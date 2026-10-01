@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Send, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
 import { FeedbackSubmission } from '../types/anime';
-import { sendTelegramFeedbackAlert } from '../services/telegramServerless';
 
 interface FeedbackSectionProps {
   onOpenSuggestModal: () => void;
@@ -30,9 +29,9 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
       timestamp: new Date().toISOString(),
     };
 
-    // Dispatch notification to Telegram bot
+    // Dispatch notification to backend API
     try {
-      const res = await fetch('/api/telegram-feedback', {
+      await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -41,22 +40,8 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
           feedback: feedback.trim(),
         }),
       });
-
-      if (!res.ok) {
-        // Fallback to direct client-side Telegram Bot API
-        await sendTelegramFeedbackAlert({
-          nameOrInsta: nameOrInsta.trim(),
-          email: email.trim(),
-          feedback: feedback.trim(),
-        });
-      }
     } catch (err) {
-      console.warn('API error, falling back to direct Telegram dispatch:', err);
-      await sendTelegramFeedbackAlert({
-        nameOrInsta: nameOrInsta.trim(),
-        email: email.trim(),
-        feedback: feedback.trim(),
-      });
+      console.warn('Feedback API error:', err);
     }
 
     // Save locally for persistence
@@ -115,7 +100,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                 Thank you for your feedback!
               </p>
               <p className="text-xs text-emerald-400/80">
-                Your feedback was delivered directly to our team on Telegram.
+                Your feedback has been received. Thank you for helping us improve!
               </p>
             </div>
           ) : (

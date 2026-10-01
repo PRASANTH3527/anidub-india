@@ -110,18 +110,18 @@ class DatabaseService {
   // --- 1. Main public query: ONLY FETCH APPROVED ANIME ---
   public getApprovedAnime(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => a.submissionStatus === 'approved');
+    return all.filter((a) => a.status === 'approved' || (a as any).submissionStatus === 'approved');
   }
 
   // --- 2. Admin queries: PENDING & REJECTED ---
   public getPendingSubmissions(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => a.submissionStatus === 'pending');
+    return all.filter((a) => a.status === 'pending' || (a as any).submissionStatus === 'pending');
   }
 
   public getRejectedSubmissions(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => a.submissionStatus === 'rejected');
+    return all.filter((a) => a.status === 'rejected' || (a as any).submissionStatus === 'rejected');
   }
 
   public getAnimeById(id: string): AnimeRecord | null {
@@ -153,7 +153,7 @@ class DatabaseService {
   }
 
   // --- 4. Moderation Actions (Approve/Reject) ---
-  public approveSubmission(id: string, notes?: string, reviewerName: string = 'Telegram Admin Bot'): boolean {
+  public approveSubmission(id: string, notes?: string, reviewerName: string = 'Admin'): boolean {
     const records = this.getAllAnimeRecords();
     const targetIndex = records.findIndex((r) => r.id === id);
     if (targetIndex === -1) return false;
@@ -177,7 +177,7 @@ class DatabaseService {
     return true;
   }
 
-  public rejectSubmission(id: string, reason?: string, reviewerName: string = 'Telegram Admin Bot'): boolean {
+  public rejectSubmission(id: string, reason?: string, reviewerName: string = 'Admin'): boolean {
     const records = this.getAllAnimeRecords();
     const targetIndex = records.findIndex((r) => r.id === id);
     if (targetIndex === -1) return false;
@@ -231,7 +231,7 @@ class DatabaseService {
               ...merged[localIdx],
               ...normalized,
               submissionStatus: normalized.submissionStatus,
-              status: normalized.submissionStatus === 'approved' ? 'Ongoing' : merged[localIdx].status,
+              status: normalized.status || normalized.submissionStatus,
               reviewedBy: normalized.reviewedBy || merged[localIdx].reviewedBy,
               reviewedAt: normalized.reviewedAt || merged[localIdx].reviewedAt,
             };

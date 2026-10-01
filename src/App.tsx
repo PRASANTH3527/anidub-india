@@ -12,7 +12,7 @@ import { RecentUpdates } from './components/RecentUpdates';
 import { FeedbackSection } from './components/FeedbackSection';
 import { SubmitDubModal } from './components/SubmitDubModal';
 import { AuthModal } from './components/AuthModal';
-import { AdminWebhookPage } from './components/AdminWebhookPage';
+import { AdminDashboard } from './components/AdminDashboard';
 import { dbService } from './services/databaseService';
 import { authService } from './services/authService';
 import { AnimeRecord, WatchlistEntry } from './types/database';
@@ -49,20 +49,20 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Check if current route is the hidden /admin-webhook route
-  const checkIsAdminWebhook = () => {
+  // Check if current route is the hidden /admin-dashboard route
+  const checkIsAdmin = () => {
     if (typeof window === 'undefined') return false;
     const path = window.location.pathname.toLowerCase();
     const hash = window.location.hash.toLowerCase().replace('#', '').replace('/', '');
     return (
-      path === '/admin-webhook' || 
-      path === '/admin-webhook/' || 
-      hash === 'admin-webhook' || 
-      hash === 'admin/webhook'
+      path === '/admin' || 
+      path === '/admin/' || 
+      hash === 'admin' || 
+      hash === 'dashboard'
     );
   };
 
-  const [isAdminWebhook, setIsAdminWebhook] = useState(checkIsAdminWebhook);
+  const [isAdminView, setIsAdminView] = useState(checkIsAdmin);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
 
   // Initial server sync to load fresh approved anime immediately on every page visit
@@ -101,12 +101,12 @@ export default function App() {
   // Dynamic Routing & SEO Hash Sync
   useEffect(() => {
     const handleLocationChange = () => {
-      const isWebhook = checkIsAdminWebhook();
-      setIsAdminWebhook(isWebhook);
-      if (isWebhook) {
+      const isAdmin = checkIsAdmin();
+      setIsAdminView(isAdmin);
+      if (isAdmin) {
         updateSeoTags({
-          title: 'Telegram Webhook Setup — AniDub India Admin',
-          description: 'Secret administration dashboard for AniDub India Telegram Bot.',
+          title: 'Admin Dashboard — AniDub India',
+          description: 'Secret administration dashboard for AniDub India.',
         });
         return;
       }
@@ -315,9 +315,9 @@ export default function App() {
     setTimeout(() => setIsLoading(false), 180);
   };
 
-  // If secret admin route, render AdminWebhookPage directly
-  if (isAdminWebhook) {
-    return <AdminWebhookPage />;
+  // If secret admin route, render AdminDashboard directly
+  if (isAdminView) {
+    return <AdminDashboard />;
   }
 
   return (

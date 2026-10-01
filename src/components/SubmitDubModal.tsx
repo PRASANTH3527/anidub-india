@@ -16,7 +16,6 @@ import { JikanAnimeResult } from '../types/database';
 import { DubLanguage, StreamingPlatform, AnimeType, ReleaseDay } from '../types/anime';
 import { dbService } from '../services/databaseService';
 import { authService } from '../services/authService';
-import { triggerTelegramAdminAlert } from '../services/telegramServerless';
 
 interface SubmitDubModalProps {
   isOpen: boolean;
@@ -163,69 +162,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     }
   };
 
-  // Send POST request to /api/telegram-notify endpoint
-  const sendTelegramNotification = async (payload: {
-    id: string;
-    title: string;
-    languages: DubLanguage[];
-    platform: StreamingPlatform;
-    poster: string;
-    imageUrl?: string;
-    releaseYear: number;
-    type: AnimeType;
-    status: 'Ongoing' | 'Completed';
-    airingStatus: 'Ongoing' | 'Completed';
-    releaseDay?: ReleaseDay;
-    genres: string[];
-    submittedBy: string;
-  }) => {
-    try {
-      const response = await fetch('/api/telegram-notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        // Fallback directly to Telegram Bot API trigger if Next.js route is in client-only mode
-        await triggerTelegramAdminAlert({
-          id: payload.id,
-          title: payload.title,
-          poster: payload.poster,
-          imageUrl: payload.imageUrl,
-          type: payload.type,
-          status: payload.status,
-          airingStatus: payload.airingStatus,
-          releaseDay: payload.releaseDay,
-          airingDay: payload.releaseDay,
-          genres: payload.genres,
-          dubs: payload.languages,
-          releaseYear: payload.releaseYear,
-          platforms: [{ name: payload.platform, url: streamUrl }],
-          submittedBy: { userName: payload.submittedBy },
-        } as any);
-      }
-    } catch (err) {
-      console.warn('API /api/telegram-notify fetch error, fallback to direct dispatch:', err);
-      await triggerTelegramAdminAlert({
-        id: payload.id,
-        title: payload.title,
-        poster: payload.poster,
-        imageUrl: payload.imageUrl,
-        type: payload.type,
-        status: payload.status,
-        airingStatus: payload.airingStatus,
-        releaseDay: payload.releaseDay,
-        airingDay: payload.releaseDay,
-        genres: payload.genres,
-        dubs: payload.languages,
-        releaseYear: payload.releaseYear,
-        platforms: [{ name: payload.platform, url: streamUrl }],
-        submittedBy: { userName: payload.submittedBy },
-      } as any);
-    }
-  };
-
   // STRICT MODERATION SUBMIT: ALWAYS ENFORCES status: "pending"
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -291,23 +227,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         userName: currentUser?.displayName || 'Community Member',
         userEmail: currentUser?.email || 'contributor@anidub.in',
       },
-    });
-
-    // Send POST request to /api/telegram-notify immediately after saving as 'pending'
-    await sendTelegramNotification({
-      id: newRecord.id,
-      title: newRecord.title,
-      languages: newRecord.dubs,
-      platform,
-      poster: defaultCover,
-      imageUrl: defaultCover,
-      releaseYear: newRecord.releaseYear,
-      type: newRecord.type,
-      status: airingStatus,
-      airingStatus,
-      releaseDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
-      genres,
-      submittedBy: currentUser?.displayName || 'Community Member',
     });
 
     setIsSubmitting(false);
@@ -378,7 +297,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               </h4>
               <p className="text-xs text-neutral-300 max-w-md mx-auto leading-relaxed">
                 Your submission is currently locked under <strong className="text-amber-400">Strict Moderation</strong>. 
-                It has been sent to the Telegram Admin Bot and will remain hidden from the website until approved.
+                It has been sent to the Admin Dashboard and will remain hidden from the website until approved.
               </p>
             </div>
           ) : (

@@ -2,7 +2,7 @@ export type DubLanguage = 'Tamil' | 'Telugu' | 'Hindi' | 'Malayalam' | 'Kannada'
 
 export type AnimeType = 'Series' | 'Movie' | 'Special' | 'OVA';
 
-export type AnimeStatus = 'Ongoing' | 'Completed' | 'Airing' | 'Upcoming';
+export type AnimeStatus = 'Ongoing' | 'Completed' | 'Airing' | 'Upcoming' | 'pending' | 'approved' | 'rejected';
 
 export type ReleaseDay = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
 
