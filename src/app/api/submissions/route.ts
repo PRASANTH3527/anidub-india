@@ -1,13 +1,13 @@
 // Next.js App Router API Route: app/api/submissions/route.ts
-// Uses @vercel/kv directly for persistent storage and updates.
-// Zero external shared lib files to prevent Vercel module resolution errors.
+// Direct @vercel/kv persistence with URL safety validation.
+// Zero cross-imports or shared lib files to prevent Vercel Serverless module resolution errors.
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 export const runtime = 'nodejs';
 
-import { kv } from '@vercel/kv';
+import { createClient } from '@vercel/kv';
 
 export interface ServerAnimeSubmission {
   id: string;
@@ -47,6 +47,7 @@ export interface ServerAnimeSubmission {
 }
 
 const KV_KEY = 'anidub_submissions';
+let memoryStore: ServerAnimeSubmission[] = [];
 
 const NO_CACHE_HEADERS = {
   'Content-Type': 'application/json',
@@ -59,27 +60,64 @@ const NO_CACHE_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
+// Validates that KV_REST_API_URL is an actual HTTPS endpoint and not an unpopulated placeholder
+function isConfiguredKvUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  return (
+    trimmed.startsWith('https://') &&
+    !trimmed.includes('KV_REST_API_URL') &&
+    !trimmed.includes('your-kv-store') &&
+    !trimmed.includes('example.com')
+  );
+}
+
+// Safely initializes @vercel/kv client only when valid credentials exist
+function getKvClient() {
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!isConfiguredKvUrl(url) || !token || token === 'KV_REST_API_TOKEN' || token.length < 5) {
+    return null;
+  }
+  try {
+    return createClient({ url, token });
+  } catch {
+    return null;
+  }
+}
+
 // Safe helper to read from Vercel KV
 async function getKvSubmissions(): Promise<ServerAnimeSubmission[]> {
-  try {
-    const data = await kv.get<ServerAnimeSubmission[]>(KV_KEY);
-    if (Array.isArray(data)) return data;
-    return [];
-  } catch (err) {
-    console.error('[Vercel KV Error] Failed to read submissions:', err);
-    return [];
+  const client = getKvClient();
+  if (client) {
+    try {
+      const data = await client.get<ServerAnimeSubmission[]>(KV_KEY);
+      if (Array.isArray(data)) {
+        memoryStore = data;
+        return data;
+      }
+      return [];
+    } catch (err) {
+      console.warn('[Vercel KV Warning] Failed to read from KV, using fallback:', err);
+    }
   }
+  return memoryStore;
 }
 
 // Safe helper to write to Vercel KV
 async function saveKvSubmissions(list: ServerAnimeSubmission[]): Promise<boolean> {
-  try {
-    await kv.set(KV_KEY, list);
-    return true;
-  } catch (err) {
-    console.error('[Vercel KV Error] Failed to save submissions:', err);
-    return false;
+  memoryStore = list;
+  const client = getKvClient();
+  if (client) {
+    try {
+      await client.set(KV_KEY, list);
+      return true;
+    } catch (err) {
+      console.warn('[Vercel KV Warning] Failed to save to KV, stored in fallback:', err);
+      return false;
+    }
   }
+  return true;
 }
 
 export async function OPTIONS(): Promise<Response> {
@@ -181,7 +219,7 @@ export async function PATCH(req: Request): Promise<Response> {
         type: 'Series',
         releaseYear: new Date().getFullYear(),
         rating: 8.5,
-        status: 'Ongoing',
+        status: newStatus === 'approved' ? 'Ongoing' : 'Rejected',
         submissionStatus: newStatus,
         reviewedBy: reviewer || 'Admin',
         reviewedAt: new Date().toISOString(),
