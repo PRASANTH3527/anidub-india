@@ -48,24 +48,12 @@ function apiDevPlugin(): Plugin {
         };
 
         try {
-          if (pathname === '/api/telegram-webhook') {
-            const mod = await server.ssrLoadModule('/api/telegram-webhook.ts');
-            return mod.default(req, res);
-          }
-          if (pathname === '/api/set-telegram-webhook') {
-            const mod = await server.ssrLoadModule('/api/set-telegram-webhook.ts');
-            return mod.default(req, res);
-          }
           if (pathname === '/api/submissions') {
             const mod = await server.ssrLoadModule('/api/submissions.ts');
             return mod.default(req, res);
           }
-          if (pathname === '/api/telegram-notify') {
-            const mod = await server.ssrLoadModule('/api/telegram-notify.ts');
-            return mod.default(req, res);
-          }
-          if (pathname === '/api/telegram-feedback') {
-            const mod = await server.ssrLoadModule('/api/telegram-feedback.ts');
+          if (pathname === '/api/feedback') {
+            const mod = await server.ssrLoadModule('/api/feedback.ts');
             return mod.default(req, res);
           }
         } catch (err: any) {
