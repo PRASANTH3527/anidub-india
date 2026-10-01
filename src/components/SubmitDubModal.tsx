@@ -175,7 +175,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     type: AnimeType;
     status: 'Ongoing' | 'Completed';
     airingStatus: 'Ongoing' | 'Completed';
-    releaseDay: ReleaseDay;
+    releaseDay?: ReleaseDay;
     genres: string[];
     submittedBy: string;
   }) => {
@@ -267,8 +267,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       rating: 8.0,
       status: airingStatus,
       airingStatus,
-      releaseDay,
-      airingDay: releaseDay,
+      releaseDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
+      airingDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
       genres: genres.length > 0 ? genres : ['Action', 'Fantasy'],
       themes: ['Super Power', 'Indian Dub'],
       characters: [
@@ -305,7 +305,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       type: newRecord.type,
       status: airingStatus,
       airingStatus,
-      releaseDay,
+      releaseDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
       genres,
       submittedBy: currentUser?.displayName || 'Community Member',
     });
@@ -529,8 +529,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 </div>
               </div>
 
-              {/* Type, Status & Release Day Dropdowns */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Type, Status & Release Day Dropdowns (Release Day is conditionally rendered ONLY when Status is 'Ongoing') */}
+              <div className={`grid grid-cols-1 ${airingStatus === 'Ongoing' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
                 <div>
                   <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
                     <span>Type <span className="text-rose-400">*</span></span>
@@ -557,29 +557,40 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                     onChange={(e) => setAiringStatus(e.target.value as 'Ongoing' | 'Completed')}
                     className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer text-xs"
                   >
-                    <option value="Ongoing">Ongoing</option>
+                    <option value="Ongoing">Ongoing (Simulcast)</option>
                     <option value="Completed">Completed</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                    <span>Release Day</span>
-                    <span className="text-[10px] text-emerald-400 font-semibold">Schedule Tab</span>
-                  </label>
-                  <select
-                    value={releaseDay}
-                    onChange={(e) => setReleaseDay(e.target.value as ReleaseDay)}
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer text-xs"
-                  >
-                    {ALL_DAYS.map((day) => (
-                      <option key={day} value={day}>
-                        {day}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Release Day: ONLY visible and required if Status is set to 'Ongoing' */}
+                {airingStatus === 'Ongoing' && (
+                  <div className="animate-fadeIn">
+                    <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                      <span>Release Day <span className="text-rose-400">*</span></span>
+                      <span className="text-[10px] text-emerald-400 font-semibold">Schedule Tab</span>
+                    </label>
+                    <select
+                      required
+                      value={releaseDay}
+                      onChange={(e) => setReleaseDay(e.target.value as ReleaseDay)}
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer text-xs"
+                    >
+                      {ALL_DAYS.map((day) => (
+                        <option key={day} value={day}>
+                          {day}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
+
+              {/* Explanatory note for Ongoing releases */}
+              {airingStatus === 'Ongoing' && (
+                <p className="text-[10px] text-neutral-400 -mt-1">
+                  Ongoing titles will be featured on the <strong className="text-white">Airing Now</strong> weekly calendar under <strong className="text-emerald-400">{releaseDay}</strong>.
+                </p>
+              )}
 
               {/* Explicit Genre Selector (Action, Comedy, Shonen, etc.) */}
               <div>

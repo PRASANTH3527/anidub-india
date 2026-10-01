@@ -12,6 +12,7 @@ import { RecentUpdates } from './components/RecentUpdates';
 import { FeedbackSection } from './components/FeedbackSection';
 import { SubmitDubModal } from './components/SubmitDubModal';
 import { AuthModal } from './components/AuthModal';
+import { AdminWebhookPage } from './components/AdminWebhookPage';
 import { dbService } from './services/databaseService';
 import { authService } from './services/authService';
 import { AnimeRecord, WatchlistEntry } from './types/database';
@@ -48,7 +49,20 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Submit modal
+  // Check if current route is the hidden /admin-webhook route
+  const checkIsAdminWebhook = () => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase().replace('#', '').replace('/', '');
+    return (
+      path === '/admin-webhook' || 
+      path === '/admin-webhook/' || 
+      hash === 'admin-webhook' || 
+      hash === 'admin/webhook'
+    );
+  };
+
+  const [isAdminWebhook, setIsAdminWebhook] = useState(checkIsAdminWebhook);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
 
   // Subscribe to DB & Auth changes
@@ -76,7 +90,17 @@ export default function App() {
 
   // Dynamic Routing & SEO Hash Sync
   useEffect(() => {
-    const handleHashChange = () => {
+    const handleLocationChange = () => {
+      const isWebhook = checkIsAdminWebhook();
+      setIsAdminWebhook(isWebhook);
+      if (isWebhook) {
+        updateSeoTags({
+          title: 'Telegram Webhook Setup — AniDub India Admin',
+          description: 'Secret administration dashboard for AniDub India Telegram Bot.',
+        });
+        return;
+      }
+
       const hash = window.location.hash.replace('#', '');
       
       if (hash.startsWith('anime/')) {
@@ -115,9 +139,13 @@ export default function App() {
       }
     };
 
-    handleHashChange();
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    handleLocationChange();
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
+    };
   }, []);
 
   // Open anime detail (Dedicated Information Page)
@@ -276,6 +304,11 @@ export default function App() {
     setCurrentPage(1);
     setTimeout(() => setIsLoading(false), 180);
   };
+
+  // If secret admin route, render AdminWebhookPage directly
+  if (isAdminWebhook) {
+    return <AdminWebhookPage />;
+  }
 
   return (
     <div className="min-h-screen bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white">
@@ -481,7 +514,9 @@ export default function App() {
       </main>
 
       {/* Footer & Feedback */}
-      <FeedbackSection onOpenSuggestModal={() => setIsSubmitModalOpen(true)} />
+      <FeedbackSection 
+        onOpenSuggestModal={() => setIsSubmitModalOpen(true)}
+      />
 
       {/* Submit Dub Info Modal with Jikan API Auto-Fill */}
       <SubmitDubModal

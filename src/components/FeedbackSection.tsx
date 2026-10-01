@@ -7,7 +7,9 @@ interface FeedbackSectionProps {
   onOpenSuggestModal: () => void;
 }
 
-export const FeedbackSection: React.FC<FeedbackSectionProps> = ({ onOpenSuggestModal }) => {
+export const FeedbackSection: React.FC<FeedbackSectionProps> = ({ 
+  onOpenSuggestModal,
+}) => {
   const [nameOrInsta, setNameOrInsta] = useState('');
   const [email, setEmail] = useState('');
   const [feedback, setFeedback] = useState('');

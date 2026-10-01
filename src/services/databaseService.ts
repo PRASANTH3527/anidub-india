@@ -11,6 +11,17 @@ class DatabaseService {
 
   constructor() {
     this.initDatabase();
+    this.syncWithServer();
+
+    if (typeof window !== 'undefined') {
+      setInterval(() => this.syncWithServer(), 8000);
+      window.addEventListener('focus', () => this.syncWithServer());
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          this.syncWithServer();
+        }
+      });
+    }
   }
 
   private initDatabase() {
@@ -100,6 +111,13 @@ class DatabaseService {
     const records = this.getAllAnimeRecords();
     this.saveAnimeRecords([newRecord, ...records]);
 
+    // Asynchronously sync with backend submissions API
+    fetch('/api/submissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newRecord),
+    }).catch((e) => console.warn('Sync to /api/submissions failed:', e));
+
     return newRecord;
   }
 
@@ -117,6 +135,14 @@ class DatabaseService {
     };
 
     this.saveAnimeRecords(records);
+
+    // Notify backend
+    fetch('/api/submissions', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action: 'approve', reviewer: reviewerName }),
+    }).catch(() => {});
+
     return true;
   }
 
@@ -133,7 +159,55 @@ class DatabaseService {
     };
 
     this.saveAnimeRecords(records);
+
+    // Notify backend
+    fetch('/api/submissions', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action: 'reject', reviewer: reviewerName, reason }),
+    }).catch(() => {});
+
     return true;
+  }
+
+  // --- 5. Server Sync: Pulls updates approved via Telegram Webhook ---
+  public async syncWithServer(): Promise<void> {
+    try {
+      const res = await fetch('/api/submissions');
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!json.success || !Array.isArray(json.data)) return;
+
+      const serverList: AnimeRecord[] = json.data;
+      const localList = this.getAllAnimeRecords();
+      let hasChanges = false;
+      const merged = [...localList];
+
+      for (const serverItem of serverList) {
+        const localIdx = merged.findIndex((l) => l.id === serverItem.id);
+        if (localIdx !== -1) {
+          if (merged[localIdx].submissionStatus !== serverItem.submissionStatus) {
+            merged[localIdx] = {
+              ...merged[localIdx],
+              submissionStatus: serverItem.submissionStatus,
+              reviewedBy: serverItem.reviewedBy || merged[localIdx].reviewedBy,
+              reviewedAt: serverItem.reviewedAt || merged[localIdx].reviewedAt,
+            };
+            hasChanges = true;
+          }
+        } else {
+          // New submission approved or stored on server
+          merged.unshift(serverItem);
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges) {
+        this.saveAnimeRecords(merged);
+      }
+    } catch {
+      // Offline or network error
+    }
   }
 
   // --- 5. Dub Reviews Management ---

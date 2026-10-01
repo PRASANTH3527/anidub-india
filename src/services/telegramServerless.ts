@@ -21,7 +21,9 @@ export async function triggerTelegramAdminAlert(anime: AnimeRecord): Promise<{ s
   const imgLink = anime.imageUrl || anime.poster || '';
   const typeText = anime.type || 'Series';
   const statusText = anime.status || anime.airingStatus || 'Ongoing';
-  const dayText = anime.releaseDay || anime.airingDay || 'Saturday';
+  const dayText = (statusText === 'Ongoing' && (anime.releaseDay || anime.airingDay)) 
+    ? `🗓️ *Release Day:* Every ${anime.releaseDay || anime.airingDay}\n` 
+    : '';
   const genreList = Array.isArray(anime.genres) && anime.genres.length > 0 ? anime.genres.join(', ') : 'Action, Shonen';
 
   const caption = 
@@ -30,7 +32,7 @@ export async function triggerTelegramAdminAlert(anime: AnimeRecord): Promise<{ s
     `🎭 *Type:* ${typeText}\n` +
     `🏷️ *Genres:* ${genreList}\n` +
     `📡 *Status:* ${statusText}\n` +
-    `🗓️ *Release Day:* Every ${dayText}\n` +
+    dayText +
     `🌐 *Dub Languages:* ${dubList}\n` +
     `📺 *Streaming Platform:* ${platform}\n` +
     `🖼️ *Image URL:* ${imgLink ? imgLink : 'Default Poster'}\n` +
