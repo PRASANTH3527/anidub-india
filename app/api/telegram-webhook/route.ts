@@ -1,4 +1,4 @@
-// Next.js App Router API Route: src/app/api/telegram-webhook/route.ts
+// Next.js App Router API Route: app/api/telegram-webhook/route.ts
 // Handles Telegram Webhook updates (callback_query for [✅ Approve] and [❌ Reject], bot commands, etc.)
 
 export const runtime = 'nodejs';

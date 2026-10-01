@@ -1,4 +1,4 @@
-// Next.js Pages Router API Route: src/pages/api/telegram-webhook.ts
+// Next.js Pages Router API Route: pages/api/telegram-webhook.ts
 // Handles Telegram Webhook callbacks (inline button clicks like [✅ Approve] and [❌ Reject])
 
 import fs from 'fs';
