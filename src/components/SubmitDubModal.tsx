@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { searchJikanAnime, formatJikanToAnime } from '../services/jikanApi';
 import { JikanAnimeResult } from '../types/database';
-import { DubLanguage, StreamingPlatform, AnimeType } from '../types/anime';
+import { DubLanguage, StreamingPlatform, AnimeType, ReleaseDay } from '../types/anime';
 import { dbService } from '../services/databaseService';
 import { authService } from '../services/authService';
 import { triggerTelegramAdminAlert } from '../services/telegramServerless';
@@ -25,6 +25,24 @@ interface SubmitDubModalProps {
 }
 
 const ALL_LANGS: DubLanguage[] = ['Tamil', 'Telugu', 'Hindi', 'Malayalam', 'Kannada'];
+const ALL_DAYS: ReleaseDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const AVAILABLE_GENRES = [
+  'Action',
+  'Adventure',
+  'Comedy',
+  'Drama',
+  'Fantasy',
+  'Horror',
+  'Isekai',
+  'Mystery',
+  'Romance',
+  'Sci-Fi',
+  'Shonen',
+  'Slice of Life',
+  'Sports',
+  'Supernatural',
+  'Thriller',
+];
 
 export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   isOpen,
@@ -48,6 +66,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [selectedDubs, setSelectedDubs] = useState<DubLanguage[]>(['Tamil']);
   const [platform, setPlatform] = useState<StreamingPlatform>('Crunchyroll');
   const [streamUrl, setStreamUrl] = useState('');
+  const [airingStatus, setAiringStatus] = useState<'Ongoing' | 'Completed'>('Ongoing');
+  const [releaseDay, setReleaseDay] = useState<ReleaseDay>('Saturday');
 
   // Jikan Search State
   const [jikanResults, setJikanResults] = useState<JikanAnimeResult[]>([]);
@@ -109,6 +129,16 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     setType(formatted.type);
     setStudio(formatted.studio);
     setGenres(formatted.genres);
+    if (item.airing !== undefined) {
+      setAiringStatus(item.airing ? 'Ongoing' : 'Completed');
+    }
+    if (item.broadcast?.day) {
+      const bDay = item.broadcast.day.replace(/s$/i, '').trim();
+      const matched = ALL_DAYS.find((d) => d.toLowerCase() === bDay.toLowerCase());
+      if (matched) {
+        setReleaseDay(matched);
+      }
+    }
     setAutoFilled(true);
     setShowDropdown(false);
   };
@@ -123,6 +153,16 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     }
   };
 
+  const toggleGenre = (genre: string) => {
+    if (genres.includes(genre)) {
+      if (genres.length > 1) {
+        setGenres(genres.filter((g) => g !== genre));
+      }
+    } else {
+      setGenres([...genres, genre]);
+    }
+  };
+
   // Send POST request to /api/telegram-notify endpoint
   const sendTelegramNotification = async (payload: {
     id: string;
@@ -130,7 +170,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     languages: DubLanguage[];
     platform: StreamingPlatform;
     poster: string;
+    imageUrl?: string;
     releaseYear: number;
+    type: AnimeType;
+    status: 'Ongoing' | 'Completed';
+    airingStatus: 'Ongoing' | 'Completed';
+    releaseDay: ReleaseDay;
+    genres: string[];
     submittedBy: string;
   }) => {
     try {
@@ -146,6 +192,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           id: payload.id,
           title: payload.title,
           poster: payload.poster,
+          imageUrl: payload.imageUrl,
+          type: payload.type,
+          status: payload.status,
+          airingStatus: payload.airingStatus,
+          releaseDay: payload.releaseDay,
+          airingDay: payload.releaseDay,
+          genres: payload.genres,
           dubs: payload.languages,
           releaseYear: payload.releaseYear,
           platforms: [{ name: payload.platform, url: streamUrl }],
@@ -158,6 +211,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         id: payload.id,
         title: payload.title,
         poster: payload.poster,
+        imageUrl: payload.imageUrl,
+        type: payload.type,
+        status: payload.status,
+        airingStatus: payload.airingStatus,
+        releaseDay: payload.releaseDay,
+        airingDay: payload.releaseDay,
+        genres: payload.genres,
         dubs: payload.languages,
         releaseYear: payload.releaseYear,
         platforms: [{ name: payload.platform, url: streamUrl }],
@@ -197,6 +257,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       title: title.trim(),
       romajiTitle: romajiTitle.trim() || title.trim(),
       poster: defaultCover,
+      imageUrl: defaultCover,
       synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available in ${selectedDubs.join(', ')} on ${platform}.`,
       releaseYear: releaseYear || new Date().getFullYear(),
       originalReleaseDate: `${releaseYear || new Date().getFullYear()}`,
@@ -204,7 +265,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       type: type || 'Series',
       studio: studio.trim() || 'Animation Studio',
       rating: 8.0,
-      status: 'Airing',
+      status: airingStatus,
+      airingStatus,
+      releaseDay,
+      airingDay: releaseDay,
       genres: genres.length > 0 ? genres : ['Action', 'Fantasy'],
       themes: ['Super Power', 'Indian Dub'],
       characters: [
@@ -236,7 +300,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       languages: newRecord.dubs,
       platform,
       poster: defaultCover,
+      imageUrl: defaultCover,
       releaseYear: newRecord.releaseYear,
+      type: newRecord.type,
+      status: airingStatus,
+      airingStatus,
+      releaseDay,
+      genres,
       submittedBy: currentUser?.displayName || 'Community Member',
     });
 
@@ -250,6 +320,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setSynopsis('');
       setStreamUrl('');
       setSelectedDubs(['Tamil']);
+      setType('Series');
+      setGenres(['Action', 'Fantasy']);
+      setAiringStatus('Ongoing');
+      setReleaseDay('Saturday');
       setAutoFilled(false);
       onClose();
       onSuccess?.();
@@ -366,21 +440,33 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 )}
               </div>
 
-              {/* Auto-filled cover preview badge (input field removed from UI) */}
-              {autoFilled && poster && (
-                <div className="flex items-center gap-3 p-2 rounded-xl bg-[#141b29] border border-purple-500/30">
-                  <img
-                    src={poster}
-                    alt="Cover preview"
-                    className="w-9 h-12 object-cover rounded-lg border border-neutral-700 shrink-0"
-                    onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+              {/* Image URL text field */}
+              <div>
+                <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                  <span>Image URL (Anime Poster Link)</span>
+                  {autoFilled && <span className="text-[10px] text-emerald-400 font-semibold">✓ Auto-filled from MAL</span>}
+                </label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="url"
+                    value={poster}
+                    onChange={(e) => setPoster(e.target.value)}
+                    placeholder="https://... (paste link to anime poster image)"
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-purple-500 rounded-xl py-2 px-3 text-xs text-white placeholder-neutral-500 focus:outline-none"
                   />
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold text-white truncate">{title}</p>
-                    <span className="text-[10px] text-emerald-400 font-semibold">✓ Auto-filled from MyAnimeList</span>
-                  </div>
+                  {poster && (
+                    <img
+                      src={poster}
+                      alt="Cover Preview"
+                      className="w-9 h-11 object-cover rounded-lg border border-purple-500/50 shrink-0 shadow"
+                      onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                    />
+                  )}
                 </div>
-              )}
+                <p className="text-[10px] text-neutral-400 mt-1">
+                  Paste any image URL or use the title search above to auto-fill from MyAnimeList.
+                </p>
+              </div>
 
               {/* Dubbed Indian Languages */}
               <div>
@@ -441,6 +527,89 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                     className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500"
                   />
                 </div>
+              </div>
+
+              {/* Type, Status & Release Day Dropdowns */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                    <span>Type <span className="text-rose-400">*</span></span>
+                    <span className="text-[10px] text-purple-400 font-semibold">Format</span>
+                  </label>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value as AnimeType)}
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer text-xs"
+                  >
+                    <option value="Series">Series</option>
+                    <option value="Movie">Movie</option>
+                    <option value="Special">Special</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                    <span>Status <span className="text-rose-400">*</span></span>
+                    <span className="text-[10px] text-purple-400 font-semibold">Airing State</span>
+                  </label>
+                  <select
+                    value={airingStatus}
+                    onChange={(e) => setAiringStatus(e.target.value as 'Ongoing' | 'Completed')}
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer text-xs"
+                  >
+                    <option value="Ongoing">Ongoing</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                    <span>Release Day</span>
+                    <span className="text-[10px] text-emerald-400 font-semibold">Schedule Tab</span>
+                  </label>
+                  <select
+                    value={releaseDay}
+                    onChange={(e) => setReleaseDay(e.target.value as ReleaseDay)}
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer text-xs"
+                  >
+                    {ALL_DAYS.map((day) => (
+                      <option key={day} value={day}>
+                        {day}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Explicit Genre Selector (Action, Comedy, Shonen, etc.) */}
+              <div>
+                <label className="block font-bold text-neutral-300 mb-1.5 flex items-center justify-between">
+                  <span>Genres (Action, Comedy, Shonen, etc.) <span className="text-rose-400">*</span></span>
+                  <span className="text-[10px] text-purple-400 font-semibold">{genres.length} selected</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5 p-3 rounded-2xl bg-[#141b29] border border-neutral-700/80 max-h-36 overflow-y-auto no-scrollbar">
+                  {AVAILABLE_GENRES.map((g) => {
+                    const isSelected = genres.includes(g);
+                    return (
+                      <button
+                        type="button"
+                        key={g}
+                        onClick={() => toggleGenre(g)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                          isSelected
+                            ? 'bg-purple-600 text-white shadow shadow-purple-600/30 ring-1 ring-purple-400/60'
+                            : 'bg-[#1b2234] text-neutral-400 hover:text-neutral-200 border border-neutral-700/60'
+                        }`}
+                      >
+                        {isSelected && <span>✓</span>}
+                        <span>{g}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-neutral-400 mt-1">
+                  Click tags to toggle genres. These link directly to the Library Genre filter so users can find this show easily.
+                </p>
               </div>
 
               {/* Optional Studio & Synopsis info (auto-filled if selected) */}

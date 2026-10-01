@@ -20,10 +20,15 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
     return () => unsub();
   }, []);
 
-  // STRICT MODERATION: Filter ONLY approved anime that are airing (pending anime never appear)
-  const airingAnime = approvedList.filter(a => a.status === 'Airing' || a.airingDay);
+  // STRICT MODERATION: Filter ONLY approved anime marked as 'Ongoing' (or 'Airing') with an assigned release day
+  const getAnimeDay = (anime: Anime) => anime.releaseDay || anime.airingDay;
 
-  const showsForDay = airingAnime.filter(a => a.airingDay === selectedDay);
+  const airingAnime = approvedList.filter((a) => {
+    const isOngoing = a.status === 'Ongoing' || a.airingStatus === 'Ongoing' || a.status === 'Airing';
+    return isOngoing && Boolean(getAnimeDay(a));
+  });
+
+  const showsForDay = airingAnime.filter((a) => getAnimeDay(a) === selectedDay);
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 py-6">
@@ -45,7 +50,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
       <div className="flex items-center justify-start sm:justify-center gap-2 overflow-x-auto pb-3 mb-6 no-scrollbar">
         {DAYS.map((day) => {
           const isSelected = selectedDay === day;
-          const count = airingAnime.filter(a => a.airingDay === day).length;
+          const count = airingAnime.filter((a) => getAnimeDay(a) === day).length;
           return (
             <button
               key={day}
@@ -79,7 +84,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
               className="bg-[#131926] border border-neutral-800 hover:border-purple-500/50 rounded-xl p-3.5 flex gap-3.5 cursor-pointer group transition-all"
             >
               <img
-                src={anime.poster}
+                src={anime.imageUrl || anime.poster}
                 alt={anime.title}
                 className="w-20 aspect-[3/4.2] object-cover rounded-lg shrink-0 shadow-md group-hover:scale-102 transition-transform"
               />
@@ -87,7 +92,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
                 <div>
                   <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold mb-1">
                     <Clock className="w-3 h-3" />
-                    <span>Every {anime.airingDay}</span>
+                    <span>Every {getAnimeDay(anime)}</span>
                   </div>
                   <h4 className="font-bold text-sm text-neutral-100 group-hover:text-purple-300 line-clamp-1">
                     {anime.title}

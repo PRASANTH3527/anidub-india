@@ -23,6 +23,7 @@ export interface AnimeRecord {
   romajiTitle?: string;
   nativeTitle?: string;
   poster: string;
+  imageUrl?: string;
   banner?: string;
   type: AnimeType;
   releaseYear: number;
@@ -31,6 +32,8 @@ export interface AnimeRecord {
   episodes?: number;
   seasons?: number;
   status: AnimeStatus;
+  airingStatus?: 'Ongoing' | 'Completed';
+  releaseDay?: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
   submissionStatus: SubmissionStatus;
   rejectionReason?: string;
   genres: string[];
@@ -101,6 +104,8 @@ export interface JikanAnimeResult {
   episodes?: number;
   type?: string;
   status?: string;
+  airing?: boolean;
+  broadcast?: { day?: string; time?: string; timezone?: string };
   score?: number;
   studios?: { name: string }[];
   genres?: { name: string }[];

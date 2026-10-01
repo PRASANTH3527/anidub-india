@@ -9,7 +9,7 @@ const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 export async function POST(req: Request): Promise<Response> {
   try {
     const body = await req.json();
-    const { id, title, languages, platform, poster, releaseYear, submittedBy } = body;
+    const { id, title, languages, platform, poster, imageUrl, releaseYear, type, status, airingStatus, releaseDay, genres, submittedBy } = body;
 
     if (!title) {
       return Response.json({ success: false, error: 'Title is required' }, { status: 400 });
@@ -18,12 +18,22 @@ export async function POST(req: Request): Promise<Response> {
     const dubList = Array.isArray(languages) ? languages.join(', ') : languages || 'Indian Dub';
     const streamingPlatform = platform || 'Crunchyroll';
     const submitterName = submittedBy || 'Community Member';
+    const imgLink = imageUrl || poster || '';
+    const typeText = type || 'Series';
+    const statusText = status || airingStatus || 'Ongoing';
+    const dayText = releaseDay || 'Saturday';
+    const genreList = Array.isArray(genres) && genres.length > 0 ? genres.join(', ') : 'Action, Shonen';
 
     const caption = 
       `🚨 *NEW ANIME DUB SUBMISSION*\n\n` +
       `🎬 *Title:* ${title}\n` +
+      `🎭 *Type:* ${typeText}\n` +
+      `🏷️ *Genres:* ${genreList}\n` +
+      `📡 *Status:* ${statusText}\n` +
+      `🗓️ *Release Day:* Every ${dayText}\n` +
       `🌐 *Languages:* ${dubList}\n` +
       `📺 *Streaming Platform:* ${streamingPlatform}\n` +
+      `🖼️ *Image URL:* ${imgLink ? imgLink : 'Default Poster'}\n` +
       `📅 *Release Year:* ${releaseYear || new Date().getFullYear()}\n` +
       `👤 *Submitted by:* ${submitterName}\n\n` +
       `_Status: PENDING ADMIN APPROVAL_`;

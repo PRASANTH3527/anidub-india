@@ -1,8 +1,10 @@
 export type DubLanguage = 'Tamil' | 'Telugu' | 'Hindi' | 'Malayalam' | 'Kannada';
 
-export type AnimeType = 'Series' | 'Movie' | 'OVA';
+export type AnimeType = 'Series' | 'Movie' | 'Special' | 'OVA';
 
-export type AnimeStatus = 'Completed' | 'Airing' | 'Upcoming';
+export type AnimeStatus = 'Ongoing' | 'Completed' | 'Airing' | 'Upcoming';
+
+export type ReleaseDay = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
 
 export type StreamingPlatform = 
   | 'Crunchyroll'
@@ -53,6 +55,7 @@ export interface Anime {
   romajiTitle?: string;
   nativeTitle?: string;
   poster: string;
+  imageUrl?: string;
   banner?: string;
   type: AnimeType;
   releaseYear: number;
@@ -61,6 +64,9 @@ export interface Anime {
   episodes?: number;
   seasons?: number;
   status: AnimeStatus;
+  airingStatus?: 'Ongoing' | 'Completed';
+  releaseDay?: ReleaseDay;
+  airingDay?: ReleaseDay;
   genres: string[];
   themes?: string[]; // e.g. "Underdog to OP", "Revenge", "Super Power"
   studio: string;
@@ -72,7 +78,6 @@ export interface Anime {
     name: StreamingPlatform;
     url: string;
   }[];
-  airingDay?: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
   featured?: boolean;
   addedDate?: string; // ISO date
 }

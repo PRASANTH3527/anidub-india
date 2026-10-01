@@ -7,18 +7,16 @@ import {
   Calendar, 
   Film, 
   User, 
-  ShieldCheck, 
   LogIn 
 } from 'lucide-react';
 import { authService } from '../services/authService';
 
-export type NavTab = 'library' | 'recommendations' | 'schedule' | 'profile' | 'admin';
+export type NavTab = 'library' | 'recommendations' | 'schedule' | 'profile';
 
 interface NavbarProps {
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
   watchlistCount: number;
-  pendingCount: number;
   onOpenSuggestModal: () => void;
   onOpenAuthModal: () => void;
 }
@@ -27,12 +25,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   watchlistCount,
-  pendingCount,
   onOpenSuggestModal,
   onOpenAuthModal,
 }) => {
   const currentUser = authService.getCurrentUser();
-  const isAdmin = authService.isAdmin();
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0b0f17]/90 backdrop-blur-md border-b border-neutral-800/80">
@@ -115,25 +111,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             {watchlistCount > 0 && (
               <span className="bg-purple-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center -ml-0.5">
                 {watchlistCount}
-              </span>
-            )}
-          </button>
-
-          {/* Secure Admin Route Button */}
-          <button
-            onClick={() => setActiveTab('admin')}
-            title="Admin Panel (/admin-panel)"
-            className={`relative flex items-center gap-1.5 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 cursor-pointer ${
-              activeTab === 'admin'
-                ? 'bg-amber-600/30 text-amber-300 border border-amber-500/50'
-                : 'text-amber-400/90 hover:text-amber-200 hover:bg-amber-950/40'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span className="hidden lg:inline">Admin</span>
-            {pendingCount > 0 && (
-              <span className="bg-amber-500 text-neutral-950 text-[10px] font-black rounded-full px-1.5 py-0.2 animate-pulse">
-                {pendingCount}
               </span>
             )}
           </button>

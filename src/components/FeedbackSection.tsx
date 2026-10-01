@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Send, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
-import { FeedbackSubmission, DubLanguage } from '../types/anime';
+import { FeedbackSubmission } from '../types/anime';
+import { sendTelegramFeedbackAlert } from '../services/telegramServerless';
 
 interface FeedbackSectionProps {
   onOpenSuggestModal: () => void;
@@ -13,35 +14,66 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({ onOpenSuggestM
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!feedback.trim()) return;
 
     setLoading(true);
 
-    setTimeout(() => {
-      // Store to local submissions list
-      const submission: FeedbackSubmission = {
-        id: 'sub-' + Date.now(),
-        nameOrInsta: nameOrInsta.trim() || 'Anonymous Otaku',
+    const submission: FeedbackSubmission = {
+      id: 'sub-' + Date.now(),
+      nameOrInsta: nameOrInsta.trim() || 'Anonymous Otaku',
+      email: email.trim(),
+      feedback: feedback.trim(),
+      timestamp: new Date().toISOString(),
+    };
+
+    // Dispatch notification to Telegram bot
+    try {
+      const res = await fetch('/api/telegram-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nameOrInsta: nameOrInsta.trim(),
+          email: email.trim(),
+          feedback: feedback.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        // Fallback to direct client-side Telegram Bot API
+        await sendTelegramFeedbackAlert({
+          nameOrInsta: nameOrInsta.trim(),
+          email: email.trim(),
+          feedback: feedback.trim(),
+        });
+      }
+    } catch (err) {
+      console.warn('API error, falling back to direct Telegram dispatch:', err);
+      await sendTelegramFeedbackAlert({
+        nameOrInsta: nameOrInsta.trim(),
         email: email.trim(),
         feedback: feedback.trim(),
-        timestamp: new Date().toISOString(),
-      };
+      });
+    }
 
+    // Save locally for persistence
+    try {
       const existing = JSON.parse(localStorage.getItem('anidub_feedback') || '[]');
       localStorage.setItem('anidub_feedback', JSON.stringify([submission, ...existing]));
+    } catch (e) {
+      // ignore
+    }
 
-      setLoading(false);
-      setSubmitted(true);
-      setNameOrInsta('');
-      setEmail('');
-      setFeedback('');
+    setLoading(false);
+    setSubmitted(true);
+    setNameOrInsta('');
+    setEmail('');
+    setFeedback('');
 
-      setTimeout(() => {
-        setSubmitted(false);
-      }, 5000);
-    }, 400);
+    setTimeout(() => {
+      setSubmitted(false);
+    }, 6000);
   };
 
   return (
@@ -78,10 +110,10 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({ onOpenSuggestM
             <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-xl p-4 text-center space-y-2 animate-fadeIn">
               <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto" />
               <p className="text-sm font-bold text-emerald-300">
-                Thank you for helping Indian anime fans!
+                Thank you for your feedback!
               </p>
               <p className="text-xs text-emerald-400/80">
-                Your feedback has been received and will be reviewed shortly.
+                Your feedback was delivered directly to our team on Telegram.
               </p>
             </div>
           ) : (

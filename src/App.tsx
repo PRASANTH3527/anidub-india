@@ -8,7 +8,6 @@ import { AnimeDetailPage } from './components/AnimeDetailPage';
 import { RecommendationSystem } from './components/RecommendationSystem';
 import { ProfileView } from './components/ProfileView';
 import { ScheduleView } from './components/ScheduleView';
-import { AdminPanel } from './components/AdminPanel';
 import { RecentUpdates } from './components/RecentUpdates';
 import { FeedbackSection } from './components/FeedbackSection';
 import { SubmitDubModal } from './components/SubmitDubModal';
@@ -18,14 +17,13 @@ import { authService } from './services/authService';
 import { AnimeRecord, WatchlistEntry } from './types/database';
 import { Anime, WatchlistItem, DubLanguage } from './types/anime';
 import { updateSeoTags } from './utils/seo';
-import { ChevronLeft, ChevronRight, Frown, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Frown, Sparkles, PlusCircle } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 12;
 
 export default function App() {
   // 1. Reactive DB State: Home & Search feeds ONLY fetch approved anime
   const [approvedAnime, setApprovedAnime] = useState<AnimeRecord[]>(() => dbService.getApprovedAnime());
-  const [pendingSubmissions, setPendingSubmissions] = useState<AnimeRecord[]>(() => dbService.getPendingSubmissions());
   
   // Auth state
   const [currentUser, setCurrentUser] = useState(authService.getCurrentUser());
@@ -58,7 +56,6 @@ export default function App() {
     const unsubDb = dbService.subscribe(() => {
       // Re-fetch only approved anime for the public catalog
       setApprovedAnime(dbService.getApprovedAnime());
-      setPendingSubmissions(dbService.getPendingSubmissions());
       if (currentUser) {
         setDbWatchlist(dbService.getUserWatchlist(currentUser.uid));
       }
@@ -90,13 +87,7 @@ export default function App() {
       }
 
       setViewingAnimeId(null);
-      if (hash === 'admin-panel' || hash === 'admin') {
-        setActiveTab('admin');
-        updateSeoTags({
-          title: 'Admin Moderation Panel — AniDub India',
-          description: 'Content moderation and submission approval portal for AniDub India regional anime dubs.',
-        });
-      } else if (hash === 'recommendations') {
+      if (hash === 'recommendations') {
         setActiveTab('recommendations');
         updateSeoTags({
           title: 'Anime Recommendation Matchmaker — AniDub India',
@@ -138,14 +129,14 @@ export default function App() {
 
   const handleBackToLibrary = () => {
     setViewingAnimeId(null);
-    window.location.hash = activeTab === 'admin' ? 'admin-panel' : activeTab;
+    window.location.hash = activeTab;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleTabChange = (tab: NavTab) => {
     setViewingAnimeId(null);
     setActiveTab(tab);
-    window.location.hash = tab === 'admin' ? 'admin-panel' : tab;
+    window.location.hash = tab;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -181,19 +172,11 @@ export default function App() {
     [dbWatchlist]
   );
 
-  // Find currently viewed anime (Regular users can ONLY view approved anime)
+  // Find currently viewed anime (STRICT: ONLY approved anime can be viewed on website)
   const currentViewingAnime = useMemo(() => {
     if (!viewingAnimeId) return null;
-    const isUserAdmin = authService.isAdmin();
-    const approvedMatch = approvedAnime.find((a) => a.id === viewingAnimeId);
-    if (approvedMatch) return approvedMatch;
-    
-    // Only allow admin moderators to preview pending submissions
-    if (isUserAdmin) {
-      return pendingSubmissions.find((a) => a.id === viewingAnimeId) || null;
-    }
-    return null;
-  }, [viewingAnimeId, approvedAnime, pendingSubmissions]);
+    return approvedAnime.find((a) => a.id === viewingAnimeId) || null;
+  }, [viewingAnimeId, approvedAnime]);
 
   // Main Home Page & Search Feeds: ONLY APPROVED ANIME
   const filteredApprovedAnime = useMemo(() => {
@@ -218,19 +201,29 @@ export default function App() {
         }
 
         if (selectedGenre !== 'All Genres') {
-          if (!anime.genres.includes(selectedGenre)) {
+          const hasGenre = anime.genres && anime.genres.some(
+            (g) => g.toLowerCase() === selectedGenre.toLowerCase()
+          );
+          if (!hasGenre) {
             return false;
           }
         }
 
         if (selectedType !== 'All Types') {
-          if (anime.type !== selectedType) {
+          if (anime.type?.toLowerCase() !== selectedType.toLowerCase()) {
             return false;
           }
         }
 
         if (selectedStatus !== 'All') {
-          if (anime.status !== selectedStatus) {
+          const animeStatusLower = anime.status?.toLowerCase();
+          const selectedLower = selectedStatus.toLowerCase();
+          const matches =
+            animeStatusLower === selectedLower ||
+            (selectedLower === 'ongoing' && (animeStatusLower === 'airing' || anime.airingStatus?.toLowerCase() === 'ongoing')) ||
+            (selectedLower === 'completed' && animeStatusLower === 'completed');
+
+          if (!matches) {
             return false;
           }
         }
@@ -291,7 +284,6 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={handleTabChange}
         watchlistCount={watchlistAnimeIds.length}
-        pendingCount={pendingSubmissions.length}
         onOpenSuggestModal={() => setIsSubmitModalOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
       />
@@ -311,15 +303,7 @@ export default function App() {
           />
         ) : (
           <>
-            {/* 2. Admin Moderation Panel (Route /admin-panel or #admin-panel) */}
-            {activeTab === 'admin' && (
-              <AdminPanel
-                onBackToHome={() => handleTabChange('library')}
-                onViewAnime={handleOpenAnimeDetail}
-              />
-            )}
-
-            {/* 3. Main Dub Library (ONLY FETCHES APPROVED ANIME) */}
+            {/* 2. Main Dub Library (ONLY FETCHES APPROVED ANIME) */}
             {activeTab === 'library' && (
               <>
                 <Hero totalCount={approvedAnime.length} />
@@ -370,20 +354,43 @@ export default function App() {
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-20 bg-[#131926]/40 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto">
-                      <Frown className="w-10 h-10 text-neutral-500 mx-auto mb-3" />
-                      <h3 className="font-heading font-black text-lg text-white mb-1">
-                        No Approved Dubbed Anime Found
-                      </h3>
-                      <p className="text-xs text-neutral-400 mb-5">
-                        No anime matches your filter criteria. Try choosing another regional language or resetting filters.
-                      </p>
-                      <button
-                        onClick={handleResetFilters}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-lg shadow-purple-600/30"
-                      >
-                        Reset All Filters
-                      </button>
+                    <div className="text-center py-16 bg-[#131926]/50 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto shadow-xl">
+                      {approvedAnime.length === 0 ? (
+                        <>
+                          <div className="w-14 h-14 rounded-2xl bg-purple-950/60 border border-purple-800/60 flex items-center justify-center mx-auto mb-4 text-purple-400">
+                            <Sparkles className="w-7 h-7" />
+                          </div>
+                          <h3 className="font-heading font-black text-xl text-white mb-2">
+                            Fresh Database Ready
+                          </h3>
+                          <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
+                            All mock entries have been cleared. The database is empty and waiting for real anime submissions!
+                          </p>
+                          <button
+                            onClick={() => setIsSubmitModalOpen(true)}
+                            className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-purple-600/30 flex items-center gap-2 mx-auto"
+                          >
+                            <PlusCircle className="w-4 h-4" />
+                            <span>Submit First Dub Info</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <Frown className="w-10 h-10 text-neutral-500 mx-auto mb-3" />
+                          <h3 className="font-heading font-black text-lg text-white mb-1">
+                            No Approved Dubbed Anime Found
+                          </h3>
+                          <p className="text-xs text-neutral-400 mb-5">
+                            No anime matches your filter criteria. Try choosing another regional language or resetting filters.
+                          </p>
+                          <button
+                            onClick={handleResetFilters}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-lg shadow-purple-600/30"
+                          >
+                            Reset All Filters
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
 

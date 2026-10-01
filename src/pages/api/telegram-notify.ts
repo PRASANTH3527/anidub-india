@@ -11,7 +11,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { id, title, languages, platform, poster, releaseYear, submittedBy } = req.body || {};
+    const { id, title, languages, platform, poster, imageUrl, releaseYear, type, status, airingStatus, releaseDay, genres, submittedBy } = req.body || {};
 
     if (!title) {
       return res.status(400).json({ error: 'Title is required' });
@@ -20,12 +20,22 @@ export default async function handler(req: any, res: any) {
     const dubList = Array.isArray(languages) ? languages.join(', ') : languages || 'Indian Dub';
     const streamingPlatform = platform || 'Crunchyroll';
     const submitterName = submittedBy || 'Community Member';
+    const imgLink = imageUrl || poster || '';
+    const typeText = type || 'Series';
+    const statusText = status || airingStatus || 'Ongoing';
+    const dayText = releaseDay || 'Saturday';
+    const genreList = Array.isArray(genres) && genres.length > 0 ? genres.join(', ') : 'Action, Shonen';
 
     const caption = 
       `🚨 *NEW ANIME DUB SUBMISSION*\n\n` +
       `🎬 *Title:* ${title}\n` +
+      `🎭 *Type:* ${typeText}\n` +
+      `🏷️ *Genres:* ${genreList}\n` +
+      `📡 *Status:* ${statusText}\n` +
+      `🗓️ *Release Day:* Every ${dayText}\n` +
       `🌐 *Languages:* ${dubList}\n` +
       `📺 *Streaming Platform:* ${streamingPlatform}\n` +
+      `🖼️ *Image URL:* ${imgLink ? imgLink : 'Default Poster'}\n` +
       `📅 *Release Year:* ${releaseYear || new Date().getFullYear()}\n` +
       `👤 *Submitted by:* ${submitterName}\n\n` +
       `_Status: PENDING ADMIN APPROVAL_`;

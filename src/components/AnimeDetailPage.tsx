@@ -131,6 +131,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     .filter((a) => a.id !== anime.id && a.genres.some((g) => anime.genres.includes(g)))
     .slice(0, 4);
 
+  const heroImage = anime.imageUrl || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
+
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-8 animate-fadeIn">
       
@@ -160,7 +162,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         {/* Blurred Backdrop Banner */}
         <div className="relative h-64 sm:h-80 w-full overflow-hidden bg-gradient-to-r from-purple-950 via-slate-900 to-neutral-900">
           <img
-            src={anime.poster}
+            src={heroImage}
             alt={anime.title}
             className="w-full h-full object-cover blur-lg opacity-25 scale-110"
           />
@@ -173,7 +175,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           {/* Main Poster */}
           <div className="relative w-44 sm:w-56 aspect-[3/4.2] rounded-2xl overflow-hidden shadow-2xl border-2 border-neutral-700/80 shrink-0 bg-neutral-900 mx-auto md:mx-0">
             <img
-              src={anime.poster}
+              src={heroImage}
               alt={anime.title}
               className="w-full h-full object-cover"
             />

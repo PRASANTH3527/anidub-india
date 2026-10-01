@@ -24,6 +24,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   onSelect,
 }) => {
   const [imageError, setImageError] = useState(false);
+  const displayImage = anime.imageUrl || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
 
   return (
     <div
@@ -34,7 +35,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
       <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
         {!imageError ? (
           <img
-            src={anime.poster}
+            src={displayImage}
             alt={anime.title}
             onError={() => setImageError(true)}
             className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
