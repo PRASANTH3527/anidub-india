@@ -1,5 +1,36 @@
 [
   {
+    "id": "bleach-tybw-p3",
+    "title": "Bleach: Thousand-Year Blood War Part 3",
+    "poster": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600",
+    "type": "Series",
+    "releaseYear": 2024,
+    "rating": 9.2,
+    "status": "Ongoing",
+    "submissionStatus": "approved",
+    "genres": [
+      "Action",
+      "Supernatural"
+    ],
+    "studio": "Pierrot",
+    "synopsis": "Dubbed anime release.",
+    "dubs": [
+      "Tamil",
+      "Telugu",
+      "Hindi"
+    ],
+    "platforms": [
+      {
+        "name": "Disney+ Hotstar",
+        "url": "https://hotstar.com"
+      }
+    ],
+    "submittedAt": "2026-10-01T19:02:29.413Z",
+    "updatedAt": "2026-10-01T19:02:30.349Z",
+    "reviewedBy": "@admin",
+    "reviewedAt": "2026-10-01T19:02:30.349Z"
+  },
+  {
     "id": "one-piece-egghead",
     "title": "One Piece: Egghead Arc",
     "poster": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600",
