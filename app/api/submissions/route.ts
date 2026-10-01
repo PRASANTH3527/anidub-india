@@ -1,13 +1,30 @@
 // Next.js App Router API Route: app/api/submissions/route.ts
-// Direct @vercel/kv persistence with URL safety validation.
-// Zero cross-imports or shared lib files to prevent Vercel Serverless module resolution errors.
+// Direct JSONBin.io persistence using standard fetch().
+// Zero npm packages and zero shared local files.
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
-export const runtime = 'nodejs';
 
-import { createClient } from '@vercel/kv';
+const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID;
+const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+
+const HEADERS = {
+  'Content-Type': 'application/json',
+  'X-Master-Key': JSONBIN_API_KEY || '',
+  'X-Bin-Versioning': 'false',
+};
+
+const NO_CACHE_HEADERS = {
+  'Content-Type': 'application/json',
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Master-Key',
+};
 
 export interface ServerAnimeSubmission {
   id: string;
@@ -46,122 +63,81 @@ export interface ServerAnimeSubmission {
   updatedAt?: string;
 }
 
-const KV_KEY = 'anidub_submissions';
-let memoryStore: ServerAnimeSubmission[] = [];
-
-const NO_CACHE_HEADERS = {
-  'Content-Type': 'application/json',
-  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-  'Pragma': 'no-cache',
-  'Expires': '0',
-  'Surrogate-Control': 'no-store',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
-
-// Validates that KV_REST_API_URL is an actual HTTPS endpoint and not an unpopulated placeholder
-function isConfiguredKvUrl(url?: string): boolean {
-  if (!url || typeof url !== 'string') return false;
-  const trimmed = url.trim();
-  return (
-    trimmed.startsWith('https://') &&
-    !trimmed.includes('KV_REST_API_URL') &&
-    !trimmed.includes('your-kv-store') &&
-    !trimmed.includes('example.com')
-  );
-}
-
-// Safely initializes @vercel/kv client only when valid credentials exist
-function getKvClient() {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!isConfiguredKvUrl(url) || !token || token === 'KV_REST_API_TOKEN' || token.length < 5) {
-    return null;
+// Helper to read from JSONBin
+async function readBin(): Promise<ServerAnimeSubmission[]> {
+  if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) {
+    console.error('JSONBin credentials missing');
+    return [];
   }
   try {
-    return createClient({ url, token });
-  } catch {
-    return null;
+    const res = await fetch(`${JSONBIN_URL}/latest`, {
+      method: 'GET',
+      headers: HEADERS,
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error(`JSONBin GET failed: ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data.record) ? data.record : [];
+  } catch (err) {
+    console.error('JSONBin read error:', err);
+    return [];
   }
 }
 
-// Safe helper to read from Vercel KV
-async function getKvSubmissions(): Promise<ServerAnimeSubmission[]> {
-  const client = getKvClient();
-  if (client) {
-    try {
-      const data = await client.get<ServerAnimeSubmission[]>(KV_KEY);
-      if (Array.isArray(data)) {
-        memoryStore = data;
-        return data;
-      }
-      return [];
-    } catch (err) {
-      console.warn('[Vercel KV Warning] Failed to read from KV, using fallback:', err);
-    }
+// Helper to update JSONBin
+async function updateBin(data: ServerAnimeSubmission[]): Promise<boolean> {
+  if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) return false;
+  try {
+    const res = await fetch(JSONBIN_URL, {
+      method: 'PUT',
+      headers: HEADERS,
+      body: JSON.stringify(data),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('JSONBin update error:', err);
+    return false;
   }
-  return memoryStore;
 }
 
-// Safe helper to write to Vercel KV
-async function saveKvSubmissions(list: ServerAnimeSubmission[]): Promise<boolean> {
-  memoryStore = list;
-  const client = getKvClient();
-  if (client) {
-    try {
-      await client.set(KV_KEY, list);
-      return true;
-    } catch (err) {
-      console.warn('[Vercel KV Warning] Failed to save to KV, stored in fallback:', err);
-      return false;
-    }
-  }
-  return true;
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: NO_CACHE_HEADERS });
 }
 
-export async function OPTIONS(): Promise<Response> {
-  return new Response(null, {
-    status: 204,
-    headers: NO_CACHE_HEADERS,
-  });
-}
-
-export async function GET(req: Request): Promise<Response> {
+export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const status = url.searchParams.get('status');
-    const all = await getKvSubmissions();
+    const all = await readBin();
 
     if (status) {
       const filtered = all.filter((s) => s.submissionStatus === status);
-      return new Response(
-        JSON.stringify({ success: true, count: filtered.length, data: filtered }),
-        { status: 200, headers: NO_CACHE_HEADERS }
-      );
+      return new Response(JSON.stringify({ success: true, count: filtered.length, data: filtered }), {
+        status: 200,
+        headers: NO_CACHE_HEADERS,
+      });
     }
 
-    return new Response(
-      JSON.stringify({ success: true, count: all.length, data: all }),
-      { status: 200, headers: NO_CACHE_HEADERS }
-    );
+    return new Response(JSON.stringify({ success: true, count: all.length, data: all }), {
+      status: 200,
+      headers: NO_CACHE_HEADERS,
+    });
   } catch (err: any) {
-    console.error('GET /api/submissions error:', err);
-    return new Response(
-      JSON.stringify({ success: false, error: err.message || 'Server error' }),
-      { status: 500, headers: NO_CACHE_HEADERS }
-    );
+    return new Response(JSON.stringify({ success: false, error: err.message }), {
+      status: 500,
+      headers: NO_CACHE_HEADERS,
+    });
   }
 }
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
     if (!body || !body.id || !body.title) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'id and title are required' }),
-        { status: 400, headers: NO_CACHE_HEADERS }
-      );
+      return new Response(JSON.stringify({ success: false, error: 'Missing ID or title' }), {
+        status: 400,
+        headers: NO_CACHE_HEADERS,
+      });
     }
 
     const record: ServerAnimeSubmission = {
@@ -171,7 +147,7 @@ export async function POST(req: Request): Promise<Response> {
       updatedAt: new Date().toISOString(),
     };
 
-    const current = await getKvSubmissions();
+    const current = await readBin();
     const index = current.findIndex((s) => s.id === record.id);
     if (index !== -1) {
       current[index] = { ...current[index], ...record };
@@ -179,84 +155,61 @@ export async function POST(req: Request): Promise<Response> {
       current.unshift(record);
     }
 
-    await saveKvSubmissions(current);
-
-    return new Response(
-      JSON.stringify({ success: true, data: record }),
-      { status: 201, headers: NO_CACHE_HEADERS }
-    );
+    await updateBin(current);
+    return new Response(JSON.stringify({ success: true, data: record }), {
+      status: 201,
+      headers: NO_CACHE_HEADERS,
+    });
   } catch (err: any) {
-    console.error('POST /api/submissions error:', err);
-    return new Response(
-      JSON.stringify({ success: false, error: err.message || 'Server error' }),
-      { status: 500, headers: NO_CACHE_HEADERS }
-    );
+    return new Response(JSON.stringify({ success: false, error: err.message }), {
+      status: 500,
+      headers: NO_CACHE_HEADERS,
+    });
   }
 }
 
-export async function PATCH(req: Request): Promise<Response> {
+export async function PATCH(req: Request) {
   try {
     const body = await req.json();
     const { id, action, reviewer, reason } = body || {};
 
     if (!id || (action !== 'approve' && action !== 'reject')) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'id and valid action (approve/reject) required' }),
-        { status: 400, headers: NO_CACHE_HEADERS }
-      );
+      return new Response(JSON.stringify({ success: false, error: 'Invalid action or missing ID' }), {
+        status: 400,
+        headers: NO_CACHE_HEADERS,
+      });
     }
 
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
-    const current = await getKvSubmissions();
+    const current = await readBin();
     const index = current.findIndex((s) => s.id === id);
 
-    let target: ServerAnimeSubmission;
     if (index === -1) {
-      target = {
-        id,
-        title: `Anime Submission #${id.slice(-6)}`,
-        poster: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
-        type: 'Series',
-        releaseYear: new Date().getFullYear(),
-        rating: 8.5,
-        status: newStatus === 'approved' ? 'Ongoing' : 'Rejected',
-        submissionStatus: newStatus,
-        reviewedBy: reviewer || 'Admin',
-        reviewedAt: new Date().toISOString(),
-        genres: ['Action'],
-        studio: 'Animation Studio',
-        synopsis: 'Regional Indian dubbed anime release.',
-        dubs: ['Tamil', 'Telugu', 'Hindi'],
-        platforms: [{ name: 'Crunchyroll', url: '' }],
-        submittedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        rejectionReason: newStatus === 'rejected' ? reason : undefined,
-      };
-      current.unshift(target);
-    } else {
-      current[index] = {
-        ...current[index],
-        submissionStatus: newStatus,
-        status: newStatus === 'approved' ? 'Ongoing' : 'Rejected',
-        reviewedBy: reviewer || 'Admin',
-        reviewedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        rejectionReason: newStatus === 'rejected' ? reason : undefined,
-      };
-      target = current[index];
+      return new Response(JSON.stringify({ success: false, error: 'Submission not found' }), {
+        status: 404,
+        headers: NO_CACHE_HEADERS,
+      });
     }
 
-    await saveKvSubmissions(current);
+    current[index] = {
+      ...current[index],
+      submissionStatus: newStatus,
+      status: newStatus === 'approved' ? 'Ongoing' : 'Rejected',
+      reviewedBy: reviewer || 'Admin',
+      reviewedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      rejectionReason: newStatus === 'rejected' ? reason : undefined,
+    };
 
-    return new Response(
-      JSON.stringify({ success: true, data: target }),
-      { status: 200, headers: NO_CACHE_HEADERS }
-    );
+    await updateBin(current);
+    return new Response(JSON.stringify({ success: true, data: current[index] }), {
+      status: 200,
+      headers: NO_CACHE_HEADERS,
+    });
   } catch (err: any) {
-    console.error('PATCH /api/submissions error:', err);
-    return new Response(
-      JSON.stringify({ success: false, error: err.message || 'Server error' }),
-      { status: 500, headers: NO_CACHE_HEADERS }
-    );
+    return new Response(JSON.stringify({ success: false, error: err.message }), {
+      status: 500,
+      headers: NO_CACHE_HEADERS,
+    });
   }
 }
