@@ -1,5 +1,5 @@
 // Multi-Provider Persistent Database Utility: lib/submissionsDb.ts
-// Supports: Vercel KV / Upstash Redis, Firebase Firestore, Supabase, and Serverless /tmp Cache.
+// Supports: Vercel KV / Upstash Redis, Firebase Firestore, Supabase, and Persistent Local Disk (/data + /tmp).
 
 import fs from 'fs';
 import path from 'path';
@@ -48,6 +48,59 @@ const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
+// URL and Token Validation Helpers to prevent "Failed to parse URL" errors
+function isValidHttpUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return false;
+  if (
+    trimmed.includes('your-kv-store') ||
+    trimmed.includes('your-project') ||
+    trimmed.includes('example.com') ||
+    trimmed === 'KV_REST_API_URL' ||
+    trimmed === 'SUPABASE_URL'
+  ) {
+    return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function isValidToken(token?: string): boolean {
+  if (!token || typeof token !== 'string') return false;
+  const trimmed = token.trim();
+  if (trimmed.length < 8) return false;
+  if (
+    trimmed.startsWith('your_') ||
+    trimmed === 'KV_REST_API_TOKEN' ||
+    trimmed === 'UPSTASH_REDIS_REST_TOKEN' ||
+    trimmed === 'SUPABASE_SERVICE_ROLE_KEY' ||
+    trimmed === 'SUPABASE_ANON_KEY'
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isValidFirebaseProjectId(id?: string): boolean {
+  if (!id || typeof id !== 'string') return false;
+  const trimmed = id.trim();
+  if (trimmed.length < 4) return false;
+  if (
+    trimmed === 'FIREBASE_PROJECT_ID' ||
+    trimmed === 'NEXT_PUBLIC_FIREBASE_PROJECT_ID' ||
+    trimmed.startsWith('your-') ||
+    trimmed.includes('example')
+  ) {
+    return false;
+  }
+  return /^[a-z0-9-]+$/.test(trimmed);
+}
+
 // Local persistent file paths (project data directory + /tmp fallback)
 const LOCAL_DATA_FILE = path.join(process.cwd(), 'data', 'submissions.json');
 const TMP_FILE = path.join('/tmp', 'anidub_submissions_v1.json');
@@ -57,7 +110,7 @@ let memoryCache: ServerAnimeSubmission[] = [];
 // 1. VERCEL KV / UPSTASH REDIS ADAPTER
 // ============================================================================
 async function fetchFromKV(): Promise<ServerAnimeSubmission[] | null> {
-  if (!KV_URL || !KV_TOKEN) return null;
+  if (!isValidHttpUrl(KV_URL) || !isValidToken(KV_TOKEN)) return null;
   try {
     const res = await fetch(`${KV_URL}/get/anidub_submissions`, {
       headers: { Authorization: `Bearer ${KV_TOKEN}` },
@@ -77,7 +130,7 @@ async function fetchFromKV(): Promise<ServerAnimeSubmission[] | null> {
 }
 
 async function saveToKV(list: ServerAnimeSubmission[]): Promise<boolean> {
-  if (!KV_URL || !KV_TOKEN) return false;
+  if (!isValidHttpUrl(KV_URL) || !isValidToken(KV_TOKEN)) return false;
   try {
     const res = await fetch(`${KV_URL}/set/anidub_submissions`, {
       method: 'POST',
@@ -98,7 +151,7 @@ async function saveToKV(list: ServerAnimeSubmission[]): Promise<boolean> {
 // 2. FIREBASE FIRESTORE REST ADAPTER (Zero SDK dependencies)
 // ============================================================================
 async function fetchFromFirebase(): Promise<ServerAnimeSubmission[] | null> {
-  if (!FIREBASE_PROJECT_ID) return null;
+  if (!isValidFirebaseProjectId(FIREBASE_PROJECT_ID)) return null;
   try {
     const endpoint = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/submissions?pageSize=300`;
     const res = await fetch(endpoint, { cache: 'no-store' });
@@ -130,7 +183,7 @@ async function fetchFromFirebase(): Promise<ServerAnimeSubmission[] | null> {
 }
 
 async function saveDocumentToFirebase(item: ServerAnimeSubmission): Promise<boolean> {
-  if (!FIREBASE_PROJECT_ID) return false;
+  if (!isValidFirebaseProjectId(FIREBASE_PROJECT_ID)) return false;
   try {
     const endpoint = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/submissions/${item.id}`;
     
@@ -167,12 +220,13 @@ async function saveDocumentToFirebase(item: ServerAnimeSubmission): Promise<bool
 // 3. SUPABASE REST ADAPTER
 // ============================================================================
 async function fetchFromSupabase(): Promise<ServerAnimeSubmission[] | null> {
-  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  if (!isValidHttpUrl(SUPABASE_URL) || !isValidToken(SUPABASE_KEY)) return null;
+  const token = SUPABASE_KEY as string;
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/submissions?select=*`, {
       headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
+        apikey: token,
+        Authorization: `Bearer ${token}`,
       },
       cache: 'no-store',
     });
@@ -185,13 +239,14 @@ async function fetchFromSupabase(): Promise<ServerAnimeSubmission[] | null> {
 }
 
 async function saveToSupabase(item: ServerAnimeSubmission): Promise<boolean> {
-  if (!SUPABASE_URL || !SUPABASE_KEY) return false;
+  if (!isValidHttpUrl(SUPABASE_URL) || !isValidToken(SUPABASE_KEY)) return false;
+  const token = SUPABASE_KEY as string;
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/submissions`, {
       method: 'POST',
       headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
+        apikey: token,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates',
       },
@@ -246,7 +301,7 @@ function saveToLocalDisk(list: ServerAnimeSubmission[]): void {
  * Loads all anime submissions from persistent store (KV -> Firestore -> Supabase -> Local)
  */
 export async function getPersistentSubmissions(): Promise<ServerAnimeSubmission[]> {
-  // 1. Try Vercel KV / Upstash
+  // 1. Try Vercel KV / Upstash (only if valid URL provided)
   const kvData = await fetchFromKV();
   if (kvData !== null) {
     memoryCache = kvData;
@@ -254,7 +309,7 @@ export async function getPersistentSubmissions(): Promise<ServerAnimeSubmission[
     return kvData;
   }
 
-  // 2. Try Firebase Firestore
+  // 2. Try Firebase Firestore (only if valid project ID provided)
   const fbData = await fetchFromFirebase();
   if (fbData !== null && fbData.length > 0) {
     memoryCache = fbData;
@@ -262,7 +317,7 @@ export async function getPersistentSubmissions(): Promise<ServerAnimeSubmission[
     return fbData;
   }
 
-  // 3. Try Supabase
+  // 3. Try Supabase (only if valid URL provided)
   const supaData = await fetchFromSupabase();
   if (supaData !== null && supaData.length > 0) {
     memoryCache = supaData;

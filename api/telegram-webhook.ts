@@ -21,6 +21,59 @@ const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
+// URL and Token Validation Helpers
+function isValidHttpUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return false;
+  if (
+    trimmed.includes('your-kv-store') ||
+    trimmed.includes('your-project') ||
+    trimmed.includes('example.com') ||
+    trimmed === 'KV_REST_API_URL' ||
+    trimmed === 'SUPABASE_URL'
+  ) {
+    return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function isValidToken(token?: string): boolean {
+  if (!token || typeof token !== 'string') return false;
+  const trimmed = token.trim();
+  if (trimmed.length < 8) return false;
+  if (
+    trimmed.startsWith('your_') ||
+    trimmed === 'KV_REST_API_TOKEN' ||
+    trimmed === 'UPSTASH_REDIS_REST_TOKEN' ||
+    trimmed === 'SUPABASE_SERVICE_ROLE_KEY' ||
+    trimmed === 'SUPABASE_ANON_KEY'
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isValidFirebaseProjectId(id?: string): boolean {
+  if (!id || typeof id !== 'string') return false;
+  const trimmed = id.trim();
+  if (trimmed.length < 4) return false;
+  if (
+    trimmed === 'FIREBASE_PROJECT_ID' ||
+    trimmed === 'NEXT_PUBLIC_FIREBASE_PROJECT_ID' ||
+    trimmed.startsWith('your-') ||
+    trimmed.includes('example')
+  ) {
+    return false;
+  }
+  return /^[a-z0-9-]+$/.test(trimmed);
+}
+
 // Persistent file storage paths (project data directory + /tmp fallback)
 const LOCAL_DATA_FILE = path.join(process.cwd(), 'data', 'submissions.json');
 const TMP_FILE = path.join('/tmp', 'anidub_submissions_v1.json');
@@ -30,8 +83,8 @@ let memorySubmissions: any[] = [];
  * Self-contained helper to load submissions from cloud DB or local disk
  */
 async function loadSubmissionsAsync(): Promise<any[]> {
-  // 1. Try Vercel KV / Upstash
-  if (KV_URL && KV_TOKEN) {
+  // 1. Try Vercel KV / Upstash (only if valid URL provided)
+  if (isValidHttpUrl(KV_URL) && isValidToken(KV_TOKEN)) {
     try {
       const res = await fetch(`${KV_URL}/get/anidub_submissions`, {
         headers: { Authorization: `Bearer ${KV_TOKEN}` },
@@ -96,8 +149,8 @@ async function saveSubmissionsAsync(list: any[]): Promise<void> {
     }
   }
 
-  // Sync to Vercel KV
-  if (KV_URL && KV_TOKEN) {
+  // Sync to Vercel KV (only if valid)
+  if (isValidHttpUrl(KV_URL) && isValidToken(KV_TOKEN)) {
     try {
       await fetch(`${KV_URL}/set/anidub_submissions`, {
         method: 'POST',
@@ -112,8 +165,8 @@ async function saveSubmissionsAsync(list: any[]): Promise<void> {
     }
   }
 
-  // Sync to Firebase
-  if (FIREBASE_PROJECT_ID) {
+  // Sync to Firebase (only if valid)
+  if (isValidFirebaseProjectId(FIREBASE_PROJECT_ID)) {
     try {
       const endpoint = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/submissions`;
       await Promise.allSettled(
@@ -133,6 +186,29 @@ async function saveSubmissionsAsync(list: any[]): Promise<void> {
       );
     } catch (e) {
       console.error('Firebase write error in webhook:', e);
+    }
+  }
+
+  // Sync to Supabase (only if valid)
+  if (isValidHttpUrl(SUPABASE_URL) && isValidToken(SUPABASE_KEY)) {
+    const token = SUPABASE_KEY as string;
+    try {
+      await Promise.allSettled(
+        list.map((item) =>
+          fetch(`${SUPABASE_URL}/rest/v1/submissions`, {
+            method: 'POST',
+            headers: {
+              apikey: token,
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              Prefer: 'resolution=merge-duplicates',
+            },
+            body: JSON.stringify(item),
+          })
+        )
+      );
+    } catch (e) {
+      console.error('Supabase write error in webhook:', e);
     }
   }
 }
