@@ -22,8 +22,12 @@ async function readBin(): Promise<any[]> {
       },
       cache: 'no-store',
     });
+    if (!res.ok) return [];
     const json = await res.json();
-    return Array.isArray(json.record) ? json.record : [];
+    const record = json.record || {};
+    if (Array.isArray(record)) return record;
+    if (record.submissions && Array.isArray(record.submissions)) return record.submissions;
+    return [];
   } catch {
     return [];
   }
@@ -38,10 +42,15 @@ async function updateBin(data: any[]): Promise<boolean> {
         'Content-Type': 'application/json',
         'X-Master-Key': JSONBIN_API_KEY,
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ submissions: data }),
     });
-    return res.ok;
-  } catch {
+    if (!res.ok) {
+      console.error(`[Webhook Legacy JSONBin] PUT failed: ${res.status}`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Webhook Legacy JSONBin] Update error:', err);
     return false;
   }
 }
@@ -49,18 +58,14 @@ async function updateBin(data: any[]): Promise<boolean> {
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Bot-Api-Secret-Token');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   if (req.method === 'GET') {
-    return res.status(200).json({
-      status: 'online',
-      service: 'AniDub India Telegram Webhook (JSONBin)',
-      timestamp: new Date().toISOString(),
-    });
+    return res.status(200).json({ status: 'online', service: 'Telegram Webhook (Legacy)' });
   }
 
   if (req.method !== 'POST') {
@@ -148,22 +153,9 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ ok: true });
     }
 
-    // Handle /status command
-    if (update.message?.text?.startsWith('/status')) {
-      await fetch(`${TELEGRAM_API}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: update.message.chat.id,
-          text: `⚡ *AniDub India Status (JSONBin)*\n\n• Service: Active\n• Time: ${new Date().toISOString()}`,
-          parse_mode: 'Markdown',
-        }),
-      });
-    }
-
     return res.status(200).json({ ok: true });
   } catch (err: any) {
-    console.error('Webhook error:', err);
+    console.error('[Webhook Legacy] Error:', err);
     return res.status(500).json({ ok: false, error: err.message });
   }
 }

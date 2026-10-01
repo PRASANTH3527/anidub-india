@@ -1,6 +1,6 @@
 // Next.js App Router API Route: app/api/submissions/route.ts
 // Direct JSONBin.io persistence using standard fetch().
-// Returns raw array to match frontend expectations.
+// Structure: { submissions: [...] }
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -21,7 +21,10 @@ const NO_CACHE_HEADERS = {
 };
 
 async function readBin(): Promise<any[]> {
-  if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) return [];
+  if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) {
+    console.error('[JSONBin] Credentials missing');
+    return [];
+  }
   try {
     const res = await fetch(`${JSONBIN_URL}/latest`, {
       method: 'GET',
@@ -31,17 +34,27 @@ async function readBin(): Promise<any[]> {
       },
       cache: 'no-store',
     });
+    if (!res.ok) {
+      console.error(`[JSONBin] GET failed: ${res.status} ${res.statusText}`);
+      return [];
+    }
     const json = await res.json();
-    // JSONBin v3 wraps data in a "record" property
-    return Array.isArray(json.record) ? json.record : [];
+    // Support both { record: { submissions: [] } } and { record: [] }
+    const record = json.record || {};
+    if (Array.isArray(record)) return record;
+    if (record.submissions && Array.isArray(record.submissions)) return record.submissions;
+    return [];
   } catch (err) {
-    console.error('JSONBin read error:', err);
+    console.error('[JSONBin] Read error:', err);
     return [];
   }
 }
 
 async function updateBin(data: any[]): Promise<boolean> {
-  if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) return false;
+  if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) {
+    console.error('[JSONBin] Credentials missing for update');
+    return false;
+  }
   try {
     const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
@@ -49,11 +62,17 @@ async function updateBin(data: any[]): Promise<boolean> {
         'Content-Type': 'application/json',
         'X-Master-Key': JSONBIN_API_KEY,
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ submissions: data }),
     });
-    return res.ok;
+    
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[JSONBin] PUT failed: ${res.status} ${res.statusText}`, errText);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.error('JSONBin update error:', err);
+    console.error('[JSONBin] Update error:', err);
     return false;
   }
 }
@@ -112,12 +131,20 @@ export async function POST(req: Request) {
       current.unshift(updatedRecord);
     }
 
-    await updateBin(current);
+    const success = await updateBin(current);
+    if (!success) {
+      return new Response(JSON.stringify({ error: 'Failed to save to database' }), {
+        status: 503,
+        headers: NO_CACHE_HEADERS,
+      });
+    }
+
     return new Response(JSON.stringify(updatedRecord), {
       status: 201,
       headers: NO_CACHE_HEADERS,
     });
   } catch (err: any) {
+    console.error('[POST] Error:', err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: NO_CACHE_HEADERS,
@@ -158,12 +185,20 @@ export async function PATCH(req: Request) {
       rejectionReason: newStatus === 'rejected' ? reason : undefined,
     };
 
-    await updateBin(current);
+    const success = await updateBin(current);
+    if (!success) {
+      return new Response(JSON.stringify({ error: 'Failed to save update' }), {
+        status: 503,
+        headers: NO_CACHE_HEADERS,
+      });
+    }
+
     return new Response(JSON.stringify(current[index]), {
       status: 200,
       headers: NO_CACHE_HEADERS,
     });
   } catch (err: any) {
+    console.error('[PATCH] Error:', err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: NO_CACHE_HEADERS,

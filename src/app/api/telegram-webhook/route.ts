@@ -26,8 +26,12 @@ async function readBin(): Promise<any[]> {
       },
       cache: 'no-store',
     });
+    if (!res.ok) return [];
     const json = await res.json();
-    return Array.isArray(json.record) ? json.record : [];
+    const record = json.record || {};
+    if (Array.isArray(record)) return record;
+    if (record.submissions && Array.isArray(record.submissions)) return record.submissions;
+    return [];
   } catch {
     return [];
   }
@@ -42,10 +46,15 @@ async function updateBin(data: any[]): Promise<boolean> {
         'Content-Type': 'application/json',
         'X-Master-Key': JSONBIN_API_KEY,
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ submissions: data }),
     });
-    return res.ok;
-  } catch {
+    if (!res.ok) {
+      console.error(`[Webhook JSONBin] PUT failed: ${res.status}`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Webhook JSONBin] Update error:', err);
     return false;
   }
 }
@@ -64,7 +73,7 @@ export async function OPTIONS() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Bot-Api-Secret-Token',
+      'Access-Control-Allow-Headers': 'Content-Type',
     },
   });
 }
@@ -151,22 +160,9 @@ export async function POST(req: Request) {
       return Response.json({ ok: true });
     }
 
-    // Handle /status command
-    if (update.message?.text?.startsWith('/status')) {
-      await fetch(`${TELEGRAM_API}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: update.message.chat.id,
-          text: `⚡ *AniDub India Status (JSONBin)*\n\n• Service: Active\n• Time: ${new Date().toISOString()}`,
-          parse_mode: 'Markdown',
-        }),
-      });
-    }
-
     return Response.json({ ok: true });
   } catch (err: any) {
-    console.error('Webhook error:', err);
+    console.error('[Webhook] Error:', err);
     return Response.json({ ok: false, error: err.message }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 // Vercel Serverless Function: api/submissions.ts
 // Direct JSONBin.io persistence using native fetch().
-// Returns raw array to match frontend expectations.
+// Structure: { submissions: [...] }
 
 const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID;
 const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
@@ -17,10 +17,13 @@ async function readBin(): Promise<any[]> {
       },
       cache: 'no-store',
     });
+    if (!res.ok) return [];
     const json = await res.json();
-    return Array.isArray(json.record) ? json.record : [];
-  } catch (err) {
-    console.error('JSONBin read error:', err);
+    const record = json.record || {};
+    if (Array.isArray(record)) return record;
+    if (record.submissions && Array.isArray(record.submissions)) return record.submissions;
+    return [];
+  } catch {
     return [];
   }
 }
@@ -34,11 +37,15 @@ async function updateBin(data: any[]): Promise<boolean> {
         'Content-Type': 'application/json',
         'X-Master-Key': JSONBIN_API_KEY,
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ submissions: data }),
     });
-    return res.ok;
+    if (!res.ok) {
+      console.error(`[Legacy API JSONBin] PUT failed: ${res.status}`);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.error('JSONBin update error:', err);
+    console.error('[Legacy API JSONBin] Update error:', err);
     return false;
   }
 }
@@ -56,7 +63,6 @@ export default async function handler(req: any, res: any) {
     if (req.method === 'GET') {
       const status = req.query?.status;
       const all = await readBin();
-
       if (status) {
         const filtered = all.filter((s: any) => s.submissionStatus === status);
         return res.status(200).json(filtered);
@@ -66,41 +72,23 @@ export default async function handler(req: any, res: any) {
 
     if (req.method === 'POST') {
       const record = req.body;
-      if (!record || !record.id) {
-        return res.status(400).json({ error: 'Missing ID' });
-      }
-
+      if (!record || !record.id) return res.status(400).json({ error: 'Missing ID' });
       const current = await readBin();
       const index = current.findIndex((s: any) => s.id === record.id);
-      const updatedRecord = {
-        ...record,
-        updatedAt: new Date().toISOString(),
-        submissionStatus: record.submissionStatus || 'pending',
-      };
-
-      if (index !== -1) {
-        current[index] = { ...current[index], ...updatedRecord };
-      } else {
-        current.unshift(updatedRecord);
-      }
-
-      await updateBin(current);
+      const updatedRecord = { ...record, updatedAt: new Date().toISOString() };
+      if (index !== -1) current[index] = { ...current[index], ...updatedRecord };
+      else current.unshift(updatedRecord);
+      const success = await updateBin(current);
+      if (!success) return res.status(503).json({ error: 'Database update failed' });
       return res.status(201).json(updatedRecord);
     }
 
     if (req.method === 'PATCH') {
       const { id, action, reviewer, reason } = req.body || {};
-      if (!id) {
-        return res.status(400).json({ error: 'Missing ID' });
-      }
-
+      if (!id) return res.status(400).json({ error: 'Missing ID' });
       const current = await readBin();
       const index = current.findIndex((s: any) => s.id === id);
-
-      if (index === -1) {
-        return res.status(404).json({ error: 'Not found' });
-      }
-
+      if (index === -1) return res.status(404).json({ error: 'Not found' });
       const newStatus = action === 'approve' ? 'approved' : 'rejected';
       current[index] = {
         ...current[index],
@@ -111,14 +99,13 @@ export default async function handler(req: any, res: any) {
         updatedAt: new Date().toISOString(),
         rejectionReason: newStatus === 'rejected' ? reason : undefined,
       };
-
-      await updateBin(current);
+      const success = await updateBin(current);
+      if (!success) return res.status(503).json({ error: 'Database update failed' });
       return res.status(200).json(current[index]);
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err: any) {
-    console.error('Submissions API error:', err);
     return res.status(500).json({ error: err.message });
   }
 }
