@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
-import { kv } from '@vercel/kv';
+import { createClient } from '@vercel/kv';
 
 export interface ServerAnimeSubmission {
   id: string;
@@ -46,28 +46,66 @@ export interface ServerAnimeSubmission {
 }
 
 const KV_KEY = 'anidub_submissions';
+let memoryStore: ServerAnimeSubmission[] = [];
+
+// Validates that KV_REST_API_URL is an actual HTTPS endpoint and not an unpopulated placeholder
+function isConfiguredKvUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  return (
+    trimmed.startsWith('https://') &&
+    !trimmed.includes('KV_REST_API_URL') &&
+    !trimmed.includes('your-kv-store') &&
+    !trimmed.includes('example.com')
+  );
+}
+
+// Safely initializes @vercel/kv client only when valid credentials exist
+function getKvClient() {
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!isConfiguredKvUrl(url) || !token || token === 'KV_REST_API_TOKEN' || token.length < 5) {
+    return null;
+  }
+  try {
+    return createClient({ url, token });
+  } catch {
+    return null;
+  }
+}
 
 // Safe helper to read from Vercel KV
 async function getKvSubmissions(): Promise<ServerAnimeSubmission[]> {
-  try {
-    const data = await kv.get<ServerAnimeSubmission[]>(KV_KEY);
-    if (Array.isArray(data)) return data;
-    return [];
-  } catch (err) {
-    console.error('[Vercel KV Error] Failed to read submissions:', err);
-    return [];
+  const client = getKvClient();
+  if (client) {
+    try {
+      const data = await client.get<ServerAnimeSubmission[]>(KV_KEY);
+      if (Array.isArray(data)) {
+        memoryStore = data;
+        return data;
+      }
+      return [];
+    } catch (err) {
+      console.warn('[Vercel KV Warning] Failed to read submissions:', err);
+    }
   }
+  return memoryStore;
 }
 
 // Safe helper to write to Vercel KV
 async function saveKvSubmissions(list: ServerAnimeSubmission[]): Promise<boolean> {
-  try {
-    await kv.set(KV_KEY, list);
-    return true;
-  } catch (err) {
-    console.error('[Vercel KV Error] Failed to save submissions:', err);
-    return false;
+  memoryStore = list;
+  const client = getKvClient();
+  if (client) {
+    try {
+      await client.set(KV_KEY, list);
+      return true;
+    } catch (err) {
+      console.warn('[Vercel KV Warning] Failed to save submissions:', err);
+      return false;
+    }
   }
+  return true;
 }
 
 export default async function handler(req: any, res: any) {

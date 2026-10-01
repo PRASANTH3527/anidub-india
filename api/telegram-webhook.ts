@@ -6,9 +6,10 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
-import { kv } from '@vercel/kv';
+import { createClient } from '@vercel/kv';
 
 const KV_KEY = 'anidub_submissions';
+let memoryStore: any[] = [];
 
 // Telegram Configuration
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8648317719:AAHZ7wxQefZT5QdKCpc61epWJ4mGAgJvgdc';
@@ -17,27 +18,64 @@ const PUBLIC_CHANNEL_ID = process.env.PUBLIC_CHANNEL_ID || '@anidub_india';
 const WEBSITE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.WEBSITE_URL || 'https://anidub.in';
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
+// Validates that KV_REST_API_URL is an actual HTTPS endpoint and not an unpopulated placeholder
+function isConfiguredKvUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  return (
+    trimmed.startsWith('https://') &&
+    !trimmed.includes('KV_REST_API_URL') &&
+    !trimmed.includes('your-kv-store') &&
+    !trimmed.includes('example.com')
+  );
+}
+
+// Safely initializes @vercel/kv client only when valid credentials exist
+function getKvClient() {
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!isConfiguredKvUrl(url) || !token || token === 'KV_REST_API_TOKEN' || token.length < 5) {
+    return null;
+  }
+  try {
+    return createClient({ url, token });
+  } catch {
+    return null;
+  }
+}
+
 // Safe helper to read from Vercel KV
 async function getKvSubmissions(): Promise<any[]> {
-  try {
-    const data = await kv.get<any[]>(KV_KEY);
-    if (Array.isArray(data)) return data;
-    return [];
-  } catch (err) {
-    console.error('[Vercel KV Error in Webhook] Failed to read submissions:', err);
-    return [];
+  const client = getKvClient();
+  if (client) {
+    try {
+      const data = await client.get<any[]>(KV_KEY);
+      if (Array.isArray(data)) {
+        memoryStore = data;
+        return data;
+      }
+      return [];
+    } catch (err) {
+      console.warn('[Vercel KV Warning] Failed to read submissions in webhook:', err);
+    }
   }
+  return memoryStore;
 }
 
 // Safe helper to write to Vercel KV
 async function saveKvSubmissions(list: any[]): Promise<boolean> {
-  try {
-    await kv.set(KV_KEY, list);
-    return true;
-  } catch (err) {
-    console.error('[Vercel KV Error in Webhook] Failed to save submissions:', err);
-    return false;
+  memoryStore = list;
+  const client = getKvClient();
+  if (client) {
+    try {
+      await client.set(KV_KEY, list);
+      return true;
+    } catch (err) {
+      console.warn('[Vercel KV Warning] Failed to save submissions in webhook:', err);
+      return false;
+    }
   }
+  return true;
 }
 
 /**
