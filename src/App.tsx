@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Navbar, NavTab } from './components/Navbar';
 import { Hero } from './components/Hero';
