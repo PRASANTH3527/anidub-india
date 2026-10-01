@@ -213,9 +213,8 @@ class DatabaseService {
       });
       if (!res.ok) return;
       const json = await res.json();
-      if (!json.success || !Array.isArray(json.data)) return;
-
-      const serverList: AnimeRecord[] = json.data;
+      const serverList: AnimeRecord[] = Array.isArray(json) ? json : (json.data || json.record || []);
+      if (!Array.isArray(serverList)) return;
       const localList = this.getAllAnimeRecords();
       let hasChanges = false;
       const merged = [...localList];

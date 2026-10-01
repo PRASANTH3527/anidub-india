@@ -1,6 +1,5 @@
 // Next.js App Router API Route: app/api/telegram-webhook/route.ts
 // Handles Telegram Webhook callbacks with JSONBin.io persistence.
-// Zero npm packages and zero shared local files.
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -10,42 +9,39 @@ const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID;
 const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
 const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
-const BIN_HEADERS = {
-  'Content-Type': 'application/json',
-  'X-Master-Key': JSONBIN_API_KEY || '',
-  'X-Bin-Versioning': 'false',
-};
-
 // Telegram Configuration
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8648317719:AAHZ7wxQefZT5QdKCpc61epWJ4mGAgJvgdc';
 const PUBLIC_CHANNEL_ID = process.env.PUBLIC_CHANNEL_ID || '@anidub_india';
 const WEBSITE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.WEBSITE_URL || 'https://anidub.in';
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
-// Helper to read from JSONBin
 async function readBin(): Promise<any[]> {
   if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) return [];
   try {
     const res = await fetch(`${JSONBIN_URL}/latest`, {
       method: 'GET',
-      headers: BIN_HEADERS,
+      headers: {
+        'X-Master-Key': JSONBIN_API_KEY,
+        'X-Bin-Versioning': 'false',
+      },
       cache: 'no-store',
     });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data.record) ? data.record : [];
+    const json = await res.json();
+    return Array.isArray(json.record) ? json.record : [];
   } catch {
     return [];
   }
 }
 
-// Helper to update JSONBin
 async function updateBin(data: any[]): Promise<boolean> {
   if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) return false;
   try {
     const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
-      headers: BIN_HEADERS,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_API_KEY,
+      },
       body: JSON.stringify(data),
     });
     return res.ok;
@@ -58,7 +54,6 @@ export async function GET() {
   return Response.json({
     status: 'online',
     service: 'AniDub India Telegram Webhook (JSONBin)',
-    botConfigured: Boolean(TELEGRAM_BOT_TOKEN),
     timestamp: new Date().toISOString(),
   });
 }

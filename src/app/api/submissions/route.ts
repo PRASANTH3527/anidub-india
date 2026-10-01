@@ -1,6 +1,6 @@
 // Next.js App Router API Route: app/api/submissions/route.ts
 // Direct JSONBin.io persistence using standard fetch().
-// Zero npm packages and zero shared local files.
+// Returns raw array to match frontend expectations.
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -9,12 +9,6 @@ export const fetchCache = 'force-no-store';
 const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID;
 const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
 const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
-
-const HEADERS = {
-  'Content-Type': 'application/json',
-  'X-Master-Key': JSONBIN_API_KEY || '',
-  'X-Bin-Versioning': 'false',
-};
 
 const NO_CACHE_HEADERS = {
   'Content-Type': 'application/json',
@@ -26,71 +20,35 @@ const NO_CACHE_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, X-Master-Key',
 };
 
-export interface ServerAnimeSubmission {
-  id: string;
-  title: string;
-  romajiTitle?: string;
-  poster: string;
-  imageUrl?: string;
-  banner?: string;
-  type: 'Series' | 'Movie' | 'Special' | 'OVA';
-  releaseYear: number;
-  originalReleaseDate?: string;
-  rating: number;
-  episodes?: number;
-  status: 'Ongoing' | 'Completed' | 'Airing' | 'Upcoming' | 'Rejected';
-  airingStatus?: 'Ongoing' | 'Completed';
-  releaseDay?: string;
-  airingDay?: string;
-  submissionStatus: 'pending' | 'approved' | 'rejected';
-  rejectionReason?: string;
-  reviewedBy?: string;
-  reviewedAt?: string;
-  genres: string[];
-  themes?: string[];
-  studio: string;
-  synopsis: string;
-  characters?: any[];
-  dubs: string[];
-  dubDetails?: any[];
-  platforms: { name: string; url: string }[];
-  submittedBy?: {
-    userId: string;
-    userName: string;
-    userEmail?: string;
-  };
-  submittedAt: string;
-  updatedAt?: string;
-}
-
-// Helper to read from JSONBin
-async function readBin(): Promise<ServerAnimeSubmission[]> {
-  if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) {
-    console.error('JSONBin credentials missing');
-    return [];
-  }
+async function readBin(): Promise<any[]> {
+  if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) return [];
   try {
     const res = await fetch(`${JSONBIN_URL}/latest`, {
       method: 'GET',
-      headers: HEADERS,
+      headers: {
+        'X-Master-Key': JSONBIN_API_KEY,
+        'X-Bin-Versioning': 'false',
+      },
       cache: 'no-store',
     });
-    if (!res.ok) throw new Error(`JSONBin GET failed: ${res.status}`);
-    const data = await res.json();
-    return Array.isArray(data.record) ? data.record : [];
+    const json = await res.json();
+    // JSONBin v3 wraps data in a "record" property
+    return Array.isArray(json.record) ? json.record : [];
   } catch (err) {
     console.error('JSONBin read error:', err);
     return [];
   }
 }
 
-// Helper to update JSONBin
-async function updateBin(data: ServerAnimeSubmission[]): Promise<boolean> {
+async function updateBin(data: any[]): Promise<boolean> {
   if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) return false;
   try {
     const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
-      headers: HEADERS,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_API_KEY,
+      },
       body: JSON.stringify(data),
     });
     return res.ok;
@@ -111,19 +69,19 @@ export async function GET(req: Request) {
     const all = await readBin();
 
     if (status) {
-      const filtered = all.filter((s) => s.submissionStatus === status);
-      return new Response(JSON.stringify({ success: true, count: filtered.length, data: filtered }), {
+      const filtered = all.filter((s: any) => s.submissionStatus === status);
+      return new Response(JSON.stringify(filtered), {
         status: 200,
         headers: NO_CACHE_HEADERS,
       });
     }
 
-    return new Response(JSON.stringify({ success: true, count: all.length, data: all }), {
+    return new Response(JSON.stringify(all), {
       status: 200,
       headers: NO_CACHE_HEADERS,
     });
   } catch (err: any) {
-    return new Response(JSON.stringify({ success: false, error: err.message }), {
+    return new Response(JSON.stringify([]), {
       status: 500,
       headers: NO_CACHE_HEADERS,
     });
@@ -132,36 +90,35 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    if (!body || !body.id || !body.title) {
-      return new Response(JSON.stringify({ success: false, error: 'Missing ID or title' }), {
+    const record = await req.json();
+    if (!record || !record.id) {
+      return new Response(JSON.stringify({ error: 'Missing ID' }), {
         status: 400,
         headers: NO_CACHE_HEADERS,
       });
     }
 
-    const record: ServerAnimeSubmission = {
-      ...body,
-      submissionStatus: body.submissionStatus || 'pending',
-      submittedAt: body.submittedAt || new Date().toISOString(),
+    const current = await readBin();
+    const index = current.findIndex((s: any) => s.id === record.id);
+    const updatedRecord = {
+      ...record,
       updatedAt: new Date().toISOString(),
+      submissionStatus: record.submissionStatus || 'pending',
     };
 
-    const current = await readBin();
-    const index = current.findIndex((s) => s.id === record.id);
     if (index !== -1) {
-      current[index] = { ...current[index], ...record };
+      current[index] = { ...current[index], ...updatedRecord };
     } else {
-      current.unshift(record);
+      current.unshift(updatedRecord);
     }
 
     await updateBin(current);
-    return new Response(JSON.stringify({ success: true, data: record }), {
+    return new Response(JSON.stringify(updatedRecord), {
       status: 201,
       headers: NO_CACHE_HEADERS,
     });
   } catch (err: any) {
-    return new Response(JSON.stringify({ success: false, error: err.message }), {
+    return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: NO_CACHE_HEADERS,
     });
@@ -173,24 +130,24 @@ export async function PATCH(req: Request) {
     const body = await req.json();
     const { id, action, reviewer, reason } = body || {};
 
-    if (!id || (action !== 'approve' && action !== 'reject')) {
-      return new Response(JSON.stringify({ success: false, error: 'Invalid action or missing ID' }), {
+    if (!id) {
+      return new Response(JSON.stringify({ error: 'Missing ID' }), {
         status: 400,
         headers: NO_CACHE_HEADERS,
       });
     }
 
-    const newStatus = action === 'approve' ? 'approved' : 'rejected';
     const current = await readBin();
-    const index = current.findIndex((s) => s.id === id);
+    const index = current.findIndex((s: any) => s.id === id);
 
     if (index === -1) {
-      return new Response(JSON.stringify({ success: false, error: 'Submission not found' }), {
+      return new Response(JSON.stringify({ error: 'Not found' }), {
         status: 404,
         headers: NO_CACHE_HEADERS,
       });
     }
 
+    const newStatus = action === 'approve' ? 'approved' : 'rejected';
     current[index] = {
       ...current[index],
       submissionStatus: newStatus,
@@ -202,12 +159,12 @@ export async function PATCH(req: Request) {
     };
 
     await updateBin(current);
-    return new Response(JSON.stringify({ success: true, data: current[index] }), {
+    return new Response(JSON.stringify(current[index]), {
       status: 200,
       headers: NO_CACHE_HEADERS,
     });
   } catch (err: any) {
-    return new Response(JSON.stringify({ success: false, error: err.message }), {
+    return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: NO_CACHE_HEADERS,
     });
