@@ -20,7 +20,7 @@ import { authService } from './services/authService';
 import { AnimeRecord, WatchlistEntry } from './types/database';
 import { Anime, WatchlistItem, DubLanguage } from './types/anime';
 import { updateSeoTags } from './utils/seo';
-import { ChevronLeft, ChevronRight, Frown, Sparkles, PlusCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Frown, Sparkles, PlusCircle, ShieldCheck, X, LogIn } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 12;
 
@@ -51,20 +51,22 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Check if current route is the hidden /admin-dashboard route
-  const checkIsAdmin = () => {
-    if (typeof window === 'undefined') return false;
-    const path = window.location.pathname.toLowerCase();
-    const hash = window.location.hash.toLowerCase().replace('#', '').replace('/', '');
-    return (
-      path === '/admin' || 
-      path === '/admin/' || 
-      hash === 'admin' || 
-      hash === 'dashboard'
-    );
-  };
+  // Secret Admin State
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showSecretLogin, setShowSecretLogin] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
 
-  const [isAdminView, setIsAdminView] = useState(checkIsAdmin);
+  const handleSecretLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminPassword === 'prasanth123') {
+      setIsAdmin(true);
+      setShowSecretLogin(false);
+      setAdminPassword('');
+    } else {
+      alert('Invalid Password');
+      setAdminPassword('');
+    }
+  };
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
 
   // Initial server sync to load fresh approved anime immediately on every page visit
@@ -103,16 +105,6 @@ export default function App() {
   // Dynamic Routing & SEO Hash Sync
   useEffect(() => {
     const handleLocationChange = () => {
-      const isAdmin = checkIsAdmin();
-      setIsAdminView(isAdmin);
-      if (isAdmin) {
-        updateSeoTags({
-          title: 'Admin Dashboard — AniDub India',
-          description: 'Secret administration dashboard for AniDub India.',
-        });
-        return;
-      }
-
       const hash = window.location.hash.replace('#', '');
       
       if (hash.startsWith('anime/')) {
@@ -317,13 +309,41 @@ export default function App() {
     setTimeout(() => setIsLoading(false), 180);
   };
 
-  // If secret admin route, render AdminDashboard directly
-  if (isAdminView) {
-    return <AdminDashboard />;
-  }
-
   return (
     <div className="min-h-screen bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white">
+      {/* Secret Password Modal */}
+      {showSecretLogin && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
+          <div className="w-full max-w-xs bg-[#131926] border border-purple-500/30 rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-heading font-black text-white flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-purple-400" />
+                Admin Access
+              </h3>
+              <button onClick={() => setShowSecretLogin(false)} className="text-neutral-500 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSecretLogin} className="space-y-4">
+              <input 
+                autoFocus
+                type="password"
+                placeholder="Enter admin password..."
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                className="w-full bg-[#0b0f17] border border-neutral-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors"
+              />
+              <button 
+                type="submit"
+                className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-colors shadow-lg shadow-purple-600/20"
+              >
+                Unlock Dashboard
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Top Navigation */}
       <Navbar
         activeTab={activeTab}
@@ -331,9 +351,25 @@ export default function App() {
         watchlistCount={watchlistAnimeIds.length}
         onOpenSuggestModal={() => setIsSubmitModalOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onSecretTrigger={() => !isAdmin && setShowSecretLogin(true)}
       />
 
       <main className="flex-grow">
+        {/* Admin Dashboard Injection */}
+        {isAdmin && activeTab === 'library' && (
+          <div className="mb-8 border-b border-purple-500/20 bg-purple-950/5">
+             <AdminDashboard />
+             <div className="max-w-6xl mx-auto px-4 py-4 flex justify-end">
+                <button 
+                  onClick={() => setIsAdmin(false)}
+                  className="text-[10px] font-bold text-neutral-500 hover:text-white uppercase tracking-widest flex items-center gap-1.5 transition-colors"
+                >
+                  <LogIn className="w-3 h-3 rotate-180" />
+                  Exit Admin Mode
+                </button>
+             </div>
+          </div>
+        )}
         {/* 1. Dedicated Information Page (Route #anime/:id) */}
         {currentViewingAnime ? (
           <AnimeDetailPage

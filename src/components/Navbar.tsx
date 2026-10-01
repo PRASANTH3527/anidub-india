@@ -19,6 +19,7 @@ interface NavbarProps {
   watchlistCount: number;
   onOpenSuggestModal: () => void;
   onOpenAuthModal: () => void;
+  onSecretTrigger: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -27,8 +28,27 @@ export const Navbar: React.FC<NavbarProps> = ({
   watchlistCount,
   onOpenSuggestModal,
   onOpenAuthModal,
+  onSecretTrigger,
 }) => {
   const currentUser = authService.getCurrentUser();
+  const [clickCount, setClickCount] = React.useState(0);
+  const [lastClickTime, setLastClickTime] = React.useState(0);
+
+  const handleLogoClick = () => {
+    const now = Date.now();
+    if (now - lastClickTime < 600) {
+      const newCount = clickCount + 1;
+      setClickCount(newCount);
+      if (newCount >= 5) {
+        onSecretTrigger();
+        setClickCount(0);
+      }
+    } else {
+      setClickCount(1);
+    }
+    setLastClickTime(now);
+    setActiveTab('library');
+  };
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0b0f17]/90 backdrop-blur-md border-b border-neutral-800/80">
@@ -36,7 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         
         {/* Brand Logo */}
         <div 
-          onClick={() => setActiveTab('library')}
+          onClick={handleLogoClick}
           className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group select-none shrink-0"
         >
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-purple-600/30 group-hover:scale-105 transition-transform duration-200">

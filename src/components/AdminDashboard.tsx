@@ -19,9 +19,8 @@ import { AnimeRecord } from '../types/database';
 export const AdminDashboard: React.FC = () => {
   const [pendingSubmissions, setPendingSubmissions] = useState<AnimeRecord[]>([]);
   const [approvedAnime, setApprovedAnime] = useState<AnimeRecord[]>([]);
-  const [feedback, setFeedback] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'feedback'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'approved'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
 
   const fetchData = async () => {
@@ -30,12 +29,6 @@ export const AdminDashboard: React.FC = () => {
       await dbService.forceRefresh();
       setPendingSubmissions(dbService.getPendingSubmissions());
       setApprovedAnime(dbService.getApprovedAnime());
-      
-      // Fetch feedback from JSONBin via a simple fetch if not in dbService
-      const res = await fetch('/api/submissions'); // The submissions route returns all including feedback if structured that way?
-      // Actually my feedback route saves to the same bin but different key. 
-      // I should probably update the submissions GET to return feedback too if I want it here.
-      // For now, let's just stick to anime moderation as primary.
     } catch (err) {
       console.error('Failed to fetch data:', err);
     } finally {
@@ -72,18 +65,18 @@ export const AdminDashboard: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#0b0f17] text-neutral-100 p-4 sm:p-8 font-sans">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="bg-transparent text-neutral-100 p-4 sm:px-8 sm:py-6 font-sans">
+      <div className="max-w-6xl mx-auto space-y-6">
         
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
-              <ShieldCheck className="w-6 h-6" />
+            <div className="w-10 h-10 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
+              <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="font-heading font-black text-2xl text-white tracking-tight">Admin Dashboard</h1>
-              <p className="text-xs text-neutral-400 font-medium">Moderate submissions & manage AniDub India</p>
+              <h1 className="font-heading font-black text-xl text-white tracking-tight">Moderation Panel</h1>
+              <p className="text-[10px] text-neutral-400 font-medium">Approve community submissions to go live</p>
             </div>
           </div>
 
@@ -91,16 +84,10 @@ export const AdminDashboard: React.FC = () => {
             <button 
               onClick={fetchData}
               disabled={isLoading}
-              className="p-2.5 rounded-xl bg-neutral-800/50 border border-neutral-700 hover:border-purple-500/50 transition-colors disabled:opacity-50"
+              className="p-2 rounded-xl bg-neutral-800/50 border border-neutral-700 hover:border-purple-500/50 transition-colors disabled:opacity-50"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
-            <a 
-              href="/"
-              className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-lg shadow-purple-600/20"
-            >
-              Back to Site
-            </a>
           </div>
         </div>
 
@@ -124,42 +111,25 @@ export const AdminDashboard: React.FC = () => {
             <CheckCircle2 className="w-3.5 h-3.5" />
             Approved ({approvedAnime.length})
           </button>
-          <button 
-            onClick={() => setActiveTab('feedback')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-              activeTab === 'feedback' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            Feedback
-          </button>
         </div>
 
         {/* List Section */}
         <div className="space-y-4">
-          {activeTab !== 'feedback' && (
-            <div className="relative max-w-md">
-              <Search className="w-4 h-4 text-neutral-500 absolute left-4 top-1/2 -translate-y-1/2" />
-              <input 
-                type="text"
-                placeholder="Search by title or ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#131926] border border-neutral-800 rounded-xl pl-11 pr-4 py-3 text-xs focus:outline-none focus:border-purple-500/50 transition-colors"
-              />
-            </div>
-          )}
+          <div className="relative max-w-md">
+            <Search className="w-4 h-4 text-neutral-500 absolute left-4 top-1/2 -translate-y-1/2" />
+            <input 
+              type="text"
+              placeholder="Search by title or ID..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-[#131926] border border-neutral-800 rounded-xl pl-11 pr-4 py-3 text-xs focus:outline-none focus:border-purple-500/50 transition-colors"
+            />
+          </div>
 
           {isLoading ? (
             <div className="py-20 text-center space-y-4">
               <RefreshCw className="w-8 h-8 text-purple-500 animate-spin mx-auto" />
               <p className="text-xs text-neutral-400 font-medium">Synchronizing...</p>
-            </div>
-          ) : activeTab === 'feedback' ? (
-            <div className="bg-[#131926] border border-neutral-800 rounded-2xl p-6 text-center py-20">
-              <MessageSquare className="w-10 h-10 text-neutral-600 mx-auto mb-4" />
-              <h3 className="text-white font-bold mb-1">Feedback View Coming Soon</h3>
-              <p className="text-xs text-neutral-500">Check Telegram for real-time feedback alerts.</p>
             </div>
           ) : filteredItems.length > 0 ? (
             <div className="grid grid-cols-1 gap-4">
