@@ -58,10 +58,41 @@ class DatabaseService {
     this.listeners.forEach((l) => l());
   }
 
+  private normalizeRecord(r: any): AnimeRecord {
+    if (!r) return r;
+    const dubs = Array.isArray(r.dubs) ? r.dubs : [];
+    const platforms = Array.isArray(r.platforms) ? r.platforms : [];
+    const genres = Array.isArray(r.genres) ? r.genres : [];
+    const themes = Array.isArray(r.themes) ? r.themes : [];
+    const characters = Array.isArray(r.characters) ? r.characters : [];
+    const dubDetails = Array.isArray(r.dubDetails)
+      ? r.dubDetails.map((d: any) => ({
+          ...d,
+          platform: Array.isArray(d?.platform) ? d.platform : (d?.platform ? [d.platform] : ['Crunchyroll']),
+        }))
+      : dubs.map((lang: string) => ({
+          language: lang,
+          available: true,
+          platform: platforms.map((p: any) => p?.name || p),
+          notes: `Available in ${lang}`,
+        }));
+
+    return {
+      ...r,
+      dubs,
+      genres,
+      themes,
+      platforms,
+      characters,
+      dubDetails,
+    };
+  }
+
   private getAllAnimeRecords(): AnimeRecord[] {
     try {
       const raw = localStorage.getItem(DB_ANIME_KEY);
-      return raw ? JSON.parse(raw) : [];
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.map((item) => this.normalizeRecord(item)) : [];
     } catch {
       return [];
     }

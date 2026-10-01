@@ -75,8 +75,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   // Map watchlist items with anime data
   const combinedList = useMemo(() => {
-    return watchlistItems.map((item) => {
-      const anime = allAnime.find((a) => a.id === item.animeId);
+    return (watchlistItems || []).map((item) => {
+      const anime = (allAnime || []).find((a) => a.id === item.animeId);
       return {
         item,
         anime,
@@ -347,7 +347,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
                       {/* Dub tags */}
                       <div className="flex flex-wrap gap-1 mt-1.5">
-                        {anime.dubs.map((d) => (
+                        {(anime.dubs || []).map((d) => (
                           <span
                             key={d}
                             className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#182032] text-neutral-300 border border-neutral-700/60"

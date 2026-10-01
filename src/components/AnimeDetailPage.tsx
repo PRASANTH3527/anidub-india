@@ -180,7 +180,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               className="w-full h-full object-cover"
             />
             <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1 max-w-[80%]">
-              {anime.dubs.map((dub) => (
+              {(anime.dubs || []).map((dub) => (
                 <span
                   key={dub}
                   className="bg-black/80 backdrop-blur-md text-amber-300 font-extrabold text-[10px] px-1.5 py-0.5 rounded shadow border border-white/10"
@@ -312,7 +312,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   Genre Tags
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {anime.genres.map((genre) => (
+                  {(anime.genres || []).map((genre) => (
                     <span
                       key={genre}
                       className="text-xs font-semibold bg-[#182032] text-purple-200 border border-neutral-700/80 px-3 py-1 rounded-full"
@@ -329,7 +329,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     Themes & Tropes
                   </span>
                   <div className="flex flex-wrap gap-1.5">
-                    {anime.themes.map((theme) => (
+                    {(anime.themes || []).map((theme) => (
                       <span
                         key={theme}
                         className="text-xs font-semibold bg-[#182032] text-neutral-300 border border-neutral-800 px-3 py-1 rounded-full"
@@ -357,7 +357,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               {anime.characters && anime.characters.length > 0 ? (
-                anime.characters.map((char, index) => (
+                (anime.characters || []).map((char, index) => (
                   <div
                     key={index}
                     className="bg-[#182032] border border-neutral-800 rounded-2xl p-3 flex gap-3 items-center"
@@ -608,7 +608,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </div>
 
             <div className="space-y-2.5">
-              {anime.dubDetails.map((dub) => {
+              {(anime.dubDetails || []).map((dub) => {
                 const badge = DUB_LANGUAGE_BADGES[dub.language] || {
                   bg: 'bg-neutral-800',
                   text: 'text-neutral-200',
@@ -629,7 +629,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     </div>
 
                     <div className="flex flex-wrap gap-1">
-                      {dub.platform.map((p) => (
+                      {(Array.isArray(dub.platform) ? dub.platform : [dub.platform]).filter(Boolean).map((p) => (
                         <span
                           key={p}
                           className="text-[9px] bg-black/40 text-neutral-300 px-1.5 py-0.5 rounded border border-white/10 font-medium"
@@ -660,7 +660,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </p>
 
             <div className="space-y-2 pt-1">
-              {anime.platforms.map((p) => (
+              {(anime.platforms || []).map((p) => (
                 <a
                   key={p.name}
                   href={p.url}

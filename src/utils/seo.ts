@@ -84,10 +84,13 @@ function updateMetaTag(key: 'name' | 'property', attr: string, content: string) 
  * Builds rich SEO configuration for a specific anime page.
  */
 export function buildAnimeSeo(anime: Anime): SeoConfig {
-  const dubList = anime.dubs.join(', ');
-  const title = `${anime.title} (${dubList} Dub) — Where to Watch & Episodes | AniDub India`;
+  const dubList = Array.isArray(anime?.dubs) ? anime.dubs.join(', ') : 'Regional Indian Dubs';
+  const platforms = Array.isArray(anime?.platforms)
+    ? anime.platforms.map((p) => p?.name || String(p)).filter(Boolean).join(', ')
+    : 'Crunchyroll, Netflix';
+  const title = `${anime?.title || 'Anime'} (${dubList} Dub) — Where to Watch & Episodes | AniDub India`;
   
-  const description = `Watch ${anime.title} dubbed in ${dubList}. Check official streaming platforms (${anime.platforms.map((p) => p.name).join(', ')}), Indian dub cast, release date (${anime.originalReleaseDate || anime.releaseYear}), and dub quality ratings.`;
+  const description = `Watch ${anime?.title || 'Anime'} dubbed in ${dubList}. Check official streaming platforms (${platforms}), Indian dub cast, release date (${anime?.originalReleaseDate || anime?.releaseYear || 'Recent'}), and dub quality ratings.`;
 
   const keywords = [
     `${anime.title} Tamil dub`,

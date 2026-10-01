@@ -53,7 +53,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 
         {/* Top-Left Dub Badges (Exact match to AniDub India video) */}
         <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1 max-w-[80%] z-10">
-          {anime.dubs.map((dub) => {
+          {(anime.dubs || []).map((dub) => {
             const badge = DUB_BADGE_STYLES[dub];
             if (!badge) return null;
             return (
@@ -127,7 +127,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         {/* Streaming platforms available */}
         <div className="mt-2.5 pt-2 border-t border-neutral-800/70 flex items-center justify-between">
           <div className="flex items-center gap-1 overflow-hidden">
-            {anime.platforms.slice(0, 2).map((p) => (
+            {(anime.platforms || []).slice(0, 2).map((p) => (
               <span
                 key={p.name}
                 className="text-[9px] font-semibold bg-[#1a2133] text-neutral-300 px-1.5 py-0.5 rounded border border-neutral-700/60 truncate"
@@ -135,9 +135,9 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
                 {p.name.replace('YouTube (', '').replace(')', '')}
               </span>
             ))}
-            {anime.platforms.length > 2 && (
+            {(anime.platforms?.length || 0) > 2 && (
               <span className="text-[9px] text-neutral-500 font-medium">
-                +{anime.platforms.length - 2}
+                +{(anime.platforms?.length || 0) - 2}
               </span>
             )}
           </div>

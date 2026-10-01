@@ -186,7 +186,7 @@ export default function App() {
 
   // Convert DB watchlist to UI format
   const watchlistItemsForUI: WatchlistItem[] = useMemo(() => {
-    return dbWatchlist.map((entry) => ({
+    return (dbWatchlist || []).map((entry) => ({
       animeId: entry.animeId,
       status: entry.status,
       addedAt: entry.addedAt,
@@ -194,9 +194,9 @@ export default function App() {
     }));
   }, [dbWatchlist]);
 
-  const watchlistAnimeIds = useMemo(() => dbWatchlist.map((w) => w.animeId), [dbWatchlist]);
+  const watchlistAnimeIds = useMemo(() => (dbWatchlist || []).map((w) => w.animeId), [dbWatchlist]);
   const watchedAnimeIds = useMemo(
-    () => dbWatchlist.filter((w) => w.status === 'watched').map((w) => w.animeId),
+    () => (dbWatchlist || []).filter((w) => w.status === 'watched').map((w) => w.animeId),
     [dbWatchlist]
   );
 
@@ -374,7 +374,7 @@ export default function App() {
                 <div className="max-w-6xl mx-auto px-4">
                   {isLoading ? (
                     <SkeletonGrid count={8} />
-                  ) : paginatedAnime.length > 0 ? (
+                  ) : (paginatedAnime && paginatedAnime.length > 0) ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4">
                       {paginatedAnime.map((anime) => (
                         <AnimeCard

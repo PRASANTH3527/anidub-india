@@ -155,7 +155,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {anime.dubDetails.map((dub) => {
+              {(anime.dubDetails || []).map((dub) => {
                 const colors = DUB_LANGUAGE_COLORS[dub.language] || {
                   bg: 'bg-neutral-800',
                   text: 'text-neutral-200',
@@ -180,7 +180,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      {dub.platform.map((p) => (
+                      {(Array.isArray(dub.platform) ? dub.platform : [dub.platform]).filter(Boolean).map((p) => (
                         <span
                           key={p}
                           className="text-[9px] bg-black/40 text-neutral-200 px-1.5 py-0.5 rounded font-medium border border-white/10"
@@ -202,7 +202,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
               <span className="text-[10px] text-neutral-500 font-normal">(Official Licensed Streams)</span>
             </h4>
             <div className="flex flex-wrap gap-2.5">
-              {anime.platforms.map((platform) => (
+              {(anime.platforms || []).map((platform) => (
                 <a
                   key={platform.name}
                   href={platform.url}

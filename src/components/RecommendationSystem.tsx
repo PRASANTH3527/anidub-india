@@ -485,7 +485,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
 
                       {/* Why this matches you */}
                       <div className="mt-2 space-y-1">
-                        {reasons.map((r, i) => (
+                        {(reasons || []).map((r, i) => (
                           <div
                             key={i}
                             className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium"
@@ -498,7 +498,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
 
                       {/* Dub tags */}
                       <div className="flex flex-wrap gap-1 mt-2.5">
-                        {anime.dubs.map((d) => (
+                        {(anime.dubs || []).map((d) => (
                           <span
                             key={d}
                             className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-neutral-800 text-neutral-300 border border-neutral-700"

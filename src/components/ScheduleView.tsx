@@ -104,7 +104,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
 
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap gap-1">
-                    {anime.dubs.map((dub) => (
+                    {(anime.dubs || []).map((dub) => (
                       <span
                         key={dub}
                         className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/40"
@@ -115,7 +115,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
                   </div>
 
                   <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-1 border-t border-neutral-800/60">
-                    <span>{anime.platforms[0]?.name}</span>
+                    <span>{anime.platforms && anime.platforms[0]?.name ? anime.platforms[0].name : 'Crunchyroll'}</span>
                     <span className="text-purple-400 font-semibold group-hover:underline">
                       View details →
                     </span>
