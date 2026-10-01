@@ -1,5 +1,5 @@
-// Vercel Serverless Function: /api/submissions.ts
-// Handles persistent storage and synchronization of anime dub submissions with real database support
+// Next.js Pages Router API Route: pages/api/submissions.ts
+// Handles anime dub submissions with persistent database & zero caching
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -9,16 +9,10 @@ import {
   getPersistentSubmissions,
   saveSingleSubmission,
   updatePersistentSubmissionStatus,
-  loadSubmissions,
-  saveSubmissions,
-  updateSubmissionStatus,
   ServerAnimeSubmission,
-} from '../lib/submissionsDb';
-
-export { loadSubmissions, saveSubmissions, updateSubmissionStatus, type ServerAnimeSubmission };
+} from '../../lib/submissionsDb';
 
 export default async function handler(req: any, res: any) {
-  // CORS & Strict Zero-Cache Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -64,7 +58,7 @@ export default async function handler(req: any, res: any) {
       const { id, action, reviewer, reason } = body || {};
 
       if (!id || (action !== 'approve' && action !== 'reject')) {
-        return res.status(400).json({ success: false, error: 'id and valid action (approve/reject) required' });
+        return res.status(400).json({ success: false, error: 'id and valid action required' });
       }
 
       const updated = await updatePersistentSubmissionStatus(

@@ -3,9 +3,12 @@
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 import fs from 'fs';
 import path from 'path';
+import { updatePersistentSubmissionStatus } from '@/lib/submissionsDb';
 
 // Environment variables
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8648317719:AAHZ7wxQefZT5QdKCpc61epWJ4mGAgJvgdc';
@@ -18,10 +21,16 @@ const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const TMP_FILE = path.join('/tmp', 'anidub_submissions_v1.json');
 
 /**
- * Helper to update anime submission status in serverless database (/tmp file)
+ * Helper to update anime submission status in serverless database (both cloud DB and local /tmp)
  */
-function updateServerlessSubmission(id: string, status: 'approved' | 'rejected', reviewer: string) {
+async function updateServerlessSubmission(id: string, status: 'approved' | 'rejected', reviewer: string) {
   try {
+    // 1. Update persistent cloud database (Vercel KV, Firebase, Supabase)
+    const record = await updatePersistentSubmissionStatus(id, status, reviewer);
+    return record;
+  } catch (err) {
+    console.error('[Persistent Database Error in Webhook, falling back to /tmp]', err);
+    // Fallback to local /tmp
     let list: any[] = [];
     if (fs.existsSync(TMP_FILE)) {
       list = JSON.parse(fs.readFileSync(TMP_FILE, 'utf-8'));
@@ -34,7 +43,6 @@ function updateServerlessSubmission(id: string, status: 'approved' | 'rejected',
       list[index].reviewedBy = reviewer;
       list[index].reviewedAt = new Date().toISOString();
     } else {
-      // Create record so it is known as approved/rejected
       list.push({
         id,
         title: `Anime Submission #${id.slice(-6)}`,
@@ -47,11 +55,7 @@ function updateServerlessSubmission(id: string, status: 'approved' | 'rejected',
     }
 
     fs.writeFileSync(TMP_FILE, JSON.stringify(list, null, 2), 'utf-8');
-    console.log(`[Database Update] Successfully marked ${id} as ${status} by ${reviewer}`);
     return list[index] || list[list.length - 1];
-  } catch (err) {
-    console.error('[Database Update Error]', err);
-    return null;
   }
 }
 
@@ -59,13 +63,22 @@ function updateServerlessSubmission(id: string, status: 'approved' | 'rejected',
  * 1. GET Handler (Health check / Verification)
  */
 export async function GET(): Promise<Response> {
-  return Response.json({
-    status: 'online',
-    service: 'AniDub India Telegram Webhook (Next.js App Router)',
-    botConfigured: Boolean(TELEGRAM_BOT_TOKEN),
-    websiteUrl: WEBSITE_URL,
-    timestamp: new Date().toISOString(),
-  });
+  return Response.json(
+    {
+      status: 'online',
+      service: 'AniDub India Telegram Webhook (Next.js App Router)',
+      botConfigured: Boolean(TELEGRAM_BOT_TOKEN),
+      websiteUrl: WEBSITE_URL,
+      timestamp: new Date().toISOString(),
+    },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    }
+  );
 }
 
 /**
@@ -78,6 +91,7 @@ export async function OPTIONS(): Promise<Response> {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Bot-Api-Secret-Token',
+      'Cache-Control': 'no-store, no-cache',
     },
   });
 }
@@ -145,7 +159,6 @@ export async function POST(req: Request): Promise<Response> {
 
       // -----------------------------------------------------------------------
       // CRITICAL REQUIREMENT 3: Call answerCallbackQuery SO BUTTON STOPS LOADING
-      // Must be called immediately and reliably!
       // -----------------------------------------------------------------------
       const answerText = isApprove
         ? `✅ Approved! "${title}" is now LIVE on AniDub India.`
@@ -168,13 +181,13 @@ export async function POST(req: Request): Promise<Response> {
       }
 
       // -----------------------------------------------------------------------
-      // CRITICAL REQUIREMENT 2: Update the anime status in the database
+      // CRITICAL REQUIREMENT 2: Update the anime status in persistent database
       // -----------------------------------------------------------------------
       const newStatus = isApprove ? 'approved' : 'rejected';
-      const updatedRecord = updateServerlessSubmission(animeId, newStatus, adminUser);
+      await updateServerlessSubmission(animeId, newStatus, adminUser);
 
       // -----------------------------------------------------------------------
-      // CRITICAL REQUIREMENT 4: Edit the original Telegram message to show Approved/Rejected
+      // CRITICAL REQUIREMENT 4: Edit original Telegram message to show Approved/Rejected
       // -----------------------------------------------------------------------
       if (message) {
         const istTime = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST';
@@ -193,7 +206,6 @@ export async function POST(req: Request): Promise<Response> {
             `📅 *Date:* ${istTime}\n` +
             `⚠️ *Status:* DECLINED (Not visible on public website)`;
 
-        // Replace approve/reject buttons with a direct link or remove them entirely
         const updatedKeyboard = isApprove
           ? {
               inline_keyboard: [
@@ -270,13 +282,20 @@ export async function POST(req: Request): Promise<Response> {
         }
       }
 
-      return Response.json({
-        ok: true,
-        action,
-        animeId,
-        title,
-        status: newStatus,
-      });
+      return Response.json(
+        {
+          ok: true,
+          action,
+          animeId,
+          title,
+          status: newStatus,
+        },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          },
+        }
+      );
     }
 
     // =========================================================================

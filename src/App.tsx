@@ -65,6 +65,16 @@ export default function App() {
   const [isAdminWebhook, setIsAdminWebhook] = useState(checkIsAdminWebhook);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
 
+  // Initial server sync to load fresh approved anime immediately on every page visit
+  useEffect(() => {
+    setIsLoading(true);
+    dbService.forceRefresh().then((freshList) => {
+      setApprovedAnime(freshList);
+    }).finally(() => {
+      setIsLoading(false);
+    });
+  }, []);
+
   // Subscribe to DB & Auth changes
   useEffect(() => {
     const unsubDb = dbService.subscribe(() => {

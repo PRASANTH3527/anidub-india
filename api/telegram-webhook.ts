@@ -1,6 +1,9 @@
 // Vercel Serverless Function: /api/telegram-webhook.ts
 // Handles Telegram Webhook callbacks (inline button clicks like [✅ Approve] and [❌ Reject]) and bot commands.
-// NOTE: All database logic is self-contained directly in this file to avoid Vercel module resolution errors.
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 import fs from 'fs';
 import path from 'path';
@@ -11,66 +14,156 @@ const PUBLIC_CHANNEL_ID = process.env.PUBLIC_CHANNEL_ID || '@anidub_india';
 const WEBSITE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.WEBSITE_URL || 'https://anidub.in';
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
-// Persistent file storage path in Vercel lambda runtime
+// Database cloud providers
+const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+
+// Persistent file storage paths (project data directory + /tmp fallback)
+const LOCAL_DATA_FILE = path.join(process.cwd(), 'data', 'submissions.json');
 const TMP_FILE = path.join('/tmp', 'anidub_submissions_v1.json');
 let memorySubmissions: any[] = [];
 
 /**
- * Self-contained helper to load submissions from /tmp or memory
+ * Self-contained helper to load submissions from cloud DB or local disk
  */
-function loadSubmissions(): any[] {
-  if (memorySubmissions.length > 0) {
-    return memorySubmissions;
-  }
-  try {
-    if (fs.existsSync(TMP_FILE)) {
-      const content = fs.readFileSync(TMP_FILE, 'utf-8');
-      memorySubmissions = JSON.parse(content);
-      return memorySubmissions;
+async function loadSubmissionsAsync(): Promise<any[]> {
+  // 1. Try Vercel KV / Upstash
+  if (KV_URL && KV_TOKEN) {
+    try {
+      const res = await fetch(`${KV_URL}/get/anidub_submissions`, {
+        headers: { Authorization: `Bearer ${KV_TOKEN}` },
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.result) {
+          const parsed = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+          if (Array.isArray(parsed)) return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('KV read error in webhook:', e);
     }
-  } catch (err) {
-    console.error('Failed reading tmp submissions file:', err);
+  }
+
+  // 2. Try Local disk (data/submissions.json then /tmp)
+  for (const filePath of [LOCAL_DATA_FILE, TMP_FILE]) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          memorySubmissions = parsed;
+          return parsed;
+        }
+      }
+    } catch (err) {
+      console.error(`Failed reading ${filePath}:`, err);
+    }
+  }
+  return memorySubmissions;
+}
+
+function loadSubmissions(): any[] {
+  for (const filePath of [LOCAL_DATA_FILE, TMP_FILE]) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          memorySubmissions = parsed;
+          return parsed;
+        }
+      }
+    } catch {}
   }
   return memorySubmissions;
 }
 
 /**
- * Self-contained helper to save submissions to /tmp and memory
+ * Helper to save submissions to cloud and local disk
  */
-function saveSubmissions(list: any[]): void {
+async function saveSubmissionsAsync(list: any[]): Promise<void> {
   memorySubmissions = list;
-  try {
-    fs.writeFileSync(TMP_FILE, JSON.stringify(list, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Failed writing tmp submissions file:', err);
+  for (const filePath of [LOCAL_DATA_FILE, TMP_FILE]) {
+    try {
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(filePath, JSON.stringify(list, null, 2), 'utf-8');
+    } catch (err) {
+      console.error(`Failed writing ${filePath}:`, err);
+    }
+  }
+
+  // Sync to Vercel KV
+  if (KV_URL && KV_TOKEN) {
+    try {
+      await fetch(`${KV_URL}/set/anidub_submissions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${KV_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(list),
+      });
+    } catch (e) {
+      console.error('KV write error in webhook:', e);
+    }
+  }
+
+  // Sync to Firebase
+  if (FIREBASE_PROJECT_ID) {
+    try {
+      const endpoint = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/submissions`;
+      await Promise.allSettled(
+        list.map((item) => {
+          const fields: any = {};
+          for (const [k, v] of Object.entries(item)) {
+            if (typeof v === 'string') fields[k] = { stringValue: v };
+            else if (typeof v === 'number') fields[k] = { doubleValue: v };
+            else if (typeof v === 'boolean') fields[k] = { booleanValue: v };
+          }
+          return fetch(`${endpoint}/${item.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields }),
+          });
+        })
+      );
+    } catch (e) {
+      console.error('Firebase write error in webhook:', e);
+    }
   }
 }
 
 /**
- * Self-contained helper to update anime submission status directly in DB
+ * Self-contained helper to update anime submission status in persistent database
  */
-function updateSubmissionStatus(
+async function updateSubmissionStatusAsync(
   id: string,
   newStatus: 'approved' | 'rejected',
   reviewer: string = 'Telegram Admin Bot',
   rejectionReason?: string
-): any {
-  const current = loadSubmissions();
+): Promise<any> {
+  const current = await loadSubmissionsAsync();
   const index = current.findIndex((s) => s.id === id);
 
+  let targetRecord: any;
+
   if (index === -1) {
-    const stubRecord: any = {
+    targetRecord = {
       id,
       title: 'Anime Submission #' + id.slice(-6),
       poster: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
       type: 'Series',
       releaseYear: new Date().getFullYear(),
-      rating: 8.0,
-      status: newStatus === 'approved' ? 'Ongoing' : 'Rejected',
+      rating: 8.5,
+      status: 'Ongoing',
       submissionStatus: newStatus,
       reviewedBy: reviewer,
       reviewedAt: new Date().toISOString(),
-      genres: ['Action', 'Shonen'],
+      genres: ['Action', 'Adventure'],
       studio: 'Animation Studio',
       synopsis: 'Dubbed regional anime release.',
       dubs: ['Tamil', 'Telugu', 'Hindi'],
@@ -78,30 +171,32 @@ function updateSubmissionStatus(
       submittedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    current.push(stubRecord);
-    saveSubmissions(current);
-    console.log(`[Database Update] Created and marked stub ${id} as ${newStatus} by ${reviewer}`);
-    return stubRecord;
+    current.unshift(targetRecord);
+  } else {
+    current[index].submissionStatus = newStatus;
+    current[index].status = 'Ongoing';
+    current[index].reviewedBy = reviewer;
+    current[index].reviewedAt = new Date().toISOString();
+    current[index].updatedAt = new Date().toISOString();
+    if (rejectionReason) {
+      current[index].rejectionReason = rejectionReason;
+    }
+    targetRecord = current[index];
   }
 
-  current[index].submissionStatus = newStatus;
-  current[index].status = newStatus === 'approved' ? 'Ongoing' : 'Rejected';
-  current[index].reviewedBy = reviewer;
-  current[index].reviewedAt = new Date().toISOString();
-  current[index].updatedAt = new Date().toISOString();
-  if (rejectionReason) {
-    current[index].rejectionReason = rejectionReason;
-  }
-  saveSubmissions(current);
-  console.log(`[Database Update] Successfully marked ${id} as ${newStatus} by ${reviewer}`);
-  return current[index];
+  await saveSubmissionsAsync(current);
+  console.log(`[Database Update] Marked ${id} as ${newStatus} by ${reviewer} (persisted to cloud)`);
+  return targetRecord;
 }
 
 export default async function handler(req: any, res: any) {
-  // CORS Headers
+  // CORS & Strict Zero-Cache Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Bot-Api-Secret-Token');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -161,8 +256,8 @@ export default async function handler(req: any, res: any) {
           : `❌ Rejected: "${title}" has been declined.`
       );
 
-      // STEP B: Update server submission record directly in database
-      const updatedRecord = updateSubmissionStatus(
+      // STEP B: Update server submission record directly in persistent cloud database
+      const updatedRecord = await updateSubmissionStatusAsync(
         animeId,
         isApprove ? 'approved' : 'rejected',
         adminUser
@@ -256,7 +351,7 @@ export default async function handler(req: any, res: any) {
       }
 
       if (text.startsWith('/status')) {
-        const all = loadSubmissions();
+        const all = await loadSubmissionsAsync();
         const pendingCount = all.filter((s: any) => s.submissionStatus === 'pending').length;
         const approvedCount = all.filter((s: any) => s.submissionStatus === 'approved').length;
 
@@ -273,7 +368,7 @@ export default async function handler(req: any, res: any) {
       }
 
       if (text.startsWith('/pending')) {
-        const all = loadSubmissions();
+        const all = await loadSubmissionsAsync();
         const pending = all.filter((s: any) => s.submissionStatus === 'pending');
 
         if (pending.length === 0) {

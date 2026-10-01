@@ -1,0 +1,186 @@
+[
+  {
+    "id": "one-piece-egghead",
+    "title": "One Piece: Egghead Arc",
+    "poster": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600",
+    "type": "Series",
+    "releaseYear": 2024,
+    "rating": 9.3,
+    "status": "Ongoing",
+    "submissionStatus": "approved",
+    "genres": [
+      "Action",
+      "Adventure"
+    ],
+    "studio": "Toei Animation",
+    "synopsis": "Dubbed anime release.",
+    "dubs": [
+      "Tamil",
+      "Telugu",
+      "Hindi"
+    ],
+    "platforms": [
+      {
+        "name": "Crunchyroll",
+        "url": "https://crunchyroll.com"
+      }
+    ],
+    "submittedAt": "2026-10-01T18:48:50.043Z",
+    "updatedAt": "2026-10-01T18:48:51.036Z",
+    "reviewedBy": "@admin",
+    "reviewedAt": "2026-10-01T18:48:51.036Z"
+  },
+  {
+    "id": "demon-slayer-s4",
+    "title": "Anime Submission #yer-s4",
+    "poster": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
+    "type": "Series",
+    "releaseYear": 2026,
+    "rating": 8.5,
+    "status": "Ongoing",
+    "submissionStatus": "approved",
+    "reviewedBy": "@admin",
+    "reviewedAt": "2026-10-01T18:47:17.075Z",
+    "genres": [
+      "Action",
+      "Adventure"
+    ],
+    "studio": "Animation Studio",
+    "synopsis": "Dubbed regional anime release.",
+    "dubs": [
+      "Tamil",
+      "Telugu",
+      "Hindi"
+    ],
+    "platforms": [
+      {
+        "name": "Crunchyroll",
+        "url": ""
+      }
+    ],
+    "submittedAt": "2026-10-01T18:47:17.075Z",
+    "updatedAt": "2026-10-01T18:47:17.075Z"
+  },
+  {
+    "id": "test-jujutsu",
+    "title": "Jujutsu Kaisen Season 2",
+    "poster": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600",
+    "type": "Series",
+    "releaseYear": 2023,
+    "rating": 8.9,
+    "status": "Ongoing",
+    "submissionStatus": "approved",
+    "genres": [
+      "Action",
+      "Supernatural"
+    ],
+    "studio": "MAPPA",
+    "synopsis": "Dubbed anime release.",
+    "dubs": [
+      "Tamil",
+      "Telugu",
+      "Hindi"
+    ],
+    "platforms": [
+      {
+        "name": "Crunchyroll",
+        "url": "https://crunchyroll.com"
+      }
+    ],
+    "submittedAt": "2026-10-01T18:46:27.059Z",
+    "reviewedBy": "@admin",
+    "reviewedAt": "2026-10-01T18:46:33.850Z",
+    "updatedAt": "2026-10-01T18:46:33.850Z"
+  },
+  {
+    "id": "sub-test-1",
+    "title": "Anime Submission #test-1",
+    "poster": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
+    "type": "Series",
+    "releaseYear": 2026,
+    "rating": 8,
+    "status": "Ongoing",
+    "submissionStatus": "approved",
+    "reviewedBy": "@prasanth",
+    "reviewedAt": "2026-10-01T17:21:14.248Z",
+    "genres": [
+      "Action",
+      "Shonen"
+    ],
+    "studio": "Animation Studio",
+    "synopsis": "Dubbed regional anime release.",
+    "dubs": [
+      "Tamil",
+      "Telugu",
+      "Hindi"
+    ],
+    "platforms": [
+      {
+        "name": "Crunchyroll",
+        "url": ""
+      }
+    ],
+    "submittedAt": "2026-10-01T17:21:14.248Z"
+  },
+  {
+    "id": "sub_test_anime",
+    "title": "Anime Submission #_anime",
+    "poster": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
+    "type": "Series",
+    "releaseYear": 2026,
+    "rating": 8,
+    "status": "Ongoing",
+    "submissionStatus": "approved",
+    "reviewedBy": "@admin",
+    "reviewedAt": "2026-10-01T17:52:45.570Z",
+    "genres": [
+      "Action",
+      "Shonen"
+    ],
+    "studio": "Animation Studio",
+    "synopsis": "Dubbed regional anime release.",
+    "dubs": [
+      "Tamil",
+      "Telugu",
+      "Hindi"
+    ],
+    "platforms": [
+      {
+        "name": "Crunchyroll",
+        "url": ""
+      }
+    ],
+    "submittedAt": "2026-10-01T17:52:45.570Z"
+  },
+  {
+    "id": "sub_refactor_1",
+    "title": "Anime Submission #ctor_1",
+    "poster": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
+    "type": "Series",
+    "releaseYear": 2026,
+    "rating": 8,
+    "status": "Ongoing",
+    "submissionStatus": "approved",
+    "reviewedBy": "@admin",
+    "reviewedAt": "2026-10-01T18:35:45.180Z",
+    "genres": [
+      "Action",
+      "Shonen"
+    ],
+    "studio": "Animation Studio",
+    "synopsis": "Dubbed regional anime release.",
+    "dubs": [
+      "Tamil",
+      "Telugu",
+      "Hindi"
+    ],
+    "platforms": [
+      {
+        "name": "Crunchyroll",
+        "url": ""
+      }
+    ],
+    "submittedAt": "2026-10-01T18:35:45.180Z",
+    "updatedAt": "2026-10-01T18:35:45.180Z"
+  }
+]

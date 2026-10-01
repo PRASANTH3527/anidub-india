@@ -204,7 +204,13 @@ class DatabaseService {
   // --- 5. Server Sync: Pulls updates approved via Telegram Webhook ---
   public async syncWithServer(): Promise<void> {
     try {
-      const res = await fetch('/api/submissions');
+      const res = await fetch(`/api/submissions?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
       if (!res.ok) return;
       const json = await res.json();
       if (!json.success || !Array.isArray(json.data)) return;
@@ -215,30 +221,41 @@ class DatabaseService {
       const merged = [...localList];
 
       for (const serverItem of serverList) {
-        const localIdx = merged.findIndex((l) => l.id === serverItem.id);
+        const normalized = this.normalizeRecord(serverItem);
+        const localIdx = merged.findIndex((l) => l.id === normalized.id);
         if (localIdx !== -1) {
-          if (merged[localIdx].submissionStatus !== serverItem.submissionStatus) {
+          if (
+            merged[localIdx].submissionStatus !== normalized.submissionStatus ||
+            merged[localIdx].status !== normalized.status
+          ) {
             merged[localIdx] = {
               ...merged[localIdx],
-              submissionStatus: serverItem.submissionStatus,
-              reviewedBy: serverItem.reviewedBy || merged[localIdx].reviewedBy,
-              reviewedAt: serverItem.reviewedAt || merged[localIdx].reviewedAt,
+              ...normalized,
+              submissionStatus: normalized.submissionStatus,
+              status: normalized.submissionStatus === 'approved' ? 'Ongoing' : merged[localIdx].status,
+              reviewedBy: normalized.reviewedBy || merged[localIdx].reviewedBy,
+              reviewedAt: normalized.reviewedAt || merged[localIdx].reviewedAt,
             };
             hasChanges = true;
           }
         } else {
           // New submission approved or stored on server
-          merged.unshift(serverItem);
+          merged.unshift(normalized);
           hasChanges = true;
         }
       }
 
-      if (hasChanges) {
+      if (hasChanges || (serverList.length > 0 && localList.length === 0)) {
         this.saveAnimeRecords(merged);
       }
-    } catch {
-      // Offline or network error
+    } catch (e) {
+      console.warn('Sync with server error:', e);
     }
+  }
+
+  public async forceRefresh(): Promise<AnimeRecord[]> {
+    await this.syncWithServer();
+    return this.getApprovedAnime();
   }
 
   // --- 5. Dub Reviews Management ---
