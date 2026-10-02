@@ -71,6 +71,7 @@ export interface Anime {
     type: 'Season' | 'OVA' | 'Movie' | 'Special' | 'ONA'; 
     label: string; 
     episodeCount: number;
+    languages?: DubLanguage[];
   }[];
   status: AnimeStatus;
   airingStatus?: 'Ongoing' | 'Completed';

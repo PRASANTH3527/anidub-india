@@ -87,15 +87,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     type: 'Season' | 'OVA' | 'Movie' | 'Special' | 'ONA'; 
     label: string; 
     episodeCount: number | ''; 
+    languages: DubLanguage[];
   }[]>([
-    { type: 'Season', label: '1', episodeCount: 12 }
+    { type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil'] }
   ]);
   const [currentSeason, setCurrentSeason] = useState<number | ''>('');
   const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number | ''>('');
 
-  // Dub fields
-  const [selectedDubs, setSelectedDubs] = useState<DubLanguage[]>(['Tamil']);
-  
   // Multi-Platform Links
   const [streamingPartners, setStreamingPartners] = useState<{ name: StreamingPlatform; url: string }[]>([
     { name: 'Crunchyroll', url: '' }
@@ -115,7 +113,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setType(editAnime.type || 'TV Series');
       setStudio(editAnime.studio || '');
       setGenres(editAnime.genres || ['Action']);
-      setSelectedDubs(editAnime.dubs || ['Tamil']);
       setAiringStatus(editAnime.status === 'Ongoing' ? 'Ongoing' : 'Completed');
       if (editAnime.releaseDay) setReleaseDay(editAnime.releaseDay as ReleaseDay);
       
@@ -123,11 +120,17 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         setSeasonDetails(editAnime.seasonDetails.map(s => ({
           type: s.type || 'Season',
           label: s.label || '1',
-          episodeCount: s.episodeCount || 0
+          episodeCount: s.episodeCount || 0,
+          languages: s.languages || (editAnime.dubs || ['Tamil'])
         })));
       } else if (editAnime.totalSeasons || editAnime.episodesPerSeason) {
         // Fallback for older records
-        setSeasonDetails([{ type: 'Season', label: '1', episodeCount: editAnime.episodesPerSeason || 12 }]);
+        setSeasonDetails([{ 
+          type: 'Season', 
+          label: '1', 
+          episodeCount: editAnime.episodesPerSeason || 12,
+          languages: editAnime.dubs || ['Tamil']
+        }]);
       }
 
       if (editAnime.currentSeason) setCurrentSeason(editAnime.currentSeason);
@@ -151,10 +154,9 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setType('TV Series');
       setStudio('');
       setGenres(['Action', 'Fantasy']);
-      setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12 }]);
+      setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil'] }]);
       setCurrentSeason('');
       setCurrentlyAiringEpisode('');
-      setSelectedDubs(['Tamil']);
       setStreamingPartners([{ name: 'Crunchyroll', url: '' }]);
       setAiringStatus('Ongoing');
       setReleaseDay('Saturday');
@@ -202,7 +204,12 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     } else {
       nextLabel = (seasonDetails.length + 1).toString();
     }
-    setSeasonDetails([...seasonDetails, { type: 'Season', label: nextLabel, episodeCount: '' }]);
+    setSeasonDetails([...seasonDetails, { 
+      type: 'Season', 
+      label: nextLabel, 
+      episodeCount: '', 
+      languages: lastEntry?.languages || ['Tamil'] 
+    }]);
   };
 
   const removeEntry = (index: number) => {
@@ -211,14 +218,28 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     }
   };
 
-  const updateEntryField = (index: number, field: 'type' | 'label' | 'episodeCount', value: any) => {
+  const updateEntryField = (index: number, field: 'type' | 'label' | 'episodeCount' | 'languages', value: any) => {
     const updated = [...seasonDetails];
     if (field === 'episodeCount') {
       updated[index] = { ...updated[index], episodeCount: value === '' ? '' : parseInt(value) || 0 };
+    } else if (field === 'languages') {
+      updated[index] = { ...updated[index], languages: value };
     } else {
       updated[index] = { ...updated[index], [field]: value };
     }
     setSeasonDetails(updated);
+  };
+
+  const toggleLanguageForEntry = (entryIdx: number, lang: DubLanguage) => {
+    const currentLangs = seasonDetails[entryIdx].languages || [];
+    let updatedLangs: DubLanguage[];
+    if (currentLangs.includes(lang)) {
+      if (currentLangs.length <= 1) return; // Must have at least one
+      updatedLangs = currentLangs.filter(l => l !== lang);
+    } else {
+      updatedLangs = [...currentLangs, lang];
+    }
+    updateEntryField(entryIdx, 'languages', updatedLangs);
   };
 
   // Jikan Search State
@@ -295,16 +316,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     setShowDropdown(false);
   };
 
-  const toggleDub = (lang: DubLanguage) => {
-    if (selectedDubs.includes(lang)) {
-      if (selectedDubs.length > 1) {
-        setSelectedDubs(selectedDubs.filter((l) => l !== lang));
-      }
-    } else {
-      setSelectedDubs([...selectedDubs, lang]);
-    }
-  };
-
   const toggleGenre = (genre: string) => {
     if (genres.includes(genre)) {
       if (genres.length > 1) {
@@ -318,7 +329,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   // STRICT MODERATION SUBMIT: ALWAYS ENFORCES status: "pending"
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || selectedDubs.length === 0) return;
+    
+    // DERIVE GLOBAL LANGUAGES: Merge all unique languages selected across all seasons
+    const derivedGlobalDubs = Array.from(new Set(
+      seasonDetails.flatMap(s => s.languages || [])
+    )) as DubLanguage[];
+
+    if (!title.trim() || derivedGlobalDubs.length === 0) return;
 
     setIsSubmitting(true);
 
@@ -326,26 +343,26 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       poster.trim() ||
       'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
 
-    const dubDetails = selectedDubs.map((lang) => ({
-      language: lang,
-      available: true,
-      platform: streamingPartners.map(p => p.name),
-      notes: `Verified ${lang} dub available on ${streamingPartners.map(p => p.name).join(', ')}`,
-    }));
-
     const platforms = streamingPartners.map(p => ({
       name: p.name,
       url: p.url.trim() || 'https://www.crunchyroll.com',
     }));
 
     const totalEpisodes = seasonDetails.reduce((acc, s) => acc + (Number(s.episodeCount) || 0), 0);
+    
+    const dubDetails = derivedGlobalDubs.map((lang) => ({
+      language: lang,
+      available: true,
+      platform: streamingPartners.map(p => p.name),
+      notes: `Verified ${lang} dub available on ${streamingPartners.map(p => p.name).join(', ')}`,
+    }));
 
     const payload = {
       title: title.trim(),
       romajiTitle: romajiTitle.trim() || title.trim(),
       poster: defaultCover,
       imageUrl: defaultCover,
-      synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available in ${selectedDubs.join(', ')}.`,
+      synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available in ${derivedGlobalDubs.join(', ')}.`,
       releaseYear: releaseYear || new Date().getFullYear(),
       originalReleaseDate: `${releaseYear || new Date().getFullYear()}`,
       episodes: totalEpisodes || 12,
@@ -354,7 +371,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       seasonDetails: seasonDetails.map(s => ({
         type: s.type,
         label: s.label,
-        episodeCount: Number(s.episodeCount) || 0
+        episodeCount: Number(s.episodeCount) || 0,
+        languages: s.languages
       })),
       currentSeason: airingStatus === 'Ongoing' ? (Number(currentSeason) || 1) : undefined,
       currentlyAiringEpisode: airingStatus === 'Ongoing' ? (Number(currentlyAiringEpisode) || 1) : undefined,
@@ -365,7 +383,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       releaseDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
       airingDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
       genres: genres.length > 0 ? genres : ['Action', 'Fantasy'],
-      dubs: selectedDubs,
+      dubs: derivedGlobalDubs,
       dubDetails,
       platforms,
     };
@@ -396,7 +414,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           characterImage: defaultCover,
           japaneseVA: 'Original Cast',
           indianVA: {
-            language: selectedDubs[0],
+            language: derivedGlobalDubs[0],
             actor: 'Regional Voice Cast',
           },
         },
@@ -418,12 +436,11 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setPoster('');
       setSynopsis('');
       setStreamingPartners([{ name: 'Crunchyroll', url: '' }]);
-      setSelectedDubs(['Tamil']);
       setType('TV Series');
       setGenres(['Action', 'Fantasy']);
       setAiringStatus('Ongoing');
       setReleaseDay('Saturday');
-      setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12 }]);
+      setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil'] }]);
       setCurrentSeason('');
       setCurrentlyAiringEpisode('');
       setAutoFilled(false);
@@ -587,32 +604,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 </p>
               </div>
 
-              {/* Dubbed Indian Languages */}
-              <div>
-                <label className="block font-bold text-neutral-300 mb-1.5">
-                  Dubbed Indian Languages <span className="text-rose-400">*</span>
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {ALL_LANGS.map((lang) => {
-                    const isSelected = selectedDubs.includes(lang);
-                    return (
-                      <button
-                        type="button"
-                        key={lang}
-                        onClick={() => toggleDub(lang)}
-                        className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 ring-1 ring-purple-400/50'
-                            : 'bg-[#182032] text-neutral-400 hover:text-white border border-neutral-700'
-                        }`}
-                      >
-                        {lang} Dub
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* Dynamic Multi-Platform Links */}
               <div className="space-y-2">
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
@@ -746,51 +737,75 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
                 <div className="space-y-2.5">
                   {seasonDetails.map((entry, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-2 bg-[#182032] border border-neutral-700/60 rounded-2xl p-2.5 animate-in zoom-in-95 duration-200">
-                      <div className="col-span-4">
-                        <select
-                          value={entry.type}
-                          onChange={(e) => updateEntryField(idx, 'type', e.target.value)}
-                          className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl px-2 py-1.5 text-[10px] sm:text-[11px] text-white outline-none cursor-pointer"
-                        >
-                          <option value="Season">Season</option>
-                          <option value="Movie">Movie</option>
-                          <option value="OVA">OVA</option>
-                          <option value="ONA">ONA</option>
-                          <option value="Special">Special</option>
-                        </select>
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="text"
-                          required
-                          value={entry.label}
-                          onChange={(e) => updateEntryField(idx, 'label', e.target.value)}
-                          placeholder="Label (e.g. 1)"
-                          className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl px-2 py-1.5 text-[10px] sm:text-[11px] text-white placeholder-neutral-600 outline-none"
-                        />
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="number"
-                          required
-                          min={1}
-                          value={entry.episodeCount}
-                          onChange={(e) => updateEntryField(idx, 'episodeCount', e.target.value)}
-                          placeholder="Eps"
-                          className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl px-2 py-1.5 text-[10px] sm:text-[11px] text-white placeholder-neutral-600 outline-none"
-                        />
-                      </div>
-                      <div className="col-span-2 flex justify-center items-center">
-                        {seasonDetails.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeEntry(idx)}
-                            className="p-1.5 rounded-xl text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-all border border-transparent hover:border-rose-500/30"
+                    <div key={idx} className="bg-[#182032] border border-neutral-700/60 rounded-2xl p-2.5 animate-in zoom-in-95 duration-200 space-y-2">
+                      <div className="grid grid-cols-12 gap-2">
+                        <div className="col-span-4">
+                          <select
+                            value={entry.type}
+                            onChange={(e) => updateEntryField(idx, 'type', e.target.value)}
+                            className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl px-2 py-1.5 text-[10px] sm:text-[11px] text-white outline-none cursor-pointer"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                            <option value="Season">Season</option>
+                            <option value="Movie">Movie</option>
+                            <option value="OVA">OVA</option>
+                            <option value="ONA">ONA</option>
+                            <option value="Special">Special</option>
+                          </select>
+                        </div>
+                        <div className="col-span-3">
+                          <input
+                            type="text"
+                            required
+                            value={entry.label}
+                            onChange={(e) => updateEntryField(idx, 'label', e.target.value)}
+                            placeholder="Label (e.g. 1)"
+                            className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl px-2 py-1.5 text-[10px] sm:text-[11px] text-white placeholder-neutral-600 outline-none"
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <input
+                            type="number"
+                            required
+                            min={1}
+                            value={entry.episodeCount}
+                            onChange={(e) => updateEntryField(idx, 'episodeCount', e.target.value)}
+                            placeholder="Eps"
+                            className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl px-2 py-1.5 text-[10px] sm:text-[11px] text-white placeholder-neutral-600 outline-none"
+                          />
+                        </div>
+                        <div className="col-span-2 flex justify-center items-center">
+                          {seasonDetails.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeEntry(idx)}
+                              className="p-1.5 rounded-xl text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-all border border-transparent hover:border-rose-500/30"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Per-Entry Language Toggles */}
+                      <div className="flex flex-wrap items-center gap-1.5 px-1 pb-0.5">
+                        <span className="text-[9px] font-bold text-neutral-500 uppercase mr-1">Available In:</span>
+                        {ALL_LANGS.map(lang => {
+                          const isSelected = entry.languages?.includes(lang);
+                          return (
+                            <button
+                              key={lang}
+                              type="button"
+                              onClick={() => toggleLanguageForEntry(idx, lang)}
+                              className={`px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all border ${
+                                isSelected 
+                                  ? 'bg-purple-600/20 border-purple-500 text-purple-300' 
+                                  : 'bg-neutral-900 border-neutral-800 text-neutral-500 hover:border-neutral-700'
+                              }`}
+                            >
+                              {lang.substring(0, 2)}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}

@@ -744,7 +744,18 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                       <div key={idx} className="bg-black/40 border border-white/5 rounded-lg p-2 flex justify-between items-center">
                         <div className="flex flex-col">
                           <span className="text-[9px] font-bold text-neutral-500 uppercase leading-none mb-0.5">{s.type}</span>
-                          <span className="text-[10px] font-black text-white">{s.label}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-white">{s.label}</span>
+                            {s.languages && s.languages.length > 0 && (
+                              <div className="flex gap-0.5">
+                                {s.languages.map(l => (
+                                  <span key={l} className="text-[7px] font-bold px-1 py-0.2 rounded bg-purple-900/40 text-purple-200 border border-purple-700/30">
+                                    {l.substring(0, 2)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <span className="text-purple-300 text-[10px] font-black">{s.episodeCount} EP</span>
                       </div>
