@@ -78,9 +78,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [studio, setStudio] = useState('');
   const [genres, setGenres] = useState<string[]>(['Action', 'Fantasy']);
   
-  // Advanced Progress Tracking
-  const [totalSeasons, setTotalSeasons] = useState<number>(1);
-  const [episodesPerSeason, setEpisodesPerSeason] = useState<number>(12);
+  // Advanced Progress Tracking (Dynamic Seasons)
+  const [seasonDetails, setSeasonDetails] = useState<{ seasonNumber: number; episodeCount: number | '' }[]>([
+    { seasonNumber: 1, episodeCount: 12 }
+  ]);
   const [currentSeason, setCurrentSeason] = useState<number>(1);
   const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number>(1);
 
@@ -123,6 +124,27 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     const updated = [...streamingPartners];
     updated[index] = { ...updated[index], [field]: value };
     setStreamingPartners(updated);
+  };
+
+  // Dynamic Season Logic
+  const addSeason = () => {
+    const nextSeason = seasonDetails.length + 1;
+    setSeasonDetails([...seasonDetails, { seasonNumber: nextSeason, episodeCount: '' }]);
+  };
+
+  const removeSeason = (index: number) => {
+    if (seasonDetails.length > 1) {
+      const filtered = seasonDetails.filter((_, i) => i !== index);
+      // Re-map season numbers to keep them sequential
+      const remapped = filtered.map((s, i) => ({ ...s, seasonNumber: i + 1 }));
+      setSeasonDetails(remapped);
+    }
+  };
+
+  const updateSeasonEpisodeCount = (index: number, count: string) => {
+    const updated = [...seasonDetails];
+    updated[index] = { ...updated[index], episodeCount: count === '' ? '' : parseInt(count) || 0 };
+    setSeasonDetails(updated);
   };
 
   // Jikan Search State
@@ -242,6 +264,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       url: p.url.trim() || 'https://www.crunchyroll.com',
     }));
 
+    const totalEpisodes = seasonDetails.reduce((acc, s) => acc + (Number(s.episodeCount) || 0), 0);
+
     // STRICT APPROVAL GATE: Every submission is saved with status: "pending"
     // Pending anime are NEVER returned in getApprovedAnime() and stay completely hidden from public feeds
     const newRecord = dbService.submitDubInfo({
@@ -252,10 +276,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available in ${selectedDubs.join(', ')}.`,
       releaseYear: releaseYear || new Date().getFullYear(),
       originalReleaseDate: `${releaseYear || new Date().getFullYear()}`,
-      episodes: episodes || 12,
-      seasons: totalSeasons,
-      totalSeasons,
-      episodesPerSeason,
+      episodes: totalEpisodes || 12,
+      seasons: seasonDetails.length,
+      totalSeasons: seasonDetails.length,
+      seasonDetails: seasonDetails.map(s => ({
+        seasonNumber: s.seasonNumber,
+        episodeCount: Number(s.episodeCount) || 0
+      })),
       currentSeason: airingStatus === 'Ongoing' ? currentSeason : undefined,
       currentlyAiringEpisode: airingStatus === 'Ongoing' ? currentlyAiringEpisode : undefined,
       type: type || 'Series',
@@ -304,8 +331,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setGenres(['Action', 'Fantasy']);
       setAiringStatus('Ongoing');
       setReleaseDay('Saturday');
-      setTotalSeasons(1);
-      setEpisodesPerSeason(12);
+      setSeasonDetails([{ seasonNumber: 1, episodeCount: 12 }]);
       setCurrentSeason(1);
       setCurrentlyAiringEpisode(1);
       setAutoFilled(false);
@@ -607,54 +633,93 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 )}
               </div>
 
-              {/* Advanced Season & Episode Tracking */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">Total Seasons</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={totalSeasons}
-                    onChange={(e) => setTotalSeasons(parseInt(e.target.value) || 1)}
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-purple-500"
-                  />
+              {/* Dynamic Seasons & Episodes Tracking */}
+              <div className="space-y-3">
+                <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Tv className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Seasons & Episodes <span className="text-rose-400">*</span></span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={addSeason}
+                    className="text-[10px] text-purple-400 font-bold hover:text-purple-300 flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Season
+                  </button>
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {seasonDetails.map((season, idx) => (
+                    <div key={idx} className="flex gap-2 items-center bg-[#182032] border border-neutral-700/60 rounded-xl p-2 animate-in zoom-in-95 duration-200">
+                      <div className="bg-purple-900/40 text-purple-300 font-black text-[10px] w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border border-purple-500/30">
+                        S{season.seasonNumber}
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          value={season.episodeCount}
+                          onChange={(e) => updateSeasonEpisodeCount(idx, e.target.value)}
+                          placeholder="Eps count"
+                          className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-neutral-600 outline-none"
+                        />
+                      </div>
+                      {seasonDetails.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeSeason(idx)}
+                          className="p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">Eps / Season</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={episodesPerSeason}
-                    onChange={(e) => setEpisodesPerSeason(parseInt(e.target.value) || 12)}
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-purple-500"
-                  />
-                </div>
-                
-                {airingStatus === 'Ongoing' && (
-                  <>
-                    <div className="animate-in zoom-in-95 duration-200">
-                      <label className="block text-[10px] font-bold text-amber-500 uppercase mb-1">Current Season</label>
+              </div>
+
+              {/* Ongoing Status Section (Conditional) */}
+              {airingStatus === 'Ongoing' && (
+                <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-4 space-y-3 animate-in slide-in-from-top-2 duration-300">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-black text-amber-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Ongoing Airing Status</span>
+                    </label>
+                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[9px] font-bold text-amber-600 uppercase mb-1 px-1">Currently Airing Season</label>
                       <input
                         type="number"
                         min={1}
+                        max={seasonDetails.length}
                         value={currentSeason}
                         onChange={(e) => setCurrentSeason(parseInt(e.target.value) || 1)}
-                        className="w-full bg-amber-950/20 border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-200 outline-none focus:border-amber-400"
+                        className="w-full bg-[#0a0e17] border border-amber-900/50 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-amber-200 outline-none transition-all"
                       />
                     </div>
-                    <div className="animate-in zoom-in-95 duration-200">
-                      <label className="block text-[10px] font-bold text-amber-500 uppercase mb-1">Live Episode</label>
+                    <div>
+                      <label className="block text-[9px] font-bold text-amber-600 uppercase mb-1 px-1">Live Episode Number</label>
                       <input
                         type="number"
                         min={1}
                         value={currentlyAiringEpisode}
                         onChange={(e) => setCurrentlyAiringEpisode(parseInt(e.target.value) || 1)}
-                        className="w-full bg-amber-950/20 border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-200 outline-none focus:border-amber-400"
+                        className="w-full bg-[#0a0e17] border border-amber-900/50 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-amber-200 outline-none transition-all"
                       />
                     </div>
-                  </>
-                )}
-              </div>
+                  </div>
+                  <p className="text-[9px] text-amber-600/80 font-medium leading-tight">
+                    * This info will be used to show the "Airing Now" badge and progress on the Home feed.
+                  </p>
+                </div>
+              )}
 
               {/* Explanatory note for Ongoing releases */}
               {airingStatus === 'Ongoing' && (

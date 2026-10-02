@@ -732,8 +732,27 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </h3>
 
             <div className="space-y-2.5 divide-y divide-neutral-800/80 text-neutral-300">
-              {/* Progress Summary if available */}
-              {(anime.totalSeasons || anime.episodesPerSeason) && (
+              {/* Progress Summary (Dynamic Seasons) */}
+              {(anime.seasonDetails && anime.seasonDetails.length > 0) ? (
+                <div className="bg-purple-950/20 rounded-xl p-3 border border-purple-500/20 mb-2 space-y-3">
+                  <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-purple-300">
+                    <span>Series Progress Breakdown</span>
+                    <Sparkles className="w-3 h-3" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {anime.seasonDetails.map((s) => (
+                      <div key={s.seasonNumber} className="bg-black/40 border border-white/5 rounded-lg p-2 flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-neutral-400">Season {s.seasonNumber}</span>
+                        <span className="text-white text-[11px] font-black">{s.episodeCount} EP</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t border-purple-500/20">
+                    <span className="text-[10px] font-bold text-purple-400 uppercase">Total Scope</span>
+                    <span className="text-white text-xs font-black">{anime.totalSeasons || anime.seasonDetails.length} Seasons • {anime.episodes} Episodes</span>
+                  </div>
+                </div>
+              ) : (anime.totalSeasons || anime.episodesPerSeason) && (
                 <div className="bg-purple-950/20 rounded-xl p-3 border border-purple-500/20 mb-2 space-y-2">
                   <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-purple-300">
                     <span>Series Scope</span>
