@@ -97,8 +97,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
       languageCounts[name] = { approved: appCount, total: totCount, percentage: pct };
     });
 
-    const seriesCount = approvedAnime.filter((a) => a.type === 'Series').length;
+    const seriesCount = approvedAnime.filter((a) => a.type === 'TV Series').length;
     const moviesCount = approvedAnime.filter((a) => a.type === 'Movie').length;
+    const ovaCount = approvedAnime.filter((a) => a.type === 'OVA' || a.type === 'ONA').length;
+    const specialCount = approvedAnime.filter((a) => a.type === 'Special').length;
 
     return {
       totalApproved,
@@ -107,6 +109,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
       languageCounts,
       seriesCount,
       moviesCount,
+      ovaCount,
+      specialCount
     };
   }, [approvedAnime, pendingSubmissions]);
 
@@ -263,7 +267,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
             {/* 3. Series Count */}
             <div className="bg-[#0e1320] border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between hover:border-neutral-700 transition-colors">
               <div className="flex items-center justify-between text-xs text-neutral-400 font-semibold mb-1">
-                <span>Anime Series</span>
+                <span>TV Series</span>
                 <Tv className="w-4 h-4 text-purple-400" />
               </div>
               <div className="flex items-baseline gap-2">
@@ -278,16 +282,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
             {/* 4. Movies Count */}
             <div className="bg-[#0e1320] border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between hover:border-neutral-700 transition-colors">
               <div className="flex items-center justify-between text-xs text-neutral-400 font-semibold mb-1">
-                <span>Anime Movies</span>
+                <span>Movies & OVAs</span>
                 <Film className="w-4 h-4 text-sky-400" />
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  {analytics.moviesCount}
+                  {analytics.moviesCount + analytics.ovaCount}
                 </span>
                 <span className="text-[10px] text-sky-400 font-bold uppercase">Films</span>
               </div>
-              <p className="text-[10px] text-neutral-500 mt-1">Theatrical releases</p>
+              <p className="text-[10px] text-neutral-500 mt-1">Movies, OVAs, ONAs</p>
             </div>
           </div>
 
@@ -439,7 +443,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                       loading="lazy"
                     />
                     <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-md text-[9px] font-bold text-white uppercase border border-white/10">
-                      {item.type || 'Series'}
+                      {item.type || 'TV Series'}
                     </div>
                   </div>
 

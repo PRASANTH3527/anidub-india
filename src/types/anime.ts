@@ -1,6 +1,6 @@
 export type DubLanguage = 'Tamil' | 'Telugu' | 'Hindi' | 'Malayalam' | 'Kannada';
 
-export type AnimeType = 'Series' | 'Movie' | 'Special' | 'OVA';
+export type AnimeType = 'TV Series' | 'Movie' | 'Special' | 'OVA' | 'ONA';
 
 export type AnimeStatus = 'Ongoing' | 'Completed' | 'Airing' | 'Upcoming' | 'pending' | 'approved' | 'rejected';
 
@@ -67,7 +67,11 @@ export interface Anime {
   episodesPerSeason?: number;
   currentSeason?: number;
   currentlyAiringEpisode?: number;
-  seasonDetails?: { seasonNumber: number; episodeCount: number }[];
+  seasonDetails?: { 
+    type: 'Season' | 'OVA' | 'Movie' | 'Special' | 'ONA'; 
+    label: string; 
+    episodeCount: number;
+  }[];
   status: AnimeStatus;
   airingStatus?: 'Ongoing' | 'Completed';
   releaseDay?: ReleaseDay;

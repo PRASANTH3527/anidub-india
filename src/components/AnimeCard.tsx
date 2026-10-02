@@ -402,7 +402,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 
           {/* Format & Year */}
           <div className="flex items-center gap-2 text-[11px] text-neutral-400 mt-1">
-            <span>{anime.type || 'Series'}</span>
+            <span>{anime.type || 'TV Series'}</span>
             <span>•</span>
             <span>{anime.releaseYear || '2024'}</span>
             {anime.episodes && (

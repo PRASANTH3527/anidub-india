@@ -732,7 +732,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </h3>
 
             <div className="space-y-2.5 divide-y divide-neutral-800/80 text-neutral-300">
-              {/* Progress Summary (Dynamic Seasons) */}
+              {/* Progress Summary (Dynamic Mixed Entries) */}
               {(anime.seasonDetails && anime.seasonDetails.length > 0) ? (
                 <div className="bg-purple-950/20 rounded-xl p-3 border border-purple-500/20 mb-2 space-y-3">
                   <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-purple-300">
@@ -740,16 +740,21 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     <Sparkles className="w-3 h-3" />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    {anime.seasonDetails.map((s) => (
-                      <div key={s.seasonNumber} className="bg-black/40 border border-white/5 rounded-lg p-2 flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-neutral-400">Season {s.seasonNumber}</span>
-                        <span className="text-white text-[11px] font-black">{s.episodeCount} EP</span>
+                    {anime.seasonDetails.map((s, idx) => (
+                      <div key={idx} className="bg-black/40 border border-white/5 rounded-lg p-2 flex justify-between items-center">
+                        <div className="flex flex-col">
+                          <span className="text-[9px] font-bold text-neutral-500 uppercase leading-none mb-0.5">{s.type}</span>
+                          <span className="text-[10px] font-black text-white">{s.label}</span>
+                        </div>
+                        <span className="text-purple-300 text-[10px] font-black">{s.episodeCount} EP</span>
                       </div>
                     ))}
                   </div>
-                  <div className="flex justify-between items-center pt-1 border-t border-purple-500/20">
+                  <div className="flex justify-between items-center pt-1.5 border-t border-purple-500/20">
                     <span className="text-[10px] font-bold text-purple-400 uppercase">Total Scope</span>
-                    <span className="text-white text-xs font-black">{anime.totalSeasons || anime.seasonDetails.length} Seasons • {anime.episodes} Episodes</span>
+                    <span className="text-white text-[10px] font-black">
+                      {anime.seasonDetails.filter(s => s.type === 'Season').length} Seasons • {anime.episodes} Episodes
+                    </span>
                   </div>
                 </div>
               ) : (anime.totalSeasons || anime.episodesPerSeason) && (
@@ -865,7 +870,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                       {show.title}
                     </h4>
                     <p className="text-[11px] text-neutral-400 mt-0.5">
-                      {show.type || 'Series'} • {show.releaseYear}
+                      {show.type || 'TV Series'} • {show.releaseYear}
                     </p>
                     <div className="flex flex-wrap gap-1 mt-2">
                       {(show.dubs || []).slice(0, 2).map((d) => (

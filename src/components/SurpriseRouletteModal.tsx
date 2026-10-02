@@ -183,7 +183,7 @@ export const SurpriseRouletteModal: React.FC<SurpriseRouletteModalProps> = ({
                   {currentAnime.title}
                 </h4>
                 <div className="flex items-center gap-2 text-xs text-neutral-300 mt-1">
-                  <span>{currentAnime.type || 'Series'}</span>
+                  <span>{currentAnime.type || 'TV Series'}</span>
                   <span>•</span>
                   <span>{currentAnime.releaseYear || '2024'}</span>
                   {currentAnime.studio && (

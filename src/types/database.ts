@@ -35,7 +35,11 @@ export interface AnimeRecord {
   episodesPerSeason?: number;
   currentSeason?: number;
   currentlyAiringEpisode?: number;
-  seasonDetails?: { seasonNumber: number; episodeCount: number }[];
+  seasonDetails?: { 
+    type: 'Season' | 'OVA' | 'Movie' | 'Special' | 'ONA'; 
+    label: string; 
+    episodeCount: number;
+  }[];
   status: AnimeStatus;
   airingStatus?: 'Ongoing' | 'Completed';
   releaseDay?: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';

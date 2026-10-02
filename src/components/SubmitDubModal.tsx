@@ -74,13 +74,17 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [synopsis, setSynopsis] = useState('');
   const [releaseYear, setReleaseYear] = useState(new Date().getFullYear());
   const [episodes, setEpisodes] = useState<number>(12);
-  const [type, setType] = useState<AnimeType>('Series');
+  const [type, setType] = useState<AnimeType>('TV Series');
   const [studio, setStudio] = useState('');
   const [genres, setGenres] = useState<string[]>(['Action', 'Fantasy']);
   
-  // Advanced Progress Tracking (Dynamic Seasons)
-  const [seasonDetails, setSeasonDetails] = useState<{ seasonNumber: number; episodeCount: number | '' }[]>([
-    { seasonNumber: 1, episodeCount: 12 }
+  // Advanced Progress Tracking (Dynamic Seasons / Mixed Entries)
+  const [seasonDetails, setSeasonDetails] = useState<{ 
+    type: 'Season' | 'OVA' | 'Movie' | 'Special' | 'ONA'; 
+    label: string; 
+    episodeCount: number | ''; 
+  }[]>([
+    { type: 'Season', label: '1', episodeCount: 12 }
   ]);
   const [currentSeason, setCurrentSeason] = useState<number>(1);
   const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number>(1);
@@ -126,24 +130,32 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     setStreamingPartners(updated);
   };
 
-  // Dynamic Season Logic
-  const addSeason = () => {
-    const nextSeason = seasonDetails.length + 1;
-    setSeasonDetails([...seasonDetails, { seasonNumber: nextSeason, episodeCount: '' }]);
+  // Dynamic Season / Entry Logic
+  const addEntry = () => {
+    // If last entry was a Season, try to guess the next number
+    const lastEntry = seasonDetails[seasonDetails.length - 1];
+    let nextLabel = '1';
+    if (lastEntry && lastEntry.type === 'Season' && !isNaN(parseInt(lastEntry.label))) {
+      nextLabel = (parseInt(lastEntry.label) + 1).toString();
+    } else {
+      nextLabel = (seasonDetails.length + 1).toString();
+    }
+    setSeasonDetails([...seasonDetails, { type: 'Season', label: nextLabel, episodeCount: '' }]);
   };
 
-  const removeSeason = (index: number) => {
+  const removeEntry = (index: number) => {
     if (seasonDetails.length > 1) {
-      const filtered = seasonDetails.filter((_, i) => i !== index);
-      // Re-map season numbers to keep them sequential
-      const remapped = filtered.map((s, i) => ({ ...s, seasonNumber: i + 1 }));
-      setSeasonDetails(remapped);
+      setSeasonDetails(seasonDetails.filter((_, i) => i !== index));
     }
   };
 
-  const updateSeasonEpisodeCount = (index: number, count: string) => {
+  const updateEntryField = (index: number, field: 'type' | 'label' | 'episodeCount', value: any) => {
     const updated = [...seasonDetails];
-    updated[index] = { ...updated[index], episodeCount: count === '' ? '' : parseInt(count) || 0 };
+    if (field === 'episodeCount') {
+      updated[index] = { ...updated[index], episodeCount: value === '' ? '' : parseInt(value) || 0 };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
     setSeasonDetails(updated);
   };
 
@@ -277,15 +289,16 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       releaseYear: releaseYear || new Date().getFullYear(),
       originalReleaseDate: `${releaseYear || new Date().getFullYear()}`,
       episodes: totalEpisodes || 12,
-      seasons: seasonDetails.length,
-      totalSeasons: seasonDetails.length,
+      seasons: seasonDetails.filter(s => s.type === 'Season').length,
+      totalSeasons: seasonDetails.filter(s => s.type === 'Season').length,
       seasonDetails: seasonDetails.map(s => ({
-        seasonNumber: s.seasonNumber,
+        type: s.type,
+        label: s.label,
         episodeCount: Number(s.episodeCount) || 0
       })),
       currentSeason: airingStatus === 'Ongoing' ? currentSeason : undefined,
       currentlyAiringEpisode: airingStatus === 'Ongoing' ? currentlyAiringEpisode : undefined,
-      type: type || 'Series',
+      type: type || 'TV Series',
       studio: studio.trim() || 'Animation Studio',
       rating: 8.0,
       status: airingStatus,
@@ -327,11 +340,11 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setSynopsis('');
       setStreamingPartners([{ name: 'Crunchyroll', url: '' }]);
       setSelectedDubs(['Tamil']);
-      setType('Series');
+      setType('TV Series');
       setGenres(['Action', 'Fantasy']);
       setAiringStatus('Ongoing');
       setReleaseDay('Saturday');
-      setSeasonDetails([{ seasonNumber: 1, episodeCount: 12 }]);
+      setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12 }]);
       setCurrentSeason(1);
       setCurrentlyAiringEpisode(1);
       setAutoFilled(false);
@@ -589,8 +602,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                     onChange={(e) => setType(e.target.value as AnimeType)}
                     className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer text-xs"
                   >
-                    <option value="Series">Series</option>
+                    <option value="TV Series">TV Series</option>
                     <option value="Movie">Movie</option>
+                    <option value="OVA">OVA</option>
+                    <option value="ONA">ONA</option>
                     <option value="Special">Special</option>
                   </select>
                 </div>
@@ -633,49 +648,71 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 )}
               </div>
 
-              {/* Dynamic Seasons & Episodes Tracking */}
+              {/* Dynamic Seasons & Mixed Entries Tracking */}
               <div className="space-y-3">
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Tv className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Seasons & Episodes <span className="text-rose-400">*</span></span>
+                    <span>Mixed Entries (Seasons, OVAs, Movies) <span className="text-rose-400">*</span></span>
                   </div>
                   <button 
                     type="button" 
-                    onClick={addSeason}
+                    onClick={addEntry}
                     className="text-[10px] text-purple-400 font-bold hover:text-purple-300 flex items-center gap-1"
                   >
                     <Plus className="w-3 h-3" />
-                    Add Season
+                    Add Entry
                   </button>
                 </label>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {seasonDetails.map((season, idx) => (
-                    <div key={idx} className="flex gap-2 items-center bg-[#182032] border border-neutral-700/60 rounded-xl p-2 animate-in zoom-in-95 duration-200">
-                      <div className="bg-purple-900/40 text-purple-300 font-black text-[10px] w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border border-purple-500/30">
-                        S{season.seasonNumber}
+                <div className="space-y-2.5">
+                  {seasonDetails.map((entry, idx) => (
+                    <div key={idx} className="grid grid-cols-12 gap-2 bg-[#182032] border border-neutral-700/60 rounded-2xl p-2.5 animate-in zoom-in-95 duration-200">
+                      <div className="col-span-4">
+                        <select
+                          value={entry.type}
+                          onChange={(e) => updateEntryField(idx, 'type', e.target.value)}
+                          className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl px-2 py-1.5 text-[10px] sm:text-[11px] text-white outline-none cursor-pointer"
+                        >
+                          <option value="Season">Season</option>
+                          <option value="Movie">Movie</option>
+                          <option value="OVA">OVA</option>
+                          <option value="ONA">ONA</option>
+                          <option value="Special">Special</option>
+                        </select>
                       </div>
-                      <div className="flex-1">
+                      <div className="col-span-3">
+                        <input
+                          type="text"
+                          required
+                          value={entry.label}
+                          onChange={(e) => updateEntryField(idx, 'label', e.target.value)}
+                          placeholder="Label (e.g. 1)"
+                          className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl px-2 py-1.5 text-[10px] sm:text-[11px] text-white placeholder-neutral-600 outline-none"
+                        />
+                      </div>
+                      <div className="col-span-3">
                         <input
                           type="number"
                           required
                           min={1}
-                          value={season.episodeCount}
-                          onChange={(e) => updateSeasonEpisodeCount(idx, e.target.value)}
-                          placeholder="Eps count"
-                          className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-neutral-600 outline-none"
+                          value={entry.episodeCount}
+                          onChange={(e) => updateEntryField(idx, 'episodeCount', e.target.value)}
+                          placeholder="Eps"
+                          className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl px-2 py-1.5 text-[10px] sm:text-[11px] text-white placeholder-neutral-600 outline-none"
                         />
                       </div>
-                      {seasonDetails.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeSeason(idx)}
-                          className="p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-all"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                      <div className="col-span-2 flex justify-center items-center">
+                        {seasonDetails.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeEntry(idx)}
+                            className="p-1.5 rounded-xl text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-all border border-transparent hover:border-rose-500/30"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

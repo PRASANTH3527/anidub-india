@@ -34,7 +34,7 @@ export const ALL_GENRES = [
   'Workplace',
 ];
 
-export const ALL_TYPES = ['All Types', 'Series', 'Movie', 'Special', 'OVA'];
+export const ALL_TYPES = ['All Types', 'TV Series', 'Movie', 'Special', 'OVA', 'ONA'];
 
 export const ALL_STATUSES = ['All', 'Ongoing', 'Completed', 'Airing', 'Upcoming'];
 

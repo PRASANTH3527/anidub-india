@@ -208,7 +208,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
                   {anime.title}
                 </h4>
                 <div className="flex items-center justify-between text-[10px] text-neutral-400 mt-1">
-                  <span>{anime.type || 'Series'}</span>
+                  <span>{anime.type || 'TV Series'}</span>
                   <span>{anime.releaseYear || '2024'}</span>
                 </div>
               </div>

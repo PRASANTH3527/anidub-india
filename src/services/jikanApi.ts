@@ -11,7 +11,7 @@ export interface AutoFillAnimeData {
   synopsis: string;
   releaseYear: number;
   episodes: number;
-  type: 'Series' | 'Movie' | 'OVA';
+  type: 'TV Series' | 'Movie' | 'OVA' | 'ONA' | 'Special';
   studio: string;
   genres: string[];
   themes: string[];
@@ -73,8 +73,11 @@ export function formatJikanToAnime(item: JikanAnimeResult): AutoFillAnimeData {
     item.images?.jpg?.image_url ||
     'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
 
-  const type: 'Series' | 'Movie' | 'OVA' =
-    item.type === 'Movie' ? 'Movie' : item.type === 'OVA' ? 'OVA' : 'Series';
+  const type: 'TV Series' | 'Movie' | 'OVA' | 'ONA' | 'Special' =
+    item.type === 'Movie' ? 'Movie' : 
+    item.type === 'OVA' ? 'OVA' : 
+    item.type === 'ONA' ? 'ONA' : 
+    item.type === 'Special' ? 'Special' : 'TV Series';
 
   const year =
     item.year ||
