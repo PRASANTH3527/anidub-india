@@ -191,6 +191,24 @@ function AppContent() {
     return [];
   });
 
+  // Filtered Watchlist (Only IDs that exist in the main database)
+  // This ensures the badge count in the Navbar is always accurate even if items are deleted by admin
+  const filteredWatchlistIds = useMemo(() => {
+    return localWatchlistIds.filter(id => approvedAnime.some(anime => anime.id === id));
+  }, [localWatchlistIds, approvedAnime]);
+
+  // Ghost Data Cleanup Effect:
+  // If an anime is deleted by an admin, we automatically prune it from the user's local storage
+  useEffect(() => {
+    if (approvedAnime.length > 0 && localWatchlistIds.length > 0) {
+      const validIds = localWatchlistIds.filter(id => approvedAnime.some(anime => anime.id === id));
+      if (validIds.length !== localWatchlistIds.length) {
+        setLocalWatchlistIds(validIds);
+        localStorage.setItem('anidub_local_watchlist', JSON.stringify(validIds));
+      }
+    }
+  }, [approvedAnime]); // Only trigger when the master list changes
+
   // Watchlist entries from DB (for signed in user sync)
   const [dbWatchlist, setDbWatchlist] = useState<WatchlistEntry[]>(() => {
     return dbService.getUserWatchlist(authService.getCurrentUser()?.uid || 'guest');
@@ -562,11 +580,11 @@ function AppContent() {
   const forYouData = useMemo<ForYouAnalysis>(() => {
     return computeForYouRecommendations(
       approvedAnime,
-      localWatchlistIds,
+      filteredWatchlistIds,
       recentlyViewedIds,
       localProfile
     );
-  }, [approvedAnime, localWatchlistIds, recentlyViewedIds, localProfile]);
+  }, [approvedAnime, filteredWatchlistIds, recentlyViewedIds, localProfile]);
 
   // Combined sorting logic that respects the active feed view
   const activeSortedAnime = useMemo(() => {
@@ -692,7 +710,7 @@ function AppContent() {
       <Navbar
         activeTab={activeTab === 'library' && feedView === 'foryou' ? 'foryou' : activeTab}
         setActiveTab={handleTabChange}
-        watchlistCount={localWatchlistIds.length}
+        watchlistCount={filteredWatchlistIds.length}
         theme={theme}
         onToggleTheme={handleToggleTheme}
         onOpenSuggestModal={handleOpenSubmitModal}
@@ -943,7 +961,7 @@ function AppContent() {
             {/* 3. My Watchlist Tab (Personal Local Favorites) */}
             {activeTab === 'watchlist' && (
               <WatchlistView
-                watchlistIds={localWatchlistIds}
+                watchlistIds={filteredWatchlistIds}
                 allAnime={approvedAnime}
                 trendingAnimeIds={trendingAnimeIds}
                 onToggleWatchlist={handleToggleWatchlist}
