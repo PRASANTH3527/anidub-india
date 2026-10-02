@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Anime, DubLanguage } from '../types/anime';
 import { AnimeRecord } from '../types/database';
+import { SupportedLanguage, translate } from '../utils/i18n';
 
 interface RecentlyViewedRowProps {
   recentlyViewedIds: string[];
@@ -21,6 +22,7 @@ interface RecentlyViewedRowProps {
   onToggleWatchlist: (anime: Anime) => void;
   watchlistIds: string[];
   onClearHistory: () => void;
+  uiLanguage?: SupportedLanguage;
 }
 
 const DUB_BADGE_STYLES: Record<DubLanguage, { bg: string; text: string; label: string }> = {
@@ -38,8 +40,10 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
   onToggleWatchlist,
   watchlistIds,
   onClearHistory,
+  uiLanguage = 'en',
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const lang = uiLanguage || 'en';
 
   // Map IDs in order of recent viewing
   const recentAnimeList: Anime[] = recentlyViewedIds
@@ -73,7 +77,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-heading font-black text-white text-base sm:text-lg tracking-tight">
-                Recently Viewed
+                {translate('recentlyViewedTitle', lang)}
               </h3>
               <span className="text-[11px] font-bold px-2 py-0.2 rounded-full bg-[#182033] border border-neutral-700/80 text-purple-300">
                 {recentAnimeList.length}
@@ -93,7 +97,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
             title="Clear recently viewed history"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Clear</span>
+            <span className="hidden sm:inline">{translate('clearHistory', lang)}</span>
           </button>
 
           {recentAnimeList.length > 3 && (

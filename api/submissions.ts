@@ -87,19 +87,36 @@ export async function readJsonBin(): Promise<any[]> {
 }
 
 /**
- * Saves submissions to JSONBin.io via PUT request with structure { submissions: [...] }.
+ * Saves submissions to JSONBin.io via PUT request while PRESERVING other root keys (like 'users').
  */
 export async function writeJsonBin(data: any[]): Promise<boolean> {
   if (!JSONBIN_BIN_ID || !JSONBIN_API_KEY) return false;
 
   try {
+    // 1. Fetch latest to ensure we don't wipe out other keys (e.g. users)
+    const latestRes = await fetch(`${JSONBIN_URL}/latest`, {
+      headers: { 'X-Master-Key': JSONBIN_API_KEY, 'X-Bin-Versioning': 'false' },
+      cache: 'no-store'
+    });
+    
+    let fullRecord: any = { submissions: [] };
+    if (latestRes.ok) {
+      const json = await latestRes.json();
+      fullRecord = json?.record || {};
+      if (Array.isArray(fullRecord)) fullRecord = { submissions: fullRecord };
+    }
+
+    // 2. Update only the submissions part
+    fullRecord.submissions = Array.isArray(data) ? data : [];
+
+    // 3. Write back the full record
     const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'X-Master-Key': JSONBIN_API_KEY,
       },
-      body: JSON.stringify({ submissions: Array.isArray(data) ? data : [] }),
+      body: JSON.stringify(fullRecord),
     });
 
     return res.ok;

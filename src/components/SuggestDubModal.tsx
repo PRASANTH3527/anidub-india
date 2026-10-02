@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Send, CheckCircle2, Film } from 'lucide-react';
+import { X, Send, CheckCircle2, Film, Plus } from 'lucide-react';
 import { DubLanguage } from '../types/anime';
 
 interface SuggestDubModalProps {
@@ -156,10 +156,12 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
 
             <button
               type="submit"
-              className="w-full mt-2 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-lg shadow-purple-600/30"
+              className="w-full mt-2 py-3.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-[0_10px_25px_rgba(168,85,247,0.35)] hover:shadow-[0_15px_35px_rgba(168,85,247,0.45)] active:scale-95 group"
             >
-              <Send className="w-3.5 h-3.5" />
-              <span>Submit Dub Info</span>
+              <div className="bg-white/20 p-1 rounded-lg group-hover:rotate-90 transition-transform duration-300">
+                <Plus className="w-4 h-4 text-white" strokeWidth={3} />
+              </div>
+              <span>Submit Dub Information</span>
             </button>
           </form>
         )}

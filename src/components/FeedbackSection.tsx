@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
+import { Send, CheckCircle2, MessageSquare, Sparkles, Plus } from 'lucide-react';
 import { FeedbackSubmission } from '../types/anime';
 
 interface FeedbackSectionProps {
@@ -64,21 +64,36 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   };
 
   return (
-    <footer className="w-full border-t border-neutral-800/80 bg-[#0c101a] py-12 px-4 mt-16">
-      <div className="max-w-xl mx-auto space-y-8">
+    <footer className="w-full border-t border-neutral-800/80 bg-[#0c101a] py-16 px-4 mt-16 pb-16 md:pb-20">
+      <div className="max-w-xl mx-auto space-y-10">
         
-        {/* Community Info Banner */}
-        <div className="text-center space-y-2">
-          <p className="text-sm text-neutral-400 font-medium">
-            AniDub India — community-driven directory of Indian language anime dubs
-          </p>
-          <div>
+        {/* Major Call-to-Action: Submit Anime */}
+        <div className="text-center space-y-5">
+          <div className="space-y-2">
+            <h2 className="font-heading font-black text-2xl text-white tracking-tight">
+              Know a missing dub?
+            </h2>
+            <p className="text-sm text-neutral-400 font-medium px-4">
+              Help us build the ultimate Indian anime directory by contributing new titles or regional audio info.
+            </p>
+          </div>
+          
+          <div className="px-2">
             <button
               onClick={onOpenSuggestModal}
-              className="text-xs font-semibold text-purple-400 hover:text-purple-300 underline underline-offset-4 cursor-pointer hover:opacity-90 transition-opacity"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-lg py-4 px-8 rounded-2xl shadow-[0_10px_30px_rgba(168,85,247,0.4)] hover:shadow-[0_15px_40px_rgba(168,85,247,0.5)] transition-all duration-300 active:scale-[0.98] cursor-pointer group"
             >
-              Submit an anime or dub →
+              <div className="bg-white/20 p-1.5 rounded-lg group-hover:rotate-90 transition-transform duration-300">
+                <Plus className="w-5 h-5 text-white" strokeWidth={3} />
+              </div>
+              <span>Submit an Anime or Dub</span>
             </button>
+          </div>
+          
+          <div className="flex items-center justify-center gap-4 text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+            <span className="w-8 h-[1px] bg-neutral-800" />
+            <span>Community Driven</span>
+            <span className="w-8 h-[1px] bg-neutral-800" />
           </div>
         </div>
 

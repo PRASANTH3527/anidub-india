@@ -9,7 +9,10 @@ import {
   ShieldAlert, 
   Film, 
   Tv, 
-  ExternalLink 
+  ExternalLink,
+  Upload,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { searchJikanAnime, formatJikanToAnime } from '../services/jikanApi';
 import { JikanAnimeResult } from '../types/database';
@@ -38,10 +41,22 @@ const AVAILABLE_GENRES = [
   'Romance',
   'Sci-Fi',
   'Shonen',
+  'Seinen',
+  'Shoujo',
+  'Josei',
   'Slice of Life',
   'Sports',
   'Supernatural',
   'Thriller',
+  'Mecha',
+  'Psychological',
+  'Music',
+  'Military',
+  'Historical',
+  'Martial Arts',
+  'Ecchi',
+  'Gourmet',
+  'Workplace',
 ];
 
 export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
@@ -55,7 +70,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   // Form Fields
   const [title, setTitle] = useState('');
   const [romajiTitle, setRomajiTitle] = useState('');
-  const [poster, setPoster] = useState('');
+  const [poster, setPoster] = useState(''); // This will now store Base64
   const [synopsis, setSynopsis] = useState('');
   const [releaseYear, setReleaseYear] = useState(new Date().getFullYear());
   const [episodes, setEpisodes] = useState<number>(12);
@@ -63,12 +78,52 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [studio, setStudio] = useState('');
   const [genres, setGenres] = useState<string[]>(['Action', 'Fantasy']);
   
+  // Advanced Progress Tracking
+  const [totalSeasons, setTotalSeasons] = useState<number>(1);
+  const [episodesPerSeason, setEpisodesPerSeason] = useState<number>(12);
+  const [currentSeason, setCurrentSeason] = useState<number>(1);
+  const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number>(1);
+
   // Dub fields
   const [selectedDubs, setSelectedDubs] = useState<DubLanguage[]>(['Tamil']);
-  const [platform, setPlatform] = useState<StreamingPlatform>('Crunchyroll');
-  const [streamUrl, setStreamUrl] = useState('');
+  
+  // Multi-Platform Links
+  const [streamingPartners, setStreamingPartners] = useState<{ name: StreamingPlatform; url: string }[]>([
+    { name: 'Crunchyroll', url: '' }
+  ]);
+
   const [airingStatus, setAiringStatus] = useState<'Ongoing' | 'Completed'>('Ongoing');
   const [releaseDay, setReleaseDay] = useState<ReleaseDay>('Saturday');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      setPoster(base64String);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const addStreamingPartner = () => {
+    setStreamingPartners([...streamingPartners, { name: 'Crunchyroll', url: '' }]);
+  };
+
+  const removeStreamingPartner = (index: number) => {
+    if (streamingPartners.length > 1) {
+      setStreamingPartners(streamingPartners.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateStreamingPartner = (index: number, field: 'name' | 'url', value: string) => {
+    const updated = [...streamingPartners];
+    updated[index] = { ...updated[index], [field]: value };
+    setStreamingPartners(updated);
+  };
 
   // Jikan Search State
   const [jikanResults, setJikanResults] = useState<JikanAnimeResult[]>([]);
@@ -178,16 +233,14 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     const dubDetails = selectedDubs.map((lang) => ({
       language: lang,
       available: true,
-      platform: [platform],
-      notes: `Verified ${lang} dub on ${platform}`,
+      platform: streamingPartners.map(p => p.name),
+      notes: `Verified ${lang} dub available on ${streamingPartners.map(p => p.name).join(', ')}`,
     }));
 
-    const platforms = [
-      {
-        name: platform,
-        url: streamUrl.trim() || 'https://www.crunchyroll.com',
-      },
-    ];
+    const platforms = streamingPartners.map(p => ({
+      name: p.name,
+      url: p.url.trim() || 'https://www.crunchyroll.com',
+    }));
 
     // STRICT APPROVAL GATE: Every submission is saved with status: "pending"
     // Pending anime are NEVER returned in getApprovedAnime() and stay completely hidden from public feeds
@@ -196,10 +249,15 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       romajiTitle: romajiTitle.trim() || title.trim(),
       poster: defaultCover,
       imageUrl: defaultCover,
-      synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available in ${selectedDubs.join(', ')} on ${platform}.`,
+      synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available in ${selectedDubs.join(', ')}.`,
       releaseYear: releaseYear || new Date().getFullYear(),
       originalReleaseDate: `${releaseYear || new Date().getFullYear()}`,
       episodes: episodes || 12,
+      seasons: totalSeasons,
+      totalSeasons,
+      episodesPerSeason,
+      currentSeason: airingStatus === 'Ongoing' ? currentSeason : undefined,
+      currentlyAiringEpisode: airingStatus === 'Ongoing' ? currentlyAiringEpisode : undefined,
       type: type || 'Series',
       studio: studio.trim() || 'Animation Studio',
       rating: 8.0,
@@ -240,12 +298,16 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setTitle('');
       setPoster('');
       setSynopsis('');
-      setStreamUrl('');
+      setStreamingPartners([{ name: 'Crunchyroll', url: '' }]);
       setSelectedDubs(['Tamil']);
       setType('Series');
       setGenres(['Action', 'Fantasy']);
       setAiringStatus('Ongoing');
       setReleaseDay('Saturday');
+      setTotalSeasons(1);
+      setEpisodesPerSeason(12);
+      setCurrentSeason(1);
+      setCurrentlyAiringEpisode(1);
       setAutoFilled(false);
       onClose();
       onSuccess?.();
@@ -362,31 +424,48 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 )}
               </div>
 
-              {/* Image URL text field */}
+              {/* Poster Image File Upload */}
               <div>
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                  <span>Image URL (Anime Poster Link)</span>
+                  <span>Anime Poster (Upload File) <span className="text-rose-400">*</span></span>
                   {autoFilled && <span className="text-[10px] text-emerald-400 font-semibold">✓ Auto-filled from MAL</span>}
                 </label>
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="url"
-                    value={poster}
-                    onChange={(e) => setPoster(e.target.value)}
-                    placeholder="https://... (paste link to anime poster image)"
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-purple-500 rounded-xl py-2 px-3 text-xs text-white placeholder-neutral-500 focus:outline-none"
-                  />
-                  {poster && (
-                    <img
-                      src={poster}
-                      alt="Cover Preview"
-                      className="w-9 h-11 object-cover rounded-lg border border-purple-500/50 shrink-0 shadow"
-                      onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                <div className="flex gap-3 items-center">
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 h-20 border-2 border-dashed border-neutral-700 hover:border-purple-500 rounded-2xl bg-[#171e2e] flex flex-col items-center justify-center cursor-pointer transition-all group"
+                  >
+                    <Upload className="w-5 h-5 text-neutral-500 group-hover:text-purple-400 mb-1" />
+                    <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider group-hover:text-neutral-200">
+                      {poster ? 'Change Photo' : 'Select Photo'}
+                    </span>
+                    <input 
+                      type="file" 
+                      ref={fileInputRef}
+                      onChange={handleImageUpload}
+                      accept="image/*"
+                      className="hidden" 
                     />
+                  </div>
+                  {poster && (
+                    <div className="relative shrink-0">
+                      <img
+                        src={poster}
+                        alt="Preview"
+                        className="w-14 h-20 object-cover rounded-xl border border-purple-500/50 shadow-xl"
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setPoster('')}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-600 rounded-full flex items-center justify-center text-white border border-black shadow-lg hover:bg-rose-500 transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
                   )}
                 </div>
-                <p className="text-[10px] text-neutral-400 mt-1">
-                  Paste any image URL or use the title search above to auto-fill from MyAnimeList.
+                <p className="text-[9px] text-neutral-500 mt-1 uppercase font-bold tracking-tighter">
+                  Supported: JPG, PNG, WEBP (Max 2MB).
                 </p>
               </div>
 
@@ -416,42 +495,63 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 </div>
               </div>
 
-              {/* Streaming Platform & Link */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-neutral-300 mb-1">
-                    Streaming Platform
-                  </label>
-                  <select
-                    value={platform}
-                    onChange={(e) => setPlatform(e.target.value as StreamingPlatform)}
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+              {/* Dynamic Multi-Platform Links */}
+              <div className="space-y-2">
+                <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                  <span>Streaming Partners (Multi-Link) <span className="text-rose-400">*</span></span>
+                  <button 
+                    type="button" 
+                    onClick={addStreamingPartner}
+                    className="text-[10px] text-purple-400 font-bold hover:text-purple-300 flex items-center gap-1"
                   >
-                    <option value="Crunchyroll">Crunchyroll</option>
-                    <option value="Netflix">Netflix</option>
-                    <option value="JioCinema">JioCinema</option>
-                    <option value="YouTube (Muse India)">YouTube (Muse India)</option>
-                    <option value="YouTube (Ani-One)">YouTube (Ani-One)</option>
-                    <option value="Disney+ Hotstar">Disney+ Hotstar</option>
-                    <option value="Prime Video">Prime Video</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-neutral-300 mb-1">
-                    Streaming Link / URL
-                  </label>
-                  <input
-                    type="url"
-                    value={streamUrl}
-                    onChange={(e) => setStreamUrl(e.target.value)}
-                    placeholder="https://crunchyroll.com/watch/..."
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500"
-                  />
+                    <Plus className="w-3 h-3" />
+                    Add Platform
+                  </button>
+                </label>
+                
+                <div className="space-y-2.5">
+                  {streamingPartners.map((partner, idx) => (
+                    <div key={idx} className="flex gap-2 items-start animate-in slide-in-from-left-2 duration-200">
+                      <div className="w-1/3">
+                        <select
+                          value={partner.name}
+                          onChange={(e) => updateStreamingPartner(idx, 'name', e.target.value)}
+                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-2.5 py-2 text-[11px] text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                        >
+                          <option value="Crunchyroll">Crunchyroll</option>
+                          <option value="Netflix">Netflix</option>
+                          <option value="JioCinema">JioCinema</option>
+                          <option value="YouTube (Muse India)">Muse India</option>
+                          <option value="YouTube (Ani-One)">Ani-One</option>
+                          <option value="Disney+ Hotstar">Hotstar</option>
+                          <option value="Prime Video">Prime</option>
+                        </select>
+                      </div>
+                      <div className="flex-1 relative">
+                        <input
+                          type="url"
+                          required
+                          value={partner.url}
+                          onChange={(e) => updateStreamingPartner(idx, 'url', e.target.value)}
+                          placeholder="Link (e.g. https://...)"
+                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-[11px] text-white placeholder-neutral-600 focus:outline-none focus:border-purple-500"
+                        />
+                      </div>
+                      {streamingPartners.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeStreamingPartner(idx)}
+                          className="p-2.5 rounded-xl bg-neutral-800/50 text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-all border border-neutral-700/40"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Type, Status & Release Day Dropdowns (Release Day is conditionally rendered ONLY when Status is 'Ongoing') */}
+              {/* Type, Status & Release Day Dropdowns */}
               <div className={`grid grid-cols-1 ${airingStatus === 'Ongoing' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
                 <div>
                   <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
@@ -484,7 +584,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                   </select>
                 </div>
 
-                {/* Release Day: ONLY visible and required if Status is set to 'Ongoing' */}
+                {/* Release Day */}
                 {airingStatus === 'Ongoing' && (
                   <div className="animate-fadeIn">
                     <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
@@ -504,6 +604,55 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                       ))}
                     </select>
                   </div>
+                )}
+              </div>
+
+              {/* Advanced Season & Episode Tracking */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">Total Seasons</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={totalSeasons}
+                    onChange={(e) => setTotalSeasons(parseInt(e.target.value) || 1)}
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">Eps / Season</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={episodesPerSeason}
+                    onChange={(e) => setEpisodesPerSeason(parseInt(e.target.value) || 12)}
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-purple-500"
+                  />
+                </div>
+                
+                {airingStatus === 'Ongoing' && (
+                  <>
+                    <div className="animate-in zoom-in-95 duration-200">
+                      <label className="block text-[10px] font-bold text-amber-500 uppercase mb-1">Current Season</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={currentSeason}
+                        onChange={(e) => setCurrentSeason(parseInt(e.target.value) || 1)}
+                        className="w-full bg-amber-950/20 border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-200 outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <div className="animate-in zoom-in-95 duration-200">
+                      <label className="block text-[10px] font-bold text-amber-500 uppercase mb-1">Live Episode</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={currentlyAiringEpisode}
+                        onChange={(e) => setCurrentlyAiringEpisode(parseInt(e.target.value) || 1)}
+                        className="w-full bg-amber-950/20 border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-200 outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </>
                 )}
               </div>
 

@@ -17,6 +17,8 @@ export interface AutoFillAnimeData {
   themes: string[];
   rating: number;
   originalReleaseDate: string;
+  airing?: boolean;
+  status?: string;
 }
 
 /**
@@ -96,6 +98,8 @@ export function formatJikanToAnime(item: JikanAnimeResult): AutoFillAnimeData {
     themes,
     rating: item.score ? Number(item.score.toFixed(1)) : 8.0,
     originalReleaseDate: item.aired?.string || `${year}`,
+    airing: item.airing,
+    status: item.status,
   };
 }
 

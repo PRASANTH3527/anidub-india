@@ -14,13 +14,17 @@ import {
   Download,
   Upload,
   Languages,
-  Database
+  Database,
+  Cloud,
+  Lock,
+  RefreshCw
 } from 'lucide-react';
 import { DubLanguage } from '../types/anime';
 import { useToast } from './Toast';
 import { ANIME_AVATARS_50, AnimeAvatarPreset } from '../data/animeAvatars50';
 import { ANIME_THEMES, applyAnimeTheme, getSavedAnimeTheme, AnimeTheme } from '../utils/theme';
 import { SupportedLanguage, getSavedUiLanguage, setSavedUiLanguage, translate } from '../utils/i18n';
+import { cloudSyncService } from '../services/cloudSyncService';
 
 export { ANIME_AVATARS_50, type AnimeAvatarPreset };
 export const ANIME_AVATAR_PRESETS = ANIME_AVATARS_50;
@@ -65,6 +69,10 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
 }) => {
   const toast = useToast();
   const uiLang = uiLanguage || getSavedUiLanguage();
+  
+  // Tab State
+  const [activeModalTab, setActiveModalTab] = useState<'identity' | 'sync'>('identity');
+
   const [nickname, setNickname] = useState(currentProfile.nickname || 'Anime Fan');
   const [selectedAvatar, setSelectedAvatar] = useState(
     currentProfile.avatar || ANIME_AVATARS_50[0].url
@@ -75,6 +83,11 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
   const [selectedThemeId, setSelectedThemeId] = useState<string>(() => {
     return currentProfile.theme || getSavedAnimeTheme().id;
   });
+
+  // Cloud Sync State
+  const [cloudUsername, setCloudUsername] = useState('');
+  const [cloudPassword, setCloudPassword] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const handleSelectTheme = (themeId: string) => {
     setSelectedThemeId(themeId);
@@ -108,6 +121,51 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
   }, [searchQuery, selectedSeries]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Watchlist count for shareable profile stats
+  const [watchlistCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('anidub_local_watchlist');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed.length;
+        }
+      } catch {}
+    }
+    return 0;
+  });
+
+  const handleCloudBackup = async () => {
+    if (!cloudUsername || !cloudPassword) {
+      toast.error('Missing Credentials', 'Please enter a username and password.');
+      return;
+    }
+    setIsSyncing(true);
+    const result = await cloudSyncService.backupToCloud(cloudUsername, cloudPassword);
+    setIsSyncing(false);
+    if (result.success) {
+      toast.success('Cloud Backup Saved!', 'Your watchlist and profile are now synced to JSONBin.');
+    } else {
+      toast.error('Backup Failed', result.error || 'Check your credentials.');
+    }
+  };
+
+  const handleCloudRestore = async () => {
+    if (!cloudUsername || !cloudPassword) {
+      toast.error('Missing Credentials', 'Please enter your username and password.');
+      return;
+    }
+    setIsSyncing(true);
+    const result = await cloudSyncService.restoreFromCloud(cloudUsername, cloudPassword);
+    setIsSyncing(false);
+    if (result.success) {
+      toast.success('Profile Restored!', 'Data successfully fetched from cloud. Refreshing...');
+      onRestoreSuccess?.();
+    } else {
+      toast.error('Restore Failed', result.error || 'User not found or wrong password.');
+    }
+  };
 
   const handleExportData = () => {
     try {
@@ -234,20 +292,6 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
   const currentSelectedPreset =
     ANIME_AVATARS_50.find((p) => p.url === selectedAvatar) || ANIME_AVATARS_50[0];
 
-  // Watchlist count for shareable profile stats
-  const [watchlistCount] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('anidub_local_watchlist');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) return parsed.length;
-        }
-      } catch {}
-    }
-    return 0;
-  });
-
   const handleShareProfile = async () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://anidub-india.web.app';
     const charName = currentSelectedPreset.character || currentSelectedPreset.name;
@@ -333,366 +377,476 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-3">
-          
-          {/* Active DP Preview Card */}
-          <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-[#0c101a] border border-neutral-800/90 shadow-inner">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-purple-500 ring-4 ring-purple-500/30 shadow-xl bg-neutral-900 shrink-0 transition-transform duration-300">
-                  <img
-                    src={selectedAvatar}
-                    alt={currentSelectedPreset.name}
-                    className="w-full h-full object-cover object-top"
-                  />
-                </div>
-                {currentSelectedPreset.isElectric && (
-                  <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center shadow-lg border border-black animate-pulse" title="Thunder Style Character">
-                    <Zap className="w-3 h-3 text-black fill-current" />
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-1 p-1 bg-[#0a0e17] border-b border-neutral-800">
+          <button
+            onClick={() => setActiveModalTab('identity')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeModalTab === 'identity'
+                ? 'bg-purple-600 text-white shadow-lg'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>{translate('identityTabTitle', uiLang)}</span>
+          </button>
+          <button
+            onClick={() => setActiveModalTab('sync')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeModalTab === 'sync'
+                ? 'bg-purple-600 text-white shadow-lg'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40'
+            }`}
+          >
+            <Cloud className="w-3.5 h-3.5" />
+            <span>{translate('cloudTabTitle', uiLang)}</span>
+          </button>
+        </div>
+
+        {activeModalTab === 'identity' ? (
+          <form onSubmit={handleSubmit} className="space-y-4 py-3">
+            
+            {/* Active DP Preview Card */}
+            <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-[#0c101a] border border-neutral-800/90 shadow-inner">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-purple-500 ring-4 ring-purple-500/30 shadow-xl bg-neutral-900 shrink-0 transition-transform duration-300">
+                    <img
+                      src={selectedAvatar}
+                      alt={currentSelectedPreset.name}
+                      className="w-full h-full object-cover object-top"
+                    />
                   </div>
+                  {currentSelectedPreset.isElectric && (
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center shadow-lg border border-black animate-pulse" title="Thunder Style Character">
+                      <Zap className="w-3 h-3 text-black fill-current" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
+                    Selected Character DP
+                  </span>
+                  <h4 className="font-heading font-black text-sm sm:text-base text-white">
+                    {currentSelectedPreset.character}
+                  </h4>
+                  <span className="text-xs text-neutral-400 font-medium">
+                    {currentSelectedPreset.series}
+                  </span>
+                </div>
+              </div>
+
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-800/50 text-[11px] text-purple-200 font-semibold">
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                <span>Instant Navbar Sync</span>
+              </div>
+            </div>
+
+            {/* Avatar Gallery Controls: Search & Category Chips */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>Select From 50 Top Anime Avatars</span>
+                </label>
+                <span className="text-[11px] text-neutral-400 font-medium">
+                  Showing <strong className="text-white">{filteredAvatars.length}</strong> of 50
+                </span>
+              </div>
+
+              {/* Quick Search Input */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search characters (e.g., Zenitsu, Gojo, Luffy, Levi, Zoro, Deku)..."
+                  className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl py-2 pl-9 pr-8 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 text-xs"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 )}
               </div>
 
-              <div className="flex flex-col">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
-                  Selected Character DP
-                </span>
-                <h4 className="font-heading font-black text-sm sm:text-base text-white">
-                  {currentSelectedPreset.character}
-                </h4>
-                <span className="text-xs text-neutral-400 font-medium">
-                  {currentSelectedPreset.series}
-                </span>
+              {/* Anime Series Filter Chips */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none text-[11px]">
+                {POPULAR_SERIES_FILTER.map((series) => {
+                  const isSelected = selectedSeries === series;
+                  return (
+                    <button
+                      type="button"
+                      key={series}
+                      onClick={() => setSelectedSeries(series)}
+                      className={`px-2.5 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'bg-[#151c2e] text-neutral-400 hover:text-neutral-200 border border-neutral-800'
+                      }`}
+                    >
+                      {series}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-800/50 text-[11px] text-purple-200 font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>Instant Navbar Sync</span>
-            </div>
-          </div>
+            {/* Highly Optimized, Beautifully Scrollable 50 Avatars Grid */}
+            <div className="relative rounded-2xl bg-[#0a0e17] border border-neutral-800/90 p-2 sm:p-3">
+              <div className="max-h-64 sm:max-h-72 overflow-y-auto pr-1.5 space-y-2 scrollbar-thin scrollbar-thumb-purple-600/50 scrollbar-track-neutral-900/60 hover:scrollbar-thumb-purple-500">
+                {filteredAvatars.length > 0 ? (
+                  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 sm:gap-2.5">
+                    {filteredAvatars.map((preset) => {
+                      const isSelected = selectedAvatar === preset.url;
 
-          {/* Avatar Gallery Controls: Search & Category Chips */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
-                <span>Select From 50 Top Anime Avatars</span>
-              </label>
-              <span className="text-[11px] text-neutral-400 font-medium">
-                Showing <strong className="text-white">{filteredAvatars.length}</strong> of 50
-              </span>
-            </div>
-
-            {/* Quick Search Input */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search characters (e.g., Zenitsu, Gojo, Luffy, Levi, Zoro, Deku)..."
-                className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl py-2 pl-9 pr-8 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 text-xs"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {/* Anime Series Filter Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none text-[11px]">
-              {POPULAR_SERIES_FILTER.map((series) => {
-                const isSelected = selectedSeries === series;
-                return (
-                  <button
-                    type="button"
-                    key={series}
-                    onClick={() => setSelectedSeries(series)}
-                    className={`px-2.5 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-purple-600 text-white shadow-sm'
-                        : 'bg-[#151c2e] text-neutral-400 hover:text-neutral-200 border border-neutral-800'
-                    }`}
-                  >
-                    {series}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Highly Optimized, Beautifully Scrollable 50 Avatars Grid */}
-          <div className="relative rounded-2xl bg-[#0a0e17] border border-neutral-800/90 p-2 sm:p-3">
-            <div className="max-h-64 sm:max-h-72 overflow-y-auto pr-1.5 space-y-2 scrollbar-thin scrollbar-thumb-purple-600/50 scrollbar-track-neutral-900/60 hover:scrollbar-thumb-purple-500">
-              {filteredAvatars.length > 0 ? (
-                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 sm:gap-2.5">
-                  {filteredAvatars.map((preset) => {
-                    const isSelected = selectedAvatar === preset.url;
-
-                    return (
-                      <button
-                        type="button"
-                        key={preset.id}
-                        onClick={() => setSelectedAvatar(preset.url)}
-                        title={`${preset.character} (${preset.series})`}
-                        className={`group relative flex flex-col items-center p-2 rounded-2xl transition-all cursor-pointer select-none active:scale-95 ${
-                          isSelected
-                            ? 'bg-purple-950/80 border border-purple-500/80 shadow-lg shadow-purple-950/60'
-                            : 'bg-[#131929]/70 hover:bg-[#1a2338] border border-neutral-800/80 hover:border-neutral-700'
-                        }`}
-                      >
-                        {/* Circular Image Frame with Ring Highlight Animation */}
-                        <div className="relative">
-                          <div
-                            className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-neutral-900 transition-all duration-200 ${
-                              isSelected
-                                ? 'ring-4 ring-purple-500 ring-offset-2 ring-offset-[#0a0e17] border-2 border-purple-300 scale-105 shadow-md shadow-purple-600/40 animate-pulse'
-                                : 'border border-neutral-700/80 group-hover:border-purple-400/60 group-hover:scale-105'
-                            }`}
-                          >
-                            <img
-                              src={preset.url}
-                              alt={preset.name}
-                              className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-110"
-                              loading="lazy"
-                            />
-                          </div>
-
-                          {/* Selected Checkmark Badge */}
-                          {isSelected && (
-                            <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-full flex items-center justify-center border-2 border-[#0a0e17] shadow-md animate-in zoom-in-75 duration-150">
-                              <Check className="w-3 h-3 text-white stroke-[3]" />
-                            </div>
-                          )}
-
-                          {/* Electric Lightning Indicator for Zenitsu / Killua */}
-                          {preset.isElectric && !isSelected && (
-                            <div
-                              className="absolute -bottom-1 -right-1 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center shadow-md border border-neutral-900"
-                              title="Thunder / Lightning"
-                            >
-                              <Zap className="w-2.5 h-2.5 text-black fill-current" />
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Name label */}
-                        <span
-                          className={`text-[10px] sm:text-[11px] font-bold text-center mt-1.5 truncate w-full tracking-tight ${
+                      return (
+                        <button
+                          type="button"
+                          key={preset.id}
+                          onClick={() => setSelectedAvatar(preset.url)}
+                          title={`${preset.character} (${preset.series})`}
+                          className={`group relative flex flex-col items-center p-2 rounded-2xl transition-all cursor-pointer select-none active:scale-95 ${
                             isSelected
-                              ? 'text-purple-200 font-black'
-                              : 'text-neutral-300 group-hover:text-white'
+                              ? 'bg-purple-950/80 border border-purple-500/80 shadow-lg shadow-purple-950/60'
+                              : 'bg-[#131929]/70 hover:bg-[#1a2338] border border-neutral-800/80 hover:border-neutral-700'
                           }`}
                         >
-                          {preset.name}
+                          {/* Circular Image Frame with Ring Highlight Animation */}
+                          <div className="relative">
+                            <div
+                              className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-neutral-900 transition-all duration-200 ${
+                                isSelected
+                                  ? 'ring-4 ring-purple-500 ring-offset-2 ring-offset-[#0a0e17] border-2 border-purple-300 scale-105 shadow-md shadow-purple-600/40 animate-pulse'
+                                  : 'border border-neutral-700/80 group-hover:border-purple-400/60 group-hover:scale-105'
+                              }`}
+                            >
+                              <img
+                                src={preset.url}
+                                alt={preset.name}
+                                className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-110"
+                                loading="lazy"
+                              />
+                            </div>
+
+                            {/* Selected Checkmark Badge */}
+                            {isSelected && (
+                              <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-full flex items-center justify-center border-2 border-[#0a0e17] shadow-md animate-in zoom-in-75 duration-150">
+                                <Check className="w-3 h-3 text-white stroke-[3]" />
+                              </div>
+                            )}
+
+                            {/* Electric Lightning Indicator for Zenitsu / Killua */}
+                            {preset.isElectric && !isSelected && (
+                              <div
+                                className="absolute -bottom-1 -right-1 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center shadow-md border border-neutral-900"
+                                title="Thunder / Lightning"
+                              >
+                                <Zap className="w-2.5 h-2.5 text-black fill-current" />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Name label */}
+                          <span
+                            className={`text-[10px] sm:text-[11px] font-bold text-center mt-1.5 truncate w-full tracking-tight ${
+                              isSelected
+                                ? 'text-purple-200 font-black'
+                                : 'text-neutral-300 group-hover:text-white'
+                            }`}
+                          >
+                            {preset.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-12 text-center text-neutral-400 space-y-2">
+                    <p className="text-xs">No anime character matched "{searchQuery}"</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setSelectedSeries('All (50)');
+                      }}
+                      className="text-xs text-purple-400 hover:text-purple-300 font-bold"
+                    >
+                      Reset Search Filter
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Dynamic Anime Accent Theme Selector */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-accent-theme" />
+                  <span>Primary Accent Theme</span>
+                </label>
+                <span className="text-[11px] text-neutral-400 font-medium">
+                  Applied instantly across app
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {ANIME_THEMES.map((theme) => {
+                  const isSelected = selectedThemeId === theme.id;
+                  return (
+                    <button
+                      type="button"
+                      key={theme.id}
+                      onClick={() => handleSelectTheme(theme.id)}
+                      className={`flex items-center gap-2 p-2 rounded-xl text-left transition-all cursor-pointer select-none active:scale-95 ${
+                        isSelected
+                          ? 'bg-[#1a2035] border-2 shadow-md'
+                          : 'bg-[#0d121f] border border-neutral-800 hover:border-neutral-700'
+                      }`}
+                      style={{
+                        borderColor: isSelected ? theme.primary : undefined,
+                        boxShadow: isSelected ? `0 0 14px ${theme.glow}` : undefined,
+                      }}
+                    >
+                      <span
+                        className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
+                        style={{ backgroundColor: theme.previewColor }}
+                      />
+                      <div className="flex flex-col min-w-0">
+                        <span className={`text-[11px] font-bold truncate ${isSelected ? 'text-white' : 'text-neutral-300'}`}>
+                          {theme.name.split(' (')[0]}
                         </span>
-                      </button>
-                    );
-                  })}
+                        <span className="text-[9px] text-neutral-500 truncate">
+                          {theme.character}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Nickname & Language Configuration Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {/* Nickname Input */}
+              <div>
+                <label className="block text-xs font-bold text-neutral-300 uppercase tracking-wider mb-1.5">
+                  Your Nickname
+                </label>
+                <input
+                  type="text"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  placeholder="e.g. ZenitsuFan, GojoDomain, DubOtaku..."
+                  maxLength={24}
+                  required
+                  className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-2xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 outline-none transition-colors"
+                />
+              </div>
+
+              {/* Favorite Dub Language */}
+              <div>
+                <label className="block text-xs font-bold text-neutral-300 uppercase tracking-wider mb-1.5">
+                  Favorite Dub Language
+                </label>
+                <select
+                  value={favLanguage}
+                  onChange={(e) => setFavLanguage(e.target.value as any)}
+                  className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-2xl px-3 sm:px-4 py-2.5 text-xs sm:text-sm text-white outline-none cursor-pointer"
+                >
+                  <option value="Tamil" className="bg-[#121829]">Tamil Dubs (தமிழ்)</option>
+                  <option value="Telugu" className="bg-[#121829]">Telugu Dubs (తెలుగు)</option>
+                  <option value="Hindi" className="bg-[#121829]">Hindi Dubs (हिंदी)</option>
+                  <option value="Malayalam" className="bg-[#121829]">Malayalam Dubs (മലയാളம்)</option>
+                  <option value="Kannada" className="bg-[#121829]">Kannada Dubs (ಕನ್ನಡ)</option>
+                  <option value="All" className="bg-[#121829]">All Indian Regional Dubs</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Hidden File Input for Data Restore */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImportFile}
+              accept=".json,application/json"
+              className="hidden"
+            />
+
+            {/* Profile Backup & Restore Box */}
+            <div className="p-3.5 rounded-2xl bg-[#0d121f] border border-neutral-800 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <div>
+                  <h4 className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
+                    <Database className="w-3.5 h-3.5 text-accent-theme" />
+                    <span>{translate('backupSectionTitle', uiLang)}</span>
+                  </h4>
+                  <p className="text-[10px] text-neutral-400">
+                    {translate('backupSectionSubtitle', uiLang)}
+                  </p>
                 </div>
-              ) : (
-                <div className="py-12 text-center text-neutral-400 space-y-2">
-                  <p className="text-xs">No anime character matched "{searchQuery}"</p>
+
+                {/* Language Switcher in Profile */}
+                <div className="flex items-center gap-1 shrink-0 self-start sm:self-auto">
+                  <span className="text-[10px] font-bold text-neutral-400 flex items-center gap-1 mr-1">
+                    <Languages className="w-3 h-3 text-purple-400" />
+                    <span>UI:</span>
+                  </span>
                   <button
                     type="button"
                     onClick={() => {
-                      setSearchQuery('');
-                      setSelectedSeries('All (50)');
+                      const next = uiLang === 'en' ? 'ta' : 'en';
+                      setSavedUiLanguage(next);
+                      onLanguageChange?.(next);
                     }}
-                    className="text-xs text-purple-400 hover:text-purple-300 font-bold"
+                    className="px-2 py-1 rounded-lg bg-[#141b2c] hover:bg-[#1e273f] text-neutral-200 hover:text-white border border-neutral-700 text-[10px] font-bold transition-all cursor-pointer"
                   >
-                    Reset Search Filter
+                    {uiLang === 'en' ? '🇮🇳 தமிழ்' : '🇬🇧 English'}
                   </button>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Dynamic Anime Accent Theme Selector */}
-          <div className="space-y-2 pt-1">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-accent-theme" />
-                <span>Primary Accent Theme</span>
-              </label>
-              <span className="text-[11px] text-neutral-400 font-medium">
-                Applied instantly across app
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {ANIME_THEMES.map((theme) => {
-                const isSelected = selectedThemeId === theme.id;
-                return (
-                  <button
-                    type="button"
-                    key={theme.id}
-                    onClick={() => handleSelectTheme(theme.id)}
-                    className={`flex items-center gap-2 p-2 rounded-xl text-left transition-all cursor-pointer select-none active:scale-95 ${
-                      isSelected
-                        ? 'bg-[#1a2035] border-2 shadow-md'
-                        : 'bg-[#0d121f] border border-neutral-800 hover:border-neutral-700'
-                    }`}
-                    style={{
-                      borderColor: isSelected ? theme.primary : undefined,
-                      boxShadow: isSelected ? `0 0 14px ${theme.glow}` : undefined,
-                    }}
-                  >
-                    <span
-                      className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
-                      style={{ backgroundColor: theme.previewColor }}
-                    />
-                    <div className="flex flex-col min-w-0">
-                      <span className={`text-[11px] font-bold truncate ${isSelected ? 'text-white' : 'text-neutral-300'}`}>
-                        {theme.name.split(' (')[0]}
-                      </span>
-                      <span className="text-[9px] text-neutral-500 truncate">
-                        {theme.character}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Nickname & Language Configuration Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            {/* Nickname Input */}
-            <div>
-              <label className="block text-xs font-bold text-neutral-300 uppercase tracking-wider mb-1.5">
-                Your Nickname
-              </label>
-              <input
-                type="text"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                placeholder="e.g. ZenitsuFan, GojoDomain, DubOtaku..."
-                maxLength={24}
-                required
-                className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-2xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 outline-none transition-colors"
-              />
-            </div>
-
-            {/* Favorite Dub Language */}
-            <div>
-              <label className="block text-xs font-bold text-neutral-300 uppercase tracking-wider mb-1.5">
-                Favorite Dub Language
-              </label>
-              <select
-                value={favLanguage}
-                onChange={(e) => setFavLanguage(e.target.value as any)}
-                className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-2xl px-3 sm:px-4 py-2.5 text-xs sm:text-sm text-white outline-none cursor-pointer"
-              >
-                <option value="Tamil" className="bg-[#121829]">Tamil Dubs (தமிழ்)</option>
-                <option value="Telugu" className="bg-[#121829]">Telugu Dubs (తెలుగు)</option>
-                <option value="Hindi" className="bg-[#121829]">Hindi Dubs (हिंदी)</option>
-                <option value="Malayalam" className="bg-[#121829]">Malayalam Dubs (മലയാളം)</option>
-                <option value="Kannada" className="bg-[#121829]">Kannada Dubs (ಕನ್ನಡ)</option>
-                <option value="All" className="bg-[#121829]">All Indian Regional Dubs</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Hidden File Input for Data Restore */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImportFile}
-            accept=".json,application/json"
-            className="hidden"
-          />
-
-          {/* Profile Backup & Restore Box */}
-          <div className="p-3.5 rounded-2xl bg-[#0d121f] border border-neutral-800 space-y-2.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-              <div>
-                <h4 className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
-                  <Database className="w-3.5 h-3.5 text-accent-theme" />
-                  <span>{translate('backupSectionTitle', uiLang)}</span>
-                </h4>
-                <p className="text-[10px] text-neutral-400">
-                  {translate('backupSectionSubtitle', uiLang)}
-                </p>
               </div>
 
-              {/* Language Switcher in Profile */}
-              <div className="flex items-center gap-1 shrink-0 self-start sm:self-auto">
-                <span className="text-[10px] font-bold text-neutral-400 flex items-center gap-1 mr-1">
-                  <Languages className="w-3 h-3 text-purple-400" />
-                  <span>UI:</span>
-                </span>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    const next = uiLang === 'en' ? 'ta' : 'en';
-                    setSavedUiLanguage(next);
-                    onLanguageChange?.(next);
-                  }}
-                  className="px-2 py-1 rounded-lg bg-[#141b2c] hover:bg-[#1e273f] text-neutral-200 hover:text-white border border-neutral-700 text-[10px] font-bold transition-all cursor-pointer"
+                  onClick={handleExportData}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-purple-950/40 hover:bg-purple-900/60 active:scale-95 text-purple-200 border border-purple-500/40 text-xs font-bold transition-all cursor-pointer shadow-sm"
                 >
-                  {uiLang === 'en' ? '🇮🇳 தமிழ்' : '🇬🇧 English'}
+                  <Download className="w-3.5 h-3.5 text-purple-400" />
+                  <span>{translate('exportBackupBtn', uiLang)}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#141b2c] hover:bg-[#1c253d] active:scale-95 text-neutral-200 hover:text-white border border-neutral-700/80 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                >
+                  <Upload className="w-3.5 h-3.5 text-neutral-400" />
+                  <span>{translate('importBackupBtn', uiLang)}</span>
                 </button>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 pt-1">
+            {/* Modal Action Buttons */}
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5 pt-3 border-t border-neutral-800">
+              {/* Share My Profile Button */}
               <button
                 type="button"
-                onClick={handleExportData}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-purple-950/40 hover:bg-purple-900/60 active:scale-95 text-purple-200 border border-purple-500/40 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                onClick={handleShareProfile}
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 active:scale-95 text-purple-300 hover:text-white border border-purple-600/40 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                title="Share your Otaku profile & stats"
               >
-                <Download className="w-3.5 h-3.5 text-purple-400" />
-                <span>{translate('exportBackupBtn', uiLang)}</span>
+                <Share2 className="w-3.5 h-3.5 text-purple-400" />
+                <span>{translate('shareProfile', uiLang)}</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#141b2c] hover:bg-[#1c253d] active:scale-95 text-neutral-200 hover:text-white border border-neutral-700/80 text-xs font-bold transition-all cursor-pointer shadow-sm"
-              >
-                <Upload className="w-3.5 h-3.5 text-neutral-400" />
-                <span>{translate('importBackupBtn', uiLang)}</span>
-              </button>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2.5 rounded-xl border border-neutral-800 text-neutral-400 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  {translate('cancel', uiLang)}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl btn-primary-theme active:scale-95 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-lg"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{translate('saveProfileAndTheme', uiLang)}</span>
+                </button>
+              </div>
             </div>
-          </div>
+          </form>
+        ) : (
+          <div className="space-y-5 py-6">
+            <div className="p-4 rounded-3xl bg-[#0d121f] border border-neutral-800 space-y-4 shadow-inner">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                  <Cloud className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-heading font-black text-white text-lg">{translate('cloudTabTitle', uiLang)}</h4>
+                  <p className="text-xs text-neutral-400">{translate('cloudSyncSubtitle', uiLang)}</p>
+                </div>
+              </div>
 
-          {/* Modal Action Buttons */}
-          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5 pt-3 border-t border-neutral-800">
-            {/* Share My Profile Button */}
-            <button
-              type="button"
-              onClick={handleShareProfile}
-              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 active:scale-95 text-purple-300 hover:text-white border border-purple-600/40 text-xs font-bold transition-all cursor-pointer shadow-sm"
-              title="Share your Otaku profile & stats"
-            >
-              <Share2 className="w-3.5 h-3.5 text-purple-400" />
-              <span>{translate('shareProfile', uiLang)}</span>
-            </button>
+              <div className="space-y-3.5 pt-2">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest px-1">
+                    {translate('cloudUsername', uiLang)}
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                    <input
+                      type="text"
+                      value={cloudUsername}
+                      onChange={(e) => setCloudUsername(e.target.value)}
+                      placeholder="Enter a unique username..."
+                      className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-2xl py-3 pl-10 pr-4 text-sm text-white placeholder-neutral-600 outline-none transition-all"
+                    />
+                  </div>
+                </div>
 
-            <div className="flex items-center justify-end gap-2">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest px-1">
+                    {translate('cloudPassword', uiLang)}
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                    <input
+                      type="password"
+                      value={cloudPassword}
+                      onChange={(e) => setCloudPassword(e.target.value)}
+                      placeholder="Secret password..."
+                      className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-2xl py-3 pl-10 pr-4 text-sm text-white placeholder-neutral-600 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <button
+                  onClick={handleCloudBackup}
+                  disabled={isSyncing}
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white text-sm font-black transition-all shadow-lg shadow-purple-600/20 active:scale-95 cursor-pointer"
+                >
+                  {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
+                  <span>{translate('cloudBackupBtn', uiLang)}</span>
+                </button>
+                <button
+                  onClick={handleCloudRestore}
+                  disabled={isSyncing}
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-[#141b2c] border border-neutral-800 hover:bg-[#1c253d] disabled:opacity-50 text-neutral-200 text-sm font-black transition-all active:scale-95 cursor-pointer"
+                >
+                  {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  <span>{translate('cloudRestoreBtn', uiLang)}</span>
+                </button>
+              </div>
+
+              <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-800/20 text-center">
+                <p className="text-[10px] font-bold text-purple-300 leading-relaxed uppercase tracking-tighter">
+                  {translate('cloudSafeNote', uiLang)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-center">
               <button
-                type="button"
                 onClick={onClose}
-                className="px-4 py-2.5 rounded-xl border border-neutral-800 text-neutral-400 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                className="px-8 py-2.5 rounded-xl border border-neutral-800 text-neutral-400 hover:text-white text-xs font-bold transition-colors cursor-pointer"
               >
                 {translate('cancel', uiLang)}
               </button>
-              <button
-                type="submit"
-                className="px-5 py-2.5 rounded-xl btn-primary-theme active:scale-95 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-lg"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>{translate('saveProfileAndTheme', uiLang)}</span>
-              </button>
             </div>
           </div>
-        </form>
+        )}
 
       </div>
     </div>

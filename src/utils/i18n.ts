@@ -65,6 +65,27 @@ export const TRANSLATIONS = {
     importSuccess: 'Profile, watchlist, and theme successfully restored!',
     importInvalid: 'Invalid backup file. Please select a valid AniDub backup .json file.',
     
+    // Cloud Sync
+    cloudTabTitle: 'Cloud Sync',
+    identityTabTitle: 'Identity',
+    cloudUsername: 'Cloud Username',
+    cloudPassword: 'Password',
+    cloudBackupBtn: 'Backup to Cloud',
+    cloudRestoreBtn: 'Restore from Cloud',
+    cloudSyncSubtitle: 'Optionally sync your watchlist and profile to our secure cloud to access on any device.',
+    cloudSafeNote: 'Privacy First: No email required. Just a unique username and password.',
+    
+    // Hero & Stats
+    heroBadge: "India's Largest Regional Anime Dub Tracker",
+    heroTitlePart1: "Find Anime Dubbed in",
+    heroTitlePart2: "Your Language",
+    heroSubtitle: "Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them.",
+    surpriseMe: "Surprise Me Roulette",
+    randomPick: "Random Pick",
+    statsAnime: "Dubbed Titles",
+    statsUpvotes: "Community Votes",
+    statsLanguages: "Indian Languages",
+    
     // Language Switcher
     langToggleLabel: 'UI Language',
     langEn: 'English',
@@ -131,6 +152,27 @@ export const TRANSLATIONS = {
     exportSuccess: 'காப்புப்பிரதி கோப்பு வெற்றிகரமாகப் பதிவிறக்கப்பட்டது!',
     importSuccess: 'சுயவிவரம் மற்றும் பட்டியல் வெற்றிகரமாக மீட்டமைக்கப்பட்டது!',
     importInvalid: 'செல்லாத காப்புப்பிரதி கோப்பு. சரியான .json கோப்பைத் தேர்ந்தெடுக்கவும்.',
+    
+    // Cloud Sync
+    cloudTabTitle: 'கிளவுட் ஒத்திசைவு',
+    identityTabTitle: 'சுயவிவரம்',
+    cloudUsername: 'பயனர் பெயர்',
+    cloudPassword: 'கடவுச்சொல்',
+    cloudBackupBtn: 'கிளவுட்டில் சேமி',
+    cloudRestoreBtn: 'கிளவுட்டிலிருந்து மீட்டெடு',
+    cloudSyncSubtitle: 'உங்கள் தரவை எந்தச் சாதனத்திலும் பயன்படுத்த பாதுகாப்பான கிளவுட்டில் ஒத்திசைக்கவும்.',
+    cloudSafeNote: 'தனியுரிமை: மின்னஞ்சல் தேவையில்லை. ஒரு தனித்துவமான பயனர் பெயர் மற்றும் கடவுச்சொல் மட்டும் போதும்.',
+    
+    // Hero & Stats
+    heroBadge: 'இந்தியாவின் மிகப்பெரிய பிராந்திய அனிமே டப் வழிகாட்டி',
+    heroTitlePart1: 'உங்களுக்குப் பிடித்த மொழியில்',
+    heroTitlePart2: 'அனிமேகளைக் கண்டறியவும்',
+    heroSubtitle: 'தமிழ், தெலுங்கு, இந்தி, மலையாளம் மற்றும் கன்னடம் ஆகிய மொழிகளில் டப் செய்யப்பட்ட அனிமேகளைக் கண்டறியுங்கள்.',
+    surpriseMe: 'அதிர்ஷ்ட அனிமே',
+    randomPick: 'சீரற்ற தேர்வு',
+    statsAnime: 'டப் செய்யப்பட்டவை',
+    statsUpvotes: 'சமூக வாக்குகள்',
+    statsLanguages: 'இந்திய மொழிகள்',
     
     // Language Switcher
     langToggleLabel: 'மொழி',

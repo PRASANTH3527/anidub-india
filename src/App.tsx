@@ -21,13 +21,16 @@ import { SurpriseRouletteModal } from './components/SurpriseRouletteModal';
 import { LocalProfileModal, LocalUserProfile, ANIME_AVATAR_PRESETS } from './components/LocalProfileModal';
 import { RecentlyViewedRow } from './components/RecentlyViewedRow';
 import { AdminDashboard } from './components/AdminDashboard';
+import { PullToRefresh } from './components/PullToRefresh';
 import { dbService } from './services/databaseService';
 import { authService } from './services/authService';
 import { AnimeRecord, WatchlistEntry } from './types/database';
 import { Anime, WatchlistItem, DubLanguage } from './types/anime';
 import { updateSeoTags } from './utils/seo';
 import { applyAnimeTheme, getSavedAnimeTheme } from './utils/theme';
-import { ChevronDown, Frown, Sparkles, PlusCircle, ShieldCheck, X, RefreshCw, WifiOff, Dices } from 'lucide-react';
+import { computeForYouRecommendations, ForYouAnalysis } from './utils/recommendations';
+import { getSavedUiLanguage, setSavedUiLanguage, translate, SupportedLanguage } from './utils/i18n';
+import { ChevronDown, Frown, Sparkles, PlusCircle, ShieldCheck, X, RefreshCw, WifiOff, Dices, Languages, Zap, Activity } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
 
 const INITIAL_VISIBLE_COUNT = 12;
@@ -46,6 +49,19 @@ function AppContent() {
     }
     return 'dark';
   });
+
+  // Bilingual UI State (English / Tamil)
+  const [uiLanguage, setUiLanguage] = useState<SupportedLanguage>(getSavedUiLanguage());
+
+  const handleToggleLanguage = () => {
+    const next = uiLanguage === 'en' ? 'ta' : 'en';
+    setUiLanguage(next);
+    setSavedUiLanguage(next);
+    toast.success(
+      next === 'ta' ? 'மொழி மாற்றப்பட்டது' : 'Language Changed',
+      next === 'ta' ? 'இடைமுகம் இப்போது தமிழில் உள்ளது.' : 'Interface is now in English.'
+    );
+  };
 
   useEffect(() => {
     const root = document.documentElement;
@@ -191,6 +207,7 @@ function AppContent() {
   const [selectedType, setSelectedType] = useState<string>('All Types');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [sortBy, setSortBy] = useState<string>('Most Upvoted');
+  const [feedView, setFeedView] = useState<'directory' | 'foryou'>('directory');
   const [visibleCount, setVisibleCount] = useState<number>(INITIAL_VISIBLE_COUNT);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -339,8 +356,20 @@ function AppContent() {
   const handleTabChange = (tab: NavTab) => {
     setViewingAnimeId(null);
     setActiveTab(tab);
+    if (tab === 'foryou') {
+      setFeedView('foryou');
+      setActiveTab('library'); // Use library view to render the feed
+    } else if (tab === 'library') {
+      setFeedView('directory');
+    }
     window.location.hash = tab;
+    setVisibleCount(INITIAL_VISIBLE_COUNT);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleRestoreSuccess = () => {
+    // Force refresh state from localStorage after a successful backup import
+    window.location.reload();
   };
 
   // Local Watchlist Toggle (No account required, saved in localStorage)
@@ -517,6 +546,27 @@ function AppContent() {
   }, [filteredApprovedAnime, sortBy]);
 
   // ==========================================================================
+  // Smart 'For You' Recommendation Engine
+  // ==========================================================================
+  const forYouData = useMemo<ForYouAnalysis>(() => {
+    return computeForYouRecommendations(
+      approvedAnime,
+      localWatchlistIds,
+      recentlyViewedIds,
+      localProfile
+    );
+  }, [approvedAnime, localWatchlistIds, recentlyViewedIds, localProfile]);
+
+  // Combined sorting logic that respects the active feed view
+  const activeSortedAnime = useMemo(() => {
+    if (feedView === 'foryou') {
+      // Recommendations are already sorted by affinity score in computeForYouRecommendations
+      return forYouData.recommendedAnime;
+    }
+    return sortedApprovedAnime;
+  }, [feedView, forYouData.recommendedAnime, sortedApprovedAnime]);
+
+  // ==========================================================================
   // Infinite Scroll Pagination Engine (IntersectionObserver)
   // ==========================================================================
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -534,7 +584,7 @@ function AppContent() {
         const entry = entries[0];
         if (entry && entry.isIntersecting) {
           setVisibleCount((prev) => {
-            if (prev < sortedApprovedAnime.length) {
+            if (prev < activeSortedAnime.length) {
               return prev + 12;
             }
             return prev;
@@ -549,11 +599,11 @@ function AppContent() {
 
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [sortedApprovedAnime.length]);
+  }, [activeSortedAnime.length]);
 
   const visibleAnime = useMemo(() => {
-    return sortedApprovedAnime.slice(0, visibleCount);
-  }, [sortedApprovedAnime, visibleCount]);
+    return activeSortedAnime.slice(0, visibleCount);
+  }, [activeSortedAnime, visibleCount]);
 
   const handleLanguageFilter = (lang: string) => {
     setSelectedLanguage(lang);
@@ -629,7 +679,7 @@ function AppContent() {
 
       {/* Top Navigation */}
       <Navbar
-        activeTab={activeTab}
+        activeTab={activeTab === 'library' && feedView === 'foryou' ? 'foryou' : activeTab}
         setActiveTab={handleTabChange}
         watchlistCount={localWatchlistIds.length}
         theme={theme}
@@ -639,6 +689,8 @@ function AppContent() {
         onSecretTrigger={() => !isAdmin && setShowSecretLogin(true)}
         localProfile={localProfile}
         onOpenProfileModal={() => setIsProfileModalOpen(true)}
+        uiLanguage={uiLanguage}
+        onToggleLanguage={handleToggleLanguage}
       />
 
       {/* 2. Gentle Offline Mode Banner */}
@@ -654,12 +706,13 @@ function AppContent() {
       )}
 
       <main className="flex-grow">
-        {/* Stealth Admin Dashboard Integration */}
-        {isAdmin && activeTab === 'library' && (
-          <div className="mb-6">
-             <AdminDashboard onExitAdmin={handleExitAdmin} />
-          </div>
-        )}
+        <PullToRefresh onRefresh={dbService.syncWithServer.bind(dbService)}>
+          {/* Stealth Admin Dashboard Integration */}
+          {isAdmin && activeTab === 'library' && (
+            <div className="mb-6">
+               <AdminDashboard onExitAdmin={handleExitAdmin} />
+            </div>
+          )}
 
         {/* 1. Dedicated Information Page (Route #anime/:id) */}
         {currentViewingAnime ? (
@@ -682,6 +735,7 @@ function AppContent() {
                 <Hero 
                   totalCount={approvedAnime.length} 
                   onOpenSurpriseMe={() => setIsSurpriseModalOpen(true)}
+                  uiLanguage={uiLanguage}
                 />
 
                 {/* 3. Animated Stats Counter Section */}
@@ -689,6 +743,7 @@ function AppContent() {
                   totalAnime={approvedAnime.length}
                   totalUpvotes={totalCommunityUpvotes}
                   languagesCount={5}
+                  uiLanguage={uiLanguage}
                 />
 
                 {/* 4. Recently Viewed Horizontal Row */}
@@ -699,6 +754,7 @@ function AppContent() {
                   onToggleWatchlist={handleToggleWatchlist}
                   watchlistIds={localWatchlistIds}
                   onClearHistory={handleClearRecentlyViewed}
+                  uiLanguage={uiLanguage}
                 />
 
                 <FilterBar
@@ -729,12 +785,50 @@ function AppContent() {
                     setSortBy(s);
                     setVisibleCount(INITIAL_VISIBLE_COUNT);
                   }}
-                  totalFiltered={filteredApprovedAnime.length}
+                  totalFiltered={activeSortedAnime.length}
                   totalAvailable={approvedAnime.length}
                   languageCounts={languageCounts}
                   isLoading={isLoading}
                   onReset={handleResetFilters}
+                  uiLanguage={uiLanguage}
+                  feedView={feedView}
+                  setFeedView={(view) => {
+                    setFeedView(view);
+                    setVisibleCount(INITIAL_VISIBLE_COUNT);
+                  }}
                 />
+
+                {/* For You Logic Metadata (Subtle Info) */}
+                {feedView === 'foryou' && (
+                  <div className="max-w-5xl mx-auto px-4 mb-6">
+                    <div className="p-5 rounded-3xl bg-primary-theme/5 border border-primary-theme/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-primary-theme/10 flex items-center justify-center text-primary-theme">
+                          <Activity className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="font-heading font-black text-white text-lg">
+                            {translate('forYouTitle', uiLanguage)}
+                          </h3>
+                          <p className="text-xs text-neutral-400">
+                            {translate('forYouSubtitle', uiLanguage)}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="px-3 py-1.5 rounded-xl bg-[#131929] border border-neutral-800 text-[10px] font-bold text-neutral-400">
+                          <span className="text-primary-theme mr-1">{translate('forYouLanguageMatch', uiLanguage)}:</span>
+                          <span className="text-neutral-200">{forYouData.preferredLanguage}</span>
+                        </div>
+                        <div className="px-3 py-1.5 rounded-xl bg-[#131929] border border-neutral-800 text-[10px] font-bold text-neutral-400">
+                          <span className="text-primary-theme mr-1">{translate('forYouTopGenres', uiLanguage)}:</span>
+                          <span className="text-neutral-200">{forYouData.topGenres.join(', ')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="max-w-6xl mx-auto px-4">
                   {isLoading ? (
@@ -757,21 +851,21 @@ function AppContent() {
 
                       {/* Infinite Scroll Sentinel & Seamless Loader */}
                       <div ref={sentinelRef} className="pt-8 pb-12 flex flex-col items-center justify-center">
-                        {visibleCount < sortedApprovedAnime.length ? (
+                        {visibleCount < activeSortedAnime.length ? (
                           <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-[#131929]/90 border border-neutral-800 text-xs font-semibold text-neutral-300 shadow-md animate-pulse">
                             <RefreshCw className="w-4 h-4 animate-spin text-primary-theme" />
-                            <span>Loading next batch of anime... ({sortedApprovedAnime.length - visibleCount} remaining)</span>
+                            <span>{translate('loadingBatch', uiLanguage)} ({activeSortedAnime.length - visibleCount} remaining)</span>
                           </div>
-                        ) : sortedApprovedAnime.length > INITIAL_VISIBLE_COUNT ? (
+                        ) : activeSortedAnime.length > INITIAL_VISIBLE_COUNT ? (
                           <div className="text-center pt-4 pb-2">
                             <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#131929] border border-neutral-800 text-xs font-semibold text-neutral-400">
                               <Sparkles className="w-3.5 h-3.5 text-primary-theme" />
-                              All {sortedApprovedAnime.length} approved anime loaded
+                              {translate('allLoaded', uiLanguage)}
                             </span>
                           </div>
                         ) : null}
                         <p className="text-[11px] text-neutral-500 font-medium mt-2.5">
-                          Showing <strong className="text-neutral-300">{visibleAnime.length}</strong> of <strong className="text-neutral-300">{sortedApprovedAnime.length}</strong> approved dubs
+                          {translate('showingTitles', uiLanguage)} <strong className="text-neutral-300">{visibleAnime.length}</strong> {translate('ofTitles', uiLanguage)} <strong className="text-neutral-300">{activeSortedAnime.length}</strong> {translate('approvedDubs', uiLanguage)}
                         </p>
                       </div>
                     </>
@@ -790,9 +884,11 @@ function AppContent() {
                           </p>
                           <button
                             onClick={() => setIsSubmitModalOpen(true)}
-                            className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-purple-600/30 flex items-center gap-2 mx-auto"
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-black py-3.5 px-8 rounded-2xl transition-all cursor-pointer shadow-[0_10px_25px_rgba(168,85,247,0.4)] hover:shadow-[0_15px_35px_rgba(168,85,247,0.5)] active:scale-95 flex items-center mx-auto group"
                           >
-                            <PlusCircle className="w-4 h-4" />
+                            <div className="bg-white/20 p-1 rounded-lg group-hover:rotate-90 transition-transform duration-300">
+                              <PlusCircle className="w-5 h-5" />
+                            </div>
                             <span>Submit First Dub Info</span>
                           </button>
                         </>
@@ -802,15 +898,24 @@ function AppContent() {
                           <h3 className="font-heading font-black text-lg text-white mb-1">
                             No Approved Dubbed Anime Found
                           </h3>
-                          <p className="text-xs text-neutral-400 mb-5">
+                          <p className="text-xs text-neutral-400 mb-6 px-4 leading-relaxed">
                             No anime matches your filter criteria. Try choosing another regional language or resetting filters.
                           </p>
-                          <button
-                            onClick={handleResetFilters}
-                            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-lg shadow-purple-600/30"
-                          >
-                            Reset All Filters
-                          </button>
+                          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 px-4">
+                            <button
+                              onClick={handleResetFilters}
+                              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold transition-all cursor-pointer border border-neutral-700"
+                            >
+                              Reset All Filters
+                            </button>
+                            <button
+                              onClick={() => setIsSubmitModalOpen(true)}
+                              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold py-3 px-6 rounded-xl transition-all cursor-pointer shadow-lg shadow-purple-600/30 group"
+                            >
+                              <PlusCircle className="w-4 h-4 group-hover:rotate-90 transition-transform" />
+                              <span>Submit a Dub</span>
+                            </button>
+                          </div>
                         </>
                       )}
                     </div>
@@ -864,6 +969,7 @@ function AppContent() {
             )}
           </>
         )}
+        </PullToRefresh>
       </main>
 
       {/* Footer & Feedback */}
@@ -914,6 +1020,11 @@ function AppContent() {
         onClose={() => setIsProfileModalOpen(false)}
         currentProfile={localProfile}
         onSaveProfile={handleSaveLocalProfile}
+        uiLanguage={uiLanguage}
+        onLanguageChange={(lang) => {
+          setUiLanguage(lang);
+        }}
+        onRestoreSuccess={handleRestoreSuccess}
       />
     </div>
   );

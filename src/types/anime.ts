@@ -63,6 +63,10 @@ export interface Anime {
   rating: number; // e.g., 8.7
   episodes?: number;
   seasons?: number;
+  totalSeasons?: number;
+  episodesPerSeason?: number;
+  currentSeason?: number;
+  currentlyAiringEpisode?: number;
   status: AnimeStatus;
   airingStatus?: 'Ongoing' | 'Completed';
   releaseDay?: ReleaseDay;

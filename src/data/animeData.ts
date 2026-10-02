@@ -16,15 +16,27 @@ export const ALL_GENRES = [
   'Romance',
   'Sci-Fi',
   'Shonen',
+  'Seinen',
+  'Shoujo',
+  'Josei',
   'Slice of Life',
   'Sports',
   'Supernatural',
   'Thriller',
+  'Mecha',
+  'Psychological',
+  'Music',
+  'Military',
+  'Historical',
+  'Martial Arts',
+  'Ecchi',
+  'Gourmet',
+  'Workplace',
 ];
 
-export const ALL_TYPES = ['All Types', 'Series', 'Movie', 'Special'];
+export const ALL_TYPES = ['All Types', 'Series', 'Movie', 'Special', 'OVA'];
 
-export const ALL_STATUSES = ['All', 'Ongoing', 'Completed'];
+export const ALL_STATUSES = ['All', 'Ongoing', 'Completed', 'Airing', 'Upcoming'];
 
 export const ALL_LANGUAGES: { name: string; short: string; bg: string; text: string; border: string }[] = [
   { name: 'All', short: 'All', bg: 'bg-purple-600', text: 'text-white', border: 'border-purple-500' },

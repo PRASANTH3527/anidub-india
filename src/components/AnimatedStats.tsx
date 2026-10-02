@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { Tv, Flame, Languages, CheckCircle2, TrendingUp, Sparkles, Film } from 'lucide-react';
+import { SupportedLanguage, translate } from '../utils/i18n';
 
 interface AnimatedStatsProps {
   totalAnime: number;
   totalUpvotes: number;
   languagesCount?: number;
+  uiLanguage?: SupportedLanguage;
 }
 
 function useCountUp(target: number, duration: number = 1200): number {
@@ -46,7 +48,9 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
   totalAnime,
   totalUpvotes,
   languagesCount = 5,
+  uiLanguage = 'en',
 }) => {
+  const lang = uiLanguage || 'en';
   const animatedAnimeCount = useCountUp(totalAnime, 1000);
   const animatedUpvotesCount = useCountUp(totalUpvotes, 1200);
   const animatedLangCount = useCountUp(languagesCount, 800);
@@ -61,7 +65,7 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
           
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-              Approved Anime
+              {translate('statsAnime', lang)}
             </span>
             <div className="w-8 h-8 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
               <Tv className="w-4 h-4" />
@@ -87,7 +91,7 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
           
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-              Community Upvotes
+              {translate('statsUpvotes', lang)}
             </span>
             <div className="w-8 h-8 rounded-xl bg-orange-600/20 border border-orange-500/30 flex items-center justify-center text-orange-400">
               <Flame className="w-4 h-4 fill-current" />
@@ -113,7 +117,7 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
           
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-              Languages Supported
+              {translate('statsLanguages', lang)}
             </span>
             <div className="w-8 h-8 rounded-xl bg-sky-600/20 border border-sky-500/30 flex items-center justify-center text-sky-400">
               <Languages className="w-4 h-4" />

@@ -47,6 +47,15 @@ const DUB_LANGUAGE_BADGES: Record<DubLanguage, { bg: string; text: string; borde
   Kannada: { bg: 'bg-rose-950/70', text: 'text-rose-300', border: 'border-rose-700/60' },
 };
 
+const PLATFORM_COLORS: Record<string, string> = {
+  Crunchyroll: 'hover:bg-orange-600/20 hover:border-orange-500/50 text-orange-400',
+  Netflix: 'hover:bg-red-600/20 hover:border-red-500/50 text-red-500',
+  'Prime Video': 'hover:bg-sky-600/20 hover:border-sky-500/50 text-sky-400',
+  'Disney+ Hotstar': 'hover:bg-blue-600/20 hover:border-blue-500/50 text-blue-400',
+  JioCinema: 'hover:bg-pink-600/20 hover:border-pink-500/50 text-pink-500',
+  YouTube: 'hover:bg-rose-600/20 hover:border-rose-500/50 text-rose-500',
+};
+
 export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   anime,
   watchlistItem,
@@ -694,28 +703,83 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </p>
 
             <div className="space-y-2 pt-1">
-              {(anime.platforms || []).map((p) => (
-                <a
-                  key={p.name}
-                  href={p.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between p-3 rounded-xl bg-[#182032] hover:bg-purple-900/30 border border-neutral-700/80 hover:border-purple-500/50 text-xs font-bold text-neutral-100 transition-all group"
-                >
-                  <span>Watch on {p.name}</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-neutral-400 group-hover:text-purple-300 transition-colors" />
-                </a>
-              ))}
+              {(anime.platforms || []).map((p) => {
+                const colorClass = Object.keys(PLATFORM_COLORS).find(k => p.name.includes(k)) 
+                  ? PLATFORM_COLORS[Object.keys(PLATFORM_COLORS).find(k => p.name.includes(k))!] 
+                  : 'hover:bg-purple-900/30 border-neutral-700/80 hover:border-purple-500/50 text-neutral-100';
+
+                return (
+                  <a
+                    key={p.name}
+                    href={p.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center justify-between p-3 rounded-xl bg-[#182032] border transition-all group font-bold text-xs ${colorClass}`}
+                  >
+                    <span>Watch on {p.name}</span>
+                    <ExternalLink className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 transition-opacity" />
+                  </a>
+                );
+              })}
             </div>
           </div>
 
           {/* Anime Production Details Panel */}
-          <div className="bg-[#131926] border border-neutral-800 rounded-3xl p-6 shadow-xl space-y-3.5 text-xs">
-            <h3 className="font-heading font-black text-base text-white">
-              Information & Details
+          <div className="bg-[#131926] border border-neutral-800 rounded-3xl p-6 shadow-xl space-y-3.5 text-xs font-medium">
+            <h3 className="font-heading font-black text-base text-white flex items-center gap-2">
+              <Tv className="w-4 h-4 text-purple-400" />
+              <span>Production & Airing</span>
             </h3>
 
             <div className="space-y-2.5 divide-y divide-neutral-800/80 text-neutral-300">
+              {/* Progress Summary if available */}
+              {(anime.totalSeasons || anime.episodesPerSeason) && (
+                <div className="bg-purple-950/20 rounded-xl p-3 border border-purple-500/20 mb-2 space-y-2">
+                  <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-purple-300">
+                    <span>Series Scope</span>
+                    <Sparkles className="w-3 h-3" />
+                  </div>
+                  <div className="flex gap-4">
+                    {anime.totalSeasons && (
+                      <div className="flex flex-col">
+                        <span className="text-white text-base font-black leading-tight">{anime.totalSeasons}</span>
+                        <span className="text-neutral-500 text-[9px] uppercase">Seasons</span>
+                      </div>
+                    )}
+                    {anime.episodesPerSeason && (
+                      <div className="flex flex-col">
+                        <span className="text-white text-base font-black leading-tight">{anime.episodesPerSeason}</span>
+                        <span className="text-neutral-500 text-[9px] uppercase">Eps/Season</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Current Live Status for Ongoing Anime */}
+              {anime.status === 'Ongoing' && (anime.currentSeason || anime.currentlyAiringEpisode) && (
+                <div className="bg-amber-950/20 rounded-xl p-3 border border-amber-500/30 mb-2 space-y-2 animate-pulse">
+                  <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-amber-500">
+                    <span>Live Airing Now</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  </div>
+                  <div className="flex gap-4">
+                    {anime.currentSeason && (
+                      <div className="flex flex-col">
+                        <span className="text-amber-200 text-base font-black leading-tight">S{anime.currentSeason}</span>
+                        <span className="text-amber-600/80 text-[9px] uppercase">Current Season</span>
+                      </div>
+                    )}
+                    {anime.currentlyAiringEpisode && (
+                      <div className="flex flex-col">
+                        <span className="text-amber-200 text-base font-black leading-tight">EP {anime.currentlyAiringEpisode}</span>
+                        <span className="text-amber-600/80 text-[9px] uppercase">Airing Now</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-between pt-2">
                 <span className="text-neutral-500">Animation Studio</span>
                 <span className="font-bold text-white">{anime.studio}</span>

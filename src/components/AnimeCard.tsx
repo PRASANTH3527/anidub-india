@@ -86,6 +86,38 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const hasSwipedRef = useRef(false);
 
+  // 3D Parallax & Glare Effect
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [glare, setGlare] = useState({ x: 50, y: 50, opacity: 0 });
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current || isSwiping) return;
+    
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    
+    // Calculate tilt (max 10 degrees)
+    const tiltX = (y - centerY) / centerY * 10;
+    const tiltY = (centerX - x) / centerX * 10;
+    
+    setTilt({ x: tiltX, y: tiltY });
+    
+    // Glare position (percentage)
+    const glareX = (x / rect.width) * 100;
+    const glareY = (y / rect.height) * 100;
+    setGlare({ x: glareX, y: glareY, opacity: 0.4 });
+  };
+
+  const handleMouseLeave = () => {
+    setTilt({ x: 0, y: 0 });
+    setGlare(prev => ({ ...prev, opacity: 0 }));
+  };
+
   const handleUpvoteDirect = async () => {
     if (isUpvoted) {
       toast.info('Already Upvoted 🔥', `You have already cast your vote for "${anime.title}".`);
@@ -134,14 +166,28 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     const diffX = touch.clientX - touchStartRef.current.x;
     const diffY = touch.clientY - touchStartRef.current.y;
 
-    // Only engage horizontal swipe if horizontal displacement is significantly greater than vertical
+    // 1. Horizontal Swipe Logic (Intact)
     if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 10) {
       setIsSwiping(true);
       hasSwipedRef.current = true;
-      // Damped clamp between -80px and 80px
       const clamped = Math.max(-80, Math.min(80, diffX));
       setDragOffset(clamped);
     }
+
+    // 2. Mobile Tilt Logic
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    
+    // Subtle tilt for mobile touch (max 5 degrees to not interfere with visibility)
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const tiltX = (y - centerY) / centerY * 5;
+    const tiltY = (centerX - x) / centerX * 5;
+    
+    setTilt({ x: tiltX, y: tiltY });
+    setGlare({ x: (x / rect.width) * 100, y: (y / rect.height) * 100, opacity: 0.3 });
   };
 
   const handleTouchEnd = () => {
@@ -201,6 +247,9 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 
       {/* Interactive Swipable Card Body */}
       <div
+        ref={cardRef}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
         onClick={() => {
           if (!hasSwipedRef.current && Math.abs(dragOffset) < 10) {
             onSelect(anime);
@@ -213,15 +262,26 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
           setDragOffset(0);
           setIsSwiping(false);
           touchStartRef.current = null;
+          handleMouseLeave();
         }}
         style={{
-          transform: `translateX(${dragOffset}px)`,
-          transition: isSwiping ? 'none' : 'transform 0.35s cubic-bezier(0.18, 0.89, 0.32, 1.28)',
+          transform: `translateX(${dragOffset}px) perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+          transition: isSwiping ? 'none' : 'transform 0.4s cubic-bezier(0.1, 0.8, 0.3, 1)',
+          transformStyle: 'preserve-3d',
         }}
-        className="relative z-10 flex flex-col rounded-2xl overflow-hidden bg-[#131926] border border-neutral-800/80 hover:border-primary-theme hover:shadow-2xl active:scale-[0.99] transition-all duration-300 cursor-pointer"
+        className="relative z-10 flex flex-col rounded-2xl overflow-hidden bg-[#131926] border border-neutral-800/80 hover:border-primary-theme hover:shadow-[0_20px_50px_rgba(0,0,0,0.5),0_0_20px_rgba(139,92,246,0.2)] active:scale-[0.99] transition-all duration-300 cursor-pointer"
       >
-      {/* Poster Aspect Ratio Container (~2:3 ratio) */}
-      <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
+        {/* Dynamic Glare/Shine Effect */}
+        <div 
+          className="absolute inset-0 z-20 pointer-events-none transition-opacity duration-300"
+          style={{
+            background: `radial-gradient(circle at ${glare.x}% ${glare.y}%, rgba(255,255,255,${glare.opacity}), transparent 80%)`,
+            mixBlendMode: 'soft-light'
+          }}
+        />
+
+        {/* Poster Aspect Ratio Container (~2:3 ratio) */}
+        <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900" style={{ transform: 'translateZ(20px)' }}>
         {!imageError ? (
           <img
             src={displayImage}
@@ -330,7 +390,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
       </div>
 
       {/* Card Info Section */}
-      <div className="p-3.5 flex flex-col justify-between flex-grow">
+      <div className="p-3.5 flex flex-col justify-between flex-grow" style={{ transform: 'translateZ(30px)' }}>
         <div>
           {/* Title */}
           <h3 
@@ -355,7 +415,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         </div>
 
         {/* Card Footer: Platforms & Upvote / Fire button */}
-        <div className="mt-2.5 pt-2 border-t border-neutral-800/70 flex items-center justify-between gap-2">
+        <div className="mt-2.5 pt-2 border-t border-neutral-800/70 flex items-center justify-between gap-2" style={{ transform: 'translateZ(10px)' }}>
           {/* Streaming Platforms */}
           <div className="flex items-center gap-1 overflow-hidden min-w-0">
             {(anime.platforms || []).slice(0, 2).map((p) => (
