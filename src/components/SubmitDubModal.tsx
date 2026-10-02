@@ -15,7 +15,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { searchJikanAnime, formatJikanToAnime } from '../services/jikanApi';
-import { JikanAnimeResult } from '../types/database';
+import { JikanAnimeResult, AnimeRecord } from '../types/database';
 import { DubLanguage, StreamingPlatform, AnimeType, ReleaseDay } from '../types/anime';
 import { dbService } from '../services/databaseService';
 import { authService } from '../services/authService';
@@ -25,6 +25,7 @@ interface SubmitDubModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  editAnime?: AnimeRecord | null;
 }
 
 const ALL_LANGS: DubLanguage[] = ['Tamil', 'Telugu', 'Hindi', 'Malayalam', 'Kannada'];
@@ -63,9 +64,12 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  editAnime,
 }) => {
   const currentUser = authService.getCurrentUser();
   const toast = useToast();
+
+  const isEditMode = !!editAnime;
 
   // Form Fields
   const [title, setTitle] = useState('');
@@ -86,8 +90,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   }[]>([
     { type: 'Season', label: '1', episodeCount: 12 }
   ]);
-  const [currentSeason, setCurrentSeason] = useState<number>(1);
-  const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number>(1);
+  const [currentSeason, setCurrentSeason] = useState<number | ''>('');
+  const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number | ''>('');
 
   // Dub fields
   const [selectedDubs, setSelectedDubs] = useState<DubLanguage[]>(['Tamil']);
@@ -99,6 +103,64 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
   const [airingStatus, setAiringStatus] = useState<'Ongoing' | 'Completed'>('Ongoing');
   const [releaseDay, setReleaseDay] = useState<ReleaseDay>('Saturday');
+
+  // Pre-fill if editing
+  useEffect(() => {
+    if (editAnime && isOpen) {
+      setTitle(editAnime.title);
+      setRomajiTitle(editAnime.romajiTitle || '');
+      setPoster(editAnime.poster || '');
+      setSynopsis(editAnime.synopsis || '');
+      setReleaseYear(editAnime.releaseYear || new Date().getFullYear());
+      setType(editAnime.type || 'TV Series');
+      setStudio(editAnime.studio || '');
+      setGenres(editAnime.genres || ['Action']);
+      setSelectedDubs(editAnime.dubs || ['Tamil']);
+      setAiringStatus(editAnime.status === 'Ongoing' ? 'Ongoing' : 'Completed');
+      if (editAnime.releaseDay) setReleaseDay(editAnime.releaseDay as ReleaseDay);
+      
+      if (editAnime.seasonDetails && editAnime.seasonDetails.length > 0) {
+        setSeasonDetails(editAnime.seasonDetails.map(s => ({
+          type: s.type || 'Season',
+          label: s.label || '1',
+          episodeCount: s.episodeCount || 0
+        })));
+      } else if (editAnime.totalSeasons || editAnime.episodesPerSeason) {
+        // Fallback for older records
+        setSeasonDetails([{ type: 'Season', label: '1', episodeCount: editAnime.episodesPerSeason || 12 }]);
+      }
+
+      if (editAnime.currentSeason) setCurrentSeason(editAnime.currentSeason);
+      if (editAnime.currentlyAiringEpisode) setCurrentlyAiringEpisode(editAnime.currentlyAiringEpisode);
+
+      if (editAnime.platforms && editAnime.platforms.length > 0) {
+        setStreamingPartners(editAnime.platforms.map(p => ({
+          name: p.name as StreamingPlatform,
+          url: p.url
+        })));
+      }
+      setAutoFilled(true); // Treat as auto-filled so Jikan search doesn't trigger immediately
+    } else if (isOpen && !editAnime) {
+      // Clear for new submission
+      setTitle('');
+      setRomajiTitle('');
+      setPoster('');
+      setSynopsis('');
+      setReleaseYear(new Date().getFullYear());
+      setEpisodes(12);
+      setType('TV Series');
+      setStudio('');
+      setGenres(['Action', 'Fantasy']);
+      setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12 }]);
+      setCurrentSeason('');
+      setCurrentlyAiringEpisode('');
+      setSelectedDubs(['Tamil']);
+      setStreamingPartners([{ name: 'Crunchyroll', url: '' }]);
+      setAiringStatus('Ongoing');
+      setReleaseDay('Saturday');
+      setAutoFilled(false);
+    }
+  }, [editAnime, isOpen]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -278,9 +340,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
     const totalEpisodes = seasonDetails.reduce((acc, s) => acc + (Number(s.episodeCount) || 0), 0);
 
-    // STRICT APPROVAL GATE: Every submission is saved with status: "pending"
-    // Pending anime are NEVER returned in getApprovedAnime() and stay completely hidden from public feeds
-    const newRecord = dbService.submitDubInfo({
+    const payload = {
       title: title.trim(),
       romajiTitle: romajiTitle.trim() || title.trim(),
       poster: defaultCover,
@@ -296,16 +356,38 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         label: s.label,
         episodeCount: Number(s.episodeCount) || 0
       })),
-      currentSeason: airingStatus === 'Ongoing' ? currentSeason : undefined,
-      currentlyAiringEpisode: airingStatus === 'Ongoing' ? currentlyAiringEpisode : undefined,
+      currentSeason: airingStatus === 'Ongoing' ? (Number(currentSeason) || 1) : undefined,
+      currentlyAiringEpisode: airingStatus === 'Ongoing' ? (Number(currentlyAiringEpisode) || 1) : undefined,
       type: type || 'TV Series',
       studio: studio.trim() || 'Animation Studio',
-      rating: 8.0,
       status: airingStatus,
       airingStatus,
       releaseDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
       airingDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
       genres: genres.length > 0 ? genres : ['Action', 'Fantasy'],
+      dubs: selectedDubs,
+      dubDetails,
+      platforms,
+    };
+
+    if (isEditMode && editAnime) {
+      const success = dbService.updateAnime(editAnime.id, payload);
+      setIsSubmitting(false);
+      if (success) {
+        toast.success('Anime Updated!', `"${title.trim()}" has been successfully updated.`);
+        onClose();
+        onSuccess?.();
+      } else {
+        toast.error('Update Failed', 'Could not update the record.');
+      }
+      return;
+    }
+
+    // STRICT APPROVAL GATE: Every submission is saved with status: "pending"
+    // Pending anime are NEVER returned in getApprovedAnime() and stay completely hidden from public feeds
+    const newRecord = dbService.submitDubInfo({
+      ...payload,
+      rating: 8.0,
       themes: ['Super Power', 'Indian Dub'],
       characters: [
         {
@@ -319,9 +401,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           },
         },
       ],
-      dubs: selectedDubs,
-      dubDetails,
-      platforms,
       submittedBy: {
         userId: currentUser?.uid || 'guest-user',
         userName: currentUser?.displayName || 'Community Member',
@@ -345,8 +424,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setAiringStatus('Ongoing');
       setReleaseDay('Saturday');
       setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12 }]);
-      setCurrentSeason(1);
-      setCurrentlyAiringEpisode(1);
+      setCurrentSeason('');
+      setCurrentlyAiringEpisode('');
       setAutoFilled(false);
       onClose();
       onSuccess?.();
@@ -372,7 +451,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
             </div>
             <div>
               <h3 className="font-heading font-black text-lg text-white leading-tight">
-                Submit Dub Info
+                {isEditMode ? 'Edit Anime Info' : 'Submit Dub Info'}
               </h3>
               <p className="text-[11px] text-amber-400 font-semibold flex items-center gap-1">
                 <ShieldAlert className="w-3.5 h-3.5" />
@@ -737,7 +816,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                         min={1}
                         max={seasonDetails.length}
                         value={currentSeason}
-                        onChange={(e) => setCurrentSeason(parseInt(e.target.value) || 1)}
+                        onChange={(e) => setCurrentSeason(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
                         className="w-full bg-[#0a0e17] border border-amber-900/50 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-amber-200 outline-none transition-all"
                       />
                     </div>
@@ -747,7 +826,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                         type="number"
                         min={1}
                         value={currentlyAiringEpisode}
-                        onChange={(e) => setCurrentlyAiringEpisode(parseInt(e.target.value) || 1)}
+                        onChange={(e) => setCurrentlyAiringEpisode(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
                         className="w-full bg-[#0a0e17] border border-amber-900/50 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-amber-200 outline-none transition-all"
                       />
                     </div>
@@ -837,8 +916,14 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 disabled={isSubmitting || !title.trim()}
                 className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-purple-600/30 transition-all disabled:opacity-50"
               >
-                <Send className="w-4 h-4" />
-                <span>Submit Dub for Admin Approval</span>
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isEditMode ? (
+                  <Plus className="w-4 h-4" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                <span>{isEditMode ? 'Update Anime Details' : 'Submit Dub for Admin Approval'}</span>
               </button>
 
             </form>

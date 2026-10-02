@@ -245,6 +245,19 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json({ success: true, deletedId: id });
       }
 
+      if (action === 'update') {
+        const updatedData = body.data || {};
+        current[targetIdx] = { 
+          ...current[targetIdx], 
+          ...updatedData,
+          id: id, // Ensure ID remains same
+          updatedAt: new Date().toISOString()
+        };
+        const success = await writeJsonBin(current);
+        if (!success) return res.status(503).json({ error: 'Failed to update JSONBin' });
+        return res.status(200).json(current[targetIdx]);
+      }
+
       if (action === 'upvote' || action === 'like') {
         const curLikes = Number(current[targetIdx].likes || current[targetIdx].upvotes || 0) + 1;
         current[targetIdx] = {
@@ -393,6 +406,19 @@ export async function PUT(req: Request) {
       const success = await writeJsonBin(current);
       if (!success) return new Response(JSON.stringify({ error: 'Failed to save to JSONBin' }), { status: 503, headers: CORS_HEADERS });
       return new Response(JSON.stringify({ success: true, deletedId: id }), { status: 200, headers: CORS_HEADERS });
+    }
+
+    if (action === 'update') {
+      const updatedData = body.data || {};
+      current[targetIdx] = { 
+        ...current[targetIdx], 
+        ...updatedData,
+        id: id,
+        updatedAt: new Date().toISOString()
+      };
+      const success = await writeJsonBin(current);
+      if (!success) return new Response(JSON.stringify({ error: 'Failed to save to JSONBin' }), { status: 503, headers: CORS_HEADERS });
+      return new Response(JSON.stringify(current[targetIdx]), { status: 200, headers: CORS_HEADERS });
     }
 
     if (action === 'upvote' || action === 'like') {

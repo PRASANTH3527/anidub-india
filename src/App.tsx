@@ -249,6 +249,17 @@ function AppContent() {
   };
 
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
+  const [animeToEdit, setAnimeToEdit] = useState<AnimeRecord | null>(null);
+
+  const handleEditAnime = (anime: AnimeRecord) => {
+    setAnimeToEdit(anime);
+    setIsSubmitModalOpen(true);
+  };
+
+  const handleOpenSubmitModal = () => {
+    setAnimeToEdit(null);
+    setIsSubmitModalOpen(true);
+  };
 
   // Initial server sync to load fresh approved anime immediately on every page visit
   useEffect(() => {
@@ -684,7 +695,7 @@ function AppContent() {
         watchlistCount={localWatchlistIds.length}
         theme={theme}
         onToggleTheme={handleToggleTheme}
-        onOpenSuggestModal={() => setIsSubmitModalOpen(true)}
+        onOpenSuggestModal={handleOpenSubmitModal}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onSecretTrigger={() => !isAdmin && setShowSecretLogin(true)}
         localProfile={localProfile}
@@ -710,7 +721,10 @@ function AppContent() {
           {/* Stealth Admin Dashboard Integration */}
           {isAdmin && activeTab === 'library' && (
             <div className="mb-6">
-               <AdminDashboard onExitAdmin={handleExitAdmin} />
+               <AdminDashboard 
+                 onExitAdmin={handleExitAdmin} 
+                 onEditAnime={handleEditAnime}
+               />
             </div>
           )}
 
@@ -909,7 +923,7 @@ function AppContent() {
                               Reset All Filters
                             </button>
                             <button
-                              onClick={() => setIsSubmitModalOpen(true)}
+                              onClick={handleOpenSubmitModal}
                               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold py-3 px-6 rounded-xl transition-all cursor-pointer shadow-lg shadow-purple-600/30 group"
                             >
                               <PlusCircle className="w-4 h-4 group-hover:rotate-90 transition-transform" />
@@ -974,13 +988,17 @@ function AppContent() {
 
       {/* Footer & Feedback */}
       <FeedbackSection 
-        onOpenSuggestModal={() => setIsSubmitModalOpen(true)}
+        onOpenSuggestModal={handleOpenSubmitModal}
       />
 
       {/* Submit Dub Info Modal */}
       <SubmitDubModal
         isOpen={isSubmitModalOpen}
-        onClose={() => setIsSubmitModalOpen(false)}
+        editAnime={animeToEdit}
+        onClose={() => {
+          setIsSubmitModalOpen(false);
+          setAnimeToEdit(null);
+        }}
         onSuccess={() => {
           // Handled inside modal
         }}

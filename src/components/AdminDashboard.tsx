@@ -17,7 +17,8 @@ import {
   Film,
   Tv,
   TrendingUp,
-  Filter
+  Filter,
+  Pencil
 } from 'lucide-react';
 import { dbService } from '../services/databaseService';
 import { AnimeRecord } from '../types/database';
@@ -27,6 +28,7 @@ import { AdminSkeleton } from './SkeletonGrid';
 
 interface AdminDashboardProps {
   onExitAdmin?: () => void;
+  onEditAnime?: (anime: AnimeRecord) => void;
 }
 
 const SUPPORTED_LANGUAGES: { name: DubLanguage; label: string; bg: string; text: string; border: string; bar: string }[] = [
@@ -37,7 +39,7 @@ const SUPPORTED_LANGUAGES: { name: DubLanguage; label: string; bg: string; text:
   { name: 'Kannada', label: 'Kan', bg: 'bg-rose-950/60', text: 'text-rose-300', border: 'border-rose-500/40', bar: 'bg-rose-500' },
 ];
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin, onEditAnime }) => {
   const [pendingSubmissions, setPendingSubmissions] = useState<AnimeRecord[]>([]);
   const [approvedAnime, setApprovedAnime] = useState<AnimeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -522,6 +524,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                         {isPending ? (
                           <>
                             <button 
+                              onClick={() => onEditAnime?.(item)}
+                              disabled={isProcessing}
+                              className="p-2 rounded-xl bg-neutral-800/80 hover:bg-purple-900/30 text-neutral-400 hover:text-purple-300 border border-neutral-700 hover:border-purple-500/40 transition-all active:scale-95 cursor-pointer"
+                              title="Edit Info"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button 
                               onClick={() => handleDelete(item.id, item.title)}
                               disabled={isProcessing}
                               className="px-3.5 py-1.5 rounded-xl border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 active:scale-95 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
@@ -540,14 +551,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                             </button>
                           </>
                         ) : (
-                          <button 
-                            onClick={() => handleDelete(item.id, item.title)}
-                            disabled={isProcessing}
-                            className="px-3 py-1.5 rounded-xl border border-neutral-800 hover:border-rose-500/40 text-neutral-400 hover:text-rose-300 hover:bg-rose-500/10 active:scale-95 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Remove</span>
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => onEditAnime?.(item)}
+                              disabled={isProcessing}
+                              className="p-2 rounded-xl bg-neutral-800/80 hover:bg-purple-900/30 text-neutral-400 hover:text-purple-300 border border-neutral-700 hover:border-purple-500/40 transition-all active:scale-95 cursor-pointer"
+                              title="Edit Info"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button 
+                              onClick={() => handleDelete(item.id, item.title)}
+                              disabled={isProcessing}
+                              className="px-3 py-1.5 rounded-xl border border-neutral-800 hover:border-rose-500/40 text-neutral-400 hover:text-rose-300 hover:bg-rose-500/10 active:scale-95 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Remove</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>

@@ -234,6 +234,30 @@ class DatabaseService {
     return true;
   }
 
+  public updateAnime(id: string, updatedData: Partial<AnimeRecord>): boolean {
+    const records = this.getAllAnimeRecords();
+    const targetIndex = records.findIndex((r) => r.id === id);
+    if (targetIndex === -1) return false;
+
+    records[targetIndex] = {
+      ...records[targetIndex],
+      ...updatedData,
+      id: id, // Ensure ID remains same
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.saveAnimeRecords(records);
+
+    // Notify backend via PUT request
+    fetch('/api/submissions', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action: 'update', data: updatedData }),
+    }).catch((e) => console.warn('Update PUT request error:', e));
+
+    return true;
+  }
+
   public deleteSubmission(id: string): boolean {
     const records = this.getAllAnimeRecords();
     const filtered = records.filter((r) => r.id !== id);
