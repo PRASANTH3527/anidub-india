@@ -1,47 +1,79 @@
-import React from 'react';
-import { Bookmark, Trash2, ExternalLink, Sparkles } from 'lucide-react';
+'use client';
+
+import React, { useState, useMemo } from 'react';
+import { Bookmark, Sparkles, Trash2, Search, Compass, Heart, Film } from 'lucide-react';
 import { Anime } from '../types/anime';
 import { AnimeCard } from './AnimeCard';
 
 interface WatchlistViewProps {
-  watchlist: Anime[];
-  onToggleBookmark: (anime: Anime) => void;
+  watchlistIds: string[];
+  allAnime: Anime[];
+  trendingAnimeIds?: string[];
+  onToggleWatchlist: (anime: Anime) => void;
   onSelectAnime: (anime: Anime) => void;
   onClearWatchlist: () => void;
-  onBackToLibrary: () => void;
+  onBrowseLibrary: () => void;
+  onReport?: (anime: Anime) => void;
 }
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
-  watchlist,
-  onToggleBookmark,
+  watchlistIds,
+  allAnime,
+  trendingAnimeIds = [],
+  onToggleWatchlist,
   onSelectAnime,
   onClearWatchlist,
-  onBackToLibrary,
+  onBrowseLibrary,
+  onReport,
 }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Find all approved anime matching the watchlist IDs
+  const bookmarkedAnime = useMemo(() => {
+    return allAnime.filter((anime) => watchlistIds.includes(anime.id));
+  }, [allAnime, watchlistIds]);
+
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return bookmarkedAnime;
+    const q = searchQuery.toLowerCase().trim();
+    return bookmarkedAnime.filter(
+      (a) =>
+        a.title.toLowerCase().includes(q) ||
+        (a.dubs || []).some((d) => d.toLowerCase().includes(q)) ||
+        (a.genres || []).some((g) => g.toLowerCase().includes(q))
+    );
+  }, [bookmarkedAnime, searchQuery]);
+
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-4 border-b border-neutral-800">
-        <div>
-          <div className="flex items-center gap-2">
-            <Bookmark className="w-5 h-5 text-purple-400 fill-current" />
-            <h2 className="font-heading font-black text-2xl text-white">
-              My Watchlist
-            </h2>
-            <span className="bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold px-2 py-0.5 rounded-full">
-              {watchlist.length} saved
-            </span>
+    <div className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-in fade-in duration-300">
+      
+      {/* Header Banner */}
+      <div className="bg-[#121829] border border-purple-500/30 rounded-3xl p-5 sm:p-7 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 ring-2 ring-purple-400/40">
+            <Bookmark className="w-6 h-6 fill-current" />
           </div>
-          <p className="text-xs text-neutral-400 mt-1">
-            Track all the anime you plan to watch dubbed in your native language.
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="font-heading font-black text-xl sm:text-2xl text-white tracking-tight">
+                My Personal Watchlist
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                {bookmarkedAnime.length} {bookmarkedAnime.length === 1 ? 'saved' : 'saved'}
+              </span>
+            </div>
+            <p className="text-xs text-neutral-400 mt-0.5">
+              Saved locally in your browser. Access your favorite regional dubs instantly without logging in.
+            </p>
+          </div>
         </div>
 
-        {watchlist.length > 0 && (
-          <div className="flex items-center gap-2">
+        {/* Actions */}
+        {bookmarkedAnime.length > 0 && (
+          <div className="flex items-center gap-3">
             <button
               onClick={onClearWatchlist}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-rose-950/40 text-neutral-300 hover:text-rose-300 border border-neutral-700 hover:border-rose-700/50 text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-500/30 hover:bg-rose-500/10 active:scale-95 text-rose-300 text-xs font-semibold transition-all cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Clear Watchlist</span>
@@ -50,40 +82,67 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
         )}
       </div>
 
-      {/* Grid or Empty State */}
-      {watchlist.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {watchlist.map((anime) => (
+      {/* Search Filter if has items */}
+      {bookmarkedAnime.length > 3 && (
+        <div className="relative max-w-md">
+          <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search within your saved watchlist..."
+            className="w-full bg-[#121829] border border-neutral-800 focus:border-purple-500 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
+          />
+        </div>
+      )}
+
+      {/* Grid of Saved Anime */}
+      {filteredItems.length > 0 ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4">
+          {filteredItems.map((anime) => (
             <AnimeCard
               key={anime.id}
               anime={anime}
               isBookmarked={true}
-              onToggleBookmark={onToggleBookmark}
+              isTrending={trendingAnimeIds.includes(anime.id)}
+              onToggleBookmark={onToggleWatchlist}
               onSelect={onSelectAnime}
+              onReport={onReport}
             />
           ))}
         </div>
-      ) : (
-        <div className="py-20 text-center max-w-md mx-auto space-y-4">
-          <div className="w-16 h-16 rounded-full bg-purple-950/40 border border-purple-800/40 flex items-center justify-center mx-auto text-purple-400">
-            <Bookmark className="w-8 h-8 opacity-60" />
+      ) : bookmarkedAnime.length === 0 ? (
+        /* Empty State */
+        <div className="text-center py-20 bg-[#121829]/60 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto shadow-2xl space-y-4">
+          <div className="w-16 h-16 rounded-3xl bg-purple-950/60 border border-purple-800/60 flex items-center justify-center mx-auto text-purple-400 shadow-xl">
+            <Bookmark className="w-8 h-8" />
           </div>
-          <div>
-            <h3 className="text-lg font-bold text-white mb-1">
-              Your Watchlist is empty
+          <div className="space-y-1.5">
+            <h3 className="font-heading font-black text-xl text-white">
+              Your Watchlist is Empty
             </h3>
-            <p className="text-xs text-neutral-400">
-              Browse the Dub Library and click the bookmark icon on any anime poster to save it here for quick access.
+            <p className="text-xs text-neutral-400 max-w-sm mx-auto leading-relaxed">
+              Explore the dubbed directory and tap the bookmark or heart icon on any anime card to save it here for fast offline access.
             </p>
           </div>
           <button
-            onClick={onBackToLibrary}
-            className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 cursor-pointer transition-all"
+            onClick={onBrowseLibrary}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white text-xs font-bold shadow-lg shadow-purple-600/30 transition-all cursor-pointer"
           >
-            Explore Dub Library
+            <Compass className="w-4 h-4" />
+            <span>Browse Dub Directory</span>
           </button>
         </div>
+      ) : (
+        /* No Search Match in Watchlist */
+        <div className="text-center py-12 bg-[#121829]/40 border border-neutral-800 rounded-2xl p-6 max-w-md mx-auto">
+          <Search className="w-6 h-6 text-neutral-500 mx-auto mb-2" />
+          <p className="text-xs text-neutral-400">
+            No saved anime matches &quot;{searchQuery}&quot;
+          </p>
+        </div>
       )}
+
     </div>
   );
 };

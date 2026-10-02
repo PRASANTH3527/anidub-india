@@ -3,19 +3,57 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AniDub India - Dubbed Anime Directory</title>
-    <meta name="description" content="Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them." />
-    <meta property="og:title" content="AniDub India - Dubbed Anime Directory" />
-    <meta property="og:description" content="Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them." />
+    <title>AniDub India — Tamil, Telugu &amp; Hindi Dubbed Anime Directory</title>
+    <meta name="description" content="Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them legally on Crunchyroll, Netflix, and JioCinema." />
+    
+    <!-- Open Graph for WhatsApp, Telegram, Facebook & Discord Previews -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="AniDub India" />
+    <meta property="og:title" content="AniDub India — Tamil, Telugu &amp; Hindi Dubbed Anime Directory" />
+    <meta property="og:description" content="Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them legally on Crunchyroll, Netflix, and JioCinema." />
+    <meta property="og:image" content="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&amp;h=630&amp;fit=crop&amp;q=85" />
+    <meta property="og:image:secure_url" content="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&amp;h=630&amp;fit=crop&amp;q=85" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="AniDub India — Regional Anime Dub Directory" />
+
+    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="AniDub India — Tamil, Telugu &amp; Hindi Dubbed Anime Directory" />
+    <meta name="twitter:description" content="Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them legally." />
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&amp;h=630&amp;fit=crop&amp;q=85" />
+
+    <!-- Progressive Web App Setup -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#7c3aed" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AniDub India" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Schema.org Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "AniDub India",
+      "url": "https://anidub.in",
+      "description": "Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them legally.",
+      "applicationCategory": "EntertainmentApplication",
+      "operatingSystem": "All",
+      "inLanguage": ["en", "ta", "te", "hi", "ml", "kn"]
+    }
+    </script>
   </head>
   <body class="bg-[#0b0f17] text-neutral-100 antialiased selection:bg-purple-600 selection:text-white min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

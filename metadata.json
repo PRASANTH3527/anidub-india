@@ -1,6 +1,6 @@
 {
-  "name": "AniDub India - Dubbed Anime Directory",
-  "description": "Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them.",
+  "name": "AniDub India — Tamil, Telugu & Hindi Dubbed Anime Directory",
+  "description": "Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them legally on Crunchyroll, Netflix, and JioCinema.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

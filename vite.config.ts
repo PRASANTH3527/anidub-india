@@ -56,6 +56,10 @@ function apiDevPlugin(): Plugin {
             const mod = await server.ssrLoadModule('/api/feedback.ts');
             return mod.default(req, res);
           }
+          if (pathname === '/api/report') {
+            const mod = await server.ssrLoadModule('/api/report.ts');
+            return mod.default(req, res);
+          }
         } catch (err: any) {
           console.error('API middleware error:', err);
           res.statusCode = 500;

@@ -39,19 +39,31 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   // User profile state stored in localStorage
   const [profile, setProfile] = useState<UserProfile>(() => {
     try {
+      const localSaved = localStorage.getItem('anidub_local_user_profile');
+      if (localSaved) {
+        const parsed = JSON.parse(localSaved);
+        if (parsed?.nickname && parsed?.avatar) {
+          return {
+            username: parsed.nickname,
+            bio: 'Tracking regional Indian dubbed anime releases in Tamil, Telugu, Hindi, Malayalam, and Kannada!',
+            favoriteLanguage: parsed.favoriteLanguage || ('Tamil' as DubLanguage),
+            avatar: parsed.avatar,
+          };
+        }
+      }
       const saved = localStorage.getItem('anidub_user_profile');
       return saved ? JSON.parse(saved) : {
-        username: 'Community Member',
+        username: 'Anime Fan',
         bio: 'Tracking regional Indian dubbed anime releases in Tamil, Telugu, Hindi, Malayalam, and Kannada!',
         favoriteLanguage: 'Tamil' as DubLanguage,
-        avatar: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=200&auto=format&fit=crop&q=80',
+        avatar: 'https://media.kitsu.app/characters/images/221/original.jpg',
       };
     } catch {
       return {
-        username: 'Community Member',
+        username: 'Anime Fan',
         bio: 'Tracking regional Indian dubbed anime releases!',
         favoriteLanguage: 'Tamil' as DubLanguage,
-        avatar: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=200&auto=format&fit=crop&q=80',
+        avatar: 'https://media.kitsu.app/characters/images/221/original.jpg',
       };
     }
   });

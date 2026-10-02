@@ -7,28 +7,50 @@ import {
   Calendar, 
   Film, 
   User, 
-  LogIn 
+  LogIn,
+  Sun,
+  Moon,
+  Heart,
+  Languages
 } from 'lucide-react';
 import { authService } from '../services/authService';
+import { LocalUserProfile, ANIME_AVATAR_PRESETS } from './LocalProfileModal';
+import { SupportedLanguage, translate } from '../utils/i18n';
 
-export type NavTab = 'library' | 'recommendations' | 'schedule' | 'profile';
+export type NavTab = 'library' | 'foryou' | 'watchlist' | 'schedule' | 'recommendations' | 'profile';
 
 interface NavbarProps {
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
   watchlistCount: number;
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
   onOpenSuggestModal: () => void;
   onOpenAuthModal: () => void;
   onSecretTrigger: () => void;
+  localProfile?: LocalUserProfile;
+  onOpenProfileModal?: () => void;
+  uiLanguage?: SupportedLanguage;
+  onToggleLanguage?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   watchlistCount,
+  theme,
+  onToggleTheme,
   onOpenSuggestModal,
   onOpenAuthModal,
   onSecretTrigger,
+  localProfile = {
+    nickname: 'Anime Fan',
+    avatar: ANIME_AVATAR_PRESETS[0].url,
+    favoriteLanguage: 'Tamil',
+  },
+  onOpenProfileModal,
+  uiLanguage = 'en',
+  onToggleLanguage,
 }) => {
   const currentUser = authService.getCurrentUser();
   const tapHistoryRef = React.useRef<number[]>([]);
@@ -46,8 +68,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#0b0f17]/90 backdrop-blur-md border-b border-neutral-800/80">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header className="sticky top-0 z-40 w-full bg-[#0b0f17]/90 backdrop-blur-md border-b border-neutral-800/80 transition-colors">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
         
         {/* Brand Logo & Title (Stealth Admin Trigger: 5 rapid taps) */}
         <div 
@@ -73,98 +95,173 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <nav className="flex items-center gap-1 sm:gap-1.5">
+        {/* Center Primary Nav Tabs */}
+        <nav className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar">
+          {/* Library / Directory Tab */}
           <button
             onClick={() => setActiveTab('library')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 active:scale-95 cursor-pointer ${
               activeTab === 'library'
-                ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+                ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme shadow-sm'
                 : 'text-neutral-300 hover:text-white hover:bg-neutral-800/60'
             }`}
           >
             <Compass className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">Dub Library</span>
-            <span className="sm:hidden">Library</span>
+            <span className="hidden sm:inline">{translate('navDirectory', uiLanguage)}</span>
           </button>
 
+          {/* Smart 'For You' Feed Tab */}
           <button
-            onClick={() => setActiveTab('recommendations')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 cursor-pointer ${
-              activeTab === 'recommendations'
-                ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+            onClick={() => setActiveTab('foryou')}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTab === 'foryou'
+                ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme shadow-sm'
                 : 'text-neutral-300 hover:text-white hover:bg-neutral-800/60'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
-            <span className="hidden md:inline">Recommendations</span>
-            <span className="md:hidden">Match</span>
+            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-accent-theme" />
+            <span>{translate('navForYou', uiLanguage)}</span>
           </button>
 
+          {/* My Watchlist Tab (Local Favorites) */}
           <button
-            onClick={() => setActiveTab('schedule')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 cursor-pointer ${
-              activeTab === 'schedule'
-                ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+            onClick={() => setActiveTab('watchlist')}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTab === 'watchlist'
+                ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme shadow-sm'
                 : 'text-neutral-300 hover:text-white hover:bg-neutral-800/60'
             }`}
           >
-            <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden md:inline">Airing Now</span>
-            <span className="md:hidden">Airing</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('profile')}
-            className={`relative flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 cursor-pointer ${
-              activeTab === 'profile'
-                ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
-                : 'text-neutral-300 hover:text-white hover:bg-neutral-800/60'
-            }`}
-          >
-            <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">Profile</span>
+            <Bookmark className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary-theme" />
+            <span className="hidden sm:inline">{translate('navWatchlist', uiLanguage)}</span>
+            <span className="sm:hidden">{translate('navSaved', uiLanguage)}</span>
             {watchlistCount > 0 && (
-              <span className="bg-purple-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center -ml-0.5">
+              <span className="bg-primary-theme text-white text-[10px] font-black rounded-full px-1.5 py-0.2 min-w-[18px] text-center shadow-sm">
                 {watchlistCount}
               </span>
             )}
           </button>
+
+          {/* Schedule Tab */}
+          <button
+            onClick={() => setActiveTab('schedule')}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTab === 'schedule'
+                ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme shadow-sm'
+                : 'text-neutral-300 hover:text-white hover:bg-neutral-800/60'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">{translate('navSchedule', uiLanguage)}</span>
+          </button>
+
+          {/* Matchmaker Recommendations Tab */}
+          <button
+            onClick={() => setActiveTab('recommendations')}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTab === 'recommendations'
+                ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme shadow-sm'
+                : 'text-neutral-300 hover:text-white hover:bg-neutral-800/60'
+            }`}
+          >
+            <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">{translate('navMatchmaker', uiLanguage)}</span>
+          </button>
+
+          {/* Profile Tab / Modal Trigger */}
+          <button
+            onClick={() => {
+              if (onOpenProfileModal) {
+                onOpenProfileModal();
+              } else {
+                setActiveTab('profile');
+              }
+            }}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTab === 'profile'
+                ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme shadow-sm'
+                : 'text-neutral-300 hover:text-white hover:bg-neutral-800/60'
+            }`}
+          >
+            <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>{translate('navProfile', uiLanguage)}</span>
+          </button>
         </nav>
 
-        {/* Right Action Toolbar: Add Dub & Google Auth Profile */}
-        <div className="flex items-center gap-2">
+        {/* Right Action Toolbar: Bilingual Toggle, Theme Toggle, Submit Dub & Chosen Avatar */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Bilingual English / Tamil Language Switcher */}
+          {onToggleLanguage && (
+            <button
+              onClick={onToggleLanguage}
+              title={uiLanguage === 'en' ? 'Switch to Tamil (தமிழ்)' : 'Switch to English'}
+              className="flex items-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-neutral-800/80 hover:bg-neutral-700/80 active:scale-95 border border-neutral-700/60 text-xs font-bold text-neutral-200 hover:text-white transition-all cursor-pointer shadow-sm"
+            >
+              <Languages className="w-3.5 h-3.5 text-accent-theme" />
+              <span className="text-[11px] font-black">{uiLanguage === 'en' ? 'தமிழ்' : 'ENG'}</span>
+            </button>
+          )}
+
+          {/* Theme Toggle Button */}
+          <button
+            onClick={onToggleTheme}
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className="p-2 rounded-xl bg-neutral-800/70 hover:bg-neutral-700/80 active:scale-90 border border-neutral-700/60 text-neutral-300 hover:text-white transition-all cursor-pointer shadow-sm"
+          >
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-amber-400 rotate-0 hover:rotate-45 transition-transform duration-300" />
+            ) : (
+              <Moon className="w-4 h-4 text-purple-400 rotate-0 hover:-rotate-12 transition-transform duration-300" />
+            )}
+          </button>
+
           {/* Add Dub CTA Button */}
           <button
             onClick={onOpenSuggestModal}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-200 text-xs sm:text-sm font-semibold transition-colors cursor-pointer group shadow-sm"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-primary-theme/20 hover:bg-primary-theme/30 active:scale-95 border border-primary-theme text-primary-theme text-xs sm:text-sm font-semibold transition-all cursor-pointer group shadow-sm hidden md:flex"
           >
-            <PlusCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400 group-hover:rotate-90 transition-transform duration-200" />
-            <span className="hidden sm:inline">Submit Dub</span>
-            <span className="sm:hidden">Submit</span>
+            <PlusCircle className="w-3.5 h-3.5 text-primary-theme group-hover:rotate-90 transition-transform duration-200" />
+            <span>Submit Dub</span>
           </button>
 
-          {/* User Auth Avatar / Login */}
-          {currentUser ? (
+          {/* Local User Profile Avatar Button */}
+          {onOpenProfileModal && (
+            <button
+              onClick={onOpenProfileModal}
+              className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-2xl bg-[#141b2c] hover:bg-[#1e273f] border border-neutral-700/80 hover:border-primary-theme transition-all cursor-pointer group active:scale-95 shadow-sm"
+              title={`Profile: ${localProfile.nickname} (Click to customize)`}
+            >
+              <div className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden bg-neutral-900 border border-primary-theme group-hover:scale-105 transition-all shrink-0">
+                <img
+                  src={localProfile.avatar}
+                  alt={localProfile.nickname}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex flex-col text-left hidden sm:flex">
+                <span className="text-[11px] font-bold text-white group-hover:text-primary-theme transition-colors truncate max-w-[80px]">
+                  {localProfile.nickname}
+                </span>
+                <span className="text-[9px] text-primary-theme font-medium -mt-0.5">
+                  Profile
+                </span>
+              </div>
+            </button>
+          )}
+
+          {/* Google Auth Avatar or Login Fallback */}
+          {currentUser && (
             <div 
               onClick={onOpenAuthModal}
-              className="flex items-center gap-2 pl-1 cursor-pointer group"
-              title={`Logged in as ${currentUser.displayName} (${currentUser.role})`}
+              className="flex items-center gap-1 cursor-pointer group active:scale-95"
+              title={`Logged in as ${currentUser.displayName}`}
             >
               <img
                 src={currentUser.photoURL}
                 alt={currentUser.displayName}
-                className="w-8 h-8 rounded-full object-cover border border-purple-500/60 group-hover:border-purple-400 transition-colors shadow"
+                className="w-7 h-7 rounded-full object-cover border border-purple-500/60 group-hover:border-purple-400 transition-colors shadow"
               />
             </div>
-          ) : (
-            <button
-              onClick={onOpenAuthModal}
-              className="p-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Login</span>
-            </button>
           )}
         </div>
 

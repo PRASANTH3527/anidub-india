@@ -80,6 +80,8 @@ export interface Anime {
   }[];
   featured?: boolean;
   addedDate?: string; // ISO date
+  likes?: number;
+  upvotes?: number;
 }
 
 export interface DubNews {

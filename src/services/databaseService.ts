@@ -90,8 +90,12 @@ class DatabaseService {
           notes: `Available in ${lang}`,
         }));
 
+    const likes = Number(r.likes || r.upvotes || 0);
+
     return {
       ...r,
+      likes,
+      upvotes: likes,
       dubs,
       genres,
       themes,
@@ -245,8 +249,43 @@ class DatabaseService {
     return true;
   }
 
+  public async upvoteAnime(id: string): Promise<number> {
+    const records = this.getAllAnimeRecords();
+    const idx = records.findIndex((r) => r.id === id);
+    let newLikes = 1;
+
+    if (idx !== -1) {
+      newLikes = Number(records[idx].likes || records[idx].upvotes || 0) + 1;
+      records[idx] = {
+        ...records[idx],
+        likes: newLikes,
+        upvotes: newLikes,
+      };
+      this.saveAnimeRecords(records);
+    }
+
+    try {
+      await fetch('/api/submissions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'upvote' }),
+      });
+    } catch (e) {
+      console.warn('Upvote PUT request error:', e);
+    }
+
+    this.notify();
+    return newLikes;
+  }
+
   // --- 5. Server Sync: Pulls updates approved via Telegram Webhook ---
   public async syncWithServer(): Promise<void> {
+    // Check if browser is offline
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.info('[AniDub DB] Offline detected. Operating purely from cached local catalog.');
+      return;
+    }
+
     try {
       const res = await fetch(`/api/submissions?t=${Date.now()}`, {
         cache: 'no-store',
@@ -255,10 +294,22 @@ class DatabaseService {
           Pragma: 'no-cache',
         },
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.warn(`[AniDub DB] Server returned HTTP ${res.status}. Falling back to offline cache.`);
+        return;
+      }
       const json = await res.json();
       const serverList: AnimeRecord[] = Array.isArray(json) ? json : (json.data || json.record || []);
       if (!Array.isArray(serverList)) return;
+
+      // Cache raw JSONBin response for resilient offline browsing
+      try {
+        localStorage.setItem('anidub_cached_catalog', JSON.stringify(serverList));
+        localStorage.setItem('anidub_catalog_last_cached', new Date().toISOString());
+      } catch (cacheErr) {
+        console.warn('[AniDub DB] Failed to cache catalog:', cacheErr);
+      }
+
       const localList = this.getAllAnimeRecords();
       let hasChanges = false;
       const merged = [...localList];
@@ -269,7 +320,8 @@ class DatabaseService {
         if (localIdx !== -1) {
           if (
             merged[localIdx].submissionStatus !== normalized.submissionStatus ||
-            merged[localIdx].status !== normalized.status
+            merged[localIdx].status !== normalized.status ||
+            (normalized.likes && normalized.likes !== merged[localIdx].likes)
           ) {
             merged[localIdx] = {
               ...merged[localIdx],
@@ -292,7 +344,7 @@ class DatabaseService {
         this.saveAnimeRecords(merged);
       }
     } catch (e) {
-      console.warn('Sync with server error:', e);
+      console.warn('Sync with server error (falling back to offline cache):', e);
     }
   }
 

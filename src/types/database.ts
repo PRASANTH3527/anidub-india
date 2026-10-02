@@ -65,6 +65,8 @@ export interface AnimeRecord {
   updatedAt?: string;
   reviewedBy?: string;
   reviewedAt?: string;
+  likes?: number;
+  upvotes?: number;
 }
 
 export interface UserAccount {

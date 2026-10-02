@@ -16,6 +16,7 @@ import { JikanAnimeResult } from '../types/database';
 import { DubLanguage, StreamingPlatform, AnimeType, ReleaseDay } from '../types/anime';
 import { dbService } from '../services/databaseService';
 import { authService } from '../services/authService';
+import { useToast } from './Toast';
 
 interface SubmitDubModalProps {
   isOpen: boolean;
@@ -49,6 +50,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   onSuccess,
 }) => {
   const currentUser = authService.getCurrentUser();
+  const toast = useToast();
 
   // Form Fields
   const [title, setTitle] = useState('');
@@ -231,6 +233,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
     setIsSubmitting(false);
     setIsSuccess(true);
+    toast.success('Anime Submitted Successfully!', `"${title.trim()}" is now pending stealth admin approval.`);
 
     setTimeout(() => {
       setIsSuccess(false);

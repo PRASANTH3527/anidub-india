@@ -18,7 +18,8 @@ import {
   ThumbsUp, 
   MessageSquare, 
   Send, 
-  LogIn 
+  LogIn,
+  Flag
 } from 'lucide-react';
 import { Anime, WatchlistItem, DubLanguage } from '../types/anime';
 import { DubReview } from '../types/database';
@@ -34,6 +35,7 @@ interface AnimeDetailPageProps {
   onBack: () => void;
   onSelectSimilarAnime?: (anime: Anime) => void;
   onOpenAuthModal?: () => void;
+  onReport?: (anime: Anime) => void;
   allAnime?: Anime[];
 }
 
@@ -53,6 +55,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   onBack,
   onSelectSimilarAnime,
   onOpenAuthModal,
+  onReport,
   allAnime = [],
 }) => {
   const currentUser = authService.getCurrentUser();
@@ -126,10 +129,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1)
     : '4.8';
 
-  // Similar anime
+  // Similar anime: dynamically filter and show up to 3 other approved anime sharing the same language
   const similarShows = allAnime
-    .filter((a) => a.id !== anime.id && a.genres.some((g) => anime.genres.includes(g)))
-    .slice(0, 4);
+    .filter((a) => {
+      if (a.id === anime.id) return false;
+      const sharesLanguage = (a.dubs || []).some((dub) => (anime.dubs || []).includes(dub));
+      return sharesLanguage;
+    })
+    .slice(0, 3);
 
   const heroImage = anime.imageUrl || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
 
@@ -147,6 +154,17 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </button>
 
         <div className="flex items-center gap-2">
+          {onReport && (
+            <button
+              onClick={() => onReport(anime)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131926] hover:bg-rose-950/40 text-neutral-400 hover:text-rose-300 border border-neutral-800 hover:border-rose-500/40 text-xs font-semibold transition-all cursor-pointer active:scale-95"
+              title="Report broken link or wrong info"
+            >
+              <Flag className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Report Issue</span>
+            </button>
+          )}
+
           <button
             onClick={handleShare}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131926] hover:bg-[#1a2336] text-neutral-300 hover:text-white border border-neutral-800 text-xs font-semibold transition-colors cursor-pointer"
@@ -172,22 +190,38 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         {/* Content overlapping banner */}
         <div className="relative px-6 sm:px-10 pb-8 -mt-36 sm:-mt-48 flex flex-col md:flex-row gap-6 md:gap-8 items-start">
           
-          {/* Main Poster */}
-          <div className="relative w-44 sm:w-56 aspect-[3/4.2] rounded-2xl overflow-hidden shadow-2xl border-2 border-neutral-700/80 shrink-0 bg-neutral-900 mx-auto md:mx-0">
-            <img
-              src={heroImage}
-              alt={anime.title}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1 max-w-[80%]">
-              {(anime.dubs || []).map((dub) => (
-                <span
-                  key={dub}
-                  className="bg-black/80 backdrop-blur-md text-amber-300 font-extrabold text-[10px] px-1.5 py-0.5 rounded shadow border border-white/10"
-                >
-                  {dub.slice(0, 3)}
-                </span>
-              ))}
+          {/* Main Poster with Spotify-like Cinematic Ambient Glow UI */}
+          <div className="relative shrink-0 mx-auto md:mx-0 group">
+            {/* Cinematic Ambient Glow Behind Poster (blur-3xl and opacity classes) */}
+            <div className="absolute -inset-4 sm:-inset-6 rounded-3xl overflow-hidden pointer-events-none -z-0">
+              {/* Blurred Ambient Mirror Poster */}
+              <img
+                src={heroImage}
+                alt=""
+                aria-hidden="true"
+                className="w-full h-full object-cover blur-3xl opacity-50 sm:opacity-60 scale-125 animate-pulse transition-opacity duration-1000"
+              />
+              {/* Atmospheric Gradient Blend */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-purple-600/40 via-transparent to-indigo-600/30 mix-blend-screen blur-2xl" />
+            </div>
+
+            {/* Poster Card */}
+            <div className="relative z-10 w-44 sm:w-56 aspect-[3/4.2] rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.85)] border-2 border-neutral-700/80 bg-neutral-900 group-hover:scale-[1.02] transition-transform duration-300">
+              <img
+                src={heroImage}
+                alt={anime.title}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1 max-w-[80%]">
+                {(anime.dubs || []).map((dub) => (
+                  <span
+                    key={dub}
+                    className="bg-black/80 backdrop-blur-md text-amber-300 font-extrabold text-[10px] px-1.5 py-0.5 rounded shadow border border-white/10"
+                  >
+                    {dub.slice(0, 3)}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -713,36 +747,58 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
       </div>
 
-      {/* Similar Anime Suggestions */}
+      {/* Similar Anime Suggestions: You Might Also Like */}
       {similarShows.length > 0 && (
         <div className="pt-8 border-t border-neutral-800 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-heading font-black text-xl text-white">
-              You Might Also Like
-            </h3>
-            <span className="text-xs text-neutral-400">
-              Based on shared genre tags
+            <div>
+              <h3 className="font-heading font-black text-xl text-white">
+                You Might Also Like
+              </h3>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                Approved regional dubs sharing {(anime.dubs || []).join(' & ')} audio
+              </p>
+            </div>
+            <span className="text-xs text-purple-400 font-bold bg-[#131929] px-3 py-1 rounded-full border border-neutral-800">
+              {similarShows.length} {similarShows.length === 1 ? 'title' : 'titles'}
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {similarShows.map((show) => (
               <div
                 key={show.id}
                 onClick={() => onSelectSimilarAnime?.(show)}
-                className="bg-[#131926] border border-neutral-800 hover:border-purple-500/50 rounded-2xl p-3 cursor-pointer group transition-all"
+                className="bg-[#131926] border border-neutral-800 hover:border-purple-500/50 rounded-2xl p-3.5 cursor-pointer group transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/20 active:scale-[0.98] flex gap-3.5"
               >
                 <img
-                  src={show.poster}
+                  src={show.poster || show.imageUrl}
                   alt={show.title}
-                  className="w-full aspect-[3/4.2] object-cover rounded-xl mb-2 group-hover:scale-102 transition-transform"
+                  className="w-20 aspect-[3/4.2] object-cover rounded-xl shrink-0 group-hover:scale-105 transition-transform duration-300 shadow"
                 />
-                <h4 className="font-bold text-xs text-white truncate group-hover:text-purple-300">
-                  {show.title}
-                </h4>
-                <div className="flex items-center justify-between text-[10px] text-neutral-400 mt-1">
-                  <span>{show.releaseYear}</span>
-                  <span className="text-amber-400 font-bold">★ {show.rating.toFixed(1)}</span>
+                <div className="flex flex-col justify-between flex-grow min-w-0">
+                  <div>
+                    <h4 className="font-bold text-sm text-white truncate group-hover:text-purple-300 transition-colors">
+                      {show.title}
+                    </h4>
+                    <p className="text-[11px] text-neutral-400 mt-0.5">
+                      {show.type || 'Series'} • {show.releaseYear}
+                    </p>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {(show.dubs || []).slice(0, 2).map((d) => (
+                        <span key={d} className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/40">
+                          {d} Dub
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-1.5 border-t border-neutral-800/70">
+                    <span className="text-amber-400 font-bold">★ {show.rating?.toFixed(1) || '8.0'}</span>
+                    <span className="text-purple-400 font-semibold group-hover:translate-x-0.5 transition-transform">
+                      View details →
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}
