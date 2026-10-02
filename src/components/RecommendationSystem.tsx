@@ -37,8 +37,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
   const [selectedGenres, setSelectedGenres] = useState<string[]>(['Action', 'Fantasy']);
   const [selectedThemes, setSelectedThemes] = useState<string[]>(['Underdog to OP', 'Dark Fantasy']);
   const [previouslyWatched, setPreviouslyWatched] = useState<string[]>(() => {
-    // Pre-populate with watchedIds or popular defaults if available
-    return watchedIds.length > 0 ? watchedIds : ['solo-leveling', 'demon-slayer'];
+    return watchedIds.length > 0 ? watchedIds : [];
   });
   const [preferredLanguage, setPreferredLanguage] = useState<string>('All');
   const [searchWatchedInput, setSearchWatchedInput] = useState('');

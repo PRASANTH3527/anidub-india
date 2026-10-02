@@ -51,14 +51,30 @@ export async function readJsonBin(): Promise<any[]> {
     const data = await res.json();
     const record = data?.record;
 
+    const sanitizeSubmissions = (list: any[]): any[] => {
+      return list.filter((s: any) => {
+        if (!s || typeof s !== 'object') return false;
+        const title = (s.title || '').trim();
+        const id = (s.id || '').trim();
+        if (title.startsWith('Anime Submission #') || title.startsWith('Dummy Anime') || title.startsWith('Test Anime')) return false;
+        if (id.startsWith('sub_test') || id.startsWith('sub_refactor') || id === 'sub-test-1' || id === 'test-jujutsu') return false;
+        return true;
+      });
+    };
+
     if (record && Array.isArray(record.submissions)) {
-      return record.submissions;
+      const sanitized = sanitizeSubmissions(record.submissions);
+      if (sanitized.length !== record.submissions.length) {
+        await writeJsonBin(sanitized);
+      }
+      return sanitized;
     }
 
     if (Array.isArray(record)) {
       // Legacy array format; normalize to { submissions: [...] }
-      await writeJsonBin(record);
-      return record;
+      const sanitized = sanitizeSubmissions(record);
+      await writeJsonBin(sanitized);
+      return sanitized;
     }
 
     // Corrupt or uninitialized; reset cleanly with empty array

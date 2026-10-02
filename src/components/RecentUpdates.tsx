@@ -5,6 +5,10 @@ import { RECENT_NEWS } from '../data/newsData';
 export const RecentUpdates: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  if (RECENT_NEWS.length === 0) {
+    return null;
+  }
+
   // Auto cycle every 6 seconds
   useEffect(() => {
     const timer = setInterval(() => {

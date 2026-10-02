@@ -41,15 +41,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     try {
       const saved = localStorage.getItem('anidub_user_profile');
       return saved ? JSON.parse(saved) : {
-        username: 'AnimeOtaku_IN',
-        bio: 'Binge-watching shonen & dark fantasy anime in Tamil & Hindi dubs!',
+        username: 'Community Member',
+        bio: 'Tracking regional Indian dubbed anime releases in Tamil, Telugu, Hindi, Malayalam, and Kannada!',
         favoriteLanguage: 'Tamil' as DubLanguage,
         avatar: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=200&auto=format&fit=crop&q=80',
       };
     } catch {
       return {
-        username: 'AnimeOtaku_IN',
-        bio: 'Binge-watching anime in Indian dubs!',
+        username: 'Community Member',
+        bio: 'Tracking regional Indian dubbed anime releases!',
         favoriteLanguage: 'Tamil' as DubLanguage,
         avatar: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=200&auto=format&fit=crop&q=80',
       };

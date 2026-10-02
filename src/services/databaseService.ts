@@ -4,7 +4,7 @@ import { Anime, DubLanguage } from '../types/anime';
 const DB_ANIME_KEY = 'anidub_db_anime_records';
 const DB_REVIEWS_KEY = 'anidub_db_reviews';
 const DB_WATCHLIST_KEY = 'anidub_db_watchlists';
-const CLEAN_SLATE_KEY = 'anidub_fresh_empty_slate_v2';
+const CLEAN_SLATE_KEY = 'anidub_purged_all_fake_data_v4';
 
 class DatabaseService {
   private listeners: (() => void)[] = [];
@@ -35,7 +35,20 @@ class DatabaseService {
         localStorage.setItem(CLEAN_SLATE_KEY, 'true');
       } else {
         const existing = localStorage.getItem(DB_ANIME_KEY);
-        if (!existing) {
+        if (existing) {
+          try {
+            const parsed = JSON.parse(existing);
+            if (Array.isArray(parsed)) {
+              const sanitized = parsed.filter((item: any) => {
+                if (!item || !item.title || !item.id) return false;
+                if (item.title.startsWith('Anime Submission #') || item.title.startsWith('Dummy Anime')) return false;
+                if (item.id.startsWith('sub_test') || item.id.startsWith('sub_refactor') || item.id === 'sub-test-1' || item.id === 'test-jujutsu') return false;
+                return true;
+              });
+              localStorage.setItem(DB_ANIME_KEY, JSON.stringify(sanitized));
+            }
+          } catch {}
+        } else {
           localStorage.setItem(DB_ANIME_KEY, JSON.stringify([]));
         }
         if (!localStorage.getItem(DB_REVIEWS_KEY)) {
@@ -92,7 +105,17 @@ class DatabaseService {
     try {
       const raw = localStorage.getItem(DB_ANIME_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.map((item) => this.normalizeRecord(item)) : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((item: any) => {
+          if (!item || !item.title || !item.id) return false;
+          const title = (item.title || '').trim();
+          const id = (item.id || '').trim();
+          if (title.startsWith('Anime Submission #') || title.startsWith('Dummy Anime') || title.startsWith('Test Anime')) return false;
+          if (id.startsWith('sub_test') || id.startsWith('sub_refactor') || id === 'sub-test-1' || id === 'test-jujutsu') return false;
+          return true;
+        })
+        .map((item) => this.normalizeRecord(item));
     } catch {
       return [];
     }
