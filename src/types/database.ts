@@ -62,6 +62,7 @@ export interface AnimeRecord {
     userEmail?: string;
   };
   submittedAt: string;
+  updatedAt?: string;
   reviewedBy?: string;
   reviewedAt?: string;
 }

@@ -135,6 +135,7 @@ class DatabaseService {
     const newRecord: AnimeRecord = {
       ...data,
       id,
+      status: 'pending',
       submissionStatus: 'pending',
       submittedAt: new Date().toISOString(),
     };
@@ -152,51 +153,71 @@ class DatabaseService {
     return newRecord;
   }
 
-  // --- 4. Moderation Actions (Approve/Reject) ---
-  public approveSubmission(id: string, notes?: string, reviewerName: string = 'Admin'): boolean {
+  // --- 4. Moderation Actions (Approve/Reject/Delete) ---
+  public approveSubmission(id: string, notes?: string, reviewerName: string = 'Admin (prasanth123)'): boolean {
     const records = this.getAllAnimeRecords();
     const targetIndex = records.findIndex((r) => r.id === id);
     if (targetIndex === -1) return false;
 
     records[targetIndex] = {
       ...records[targetIndex],
+      status: 'approved',
       submissionStatus: 'approved',
       reviewedBy: reviewerName,
       reviewedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     this.saveAnimeRecords(records);
 
-    // Notify backend
+    // Notify backend via PUT request
     fetch('/api/submissions', {
-      method: 'PATCH',
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, action: 'approve', reviewer: reviewerName }),
-    }).catch(() => {});
+    }).catch((e) => console.warn('Approve PUT request error:', e));
 
     return true;
   }
 
-  public rejectSubmission(id: string, reason?: string, reviewerName: string = 'Admin'): boolean {
+  public rejectSubmission(id: string, reason?: string, reviewerName: string = 'Admin (prasanth123)'): boolean {
     const records = this.getAllAnimeRecords();
     const targetIndex = records.findIndex((r) => r.id === id);
     if (targetIndex === -1) return false;
 
     records[targetIndex] = {
       ...records[targetIndex],
+      status: 'rejected',
       submissionStatus: 'rejected',
       reviewedBy: reviewerName,
       reviewedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      rejectionReason: reason,
     };
 
     this.saveAnimeRecords(records);
 
-    // Notify backend
+    // Notify backend via PUT request
     fetch('/api/submissions', {
-      method: 'PATCH',
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, action: 'reject', reviewer: reviewerName, reason }),
-    }).catch(() => {});
+    }).catch((e) => console.warn('Reject PUT request error:', e));
+
+    return true;
+  }
+
+  public deleteSubmission(id: string): boolean {
+    const records = this.getAllAnimeRecords();
+    const filtered = records.filter((r) => r.id !== id);
+    this.saveAnimeRecords(filtered);
+
+    // Notify backend via PUT / DELETE
+    fetch('/api/submissions', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action: 'delete' }),
+    }).catch((e) => console.warn('Delete PUT request error:', e));
 
     return true;
   }

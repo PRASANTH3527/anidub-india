@@ -31,22 +31,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSecretTrigger,
 }) => {
   const currentUser = authService.getCurrentUser();
-  const [clickCount, setClickCount] = React.useState(0);
-  const [lastClickTime, setLastClickTime] = React.useState(0);
+  const tapHistoryRef = React.useRef<number[]>([]);
 
   const handleLogoClick = () => {
     const now = Date.now();
-    if (now - lastClickTime < 600) {
-      const newCount = clickCount + 1;
-      setClickCount(newCount);
-      if (newCount >= 5) {
-        onSecretTrigger();
-        setClickCount(0);
-      }
-    } else {
-      setClickCount(1);
+    // Keep taps from the last 2.5 seconds
+    tapHistoryRef.current = [...tapHistoryRef.current.filter((t) => now - t < 2500), now];
+    
+    if (tapHistoryRef.current.length >= 5) {
+      tapHistoryRef.current = [];
+      onSecretTrigger();
     }
-    setLastClickTime(now);
     setActiveTab('library');
   };
 
@@ -54,17 +49,18 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="sticky top-0 z-40 w-full bg-[#0b0f17]/90 backdrop-blur-md border-b border-neutral-800/80">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         
-        {/* Brand Logo */}
+        {/* Brand Logo & Title (Stealth Admin Trigger: 5 rapid taps) */}
         <div 
           onClick={handleLogoClick}
-          className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group select-none shrink-0"
+          className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group select-none shrink-0 active:scale-[0.97] transition-transform"
+          title="AniDub India — Tap 5 times to reveal stealth admin panel"
         >
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-purple-600/30 group-hover:scale-105 transition-transform duration-200">
             <Film className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5">
-              <span className="font-heading font-black text-lg sm:text-xl tracking-tight text-white">
+              <span className="font-heading font-black text-lg sm:text-xl tracking-tight text-white group-hover:text-purple-300 transition-colors">
                 Ani<span className="text-purple-400">Dub</span>
               </span>
               <span className="bg-gradient-to-r from-orange-500 via-white to-green-500 bg-clip-text text-transparent font-bold text-[10px] tracking-wider uppercase border border-neutral-700/60 rounded px-1 py-0.2">

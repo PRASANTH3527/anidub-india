@@ -51,20 +51,37 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Secret Admin State
-  const [isAdmin, setIsAdmin] = useState(false);
+  // Secret Admin State (persisted in session)
+  const [isAdmin, setIsAdmin] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('anidub_is_admin') === 'true';
+    }
+    return false;
+  });
   const [showSecretLogin, setShowSecretLogin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
+  const [adminError, setAdminError] = useState('');
 
   const handleSecretLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPassword === 'prasanth123') {
+    if (adminPassword.trim() === 'prasanth123') {
       setIsAdmin(true);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('anidub_is_admin', 'true');
+      }
       setShowSecretLogin(false);
       setAdminPassword('');
+      setAdminError('');
     } else {
-      alert('Invalid Password');
+      setAdminError('Invalid password. Please enter the correct passphrase.');
       setAdminPassword('');
+    }
+  };
+
+  const handleExitAdmin = () => {
+    setIsAdmin(false);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('anidub_is_admin');
     }
   };
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
@@ -313,31 +330,53 @@ export default function App() {
     <div className="min-h-screen bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white">
       {/* Secret Password Modal */}
       {showSecretLogin && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
-          <div className="w-full max-w-xs bg-[#131926] border border-purple-500/30 rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-heading font-black text-white flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-purple-400" />
-                Admin Access
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+          <div className="w-full max-w-sm bg-[#121829] border border-purple-500/40 rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-heading font-black text-white flex items-center gap-2 text-base">
+                <ShieldCheck className="w-5 h-5 text-purple-400" />
+                Stealth Admin Access
               </h3>
-              <button onClick={() => setShowSecretLogin(false)} className="text-neutral-500 hover:text-white">
+              <button 
+                onClick={() => {
+                  setShowSecretLogin(false);
+                  setAdminError('');
+                  setAdminPassword('');
+                }} 
+                className="text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleSecretLogin} className="space-y-4">
-              <input 
-                autoFocus
-                type="password"
-                placeholder="Enter admin password..."
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                className="w-full bg-[#0b0f17] border border-neutral-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors"
-              />
+            
+            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
+              Enter the security passphrase to unlock live moderation & approval controls.
+            </p>
+
+            <form onSubmit={handleSecretLogin} className="space-y-3.5">
+              <div>
+                <input 
+                  autoFocus
+                  type="password"
+                  placeholder="Enter admin password..."
+                  value={adminPassword}
+                  onChange={(e) => {
+                    setAdminPassword(e.target.value);
+                    if (adminError) setAdminError('');
+                  }}
+                  className={`w-full bg-[#0a0d14] border ${adminError ? 'border-rose-500 ring-1 ring-rose-500' : 'border-neutral-700/80 focus:border-purple-500 focus:ring-1 focus:ring-purple-500'} rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-500 outline-none transition-all`}
+                />
+                {adminError && (
+                  <p className="text-xs text-rose-400 font-medium mt-1.5">{adminError}</p>
+                )}
+              </div>
+
               <button 
                 type="submit"
-                className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-colors shadow-lg shadow-purple-600/20"
+                className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-[0.98] text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 cursor-pointer"
               >
-                Unlock Dashboard
+                <ShieldCheck className="w-4 h-4" />
+                <span>Unlock Live Dashboard</span>
               </button>
             </form>
           </div>
@@ -355,19 +394,10 @@ export default function App() {
       />
 
       <main className="flex-grow">
-        {/* Admin Dashboard Injection */}
+        {/* Stealth Admin Dashboard Integration */}
         {isAdmin && activeTab === 'library' && (
-          <div className="mb-8 border-b border-purple-500/20 bg-purple-950/5">
-             <AdminDashboard />
-             <div className="max-w-6xl mx-auto px-4 py-4 flex justify-end">
-                <button 
-                  onClick={() => setIsAdmin(false)}
-                  className="text-[10px] font-bold text-neutral-500 hover:text-white uppercase tracking-widest flex items-center gap-1.5 transition-colors"
-                >
-                  <LogIn className="w-3 h-3 rotate-180" />
-                  Exit Admin Mode
-                </button>
-             </div>
+          <div className="mb-6">
+             <AdminDashboard onExitAdmin={handleExitAdmin} />
           </div>
         )}
         {/* 1. Dedicated Information Page (Route #anime/:id) */}
