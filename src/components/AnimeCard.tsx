@@ -1,10 +1,24 @@
-import React, { useState, useRef } from 'react';
-import { Bookmark, Star, Play, Sparkles, Share2, Check, Flame, Flag, Heart } from 'lucide-react';
-import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from 'framer-motion';
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { 
+  Bookmark, 
+  Star, 
+  Sparkles, 
+  Share2, 
+  Check, 
+  Flame, 
+  Flag, 
+  Heart, 
+  DownloadCloud, 
+  CheckCircle2 
+} from 'lucide-react';
+import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { Anime, DubLanguage } from '../types/anime';
 import { useToast } from './Toast';
 import { dbService } from '../services/databaseService';
-import { ParallaxCard } from './ParallaxCard';
+import { posterCacheService } from '../services/posterCacheService';
+import ParallaxCard from './ParallaxCard';
 
 interface AnimeCardProps {
   anime: Anime;
@@ -33,7 +47,22 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isCached, setIsCached] = useState(false);
+  const [isCaching, setIsCaching] = useState(false);
   const toast = useToast();
+
+  const displayImage = anime.imageUrl || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
+
+  // Check offline poster cache status
+  useEffect(() => {
+    let isMounted = true;
+    posterCacheService.isCached(displayImage).then((cached) => {
+      if (isMounted) setIsCached(cached);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [displayImage]);
 
   // Local vote check
   const [isUpvoted, setIsUpvoted] = useState<boolean>(() => {
@@ -52,7 +81,29 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   const [likeCount, setLikeCount] = useState<number>(() => Number(anime.likes || anime.upvotes || 0));
   const [isUpvoting, setIsUpvoting] = useState(false);
 
-  const displayImage = anime.imageUrl || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
+  // Manual 1-Tap Offline Poster Caching
+  const handleToggleCachePoster = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isCaching) return;
+
+    if (isCached) {
+      const removed = await posterCacheService.removePoster(displayImage);
+      if (removed) {
+        setIsCached(false);
+        toast.info('Removed from Offline Cache', `Poster for "${anime.title}" freed from device cache.`);
+      }
+    } else {
+      setIsCaching(true);
+      const success = await posterCacheService.cachePoster(displayImage);
+      setIsCaching(false);
+      if (success) {
+        setIsCached(true);
+        toast.success('Saved for Offline! 💾', `Poster for "${anime.title}" cached. You can now view it without internet.`);
+      } else {
+        toast.error('Caching Failed', 'Could not cache poster. Check network connection.');
+      }
+    }
+  };
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -122,14 +173,12 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   const onDragEnd = (_: any, info: any) => {
     const offset = info.offset.x;
     if (offset > 50) {
-      // Swipe Right -> Watchlist
       onToggleBookmark(anime);
       toast.success(
         !isBookmarked ? 'Added to Watchlist! 💜' : 'Removed from Watchlist',
         `"${anime.title}" ${!isBookmarked ? 'saved to your watchlist' : 'removed from watchlist'}.`
       );
     } else if (offset < -50) {
-      // Swipe Left -> Upvote
       handleUpvoteDirect();
     }
   };
@@ -139,36 +188,38 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
       {/* Background Indicators for Swipe */}
       <motion.div 
         style={{ opacity: backgroundOpacityLeft }}
-        className="absolute inset-y-0 left-0 w-28 bg-gradient-to-r from-purple-600/40 via-purple-600/20 to-transparent flex items-center pl-4 z-0 rounded-2xl"
+        className="absolute inset-y-0 left-0 w-28 bg-gradient-to-r from-purple-600/40 via-purple-600/20 to-transparent flex items-center pl-4 z-0 rounded-2xl pointer-events-none"
       >
         <Heart className="w-6 h-6 text-rose-400 fill-current animate-pulse" />
       </motion.div>
       <motion.div 
         style={{ opacity: backgroundOpacityRight }}
-        className="absolute inset-y-0 right-0 w-28 bg-gradient-to-l from-orange-600/40 via-amber-600/20 to-transparent flex items-center justify-end pr-4 z-0 rounded-2xl"
+        className="absolute inset-y-0 right-0 w-28 bg-gradient-to-l from-orange-600/40 via-amber-600/20 to-transparent flex items-center justify-end pr-4 z-0 rounded-2xl pointer-events-none"
       >
         <Flame className="w-6 h-6 text-orange-400 fill-current animate-pulse" />
       </motion.div>
 
-      {/* Swipeable Container */}
+      {/* Swipeable Container with 3D Tilt */}
       <motion.div
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={0.2}
+        dragElastic={0.15}
         onDragEnd={onDragEnd}
         style={{ x: dragX }}
         className="relative z-10"
       >
-        <ParallaxCard>
+        <ParallaxCard maxTilt={14} enableGyroscope={true}>
           <div 
             onClick={() => onSelect(anime)}
-            className="flex flex-col h-full bg-[#131926] group/inner"
+            className="flex flex-col h-full bg-[#131926] group/inner select-none"
+            style={{ transformStyle: 'preserve-3d' }}
           >
-            {/* Poster Section (Shared Element Transition) */}
+            {/* Poster Section (Shared Element Transition + 3D Layering) */}
             <motion.div 
               layoutId={`anime-poster-${anime.id}`}
               transition={{ type: "spring", stiffness: 350, damping: 28 }}
               className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900"
+              style={{ transformStyle: 'preserve-3d' }}
             >
               {!imageError ? (
                 <motion.img
@@ -176,21 +227,25 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
                   src={displayImage}
                   alt={anime.title}
                   onError={() => setImageError(true)}
-                  className="w-full h-full object-cover object-center"
+                  className="w-full h-full object-cover object-center transform-gpu will-change-transform"
                   whileHover={{ scale: 1.05 }}
-                  transition={{ duration: 0.4 }}
+                  transition={{ duration: 0.35 }}
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-[#1a1e2d] to-[#0f131d] flex flex-col items-center justify-center p-4 text-center">
                   <Sparkles className="w-8 h-8 text-purple-400 mb-2 opacity-50" />
                   <span className="text-xs font-semibold text-neutral-300">{anime.title}</span>
+                  <span className="text-[10px] text-neutral-500 mt-1">Image Cached Offline</span>
                 </div>
               )}
 
               <div className="absolute inset-0 bg-gradient-to-t from-[#0d121c] via-transparent to-black/40 pointer-events-none" />
 
-              {/* Badges & Actions */}
-              <div className="absolute top-2.5 left-2.5 z-10">
+              {/* 3D Floating Badges (Z-Depth: 26px) */}
+              <div 
+                className="absolute top-2.5 left-2.5 z-20 flex flex-col gap-1.5"
+                style={{ transform: 'translateZ(26px)' }}
+              >
                 {isTrending && (
                   <motion.span 
                     initial={{ scale: 0.8, opacity: 0 }}
@@ -201,9 +256,41 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
                     <span>Trending</span>
                   </motion.span>
                 )}
+
+                {/* Offline Poster Status Pill */}
+                {isCached && (
+                  <motion.span 
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="inline-flex items-center gap-1 bg-emerald-950/90 text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md border border-emerald-500/40 backdrop-blur-md"
+                  >
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    <span>Offline Ready</span>
+                  </motion.span>
+                )}
               </div>
 
-              <div className="absolute top-2.5 right-2.5 z-30 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+              {/* 3D Floating Action Buttons (Z-Depth: 36px) */}
+              <div 
+                className="absolute top-2.5 right-2.5 z-30 flex items-center gap-1.5" 
+                onClick={(e) => e.stopPropagation()}
+                style={{ transform: 'translateZ(36px)' }}
+              >
+                {/* 1-Tap Offline Poster Caching Button */}
+                <motion.button
+                  whileHover={{ scale: 1.15 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleToggleCachePoster}
+                  title={isCached ? 'Poster cached for offline viewing' : 'Download poster for offline use'}
+                  className={`p-1.5 rounded-full backdrop-blur-md border transition-colors ${
+                    isCached 
+                      ? 'bg-emerald-950/80 text-emerald-400 border-emerald-500/40' 
+                      : 'bg-black/60 text-neutral-300 hover:text-white border-white/10'
+                  }`}
+                >
+                  <DownloadCloud className={`w-3.5 h-3.5 ${isCaching ? 'animate-bounce text-purple-400' : ''}`} />
+                </motion.button>
+
                 {onReport && (
                   <motion.button
                     whileHover={{ scale: 1.15 }}
@@ -232,7 +319,11 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
                 </motion.button>
               </div>
 
-              <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between text-[11px] font-bold text-white/90">
+              {/* 3D Bottom Stats (Z-Depth: 22px) */}
+              <div 
+                className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between text-[11px] font-bold text-white/90"
+                style={{ transform: 'translateZ(22px)' }}
+              >
                 <div className="flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-md backdrop-blur-sm border border-white/10">
                   <Star className="w-3 h-3 text-orange-500 fill-orange-500" />
                   <span className="text-orange-400 font-black">CR</span>
@@ -247,9 +338,12 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               </div>
             </motion.div>
 
-            {/* Info Section */}
-            <div className="p-3.5 flex flex-col justify-between flex-grow">
-              <div className="transform-gpu translate-z-10">
+            {/* 3D Elevated Info Section (Z-Depth: 24px) */}
+            <div 
+              className="p-3.5 flex flex-col justify-between flex-grow"
+              style={{ transform: 'translateZ(24px)' }}
+            >
+              <div>
                 <div className="flex flex-wrap gap-1 mb-2">
                   {(anime.dubs || []).map((lang) => {
                     const style = DUB_BADGE_STYLES[lang] || { bg: 'bg-neutral-700', text: 'text-neutral-100', label: lang.substring(0, 3) };
@@ -270,7 +364,11 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
                 </div>
               </div>
 
-              <div className="mt-3 pt-2 border-t border-neutral-800/70 flex items-center justify-between gap-2">
+              {/* 3D Bottom Platform and Upvote Bar (Z-Depth: 28px) */}
+              <div 
+                className="mt-3 pt-2 border-t border-neutral-800/70 flex items-center justify-between gap-2"
+                style={{ transform: 'translateZ(28px)' }}
+              >
                 <div className="flex items-center gap-1 min-w-0">
                   {(anime.platforms || []).slice(0, 2).map((p) => (
                     <span key={p.name} className="text-[9px] font-semibold bg-[#1a2133] text-neutral-400 px-1.5 py-0.5 rounded truncate">

@@ -2,11 +2,26 @@
 // AniDub India — Service Worker with PWA Background Sync & IndexedDB Queue
 // ==============================================================================
 
-const CACHE_NAME = 'anidub-pwa-v1';
+const CACHE_NAME = 'anidub-pwa-v2';
+const POSTER_CACHE_NAME = 'anidub-posters-v2';
+const MAX_POSTERS = 120;
 const DB_NAME = 'anidub-offline-db';
 const DB_VERSION = 1;
 const STORE_NAME = 'pending-watchlist';
 const SYNC_TAG = 'sync-watchlist';
+
+// Offline SVG Fallback poster placeholder
+const OFFLINE_POSTER_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600" fill="none">
+  <rect width="400" height="600" fill="#0d131f"/>
+  <rect x="20" y="20" width="360" height="560" rx="16" stroke="#253047" stroke-width="2" stroke-dasharray="6 6"/>
+  <circle cx="200" cy="250" r="48" fill="#1c2436"/>
+  <path d="M185 240L215 240M200 225L200 255" stroke="#7c3aed" stroke-width="4" stroke-linecap="round"/>
+  <path d="M175 270L195 245L210 262L220 252L235 270H175Z" fill="#a855f7"/>
+  <text x="200" y="340" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" fill="#e2e8f0" text-anchor="middle">Poster Offline</text>
+  <text x="200" y="370" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b" text-anchor="middle">AniDub India Offline Cache</text>
+</svg>
+`.trim();
 
 // --- Lifecycle Events ---
 const PRECACHE_ASSETS = ['/', '/share', '/manifest.json', '/icon.svg'];
@@ -23,8 +38,56 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME && key !== POSTER_CACHE_NAME) {
+            console.log('[ServiceWorker] Deleting obsolete cache:', key);
+            return caches.delete(key);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
 });
+
+// Helper: Trim Poster Cache LRU
+async function trimPosterCache(maxItems) {
+  try {
+    const cache = await caches.open(POSTER_CACHE_NAME);
+    const keys = await cache.keys();
+    if (keys.length > maxItems) {
+      const deleteCount = keys.length - maxItems;
+      for (let i = 0; i < deleteCount; i++) {
+        await cache.delete(keys[i]);
+      }
+    }
+  } catch (err) {
+    console.warn('[ServiceWorker] Failed to trim poster cache:', err);
+  }
+}
+
+// Helper: Check if request is an image or anime poster
+function isImageRequest(request) {
+  if (request.destination === 'image') return true;
+  const url = request.url.toLowerCase();
+  return (
+    url.endsWith('.jpg') ||
+    url.endsWith('.jpeg') ||
+    url.endsWith('.png') ||
+    url.endsWith('.webp') ||
+    url.endsWith('.avif') ||
+    url.endsWith('.gif') ||
+    url.includes('images.unsplash.com') ||
+    url.includes('cdn.myanimelist.net') ||
+    url.includes('s4.anilist.co') ||
+    url.includes('media.kitsu.io') ||
+    url.includes('crunchyroll.com') ||
+    url.includes('static.wikia.nocookie.net') ||
+    url.includes('m.media-amazon.com')
+  );
+}
 
 // --- IndexedDB Queue Management ---
 function openDB() {
@@ -180,7 +243,38 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Navigation requests: Network first with Cache fallback (handles offline /share and /)
+  // 2. Poster & Image Requests: Cache-First with Stale-While-Revalidate and Offline Fallback
+  if (isImageRequest(event.request)) {
+    event.respondWith(
+      caches.open(POSTER_CACHE_NAME).then(async (cache) => {
+        const cachedResponse = await cache.match(event.request);
+
+        // Background network fetch to keep cache fresh (stale-while-revalidate)
+        const fetchPromise = fetch(event.request.clone())
+          .then(async (networkResponse) => {
+            if (networkResponse && (networkResponse.status === 200 || networkResponse.type === 'opaque')) {
+              await cache.put(event.request, networkResponse.clone());
+              trimPosterCache(MAX_POSTERS);
+            }
+            return networkResponse;
+          })
+          .catch(() => {
+            if (!cachedResponse) {
+              return new Response(OFFLINE_POSTER_SVG, {
+                status: 200,
+                headers: { 'Content-Type': 'image/svg+xml' },
+              });
+            }
+            return cachedResponse;
+          });
+
+        return cachedResponse || fetchPromise;
+      })
+    );
+    return;
+  }
+
+  // 3. Navigation requests: Network first with Cache fallback (handles offline /share and /)
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
@@ -198,6 +292,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. Default network fetch for all other requests
+  // 4. Default network fetch for all other requests
   event.respondWith(fetch(event.request));
 });

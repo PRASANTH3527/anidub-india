@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Bookmark, Sparkles, Trash2, Search, Compass, Heart, Film } from 'lucide-react';
+import { Bookmark, Sparkles, Trash2, Search, Compass, Heart, Film, DownloadCloud, CheckCircle2 } from 'lucide-react';
 import { Anime } from '../types/anime';
 import { AnimeCard } from './AnimeCard';
+import { posterCacheService } from '../services/posterCacheService';
+import { useToast } from './Toast';
 
 interface WatchlistViewProps {
   watchlistIds: string[];
@@ -27,6 +29,8 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   onReport,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [isCachingAll, setIsCachingAll] = useState(false);
+  const toast = useToast();
 
   // Find all approved anime matching the watchlist IDs
   const bookmarkedAnime = useMemo(() => {
@@ -43,6 +47,24 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
         (a.genres || []).some((g) => g.toLowerCase().includes(q))
     );
   }, [bookmarkedAnime, searchQuery]);
+
+  const handleCacheAllPosters = async () => {
+    if (bookmarkedAnime.length === 0 || isCachingAll) return;
+    setIsCachingAll(true);
+    toast.info('Caching Watchlist Posters...', `Downloading posters for ${bookmarkedAnime.length} anime so you can view offline.`);
+
+    const urls = bookmarkedAnime
+      .map((a) => a.imageUrl || a.poster)
+      .filter(Boolean) as string[];
+
+    const result = await posterCacheService.cacheMultiplePosters(urls);
+    setIsCachingAll(false);
+
+    toast.success(
+      'Watchlist Cached Offline! 💾',
+      `Successfully stored ${result.success} anime poster(s) in local PWA cache.`
+    );
+  };
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-in fade-in duration-300">
@@ -70,7 +92,15 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
         {/* Actions */}
         {bookmarkedAnime.length > 0 && (
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={handleCacheAllPosters}
+              disabled={isCachingAll}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-semibold transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+            >
+              <DownloadCloud className={`w-3.5 h-3.5 ${isCachingAll ? 'animate-bounce text-purple-400' : ''}`} />
+              <span>{isCachingAll ? 'Saving Offline...' : 'Save All Posters Offline'}</span>
+            </button>
             <button
               onClick={onClearWatchlist}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-500/30 hover:bg-rose-500/10 active:scale-95 text-rose-300 text-xs font-semibold transition-all cursor-pointer"

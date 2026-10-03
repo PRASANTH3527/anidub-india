@@ -54,7 +54,15 @@ const MobileChartTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export const AdminDashboard: React.FC = () => {
+interface AdminDashboardProps {
+  onExitAdmin?: () => void;
+  onEditAnime?: (anime: any) => void;
+}
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  onExitAdmin,
+  onEditAnime,
+}) => {
   const {
     liveActiveUsers,
     liveActiveDiff,
