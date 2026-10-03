@@ -263,6 +263,26 @@ class DatabaseService {
     const filtered = records.filter((r) => r.id !== id);
     this.saveAnimeRecords(filtered);
 
+    // Global Auto-Cleanup: Remove deleted anime from the current browser's local watchlists
+    try {
+      const savedWatchlist = localStorage.getItem(DB_WATCHLIST_KEY);
+      if (savedWatchlist) {
+        const watchlists: WatchlistEntry[] = JSON.parse(savedWatchlist);
+        const filteredWatchlists = watchlists.filter((w) => w.animeId !== id);
+        localStorage.setItem(DB_WATCHLIST_KEY, JSON.stringify(filteredWatchlists));
+      }
+
+      // Also clean up the public local_watchlist key used for guest users
+      const publicWatchlist = localStorage.getItem('anidub_local_watchlist');
+      if (publicWatchlist) {
+        const ids: string[] = JSON.parse(publicWatchlist);
+        const filteredIds = ids.filter((watchlistId) => watchlistId !== id);
+        localStorage.setItem('anidub_local_watchlist', JSON.stringify(filteredIds));
+      }
+    } catch (e) {
+      console.warn('Watchlist cleanup error after deletion:', e);
+    }
+
     // Notify backend via PUT / DELETE
     fetch('/api/submissions', {
       method: 'PUT',
@@ -270,6 +290,7 @@ class DatabaseService {
       body: JSON.stringify({ id, action: 'delete' }),
     }).catch((e) => console.warn('Delete PUT request error:', e));
 
+    this.notify();
     return true;
   }
 

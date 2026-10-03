@@ -21,6 +21,7 @@ import { SurpriseRouletteModal } from './components/SurpriseRouletteModal';
 import { LocalProfileModal, LocalUserProfile, ANIME_AVATAR_PRESETS } from './components/LocalProfileModal';
 import { RecentlyViewedRow } from './components/RecentlyViewedRow';
 import { AdminDashboard } from './components/AdminDashboard';
+import { BottomNav } from './components/BottomNav';
 import { PullToRefresh } from './components/PullToRefresh';
 import { dbService } from './services/databaseService';
 import { authService } from './services/authService';
@@ -734,7 +735,7 @@ function AppContent() {
         </div>
       )}
 
-      <main className="flex-grow">
+      <main className="flex-grow pb-20 sm:pb-0">
         <PullToRefresh onRefresh={dbService.syncWithServer.bind(dbService)}>
           {/* Stealth Admin Dashboard Integration */}
           {isAdmin && activeTab === 'library' && (
@@ -828,6 +829,7 @@ function AppContent() {
                     setFeedView(view);
                     setVisibleCount(INITIAL_VISIBLE_COUNT);
                   }}
+                  allAnime={approvedAnime}
                 />
 
                 {/* For You Logic Metadata (Subtle Info) */}
@@ -1061,6 +1063,14 @@ function AppContent() {
           setUiLanguage(lang);
         }}
         onRestoreSuccess={handleRestoreSuccess}
+      />
+      
+      {/* Mobile Bottom Navigation (Strict requirement) */}
+      <BottomNav
+        activeTab={activeTab === 'library' && feedView === 'foryou' ? 'foryou' : activeTab}
+        setActiveTab={handleTabChange}
+        watchlistCount={filteredWatchlistIds.length}
+        uiLanguage={uiLanguage}
       />
     </div>
   );

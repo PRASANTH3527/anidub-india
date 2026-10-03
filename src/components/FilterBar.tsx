@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, X, SlidersHorizontal, RotateCcw, Sparkles, Flame, Filter, Mic, MicOff } from 'lucide-react';
 import { ALL_GENRES, ALL_TYPES, ALL_STATUSES, ALL_LANGUAGES } from '../data/animeData';
 import { useToast } from './Toast';
 import { SupportedLanguage, translate } from '../utils/i18n';
+import { AnimeRecord } from '../types/database';
 
 interface FilterBarProps {
   searchQuery: string;
@@ -25,6 +26,7 @@ interface FilterBarProps {
   uiLanguage?: SupportedLanguage;
   feedView?: 'directory' | 'foryou';
   setFeedView?: (view: 'directory' | 'foryou') => void;
+  allAnime?: AnimeRecord[];
 }
 
 export const FilterBar: React.FC<FilterBarProps> = ({
@@ -48,21 +50,31 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   uiLanguage = 'en',
   feedView = 'directory',
   setFeedView,
+  allAnime = [],
 }) => {
   const toast = useToast();
   const lang = uiLanguage || 'en';
   const [isListening, setIsListening] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Clean up recognition instance on unmount
+  // Trending Suggestions logic
+  const trendingSuggestions = useMemo(() => {
+    return [...allAnime]
+      .sort((a, b) => Number(b.likes || b.upvotes || 0) - Number(a.likes || a.upvotes || 0))
+      .slice(0, 5);
+  }, [allAnime]);
+
+  // Handle click outside to close dropdown
   useEffect(() => {
-    return () => {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch {}
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
       }
     };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const toggleVoiceSearch = () => {
@@ -83,7 +95,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     if (isListening) {
       if (recognitionRef.current) {
         try {
-          recognitionRef.current.stop();
+          recognitionRef.current.abort();
         } catch {}
       }
       setIsListening(false);
@@ -179,14 +191,18 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       )}
 
       {/* Search Bar Container */}
-      <div className="relative group">
+      <div className="relative group" ref={dropdownRef}>
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-400 group-focus-within:text-purple-400 transition-colors">
           <Search className="w-4 h-4 sm:w-5 sm:h-5" />
         </div>
         <input
           type="text"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onFocus={() => setShowDropdown(true)}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            if (!showDropdown) setShowDropdown(true);
+          }}
           placeholder={
             isListening
               ? translate('searchListening', lang)
@@ -198,6 +214,38 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               : 'border-neutral-700/80 group-hover:border-neutral-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20'
           }`}
         />
+
+        {/* Smart Search Dropdown (Strict Requirement) */}
+        {showDropdown && !searchQuery && trendingSuggestions.length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-2 bg-[#121829] border border-neutral-700/80 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="p-3 bg-purple-950/30 border-b border-neutral-800 flex items-center gap-2">
+              <Flame className="w-4 h-4 text-orange-400" />
+              <span className="text-[11px] font-black uppercase tracking-wider text-purple-200">Trending Right Now</span>
+            </div>
+            <div className="max-h-60 overflow-y-auto">
+              {trendingSuggestions.map((anime: AnimeRecord) => (
+                <div
+                  key={anime.id}
+                  onClick={() => {
+                    setSearchQuery(anime.title);
+                    setShowDropdown(false);
+                  }}
+                  className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer border-b border-neutral-800/50 last:border-0 group"
+                >
+                  <img src={anime.poster} className="w-8 h-10 object-cover rounded-lg border border-neutral-700 group-hover:border-purple-500/50" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white truncate">{anime.title}</p>
+                    <p className="text-[10px] text-neutral-500">{anime.type} • {anime.releaseYear} • ★ {anime.rating || '8.0'}</p>
+                  </div>
+                  <div className="ml-auto text-[10px] font-black text-orange-500 flex items-center gap-1">
+                    <Flame className="w-3 h-3" />
+                    {anime.likes || anime.upvotes || 0}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Right Search Bar Action Controls */}
         <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -252,21 +300,21 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
         {/* Scrollable Language Row */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar select-none">
-          {ALL_LANGUAGES.map((lang) => {
-            const isSelected = selectedLanguage === lang.name;
-            const count = lang.name === 'All' ? totalAvailable : languageCounts[lang.name];
+          {ALL_LANGUAGES.map((langItem) => {
+            const isSelected = selectedLanguage === langItem.name;
+            const count = langItem.name === 'All' ? totalAvailable : languageCounts[langItem.name];
 
             return (
               <button
-                key={lang.name}
-                onClick={() => setSelectedLanguage(lang.name)}
+                key={langItem.name}
+                onClick={() => setSelectedLanguage(langItem.name)}
                 className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 shrink-0 cursor-pointer flex items-center gap-2 active:scale-95 ${
                   isSelected
                     ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 ring-2 ring-purple-400/40'
                     : 'bg-[#141b2c] text-neutral-300 hover:text-white hover:bg-[#1c253d] border border-neutral-800 hover:border-neutral-700'
                 }`}
               >
-                <span>{lang.name}</span>
+                <span>{langItem.name}</span>
                 {count !== undefined && count > 0 && (
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
                     isSelected ? 'bg-purple-800 text-white' : 'bg-[#0f1422] text-neutral-400'

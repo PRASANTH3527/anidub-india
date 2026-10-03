@@ -93,8 +93,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Primary Nav Tabs (Icons only on mobile) */}
-        <nav className="flex items-center gap-1 sm:gap-2">
+        {/* Primary Nav Tabs (Hidden on mobile - moved to BottomNav) */}
+        <nav className="hidden sm:flex items-center gap-1 sm:gap-2">
           {/* Library / Directory */}
           <button
             onClick={() => setActiveTab('library')}

@@ -134,9 +134,23 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         }]);
       }
 
-      if (editAnime.currentSeason) setCurrentSeason(editAnime.currentSeason);
-      if (editAnime.currentlyAiringEpisode) setCurrentlyAiringEpisode(editAnime.currentlyAiringEpisode);
-      if (editAnime.rating) setRating(editAnime.rating);
+      if (editAnime.currentSeason !== undefined && editAnime.currentSeason !== null) {
+        setCurrentSeason(editAnime.currentSeason);
+      } else {
+        setCurrentSeason('');
+      }
+
+      if (editAnime.currentlyAiringEpisode !== undefined && editAnime.currentlyAiringEpisode !== null) {
+        setCurrentlyAiringEpisode(editAnime.currentlyAiringEpisode);
+      } else {
+        setCurrentlyAiringEpisode('');
+      }
+
+      if (editAnime.rating !== undefined && editAnime.rating !== null) {
+        setRating(editAnime.rating);
+      } else {
+        setRating('');
+      }
 
       if (editAnime.platforms && editAnime.platforms.length > 0) {
         setStreamingPartners(editAnime.platforms.map(p => ({
