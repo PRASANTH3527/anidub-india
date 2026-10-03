@@ -77,6 +77,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [poster, setPoster] = useState(''); // This will now store Base64
   const [synopsis, setSynopsis] = useState('');
   const [releaseYear, setReleaseYear] = useState(new Date().getFullYear());
+  const [rating, setRating] = useState<number | ''>('');
   const [episodes, setEpisodes] = useState<number>(12);
   const [type, setType] = useState<AnimeType>('TV Series');
   const [studio, setStudio] = useState('');
@@ -135,6 +136,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
       if (editAnime.currentSeason) setCurrentSeason(editAnime.currentSeason);
       if (editAnime.currentlyAiringEpisode) setCurrentlyAiringEpisode(editAnime.currentlyAiringEpisode);
+      if (editAnime.rating) setRating(editAnime.rating);
 
       if (editAnime.platforms && editAnime.platforms.length > 0) {
         setStreamingPartners(editAnime.platforms.map(p => ({
@@ -157,6 +159,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil'] }]);
       setCurrentSeason('');
       setCurrentlyAiringEpisode('');
+      setRating('');
       setStreamingPartners([{ name: 'Crunchyroll', url: '' }]);
       setAiringStatus('Ongoing');
       setReleaseDay('Saturday');
@@ -302,6 +305,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     setType(formatted.type);
     setStudio(formatted.studio);
     setGenres(formatted.genres);
+    setRating(formatted.rating || '');
     if (item.airing !== undefined) {
       setAiringStatus(item.airing ? 'Ongoing' : 'Completed');
     }
@@ -365,6 +369,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available in ${derivedGlobalDubs.join(', ')}.`,
       releaseYear: releaseYear || new Date().getFullYear(),
       originalReleaseDate: `${releaseYear || new Date().getFullYear()}`,
+      rating: rating !== '' ? Number(rating) : undefined,
       episodes: totalEpisodes || 12,
       seasons: seasonDetails.filter(s => s.type === 'Season').length,
       totalSeasons: seasonDetails.filter(s => s.type === 'Season').length,
@@ -405,7 +410,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     // Pending anime are NEVER returned in getApprovedAnime() and stay completely hidden from public feeds
     const newRecord = dbService.submitDubInfo({
       ...payload,
-      rating: 8.0,
       themes: ['Super Power', 'Indian Dub'],
       characters: [
         {
@@ -443,6 +447,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil'] }]);
       setCurrentSeason('');
       setCurrentlyAiringEpisode('');
+      setRating('');
       setAutoFilled(false);
       onClose();
       onSuccess?.();
@@ -890,16 +895,16 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 </p>
               </div>
 
-              {/* Optional Studio & Synopsis info (auto-filled if selected) */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Optional Studio, Year & Rating info (auto-filled if selected) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-bold text-neutral-400 mb-1">Animation Studio</label>
                   <input
                     type="text"
                     value={studio}
                     onChange={(e) => setStudio(e.target.value)}
-                    placeholder="e.g. Ufotable, A-1 Pictures"
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white placeholder-neutral-500"
+                    placeholder="e.g. Ufotable"
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white placeholder-neutral-500 text-xs"
                   />
                 </div>
                 <div>
@@ -908,7 +913,20 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                     type="number"
                     value={releaseYear}
                     onChange={(e) => setReleaseYear(parseInt(e.target.value) || 2024)}
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white"
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-400 mb-1">IMDb / MAL Rating</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                    value={rating}
+                    onChange={(e) => setRating(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                    placeholder="e.g. 8.7"
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white placeholder-neutral-500 text-xs"
                   />
                 </div>
               </div>

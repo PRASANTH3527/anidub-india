@@ -60,7 +60,7 @@ export interface Anime {
   type: AnimeType;
   releaseYear: number;
   originalReleaseDate?: string; // e.g. "January 6, 2024"
-  rating: number; // e.g., 8.7
+  rating?: number; // e.g., 8.7
   episodes?: number;
   seasons?: number;
   totalSeasons?: number;

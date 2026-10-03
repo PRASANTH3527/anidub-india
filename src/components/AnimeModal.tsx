@@ -127,10 +127,12 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
                 </p>
               )}
               <div className="flex flex-wrap items-center gap-2 mt-2">
-                <span className="flex items-center gap-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded text-xs font-bold">
-                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                  {anime.rating.toFixed(1)} / 10
-                </span>
+                {anime.rating && (
+                  <span className="flex items-center gap-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded text-xs font-bold">
+                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    {anime.rating.toFixed(1)} / 10
+                  </span>
+                )}
                 <span className="text-xs font-semibold bg-neutral-800/80 text-neutral-300 px-2 py-0.5 rounded border border-neutral-700">
                   {anime.type}
                 </span>

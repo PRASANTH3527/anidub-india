@@ -28,7 +28,7 @@ export interface AnimeRecord {
   type: AnimeType;
   releaseYear: number;
   originalReleaseDate?: string;
-  rating: number;
+  rating?: number;
   episodes?: number;
   seasons?: number;
   totalSeasons?: number;

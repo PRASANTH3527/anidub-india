@@ -15,7 +15,7 @@ export interface AutoFillAnimeData {
   studio: string;
   genres: string[];
   themes: string[];
-  rating: number;
+  rating?: number;
   originalReleaseDate: string;
   airing?: boolean;
   status?: string;
@@ -99,7 +99,7 @@ export function formatJikanToAnime(item: JikanAnimeResult): AutoFillAnimeData {
     studio,
     genres,
     themes,
-    rating: item.score ? Number(item.score.toFixed(1)) : 8.0,
+    rating: item.score ? Number(item.score.toFixed(1)) : undefined,
     originalReleaseDate: item.aired?.string || `${year}`,
     airing: item.airing,
     status: item.status,

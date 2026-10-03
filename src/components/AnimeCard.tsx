@@ -300,7 +300,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         {/* Gradient shadow overlay for badge readability & bottom text */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#0d121c] via-transparent to-black/50 pointer-events-none" />
 
-        {/* Top-Left: Trending Badge & Dub Badges */}
+        {/* Top-Left: Trending Badge ONLY */}
         <div className="absolute top-2.5 left-2.5 flex flex-col items-start gap-1 max-w-[70%] z-10">
           {/* Trending Indicator */}
           {isTrending && (
@@ -309,22 +309,6 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               <span>Trending</span>
             </span>
           )}
-
-          {/* Regional Dub Badges */}
-          <div className="flex flex-wrap gap-1">
-            {(anime.dubs || []).map((dub) => {
-              const badge = DUB_BADGE_STYLES[dub];
-              if (!badge) return null;
-              return (
-                <span
-                  key={dub}
-                  className={`${badge.bg} ${badge.text} text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-md backdrop-blur-sm tracking-tight`}
-                >
-                  {badge.label}
-                </span>
-              );
-            })}
-          </div>
         </div>
 
         {/* Top-Right Quick Action Group: Report, Native Share & Bookmark */}
@@ -377,7 +361,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between text-[11px] font-semibold text-white/90">
           <div className="flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-md backdrop-blur-sm border border-white/10">
             <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-            <span>{anime.rating?.toFixed(1) || '8.0'}</span>
+            <span>{anime.rating ? anime.rating.toFixed(1) : 'N/A'}</span>
           </div>
 
           {anime.status === 'Airing' && (
@@ -392,7 +376,20 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
       {/* Card Info Section */}
       <div className="p-3.5 flex flex-col justify-between flex-grow" style={{ transform: 'translateZ(30px)' }}>
         <div>
-          {/* Title */}
+          {/* Language Badges (Repositioned to avoid overlap) */}
+          <div className="flex flex-wrap gap-1.5 mb-2.5">
+            {(anime.dubs || []).map((lang) => {
+              const style = DUB_BADGE_STYLES[lang] || { bg: 'bg-neutral-700', text: 'text-neutral-100', label: lang.substring(0, 3) };
+              return (
+                <span
+                  key={lang}
+                  className={`${style.bg} ${style.text} text-[8px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm border border-white/5 transition-transform hover:scale-105`}
+                >
+                  {style.label}
+                </span>
+              );
+            })}
+          </div>
           <h3 
             className="font-bold text-sm text-neutral-100 line-clamp-1 group-hover:text-purple-300 transition-colors"
             title={anime.title}

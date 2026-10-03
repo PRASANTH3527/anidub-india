@@ -276,7 +276,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 sm:gap-4 pt-1">
               <div className="flex items-center gap-1.5 bg-black/50 border border-neutral-700/80 px-3 py-1.5 rounded-xl">
                 <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                <span className="font-extrabold text-white text-sm">{anime.rating.toFixed(1)}</span>
+                <span className="font-extrabold text-white text-sm">{anime.rating ? anime.rating.toFixed(1) : 'N/A'}</span>
                 <span className="text-[11px] text-neutral-500">MAL Score</span>
               </div>
 
@@ -893,7 +893,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-1.5 border-t border-neutral-800/70">
-                    <span className="text-amber-400 font-bold">★ {show.rating?.toFixed(1) || '8.0'}</span>
+                    <span className="text-amber-400 font-bold">★ {show.rating ? show.rating.toFixed(1) : 'N/A'}</span>
                     <span className="text-purple-400 font-semibold group-hover:translate-x-0.5 transition-transform">
                       View details →
                     </span>
