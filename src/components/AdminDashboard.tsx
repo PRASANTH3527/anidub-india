@@ -192,6 +192,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin, onE
           {/* Quick Actions */}
           <div className="flex items-center gap-2.5">
             <button 
+              onClick={() => {
+                window.location.hash = 'analytics';
+              }}
+              title="Open Analytics Dashboard"
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white border border-purple-400/40 text-xs font-bold transition-all cursor-pointer shadow-lg shadow-purple-600/20"
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span className="hidden sm:inline">Analytics</span>
+            </button>
+
+            <button 
               onClick={fetchData}
               disabled={isLoading}
               title="Force Sync with JSONBin"

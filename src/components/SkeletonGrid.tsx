@@ -2,29 +2,53 @@ import React from 'react';
 
 export const SkeletonCard: React.FC<{ className?: string }> = ({ className = '' }) => {
   return (
-    <div className={`relative rounded-2xl overflow-hidden bg-[#131926] border border-neutral-800/80 flex flex-col group ${className}`}>
-      {/* Poster Skeleton with Shimmer Wave */}
-      <div className="aspect-[3/4.2] w-full bg-neutral-800/60 relative overflow-hidden">
-        <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_infinite] bg-gradient-to-r from-transparent via-white/5 to-transparent" />
-        <div className="absolute top-2.5 left-2.5 flex gap-1.5 z-10">
-          <div className="w-8 h-4 rounded-md bg-neutral-700/80 animate-pulse" />
-          <div className="w-8 h-4 rounded-md bg-neutral-700/80 animate-pulse" />
+    <div className={`relative rounded-2xl overflow-hidden bg-[#131926] border border-neutral-800/80 flex flex-col group ${className} animate-in fade-in duration-500`}>
+      {/* Poster Skeleton with Shimmer Wave (Netflix Style) */}
+      <div className="aspect-[3/4.2] w-full bg-neutral-800/40 relative overflow-hidden">
+        {/* Continuous Shimmer Overlay */}
+        <div className="absolute inset-0 -translate-x-full animate-[shimmer_2.5s_infinite] bg-gradient-to-r from-transparent via-white/[0.03] to-transparent" />
+        
+        {/* Top Badges */}
+        <div className="absolute top-3 left-3 flex gap-2 z-10">
+          <div className="w-12 h-5 rounded-lg bg-neutral-700/60 animate-pulse" />
         </div>
-        <div className="absolute bottom-2.5 left-2.5 right-2.5 flex justify-between z-10">
-          <div className="w-10 h-4 rounded-md bg-neutral-700/80 animate-pulse" />
-          <div className="w-12 h-4 rounded-md bg-neutral-700/80 animate-pulse" />
+        
+        {/* Top Actions */}
+        <div className="absolute top-3 right-3 flex gap-1.5 z-10">
+          <div className="w-7 h-7 rounded-full bg-neutral-700/50 animate-pulse" />
+          <div className="w-7 h-7 rounded-full bg-neutral-700/50 animate-pulse" />
+        </div>
+
+        {/* Bottom Metadata */}
+        <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center z-10">
+          <div className="w-14 h-5 rounded-md bg-neutral-700/60 animate-pulse" />
+          <div className="w-10 h-4 rounded-md bg-neutral-700/40 animate-pulse" />
         </div>
       </div>
 
       {/* Content Skeleton */}
-      <div className="p-3.5 space-y-2.5 flex-grow flex flex-col justify-between">
-        <div className="space-y-2">
-          <div className="h-4 bg-neutral-700/70 rounded-md w-3/4 animate-pulse" />
-          <div className="h-3 bg-neutral-800/80 rounded-md w-1/2 animate-pulse" />
+      <div className="p-4 space-y-4 flex-grow flex flex-col justify-between bg-[#131926]">
+        <div className="space-y-3">
+          {/* Dub Badges */}
+          <div className="flex gap-1.5">
+            <div className="w-8 h-4 rounded bg-neutral-800 animate-pulse" />
+            <div className="w-8 h-4 rounded bg-neutral-800 animate-pulse" />
+          </div>
+          
+          {/* Title */}
+          <div className="h-5 bg-neutral-700/50 rounded-lg w-[85%] animate-pulse" />
+          
+          {/* Subtitle */}
+          <div className="h-3.5 bg-neutral-800/60 rounded-md w-[40%] animate-pulse" />
         </div>
-        <div className="pt-2 border-t border-neutral-800/70 flex items-center justify-between">
-          <div className="h-3 bg-neutral-800/70 rounded w-16 animate-pulse" />
-          <div className="h-3 bg-neutral-800/70 rounded w-4 animate-pulse" />
+
+        {/* Footer */}
+        <div className="pt-3 border-t border-neutral-800/70 flex items-center justify-between">
+          <div className="flex gap-1.5">
+            <div className="h-4 bg-neutral-800 rounded w-12 animate-pulse" />
+            <div className="h-4 bg-neutral-800 rounded w-10 animate-pulse" />
+          </div>
+          <div className="h-6 bg-neutral-800/80 rounded-lg w-10 animate-pulse" />
         </div>
       </div>
     </div>

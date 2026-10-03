@@ -458,11 +458,10 @@ class DatabaseService {
       let all: WatchlistEntry[] = raw ? JSON.parse(raw) : [];
       const existingIndex = all.findIndex((w) => w.userId === userId && w.animeId === animeId);
 
+      let isAdded = false;
       if (existingIndex > -1) {
         all.splice(existingIndex, 1);
-        localStorage.setItem(DB_WATCHLIST_KEY, JSON.stringify(all));
-        this.notify();
-        return false;
+        isAdded = false;
       } else {
         const entry: WatchlistEntry = {
           userId,
@@ -471,10 +470,20 @@ class DatabaseService {
           addedAt: new Date().toISOString(),
         };
         all.push(entry);
-        localStorage.setItem(DB_WATCHLIST_KEY, JSON.stringify(all));
-        this.notify();
-        return true;
+        isAdded = true;
       }
+      
+      localStorage.setItem(DB_WATCHLIST_KEY, JSON.stringify(all));
+      this.notify();
+
+      // PWA Background Sync: Intercepted by Service Worker
+      fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, animeId, action: isAdded ? 'add' : 'remove' }),
+      }).catch(err => console.warn('Offline sync queued:', err));
+
+      return isAdded;
     } catch {
       return false;
     }

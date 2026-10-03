@@ -220,7 +220,10 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </div>
 
             {/* Poster Card */}
-            <div className="relative z-10 w-44 sm:w-56 aspect-[3/4.2] rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.85)] border-2 border-neutral-700/80 bg-neutral-900 group-hover:scale-[1.02] transition-transform duration-300">
+            <motion.div 
+              layoutId={`anime-poster-${anime.id}`}
+              className="relative z-10 w-44 sm:w-56 aspect-[3/4.2] rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.85)] border-2 border-neutral-700/80 bg-neutral-900 group-hover:scale-[1.02] transition-transform duration-300"
+            >
               <img
                 src={heroImage}
                 alt={anime.title}
@@ -236,7 +239,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   </span>
                 ))}
               </div>
-            </div>
+            </motion.div>
           </div>
 
           {/* Title & Core Metadata */}

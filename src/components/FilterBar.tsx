@@ -73,15 +73,15 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     setSearchQuery(debouncedSearch);
   }, [debouncedSearch]);
 
-  // Live Results for Dropdown
+  // Live Results for Dropdown (Netflix-level: Fetch results based on debounced search to prevent excessive "API" calls)
   const liveResults = useMemo(() => {
-    if (!localSearch.trim() || localSearch.length < 2) return [];
-    const query = localSearch.toLowerCase().trim();
+    if (!debouncedSearch.trim() || debouncedSearch.length < 2) return [];
+    const query = debouncedSearch.toLowerCase().trim();
     return allAnime.filter(anime => 
       anime.title.toLowerCase().includes(query) || 
       anime.romajiTitle?.toLowerCase().includes(query)
     ).slice(0, 6);
-  }, [localSearch, allAnime]);
+  }, [debouncedSearch, allAnime]);
 
   // Trending Suggestions logic
   const trendingSuggestions = useMemo(() => {

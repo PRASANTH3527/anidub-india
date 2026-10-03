@@ -1,5 +1,6 @@
 import React from 'react';
-import '../src/index.css';
+import '../index.css';
+import SWRegister from '../components/SWRegister';
 
 const DEFAULT_BANNER = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&h=630&fit=crop&q=85';
 
@@ -72,6 +73,7 @@ export default function RootLayout({
         <meta name="twitter:image" content={DEFAULT_BANNER} />
       </head>
       <body className="bg-[#0b0f17] text-neutral-100 antialiased min-h-screen">
+        <SWRegister />
         {children}
       </body>
     </html>

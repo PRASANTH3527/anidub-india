@@ -12,13 +12,14 @@ import {
   Moon,
   Heart,
   Languages,
-  Search
+  Search,
+  BarChart3
 } from 'lucide-react';
 import { authService } from '../services/authService';
 import { LocalUserProfile, ANIME_AVATAR_PRESETS } from './LocalProfileModal';
 import { SupportedLanguage, translate } from '../utils/i18n';
 
-export type NavTab = 'library' | 'foryou' | 'watchlist' | 'schedule' | 'recommendations' | 'profile';
+export type NavTab = 'library' | 'foryou' | 'watchlist' | 'schedule' | 'recommendations' | 'profile' | 'analytics';
 
 interface NavbarProps {
   activeTab: NavTab;
@@ -33,6 +34,7 @@ interface NavbarProps {
   onOpenProfileModal?: () => void;
   uiLanguage?: SupportedLanguage;
   onToggleLanguage?: () => void;
+  isAdmin?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -52,6 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenProfileModal,
   uiLanguage = 'en',
   onToggleLanguage,
+  isAdmin = false,
 }) => {
   const currentUser = authService.getCurrentUser();
   const tapHistoryRef = React.useRef<number[]>([]);
@@ -160,6 +163,22 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             )}
           </button>
+
+          {/* Admin Analytics (Hidden for public) */}
+          {(isAdmin || currentUser?.email === 'prasanth01236@gmail.com') && (
+            <button
+              onClick={() => setActiveTab('analytics')}
+              className={`flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 active:scale-90 cursor-pointer ${
+                activeTab === 'analytics'
+                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50 shadow-sm'
+                  : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+              }`}
+              title="View Platform Analytics"
+            >
+              <BarChart3 className="w-5 h-5 sm:w-4 sm:h-4 text-purple-400" />
+              <span className="hidden lg:inline text-purple-200">Analytics</span>
+            </button>
+          )}
 
           {/* Profile / Account */}
           <button

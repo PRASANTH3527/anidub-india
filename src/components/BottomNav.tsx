@@ -23,7 +23,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   uiLanguage
 }) => {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#0b0f17]/95 backdrop-blur-xl border-t border-neutral-800/80 px-2 pb-safe pt-2 flex items-center justify-around sm:hidden">
+    <nav className="fixed top-16 left-0 right-0 z-50 bg-[#0b0f17]/90 backdrop-blur-xl border-b border-neutral-800/60 px-2 py-1 flex items-center justify-around sm:hidden shadow-[0_10px_30px_rgba(0,0,0,0.4)] animate-in slide-in-from-top duration-300">
       {/* Directory */}
       <button
         onClick={() => setActiveTab('library')}

@@ -1,5 +1,4 @@
 // Next.js App Router Route Handler: app/api/feedback/route.ts
-export { default } from '../../../api/feedback';
 
 export async function POST(req: Request) {
   try {
