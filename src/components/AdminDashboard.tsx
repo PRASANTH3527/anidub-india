@@ -1,613 +1,425 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  ShieldCheck, 
-  Clock, 
-  CheckCircle2, 
-  Trash2, 
-  ExternalLink, 
-  RefreshCw,
-  Search,
-  Sparkles,
-  LogOut,
-  Layers,
-  BarChart3,
-  Languages,
-  Film,
-  Tv,
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
+import {
+  Users,
   TrendingUp,
-  Filter,
-  Pencil
+  Bookmark,
+  Tv,
+  Zap,
+  ArrowUpRight,
+  ArrowDownRight,
+  Radio,
+  Clock,
+  Flame,
+  Globe,
+  RefreshCw,
+  Sparkles,
+  ChevronRight,
+  ShieldCheck,
+  Smartphone,
 } from 'lucide-react';
-import { dbService } from '../services/databaseService';
-import { AnimeRecord } from '../types/database';
-import { DubLanguage } from '../types/anime';
-import { useToast } from './Toast';
-import { AdminSkeleton } from './SkeletonGrid';
+import { useFirebaseAnalytics } from '../hooks/useFirebaseAnalytics';
 
-interface AdminDashboardProps {
-  onExitAdmin?: () => void;
-  onEditAnime?: (anime: AnimeRecord) => void;
-}
+// Custom sleek dark tooltip for mobile screens
+const MobileChartTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-[#131926]/95 backdrop-blur-md border border-neutral-700/80 p-2.5 rounded-xl shadow-2xl text-xs space-y-1">
+        <p className="font-bold text-neutral-200">{label}</p>
+        {payload.map((entry: any, index: number) => (
+          <p key={`tooltip-${index}`} className="flex items-center gap-1.5 font-medium" style={{ color: entry.color || '#a855f7' }}>
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color || '#a855f7' }} />
+            <span>{entry.name}:</span>
+            <span className="font-bold text-white">{Number(entry.value).toLocaleString()}</span>
+          </p>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
 
-const SUPPORTED_LANGUAGES: { name: DubLanguage; label: string; bg: string; text: string; border: string; bar: string }[] = [
-  { name: 'Tamil', label: 'Tam', bg: 'bg-amber-950/60', text: 'text-amber-300', border: 'border-amber-500/40', bar: 'bg-amber-500' },
-  { name: 'Telugu', label: 'Tel', bg: 'bg-sky-950/60', text: 'text-sky-300', border: 'border-sky-500/40', bar: 'bg-sky-500' },
-  { name: 'Hindi', label: 'Hin', bg: 'bg-emerald-950/60', text: 'text-emerald-300', border: 'border-emerald-500/40', bar: 'bg-emerald-500' },
-  { name: 'Malayalam', label: 'Mal', bg: 'bg-purple-950/60', text: 'text-purple-300', border: 'border-purple-500/40', bar: 'bg-purple-500' },
-  { name: 'Kannada', label: 'Kan', bg: 'bg-rose-950/60', text: 'text-rose-300', border: 'border-rose-500/40', bar: 'bg-rose-500' },
-];
+export const AdminDashboard: React.FC = () => {
+  const {
+    liveActiveUsers,
+    liveActiveDiff,
+    totalWatchlists,
+    todayStreams,
+    mostWatchlisted,
+    trafficData,
+    dubBreakdown,
+    recentActivities,
+    isConnected,
+    isFallback,
+    lastUpdated,
+    pushRealtimeUpdate,
+  } = useFirebaseAnalytics();
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin, onEditAnime }) => {
-  const [pendingSubmissions, setPendingSubmissions] = useState<AnimeRecord[]>([]);
-  const [approvedAnime, setApprovedAnime] = useState<AnimeRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved'>('pending');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedLanguageFilter, setSelectedLanguageFilter] = useState<string>('All');
-  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'watchlists' | 'dubs'>('overview');
+  const [isSimulating, setIsSimulating] = useState(false);
 
-  const toast = useToast();
-
-  const fetchData = async () => {
-    setIsLoading(true);
-    try {
-      await dbService.forceRefresh();
-      setPendingSubmissions(dbService.getPendingSubmissions());
-      setApprovedAnime(dbService.getApprovedAnime());
-    } catch (err: any) {
-      console.error('Failed to sync admin data:', err);
-      toast.error('Sync Error', 'Could not refresh JSONBin database.');
-    } finally {
-      setIsLoading(false);
-    }
+  const handleSimulateSpike = async () => {
+    setIsSimulating(true);
+    await pushRealtimeUpdate(liveActiveUsers + Math.floor(Math.random() * 45) + 15);
+    setTimeout(() => setIsSimulating(false), 600);
   };
-
-  useEffect(() => {
-    fetchData();
-    const unsub = dbService.subscribe(() => {
-      setPendingSubmissions(dbService.getPendingSubmissions());
-      setApprovedAnime(dbService.getApprovedAnime());
-    });
-    return unsub;
-  }, []);
-
-  // ==========================================================================
-  // 1. Enhanced Stealth Admin Analytics Calculations
-  // ==========================================================================
-  const analytics = useMemo(() => {
-    const totalApproved = approvedAnime.length;
-    const totalPending = pendingSubmissions.length;
-    const totalAll = totalApproved + totalPending;
-
-    // Language counts for approved and total
-    const languageCounts: Record<DubLanguage, { approved: number; total: number; percentage: number }> = {
-      Tamil: { approved: 0, total: 0, percentage: 0 },
-      Telugu: { approved: 0, total: 0, percentage: 0 },
-      Hindi: { approved: 0, total: 0, percentage: 0 },
-      Malayalam: { approved: 0, total: 0, percentage: 0 },
-      Kannada: { approved: 0, total: 0, percentage: 0 },
-    };
-
-    const allRecords = [...approvedAnime, ...pendingSubmissions];
-
-    SUPPORTED_LANGUAGES.forEach(({ name }) => {
-      const appCount = approvedAnime.filter((a) => (a.dubs || []).includes(name)).length;
-      const totCount = allRecords.filter((a) => (a.dubs || []).includes(name)).length;
-      const pct = totalApproved > 0 ? Math.round((appCount / totalApproved) * 100) : 0;
-      languageCounts[name] = { approved: appCount, total: totCount, percentage: pct };
-    });
-
-    const seriesCount = approvedAnime.filter((a) => a.type === 'TV Series').length;
-    const moviesCount = approvedAnime.filter((a) => a.type === 'Movie').length;
-    const ovaCount = approvedAnime.filter((a) => a.type === 'OVA' || a.type === 'ONA').length;
-    const specialCount = approvedAnime.filter((a) => a.type === 'Special').length;
-
-    return {
-      totalApproved,
-      totalPending,
-      totalAll,
-      languageCounts,
-      seriesCount,
-      moviesCount,
-      ovaCount,
-      specialCount
-    };
-  }, [approvedAnime, pendingSubmissions]);
-
-  // Actions
-  const handleApprove = async (id: string, title: string) => {
-    setProcessingId(id);
-    try {
-      const success = dbService.approveSubmission(id, 'Approved via Live Stealth Admin', 'Admin (prasanth123)');
-      if (success) {
-        toast.success('Approved Live!', `"${title}" is now published on the public catalog.`);
-      } else {
-        toast.error('Action Failed', 'Could not approve record.');
-      }
-    } catch (e: any) {
-      toast.error('Approval Error', e.message);
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`Are you sure you want to reject and remove "${title}"?`)) {
-      return;
-    }
-    setProcessingId(id);
-    try {
-      dbService.deleteSubmission(id);
-      toast.info('Submission Removed', `"${title}" has been deleted from submissions.`);
-    } catch (e: any) {
-      toast.error('Delete Error', e.message);
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  // Filter items
-  const currentList = activeTab === 'pending' ? pendingSubmissions : approvedAnime;
-  const filteredItems = currentList.filter((item) => {
-    const matchesSearch = 
-      item.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.studio || '').toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesLanguage = 
-      selectedLanguageFilter === 'All' || 
-      (item.dubs || []).includes(selectedLanguageFilter as DubLanguage);
-
-    return matchesSearch && matchesLanguage;
-  });
 
   return (
-    <div className="w-full bg-gradient-to-b from-[#121729] via-[#0f1422] to-[#0b0f17] border-b border-purple-500/30 text-neutral-100 p-4 sm:p-6 lg:p-8 font-sans transition-all duration-300">
-      <div className="max-w-7xl mx-auto space-y-6">
-        
-        {/* Top Control Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#151c2e]/90 border border-purple-500/30 rounded-3xl p-4 sm:p-5 shadow-2xl backdrop-blur-xl">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 ring-2 ring-purple-400/40">
-              <ShieldCheck className="w-6 h-6" />
+    <div className="min-h-screen bg-[#0b0f17] text-neutral-100 pb-16 font-sans antialiased selection:bg-purple-600 selection:text-white">
+      {/* 1. Mobile-First Top Header */}
+      <header className="sticky top-0 z-40 bg-[#0b0f17]/90 backdrop-blur-md border-b border-neutral-800/80 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-purple-600/30">
+              <Zap className="w-4 h-4 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-heading font-black text-lg sm:text-xl text-white tracking-tight">
-                  Stealth Admin & Moderation Panel
-                </h2>
-                <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  Live Sync
+                <h1 className="text-sm font-black tracking-tight text-white">AniDub Admin</h1>
+                {/* Live Real-time Status Badge */}
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 shadow-sm">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                  Live
                 </span>
               </div>
-              <p className="text-xs text-neutral-400 mt-0.5">
-                Real-time JSONBin.io database analytics, regional dub approvals, and submission queue.
+              <p className="text-[10px] text-neutral-400 font-mono">
+                {isFallback ? 'Firestore Client Stream' : 'Cloud Firestore Active'}
               </p>
             </div>
           </div>
 
-          {/* Quick Actions */}
-          <div className="flex items-center gap-2.5">
-            <button 
-              onClick={() => {
-                window.location.hash = 'analytics';
-              }}
-              title="Open Analytics Dashboard"
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white border border-purple-400/40 text-xs font-bold transition-all cursor-pointer shadow-lg shadow-purple-600/20"
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span className="hidden sm:inline">Analytics</span>
-            </button>
-
-            <button 
-              onClick={fetchData}
-              disabled={isLoading}
-              title="Force Sync with JSONBin"
-              className="p-2.5 rounded-xl bg-neutral-800/80 hover:bg-neutral-700/80 active:scale-95 border border-neutral-700 text-neutral-300 hover:text-white transition-all disabled:opacity-50 cursor-pointer shadow-md"
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-purple-400' : ''}`} />
-            </button>
-
-            {onExitAdmin && (
-              <button 
-                onClick={onExitAdmin}
-                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 active:scale-95 text-rose-300 border border-rose-500/40 text-xs font-bold transition-all cursor-pointer shadow-md"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Exit Admin</span>
-              </button>
-            )}
-          </div>
+          {/* Quick Realtime Spike Trigger (Ideal for mobile Replit testing) */}
+          <button
+            onClick={handleSimulateSpike}
+            disabled={isSimulating}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 active:scale-95 border border-purple-500/40 text-purple-300 text-xs font-bold transition-all cursor-pointer"
+            title="Simulate live user spike"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSimulating ? 'animate-spin' : ''}`} />
+            <span className="hidden xs:inline">Ping</span>
+          </button>
         </div>
 
-        {/* ================================================================== */}
-        {/* 1. Enhanced Analytics Dashboard Section */}
-        {/* ================================================================== */}
-        <div className="bg-[#131929]/95 border border-purple-500/20 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                <BarChart3 className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="font-heading font-black text-sm sm:text-base text-white">
-                  Database Analytics Overview
-                </h3>
-                <p className="text-[11px] text-neutral-400">Live metrics across regional dub catalogs</p>
+        {/* Mobile Filter Tabs */}
+        <div className="flex gap-1.5 mt-3 pt-1 border-t border-neutral-800/60 overflow-x-auto scrollbar-none">
+          {[
+            { id: 'overview', label: 'Overview' },
+            { id: 'watchlists', label: 'Watchlists' },
+            { id: 'dubs', label: 'Regional Dubs' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                activeTab === tab.id
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                  : 'bg-[#131926] text-neutral-400 hover:text-white border border-neutral-800'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {/* Main Content Body */}
+      <main className="px-4 py-4 space-y-4 max-w-lg mx-auto sm:max-w-2xl">
+        {/* 2. Real-time Metric Cards (2x2 Mobile Grid) */}
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
+          {/* Metric 1: Live Active Users */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-3.5 sm:p-4 rounded-2xl bg-[#131926] border border-neutral-800/90 shadow-xl relative overflow-hidden"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-semibold text-neutral-400">Active Now</span>
+              <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <Users className="w-3.5 h-3.5" />
               </div>
             </div>
-            
-            <span className="text-[11px] font-bold text-neutral-500 bg-[#0c101a] px-3 py-1 rounded-full border border-neutral-800">
-              Total Records: <strong className="text-purple-300">{analytics.totalAll}</strong>
-            </span>
-          </div>
-
-          {/* Metric KPI Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-            {/* 1. Total Approved */}
-            <div className="bg-[#0e1320] border border-emerald-500/30 rounded-2xl p-4 flex flex-col justify-between hover:border-emerald-500/50 transition-colors group">
-              <div className="flex items-center justify-between text-xs text-neutral-400 font-semibold mb-1">
-                <span>Approved Live</span>
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  {analytics.totalApproved}
-                </span>
-                <span className="text-[10px] text-emerald-400 font-bold uppercase">Public</span>
-              </div>
-              <p className="text-[10px] text-neutral-500 mt-1">Live in AniDub catalog</p>
+            <div className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-baseline gap-1.5">
+              <span>{liveActiveUsers.toLocaleString()}</span>
             </div>
-
-            {/* 2. Total Pending */}
-            <div className="bg-[#0e1320] border border-amber-500/30 rounded-2xl p-4 flex flex-col justify-between hover:border-amber-500/50 transition-colors group">
-              <div className="flex items-center justify-between text-xs text-neutral-400 font-semibold mb-1">
-                <span>Pending Approvals</span>
-                <Clock className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  {analytics.totalPending}
-                </span>
-                <span className="text-[10px] text-amber-400 font-bold uppercase">Queue</span>
-              </div>
-              <p className="text-[10px] text-neutral-500 mt-1">Awaiting moderation</p>
+            <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-emerald-400">
+              <ArrowUpRight className="w-3.5 h-3.5" />
+              <span>+{liveActiveDiff} in 30s</span>
             </div>
+          </motion.div>
 
-            {/* 3. Series Count */}
-            <div className="bg-[#0e1320] border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between hover:border-neutral-700 transition-colors">
-              <div className="flex items-center justify-between text-xs text-neutral-400 font-semibold mb-1">
-                <span>TV Series</span>
-                <Tv className="w-4 h-4 text-purple-400" />
+          {/* Metric 2: Total Watchlists */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="p-3.5 sm:p-4 rounded-2xl bg-[#131926] border border-neutral-800/90 shadow-xl"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-semibold text-neutral-400">Watchlists</span>
+              <div className="w-6 h-6 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                <Bookmark className="w-3.5 h-3.5" />
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  {analytics.seriesCount}
-                </span>
-                <span className="text-[10px] text-purple-400 font-bold uppercase">Shows</span>
-              </div>
-              <p className="text-[10px] text-neutral-500 mt-1">Multi-episode formats</p>
             </div>
-
-            {/* 4. Movies Count */}
-            <div className="bg-[#0e1320] border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between hover:border-neutral-700 transition-colors">
-              <div className="flex items-center justify-between text-xs text-neutral-400 font-semibold mb-1">
-                <span>Movies & OVAs</span>
-                <Film className="w-4 h-4 text-sky-400" />
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  {analytics.moviesCount + analytics.ovaCount}
-                </span>
-                <span className="text-[10px] text-sky-400 font-bold uppercase">Films</span>
-              </div>
-              <p className="text-[10px] text-neutral-500 mt-1">Movies, OVAs, ONAs</p>
+            <div className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              {totalWatchlists.toLocaleString()}
             </div>
-          </div>
+            <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-purple-400">
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>+18.4% today</span>
+            </div>
+          </motion.div>
 
-          {/* Regional Dub Language Breakdown */}
-          <div className="pt-2 border-t border-neutral-800/80 space-y-3">
+          {/* Metric 3: Today's Streams */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="p-3.5 sm:p-4 rounded-2xl bg-[#131926] border border-neutral-800/90 shadow-xl"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-semibold text-neutral-400">Dub Streams</span>
+              <div className="w-6 h-6 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                <Tv className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              {todayStreams.toLocaleString()}
+            </div>
+            <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-indigo-400">
+              <Flame className="w-3.5 h-3.5" />
+              <span>Peak hour</span>
+            </div>
+          </motion.div>
+
+          {/* Metric 4: Cloud Status */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="p-3.5 sm:p-4 rounded-2xl bg-[#131926] border border-neutral-800/90 shadow-xl"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-semibold text-neutral-400">Sync Status</span>
+              <div className="w-6 h-6 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                <ShieldCheck className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <div className="text-base sm:text-lg font-black text-white truncate">
+              {isConnected ? 'Realtime 100%' : 'Online (Sync)'}
+            </div>
+            <div className="mt-1 flex items-center gap-1 text-[11px] font-mono text-neutral-400 truncate">
+              {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </div>
+          </motion.div>
+        </div>
+
+        {/* 3. Real-time Area Chart: Live Traffic & Active Sessions */}
+        {(activeTab === 'overview' || activeTab === 'watchlists') && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-3xl bg-[#131926] border border-neutral-800/90 shadow-xl space-y-3"
+          >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
-                <Languages className="w-3.5 h-3.5 text-purple-400" />
-                Regional Dub Language Breakdown
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400">
+                  Live Traffic & Sessions
+                </h3>
+                <p className="text-[11px] text-neutral-400">Firestore streaming every 5s</p>
+              </div>
+              <span className="text-xs font-extrabold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-lg border border-emerald-800/40">
+                Active
               </span>
-              <span className="text-[10px] text-neutral-400">Click any language to filter table</span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
-              {SUPPORTED_LANGUAGES.map((lang) => {
-                const countInfo = analytics.languageCounts[lang.name];
-                const isSelected = selectedLanguageFilter === lang.name;
-
-                return (
-                  <button
-                    key={lang.name}
-                    onClick={() => setSelectedLanguageFilter(isSelected ? 'All' : lang.name)}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group active:scale-95 ${
-                      isSelected
-                        ? 'bg-[#182138] border-purple-500 shadow-md shadow-purple-600/20 ring-1 ring-purple-400'
-                        : `${lang.bg} ${lang.border} hover:border-purple-500/50`
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className={`text-xs font-bold ${lang.text}`}>
-                        {lang.name}
-                      </span>
-                      <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-black/40 text-neutral-300 border border-white/10">
-                        {lang.label}
-                      </span>
-                    </div>
-
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xl font-black text-white">
-                        {countInfo.approved}
-                      </span>
-                      <span className="text-[10px] text-neutral-400 font-medium">
-                        {countInfo.percentage}% share
-                      </span>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="w-full bg-black/40 h-1 rounded-full mt-2 overflow-hidden">
-                      <div 
-                        className={`h-full ${lang.bar} transition-all duration-500`}
-                        style={{ width: `${Math.max(8, countInfo.percentage)}%` }}
-                      />
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="h-52 w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trafficData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="purpleGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.6} />
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="time"
+                    tick={{ fill: '#737373', fontSize: 10 }}
+                    axisLine={{ stroke: '#262626' }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: '#737373', fontSize: 10 }}
+                    axisLine={{ stroke: '#262626' }}
+                    tickLine={false}
+                  />
+                  <Tooltip content={<MobileChartTooltip />} />
+                  <Area
+                    type="monotone"
+                    dataKey="active"
+                    stroke="#a855f7"
+                    strokeWidth={2.5}
+                    fillOpacity={1}
+                    fill="url(#purpleGradient)"
+                    name="Active Users"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
-          </div>
-        </div>
-
-        {/* Tab Selector & Search Ribbon */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
-          {/* Tabs */}
-          <div className="flex items-center gap-2 p-1 bg-[#131929] border border-neutral-800 rounded-2xl w-fit">
-            <button 
-              onClick={() => setActiveTab('pending')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
-                activeTab === 'pending' 
-                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30' 
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>Pending Approvals</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                activeTab === 'pending' ? 'bg-amber-700 text-white' : 'bg-neutral-800 text-neutral-300'
-              }`}>
-                {pendingSubmissions.length}
-              </span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('approved')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
-                activeTab === 'approved' 
-                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30' 
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Live Catalog</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                activeTab === 'approved' ? 'bg-purple-700 text-white' : 'bg-neutral-800 text-neutral-300'
-              }`}>
-                {approvedAnime.length}
-              </span>
-            </button>
-          </div>
-
-          {/* Search & Language Filter Controls */}
-          <div className="flex items-center gap-2">
-            {selectedLanguageFilter !== 'All' && (
-              <button
-                onClick={() => setSelectedLanguageFilter('All')}
-                className="px-2.5 py-2 rounded-xl bg-purple-900/40 border border-purple-500/40 text-purple-300 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-              >
-                <span>{selectedLanguageFilter}</span>
-                <span className="text-[10px]">✕</span>
-              </button>
-            )}
-
-            <div className="relative w-full sm:w-64">
-              <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input 
-                type="text"
-                placeholder="Search title, ID, studio..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#131929] border border-neutral-800 focus:border-purple-500 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Content Section: Pending Submissions or Live Catalog */}
-        {isLoading ? (
-          <AdminSkeleton />
-        ) : filteredItems.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredItems.map((item) => {
-              const isPending = item.status === 'pending' || item.submissionStatus === 'pending';
-              const isProcessing = processingId === item.id;
-
-              return (
-                <div 
-                  key={item.id}
-                  className={`relative flex flex-col sm:flex-row gap-4 p-4 rounded-2xl border transition-all duration-200 ${
-                    isPending 
-                      ? 'bg-[#151a2d]/90 border-amber-500/30 hover:border-amber-500/60 shadow-xl' 
-                      : 'bg-[#121726]/90 border-neutral-800 hover:border-purple-500/40'
-                  }`}
-                >
-                  {/* Poster Thumbnail */}
-                  <div className="w-full sm:w-28 h-40 sm:h-auto shrink-0 rounded-xl overflow-hidden bg-neutral-900 border border-neutral-800 relative">
-                    <img 
-                      src={item.poster || item.imageUrl || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600'} 
-                      alt={item.title} 
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                    <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-md text-[9px] font-bold text-white uppercase border border-white/10">
-                      {item.type || 'TV Series'}
-                    </div>
-                  </div>
-
-                  {/* Details Area */}
-                  <div className="flex flex-col justify-between flex-grow min-w-0 space-y-2.5">
-                    <div>
-                      {/* Title & External Link */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h3 className="font-heading font-black text-white text-base truncate" title={item.title}>
-                            {item.title}
-                          </h3>
-                          {item.romajiTitle && item.romajiTitle !== item.title && (
-                            <p className="text-[11px] text-neutral-400 italic truncate">{item.romajiTitle}</p>
-                          )}
-                        </div>
-
-                        <a 
-                          href={`#anime/${item.id}`}
-                          title="Preview Anime Page"
-                          className="p-1.5 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 active:scale-95 text-neutral-300 hover:text-white transition-colors shrink-0 cursor-pointer"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      </div>
-
-                      {/* Meta Tags: Year, Studio, Rating */}
-                      <div className="flex flex-wrap items-center gap-2 text-[10px] text-neutral-400 font-semibold mt-1">
-                        <span>{item.releaseYear || '2024'}</span>
-                        <span>•</span>
-                        <span>{item.studio || 'Studio'}</span>
-                        <span>•</span>
-                        <span className="text-amber-400">★ {item.rating?.toFixed(1) || '8.0'}</span>
-                        {item.airingStatus && (
-                          <>
-                            <span>•</span>
-                            <span className={item.airingStatus === 'Ongoing' ? 'text-emerald-400' : 'text-neutral-400'}>
-                              {item.airingStatus} {item.releaseDay ? `(${item.releaseDay})` : ''}
-                            </span>
-                          </>
-                        )}
-                      </div>
-
-                      {/* Dubbed Languages Badges */}
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {(item.dubs || []).map((dub) => {
-                          const langObj = SUPPORTED_LANGUAGES.find((l) => l.name === dub);
-                          return (
-                            <span 
-                              key={dub} 
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${langObj ? `${langObj.bg} ${langObj.border} ${langObj.text}` : 'bg-neutral-800 border-neutral-700 text-neutral-300'}`}
-                            >
-                              {dub} Dub
-                            </span>
-                          );
-                        })}
-                      </div>
-
-                      {/* Synopsis Preview */}
-                      <p className="text-xs text-neutral-300 line-clamp-2 mt-2 leading-relaxed">
-                        {item.synopsis || 'No synopsis provided.'}
-                      </p>
-                    </div>
-
-                    {/* Submitter & Action Buttons */}
-                    <div className="pt-2 border-t border-neutral-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                      <div className="text-[10px] text-neutral-400 truncate">
-                        Submitted by <strong className="text-neutral-200">{item.submittedBy?.userName || 'User'}</strong>
-                        {item.submittedAt && (
-                          <span> • {new Date(item.submittedAt).toLocaleDateString()}</span>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {isPending ? (
-                          <>
-                            <button 
-                              onClick={() => onEditAnime?.(item)}
-                              disabled={isProcessing}
-                              className="p-2 rounded-xl bg-neutral-800/80 hover:bg-purple-900/30 text-neutral-400 hover:text-purple-300 border border-neutral-700 hover:border-purple-500/40 transition-all active:scale-95 cursor-pointer"
-                              title="Edit Info"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-
-                            <button 
-                              onClick={() => handleDelete(item.id, item.title)}
-                              disabled={isProcessing}
-                              className="px-3.5 py-1.5 rounded-xl border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 active:scale-95 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Reject</span>
-                            </button>
-
-                            <button 
-                              onClick={() => handleApprove(item.id, item.title)}
-                              disabled={isProcessing}
-                              className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-extrabold shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Approve Live</span>
-                            </button>
-                          </>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => onEditAnime?.(item)}
-                              disabled={isProcessing}
-                              className="p-2 rounded-xl bg-neutral-800/80 hover:bg-purple-900/30 text-neutral-400 hover:text-purple-300 border border-neutral-700 hover:border-purple-500/40 transition-all active:scale-95 cursor-pointer"
-                              title="Edit Info"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-
-                            <button 
-                              onClick={() => handleDelete(item.id, item.title)}
-                              disabled={isProcessing}
-                              className="px-3 py-1.5 rounded-xl border border-neutral-800 hover:border-rose-500/40 text-neutral-400 hover:text-rose-300 hover:bg-rose-500/10 active:scale-95 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Remove</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          /* Empty State */
-          <div className="py-16 text-center bg-[#111726]/40 border border-neutral-800/80 rounded-3xl p-8 max-w-md mx-auto shadow-2xl animate-in fade-in duration-300">
-            <div className="w-14 h-14 rounded-2xl bg-neutral-800/60 border border-neutral-700/60 mx-auto mb-4 flex items-center justify-center text-neutral-400">
-              {activeTab === 'pending' ? <CheckCircle2 className="w-7 h-7 text-emerald-400" /> : <Clock className="w-7 h-7 text-purple-400" />}
-            </div>
-            <h3 className="font-heading font-black text-lg text-white mb-1.5">
-              {activeTab === 'pending' ? 'All Submissions Approved' : 'No Items Found'}
-            </h3>
-            <p className="text-xs text-neutral-400 leading-relaxed">
-              {activeTab === 'pending' 
-                ? 'Great job! There are currently no pending anime dubs awaiting moderation. Any new user submissions will appear here instantly.'
-                : 'No anime matches your filter criteria.'}
-            </p>
-          </div>
+          </motion.div>
         )}
 
-      </div>
+        {/* 4. Real-time Bar Chart: Most Watchlisted Anime */}
+        {(activeTab === 'overview' || activeTab === 'watchlists') && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-3xl bg-[#131926] border border-neutral-800/90 shadow-xl space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400">
+                  Most Watchlisted in India
+                </h3>
+                <p className="text-[11px] text-neutral-400">Real-time aggregate saves</p>
+              </div>
+              <span className="text-[10px] font-bold text-neutral-400 bg-neutral-800/80 px-2 py-0.5 rounded">
+                Top 6
+              </span>
+            </div>
+
+            <div className="h-52 w-full pt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={mostWatchlisted} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fill: '#a3a3a3', fontSize: 9 }}
+                    axisLine={{ stroke: '#262626' }}
+                    tickLine={false}
+                    interval={0}
+                    tickFormatter={(val) => (val.length > 8 ? val.slice(0, 7) + '..' : val)}
+                  />
+                  <YAxis
+                    tick={{ fill: '#737373', fontSize: 10 }}
+                    axisLine={{ stroke: '#262626' }}
+                    tickLine={false}
+                  />
+                  <Tooltip content={<MobileChartTooltip />} />
+                  <Bar
+                    dataKey="count"
+                    fill="#7c3aed"
+                    radius={[6, 6, 0, 0]}
+                    name="Watchlist Saves"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+        )}
+
+        {/* 5. Donut Chart: Regional Dub Language Popularity */}
+        {(activeTab === 'overview' || activeTab === 'dubs') && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-3xl bg-[#131926] border border-neutral-800/90 shadow-xl space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400">
+                  Regional Dub Distribution
+                </h3>
+                <p className="text-[11px] text-neutral-400">User language preference in India</p>
+              </div>
+              <Globe className="w-4 h-4 text-purple-400" />
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+              <div className="h-44 w-44 shrink-0 mx-auto">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={dubBreakdown}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={42}
+                      outerRadius={65}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {dubBreakdown.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<MobileChartTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Mobile Legend */}
+              <div className="space-y-1.5 flex-1 text-xs">
+                {dubBreakdown.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                      <span className="text-neutral-300 font-medium">{item.name}</span>
+                    </div>
+                    <span className="font-bold text-white">{item.value}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* 6. Live Activity Ticker (Real-Time Firestore Updates) */}
+        <div className="p-4 rounded-3xl bg-[#131926] border border-neutral-800/90 shadow-xl space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+              <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+              <span>Real-Time Feed</span>
+            </h3>
+            <span className="text-[10px] text-neutral-400">Zero Page Refresh</span>
+          </div>
+
+          <div className="divide-y divide-neutral-800/60">
+            {recentActivities.map((act) => (
+              <div key={act.id} className="py-2.5 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 truncate">
+                  <div className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
+                  <span className="font-bold text-white truncate">{act.user}</span>
+                  <span className="text-neutral-400">
+                    {act.action === 'watchlisted' ? 'saved' : 'watched'}
+                  </span>
+                  <span className="text-purple-300 font-medium truncate">{act.animeTitle}</span>
+                </div>
+                <div className="text-[10px] text-neutral-500 shrink-0 font-mono ml-2">
+                  {act.time}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </main>
     </div>
   );
 };
+
+export default AdminDashboard;

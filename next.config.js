@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  allowedDevOrigins: [
+    '*.run.app',
+    'ais-dev-6p7rzfmrynewixau5fp7yy-712933804987.asia-southeast1.run.app',
+    'localhost:3000',
+  ],
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },

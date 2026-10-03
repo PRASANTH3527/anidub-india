@@ -135,7 +135,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   };
 
   return (
-    <div className="relative group">
+    <motion.div layout className="relative group">
       {/* Background Indicators for Swipe */}
       <motion.div 
         style={{ opacity: backgroundOpacityLeft }}
@@ -164,13 +164,15 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
             onClick={() => onSelect(anime)}
             className="flex flex-col h-full bg-[#131926] group/inner"
           >
-            {/* Poster Section */}
+            {/* Poster Section (Shared Element Transition) */}
             <motion.div 
               layoutId={`anime-poster-${anime.id}`}
+              transition={{ type: "spring", stiffness: 350, damping: 28 }}
               className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900"
             >
               {!imageError ? (
                 <motion.img
+                  layoutId={`anime-poster-img-${anime.id}`}
                   src={displayImage}
                   alt={anime.title}
                   onError={() => setImageError(true)}
@@ -290,6 +292,6 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
           </div>
         </ParallaxCard>
       </motion.div>
-    </div>
+    </motion.div>
   );
 };

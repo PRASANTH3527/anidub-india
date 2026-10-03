@@ -27,6 +27,7 @@ import { DubReview } from '../types/database';
 import { dbService } from '../services/databaseService';
 import { authService } from '../services/authService';
 import { updateSeoTags, buildAnimeSeo } from '../utils/seo';
+import DynamicAmbientGlow from './DynamicAmbientGlow';
 
 interface AnimeDetailPageProps {
   anime: Anime;
@@ -151,7 +152,13 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const heroImage = anime.imageUrl || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-8 animate-fadeIn">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-8"
+    >
       
       {/* Top Navigation & Breadcrumbs */}
       <div className="flex items-center justify-between">
@@ -189,8 +196,13 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </div>
       </div>
 
-      {/* Main Hero Header Card */}
-      <div className="relative rounded-3xl overflow-hidden bg-[#131926] border border-neutral-800 shadow-2xl">
+      {/* Main Hero Header Card (Motion Wrapper) */}
+      <motion.div 
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="relative rounded-3xl overflow-hidden bg-[#131926] border border-neutral-800 shadow-2xl"
+      >
         {/* Blurred Backdrop Banner */}
         <div className="relative h-64 sm:h-80 w-full overflow-hidden bg-gradient-to-r from-purple-950 via-slate-900 to-neutral-900">
           <img
@@ -204,27 +216,16 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         {/* Content overlapping banner */}
         <div className="relative px-6 sm:px-10 pb-8 -mt-36 sm:-mt-48 flex flex-col md:flex-row gap-6 md:gap-8 items-start">
           
-          {/* Main Poster with Spotify-like Cinematic Ambient Glow UI */}
-          <div className="relative shrink-0 mx-auto md:mx-0 group">
-            {/* Cinematic Ambient Glow Behind Poster (blur-3xl and opacity classes) */}
-            <div className="absolute -inset-4 sm:-inset-6 rounded-3xl overflow-hidden pointer-events-none -z-0">
-              {/* Blurred Ambient Mirror Poster */}
-              <img
-                src={heroImage}
-                alt=""
-                aria-hidden="true"
-                className="w-full h-full object-cover blur-3xl opacity-50 sm:opacity-60 scale-125 animate-pulse transition-opacity duration-1000"
-              />
-              {/* Atmospheric Gradient Blend */}
-              <div className="absolute inset-0 bg-gradient-to-tr from-purple-600/40 via-transparent to-indigo-600/30 mix-blend-screen blur-2xl" />
-            </div>
-
-            {/* Poster Card */}
+          {/* Main Poster with Spotify/Apple TV Cinematic Dynamic Ambient Glow */}
+          <DynamicAmbientGlow imageUrl={heroImage} className="shrink-0 mx-auto md:mx-0 group">
+            {/* Poster Card (Shared Element Transition) */}
             <motion.div 
               layoutId={`anime-poster-${anime.id}`}
+              transition={{ type: "spring", stiffness: 350, damping: 28 }}
               className="relative z-10 w-44 sm:w-56 aspect-[3/4.2] rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.85)] border-2 border-neutral-700/80 bg-neutral-900 group-hover:scale-[1.02] transition-transform duration-300"
             >
-              <img
+              <motion.img
+                layoutId={`anime-poster-img-${anime.id}`}
                 src={heroImage}
                 alt={anime.title}
                 className="w-full h-full object-cover"
@@ -240,7 +241,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 ))}
               </div>
             </motion.div>
-          </div>
+          </DynamicAmbientGlow>
 
           {/* Title & Core Metadata */}
           <div className="flex-grow space-y-4 text-center md:text-left">
@@ -343,7 +344,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           </div>
 
         </div>
-      </div>
+      </motion.div>
 
       {/* Main Grid: Details, Characters & Dub Information */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -917,6 +918,6 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </div>
       )}
 
-    </div>
+    </motion.div>
   );
 };

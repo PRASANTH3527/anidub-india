@@ -25,6 +25,7 @@ class DatabaseService {
   }
 
   private initDatabase() {
+    if (typeof window === 'undefined') return;
     try {
       // Clear legacy dummy/mock placeholder data to start completely fresh
       if (!localStorage.getItem(CLEAN_SLATE_KEY)) {

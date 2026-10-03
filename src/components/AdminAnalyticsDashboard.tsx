@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { AnimeRecord } from '../types/database';
+import AdminDashboard from './AdminDashboard';
 
 interface AdminAnalyticsDashboardProps {
   allAnime: AnimeRecord[];
@@ -43,6 +44,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
   allAnime,
   onBack,
 }) => {
+  const [viewMode, setViewMode] = React.useState<'mobile_stream' | 'desktop_console'>('mobile_stream');
   // Mock Data for Charts (since real historical data isn't in localStorage yet)
   const dailyTrafficData = [
     { name: 'Mon', views: 2400, users: 400 },
@@ -114,9 +116,9 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
   ];
 
   return (
-    <div className="min-h-screen bg-[#0b0f17] text-white p-4 sm:p-6 lg:p-8 animate-in fade-in duration-500">
+    <div className="min-h-screen bg-[#0b0f17] text-white p-3 sm:p-6 lg:p-8 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-2 text-purple-400 mb-1">
             <LayoutDashboard className="w-4 h-4" />
@@ -127,20 +129,45 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
           </h1>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#121829] border border-neutral-800 text-[10px] font-bold text-neutral-400">
-            <Clock className="w-3 h-3" />
-            <span>Updated 2 mins ago</span>
+        <div className="flex items-center gap-2">
+          {/* View Toggle */}
+          <div className="flex items-center p-1 rounded-xl bg-[#121829] border border-neutral-800 text-xs">
+            <button
+              onClick={() => setViewMode('mobile_stream')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                viewMode === 'mobile_stream'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              Real-time Firestore
+            </button>
+            <button
+              onClick={() => setViewMode('desktop_console')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                viewMode === 'desktop_console'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              All Metrics
+            </button>
           </div>
+
           <button 
             onClick={onBack}
-            className="px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold transition-all cursor-pointer border border-neutral-700 active:scale-95"
+            className="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold transition-all cursor-pointer border border-neutral-700 active:scale-95"
           >
-            Exit Dashboard
+            Exit
           </button>
         </div>
       </div>
 
+      {viewMode === 'mobile_stream' ? (
+        <div className="max-w-2xl mx-auto -mt-2">
+          <AdminDashboard />
+        </div>
+      ) : (
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Stat Grid */}
@@ -397,6 +424,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
         </div>
 
       </div>
+      )}
     </div>
   );
 };

@@ -4,11 +4,16 @@ import SWRegister from '../components/SWRegister';
 
 const DEFAULT_BANNER = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&h=630&fit=crop&q=85';
 
+export const viewport = {
+  themeColor: '#7c3aed',
+  width: 'device-width',
+  initialScale: 1,
+};
+
 export const metadata = {
   title: 'AniDub India — Tamil, Telugu & Hindi Dubbed Anime Directory',
   description: 'Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them legally on Crunchyroll, Netflix, and JioCinema.',
   manifest: '/manifest.json',
-  themeColor: '#7c3aed',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

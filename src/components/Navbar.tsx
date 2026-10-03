@@ -96,23 +96,23 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Primary Nav Tabs (Hidden on mobile - moved to BottomNav) */}
-        <nav className="hidden sm:flex items-center gap-1 sm:gap-2">
+        {/* Primary Nav Tabs (Icon-only minimalist design) */}
+        <nav className="hidden sm:flex items-center gap-1.5 md:gap-2">
           {/* Library / Directory */}
           <button
             onClick={() => setActiveTab('library')}
-            className={`flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
               activeTab === 'library'
-                ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme/50 shadow-sm'
+                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
             }`}
             title={translate('navDirectory', uiLanguage)}
+            aria-label={translate('navDirectory', uiLanguage)}
           >
-            <Compass className="w-5 h-5 sm:w-4 sm:h-4" />
-            <span className="hidden md:inline">{translate('navDirectory', uiLanguage)}</span>
+            <Compass className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'library' ? 'scale-110' : ''}`} />
           </button>
 
-          {/* Search Shortcut (New for top nav mobile convenience) */}
+          {/* Search Shortcut */}
           <button
             onClick={() => {
               setActiveTab('library');
@@ -124,41 +124,41 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }
               }, 100);
             }}
-            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs sm:text-sm font-bold text-neutral-400 hover:text-white hover:bg-neutral-800/60 transition-all active:scale-90 cursor-pointer"
+            className="w-10 h-10 flex items-center justify-center rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800/60 transition-all active:scale-90 cursor-pointer"
             title="Search Anime"
+            aria-label="Search Anime"
           >
-            <Search className="w-5 h-5 sm:w-4 sm:h-4" />
-            <span className="hidden lg:inline">Search</span>
+            <Search className="w-5 h-5" />
           </button>
 
           {/* For You */}
           <button
             onClick={() => setActiveTab('foryou')}
-            className={`flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
               activeTab === 'foryou'
-                ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme/50 shadow-sm'
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
             }`}
             title={translate('navForYou', uiLanguage)}
+            aria-label={translate('navForYou', uiLanguage)}
           >
-            <Sparkles className="w-5 h-5 sm:w-4 sm:h-4 text-accent-theme" />
-            <span className="hidden md:inline">{translate('navForYou', uiLanguage)}</span>
+            <Sparkles className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'foryou' ? 'scale-110' : ''}`} />
           </button>
 
           {/* Watchlist */}
           <button
             onClick={() => setActiveTab('watchlist')}
-            className={`flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 active:scale-90 cursor-pointer relative ${
+            className={`relative w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
               activeTab === 'watchlist'
-                ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme/50 shadow-sm'
+                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
             }`}
             title={translate('navWatchlist', uiLanguage)}
+            aria-label={translate('navWatchlist', uiLanguage)}
           >
-            <Bookmark className="w-5 h-5 sm:w-4 sm:h-4 text-primary-theme" />
-            <span className="hidden md:inline">{translate('navWatchlist', uiLanguage)}</span>
+            <Bookmark className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'watchlist' ? 'scale-110 fill-purple-400/20' : ''}`} />
             {watchlistCount > 0 && (
-              <span className="absolute -top-1 -right-1 sm:static sm:ml-1 bg-primary-theme text-white text-[9px] font-black rounded-full px-1 py-0.2 min-w-[15px] text-center shadow-sm">
+              <span className="absolute -top-1 -right-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[9px] font-black rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5 border border-[#0b0f17] shadow-sm">
                 {watchlistCount}
               </span>
             )}
@@ -168,15 +168,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           {(isAdmin || currentUser?.email === 'prasanth01236@gmail.com') && (
             <button
               onClick={() => setActiveTab('analytics')}
-              className={`flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 active:scale-90 cursor-pointer ${
+              className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
                 activeTab === 'analytics'
                   ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50 shadow-sm'
                   : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
               }`}
               title="View Platform Analytics"
+              aria-label="Platform Analytics"
             >
-              <BarChart3 className="w-5 h-5 sm:w-4 sm:h-4 text-purple-400" />
-              <span className="hidden lg:inline text-purple-200">Analytics</span>
+              <BarChart3 className="w-5 h-5 text-purple-400" />
             </button>
           )}
 
@@ -189,15 +189,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setActiveTab('profile');
               }
             }}
-            className={`flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
               activeTab === 'profile'
-                ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme/50 shadow-sm'
+                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
             }`}
             title={translate('navProfile', uiLanguage)}
+            aria-label={translate('navProfile', uiLanguage)}
           >
-            <User className="w-5 h-5 sm:w-4 sm:h-4" />
-            <span className="hidden lg:inline">{translate('navProfile', uiLanguage)}</span>
+            <User className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'profile' ? 'scale-110' : ''}`} />
           </button>
         </nav>
 
@@ -206,6 +206,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Theme Toggle */}
           <button
             onClick={onToggleTheme}
+            suppressHydrationWarning
             className="p-2 sm:p-2.5 rounded-xl bg-neutral-800/60 hover:bg-neutral-700/80 active:scale-90 border border-neutral-700/40 text-neutral-400 hover:text-white transition-all cursor-pointer shadow-sm"
             title="Toggle Theme"
           >

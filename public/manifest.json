@@ -1,13 +1,14 @@
 {
+  "id": "/",
   "name": "AniDub India — Dubbed Anime Directory",
   "short_name": "AniDub",
   "description": "Discover anime dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0b0f17",
   "theme_color": "#7c3aed",
   "orientation": "portrait-primary",
-  "scope": "/",
   "icons": [
     {
       "src": "/icon.svg",
@@ -26,6 +27,32 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "shortcuts": [
+    {
+      "name": "Offline Watchlist",
+      "short_name": "Watchlist",
+      "description": "View your offline saved anime watchlist",
+      "url": "/#watchlist",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Add from Share Target",
+      "short_name": "Share",
+      "description": "Catch shared anime links from mobile share menu",
+      "url": "/share",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
     }
   ]
 }

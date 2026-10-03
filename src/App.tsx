@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useRef, Suspense, lazy } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Navbar, NavTab } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { AnimatedStats } from './components/AnimatedStats';
@@ -410,8 +411,10 @@ function AppContent() {
     window.location.reload();
   };
 
-  // Local Watchlist Toggle (No account required, saved in localStorage)
+  // Local Watchlist Toggle (No account required, saved in localStorage & PWA Background Sync)
   const handleToggleWatchlist = (anime: Anime) => {
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
     setLocalWatchlistIds((prev) => {
       let updated: string[];
       if (prev.includes(anime.id)) {
@@ -419,16 +422,38 @@ function AppContent() {
         toast.info('Removed from Watchlist', `"${anime.title}" was removed.`);
       } else {
         updated = [...prev, anime.id];
-        toast.success('Saved to Watchlist!', `"${anime.title}" saved to your personal local favorites.`);
+        if (isOffline) {
+          toast.info(
+            'Saved Offline - Will sync when connected',
+            `"${anime.title}" was saved locally. It will automatically sync once your connection is restored.`
+          );
+        } else {
+          toast.success('Saved to Watchlist!', `"${anime.title}" saved to your personal local favorites.`);
+        }
       }
       localStorage.setItem('anidub_local_watchlist', JSON.stringify(updated));
       return updated;
     });
 
-    if (currentUser) {
-      dbService.toggleWatchlist(currentUser.uid, anime.id);
-    }
+    const uid = currentUser?.uid || 'guest';
+    dbService.toggleWatchlist(uid, anime.id);
   };
+
+  // PWA Background Sync event listener
+  useEffect(() => {
+    const handleSyncComplete = (e: any) => {
+      const count = e.detail?.count || 0;
+      if (count > 0) {
+        toast.success(
+          'Synced with Cloud',
+          `${count} offline watchlist ${count === 1 ? 'item was' : 'items were'} synced successfully.`
+        );
+      }
+    };
+
+    window.addEventListener('pwa-sync-completed', handleSyncComplete);
+    return () => window.removeEventListener('pwa-sync-completed', handleSyncComplete);
+  }, []);
 
   const handleClearWatchlist = () => {
     if (confirm('Clear all saved anime from your personal watchlist?')) {
@@ -755,7 +780,7 @@ function AppContent() {
         </div>
       )}
 
-      <main className="flex-grow pt-28 sm:pt-20 pb-6 transition-all duration-500">
+      <main className="flex-grow pt-32 sm:pt-20 pb-6 transition-all duration-500">
         <PullToRefresh onRefresh={dbService.syncWithServer.bind(dbService)}>
           {/* Stealth Admin Dashboard Integration */}
           {isAdmin && activeTab === 'library' && (
@@ -769,20 +794,28 @@ function AppContent() {
 
         {/* 1. Dedicated Information Page (Route #anime/:id) */}
         <Suspense fallback={<div className="max-w-6xl mx-auto px-4 py-8"><SkeletonGrid count={4} /></div>}>
-          {currentViewingAnime ? (
-            <AnimeDetailPage
-              anime={currentViewingAnime}
-              watchlistItem={watchlistItemsForUI.find((w) => w.animeId === currentViewingAnime.id)}
-              onToggleWatchlist={handleToggleWatchlist}
-              onToggleWatchedStatus={handleToggleWatchedStatus}
-              onBack={handleBackToLibrary}
-              onSelectSimilarAnime={handleOpenAnimeDetail}
-              onOpenAuthModal={() => setIsAuthModalOpen(true)}
-              onReport={(anime) => setReportingAnime(anime)}
-              allAnime={approvedAnime}
-            />
-          ) : (
-            <>
+          <AnimatePresence mode="wait">
+            {currentViewingAnime ? (
+              <AnimeDetailPage
+                key={`anime-detail-${currentViewingAnime.id}`}
+                anime={currentViewingAnime}
+                watchlistItem={watchlistItemsForUI.find((w) => w.animeId === currentViewingAnime.id)}
+                onToggleWatchlist={handleToggleWatchlist}
+                onToggleWatchedStatus={handleToggleWatchedStatus}
+                onBack={handleBackToLibrary}
+                onSelectSimilarAnime={handleOpenAnimeDetail}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                onReport={(anime) => setReportingAnime(anime)}
+                allAnime={approvedAnime}
+              />
+            ) : (
+              <motion.div
+                key="catalog-view"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
+              >
               {/* 2. Main Dub Library (ONLY FETCHES APPROVED ANIME) */}
               {activeTab === 'library' && (
                 <>
@@ -1000,8 +1033,9 @@ function AppContent() {
                   onBack={() => handleTabChange('library')}
                 />
               )}
-            </>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </Suspense>
 
         </PullToRefresh>
