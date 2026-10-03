@@ -1,8 +1,8 @@
 import React from 'react';
 
-export const SkeletonCard: React.FC = () => {
+export const SkeletonCard: React.FC<{ className?: string }> = ({ className = '' }) => {
   return (
-    <div className="relative rounded-2xl overflow-hidden bg-[#131926] border border-neutral-800/80 flex flex-col group">
+    <div className={`relative rounded-2xl overflow-hidden bg-[#131926] border border-neutral-800/80 flex flex-col group ${className}`}>
       {/* Poster Skeleton with Shimmer Wave */}
       <div className="aspect-[3/4.2] w-full bg-neutral-800/60 relative overflow-hidden">
         <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_infinite] bg-gradient-to-r from-transparent via-white/5 to-transparent" />

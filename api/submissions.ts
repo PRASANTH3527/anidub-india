@@ -1,9 +1,15 @@
 // Next.js App Router & Vercel Serverless Function: api/submissions.ts
-// Direct JSONBin.io persistence with simple one-way Telegram notification.
+// Direct JSONBin.io persistence with Advanced Caching (Vercel KV/Redis).
+
+import { kv } from '@vercel/kv';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
+// Cache revalidation time (ISR) - 1 hour
+export const revalidate = 3600; 
+export const fetchCache = 'auto';
+
+const CACHE_KEY = 'anidub_submissions_v1';
+const CACHE_TTL = 3600; // 1 hour in seconds
 
 const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID;
 const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
@@ -32,6 +38,19 @@ export async function readJsonBin(): Promise<any[]> {
     return [];
   }
 
+  // 1. Try to serve from KV Cache first (Redis)
+  try {
+    const cachedData = await kv.get<any[]>(CACHE_KEY);
+    if (cachedData && Array.isArray(cachedData)) {
+      // Logic for background revalidation if needed can go here
+      // For now, serving from cache and manual invalidation on write is sufficient for ISR-like speed
+      console.info('[Cache] Serving from Vercel KV');
+      return cachedData;
+    }
+  } catch (kvErr) {
+    console.warn('[Cache] KV Read Error (bypassing):', kvErr);
+  }
+
   try {
     const res = await fetch(`${JSONBIN_URL}/latest`, {
       method: 'GET',
@@ -39,6 +58,7 @@ export async function readJsonBin(): Promise<any[]> {
         'X-Master-Key': JSONBIN_API_KEY,
         'X-Bin-Versioning': 'false',
       },
+      // ISR logic: fetch strictly but allow KV to manage the "stale" state if we were doing more complex logic
       cache: 'no-store',
     });
 
@@ -64,6 +84,10 @@ export async function readJsonBin(): Promise<any[]> {
 
     if (record && Array.isArray(record.submissions)) {
       const sanitized = sanitizeSubmissions(record.submissions);
+      
+      // Update Cache (Background)
+      kv.set(CACHE_KEY, sanitized, { ex: CACHE_TTL }).catch(e => console.warn('[Cache] KV Set Error:', e));
+
       if (sanitized.length !== record.submissions.length) {
         await writeJsonBin(sanitized);
       }
@@ -73,6 +97,10 @@ export async function readJsonBin(): Promise<any[]> {
     if (Array.isArray(record)) {
       // Legacy array format; normalize to { submissions: [...] }
       const sanitized = sanitizeSubmissions(record);
+      
+      // Update Cache (Background)
+      kv.set(CACHE_KEY, sanitized, { ex: CACHE_TTL }).catch(e => console.warn('[Cache] KV Set Error:', e));
+
       await writeJsonBin(sanitized);
       return sanitized;
     }
@@ -118,6 +146,13 @@ export async function writeJsonBin(data: any[]): Promise<boolean> {
       },
       body: JSON.stringify(fullRecord),
     });
+
+    if (res.ok) {
+      // Invalidate/Update Cache on mutation
+      const sanitized = fullRecord.submissions;
+      await kv.set(CACHE_KEY, sanitized, { ex: CACHE_TTL });
+      console.info('[Cache] Invalidated & Updated Vercel KV');
+    }
 
     return res.ok;
   } catch (err) {
@@ -323,6 +358,8 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const status = url.searchParams.get('status');
+    
+    // Serve from readJsonBin which has KV caching logic
     const all = await readJsonBin();
 
     if (status) {

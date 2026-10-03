@@ -12,7 +12,8 @@ import {
   ExternalLink,
   Upload,
   Plus,
-  Trash2
+  Trash2,
+  Star
 } from 'lucide-react';
 import { searchJikanAnime, formatJikanToAnime } from '../services/jikanApi';
 import { JikanAnimeResult, AnimeRecord } from '../types/database';
@@ -69,8 +70,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const currentUser = authService.getCurrentUser();
   const toast = useToast();
 
-  const isEditMode = !!editAnime;
-
   // Form Fields
   const [title, setTitle] = useState('');
   const [romajiTitle, setRomajiTitle] = useState('');
@@ -103,63 +102,106 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [airingStatus, setAiringStatus] = useState<'Ongoing' | 'Completed'>('Ongoing');
   const [releaseDay, setReleaseDay] = useState<ReleaseDay>('Saturday');
 
+  // Real-time Duplicate Check State
+  const [duplicateAnime, setDuplicateAnime] = useState<AnimeRecord | null>(null);
+  const [localEditAnime, setLocalEditAnime] = useState<AnimeRecord | null>(null);
+
+  // Jikan Search State
+  const [jikanResults, setJikanResults] = useState<JikanAnimeResult[]>([]);
+  const [isSearchingJikan, setIsSearchingJikan] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [autoFilled, setAutoFilled] = useState(false);
+
+  // Submission State
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Derived state
+  const isEditMode = !!editAnime || !!localEditAnime;
+  const activeAnime = editAnime || localEditAnime;
+
+  // Debounced Jikan API search
+  useEffect(() => {
+    if (!title || title.trim().length < 2 || autoFilled) {
+      setJikanResults([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingJikan(true);
+      try {
+        const results = await searchJikanAnime(title);
+        setJikanResults(results);
+        setShowDropdown(results.length > 0);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsSearchingJikan(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [title, autoFilled]);
+
   // Pre-fill if editing
   useEffect(() => {
-    if (editAnime && isOpen) {
-      setTitle(editAnime.title);
-      setRomajiTitle(editAnime.romajiTitle || '');
-      setPoster(editAnime.poster || '');
-      setSynopsis(editAnime.synopsis || '');
-      setReleaseYear(editAnime.releaseYear || new Date().getFullYear());
-      setType(editAnime.type || 'TV Series');
-      setStudio(editAnime.studio || '');
-      setGenres(editAnime.genres || ['Action']);
-      setAiringStatus(editAnime.status === 'Ongoing' ? 'Ongoing' : 'Completed');
-      if (editAnime.releaseDay) setReleaseDay(editAnime.releaseDay as ReleaseDay);
+    if (activeAnime && isOpen) {
+      setTitle(activeAnime.title);
+      setRomajiTitle(activeAnime.romajiTitle || '');
+      setPoster(activeAnime.poster || '');
+      setSynopsis(activeAnime.synopsis || '');
+      setReleaseYear(activeAnime.releaseYear || new Date().getFullYear());
+      setType(activeAnime.type || 'TV Series');
+      setStudio(activeAnime.studio || '');
+      setGenres(activeAnime.genres || ['Action']);
+      setAiringStatus(activeAnime.status === 'Ongoing' ? 'Ongoing' : 'Completed');
+      if (activeAnime.releaseDay) setReleaseDay(activeAnime.releaseDay as ReleaseDay);
       
-      if (editAnime.seasonDetails && editAnime.seasonDetails.length > 0) {
-        setSeasonDetails(editAnime.seasonDetails.map(s => ({
+      if (activeAnime.seasonDetails && activeAnime.seasonDetails.length > 0) {
+        setSeasonDetails(activeAnime.seasonDetails.map(s => ({
           type: s.type || 'Season',
           label: s.label || '1',
           episodeCount: s.episodeCount || 0,
-          languages: s.languages || (editAnime.dubs || ['Tamil'])
+          languages: s.languages || (activeAnime.dubs || ['Tamil'])
         })));
-      } else if (editAnime.totalSeasons || editAnime.episodesPerSeason) {
+      } else if (activeAnime.totalSeasons || activeAnime.episodesPerSeason) {
         // Fallback for older records
         setSeasonDetails([{ 
           type: 'Season', 
           label: '1', 
-          episodeCount: editAnime.episodesPerSeason || 12,
-          languages: editAnime.dubs || ['Tamil']
+          episodeCount: activeAnime.episodesPerSeason || 12,
+          languages: activeAnime.dubs || ['Tamil']
         }]);
       }
 
-      if (editAnime.currentSeason !== undefined && editAnime.currentSeason !== null) {
-        setCurrentSeason(editAnime.currentSeason);
+      if (activeAnime.currentSeason !== undefined && activeAnime.currentSeason !== null) {
+        setCurrentSeason(activeAnime.currentSeason);
       } else {
         setCurrentSeason('');
       }
 
-      if (editAnime.currentlyAiringEpisode !== undefined && editAnime.currentlyAiringEpisode !== null) {
-        setCurrentlyAiringEpisode(editAnime.currentlyAiringEpisode);
+      if (activeAnime.currentlyAiringEpisode !== undefined && activeAnime.currentlyAiringEpisode !== null) {
+        setCurrentlyAiringEpisode(activeAnime.currentlyAiringEpisode);
       } else {
         setCurrentlyAiringEpisode('');
       }
 
-      if (editAnime.rating !== undefined && editAnime.rating !== null) {
-        setRating(editAnime.rating);
+      if (activeAnime.rating !== undefined && activeAnime.rating !== null) {
+        setRating(activeAnime.rating);
       } else {
         setRating('');
       }
 
-      if (editAnime.platforms && editAnime.platforms.length > 0) {
-        setStreamingPartners(editAnime.platforms.map(p => ({
+      if (activeAnime.platforms && activeAnime.platforms.length > 0) {
+        setStreamingPartners(activeAnime.platforms.map(p => ({
           name: p.name as StreamingPlatform,
           url: p.url
         })));
       }
       setAutoFilled(true); // Treat as auto-filled so Jikan search doesn't trigger immediately
-    } else if (isOpen && !editAnime) {
+    } else if (isOpen && !activeAnime) {
       // Clear for new submission
       setTitle('');
       setRomajiTitle('');
@@ -179,7 +221,48 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setReleaseDay('Saturday');
       setAutoFilled(false);
     }
-  }, [editAnime, isOpen]);
+    
+    if (!isOpen) {
+      setLocalEditAnime(null);
+    }
+    
+    setDuplicateAnime(null);
+  }, [activeAnime, isOpen]);
+
+  // Real-time Duplicate Check Logic
+  useEffect(() => {
+    if (isEditMode || !title || title.trim().length < 3 || autoFilled) {
+      setDuplicateAnime(null);
+      return;
+    }
+
+    const debounceTimer = setTimeout(() => {
+      const allApproved = dbService.getApprovedAnime();
+      const allPending = dbService.getPendingSubmissions();
+      const allRecords = [...allApproved, ...allPending];
+      
+      const match = allRecords.find(a => 
+        a.title.toLowerCase().trim() === title.toLowerCase().trim() ||
+        (a.romajiTitle && a.romajiTitle.toLowerCase().trim() === title.toLowerCase().trim())
+      );
+
+      if (match) {
+        setDuplicateAnime(match);
+      } else {
+        setDuplicateAnime(null);
+      }
+    }, 500);
+
+    return () => clearTimeout(debounceTimer);
+  }, [title, isEditMode, autoFilled]);
+
+  const handleEditDuplicate = () => {
+    if (duplicateAnime) {
+      setLocalEditAnime(duplicateAnime);
+      setDuplicateAnime(null);
+      toast.info('Switched to Edit Mode', `Now editing existing entry for "${duplicateAnime.title}"`);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -258,41 +341,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     }
     updateEntryField(entryIdx, 'languages', updatedLangs);
   };
-
-  // Jikan Search State
-  const [jikanResults, setJikanResults] = useState<JikanAnimeResult[]>([]);
-  const [isSearchingJikan, setIsSearchingJikan] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [autoFilled, setAutoFilled] = useState(false);
-
-  // Submission State
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Debounced Jikan API search
-  useEffect(() => {
-    if (!title || title.trim().length < 2 || autoFilled) {
-      setJikanResults([]);
-      setShowDropdown(false);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      setIsSearchingJikan(true);
-      try {
-        const results = await searchJikanAnime(title);
-        setJikanResults(results);
-        setShowDropdown(results.length > 0);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsSearchingJikan(false);
-      }
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [title, autoFilled]);
 
   // Click outside listener for Jikan dropdown
   useEffect(() => {
@@ -505,8 +553,9 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         </div>
 
         {/* Content body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
-          {isSuccess ? (
+        <div className="flex-1 overflow-y-auto pb-32">
+          <div className="p-5 sm:p-6 space-y-4">
+            {isSuccess ? (
             <div className="py-8 text-center space-y-3">
               <div className="w-14 h-14 rounded-full bg-amber-950/70 border border-amber-500/50 flex items-center justify-center mx-auto text-amber-400 animate-bounce">
                 <CheckCircle2 className="w-7 h-7" />
@@ -547,6 +596,30 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                   />
                   <Search className="w-4 h-4 text-neutral-500 absolute right-3 top-3 pointer-events-none" />
                 </div>
+
+                {/* Duplicate Warning Alert */}
+                {duplicateAnime && (
+                  <div className="mt-2.5 bg-amber-950/30 border border-amber-500/40 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0 border border-amber-500/30">
+                        <ShieldAlert className="w-4 h-4 text-amber-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-black text-amber-500 text-[11px] uppercase tracking-wider">Duplicate Entry Found</p>
+                        <p className="text-xs text-neutral-200 font-medium">
+                          <span className="font-bold">"{duplicateAnime.title}"</span> already exists with <span className="text-amber-400 font-bold">{duplicateAnime.dubs.join(', ')}</span> dubs.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleEditDuplicate}
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-black uppercase tracking-tight transition-all active:scale-95 whitespace-nowrap shadow-lg shadow-amber-500/20"
+                    >
+                      Edit Existing Entry
+                    </button>
+                  </div>
+                )}
 
                 {/* Auto-fill Dropdown Results from Jikan */}
                 {showDropdown && jikanResults.length > 0 && (
@@ -931,17 +1004,22 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-neutral-400 mb-1">IMDb / MAL Rating</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="10"
-                    value={rating}
-                    onChange={(e) => setRating(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                    placeholder="e.g. 8.7"
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white placeholder-neutral-500 text-xs"
-                  />
+                  <label className="block font-bold text-neutral-400 mb-1 text-[10px] uppercase tracking-wider">Crunchyroll Rating</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="5"
+                      value={rating}
+                      onChange={(e) => setRating(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      placeholder="e.g. 4.8"
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white placeholder-neutral-500 text-xs focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition-all"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <Star className="w-3 h-3 text-orange-500 fill-orange-500" />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -957,25 +1035,41 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 </p>
               </div>
 
-              {/* Submit CTA */}
-              <button
-                type="submit"
-                disabled={isSubmitting || !title.trim()}
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-purple-600/30 transition-all disabled:opacity-50"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : isEditMode ? (
-                  <Plus className="w-4 h-4" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-                <span>{isEditMode ? 'Update Anime Details' : 'Submit Dub for Admin Approval'}</span>
-              </button>
-
+              {/* Submit CTA (Moved to Sticky Footer) */}
+              <div className="h-2" />
             </form>
           )}
         </div>
+
+        {/* Sticky Floating Submit Footer (Glassmorphism & Glowing) */}
+        {!isSuccess && (
+          <div className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-[#111726] via-[#111726]/95 to-transparent backdrop-blur-lg border-t border-white/5 z-50">
+            <button
+              onClick={() => {
+                const form = document.querySelector('form');
+                if (form) form.requestSubmit();
+              }}
+              disabled={isSubmitting || !title.trim()}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-purple-600 hover:from-orange-500 hover:via-amber-500 hover:to-purple-500 text-white font-black text-sm flex items-center justify-center gap-3 cursor-pointer shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed group"
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : isEditMode ? (
+                <div className="relative flex items-center gap-2">
+                  <Plus className="w-5 h-5" />
+                  <span>Update Anime Details</span>
+                </div>
+              ) : (
+                <div className="relative flex items-center gap-3">
+                  <div className="absolute -inset-1 bg-white rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity" />
+                  <Send className="w-5 h-5 relative" />
+                  <span>Submit Dub for Admin Approval</span>
+                </div>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
 
       </div>
     </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { 
   ArrowLeft, 
   Star, 
@@ -164,23 +165,27 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
         <div className="flex items-center gap-2">
           {onReport && (
-            <button
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={() => onReport(anime)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131926] hover:bg-rose-950/40 text-neutral-400 hover:text-rose-300 border border-neutral-800 hover:border-rose-500/40 text-xs font-semibold transition-all cursor-pointer active:scale-95"
               title="Report broken link or wrong info"
             >
               <Flag className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Report Issue</span>
-            </button>
+            </motion.button>
           )}
 
-          <button
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={handleShare}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131926] hover:bg-[#1a2336] text-neutral-300 hover:text-white border border-neutral-800 text-xs font-semibold transition-colors cursor-pointer"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
             <span>{copied ? 'Link Copied!' : 'Share'}</span>
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -275,9 +280,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             {/* Quick Metrics Bar */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 sm:gap-4 pt-1">
               <div className="flex items-center gap-1.5 bg-black/50 border border-neutral-700/80 px-3 py-1.5 rounded-xl">
-                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                <Star className="w-4 h-4 text-orange-500 fill-orange-500" />
                 <span className="font-extrabold text-white text-sm">{anime.rating ? anime.rating.toFixed(1) : 'N/A'}</span>
-                <span className="text-[11px] text-neutral-500">MAL Score</span>
+                <span className="text-[11px] text-orange-500 font-black">CR RATING</span>
               </div>
 
               <div className="flex items-center gap-1.5 bg-black/50 border border-purple-800/80 px-3 py-1.5 rounded-xl">
@@ -301,7 +306,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
             {/* Watchlist CTAs */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2">
-              <button
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => onToggleWatchlist(anime)}
                 className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg ${
                   isBookmarked
@@ -311,10 +318,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               >
                 <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
                 <span>{isBookmarked ? 'In Watchlist' : 'Add to Watchlist'}</span>
-              </button>
+              </motion.button>
 
               {isBookmarked && (
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => onToggleWatchedStatus(anime.id)}
                   className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
                     isWatched
@@ -324,7 +333,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 >
                   <CheckCircle2 className={`w-4 h-4 ${isWatched ? 'text-emerald-400' : 'text-neutral-500'}`} />
                   <span>{isWatched ? 'Completed / Watched' : 'Mark as Watched'}</span>
-                </button>
+                </motion.button>
               )}
             </div>
 
@@ -893,7 +902,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-1.5 border-t border-neutral-800/70">
-                    <span className="text-amber-400 font-bold">★ {show.rating ? show.rating.toFixed(1) : 'N/A'}</span>
+                    <span className="text-orange-500 font-black">CR ★ {show.rating ? show.rating.toFixed(1) : 'N/A'}</span>
                     <span className="text-purple-400 font-semibold group-hover:translate-x-0.5 transition-transform">
                       View details →
                     </span>

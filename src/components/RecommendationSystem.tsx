@@ -125,7 +125,8 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
         }
 
         // Base quality boost from rating (up to 10 points)
-        score += (anime.rating / 10) * 10;
+        const animeRating = anime.rating || 0;
+        score += (animeRating / 10) * 10;
 
         // Cap at 99% match
         const matchPercentage = Math.min(99, Math.max(65, Math.round(score)));
@@ -456,7 +457,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     />
                     <div className="absolute top-1.5 left-1.5 bg-black/70 px-1.5 py-0.5 rounded text-[10px] font-bold text-amber-300 flex items-center gap-1 backdrop-blur-sm">
                       <Star className="w-2.5 h-2.5 fill-current" />
-                      <span>{anime.rating.toFixed(1)}</span>
+                      <span>{(anime.rating || 0).toFixed(1)}</span>
                     </div>
                   </div>
 

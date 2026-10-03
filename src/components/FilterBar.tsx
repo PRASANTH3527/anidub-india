@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, X, SlidersHorizontal, RotateCcw, Sparkles, Flame, Filter, Mic, MicOff } from 'lucide-react';
+import { Search, X, SlidersHorizontal, RotateCcw, Sparkles, Flame, Filter, Mic, MicOff, Star, PlayCircle } from 'lucide-react';
 import { ALL_GENRES, ALL_TYPES, ALL_STATUSES, ALL_LANGUAGES } from '../data/animeData';
 import { useToast } from './Toast';
 import { SupportedLanguage, translate } from '../utils/i18n';
 import { AnimeRecord } from '../types/database';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface FilterBarProps {
   searchQuery: string;
@@ -56,8 +57,31 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   const lang = uiLanguage || 'en';
   const [isListening, setIsListening] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+  const debouncedSearch = useDebounce(localSearch, 500);
+
   const recognitionRef = useRef<any>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Sync internal search with parent prop (for resets)
+  useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
+
+  // Update parent when debounced value changes
+  useEffect(() => {
+    setSearchQuery(debouncedSearch);
+  }, [debouncedSearch]);
+
+  // Live Results for Dropdown
+  const liveResults = useMemo(() => {
+    if (!localSearch.trim() || localSearch.length < 2) return [];
+    const query = localSearch.toLowerCase().trim();
+    return allAnime.filter(anime => 
+      anime.title.toLowerCase().includes(query) || 
+      anime.romajiTitle?.toLowerCase().includes(query)
+    ).slice(0, 6);
+  }, [localSearch, allAnime]);
 
   // Trending Suggestions logic
   const trendingSuggestions = useMemo(() => {
@@ -197,10 +221,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         </div>
         <input
           type="text"
-          value={searchQuery}
+          value={localSearch}
           onFocus={() => setShowDropdown(true)}
           onChange={(e) => {
-            setSearchQuery(e.target.value);
+            setLocalSearch(e.target.value);
             if (!showDropdown) setShowDropdown(true);
           }}
           placeholder={
@@ -215,43 +239,97 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           }`}
         />
 
-        {/* Smart Search Dropdown (Strict Requirement) */}
-        {showDropdown && !searchQuery && trendingSuggestions.length > 0 && (
-          <div className="absolute left-0 right-0 top-full mt-2 bg-[#121829] border border-neutral-700/80 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-            <div className="p-3 bg-purple-950/30 border-b border-neutral-800 flex items-center gap-2">
-              <Flame className="w-4 h-4 text-orange-400" />
-              <span className="text-[11px] font-black uppercase tracking-wider text-purple-200">Trending Right Now</span>
-            </div>
-            <div className="max-h-60 overflow-y-auto">
-              {trendingSuggestions.map((anime: AnimeRecord) => (
-                <div
-                  key={anime.id}
-                  onClick={() => {
-                    setSearchQuery(anime.title);
-                    setShowDropdown(false);
-                  }}
-                  className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer border-b border-neutral-800/50 last:border-0 group"
-                >
-                  <img src={anime.poster} className="w-8 h-10 object-cover rounded-lg border border-neutral-700 group-hover:border-purple-500/50" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-white truncate">{anime.title}</p>
-                    <p className="text-[10px] text-neutral-500">{anime.type} • {anime.releaseYear} • ★ {anime.rating || '8.0'}</p>
+        {/* Live Search & Trending Dropdown */}
+        {showDropdown && (
+          <div className="absolute left-0 right-0 top-full mt-2 bg-[#121829]/98 border border-neutral-700/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 backdrop-blur-xl">
+            {localSearch.trim().length >= 2 ? (
+              <>
+                <div className="p-3 bg-purple-950/30 border-b border-neutral-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Search className="w-3.5 h-3.5 text-purple-400" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-purple-200">Matching Titles</span>
                   </div>
-                  <div className="ml-auto text-[10px] font-black text-orange-500 flex items-center gap-1">
-                    <Flame className="w-3 h-3" />
-                    {anime.likes || anime.upvotes || 0}
-                  </div>
+                  <span className="text-[9px] text-neutral-500 font-bold uppercase">{liveResults.length} Results</span>
                 </div>
-              ))}
-            </div>
+                <div className="max-h-80 overflow-y-auto divide-y divide-neutral-800/50">
+                  {liveResults.length > 0 ? (
+                    liveResults.map((anime) => (
+                      <div
+                        key={anime.id}
+                        onClick={() => {
+                          setLocalSearch(anime.title);
+                          setShowDropdown(false);
+                        }}
+                        className="flex items-center gap-3 p-3 hover:bg-purple-600/10 cursor-pointer group transition-colors"
+                      >
+                        <div className="relative w-10 h-14 rounded-lg overflow-hidden border border-neutral-700 shrink-0">
+                          <img src={anime.poster} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                          <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
+                        </div>
+                        <div className="min-w-0 flex-grow">
+                          <p className="text-xs font-bold text-white truncate group-hover:text-purple-300 transition-colors">{anime.title}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] text-neutral-400">{anime.type} • {anime.releaseYear}</span>
+                            <div className="flex items-center gap-0.5 text-orange-500 font-black text-[9px]">
+                              <Star className="w-2.5 h-2.5 fill-current" />
+                              {anime.rating || '8.0'}
+                            </div>
+                          </div>
+                          <div className="flex gap-1 mt-1">
+                            {anime.dubs?.slice(0, 2).map(d => (
+                              <span key={d} className="text-[8px] px-1 py-0.2 bg-neutral-800 text-neutral-400 rounded border border-neutral-700">{d}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <PlayCircle className="w-5 h-5 text-neutral-600 group-hover:text-purple-400 transition-colors opacity-0 group-hover:opacity-100" />
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center">
+                      <Search className="w-8 h-8 text-neutral-700 mx-auto mb-2 opacity-20" />
+                      <p className="text-xs text-neutral-500 font-medium">No matches found for "{localSearch}"</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : trendingSuggestions.length > 0 && (
+              <>
+                <div className="p-3 bg-purple-950/30 border-b border-neutral-800 flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-orange-400" />
+                  <span className="text-[11px] font-black uppercase tracking-wider text-purple-200">Trending Right Now</span>
+                </div>
+                <div className="max-h-60 overflow-y-auto divide-y divide-neutral-800/50">
+                  {trendingSuggestions.map((anime: AnimeRecord) => (
+                    <div
+                      key={anime.id}
+                      onClick={() => {
+                        setLocalSearch(anime.title);
+                        setShowDropdown(false);
+                      }}
+                      className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer group transition-colors"
+                    >
+                      <img src={anime.poster} className="w-8 h-10 object-cover rounded-lg border border-neutral-700 group-hover:border-purple-500/50" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-white truncate group-hover:text-purple-300 transition-colors">{anime.title}</p>
+                        <p className="text-[10px] text-neutral-500">{anime.type} • {anime.releaseYear} • ★ {anime.rating || '8.0'}</p>
+                      </div>
+                      <div className="ml-auto text-[10px] font-black text-orange-500 flex items-center gap-1">
+                        <Flame className="w-3 h-3" />
+                        {anime.likes || anime.upvotes || 0}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
         {/* Right Search Bar Action Controls */}
         <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-          {searchQuery && (
+          {localSearch && (
             <button
-              onClick={() => setSearchQuery('')}
+              onClick={() => setLocalSearch('')}
               className="text-neutral-400 hover:text-white p-1.5 rounded-xl hover:bg-neutral-800/80 active:scale-90 transition-all cursor-pointer"
               title="Clear search query"
             >

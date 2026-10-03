@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, Suspense, lazy } from 'react';
 import { Navbar, NavTab } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { AnimatedStats } from './components/AnimatedStats';
 import { FilterBar } from './components/FilterBar';
 import { AnimeCard } from './components/AnimeCard';
-import { SkeletonGrid } from './components/SkeletonGrid';
+import { SkeletonGrid, SkeletonCard } from './components/SkeletonGrid';
 import { AnimeDetailPage } from './components/AnimeDetailPage';
 import { RecommendationSystem } from './components/RecommendationSystem';
 import { ProfileView } from './components/ProfileView';
@@ -748,261 +748,272 @@ function AppContent() {
           )}
 
         {/* 1. Dedicated Information Page (Route #anime/:id) */}
-        {currentViewingAnime ? (
-          <AnimeDetailPage
-            anime={currentViewingAnime}
-            watchlistItem={watchlistItemsForUI.find((w) => w.animeId === currentViewingAnime.id)}
-            onToggleWatchlist={handleToggleWatchlist}
-            onToggleWatchedStatus={handleToggleWatchedStatus}
-            onBack={handleBackToLibrary}
-            onSelectSimilarAnime={handleOpenAnimeDetail}
-            onOpenAuthModal={() => setIsAuthModalOpen(true)}
-            onReport={(anime) => setReportingAnime(anime)}
-            allAnime={approvedAnime}
-          />
-        ) : (
-          <>
-            {/* 2. Main Dub Library (ONLY FETCHES APPROVED ANIME) */}
-            {activeTab === 'library' && (
-              <>
-                <Hero 
-                  totalCount={approvedAnime.length} 
-                  onOpenSurpriseMe={() => setIsSurpriseModalOpen(true)}
-                  uiLanguage={uiLanguage}
-                />
+        <Suspense fallback={<div className="max-w-6xl mx-auto px-4 py-8"><SkeletonGrid count={4} /></div>}>
+          {currentViewingAnime ? (
+            <AnimeDetailPage
+              anime={currentViewingAnime}
+              watchlistItem={watchlistItemsForUI.find((w) => w.animeId === currentViewingAnime.id)}
+              onToggleWatchlist={handleToggleWatchlist}
+              onToggleWatchedStatus={handleToggleWatchedStatus}
+              onBack={handleBackToLibrary}
+              onSelectSimilarAnime={handleOpenAnimeDetail}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+              onReport={(anime) => setReportingAnime(anime)}
+              allAnime={approvedAnime}
+            />
+          ) : (
+            <>
+              {/* 2. Main Dub Library (ONLY FETCHES APPROVED ANIME) */}
+              {activeTab === 'library' && (
+                <>
+                  <Hero 
+                    totalCount={approvedAnime.length} 
+                    onOpenSurpriseMe={() => setIsSurpriseModalOpen(true)}
+                    uiLanguage={uiLanguage}
+                  />
 
-                {/* 3. Animated Stats Counter Section */}
-                <AnimatedStats
-                  totalAnime={approvedAnime.length}
-                  totalUpvotes={totalCommunityUpvotes}
-                  languagesCount={5}
-                  uiLanguage={uiLanguage}
-                />
+                  {/* 3. Animated Stats Counter Section */}
+                  <AnimatedStats
+                    totalAnime={approvedAnime.length}
+                    totalUpvotes={totalCommunityUpvotes}
+                    languagesCount={5}
+                    uiLanguage={uiLanguage}
+                  />
 
-                {/* 4. Recently Viewed Horizontal Row */}
-                <RecentlyViewedRow
-                  recentlyViewedIds={recentlyViewedIds}
-                  allAnime={approvedAnime}
-                  onSelectAnime={handleOpenAnimeDetail}
-                  onToggleWatchlist={handleToggleWatchlist}
-                  watchlistIds={localWatchlistIds}
-                  onClearHistory={handleClearRecentlyViewed}
-                  uiLanguage={uiLanguage}
-                />
+                  {/* 4. Recently Viewed Horizontal Row */}
+                  <RecentlyViewedRow
+                    recentlyViewedIds={recentlyViewedIds}
+                    allAnime={approvedAnime}
+                    onSelectAnime={handleOpenAnimeDetail}
+                    onToggleWatchlist={handleToggleWatchlist}
+                    watchlistIds={localWatchlistIds}
+                    onClearHistory={handleClearRecentlyViewed}
+                    uiLanguage={uiLanguage}
+                  />
 
-                <FilterBar
-                  searchQuery={searchQuery}
-                  setSearchQuery={(q) => {
-                    setSearchQuery(q);
-                    setVisibleCount(INITIAL_VISIBLE_COUNT);
-                  }}
-                  selectedLanguage={selectedLanguage}
-                  setSelectedLanguage={handleLanguageFilter}
-                  selectedGenre={selectedGenre}
-                  setSelectedGenre={(g) => {
-                    setSelectedGenre(g);
-                    setVisibleCount(INITIAL_VISIBLE_COUNT);
-                  }}
-                  selectedType={selectedType}
-                  setSelectedType={(t) => {
-                    setSelectedType(t);
-                    setVisibleCount(INITIAL_VISIBLE_COUNT);
-                  }}
-                  selectedStatus={selectedStatus}
-                  setSelectedStatus={(s) => {
-                    setSelectedStatus(s);
-                    setVisibleCount(INITIAL_VISIBLE_COUNT);
-                  }}
-                  sortBy={sortBy}
-                  setSortBy={(s) => {
-                    setSortBy(s);
-                    setVisibleCount(INITIAL_VISIBLE_COUNT);
-                  }}
-                  totalFiltered={activeSortedAnime.length}
-                  totalAvailable={approvedAnime.length}
-                  languageCounts={languageCounts}
-                  isLoading={isLoading}
-                  onReset={handleResetFilters}
-                  uiLanguage={uiLanguage}
-                  feedView={feedView}
-                  setFeedView={(view) => {
-                    setFeedView(view);
-                    setVisibleCount(INITIAL_VISIBLE_COUNT);
-                  }}
-                  allAnime={approvedAnime}
-                />
+                  <FilterBar
+                    searchQuery={searchQuery}
+                    setSearchQuery={(q) => {
+                      setSearchQuery(q);
+                      setVisibleCount(INITIAL_VISIBLE_COUNT);
+                    }}
+                    selectedLanguage={selectedLanguage}
+                    setSelectedLanguage={handleLanguageFilter}
+                    selectedGenre={selectedGenre}
+                    setSelectedGenre={(g) => {
+                      setSelectedGenre(g);
+                      setVisibleCount(INITIAL_VISIBLE_COUNT);
+                    }}
+                    selectedType={selectedType}
+                    setSelectedType={(t) => {
+                      setSelectedType(t);
+                      setVisibleCount(INITIAL_VISIBLE_COUNT);
+                    }}
+                    selectedStatus={selectedStatus}
+                    setSelectedStatus={(s) => {
+                      setSelectedStatus(s);
+                      setVisibleCount(INITIAL_VISIBLE_COUNT);
+                    }}
+                    sortBy={sortBy}
+                    setSortBy={(s) => {
+                      setSortBy(s);
+                      setVisibleCount(INITIAL_VISIBLE_COUNT);
+                    }}
+                    totalFiltered={activeSortedAnime.length}
+                    totalAvailable={approvedAnime.length}
+                    languageCounts={languageCounts}
+                    isLoading={isLoading}
+                    onReset={handleResetFilters}
+                    uiLanguage={uiLanguage}
+                    feedView={feedView}
+                    setFeedView={(view) => {
+                      setFeedView(view);
+                      setVisibleCount(INITIAL_VISIBLE_COUNT);
+                    }}
+                    allAnime={approvedAnime}
+                  />
 
-                {/* For You Logic Metadata (Subtle Info) */}
-                {feedView === 'foryou' && (
-                  <div className="max-w-5xl mx-auto px-4 mb-6">
-                    <div className="p-5 rounded-3xl bg-primary-theme/5 border border-primary-theme/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-primary-theme/10 flex items-center justify-center text-primary-theme">
-                          <Activity className="w-6 h-6" />
+                  {/* For You Logic Metadata (Subtle Info) */}
+                  {feedView === 'foryou' && (
+                    <div className="max-w-5xl mx-auto px-4 mb-6">
+                      <div className="p-5 rounded-3xl bg-primary-theme/5 border border-primary-theme/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-2xl bg-primary-theme/10 flex items-center justify-center text-primary-theme">
+                            <Activity className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h3 className="font-heading font-black text-white text-lg">
+                              {translate('forYouTitle', uiLanguage)}
+                            </h3>
+                            <p className="text-xs text-neutral-400">
+                              {translate('forYouSubtitle', uiLanguage)}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-heading font-black text-white text-lg">
-                            {translate('forYouTitle', uiLanguage)}
-                          </h3>
-                          <p className="text-xs text-neutral-400">
-                            {translate('forYouSubtitle', uiLanguage)}
-                          </p>
+                        
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="px-3 py-1.5 rounded-xl bg-[#131929] border border-neutral-800 text-[10px] font-bold text-neutral-400">
+                            <span className="text-primary-theme mr-1">{translate('forYouLanguageMatch', uiLanguage)}:</span>
+                            <span className="text-neutral-200">{forYouData.preferredLanguage}</span>
+                          </div>
+                          <div className="px-3 py-1.5 rounded-xl bg-[#131929] border border-neutral-800 text-[10px] font-bold text-neutral-400">
+                            <span className="text-primary-theme mr-1">{translate('forYouTopGenres', uiLanguage)}:</span>
+                            <span className="text-neutral-200">{forYouData.topGenres.join(', ')}</span>
+                          </div>
                         </div>
                       </div>
-                      
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="px-3 py-1.5 rounded-xl bg-[#131929] border border-neutral-800 text-[10px] font-bold text-neutral-400">
-                          <span className="text-primary-theme mr-1">{translate('forYouLanguageMatch', uiLanguage)}:</span>
-                          <span className="text-neutral-200">{forYouData.preferredLanguage}</span>
-                        </div>
-                        <div className="px-3 py-1.5 rounded-xl bg-[#131929] border border-neutral-800 text-[10px] font-bold text-neutral-400">
-                          <span className="text-primary-theme mr-1">{translate('forYouTopGenres', uiLanguage)}:</span>
-                          <span className="text-neutral-200">{forYouData.topGenres.join(', ')}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="max-w-6xl mx-auto px-4">
-                  {isLoading ? (
-                    <SkeletonGrid count={8} />
-                  ) : (visibleAnime && visibleAnime.length > 0) ? (
-                    <>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4">
-                        {visibleAnime.map((anime) => (
-                          <AnimeCard
-                            key={anime.id}
-                            anime={anime}
-                            isBookmarked={localWatchlistIds.includes(anime.id)}
-                            isTrending={trendingAnimeIds.includes(anime.id)}
-                            onToggleBookmark={handleToggleWatchlist}
-                            onSelect={handleOpenAnimeDetail}
-                            onReport={(anime) => setReportingAnime(anime)}
-                          />
-                        ))}
-                      </div>
-
-                      {/* Infinite Scroll Sentinel & Seamless Loader */}
-                      <div ref={sentinelRef} className="pt-8 pb-12 flex flex-col items-center justify-center">
-                        {visibleCount < activeSortedAnime.length ? (
-                          <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-[#131929]/90 border border-neutral-800 text-xs font-semibold text-neutral-300 shadow-md animate-pulse">
-                            <RefreshCw className="w-4 h-4 animate-spin text-primary-theme" />
-                            <span>{translate('loadingBatch', uiLanguage)} ({activeSortedAnime.length - visibleCount} remaining)</span>
-                          </div>
-                        ) : activeSortedAnime.length > INITIAL_VISIBLE_COUNT ? (
-                          <div className="text-center pt-4 pb-2">
-                            <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#131929] border border-neutral-800 text-xs font-semibold text-neutral-400">
-                              <Sparkles className="w-3.5 h-3.5 text-primary-theme" />
-                              {translate('allLoaded', uiLanguage)}
-                            </span>
-                          </div>
-                        ) : null}
-                        <p className="text-[11px] text-neutral-500 font-medium mt-2.5">
-                          {translate('showingTitles', uiLanguage)} <strong className="text-neutral-300">{visibleAnime.length}</strong> {translate('ofTitles', uiLanguage)} <strong className="text-neutral-300">{activeSortedAnime.length}</strong> {translate('approvedDubs', uiLanguage)}
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-center py-16 bg-[#131926]/50 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto shadow-xl">
-                      {approvedAnime.length === 0 ? (
-                        <>
-                          <div className="w-14 h-14 rounded-2xl bg-purple-950/60 border border-purple-800/60 flex items-center justify-center mx-auto mb-4 text-purple-400">
-                            <Sparkles className="w-7 h-7" />
-                          </div>
-                          <h3 className="font-heading font-black text-xl text-white mb-2">
-                            Fresh Database Ready
-                          </h3>
-                          <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
-                            All mock entries have been cleared. The database is empty and waiting for real anime submissions!
-                          </p>
-                          <button
-                            onClick={() => setIsSubmitModalOpen(true)}
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-black py-3.5 px-8 rounded-2xl transition-all cursor-pointer shadow-[0_10px_25px_rgba(168,85,247,0.4)] hover:shadow-[0_15px_35px_rgba(168,85,247,0.5)] active:scale-95 flex items-center mx-auto group"
-                          >
-                            <div className="bg-white/20 p-1 rounded-lg group-hover:rotate-90 transition-transform duration-300">
-                              <PlusCircle className="w-5 h-5" />
-                            </div>
-                            <span>Submit First Dub Info</span>
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <Frown className="w-10 h-10 text-neutral-500 mx-auto mb-3" />
-                          <h3 className="font-heading font-black text-lg text-white mb-1">
-                            No Approved Dubbed Anime Found
-                          </h3>
-                          <p className="text-xs text-neutral-400 mb-6 px-4 leading-relaxed">
-                            No anime matches your filter criteria. Try choosing another regional language or resetting filters.
-                          </p>
-                          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 px-4">
-                            <button
-                              onClick={handleResetFilters}
-                              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold transition-all cursor-pointer border border-neutral-700"
-                            >
-                              Reset All Filters
-                            </button>
-                            <button
-                              onClick={handleOpenSubmitModal}
-                              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold py-3 px-6 rounded-xl transition-all cursor-pointer shadow-lg shadow-purple-600/30 group"
-                            >
-                              <PlusCircle className="w-4 h-4 group-hover:rotate-90 transition-transform" />
-                              <span>Submit a Dub</span>
-                            </button>
-                          </div>
-                        </>
-                      )}
                     </div>
                   )}
-                </div>
 
-                <RecentUpdates />
-              </>
-            )}
+                  <div className="max-w-6xl mx-auto px-4">
+                    {isLoading ? (
+                      <SkeletonGrid count={8} />
+                    ) : (visibleAnime && visibleAnime.length > 0) ? (
+                      <>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4">
+                          {visibleAnime.map((anime) => (
+                            <AnimeCard
+                              key={anime.id}
+                              anime={anime}
+                              isBookmarked={localWatchlistIds.includes(anime.id)}
+                              isTrending={trendingAnimeIds.includes(anime.id)}
+                              onToggleBookmark={handleToggleWatchlist}
+                              onSelect={handleOpenAnimeDetail}
+                              onReport={(anime) => setReportingAnime(anime)}
+                            />
+                          ))}
+                        </div>
 
-            {/* 3. My Watchlist Tab (Personal Local Favorites) */}
-            {activeTab === 'watchlist' && (
-              <WatchlistView
-                watchlistIds={filteredWatchlistIds}
-                allAnime={approvedAnime}
-                trendingAnimeIds={trendingAnimeIds}
-                onToggleWatchlist={handleToggleWatchlist}
-                onSelectAnime={handleOpenAnimeDetail}
-                onClearWatchlist={handleClearWatchlist}
-                onBrowseLibrary={() => handleTabChange('library')}
-                onReport={(anime) => setReportingAnime(anime)}
-              />
-            )}
+                        {/* Infinite Scroll Sentinel & Seamless Loader */}
+                        <div ref={sentinelRef} className="pt-8 pb-12 flex flex-col items-center justify-center min-h-[100px]">
+                          {visibleCount < activeSortedAnime.length ? (
+                            <div className="flex flex-col items-center gap-4">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4 w-full opacity-40 grayscale pointer-events-none">
+                                <SkeletonCard />
+                                <SkeletonCard className="hidden sm:block" />
+                                <SkeletonCard className="hidden md:block" />
+                                <SkeletonCard className="hidden lg:block" />
+                              </div>
+                              <div className="flex items-center gap-2.5 px-5 py-3 rounded-full bg-[#131929]/95 border border-purple-500/30 text-xs font-bold text-neutral-200 shadow-2xl backdrop-blur-md">
+                                <RefreshCw className="w-4 h-4 animate-spin text-purple-400" />
+                                <span>{translate('loadingBatch', uiLanguage)}</span>
+                              </div>
+                            </div>
+                          ) : activeSortedAnime.length > INITIAL_VISIBLE_COUNT ? (
+                            <div className="text-center pt-4 pb-2">
+                              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#131929] border border-neutral-800 text-xs font-semibold text-neutral-400">
+                                <Sparkles className="w-3.5 h-3.5 text-primary-theme" />
+                                {translate('allLoaded', uiLanguage)}
+                              </span>
+                            </div>
+                          ) : null}
+                          <p className="text-[11px] text-neutral-500 font-medium mt-4">
+                            {translate('showingTitles', uiLanguage)} <strong className="text-neutral-300">{visibleAnime.length}</strong> {translate('ofTitles', uiLanguage)} <strong className="text-neutral-300">{activeSortedAnime.length}</strong> {translate('approvedDubs', uiLanguage)}
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-16 bg-[#131926]/50 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto shadow-xl">
+                        {approvedAnime.length === 0 ? (
+                          <>
+                            <div className="w-14 h-14 rounded-2xl bg-purple-950/60 border border-purple-800/60 flex items-center justify-center mx-auto mb-4 text-purple-400">
+                              <Sparkles className="w-7 h-7" />
+                            </div>
+                            <h3 className="font-heading font-black text-xl text-white mb-2">
+                              Fresh Database Ready
+                            </h3>
+                            <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
+                              All mock entries have been cleared. The database is empty and waiting for real anime submissions!
+                            </p>
+                            <button
+                              onClick={() => setIsSubmitModalOpen(true)}
+                              className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-black py-3.5 px-8 rounded-2xl transition-all cursor-pointer shadow-[0_10px_25px_rgba(168,85,247,0.4)] hover:shadow-[0_15px_35px_rgba(168,85,247,0.5)] active:scale-95 flex items-center mx-auto group"
+                            >
+                              <div className="bg-white/20 p-1 rounded-lg group-hover:rotate-90 transition-transform duration-300">
+                                <PlusCircle className="w-5 h-5" />
+                              </div>
+                              <span>Submit First Dub Info</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <Frown className="w-10 h-10 text-neutral-500 mx-auto mb-3" />
+                            <h3 className="font-heading font-black text-lg text-white mb-1">
+                              No Approved Dubbed Anime Found
+                            </h3>
+                            <p className="text-xs text-neutral-400 mb-6 px-4 leading-relaxed">
+                              No anime matches your filter criteria. Try choosing another regional language or resetting filters.
+                            </p>
+                            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 px-4">
+                              <button
+                                onClick={handleResetFilters}
+                                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold transition-all cursor-pointer border border-neutral-700"
+                              >
+                                Reset All Filters
+                              </button>
+                              <button
+                                onClick={handleOpenSubmitModal}
+                                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold py-3 px-6 rounded-xl transition-all cursor-pointer shadow-lg shadow-purple-600/30 group"
+                              >
+                                <PlusCircle className="w-4 h-4 group-hover:rotate-90 transition-transform" />
+                                <span>Submit a Dub</span>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-            {/* 4. Recommendation Matchmaker */}
-            {activeTab === 'recommendations' && (
-              <RecommendationSystem
-                animeList={approvedAnime}
-                watchlistIds={localWatchlistIds}
-                watchedIds={watchedAnimeIds}
-                onToggleWatchlist={handleToggleWatchlist}
-                onSelectAnime={handleOpenAnimeDetail}
-              />
-            )}
+                  <RecentUpdates />
+                </>
+              )}
 
-            {/* 5. Airing & Simulcast Schedule */}
-            {activeTab === 'schedule' && (
-              <ScheduleView onSelectAnime={handleOpenAnimeDetail} />
-            )}
+              {/* 3. My Watchlist Tab (Personal Local Favorites) */}
+              {activeTab === 'watchlist' && (
+                <WatchlistView
+                  watchlistIds={filteredWatchlistIds}
+                  allAnime={approvedAnime}
+                  trendingAnimeIds={trendingAnimeIds}
+                  onToggleWatchlist={handleToggleWatchlist}
+                  onSelectAnime={handleOpenAnimeDetail}
+                  onClearWatchlist={handleClearWatchlist}
+                  onBrowseLibrary={() => handleTabChange('library')}
+                  onReport={(anime) => setReportingAnime(anime)}
+                />
+              )}
 
-            {/* 6. User Profile Tab */}
-            {activeTab === 'profile' && (
-              <ProfileView
-                allAnime={approvedAnime}
-                watchlistItems={watchlistItemsForUI}
-                onToggleWatchedStatus={handleToggleWatchedStatus}
-                onRemoveFromWatchlist={handleRemoveFromWatchlist}
-                onSelectAnime={handleOpenAnimeDetail}
-                onNavigateToTab={(tab) => handleTabChange(tab)}
-              />
-            )}
-          </>
-        )}
+              {/* 4. Recommendation Matchmaker */}
+              {activeTab === 'recommendations' && (
+                <RecommendationSystem
+                  animeList={approvedAnime}
+                  watchlistIds={localWatchlistIds}
+                  watchedIds={watchedAnimeIds}
+                  onToggleWatchlist={handleToggleWatchlist}
+                  onSelectAnime={handleOpenAnimeDetail}
+                />
+              )}
+
+              {/* 5. Airing & Simulcast Schedule */}
+              {activeTab === 'schedule' && (
+                <ScheduleView onSelectAnime={handleOpenAnimeDetail} />
+              )}
+
+              {/* 6. User Profile Tab */}
+              {activeTab === 'profile' && (
+                <ProfileView
+                  allAnime={approvedAnime}
+                  watchlistItems={watchlistItemsForUI}
+                  onToggleWatchedStatus={handleToggleWatchedStatus}
+                  onRemoveFromWatchlist={handleRemoveFromWatchlist}
+                  onSelectAnime={handleOpenAnimeDetail}
+                  onNavigateToTab={(tab) => handleTabChange(tab)}
+                />
+              )}
+            </>
+          )}
+        </Suspense>
+
         </PullToRefresh>
       </main>
 
