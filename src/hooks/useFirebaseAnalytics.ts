@@ -12,6 +12,8 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { dbService } from '../services/databaseService';
+import { AnimeRecord } from '../types/database';
 
 export interface WatchlistStat {
   id: string;
@@ -30,22 +32,28 @@ export interface TrafficPoint {
 export interface DubLanguageMetric {
   name: string;
   value: number;
+  count: number;
   color: string;
 }
 
 export interface ActivityEvent {
   id: string;
   user: string;
-  action: 'watchlisted' | 'reviewed' | 'searched' | 'streamed';
+  action: 'watchlisted' | 'reviewed' | 'searched' | 'streamed' | 'submitted' | 'updated' | 'approved' | 'feedback';
   animeTitle: string;
   time: string;
+  timestamp?: number;
   language?: string;
+  status?: string;
 }
 
 export interface RealtimeAnalyticsState {
+  totalAnime: number;
+  totalSubmissions: number;
+  pendingSubmissions: number;
+  totalWatchlists: number;
   liveActiveUsers: number;
   liveActiveDiff: number;
-  totalWatchlists: number;
   todayStreams: number;
   mostWatchlisted: WatchlistStat[];
   trafficData: TrafficPoint[];
@@ -54,214 +62,279 @@ export interface RealtimeAnalyticsState {
   isConnected: boolean;
   isFallback: boolean;
   lastUpdated: Date;
+  isLoading: boolean;
 }
 
-// Initial realistic baseline metrics for AniDub India
-const INITIAL_WATCHLIST_DATA: WatchlistStat[] = [
-  { id: '1', name: 'Jujutsu Kaisen', title: 'Jujutsu Kaisen', count: 1842, dubs: ['Hindi', 'Tamil'] },
-  { id: '2', name: 'Solo Leveling', title: 'Solo Leveling', count: 1530, dubs: ['Hindi', 'Telugu'] },
-  { id: '3', name: 'Demon Slayer', title: 'Demon Slayer', count: 1390, dubs: ['Tamil', 'Telugu', 'Hindi'] },
-  { id: '4', name: 'Naruto Shippuden', title: 'Naruto Shippuden', count: 1140, dubs: ['Tamil', 'Hindi'] },
-  { id: '5', name: 'Attack on Titan', title: 'Attack on Titan', count: 980, dubs: ['Hindi', 'Malayalam'] },
-  { id: '6', name: 'Dragon Ball Z', title: 'Dragon Ball Z', count: 870, dubs: ['Hindi', 'Tamil', 'Kannada'] },
-];
+// Relative time formatter for real timestamps
+function formatRelativeTime(dateInput: string | number | Date | undefined): string {
+  if (!dateInput) return 'Just now';
+  const timestamp = typeof dateInput === 'string' || typeof dateInput === 'number' ? new Date(dateInput).getTime() : dateInput.getTime();
+  if (isNaN(timestamp)) return 'Recently';
 
-const INITIAL_TRAFFIC: TrafficPoint[] = [
-  { time: '12:00', active: 310, views: 1240 },
-  { time: '13:00', active: 420, views: 1680 },
-  { time: '14:00', active: 380, views: 1450 },
-  { time: '15:00', active: 590, views: 2360 },
-  { time: '16:00', active: 780, views: 3120 },
-  { time: '17:00', active: 940, views: 4200 },
-  { time: '18:00', active: 1120, views: 5100 },
-  { time: '19:00', active: 1350, views: 6300 },
-];
+  const diffMs = Date.now() - timestamp;
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 45) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return new Date(timestamp).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+}
 
-const INITIAL_DUB_DISTRIBUTION: DubLanguageMetric[] = [
-  { name: 'Hindi', value: 42, color: '#10b981' },
-  { name: 'Tamil', value: 28, color: '#f59e0b' },
-  { name: 'Telugu', value: 18, color: '#0ea5e9' },
-  { name: 'Malayalam', value: 8, color: '#8b5cf6' },
-  { name: 'Kannada', value: 4, color: '#f43f5e' },
-];
-
-const INITIAL_ACTIVITIES: ActivityEvent[] = [
-  { id: 'act-1', user: 'Rahul_M', action: 'watchlisted', animeTitle: 'Solo Leveling', time: 'Just now', language: 'Telugu' },
-  { id: 'act-2', user: 'Ananya99', action: 'reviewed', animeTitle: 'Demon Slayer', time: '1m ago', language: 'Tamil' },
-  { id: 'act-3', user: 'Vikram_K', action: 'streamed', animeTitle: 'Jujutsu Kaisen', time: '2m ago', language: 'Hindi' },
-  { id: 'act-4', user: 'Sneha_R', action: 'watchlisted', animeTitle: 'Naruto Shippuden', time: '4m ago', language: 'Tamil' },
-];
+// Color palette for regional dub languages
+const LANGUAGE_COLORS: Record<string, string> = {
+  Hindi: '#10b981',     // Emerald
+  Tamil: '#f59e0b',     // Amber
+  Telugu: '#0ea5e9',    // Sky
+  Malayalam: '#8b5cf6', // Purple
+  Kannada: '#f43f5e',   // Rose
+  English: '#6366f1',   // Indigo
+  Japanese: '#ec4899',  // Pink
+};
 
 export function useFirebaseAnalytics() {
   const [data, setData] = useState<RealtimeAnalyticsState>({
-    liveActiveUsers: 1354,
-    liveActiveDiff: 12,
-    totalWatchlists: 7854,
-    todayStreams: 14209,
-    mostWatchlisted: INITIAL_WATCHLIST_DATA,
-    trafficData: INITIAL_TRAFFIC,
-    dubBreakdown: INITIAL_DUB_DISTRIBUTION,
-    recentActivities: INITIAL_ACTIVITIES,
+    totalAnime: 0,
+    totalSubmissions: 0,
+    pendingSubmissions: 0,
+    totalWatchlists: 0,
+    liveActiveUsers: 0,
+    liveActiveDiff: 0,
+    todayStreams: 0,
+    mostWatchlisted: [],
+    trafficData: [],
+    dubBreakdown: [],
+    recentActivities: [],
     isConnected: false,
     isFallback: false,
     lastUpdated: new Date(),
+    isLoading: true,
   });
 
-  useEffect(() => {
-    let unsubscribeOverview: (() => void) | null = null;
-    let unsubscribeWatchlists: (() => void) | null = null;
-    let fallbackInterval: NodeJS.Timeout | null = null;
-
+  const refreshRealData = useCallback(async () => {
     try {
-      // 1. Real-time listener on Cloud Firestore doc: 'analytics/realtime'
-      const overviewDocRef = doc(db, 'analytics', 'realtime');
-      
-      unsubscribeOverview = onSnapshot(
-        overviewDocRef,
-        (snapshot) => {
-          if (snapshot.exists()) {
-            const raw = snapshot.data();
-            setData((prev) => ({
-              ...prev,
-              liveActiveUsers: raw.liveActiveUsers ?? prev.liveActiveUsers,
-              liveActiveDiff: raw.liveActiveDiff ?? Math.floor(Math.random() * 9) - 3,
-              totalWatchlists: raw.totalWatchlists ?? prev.totalWatchlists,
-              todayStreams: raw.todayStreams ?? prev.todayStreams,
-              isConnected: true,
-              isFallback: false,
-              lastUpdated: new Date(),
-            }));
-          } else {
-            // First time doc creation / fallback mode
-            setData((prev) => ({ ...prev, isConnected: true, isFallback: true }));
-          }
-        },
-        (error) => {
-          // If Firestore is running in mock/demo mode or permissions are restricted
-          console.info('[Firebase] Firestore onSnapshot fallback mode active:', error.message);
-          setData((prev) => ({ ...prev, isConnected: false, isFallback: true }));
+      // 1. Fetch real anime records from local service
+      const localRecords = dbService.getAllAnimeRecords();
+
+      // 2. Fetch real submissions from server API
+      let serverSubmissions: AnimeRecord[] = [];
+      try {
+        const res = await fetch(`/api/submissions?t=${Date.now()}`, { cache: 'no-store' });
+        if (res.ok) {
+          const json = await res.json();
+          serverSubmissions = Array.isArray(json) ? json : (json.data || json.record || []);
         }
-      );
+      } catch (err) {
+        console.warn('[Analytics] Submissions API fetch error:', err);
+      }
 
-      // 2. Real-time listener on collection: 'analytics_most_watchlisted'
-      const watchlistsQuery = query(
-        collection(db, 'analytics_most_watchlisted'),
-        orderBy('count', 'desc'),
-        limit(6)
-      );
+      // Merge records uniquely by id
+      const allRecordsMap = new Map<string, AnimeRecord>();
+      serverSubmissions.forEach(r => { if (r && r.id) allRecordsMap.set(r.id, r); });
+      localRecords.forEach(r => { if (r && r.id && !allRecordsMap.has(r.id)) allRecordsMap.set(r.id, r); });
+      const allAnime = Array.from(allRecordsMap.values());
 
-      unsubscribeWatchlists = onSnapshot(
-        watchlistsQuery,
-        (snapshot) => {
-          if (!snapshot.empty) {
-            const list: WatchlistStat[] = snapshot.docs.map((docSnap) => {
-              const d = docSnap.data();
-              return {
-                id: docSnap.id,
-                name: d.title || d.name || 'Anime',
-                title: d.title || d.name || 'Anime',
-                count: Number(d.count || 0),
-                dubs: Array.isArray(d.dubs) ? d.dubs : ['Hindi', 'Tamil'],
-              };
-            });
-            setData((prev) => ({
-              ...prev,
-              mostWatchlisted: list,
-              isConnected: true,
-              lastUpdated: new Date(),
-            }));
-          }
-        },
-        (err) => {
-          console.info('[Firebase] Watchlists listener running in fallback mode:', err.message);
+      // 3. Fetch real user feedbacks
+      let feedbackList: any[] = [];
+      try {
+        const localFbRaw = localStorage.getItem('anidub_feedback');
+        if (localFbRaw) {
+          const parsed = JSON.parse(localFbRaw);
+          if (Array.isArray(parsed)) feedbackList = parsed;
         }
-      );
-    } catch (err) {
-      console.warn('[Firebase] Init error, engaging reactive stream:', err);
-      setData((prev) => ({ ...prev, isConnected: false, isFallback: true }));
-    }
+      } catch {}
 
-    // 3. Realistic Real-time simulation heartbeat
-    // Ensures real-time visual responsiveness on mobile Replit preview even before production Firestore rules are seeded
-    fallbackInterval = setInterval(() => {
-      setData((prev) => {
-        const delta = Math.floor(Math.random() * 11) - 4; // -4 to +6
-        const newUsers = Math.max(1100, prev.liveActiveUsers + delta);
-        
-        // Randomly simulate an incoming user activity every few seconds
-        const randomTitles = ['Solo Leveling', 'Jujutsu Kaisen', 'Demon Slayer', 'Bleach: TYBW', 'One Piece'];
-        const randomUsers = ['Arjun_S', 'Kavya_R', 'Deepak_B', 'Priya_M', 'Karthik_V'];
-        const randomLangs = ['Tamil', 'Telugu', 'Hindi', 'Malayalam'];
-        
-        let updatedActivities = prev.recentActivities;
-        if (Math.random() > 0.45) {
-          const newAct: ActivityEvent = {
-            id: 'act-' + Date.now().toString(36),
-            user: randomUsers[Math.floor(Math.random() * randomUsers.length)],
-            action: Math.random() > 0.4 ? 'watchlisted' : 'streamed',
-            animeTitle: randomTitles[Math.floor(Math.random() * randomTitles.length)],
-            time: 'Just now',
-            language: randomLangs[Math.floor(Math.random() * randomLangs.length)],
-          };
-          updatedActivities = [newAct, ...prev.recentActivities.slice(0, 4)];
-        }
+      // 4. Calculate real metrics
+      const totalAnime = allAnime.length;
+      const pendingSubmissions = allAnime.filter(a => a.status === 'pending' || a.submissionStatus === 'pending').length;
+      const totalSubmissions = allAnime.length;
 
-        // Slight live pulse in watchlist count
-        const updatedWatchlist = prev.mostWatchlisted.map((item, idx) => {
-          if (idx === 0 && Math.random() > 0.6) {
-            return { ...item, count: item.count + 1 };
+      // Real watchlist count
+      let totalWatchlists = 0;
+      try {
+        const savedWatchlist = localStorage.getItem('anidub_local_watchlist');
+        const parsed = savedWatchlist ? JSON.parse(savedWatchlist) : [];
+        if (Array.isArray(parsed)) totalWatchlists = parsed.length;
+      } catch {}
+
+      // Real upvotes/streams
+      const totalUpvotes = allAnime.reduce((acc, curr) => acc + Number(curr.likes || curr.upvotes || 0), 0);
+
+      // 5. Calculate real Most Watchlisted / Upvoted
+      const sortedByPopularity = [...allAnime]
+        .sort((a, b) => Number(b.likes || b.upvotes || 0) - Number(a.likes || a.upvotes || 0))
+        .slice(0, 6)
+        .map(a => ({
+          id: a.id,
+          name: a.title,
+          title: a.title,
+          count: Number(a.likes || a.upvotes || 0),
+          dubs: Array.isArray(a.dubs) ? a.dubs : [],
+        }));
+
+      // 6. Calculate real Regional Dub Distribution
+      const dubCounts: Record<string, number> = {};
+      let totalDubMentions = 0;
+
+      allAnime.forEach(item => {
+        const dubs = Array.isArray(item.dubs) ? item.dubs : [];
+        dubs.forEach(d => {
+          if (typeof d === 'string' && d.trim()) {
+            const lang = d.trim();
+            dubCounts[lang] = (dubCounts[lang] || 0) + 1;
+            totalDubMentions++;
           }
-          return item;
         });
-
-        return {
-          ...prev,
-          liveActiveUsers: newUsers,
-          liveActiveDiff: delta,
-          totalWatchlists: prev.totalWatchlists + (Math.random() > 0.7 ? 1 : 0),
-          todayStreams: prev.todayStreams + (delta > 0 ? delta * 2 : 1),
-          mostWatchlisted: updatedWatchlist,
-          recentActivities: updatedActivities,
-          lastUpdated: new Date(),
-        };
       });
-    }, 4500);
 
-    return () => {
-      if (unsubscribeOverview) unsubscribeOverview();
-      if (unsubscribeWatchlists) unsubscribeWatchlists();
-      if (fallbackInterval) clearInterval(fallbackInterval);
-    };
+      const dubBreakdown: DubLanguageMetric[] = Object.entries(dubCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([name, count]) => ({
+          name,
+          count,
+          value: totalDubMentions > 0 ? Math.round((count / totalDubMentions) * 100) : 0,
+          color: LANGUAGE_COLORS[name] || '#8b5cf6',
+        }));
+
+      // 7. Calculate real Activity Timeline (e.g. past hours/days)
+      const dayBuckets: Record<string, { active: number; views: number }> = {
+        Mon: { active: 0, views: 0 },
+        Tue: { active: 0, views: 0 },
+        Wed: { active: 0, views: 0 },
+        Thu: { active: 0, views: 0 },
+        Fri: { active: 0, views: 0 },
+        Sat: { active: 0, views: 0 },
+        Sun: { active: 0, views: 0 },
+      };
+
+      allAnime.forEach(item => {
+        const dateStr = item.submittedAt || item.updatedAt;
+        if (dateStr) {
+          const d = new Date(dateStr);
+          if (!isNaN(d.getTime())) {
+            const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+            if (dayBuckets[dayName]) {
+              dayBuckets[dayName].active += 1;
+              dayBuckets[dayName].views += Number(item.likes || item.upvotes || 1);
+            }
+          }
+        }
+      });
+
+      const trafficData: TrafficPoint[] = Object.entries(dayBuckets).map(([time, stats]) => ({
+        time,
+        active: stats.active,
+        views: stats.views,
+      }));
+
+      // 8. Generate real Recent Activities
+      const activities: ActivityEvent[] = [];
+
+      allAnime.slice(0, 10).forEach(item => {
+        const timestamp = item.updatedAt || item.submittedAt;
+        const timeVal = timestamp ? new Date(timestamp).getTime() : 0;
+        activities.push({
+          id: `sub-${item.id}`,
+          user: item.submittedBy?.userName || 'Community User',
+          action: item.status === 'approved' ? 'approved' : (item.updatedAt && item.submittedAt !== item.updatedAt ? 'updated' : 'submitted'),
+          animeTitle: item.title,
+          time: formatRelativeTime(timestamp),
+          timestamp: timeVal,
+          language: item.dubs?.[0] || 'Indian Dub',
+          status: item.status,
+        });
+      });
+
+      feedbackList.slice(0, 5).forEach((fb, idx) => {
+        const timestamp = fb.timestamp;
+        const timeVal = timestamp ? new Date(timestamp).getTime() : 0;
+        activities.push({
+          id: `fb-${fb.id || idx}`,
+          user: fb.nameOrInsta || 'User Feedback',
+          action: 'feedback',
+          animeTitle: fb.feedback ? (fb.feedback.length > 28 ? fb.feedback.slice(0, 25) + '...' : fb.feedback) : 'App Feedback',
+          time: formatRelativeTime(timestamp),
+          timestamp: timeVal,
+        });
+      });
+
+      activities.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+      setData(prev => ({
+        ...prev,
+        totalAnime,
+        totalSubmissions,
+        pendingSubmissions,
+        totalWatchlists,
+        liveActiveUsers: totalAnime + totalWatchlists,
+        liveActiveDiff: pendingSubmissions,
+        todayStreams: totalUpvotes,
+        mostWatchlisted: sortedByPopularity,
+        trafficData,
+        dubBreakdown,
+        recentActivities: activities.slice(0, 8),
+        isConnected: true,
+        isFallback: false,
+        lastUpdated: new Date(),
+        isLoading: false,
+      }));
+
+    } catch (error) {
+      console.error('[Analytics] Failed to aggregate real data:', error);
+      setData(prev => ({ ...prev, isLoading: false }));
+    }
   }, []);
 
-  // Admin action: Manually push an update to Firestore (syncs to all listening clients instantly)
-  const pushRealtimeUpdate = useCallback(async (newUserCount?: number) => {
+  useEffect(() => {
+    // Initial fetch
+    refreshRealData();
+
+    // Subscribe to local database changes (when user submits, edits, or bookmarks)
+    const unsubscribeDb = dbService.subscribe(() => {
+      refreshRealData();
+    });
+
+    // Real-time listener for Firestore if configured
+    let unsubscribeFirestore: (() => void) | null = null;
     try {
-      const targetCount = newUserCount || data.liveActiveUsers + Math.floor(Math.random() * 25) + 5;
-      const ref = doc(db, 'analytics', 'realtime');
-      await setDoc(
-        ref,
-        {
-          liveActiveUsers: targetCount,
-          liveActiveDiff: targetCount - data.liveActiveUsers,
-          updatedAt: serverTimestamp(),
+      const overviewDocRef = doc(db, 'analytics', 'realtime');
+      unsubscribeFirestore = onSnapshot(
+        overviewDocRef,
+        (snap) => {
+          if (snap.exists()) {
+            const raw = snap.data();
+            setData(prev => ({
+              ...prev,
+              liveActiveUsers: raw.liveActiveUsers ?? prev.liveActiveUsers,
+              totalWatchlists: raw.totalWatchlists ?? prev.totalWatchlists,
+              isConnected: true,
+            }));
+          }
         },
-        { merge: true }
+        () => {
+          // Silent fallback to API & local database
+        }
       );
-    } catch (e) {
-      // Local immediate optimistic update
-      setData((prev) => ({
-        ...prev,
-        liveActiveUsers: prev.liveActiveUsers + 15,
-        liveActiveDiff: 15,
-        totalWatchlists: prev.totalWatchlists + 1,
-        lastUpdated: new Date(),
-      }));
-    }
-  }, [data.liveActiveUsers]);
+    } catch {}
+
+    return () => {
+      unsubscribeDb();
+      if (unsubscribeFirestore) unsubscribeFirestore();
+    };
+  }, [refreshRealData]);
+
+  // Real data refresh handler
+  const pushRealtimeUpdate = useCallback(async () => {
+    await refreshRealData();
+  }, [refreshRealData]);
 
   return {
     ...data,
+    refreshRealData,
     pushRealtimeUpdate,
   };
 }

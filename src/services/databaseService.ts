@@ -106,7 +106,7 @@ class DatabaseService {
     };
   }
 
-  private getAllAnimeRecords(): AnimeRecord[] {
+  public getAllAnimeRecords(): AnimeRecord[] {
     try {
       const raw = localStorage.getItem(DB_ANIME_KEY);
       const parsed = raw ? JSON.parse(raw) : [];

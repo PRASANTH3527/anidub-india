@@ -45,73 +45,111 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
   onBack,
 }) => {
   const [viewMode, setViewMode] = React.useState<'mobile_stream' | 'desktop_console'>('mobile_stream');
-  // Mock Data for Charts (since real historical data isn't in localStorage yet)
-  const dailyTrafficData = [
-    { name: 'Mon', views: 2400, users: 400 },
-    { name: 'Tue', views: 1398, users: 300 },
-    { name: 'Wed', views: 9800, users: 2000 },
-    { name: 'Thu', views: 3908, users: 2780 },
-    { name: 'Fri', views: 4800, users: 1890 },
-    { name: 'Sat', views: 3800, users: 2390 },
-    { name: 'Sun', views: 4300, users: 3490 },
-  ];
+  // Real aggregated data derived from catalog & local storage
+  const totalUpvotes = useMemo(() => {
+    return allAnime.reduce((acc, a) => acc + Number(a.likes || a.upvotes || 0), 0);
+  }, [allAnime]);
+
+  const totalWatchlistsCount = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('anidub_local_watchlist');
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed.length : 0;
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  const approvedCount = useMemo(() => {
+    return allAnime.filter(a => a.status === 'approved' || a.submissionStatus === 'approved').length;
+  }, [allAnime]);
+
+  const pendingCount = useMemo(() => {
+    return allAnime.filter(a => a.status === 'pending' || a.submissionStatus === 'pending').length;
+  }, [allAnime]);
 
   const watchlistData = useMemo(() => {
     return allAnime
-      .slice(0, 5)
+      .slice(0, 6)
       .map(anime => ({
         name: anime.title.length > 15 ? anime.title.substring(0, 12) + '...' : anime.title,
-        value: Math.floor(Math.random() * 500) + 100 // Mock saves count
+        value: Number(anime.likes || anime.upvotes || 0)
       }))
       .sort((a, b) => b.value - a.value);
   }, [allAnime]);
 
   const trendingAnimeData = useMemo(() => {
-    return allAnime
-      .sort((a, b) => (b.likes || 0) - (a.likes || 0))
+    return [...allAnime]
+      .sort((a, b) => Number(b.likes || b.upvotes || 0) - Number(a.likes || a.upvotes || 0))
       .slice(0, 6)
       .map(anime => ({
         name: anime.title.length > 10 ? anime.title.substring(0, 8) + '..' : anime.title,
-        votes: anime.likes || 0
+        votes: Number(anime.likes || anime.upvotes || 0)
       }));
+  }, [allAnime]);
+
+  const dailyTrafficData = useMemo(() => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const buckets: Record<string, { views: number; users: number }> = {};
+    days.forEach(d => { buckets[d] = { views: 0, users: 0 }; });
+
+    allAnime.forEach(a => {
+      const dateStr = a.submittedAt || a.updatedAt;
+      if (dateStr) {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+          const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+          if (buckets[dayName]) {
+            buckets[dayName].views += Number(a.likes || a.upvotes || 1);
+            buckets[dayName].users += 1;
+          }
+        }
+      }
+    });
+
+    return days.map(day => ({
+      name: day,
+      views: buckets[day].views,
+      users: buckets[day].users,
+    }));
   }, [allAnime]);
 
   const stats = [
     { 
-      label: 'Total Views', 
-      value: '128.4K', 
-      trend: '+12.5%', 
+      label: 'Catalog Anime', 
+      value: allAnime.length.toString(), 
+      trend: `${approvedCount} approved`, 
       isUp: true, 
-      icon: Eye, 
+      icon: Film, 
       color: 'text-purple-400',
       glow: 'shadow-purple-500/20'
     },
     { 
-      label: 'Active Users', 
-      value: '4,829', 
-      trend: '+5.2%', 
+      label: 'Total Upvotes', 
+      value: totalUpvotes.toLocaleString(), 
+      trend: `${pendingCount} pending`, 
       isUp: true, 
-      icon: Users, 
+      icon: Eye, 
       color: 'text-indigo-400',
       glow: 'shadow-indigo-500/20'
     },
     { 
-      label: 'Total Anime', 
-      value: allAnime.length.toString(), 
-      trend: '+2 today', 
+      label: 'Approved Titles', 
+      value: approvedCount.toString(), 
+      trend: 'Active', 
       isUp: true, 
-      icon: Film, 
+      icon: Users, 
       color: 'text-emerald-400',
       glow: 'shadow-emerald-500/20'
     },
     { 
       label: 'Watchlist Saves', 
-      value: '12.1K', 
-      trend: '-1.4%', 
-      isUp: false, 
+      value: totalWatchlistsCount.toLocaleString(), 
+      trend: 'Saved', 
+      isUp: true, 
       icon: Bookmark, 
-      color: 'text-rose-400',
-      glow: 'shadow-rose-500/20'
+      color: 'text-amber-400',
+      glow: 'shadow-amber-500/20'
     },
   ];
 
