@@ -119,7 +119,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
               </p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form id="user-feedback-form" onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
                   Your name or Insta ID (optional)

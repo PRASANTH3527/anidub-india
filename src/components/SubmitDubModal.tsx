@@ -458,8 +458,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       platforms: finalPlatforms,
     };
 
-    if (isEditMode && editAnime) {
-      const success = dbService.updateAnime(editAnime.id, payload);
+    if (isEditMode && activeAnime) {
+      const success = dbService.updateAnime(activeAnime.id, payload);
       setIsSubmitting(false);
       if (success) {
         toast.success('Anime Updated!', `"${title.trim()}" has been successfully updated.`);
@@ -572,7 +572,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               </p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+            <form id="anime-edit-form" onSubmit={handleSubmit} className="space-y-4 text-xs">
               
               {/* Title & Jikan Auto-fill Search */}
               <div className="relative" ref={dropdownRef}>
@@ -1044,9 +1044,14 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         {!isSuccess && (
           <div className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-[#111726] via-[#111726]/95 to-transparent backdrop-blur-lg border-t border-white/5 z-50">
             <button
-              onClick={() => {
-                const form = document.querySelector('form');
-                if (form) form.requestSubmit();
+              type="submit"
+              form="anime-edit-form"
+              onClick={(e) => {
+                e.stopPropagation();
+                const form = document.getElementById('anime-edit-form') as HTMLFormElement;
+                if (form) {
+                  form.requestSubmit();
+                }
               }}
               disabled={isSubmitting || !title.trim()}
               className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-purple-600 hover:from-orange-500 hover:via-amber-500 hover:to-purple-500 text-white font-black text-sm flex items-center justify-center gap-3 cursor-pointer shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed group"
