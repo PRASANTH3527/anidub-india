@@ -417,7 +417,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
             </div>
           </motion.div>
 
-          {/* Real-time Events Feed (Mock) */}
+          {/* Real-time Events Feed (Live) */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -435,27 +435,13 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
               </div>
             </div>
 
-            <div className="space-y-4 max-h-[250px] overflow-y-auto no-scrollbar pr-2">
-              {[
-                { user: 'Rahul K.', action: 'Saved to Watchlist', item: 'Demon Slayer S4', time: 'Just now', icon: Bookmark, color: 'text-purple-400' },
-                { user: 'Guest_81', action: 'Upvoted', item: 'Solo Leveling', time: '2 mins ago', icon: TrendingUp, color: 'text-orange-400' },
-                { user: 'Admin_Prasanth', action: 'Approved Submission', item: 'Kaiju No. 8', time: '5 mins ago', icon: Zap, color: 'text-indigo-400' },
-                { user: 'Sanya V.', action: 'New Review', item: 'Jujutsu Kaisen', time: '12 mins ago', icon: Activity, color: 'text-emerald-400' },
-                { user: 'User_992', action: 'Visited from', item: 'Chennai, India', time: '18 mins ago', icon: Globe, color: 'text-sky-400' },
-              ].map((event, idx) => (
-                <div key={idx} className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors border border-transparent hover:border-white/5 group">
-                  <div className={`p-2 rounded-xl bg-black/20 ${event.color} group-hover:scale-110 transition-transform`}>
-                    <event.icon size={16} />
-                  </div>
-                  <div className="min-w-0 flex-grow">
-                    <p className="text-xs text-white">
-                      <span className="font-black">{event.user}</span> {event.action.toLowerCase()}{' '}
-                      <span className="text-purple-400 font-bold">{event.item}</span>
-                    </p>
-                    <p className="text-[10px] text-neutral-500 font-medium">{event.time}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="flex flex-col items-center justify-center py-12 text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-primary-theme/10 flex items-center justify-center text-primary-theme">
+                <Activity className="w-6 h-6 animate-pulse" />
+              </div>
+              <p className="text-xs text-neutral-400 max-w-[200px]">
+                Live activity feed is active. Switch to <strong>Real-time Firestore</strong> view to see detailed event stream.
+              </p>
             </div>
           </motion.div>
 

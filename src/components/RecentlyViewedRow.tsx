@@ -21,7 +21,6 @@ interface RecentlyViewedRowProps {
   onSelectAnime: (anime: Anime) => void;
   onToggleWatchlist: (anime: Anime) => void;
   watchlistIds: string[];
-  onClearHistory: () => void;
   uiLanguage?: SupportedLanguage;
 }
 
@@ -39,7 +38,6 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
   onSelectAnime,
   onToggleWatchlist,
   watchlistIds,
-  onClearHistory,
   uiLanguage = 'en',
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -89,17 +87,8 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
           </div>
         </div>
 
-        {/* Action Controls: Clear History & Scroll Arrows */}
+        {/* Action Controls: Scroll Arrows */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          <button
-            onClick={onClearHistory}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#141b2c] hover:bg-[#1f2940] active:scale-95 text-neutral-400 hover:text-purple-400 text-xs font-semibold transition-all border border-neutral-800 cursor-pointer"
-            title="Clear recently viewed history"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{translate('clearHistory', lang)}</span>
-          </button>
-
           {recentAnimeList.length > 3 && (
             <div className="flex items-center gap-1">
               <button

@@ -340,9 +340,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       // STRICT: allAnime is exclusively what came from real Firebase collections!
-      const allAnime = Array.from(firestoreAnimeMap.values()).filter((item) => {
+      let allAnime = Array.from(firestoreAnimeMap.values()).filter((item) => {
         return item && (item.id || item.title || (item as any).name);
       });
+
+      // 100% DATA SAFETY FALLBACK: If live fetch returned 0 but we have cached data, use the cache
+      // This prevents the Admin Dashboard from appearing empty during quota hits
+      if (allAnime.length === 0) {
+        const cached = dbService.getAllAnimeRecords();
+        if (cached.length > 0) {
+          console.log('[Admin] Live fetch empty, falling back to local cache.');
+          allAnime = cached;
+        }
+      }
 
       // Save strictly to catalog state
       setCatalogTitles(allAnime);

@@ -168,14 +168,6 @@ function AppContent() {
     });
   };
 
-  const handleClearRecentlyViewed = () => {
-    setRecentlyViewedIds([]);
-    try {
-      localStorage.removeItem('anidub_recently_viewed');
-    } catch {}
-    toast.info('History Cleared', 'Recently viewed history was cleared.');
-  };
-
   // Report Modal state
   const [reportingAnime, setReportingAnime] = useState<{ id: string; title: string; poster?: string } | null>(null);
 
@@ -454,14 +446,6 @@ function AppContent() {
     window.addEventListener('pwa-sync-completed', handleSyncComplete);
     return () => window.removeEventListener('pwa-sync-completed', handleSyncComplete);
   }, []);
-
-  const handleClearWatchlist = () => {
-    if (confirm('Clear all saved anime from your personal watchlist?')) {
-      setLocalWatchlistIds([]);
-      localStorage.setItem('anidub_local_watchlist', JSON.stringify([]));
-      toast.info('Watchlist Cleared', 'All local favorites were removed.');
-    }
-  };
 
   const handleToggleWatchedStatus = useCallback((animeId: string) => {
     const userId = currentUser?.uid || 'guest';
@@ -757,29 +741,7 @@ function AppContent() {
         </>
       )}
 
-      {/* 2. Gentle Offline Mode & Quota Banners */}
-      {isOffline && (
-        <div className="sticky top-16 z-30 bg-gradient-to-r from-amber-950/95 via-amber-900/95 to-yellow-950/95 border-b border-amber-600/40 text-amber-200 px-4 py-2 text-xs shadow-lg backdrop-blur-md transition-all duration-300">
-          <div className="flex items-center gap-2 max-w-4xl mx-auto w-full justify-center text-center">
-            <WifiOff className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-            <span>
-              <strong>Offline Mode Active:</strong> You are browsing the cached anime catalog. Your saved Watchlist and details remain fully accessible!
-            </span>
-          </div>
-        </div>
-      )}
-
-      {dbService.getIsQuotaLimited() && !isOffline && (
-        <div className="sticky top-16 z-30 bg-gradient-to-r from-purple-950/95 via-purple-900/95 to-indigo-950/95 border-b border-purple-600/40 text-purple-200 px-4 py-2 text-xs shadow-lg backdrop-blur-md transition-all duration-300">
-          <div className="flex items-center gap-2 max-w-4xl mx-auto w-full justify-center text-center">
-            <Zap className="w-4 h-4 text-purple-400 shrink-0 animate-pulse" />
-            <span>
-              <strong>Firestore Quota Reached:</strong> Live updates are paused for today. You are viewing cached data from your last successful sync.
-            </span>
-          </div>
-        </div>
-      )}
-
+      {/* 2. Main Content Feed */}
       <main className="flex-grow pt-4 sm:pt-6 pb-12 transition-all duration-500">
         {/* Stealth Admin Dashboard Integration */}
         {isAdmin && activeTab === 'library' && (
@@ -839,7 +801,6 @@ function AppContent() {
                     onSelectAnime={handleOpenAnimeDetail}
                     onToggleWatchlist={handleToggleWatchlist}
                     watchlistIds={localWatchlistIds}
-                    onClearHistory={handleClearRecentlyViewed}
                     uiLanguage={uiLanguage}
                   />
 
@@ -940,14 +901,10 @@ function AppContent() {
                             <Database className="w-7 h-7" />
                           </div>
                           <h3 className="font-heading font-black text-xl text-white mb-2">
-                            {dbService.getIsQuotaLimited() 
-                              ? 'Live Updates Paused' 
-                              : 'Connecting to Live Database...'}
+                            Connecting to Live Database...
                           </h3>
                           <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
-                            {dbService.getIsQuotaLimited() 
-                              ? 'We have reached the daily Firestore quota limit. You are currently viewing cached data. Live updates will resume in 24 hours.' 
-                              : "We're connecting to the live Firestore collections. If you have uploaded anime recently, they should appear here momentarily."}
+                            We're connecting to the live Firestore collections. If you have uploaded anime recently, they should appear here momentarily.
                           </p>
                           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                             <button
@@ -956,16 +913,15 @@ function AppContent() {
                                 try {
                                   const fresh = await dbService.forceRefresh();
                                   setApprovedAnime(fresh);
-                                  toast.success('Sync Attempted', dbService.getIsQuotaLimited() ? 'Sync restricted by quota limit.' : `${fresh.length} anime records found.`);
+                                  toast.success('Sync Attempted', 'Refreshing database records...');
                                 } finally {
                                   setIsLoading(false);
                                 }
                               }}
-                              disabled={dbService.getIsQuotaLimited()}
-                              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold transition-all border border-neutral-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold transition-all border border-neutral-700 cursor-pointer disabled:opacity-50"
                             >
                               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                              <span>{dbService.getIsQuotaLimited() ? 'Quota Restricted' : 'Force Database Refresh'}</span>
+                              <span>Force Database Refresh</span>
                             </button>
                             <button
                               onClick={() => setIsSubmitModalOpen(true)}
@@ -1013,7 +969,6 @@ function AppContent() {
                   trendingAnimeIds={trendingAnimeIds}
                   onToggleWatchlist={handleToggleWatchlist}
                   onSelectAnime={handleOpenAnimeDetail}
-                  onClearWatchlist={handleClearWatchlist}
                   onBrowseLibrary={() => handleTabChange('library')}
                   onReport={(anime) => setReportingAnime(anime)}
                 />

@@ -13,7 +13,6 @@ interface WatchlistViewProps {
   trendingAnimeIds?: string[];
   onToggleWatchlist: (anime: Anime) => void;
   onSelectAnime: (anime: Anime) => void;
-  onClearWatchlist: () => void;
   onBrowseLibrary: () => void;
   onReport?: (anime: Anime) => void;
 }
@@ -24,7 +23,6 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   trendingAnimeIds = [],
   onToggleWatchlist,
   onSelectAnime,
-  onClearWatchlist,
   onBrowseLibrary,
   onReport,
 }) => {
@@ -100,13 +98,6 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             >
               <DownloadCloud className={`w-3.5 h-3.5 ${isCachingAll ? 'animate-bounce text-accent-theme' : ''}`} />
               <span>{isCachingAll ? 'Saving Offline...' : 'Save All Posters Offline'}</span>
-            </button>
-            <button
-              onClick={onClearWatchlist}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-purple-500/30 hover:bg-purple-500/10 active:scale-95 text-purple-300 text-xs font-semibold transition-all cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear Watchlist</span>
             </button>
           </div>
         )}

@@ -15,7 +15,6 @@ import {
 const DB_ANIME_KEY = 'anidub_db_anime_records';
 const DB_REVIEWS_KEY = 'anidub_db_reviews';
 const DB_WATCHLIST_KEY = 'anidub_db_watchlists';
-const CLEAN_SLATE_KEY = 'anidub_purged_mock_strict_firebase_v7';
 const QUOTA_EXCEEDED_KEY = 'anidub_firestore_quota_exceeded_timestamp';
 const LAST_SYNC_KEY = 'anidub_db_last_sync_timestamp';
 
@@ -149,29 +148,30 @@ class DatabaseService {
   private initDatabase() {
     if (typeof window === 'undefined') return;
     try {
-      // Completely wipe any legacy dummy/mock placeholder data from localStorage
-      if (!localStorage.getItem(CLEAN_SLATE_KEY)) {
+      // Ensure the keys exist in localStorage without clearing them
+      if (!localStorage.getItem(DB_ANIME_KEY)) {
         localStorage.setItem(DB_ANIME_KEY, JSON.stringify([]));
+      }
+      if (!localStorage.getItem(DB_REVIEWS_KEY)) {
         localStorage.setItem(DB_REVIEWS_KEY, JSON.stringify([]));
+      }
+      if (!localStorage.getItem(DB_WATCHLIST_KEY)) {
         localStorage.setItem(DB_WATCHLIST_KEY, JSON.stringify([]));
-        localStorage.removeItem('anidub_cached_catalog');
-        localStorage.removeItem('anidub_feedback');
-        localStorage.setItem(CLEAN_SLATE_KEY, 'true');
-      } else {
-        const existing = localStorage.getItem(DB_ANIME_KEY);
-        if (existing) {
-          try {
-            const parsed = JSON.parse(existing);
-            if (Array.isArray(parsed)) {
-              // Ensure all cached records are normalized but don't strictly purge titles
-              const normalized = parsed
-                .filter((item: any) => item && (item.id || item.title || item.name))
-                .map((item) => this.normalizeRecord(item));
-              localStorage.setItem(DB_ANIME_KEY, JSON.stringify(normalized));
-            }
-          } catch {}
-        } else {
-          localStorage.setItem(DB_ANIME_KEY, JSON.stringify([]));
+      }
+      
+      const existing = localStorage.getItem(DB_ANIME_KEY);
+      if (existing) {
+        try {
+          const parsed = JSON.parse(existing);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            // Re-normalize existing records to keep them up to date with schema changes
+            const normalized = parsed
+              .filter((item: any) => item && (item.id || item.title || item.name))
+              .map((item) => this.normalizeRecord(item));
+            localStorage.setItem(DB_ANIME_KEY, JSON.stringify(normalized));
+          }
+        } catch (e) {
+          console.warn('Cache migration warning:', e);
         }
       }
     } catch (e) {
@@ -272,7 +272,6 @@ class DatabaseService {
       const parsed = raw ? JSON.parse(raw) : [];
       if (!Array.isArray(parsed)) return [];
       
-      // Removed strict title filtering to ensure real data is not blocked
       return parsed
         .filter((item: any) => item && (item.id || item.title || item.name))
         .map((item) => this.normalizeRecord(item));
@@ -283,6 +282,13 @@ class DatabaseService {
 
   private saveAnimeRecords(records: AnimeRecord[]) {
     try {
+      // 100% DATA SAFETY: Never overwrite existing cache with an empty array during sync
+      const current = this.getAllAnimeRecords();
+      if (records.length === 0 && current.length > 0) {
+        console.warn('[AniDub DB] Safety Block: Prevented overwriting cache with empty data.');
+        return;
+      }
+      
       localStorage.setItem(DB_ANIME_KEY, JSON.stringify(records));
       this.notify();
     } catch (e) {
@@ -765,14 +771,6 @@ class DatabaseService {
     } catch {
       return 'plan_to_watch';
     }
-  }
-
-  // --- Helper to wipe and start completely fresh anytime ---
-  public resetToEmptySlate(): void {
-    localStorage.setItem(DB_ANIME_KEY, JSON.stringify([]));
-    localStorage.setItem(DB_REVIEWS_KEY, JSON.stringify([]));
-    localStorage.setItem(DB_WATCHLIST_KEY, JSON.stringify([]));
-    this.notify();
   }
 }
 
