@@ -78,91 +78,91 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
           <form onSubmit={handleSubmit} className="space-y-3.5">
             <div>
               <label className="block text-xs font-semibold text-neutral-300 mb-1">
-                Anime Title <span className="text-rose-400">*</span>
+              Anime Title <span className="text-primary-theme">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={animeName}
+              onChange={(e) => setAnimeName(e.target.value)}
+              placeholder="e.g. Bleach, Naruto, Blue Lock"
+              className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-primary-theme"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-neutral-300 mb-1">
+                Dubbed Language
               </label>
-              <input
-                type="text"
-                required
-                value={animeName}
-                onChange={(e) => setAnimeName(e.target.value)}
-                placeholder="e.g. Bleach, Naruto, Blue Lock"
-                className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-neutral-300 mb-1">
-                  Dubbed Language
-                </label>
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value as DubLanguage)}
-                  className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
-                >
-                  <option value="Tamil">Tamil (தமிழ்)</option>
-                  <option value="Telugu">Telugu (తెలుగు)</option>
-                  <option value="Hindi">Hindi (हिंदी)</option>
-                  <option value="Malayalam">Malayalam (മലയാളം)</option>
-                  <option value="Kannada">Kannada (ಕನ್ನಡ)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-neutral-300 mb-1">
-                  Platform
-                </label>
-                <select
-                  value={platform}
-                  onChange={(e) => setPlatform(e.target.value)}
-                  className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
-                >
-                  <option value="Crunchyroll">Crunchyroll</option>
-                  <option value="Netflix">Netflix</option>
-                  <option value="JioCinema">JioCinema</option>
-                  <option value="YouTube (Muse India)">YouTube (Muse India)</option>
-                  <option value="YouTube (Ani-One)">YouTube (Ani-One)</option>
-                  <option value="Disney+ Hotstar">Disney+ Hotstar</option>
-                  <option value="TV Channel">Sony YAY / Cartoon Network</option>
-                </select>
-              </div>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as DubLanguage)}
+                className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-primary-theme cursor-pointer"
+              >
+                <option value="Tamil">Tamil (தமிழ்)</option>
+                <option value="Telugu">Telugu (తెలుగు)</option>
+                <option value="Hindi">Hindi (हिंदी)</option>
+                <option value="Malayalam">Malayalam (மலയാളம்)</option>
+                <option value="Kannada">Kannada (ಕನ್ನಡ)</option>
+              </select>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-neutral-300 mb-1">
-                Official Streaming or Source Link
+                Platform
               </label>
-              <input
-                type="url"
-                value={sourceLink}
-                onChange={(e) => setSourceLink(e.target.value)}
-                placeholder="https://crunchyroll.com/..."
-                className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500"
-              />
+              <select
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+                className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-primary-theme cursor-pointer"
+              >
+                <option value="Crunchyroll">Crunchyroll</option>
+                <option value="Netflix">Netflix</option>
+                <option value="JioCinema">JioCinema</option>
+                <option value="YouTube (Muse India)">YouTube (Muse India)</option>
+                <option value="YouTube (Ani-One)">YouTube (Ani-One)</option>
+                <option value="Disney+ Hotstar">Disney+ Hotstar</option>
+                <option value="TV Channel">Sony YAY / Cartoon Network</option>
+              </select>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-neutral-300 mb-1">
-                Additional Notes (Optional)
-              </label>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Which season? Voice actor info or release date..."
-                className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500 resize-none"
-              />
+          <div>
+            <label className="block text-xs font-semibold text-neutral-300 mb-1">
+              Official Streaming or Source Link
+            </label>
+            <input
+              type="url"
+              value={sourceLink}
+              onChange={(e) => setSourceLink(e.target.value)}
+              placeholder="https://crunchyroll.com/..."
+              className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-primary-theme"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-neutral-300 mb-1">
+              Additional Notes (Optional)
+            </label>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Which season? Voice actor info or release date..."
+              className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-primary-theme resize-none"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full mt-2 py-3.5 btn-primary-theme text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95 group"
+          >
+            <div className="bg-white/20 p-1 rounded-lg group-hover:rotate-90 transition-transform duration-300">
+              <Plus className="w-4 h-4 text-white" strokeWidth={3} />
             </div>
-
-            <button
-              type="submit"
-              className="w-full mt-2 py-3.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-[0_10px_25px_rgba(168,85,247,0.35)] hover:shadow-[0_15px_35px_rgba(168,85,247,0.45)] active:scale-95 group"
-            >
-              <div className="bg-white/20 p-1 rounded-lg group-hover:rotate-90 transition-transform duration-300">
-                <Plus className="w-4 h-4 text-white" strokeWidth={3} />
-              </div>
-              <span>Submit Dub Information</span>
-            </button>
+            <span>Submit Dub Information</span>
+          </button>
           </form>
         )}
       </div>

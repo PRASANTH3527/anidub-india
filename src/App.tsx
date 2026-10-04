@@ -31,7 +31,7 @@ import { Anime, WatchlistItem, DubLanguage } from './types/anime';
 import { updateSeoTags } from './utils/seo';
 import { computeForYouRecommendations, ForYouAnalysis } from './utils/recommendations';
 import { getSavedUiLanguage, setSavedUiLanguage, translate, SupportedLanguage } from './utils/i18n';
-import { ChevronDown, Frown, Sparkles, PlusCircle, ShieldCheck, X, WifiOff, Dices, Languages, Zap, Activity } from 'lucide-react';
+import { ChevronDown, Frown, Sparkles, PlusCircle, ShieldCheck, X, WifiOff, Dices, Languages, Zap, Activity, RefreshCw, Database } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
 import { useTheme } from './context/ThemeContext';
 import { useReducedMotion, useIsMobile } from './hooks/useMediaQuery';
@@ -110,6 +110,7 @@ function AppContent() {
 
   // 3. Reactive DB State: Home & Search feeds ONLY fetch approved anime
   const [approvedAnime, setApprovedAnime] = useState<AnimeRecord[]>(() => dbService.getApprovedAnime());
+  const [allAnimeRecords, setAllAnimeRecords] = useState<AnimeRecord[]>(() => dbService.getAllAnimeRecords());
   
   // Auth state
   const [currentUser, setCurrentUser] = useState(authService.getCurrentUser());
@@ -295,6 +296,7 @@ function AppContent() {
   useEffect(() => {
     const unsubDb = dbService.subscribe(() => {
       setApprovedAnime(dbService.getApprovedAnime());
+      setAllAnimeRecords(dbService.getAllAnimeRecords());
       if (currentUser) {
         setDbWatchlist(dbService.getUserWatchlist(currentUser.uid));
       }
@@ -715,10 +717,10 @@ function AppContent() {
                     setAdminPassword(e.target.value);
                     if (adminError) setAdminError('');
                   }}
-                  className={`w-full bg-[#0a0d14] border ${adminError ? 'border-rose-500 ring-1 ring-rose-500' : 'border-neutral-700/80 focus:border-primary-theme focus:ring-1 focus:ring-primary-theme'} rounded-2xl px-4 py-3 text-sm text-white placeholder-neutral-500 outline-none transition-all`}
+                  className={`w-full bg-[#0a0d14] border ${adminError ? 'border-purple-500 ring-1 ring-purple-500' : 'border-neutral-700/80 focus:border-primary-theme focus:ring-1 focus:ring-primary-theme'} rounded-2xl px-4 py-3 text-sm text-white placeholder-neutral-500 outline-none transition-all`}
                 />
                 {adminError && (
-                  <p className="text-xs text-rose-400 font-medium mt-1.5">{adminError}</p>
+                  <p className="text-xs text-purple-400 font-medium mt-1.5">{adminError}</p>
                 )}
               </div>
 
@@ -768,9 +770,9 @@ function AppContent() {
       )}
 
       {dbService.getIsQuotaLimited() && !isOffline && (
-        <div className="sticky top-16 z-30 bg-gradient-to-r from-rose-950/95 via-rose-900/95 to-red-950/95 border-b border-rose-600/40 text-rose-200 px-4 py-2 text-xs shadow-lg backdrop-blur-md transition-all duration-300">
+        <div className="sticky top-16 z-30 bg-gradient-to-r from-purple-950/95 via-purple-900/95 to-indigo-950/95 border-b border-purple-600/40 text-purple-200 px-4 py-2 text-xs shadow-lg backdrop-blur-md transition-all duration-300">
           <div className="flex items-center gap-2 max-w-4xl mx-auto w-full justify-center text-center">
-            <Zap className="w-4 h-4 text-rose-400 shrink-0 animate-pulse" />
+            <Zap className="w-4 h-4 text-purple-400 shrink-0 animate-pulse" />
             <span>
               <strong>Firestore Quota Reached:</strong> Live updates are paused for today. You are viewing cached data from your last successful sync.
             </span>
@@ -935,23 +937,44 @@ function AppContent() {
                       ) : (
                         <div className="text-center py-16 bg-[#131926]/50 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto shadow-xl">
                           <div className="w-14 h-14 rounded-2xl bg-primary-theme/10 border border-primary-theme/20 flex items-center justify-center mx-auto mb-4 text-primary-theme">
-                            <PlusCircle className="w-7 h-7" />
+                            <Database className="w-7 h-7" />
                           </div>
                           <h3 className="font-heading font-black text-xl text-white mb-2">
-                            No Dubbed Anime Found
+                            {dbService.getIsQuotaLimited() 
+                              ? 'Live Updates Paused' 
+                              : 'Connecting to Live Database...'}
                           </h3>
                           <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
-                            The database is currently empty. Be the first to contribute by submitting regional dub information!
+                            {dbService.getIsQuotaLimited() 
+                              ? 'We have reached the daily Firestore quota limit. You are currently viewing cached data. Live updates will resume in 24 hours.' 
+                              : "We're connecting to the live Firestore collections. If you have uploaded anime recently, they should appear here momentarily."}
                           </p>
-                          <button
-                            onClick={() => setIsSubmitModalOpen(true)}
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 btn-primary-theme text-white text-sm font-black py-3.5 px-8 rounded-2xl transition-all cursor-pointer shadow-lg active:scale-95 group"
-                          >
-                            <div className="bg-white/20 p-1 rounded-lg group-hover:rotate-90 transition-transform duration-300">
-                              <PlusCircle className="w-5 h-5" />
-                            </div>
-                            <span>Submit Dub Info</span>
-                          </button>
+                          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                            <button
+                              onClick={async () => {
+                                setIsLoading(true);
+                                try {
+                                  const fresh = await dbService.forceRefresh();
+                                  setApprovedAnime(fresh);
+                                  toast.success('Sync Attempted', dbService.getIsQuotaLimited() ? 'Sync restricted by quota limit.' : `${fresh.length} anime records found.`);
+                                } finally {
+                                  setIsLoading(false);
+                                }
+                              }}
+                              disabled={dbService.getIsQuotaLimited()}
+                              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold transition-all border border-neutral-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                              <span>{dbService.getIsQuotaLimited() ? 'Quota Restricted' : 'Force Database Refresh'}</span>
+                            </button>
+                            <button
+                              onClick={() => setIsSubmitModalOpen(true)}
+                              className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 btn-primary-theme text-white text-xs font-black py-3 px-6 rounded-xl transition-all cursor-pointer shadow-lg active:scale-95 group"
+                            >
+                              <PlusCircle className="w-4 h-4 group-hover:rotate-90 transition-transform" />
+                              <span>Submit New Dub</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </Suspense>
@@ -1027,7 +1050,7 @@ function AppContent() {
               {/* 7. Admin Analytics Dashboard */}
               {activeTab === 'analytics' && (
                 <AdminAnalyticsDashboard 
-                  allAnime={approvedAnime}
+                  allAnime={allAnimeRecords}
                   onBack={() => handleTabChange('library')}
                 />
               )}

@@ -47,16 +47,16 @@ const DUB_LANGUAGE_BADGES: Record<DubLanguage, { bg: string; text: string; borde
   Telugu: { bg: 'bg-sky-950/70', text: 'text-sky-300', border: 'border-sky-700/60' },
   Hindi: { bg: 'bg-emerald-950/70', text: 'text-emerald-300', border: 'border-emerald-700/60' },
   Malayalam: { bg: 'bg-purple-950/70', text: 'text-purple-300', border: 'border-purple-700/60' },
-  Kannada: { bg: 'bg-rose-950/70', text: 'text-rose-300', border: 'border-rose-700/60' },
+  Kannada: { bg: 'bg-indigo-950/70', text: 'text-indigo-300', border: 'border-indigo-700/60' },
 };
 
 const PLATFORM_COLORS: Record<string, string> = {
   Crunchyroll: 'hover:bg-orange-600/20 hover:border-orange-500/50 text-orange-400',
-  Netflix: 'hover:bg-red-600/20 hover:border-red-500/50 text-red-500',
+  Netflix: 'hover:bg-indigo-600/20 hover:border-indigo-500/50 text-indigo-400',
   'Prime Video': 'hover:bg-sky-600/20 hover:border-sky-500/50 text-sky-400',
   'Disney+ Hotstar': 'hover:bg-blue-600/20 hover:border-blue-500/50 text-blue-400',
-  JioCinema: 'hover:bg-pink-600/20 hover:border-pink-500/50 text-pink-500',
-  YouTube: 'hover:bg-rose-600/20 hover:border-rose-500/50 text-rose-500',
+  JioCinema: 'hover:bg-purple-600/20 hover:border-purple-500/50 text-purple-400',
+  YouTube: 'hover:bg-violet-600/20 hover:border-violet-500/50 text-violet-400',
 };
 
 export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
@@ -181,7 +181,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => onReport(anime)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131926] hover:bg-rose-950/40 text-neutral-400 hover:text-rose-300 border border-neutral-800 hover:border-rose-500/40 text-xs font-semibold transition-all cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131926] hover:bg-purple-950/40 text-neutral-400 hover:text-purple-300 border border-neutral-800 hover:border-purple-500/40 text-xs font-semibold transition-all cursor-pointer active:scale-95"
               title="Report broken link or wrong info"
             >
               <Flag className="w-3.5 h-3.5" />

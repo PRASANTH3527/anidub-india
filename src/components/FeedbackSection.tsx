@@ -81,7 +81,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
           <div className="px-2">
             <button
               onClick={onOpenSuggestModal}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-lg py-4 px-8 rounded-2xl shadow-[0_10px_30px_rgba(168,85,247,0.4)] hover:shadow-[0_15px_40px_rgba(168,85,247,0.5)] transition-all duration-300 active:scale-[0.98] cursor-pointer group"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-lg py-4 px-8 rounded-2xl shadow-[0_10px_30px_rgba(168,85,247,0.4)] hover:shadow-[0_15px_40px_rgba(168,85,247,0.5)] transition-all duration-300 active:scale-[0.98] cursor-pointer group"
             >
               <div className="bg-white/20 p-1.5 rounded-lg group-hover:rotate-90 transition-transform duration-300">
                 <Plus className="w-5 h-5 text-white" strokeWidth={3} />
@@ -148,7 +148,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                  Your feedback <span className="text-rose-400">*</span>
+                  Your feedback <span className="text-primary-theme">*</span>
                 </label>
                 <textarea
                   required

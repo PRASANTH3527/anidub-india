@@ -26,54 +26,85 @@ class DatabaseService {
   constructor() {
     this.initDatabase();
     this.checkQuotaStatus();
-    this.startRealtimeSync();
+    
+    // Auto-sync on load only if data is stale (> 12 hours)
+    if (this.shouldSync()) {
+      this.syncWithServer();
+    }
   }
 
-  private startRealtimeSync() {
+  /**
+   * Starts real-time listeners for essential collections only.
+   * Optimized to avoid hitting Firestore quotas.
+   */
+  public startRealtimeSync() {
     if (this.isQuotaLimited || typeof window === 'undefined') return;
+    if (this.listeners.length > 0) return; // Already active
 
     try {
-      const collections = ['animes', 'anime', 'submissions'];
+      // Optimized: Only listen to the main catalog and submissions
+      // Other collections like 'anime', 'titles' are likely redundant for real-time updates
+      const essentialCollections = ['animes', 'submissions'];
       
-      collections.forEach(collName => {
-        onSnapshot(collection(db, collName), (snapshot) => {
+      essentialCollections.forEach(collName => {
+        const unsub = onSnapshot(collection(db, collName), (snapshot) => {
           const currentRecords = this.getAllAnimeRecords();
           const firestoreMap = new Map<string, AnimeRecord>();
           
-          // Seed map with current records to preserve other collections' data
+          // Seed map with current records to preserve data from other collections
           currentRecords.forEach(r => firestoreMap.set(r.id, r));
 
-          snapshot.docs.forEach(d => {
-            const data = d.data();
-            const normalized = this.normalizeRecord({ ...data, id: d.id });
-            
-            if (normalized && normalized.id && normalized.title) {
-              // If it's from main 'animes' or 'anime' collection and lacks status, treat as approved
-              // This handles legacy data or direct uploads without explicit status fields
-              if ((collName === 'animes' || collName === 'anime') && 
-                  (!data.status || data.status === 'pending') && 
-                  (!data.submissionStatus || data.submissionStatus === 'pending')) {
-                normalized.status = 'approved';
-                normalized.submissionStatus = 'approved';
+          let changed = false;
+          snapshot.docChanges().forEach(change => {
+            const data = change.doc.data();
+            if (change.type === 'removed') {
+              if (firestoreMap.has(change.doc.id)) {
+                firestoreMap.delete(change.doc.id);
+                changed = true;
               }
-              
-              firestoreMap.set(normalized.id, normalized);
+            } else {
+              const normalized = this.normalizeRecord({ ...data, id: change.doc.id });
+              if (normalized && normalized.id && normalized.title) {
+                // Auto-approve logic for live data
+                if (data.status !== 'rejected' && data.submissionStatus !== 'rejected') {
+                  normalized.status = 'approved';
+                  normalized.submissionStatus = 'approved';
+                }
+                firestoreMap.set(normalized.id, normalized);
+                changed = true;
+              }
             }
           });
 
-          const updatedList = Array.from(firestoreMap.values());
-          this.saveAnimeRecords(updatedList);
-          localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
+          if (changed || snapshot.docs.length === 0) {
+            const updatedList = Array.from(firestoreMap.values());
+            this.saveAnimeRecords(updatedList);
+            localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
+          }
         }, (err) => {
           if (this.isQuotaExceededError(err)) {
             this.setQuotaExceeded();
+            this.stopRealtimeSync();
           }
           console.warn(`[AniDub DB] Real-time sync error for ${collName}:`, err);
         });
+        this.listeners.push(unsub);
       });
     } catch (e) {
       console.warn('[AniDub DB] Failed to start real-time sync:', e);
     }
+  }
+
+  /**
+   * Stop all active Firestore listeners
+   */
+  public stopRealtimeSync() {
+    this.listeners.forEach(unsub => {
+      try {
+        unsub();
+      } catch {}
+    });
+    this.listeners = [];
   }
 
   private checkQuotaStatus() {
@@ -107,6 +138,7 @@ class DatabaseService {
     if (typeof window !== 'undefined') {
       localStorage.setItem(QUOTA_EXCEEDED_KEY, Date.now().toString());
     }
+    this.notify();
   }
 
   private isQuotaExceededError(err: any): boolean {
@@ -184,13 +216,24 @@ class DatabaseService {
     const likes = Number(data?.likes || data?.upvotes || data?.votes || 0);
     const platforms = Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'];
 
+    // Robust title extraction
+    const title = (
+      data?.title || 
+      data?.name || 
+      data?.animeTitle || 
+      data?.anime_title || 
+      data?.title_en || 
+      data?.englishTitle || 
+      'Untitled Anime'
+    ).trim();
+
     const normalized: AnimeRecord = {
       ...data,
       id: data.id,
-      title: (data?.title || data?.name || 'Untitled Anime').trim(),
-      romajiTitle: (data?.romajiTitle || data?.japaneseTitle || '').trim(),
-      poster: data?.poster || data?.image || data?.cover || '',
-      banner: data?.banner || data?.bannerImage || '',
+      title,
+      romajiTitle: (data?.romajiTitle || data?.japaneseTitle || data?.title_jp || '').trim(),
+      poster: data?.poster || data?.image || data?.cover || data?.posterImage || '',
+      banner: data?.banner || data?.bannerImage || data?.coverImage || '',
       studio: data?.studio || 'Animation Studio',
       synopsis: data?.synopsis || data?.description || '',
       type: data?.type || 'TV Series',
@@ -531,7 +574,7 @@ class DatabaseService {
     return newLikes;
   }
 
-  // --- 5. Server Sync: Strictly syncs from Firestore database ---
+  // --- 5. Server Sync: Optimized to reduce reads ---
   public async syncWithServer(): Promise<void> {
     // Check if browser is offline or quota limited
     if (this.isQuotaLimited || (typeof navigator !== 'undefined' && !navigator.onLine)) {
@@ -539,9 +582,16 @@ class DatabaseService {
     }
 
     try {
-      // Query real Firestore collections strictly
       const firestoreMap = new Map<string, AnimeRecord>();
-      const collections = ['animes', 'anime', 'submissions'];
+      // Optimized: prioritize the main catalog
+      const primaryCollections = ['animes', 'submissions'];
+      
+      // If we are completely empty, we might want to check more legacy names once
+      const current = this.getAllAnimeRecords();
+      const checkLegacy = current.length === 0;
+      const collections = checkLegacy 
+        ? ['animes', 'submissions', 'anime', 'anime_records'] 
+        : primaryCollections;
 
       for (const collName of collections) {
         try {
@@ -551,10 +601,7 @@ class DatabaseService {
             const normalized = this.normalizeRecord({ ...data, id: d.id });
             
             if (normalized && normalized.id && normalized.title) {
-              // If it's from main 'animes' or 'anime' collection and lacks status, treat as approved
-              if ((collName === 'animes' || collName === 'anime') && 
-                  (!data.status || data.status === 'pending') && 
-                  (!data.submissionStatus || data.submissionStatus === 'pending')) {
+              if (data.status !== 'rejected' && data.submissionStatus !== 'rejected') {
                 normalized.status = 'approved';
                 normalized.submissionStatus = 'approved';
               }
@@ -569,15 +616,15 @@ class DatabaseService {
             this.setQuotaExceeded();
             return; 
           }
-          console.warn(`[AniDub DB] Firestore ${collName} sync notice:`, err);
         }
       }
 
-      const firestoreList = Array.from(firestoreMap.values());
-      this.saveAnimeRecords(firestoreList);
-      
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
+      if (firestoreMap.size > 0) {
+        const firestoreList = Array.from(firestoreMap.values());
+        this.saveAnimeRecords(firestoreList);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
+        }
       }
     } catch (e) {
       console.warn('[AniDub DB] Sync error:', e);

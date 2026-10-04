@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --primary-accent: #e11d48;
-  --primary-glow: rgba(225, 29, 72, 0.4);
-  --primary-gradient: linear-gradient(135deg, #e11d48, #be123c);
-  --primary-light: #fda4af;
-  --primary-badge: #881337;
-  --primary-border: rgba(225, 29, 72, 0.45);
-  --primary-ring: rgba(225, 29, 72, 0.6);
-  --primary-accent-rgb: 225, 29, 72;
+  --primary-accent: #9333ea;
+  --primary-glow: rgba(147, 51, 234, 0.5);
+  --primary-gradient: linear-gradient(135deg, #9333ea, #4f46e5);
+  --primary-light: #c084fc;
+  --primary-badge: #581c87;
+  --primary-border: rgba(147, 51, 234, 0.4);
+  --primary-ring: rgba(147, 51, 234, 0.6);
+  --primary-accent-rgb: 147, 51, 234;
 }
 
 @layer base {

@@ -27,7 +27,7 @@ const DUB_LANGUAGE_COLORS: Record<DubLanguage, { bg: string; text: string; borde
   Telugu: { bg: 'bg-sky-950/60', text: 'text-sky-300', border: 'border-sky-700/60' },
   Hindi: { bg: 'bg-emerald-950/60', text: 'text-emerald-300', border: 'border-emerald-700/60' },
   Malayalam: { bg: 'bg-purple-950/60', text: 'text-purple-300', border: 'border-purple-700/60' },
-  Kannada: { bg: 'bg-rose-950/60', text: 'text-rose-300', border: 'border-rose-700/60' },
+  Kannada: { bg: 'bg-indigo-950/60', text: 'text-indigo-300', border: 'border-indigo-700/60' },
 };
 
 export const AnimeModal: React.FC<AnimeModalProps> = ({

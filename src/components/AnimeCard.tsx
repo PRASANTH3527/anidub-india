@@ -34,7 +34,7 @@ const DUB_BADGE_STYLES: Record<DubLanguage, { bg: string; text: string; label: s
   Telugu: { bg: 'bg-[#0284c7]', text: 'text-sky-100', label: 'Tel' },
   Hindi: { bg: 'bg-[#059669]', text: 'text-emerald-100', label: 'Hin' },
   Malayalam: { bg: 'bg-[#7c3aed]', text: 'text-purple-100', label: 'Mal' },
-  Kannada: { bg: 'bg-[#e11d48]', text: 'text-rose-100', label: 'Kan' },
+  Kannada: { bg: 'bg-indigo-600', text: 'text-indigo-100', label: 'Kan' },
 };
 
 export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
@@ -276,7 +276,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
         {/* Top-Left Badges */}
         <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1.5 pointer-events-none">
           {isTrending && (
-            <span className="inline-flex items-center gap-1 bg-gradient-to-r from-orange-600 via-amber-600 to-rose-600 text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shadow-lg border border-orange-400/40">
+            <span className="inline-flex items-center gap-1 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shadow-lg border border-purple-400/40">
               <Flame className="w-3 h-3 fill-current text-amber-200" />
               <span>Trending</span>
             </span>
@@ -317,7 +317,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
               onClick={(e) => { e.stopPropagation(); onReport(anime); }}
               onMouseDown={(e) => e.stopPropagation()}
               title="Report issue"
-              className="p-1.5 rounded-full bg-black/60 backdrop-blur-md text-neutral-400 hover:text-rose-400 border border-white/10 active:scale-90 transition-all cursor-pointer pointer-events-auto"
+              className="p-1.5 rounded-full bg-black/60 backdrop-blur-md text-neutral-400 hover:text-primary-theme border border-white/10 active:scale-90 transition-all cursor-pointer pointer-events-auto"
             >
               <Flag className="w-3.5 h-3.5" />
             </button>
@@ -341,8 +341,8 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
             title={isLiked ? 'Unlike' : 'Like'}
             className={`p-1.5 rounded-full backdrop-blur-md border transition-all active:scale-90 cursor-pointer pointer-events-auto ${
               isLiked 
-                ? 'bg-rose-600 text-white border-rose-400/50 shadow-lg shadow-rose-950/40' 
-                : 'bg-black/60 text-neutral-300 hover:text-rose-400 border-white/10'
+                ? 'bg-primary-theme text-white border-primary-light/50 shadow-lg shadow-purple-950/40' 
+                : 'bg-black/60 text-neutral-300 hover:text-primary-theme border-white/10'
             }`}
           >
             <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-current text-white' : ''}`} />
@@ -428,11 +428,11 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
               title={isLiked ? 'Unlike' : 'Like'}
               className={`pointer-events-auto flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all active:scale-90 cursor-pointer ${
                 isLiked 
-                  ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' 
-                  : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:text-rose-400 hover:border-rose-500/30'
+                  ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme/40' 
+                  : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:text-primary-theme hover:border-primary-theme/30'
               }`}
             >
-              <Heart className={`w-3 h-3 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} />
+              <Heart className={`w-3 h-3 ${isLiked ? 'fill-primary-theme text-primary-theme' : ''}`} />
               <span>{heartCount}</span>
             </button>
 

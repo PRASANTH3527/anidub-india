@@ -234,7 +234,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
           }
           className={`w-full bg-[#121829]/95 border rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-12 pr-24 text-sm text-neutral-100 placeholder-neutral-500 outline-none transition-all duration-200 shadow-xl backdrop-blur-md ${
             isListening
-              ? 'border-rose-500 ring-4 ring-rose-500/25 bg-rose-950/20'
+              ? 'border-primary-theme ring-4 ring-primary-theme/25 bg-[var(--primary-badge)]/20'
               : 'border-neutral-700/80 group-hover:border-neutral-600 focus:border-accent-theme focus:ring-2 focus:ring-[var(--primary-ring)]'
           }`}
         />
@@ -343,7 +343,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
             onClick={toggleVoiceSearch}
             className={`p-2 rounded-xl transition-all duration-200 cursor-pointer active:scale-90 flex items-center justify-center ${
               isListening
-                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/40 ring-2 ring-rose-400 animate-pulse'
+                ? 'bg-primary-theme text-white shadow-lg shadow-primary-theme ring-2 ring-primary-light animate-pulse'
                 : 'text-neutral-400 hover:text-accent-theme hover:bg-neutral-800/80'
             }`}
             title={isListening ? 'Listening to speech... click to stop' : 'Search with your voice'}

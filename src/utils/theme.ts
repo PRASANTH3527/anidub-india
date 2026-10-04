@@ -18,19 +18,19 @@ export interface AnimeTheme {
 
 export const ANIME_THEMES: AnimeTheme[] = [
   {
-    id: 'default-red',
-    name: 'Default Red (Sukuna / Itachi)',
-    character: 'Sukuna & Itachi',
-    series: 'Jujutsu Kaisen & Naruto',
-    colorName: 'Crimson Flame',
-    previewColor: '#e11d48',
-    primary: '#e11d48',
-    gradient: 'linear-gradient(135deg, #e11d48, #be123c)',
-    glow: 'rgba(225, 29, 72, 0.4)',
-    light: '#fda4af',
-    badge: '#881337',
-    border: 'rgba(225, 29, 72, 0.45)',
-    ring: 'rgba(225, 29, 72, 0.6)',
+    id: 'default-purple',
+    name: 'Sleek Purple (Default)',
+    character: 'Lelouch Lamperouge',
+    series: 'Code Geass',
+    colorName: 'Royal Violet',
+    previewColor: '#9333ea',
+    primary: '#9333ea',
+    gradient: 'linear-gradient(135deg, #9333ea, #4f46e5)',
+    glow: 'rgba(147, 51, 234, 0.5)',
+    light: '#c084fc',
+    badge: '#581c87',
+    border: 'rgba(147, 51, 234, 0.4)',
+    ring: 'rgba(147, 51, 234, 0.6)',
   }
 ];
 

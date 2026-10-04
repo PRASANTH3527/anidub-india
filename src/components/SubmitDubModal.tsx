@@ -771,7 +771,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               {/* Title & Jikan Auto-fill Search */}
               <div className="relative" ref={dropdownRef}>
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                  <span>Anime Title (Type to Auto-Fill via MyAnimeList) <span className="text-rose-400">*</span></span>
+                  <span>Anime Title (Type to Auto-Fill via MyAnimeList) <span className="text-purple-400">*</span></span>
                   {isSearchingJikan && (
                     <span className="text-[10px] text-accent-theme flex items-center gap-1">
                       <Loader2 className="w-3 h-3 animate-spin" />
@@ -888,7 +888,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                       <button 
                         type="button"
                         onClick={() => setPoster('')}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-600 rounded-full flex items-center justify-center text-white border border-black shadow-lg hover:bg-rose-500 transition-colors"
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center text-white border border-black shadow-lg hover:bg-purple-500 transition-colors"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -945,7 +945,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                         <button
                           type="button"
                           onClick={() => removeStreamingPartner(idx)}
-                          className="p-2.5 rounded-xl bg-neutral-800/50 text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-all border border-neutral-700/40 cursor-pointer"
+                          className="p-2.5 rounded-xl bg-neutral-800/50 text-neutral-500 hover:text-purple-400 hover:bg-purple-950/20 transition-all border border-neutral-700/40 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1069,7 +1069,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                             <button
                               type="button"
                               onClick={() => removeEntry(idx)}
-                              className="p-1.5 rounded-xl text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-all border border-transparent hover:border-rose-500/30"
+                              className="p-1.5 rounded-xl text-neutral-500 hover:text-purple-400 hover:bg-purple-950/20 transition-all border border-transparent hover:border-purple-500/30"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>

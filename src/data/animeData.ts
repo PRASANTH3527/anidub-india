@@ -44,5 +44,5 @@ export const ALL_LANGUAGES: { name: string; short: string; bg: string; text: str
   { name: 'Telugu', short: 'Tel', bg: 'bg-sky-600', text: 'text-sky-100', border: 'border-sky-500' },
   { name: 'Hindi', short: 'Hin', bg: 'bg-emerald-600', text: 'text-emerald-100', border: 'border-emerald-500' },
   { name: 'Malayalam', short: 'Mal', bg: 'bg-violet-600', text: 'text-violet-100', border: 'border-violet-500' },
-  { name: 'Kannada', short: 'Kan', bg: 'bg-rose-600', text: 'text-rose-100', border: 'border-rose-500' },
+  { name: 'Kannada', short: 'Kan', bg: 'bg-indigo-600', text: 'text-indigo-100', border: 'border-indigo-500' },
 ];

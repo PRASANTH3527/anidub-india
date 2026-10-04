@@ -51,7 +51,7 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ toasts, onRemove }
               className="shrink-0"
             >
               {activeToast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-              {activeToast.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-400" />}
+              {activeToast.type === 'error' && <AlertCircle className="w-5 h-5 text-purple-400" />}
               {activeToast.type === 'info' && <Info className="w-5 h-5 text-purple-400" />}
             </motion.div>
 

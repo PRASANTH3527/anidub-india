@@ -38,7 +38,7 @@ interface AdminAnalyticsDashboardProps {
   onBack: () => void;
 }
 
-const COLORS = ['#8b5cf6', '#a855f7', '#6366f1', '#ec4899', '#f43f5e'];
+const COLORS = ['#8b5cf6', '#a855f7', '#6366f1', '#4f46e5', '#7c3aed'];
 
 export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = ({
   allAnime,
@@ -226,7 +226,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
                 <div className={`p-2.5 rounded-2xl bg-white/5 border border-white/5 ${stat.color}`}>
                   <stat.icon className="w-5 h-5" />
                 </div>
-                <div className={`flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border ${stat.isUp ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
+                <div className={`flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border ${stat.isUp ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'}`}>
                   {stat.isUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                   {stat.trend}
                 </div>
@@ -243,7 +243,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
                   initial={{ width: 0 }}
                   animate={{ width: stat.isUp ? '70%' : '40%' }}
                   transition={{ duration: 1, delay: 0.5 + (i * 0.1) }}
-                  className={`h-full ${stat.isUp ? 'bg-emerald-500' : 'bg-rose-500'} opacity-50`}
+                  className={`h-full ${stat.isUp ? 'bg-emerald-500' : 'bg-purple-500'} opacity-50`}
                 />
               </div>
             </motion.div>

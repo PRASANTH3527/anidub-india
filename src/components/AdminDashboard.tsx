@@ -49,7 +49,8 @@ import {
   Loader2,
   Lock,
   KeyRound,
-  ShieldAlert
+  ShieldAlert,
+  RefreshCw
 } from 'lucide-react';
 // Direct Firebase Firestore import as requested
 import { db } from '../lib/firebase';
@@ -123,15 +124,15 @@ const MobileChartTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-// Color palette for regional dub languages
+// Color palette for regional dub languages (Cool spectrum: Emerald to Indigo)
 const LANGUAGE_COLORS: Record<string, string> = {
   Hindi: '#10b981',     // Emerald
   Tamil: '#f59e0b',     // Amber
   Telugu: '#0ea5e9',    // Sky
   Malayalam: '#8b5cf6', // Purple
-  Kannada: '#f43f5e',   // Rose
+  Kannada: '#3b82f6',   // Blue (was Rose)
   English: '#6366f1',   // Indigo
-  Japanese: '#ec4899',  // Pink
+  Japanese: '#a855f7',  // Violet (was Pink)
 };
 
 // Formatter for relative timestamps
@@ -183,12 +184,23 @@ function normalizeFirestoreAnime(id: string, data: any): AnimeRecord {
 
   const likes = Number(data?.likes || data?.upvotes || data?.votes || 0);
 
+  // Robust title extraction
+  const title = (
+    data?.title || 
+    data?.name || 
+    data?.animeTitle || 
+    data?.anime_title || 
+    data?.title_en || 
+    data?.englishTitle || 
+    'Untitled Anime'
+  ).trim();
+
   return {
     id: id,
-    title: (data?.title || data?.name || 'Untitled Anime').trim(),
-    romajiTitle: (data?.romajiTitle || data?.japaneseTitle || '').trim(),
-    poster: data?.poster || data?.image || data?.cover || '',
-    banner: data?.banner || data?.bannerImage || '',
+    title,
+    romajiTitle: (data?.romajiTitle || data?.japaneseTitle || data?.title_jp || '').trim(),
+    poster: data?.poster || data?.image || data?.cover || data?.posterImage || '',
+    banner: data?.banner || data?.bannerImage || data?.coverImage || '',
     studio: data?.studio || 'Animation Studio',
     synopsis: data?.synopsis || data?.description || '',
     type: data?.type || 'TV Series',
@@ -300,48 +312,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       // 1. Fetch anime records STRICTLY and EXCLUSIVELY from real Firestore database collections
       const firestoreAnimeMap = new Map<string, AnimeRecord>();
+      
+      // Optimized: Use main collections. If we need to discover data, we do it in dbService.
+      // Here we just want the latest for the dashboard.
+      const primaryCollections = ['animes', 'submissions'];
+      
+      // If we are completely empty, check legacy once to help migration
+      const collections = catalogTitles.length === 0 
+        ? ['animes', 'submissions', 'anime', 'anime_records'] 
+        : primaryCollections;
 
-      // A. Query 'animes' collection in Firestore
-      try {
-        const animesSnap = await getDocs(collection(db, 'animes'));
-        animesSnap.forEach((docSnap) => {
-          const rec = normalizeFirestoreAnime(docSnap.id, docSnap.data());
-          if (rec && rec.id && rec.title) {
-            firestoreAnimeMap.set(rec.id, rec);
-          }
-        });
-      } catch (err) {
-        console.warn('[Admin] Firestore animes collection query notice:', err);
-      }
-
-      // B. Query 'anime' collection in Firestore in case singular collection name was used
-      try {
-        const animeSnap = await getDocs(collection(db, 'anime'));
-        animeSnap.forEach((docSnap) => {
-          if (!firestoreAnimeMap.has(docSnap.id)) {
-            const rec = normalizeFirestoreAnime(docSnap.id, docSnap.data());
-            if (rec && rec.id && rec.title) {
-              firestoreAnimeMap.set(rec.id, rec);
+      for (const collName of collections) {
+        try {
+          const snap = await getDocs(collection(db, collName));
+          snap.forEach((docSnap) => {
+            if (!firestoreAnimeMap.has(docSnap.id)) {
+              const rec = normalizeFirestoreAnime(docSnap.id, docSnap.data());
+              if (rec && rec.id && rec.title) {
+                firestoreAnimeMap.set(rec.id, rec);
+              }
             }
-          }
-        });
-      } catch (err) {
-        console.warn('[Admin] Firestore anime collection query notice:', err);
-      }
-
-      // C. Query 'submissions' collection in Firestore
-      try {
-        const subsSnap = await getDocs(collection(db, 'submissions'));
-        subsSnap.forEach((docSnap) => {
-          if (!firestoreAnimeMap.has(docSnap.id)) {
-            const rec = normalizeFirestoreAnime(docSnap.id, docSnap.data());
-            if (rec && rec.id && rec.title) {
-              firestoreAnimeMap.set(rec.id, rec);
-            }
-          }
-        });
-      } catch (err) {
-        console.warn('[Admin] Firestore submissions collection query notice:', err);
+          });
+        } catch (err) {
+          // If we hit a quota here, we'll stop the loop
+          if (String(err).toLowerCase().includes('quota')) break;
+        }
       }
 
       // STRICT: allAnime is exclusively what came from real Firebase collections!
@@ -569,34 +564,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, []);
 
-  // Set up real-time listener with Firestore (onSnapshot)
+  // Set up real-time listener via centralized dbService
   useEffect(() => {
-    fetchRealData();
+    // Start optimized sync in dbService
+    dbService.startRealtimeSync();
+    
+    // Subscribe to dbService updates to refresh analytics
+    const unsub = dbService.subscribe(() => {
+      fetchRealData();
+    });
 
-    // Direct real-time listeners on Firestore collections
-    let unsubAnimes: (() => void) | null = null;
-    let unsubAnime: (() => void) | null = null;
-    let unsubSubs: (() => void) | null = null;
-
-    try {
-      unsubAnimes = onSnapshot(collection(db, 'animes'), () => {
-        fetchRealData();
-      }, (e) => console.warn('[Admin] Firestore animes listener notice:', e));
-    } catch {}
-
-    try {
-      unsubAnime = onSnapshot(collection(db, 'anime'), () => {
-        fetchRealData();
-      }, (e) => console.warn('[Admin] Firestore anime listener notice:', e));
-    } catch {}
-
-    try {
-      unsubSubs = onSnapshot(collection(db, 'submissions'), () => {
-        fetchRealData();
-      }, (e) => console.warn('[Admin] Firestore submissions listener notice:', e));
-    } catch {}
-
-    // Real-time listener on Firestore analytics/realtime document
+    // Still need the specific analytics/realtime doc for dashboard metrics
     let unsubscribeFirestore: (() => void) | null = null;
     try {
       const realtimeRef = doc(db, 'analytics', 'realtime');
@@ -616,10 +594,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } catch {}
 
     return () => {
-      if (unsubAnimes) unsubAnimes();
-      if (unsubAnime) unsubAnime();
-      if (unsubSubs) unsubSubs();
+      unsub();
       if (unsubscribeFirestore) unsubscribeFirestore();
+      // We don't stop the global sync here because it's shared
     };
   }, [fetchRealData]);
 
@@ -851,13 +828,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   if (!isAdmin) {
     return (
       <div className="min-h-screen bg-[#0b0f17] text-neutral-100 flex items-center justify-center p-4 selection:bg-accent-theme selection:text-white">
-        <div className="w-full max-w-md bg-[#131926] border border-rose-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-center animate-in fade-in duration-300">
-          <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400 shadow-lg shadow-rose-950/40">
+        <div className="w-full max-w-md bg-[#131926] border border-purple-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-center animate-in fade-in duration-300">
+          <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center mx-auto text-purple-400 shadow-lg shadow-purple-950/40">
             <Lock className="w-8 h-8" />
           </div>
 
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-950/80 text-rose-300 border border-rose-500/30">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-950/80 text-purple-300 border border-purple-500/30">
               <ShieldAlert className="w-3.5 h-3.5" />
               <span>Admin Authentication Required</span>
             </div>
@@ -887,7 +864,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <KeyRound className="w-4 h-4 text-neutral-500 absolute right-3.5 top-3.5" />
               </div>
               {passcodeError && (
-                <p className="text-xs text-rose-400 mt-1.5 font-medium flex items-center gap-1">
+                <p className="text-xs text-purple-400 mt-1.5 font-medium flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5" />
                   <span>{passcodeError}</span>
                 </p>
@@ -953,10 +930,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* Exit Admin / Logout Button */}
             <button
               onClick={handleExitAdmin}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 active:scale-95 border border-rose-500/40 text-rose-300 hover:text-white text-xs font-bold transition-all cursor-pointer shadow-sm shadow-rose-950/40"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 active:scale-95 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-bold transition-all cursor-pointer shadow-sm shadow-purple-950/40"
               title="Exit Admin (Logout)"
             >
-              <LogOut className="w-3.5 h-3.5 text-rose-400" />
+              <LogOut className="w-3.5 h-3.5 text-purple-400" />
               <span>Exit Admin</span>
             </button>
           </div>
@@ -1440,10 +1417,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {isAdmin && (
                         <button
                           onClick={() => setAnimeToDelete(anime)}
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-rose-100 border border-rose-500/40 font-bold text-xs transition-all cursor-pointer"
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-purple-100 border border-purple-500/40 font-bold text-xs transition-all cursor-pointer"
                           title="Delete permanently"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                          <Trash2 className="w-3.5 h-3.5 text-purple-400" />
                           <span>Delete</span>
                         </button>
                       )}
@@ -1551,22 +1528,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <FolderOpen className="w-10 h-10 mx-auto text-neutral-600" />
                 <h3 className="font-bold text-white text-sm">
                   {catalogTitles.length === 0
-                    ? 'No Anime Uploaded to Database'
+                    ? 'Connecting to Live Catalog...'
                     : 'No Matching Anime Found'}
                 </h3>
                 <p className="text-xs text-neutral-400 max-w-sm mx-auto">
                   {catalogTitles.length === 0
-                    ? 'Your Firestore database currently has no anime documents. Click "Add New Anime" to upload your first title.'
+                    ? 'Syncing with Firestore collections. If you have uploaded documents to "animes", "anime", or "submissions", they will appear here automatically.'
                     : 'Try clearing your search query or language filter.'}
                 </p>
                 {catalogTitles.length === 0 ? (
-                  <button
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs cursor-pointer shadow-md"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Upload First Anime</span>
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                    <button
+                      onClick={() => fetchRealData()}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs cursor-pointer border border-neutral-700"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      <span>Retry Fetch</span>
+                    </button>
+                    <button
+                      onClick={() => setIsAddModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs cursor-pointer shadow-md"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Upload First Anime</span>
+                    </button>
+                  </div>
                 ) : (
                   <button
                     onClick={() => { setSearchManageQuery(''); setSelectedManageLang('All'); }}
@@ -1679,10 +1665,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {isAdmin && (
                         <button
                           onClick={() => setAnimeToDelete(anime)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-rose-100 border border-rose-500/40 text-xs font-bold transition-all cursor-pointer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 text-xs font-bold transition-all cursor-pointer"
                           title={`Delete ${anime.title}`}
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                          <Trash2 className="w-3.5 h-3.5 text-purple-400" />
                           <span>Delete</span>
                         </button>
                       )}
@@ -1793,10 +1779,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {isAdmin && (
                         <button
                           onClick={() => setAnimeToDelete(anime)}
-                          className="p-1 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-white transition-colors cursor-pointer"
+                          className="p-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white transition-colors cursor-pointer"
                           title="Delete Title"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                          <Trash2 className="w-3.5 h-3.5 text-purple-400" />
                         </button>
                       )}
                     </div>
@@ -1885,10 +1871,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               initial={{ scale: 0.95, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              className="relative w-full max-w-md bg-[#111726] border border-rose-500/30 rounded-3xl p-6 shadow-2xl z-10 space-y-4 text-white"
+              className="relative w-full max-w-md bg-[#111726] border border-purple-500/30 rounded-3xl p-6 shadow-2xl z-10 space-y-4 text-white"
             >
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
                   <AlertTriangle className="w-5 h-5" />
                 </div>
                 <div>
@@ -1949,7 +1935,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="button"
                   onClick={handleDeleteConfirm}
                   disabled={isDeleting}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold text-xs transition-all shadow-md shadow-rose-950/50 cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-xs transition-all shadow-md shadow-purple-950/50 cursor-pointer disabled:opacity-50"
                 >
                   {isDeleting ? (
                     <>

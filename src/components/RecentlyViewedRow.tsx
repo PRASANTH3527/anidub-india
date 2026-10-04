@@ -30,7 +30,7 @@ const DUB_BADGE_STYLES: Record<DubLanguage, { bg: string; text: string; label: s
   Telugu: { bg: 'bg-[#0284c7]', text: 'text-sky-100', label: 'Tel' },
   Hindi: { bg: 'bg-[#059669]', text: 'text-emerald-100', label: 'Hin' },
   Malayalam: { bg: 'bg-[#7c3aed]', text: 'text-purple-100', label: 'Mal' },
-  Kannada: { bg: 'bg-[#e11d48]', text: 'text-rose-100', label: 'Kan' },
+  Kannada: { bg: 'bg-[#4f46e5]', text: 'text-indigo-100', label: 'Kan' },
 };
 
 export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
@@ -93,7 +93,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
         <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             onClick={onClearHistory}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#141b2c] hover:bg-[#1f2940] active:scale-95 text-neutral-400 hover:text-rose-400 text-xs font-semibold transition-all border border-neutral-800 cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#141b2c] hover:bg-[#1f2940] active:scale-95 text-neutral-400 hover:text-purple-400 text-xs font-semibold transition-all border border-neutral-800 cursor-pointer"
             title="Clear recently viewed history"
           >
             <Trash2 className="w-3.5 h-3.5" />

@@ -7,7 +7,7 @@ import { ThemeWrapper } from '../components/ThemeWrapper';
 const DEFAULT_BANNER = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&h=630&fit=crop&q=85';
 
 export const viewport: Viewport = {
-  themeColor: '#e11d48',
+  themeColor: '#9333ea',
   width: 'device-width',
   initialScale: 1,
 };
@@ -28,16 +28,16 @@ export default function RootLayout({
       lang="en" 
       className="dark" 
       suppressHydrationWarning
-      data-anime-theme="default-red"
+      data-anime-theme="default-purple"
       style={{
-        ['--primary-accent' as any]: '#e11d48',
-        ['--primary-glow' as any]: 'rgba(225, 29, 72, 0.4)',
-        ['--primary-gradient' as any]: 'linear-gradient(135deg, #e11d48, #be123c)',
-        ['--primary-light' as any]: '#fda4af',
-        ['--primary-badge' as any]: '#881337',
-        ['--primary-border' as any]: 'rgba(225, 29, 72, 0.45)',
-        ['--primary-ring' as any]: 'rgba(225, 29, 72, 0.6)',
-        ['--primary-accent-rgb' as any]: '225, 29, 72',
+        ['--primary-accent' as any]: '#9333ea',
+        ['--primary-glow' as any]: 'rgba(147, 51, 234, 0.5)',
+        ['--primary-gradient' as any]: 'linear-gradient(135deg, #9333ea, #4f46e5)',
+        ['--primary-light' as any]: '#c084fc',
+        ['--primary-badge' as any]: '#581c87',
+        ['--primary-border' as any]: 'rgba(147, 51, 234, 0.4)',
+        ['--primary-ring' as any]: 'rgba(147, 51, 234, 0.6)',
+        ['--primary-accent-rgb' as any]: '147, 51, 234',
       }}
     >
       <body className="bg-[#0b0f17] text-neutral-100 antialiased min-h-screen">

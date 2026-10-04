@@ -373,7 +373,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                         </button>
                         <button
                           onClick={() => onRemoveFromWatchlist(anime.id)}
-                          className="p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg text-neutral-500 hover:text-purple-400 hover:bg-purple-950/30 transition-colors cursor-pointer"
                           title="Remove from Watchlist"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

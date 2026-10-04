@@ -103,7 +103,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             </button>
             <button
               onClick={onClearWatchlist}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-500/30 hover:bg-rose-500/10 active:scale-95 text-rose-300 text-xs font-semibold transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-purple-500/30 hover:bg-purple-500/10 active:scale-95 text-purple-300 text-xs font-semibold transition-all cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Clear Watchlist</span>

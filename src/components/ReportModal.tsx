@@ -78,12 +78,12 @@ export const ReportModal: React.FC<ReportModalProps> = ({
       />
 
       {/* Modal Card */}
-      <div className="relative w-full max-w-md bg-[#121829] border border-rose-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl z-10 animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-md bg-[#121829] border border-primary-theme/40 rounded-3xl p-5 sm:p-6 shadow-2xl z-10 animate-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-rose-950/80 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0 shadow-lg">
+            <div className="w-10 h-10 rounded-2xl bg-primary-theme/10 border border-primary-theme/30 flex items-center justify-center text-accent-theme shrink-0 shadow-lg">
               <Flag className="w-5 h-5 fill-current" />
             </div>
             <div>
@@ -131,7 +131,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                       onClick={() => setSelectedReason(r)}
                       className={`text-left px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
                         isSelected
-                          ? 'bg-rose-950/70 border-rose-500 text-rose-200 shadow-md shadow-rose-950/40'
+                          ? 'bg-primary-theme/20 border-primary-theme text-primary-theme shadow-md shadow-purple-950/40'
                           : 'bg-[#161d30] border-neutral-800 text-neutral-300 hover:border-neutral-700'
                       }`}
                     >
@@ -152,7 +152,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                 onChange={(e) => setDetails(e.target.value)}
                 placeholder="e.g. Correct link is Netflix, or episode 4 is missing Tamil audio..."
                 rows={3}
-                className="w-full bg-[#0b0f17] border border-neutral-800 focus:border-rose-500 rounded-2xl p-3 text-xs text-white placeholder-neutral-500 outline-none transition-colors resize-none"
+                className="w-full bg-[#0b0f17] border border-neutral-800 focus:border-primary-theme rounded-2xl p-3 text-xs text-white placeholder-neutral-500 outline-none transition-colors resize-none"
               />
             </div>
 
@@ -175,7 +175,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
               <button
                 type="submit"
                 disabled={isSubmitting || !selectedReason}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white text-xs font-bold shadow-lg shadow-rose-600/30 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-5 py-2.5 rounded-xl btn-primary-theme active:scale-95 text-white text-xs font-bold shadow-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <>
