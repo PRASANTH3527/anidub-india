@@ -460,16 +460,18 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
     if (isEditMode && activeAnime) {
       const success = dbService.updateAnime(activeAnime.id, payload);
-      setIsSubmitting(false);
+      
       if (success) {
-        // Trigger Telegram notification for updated anime
+        // Dispatch Telegram admin notification (similar to Feedback form)
         try {
-          fetch('/api/telegram/broadcast-anime', {
+          await fetch('/api/telegram/broadcast-anime', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            keepalive: true,
             body: JSON.stringify({
               message: `🔔 Anime Updated: ${title.trim()}`,
               text: `🔔 Anime Updated: ${title.trim()}`,
+              title: title.trim(),
               anime: {
                 id: activeAnime.id,
                 title: title.trim(),
@@ -481,15 +483,17 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 score: rating || 'N/A',
               },
             }),
-          }).catch((err) => console.warn('Failed to send Telegram notification:', err));
-        } catch (e) {
-          console.warn('Telegram trigger error:', e);
+          });
+        } catch (err) {
+          console.warn('Telegram notification error:', err);
         }
 
+        setIsSubmitting(false);
         toast.success('Anime Updated!', `"${title.trim()}" has been successfully updated.`);
         onClose();
         onSuccess?.();
       } else {
+        setIsSubmitting(false);
         toast.error('Update Failed', 'Could not update the record.');
       }
       return;
@@ -519,14 +523,16 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       },
     });
 
-    // Trigger Telegram notification for added anime
+    // Dispatch Telegram admin notification (similar to Feedback form)
     try {
-      fetch('/api/telegram/broadcast-anime', {
+      await fetch('/api/telegram/broadcast-anime', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
         body: JSON.stringify({
           message: `🔔 Anime Added: ${title.trim()}`,
           text: `🔔 Anime Added: ${title.trim()}`,
+          title: title.trim(),
           anime: {
             id: newRecord.id,
             title: title.trim(),
@@ -538,9 +544,9 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
             score: rating || 'N/A',
           },
         }),
-      }).catch((err) => console.warn('Failed to send Telegram notification:', err));
-    } catch (e) {
-      console.warn('Telegram trigger error:', e);
+      });
+    } catch (err) {
+      console.warn('Telegram notification error:', err);
     }
 
     setIsSubmitting(false);
