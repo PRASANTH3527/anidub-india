@@ -24,6 +24,23 @@ import { useToast } from './Toast';
 import { db } from '../lib/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
+// Helper to remove any undefined fields before saving to Firestore to prevent crashes
+function cleanFirestoreData(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(cleanFirestoreData);
+  if (typeof obj === 'object' && !(obj instanceof Date)) {
+    const res: Record<string, any> = {};
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val !== undefined) {
+        res[key] = cleanFirestoreData(val);
+      }
+    }
+    return res;
+  }
+  return obj;
+}
+
 interface SubmitDubModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -463,15 +480,18 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     if (isEditMode && activeAnime) {
       // 1. Direct write to live Firebase Firestore database
       try {
-        await setDoc(doc(db, 'animes', activeAnime.id), {
+        const sanitizedEditPayload = cleanFirestoreData({
           ...payload,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        });
 
-        await setDoc(doc(db, 'submissions', activeAnime.id), {
-          ...payload,
-          updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        await setDoc(doc(db, 'animes', activeAnime.id), sanitizedEditPayload, { merge: true });
+        try {
+          await setDoc(doc(db, 'anime', activeAnime.id), sanitizedEditPayload, { merge: true });
+        } catch {}
+        try {
+          await setDoc(doc(db, 'submissions', activeAnime.id), sanitizedEditPayload, { merge: true });
+        } catch {}
       } catch (fsEditErr) {
         console.error('[Firestore Direct Edit Error]', fsEditErr);
       }
@@ -549,19 +569,21 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       upvotes: 0,
     };
 
-    // 1. Save new anime data DIRECTLY to live Firebase Firestore database collections ('animes' and 'submissions')
+    // 1. Save new anime data DIRECTLY to live Firebase Firestore database collections ('animes', 'anime', and 'submissions')
     try {
-      await setDoc(doc(db, 'animes', newId), {
+      const sanitizedDocData = cleanFirestoreData({
         ...newRecord,
         createdAt: new Date().toISOString(),
         serverCreatedAt: serverTimestamp(),
       });
 
-      await setDoc(doc(db, 'submissions', newId), {
-        ...newRecord,
-        createdAt: new Date().toISOString(),
-        serverCreatedAt: serverTimestamp(),
-      });
+      await setDoc(doc(db, 'animes', newId), sanitizedDocData);
+
+      try {
+        await setDoc(doc(db, 'anime', newId), sanitizedDocData);
+      } catch {}
+
+      await setDoc(doc(db, 'submissions', newId), sanitizedDocData);
 
       // Log activity event in Firestore
       await setDoc(doc(db, 'activities', `act-${newId}`), {

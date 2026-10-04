@@ -258,11 +258,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'watchlists' | 'dubs' | 'feed'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'catalog' | 'watchlists' | 'dubs' | 'feed'>('overview');
+
+  // Pending Moderation State
+  const [pendingList, setPendingList] = useState<AnimeRecord[]>([]);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   // Manage Anime Catalog Search & Filter State
   const [searchManageQuery, setSearchManageQuery] = useState<string>('');
   const [selectedManageLang, setSelectedManageLang] = useState<string>('All');
+  const [selectedManageStatus, setSelectedManageStatus] = useState<'All' | 'pending' | 'approved'>('All');
   
   // Modals state for Edit and Delete
   const [animeToDelete, setAnimeToDelete] = useState<AnimeRecord | null>(null);
@@ -334,6 +339,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       // Save strictly to catalog state
       setCatalogTitles(allAnime);
+
+      // Extract pending submissions awaiting admin review
+      const pendingItems = allAnime.filter(
+        (a) => a.status === 'pending' || a.submissionStatus === 'pending'
+      );
+      setPendingList(pendingItems);
+      setPendingSubmissions(pendingItems.length);
 
       // 2. Fetch real user feedbacks from Firestore or storage
       let feedbackList: any[] = [];
@@ -609,6 +621,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Filtered anime list for Manage Anime tab
   const filteredCatalog = useMemo(() => {
     return catalogTitles.filter((item) => {
+      if (selectedManageStatus !== 'All') {
+        const isPending = item.status === 'pending' || item.submissionStatus === 'pending';
+        if (selectedManageStatus === 'pending' && !isPending) return false;
+        if (selectedManageStatus === 'approved' && isPending) return false;
+      }
       if (searchManageQuery.trim()) {
         const q = searchManageQuery.toLowerCase().trim();
         const matchesTitle = item.title?.toLowerCase().includes(q);
@@ -624,7 +641,99 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
       return true;
     });
-  }, [catalogTitles, searchManageQuery, selectedManageLang]);
+  }, [catalogTitles, searchManageQuery, selectedManageLang, selectedManageStatus]);
+
+  // Approve pending anime submission in live Firebase Firestore
+  const handleApprove = async (anime: AnimeRecord) => {
+    setApprovingId(anime.id);
+    try {
+      const updateData = {
+        status: 'approved',
+        submissionStatus: 'approved',
+        reviewedBy: 'Admin',
+        reviewedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // 1. Update in Firestore 'animes'
+      await setDoc(doc(db, 'animes', anime.id), updateData, { merge: true });
+
+      // 2. Update in Firestore 'anime' singular
+      try {
+        await setDoc(doc(db, 'anime', anime.id), updateData, { merge: true });
+      } catch {}
+
+      // 3. Update in Firestore 'submissions'
+      try {
+        await setDoc(doc(db, 'submissions', anime.id), updateData, { merge: true });
+      } catch {}
+
+      // 4. Log admin activity in Firestore
+      try {
+        await setDoc(doc(db, 'activities', `appr-${Date.now()}`), {
+          user: 'Admin',
+          action: 'approved',
+          animeTitle: anime.title,
+          timestamp: new Date(),
+          language: anime.dubs?.[0] || 'Indian Dub',
+          status: 'approved',
+        });
+      } catch {}
+
+      // 5. Update local databaseService cache
+      dbService.approveSubmission(anime.id, undefined, 'Admin');
+
+      // 6. Notify admin on Telegram
+      try {
+        await fetch('/api/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: `✅ Anime Approved: ${anime.title}`,
+            text: `✅ Anime Approved: ${anime.title}`,
+            title: anime.title,
+            anime: anime,
+          }),
+        });
+      } catch {}
+
+      toast.success('Anime Approved!', `"${anime.title}" is now published and live in the catalog.`);
+      await fetchRealData();
+    } catch (err: any) {
+      console.error('[Admin] Error approving anime:', err);
+      toast.error('Approval Failed', err?.message || 'Could not approve anime.');
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  // Reject pending anime submission
+  const handleReject = async (anime: AnimeRecord) => {
+    try {
+      const updateData = {
+        status: 'rejected',
+        submissionStatus: 'rejected',
+        reviewedBy: 'Admin',
+        reviewedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      await setDoc(doc(db, 'animes', anime.id), updateData, { merge: true });
+      try {
+        await setDoc(doc(db, 'anime', anime.id), updateData, { merge: true });
+      } catch {}
+      try {
+        await setDoc(doc(db, 'submissions', anime.id), updateData, { merge: true });
+      } catch {}
+
+      dbService.rejectSubmission(anime.id, undefined, 'Admin');
+      toast.info('Anime Rejected', `"${anime.title}" has been marked as rejected.`);
+      await fetchRealData();
+    } catch (err: any) {
+      console.error('[Admin] Error rejecting anime:', err);
+      toast.error('Action Failed', err?.message || 'Could not update status.');
+    }
+  };
 
   // Permanently delete anime from real Firebase Firestore database
   const handleDeleteConfirm = async () => {
@@ -745,6 +854,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="flex gap-1.5 mt-3 pt-1 border-t border-neutral-800/60 overflow-x-auto scrollbar-none">
           {[
             { id: 'overview', label: 'Overview' },
+            { id: 'pending', label: `Pending Approvals (${pendingSubmissions})` },
             { id: 'catalog', label: `Manage Anime (${catalogTitles.length})` },
             { id: 'watchlists', label: 'Popular & Watchlists' },
             { id: 'dubs', label: 'Regional Dubs' },
@@ -755,7 +865,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onClick={() => setActiveTab(tab.id as any)}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 activeTab === tab.id
-                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                  ? tab.id === 'pending' && pendingSubmissions > 0
+                    ? 'bg-amber-500 text-black shadow-md shadow-amber-500/30'
+                    : 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                  : tab.id === 'pending' && pendingSubmissions > 0
+                  ? 'bg-amber-950/70 text-amber-300 border border-amber-500/50 hover:bg-amber-900/60'
                   : 'bg-[#131926] text-neutral-400 hover:text-white border border-neutral-800'
               }`}
             >
@@ -831,10 +945,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="text-xl sm:text-2xl font-black text-white tracking-tight">
               {totalSubmissions.toLocaleString()}
             </div>
-            <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-amber-400">
+            <button
+              onClick={() => setActiveTab('pending')}
+              className="mt-1 flex items-center gap-1 text-[11px] font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer text-left"
+            >
               <AlertCircle className="w-3.5 h-3.5" />
-              <span>{pendingSubmissions} pending</span>
-            </div>
+              <span>{pendingSubmissions} pending (Review)</span>
+            </button>
           </motion.div>
 
           {/* Metric 4: Dub Streams / Total Upvotes */}
@@ -1030,6 +1147,203 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </motion.div>
         )}
 
+        {/* 5.3 Pending Approvals Tab View */}
+        {activeTab === 'pending' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4"
+          >
+            {/* Top Toolbar */}
+            <div className="p-4 rounded-3xl bg-[#131926] border border-amber-500/30 shadow-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-black text-white flex items-center gap-2">
+                    <Inbox className="w-4 h-4 text-amber-400" />
+                    <span>Pending Dub Submissions</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      {pendingList.length} Awaiting Approval
+                    </span>
+                  </h2>
+                  <p className="text-xs text-neutral-400">
+                    Real-time submissions from Firebase Firestore awaiting admin review and verification
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 text-xs font-bold transition-all cursor-pointer"
+                    title="Refresh live submissions from Firebase"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('catalog')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <Database className="w-3.5 h-3.5" />
+                    <span>Full Catalog</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Pending List */}
+            {pendingList.length === 0 ? (
+              <div className="p-8 rounded-3xl bg-[#131926] border border-neutral-800/90 shadow-xl text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mx-auto">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h3 className="font-bold text-white text-base">No Pending Submissions</h3>
+                <p className="text-xs text-neutral-400 max-w-sm mx-auto leading-relaxed">
+                  All user-submitted dubs have been reviewed and approved! When new titles are submitted through the "Submit Dub Info" form, they will instantly stream here in real-time.
+                </p>
+                <div className="pt-2">
+                  <button
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs cursor-pointer shadow-md shadow-purple-600/30 active:scale-95 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add New Anime Directly</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pendingList.map((anime) => (
+                  <div
+                    key={anime.id}
+                    className="p-4 rounded-3xl bg-[#131926] border border-amber-500/40 hover:border-amber-500/60 shadow-xl transition-all space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        {anime.poster ? (
+                          <img
+                            src={anime.poster}
+                            alt={anime.title}
+                            className="w-16 h-22 object-cover rounded-2xl bg-neutral-800 shrink-0 border border-neutral-700/60 shadow-lg"
+                          />
+                        ) : (
+                          <div className="w-16 h-22 rounded-2xl bg-amber-950/40 border border-amber-800/40 flex items-center justify-center shrink-0 text-amber-400 shadow-lg">
+                            <Tv className="w-7 h-7" />
+                          </div>
+                        )}
+
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                              Pending Approval
+                            </span>
+                            <span className="text-[11px] text-neutral-400 font-mono">
+                              ID: {anime.id}
+                            </span>
+                            {anime.releaseYear && (
+                              <span className="text-[11px] text-neutral-400">
+                                • {anime.releaseYear}
+                              </span>
+                            )}
+                            {anime.episodes && (
+                              <span className="text-[11px] text-neutral-400">
+                                • {anime.episodes} eps
+                              </span>
+                            )}
+                          </div>
+
+                          <h3 className="font-heading font-black text-white text-base leading-tight">
+                            {anime.title}
+                          </h3>
+                          {anime.romajiTitle && anime.romajiTitle !== anime.title && (
+                            <p className="text-xs text-neutral-400 italic">
+                              {anime.romajiTitle}
+                            </p>
+                          )}
+
+                          {anime.synopsis && (
+                            <p className="text-xs text-neutral-300 line-clamp-2 leading-relaxed pt-0.5">
+                              {anime.synopsis}
+                            </p>
+                          )}
+
+                          <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                            <span className="text-[11px] font-semibold text-neutral-400">Dubs:</span>
+                            {(anime.dubs || []).length === 0 ? (
+                              <span className="text-[11px] text-neutral-500 italic">None specified</span>
+                            ) : (
+                              (anime.dubs || []).map((dub) => (
+                                <span
+                                  key={dub}
+                                  className="text-[10px] px-2 py-0.5 rounded font-bold text-white shadow-xs"
+                                  style={{ backgroundColor: LANGUAGE_COLORS[dub] || '#8b5cf6' }}
+                                >
+                                  {dub}
+                                </span>
+                              ))
+                            )}
+                          </div>
+
+                          <div className="text-[11px] text-neutral-400 pt-1">
+                            Submitted by: <strong className="text-neutral-200">{anime.submittedBy?.userName || 'Community User'}</strong>
+                            {anime.submittedBy?.userEmail && ` (${anime.submittedBy.userEmail})`}
+                            {' • '}{formatRelativeTime(anime.submittedAt)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons: Approve, Edit, Reject, Delete */}
+                    <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-800/80 flex-wrap">
+                      <button
+                        onClick={() => handleApprove(anime)}
+                        disabled={approvingId === anime.id}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs transition-all shadow-md shadow-emerald-950/50 cursor-pointer disabled:opacity-50"
+                        title="Approve and publish to live catalog"
+                      >
+                        {approvingId === anime.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                        <span>Approve Anime</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleTriggerEdit(anime)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 font-bold text-xs transition-all cursor-pointer"
+                        title="Edit anime details before approving"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <span>Edit Details</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleReject(anime)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 hover:text-amber-100 border border-amber-500/40 font-bold text-xs transition-all cursor-pointer"
+                        title="Reject submission"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>Reject</span>
+                      </button>
+
+                      <button
+                        onClick={() => setAnimeToDelete(anime)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-rose-100 border border-rose-500/40 font-bold text-xs transition-all cursor-pointer"
+                        title="Delete permanently"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
         {/* 5.5 Manage Anime / Catalog Tab View */}
         {activeTab === 'catalog' && (
           <motion.div
@@ -1103,6 +1417,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       }`}
                     >
                       {lang}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Status Filter Chips */}
+                <div className="flex items-center gap-1 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
+                  {(['All', 'pending', 'approved'] as const).map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setSelectedManageStatus(st)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
+                        selectedManageStatus === st
+                          ? st === 'pending'
+                            ? 'bg-amber-500 text-black shadow-sm font-black'
+                            : 'bg-purple-600 text-white shadow-sm'
+                          : 'bg-neutral-800/80 text-neutral-400 hover:text-white border border-neutral-700/50'
+                      }`}
+                    >
+                      {st === 'All' ? 'All Status' : st === 'pending' ? `Pending (${pendingList.length})` : 'Approved'}
                     </button>
                   ))}
                 </div>
@@ -1211,8 +1544,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Action Buttons: Edit and Delete */}
+                    {/* Action Buttons: Approve, Edit and Delete */}
                     <div className="flex items-center gap-2 self-end sm:self-center shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-neutral-800/60 w-full sm:w-auto justify-end">
+                      {(anime.status === 'pending' || anime.submissionStatus === 'pending') && (
+                        <button
+                          onClick={() => handleApprove(anime)}
+                          disabled={approvingId === anime.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950/50 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                          title={`Approve ${anime.title}`}
+                        >
+                          {approvingId === anime.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          )}
+                          <span>Approve</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => handleTriggerEdit(anime)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 text-xs font-bold transition-all cursor-pointer"
@@ -1310,6 +1659,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       }`}>
                         {anime.status || 'approved'}
                       </span>
+                      {(anime.status === 'pending' || anime.submissionStatus === 'pending') && (
+                        <button
+                          onClick={() => handleApprove(anime)}
+                          disabled={approvingId === anime.id}
+                          className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-sm disabled:opacity-50"
+                          title="Approve Title"
+                        >
+                          {approvingId === anime.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-3 h-3" />
+                          )}
+                          <span>Approve</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => handleTriggerEdit(anime)}
                         className="p-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors cursor-pointer"
