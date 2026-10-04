@@ -780,7 +780,7 @@ function AppContent() {
         </div>
       )}
 
-      <main className="flex-grow pt-32 sm:pt-20 pb-6 transition-all duration-500">
+      <main className="flex-grow pt-4 sm:pt-6 pb-12 transition-all duration-500">
         <PullToRefresh onRefresh={dbService.syncWithServer.bind(dbService)}>
           {/* Stealth Admin Dashboard Integration */}
           {isAdmin && activeTab === 'library' && (

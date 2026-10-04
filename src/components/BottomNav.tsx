@@ -25,7 +25,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   return (
     <nav 
       aria-label="Mobile Navigation"
-      className="fixed top-16 left-0 right-0 z-40 bg-[#0b0f17]/90 backdrop-blur-xl border-b border-neutral-800/70 px-4 py-2 flex items-center justify-around sm:hidden shadow-[0_8px_30px_rgba(0,0,0,0.5)] transition-all"
+      className="sticky top-16 z-30 w-full bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 px-2 py-2 flex items-center justify-around sm:hidden shadow-lg transition-all"
     >
       <div className="w-full max-w-md mx-auto grid grid-cols-5 place-items-center">
         {/* Directory / Library */}
