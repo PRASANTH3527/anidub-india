@@ -1039,7 +1039,9 @@ function AppContent() {
           setAnimeToEdit(null);
         }}
         onSuccess={() => {
-          // Handled inside modal
+          dbService.syncWithServer().then(() => {
+            setApprovedAnime(dbService.getApprovedAnime());
+          });
         }}
       />
 

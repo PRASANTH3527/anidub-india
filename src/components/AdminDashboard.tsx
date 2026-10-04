@@ -39,7 +39,15 @@ import {
   CheckCircle2,
   AlertCircle,
   Inbox,
-  Database
+  Database,
+  Trash2,
+  Search,
+  Plus,
+  AlertTriangle,
+  Layers,
+  Film,
+  X,
+  Loader2
 } from 'lucide-react';
 // Direct Firebase Firestore import as requested
 import { db } from '../lib/firebase';
@@ -51,10 +59,14 @@ import {
   query,
   orderBy,
   limit,
+  deleteDoc,
+  setDoc,
   DocumentData
 } from 'firebase/firestore';
 import { dbService } from '../services/databaseService';
 import { AnimeRecord } from '../types/database';
+import { SubmitDubModal } from './SubmitDubModal';
+import { useToast } from './Toast';
 
 // Types for Admin Dashboard real state
 export interface WatchlistStat {
@@ -138,6 +150,81 @@ function formatRelativeTime(dateInput: string | number | Date | undefined): stri
   return new Date(timestamp).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
 }
 
+// Safely normalize a Firestore document snapshot into a valid AnimeRecord strictly
+function normalizeFirestoreAnime(id: string, data: any): AnimeRecord {
+  // Extract languages/dubs safely
+  let rawDubs: any[] = [];
+  if (Array.isArray(data?.dubs)) {
+    rawDubs = data.dubs;
+  } else if (Array.isArray(data?.languages)) {
+    rawDubs = data.languages;
+  } else if (Array.isArray(data?.dubLanguages)) {
+    rawDubs = data.dubLanguages;
+  } else if (Array.isArray(data?.dubDetails)) {
+    rawDubs = data.dubDetails.map((d: any) => d?.language || d);
+  } else if (typeof data?.dub === 'string' && data.dub.trim()) {
+    rawDubs = [data.dub.trim()];
+  } else if (typeof data?.language === 'string' && data.language.trim()) {
+    rawDubs = [data.language.trim()];
+  } else if (Array.isArray(data?.seasonDetails)) {
+    data.seasonDetails.forEach((s: any) => {
+      if (Array.isArray(s?.languages)) {
+        rawDubs.push(...s.languages);
+      }
+    });
+  }
+
+  const dubs: string[] = rawDubs
+    .map((d: any) => (typeof d === 'string' ? d.trim() : (d?.name || d?.language || '')))
+    .filter(Boolean);
+
+  const likes = Number(data?.likes || data?.upvotes || data?.votes || 0);
+
+  return {
+    id: id,
+    title: (data?.title || data?.name || 'Untitled Anime').trim(),
+    romajiTitle: (data?.romajiTitle || data?.japaneseTitle || '').trim(),
+    poster: data?.poster || data?.image || data?.cover || '',
+    banner: data?.banner || data?.bannerImage || '',
+    studio: data?.studio || 'Animation Studio',
+    synopsis: data?.synopsis || data?.description || '',
+    type: data?.type || 'TV Series',
+    episodes: Number(data?.episodes) || 12,
+    status: data?.status || data?.submissionStatus || 'approved',
+    submissionStatus: data?.submissionStatus || data?.status || 'approved',
+    releaseYear: Number(data?.releaseYear) || Number(data?.year) || new Date().getFullYear(),
+    rating: data?.rating || data?.score || 8.0,
+    genres: Array.isArray(data?.genres)
+      ? data.genres
+      : typeof data?.genres === 'string'
+      ? data.genres.split(',').map((g: string) => g.trim())
+      : [],
+    themes: Array.isArray(data?.themes) ? data.themes : [],
+    dubs: dubs as any,
+    dubDetails: Array.isArray(data?.dubDetails)
+      ? data.dubDetails
+      : dubs.map((lang: string) => ({
+          language: lang as any,
+          available: true,
+          platform: Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'],
+          notes: `Available in ${lang}`,
+        })),
+    platforms: Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'],
+    characters: Array.isArray(data?.characters) ? data.characters : [],
+    likes: likes,
+    upvotes: likes,
+    submittedAt: data?.submittedAt || data?.createdAt?.toDate?.()?.toISOString() || data?.createdAt || new Date().toISOString(),
+    updatedAt: data?.updatedAt || data?.updatedAt?.toDate?.()?.toISOString() || data?.submittedAt || new Date().toISOString(),
+    submittedBy: data?.submittedBy || {
+      userId: data?.userId || 'admin',
+      userName: data?.userName || 'Admin',
+      userEmail: data?.userEmail || '',
+    },
+    reviewedBy: data?.reviewedBy,
+    reviewedAt: data?.reviewedAt,
+  };
+}
+
 interface AdminDashboardProps {
   onExitAdmin?: () => void;
   onEditAnime?: (anime: AnimeRecord) => void;
@@ -156,6 +243,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [totalAnime, setTotalAnime] = useState<number>(0);
   const [totalSubmissions, setTotalSubmissions] = useState<number>(0);
   const [pendingSubmissions, setPendingSubmissions] = useState<number>(0);
+  const [catalogTitles, setCatalogTitles] = useState<AnimeRecord[]>([]);
   
   // Real charts state
   const [mostWatchlisted, setMostWatchlisted] = useState<WatchlistStat[]>([]);
@@ -170,45 +258,103 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'watchlists' | 'dubs' | 'feed'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'watchlists' | 'dubs' | 'feed'>('overview');
 
-  // Real Data Fetching from Firebase Firestore & actual database collections
+  // Manage Anime Catalog Search & Filter State
+  const [searchManageQuery, setSearchManageQuery] = useState<string>('');
+  const [selectedManageLang, setSelectedManageLang] = useState<string>('All');
+  
+  // Modals state for Edit and Delete
+  const [animeToDelete, setAnimeToDelete] = useState<AnimeRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [editingAnime, setEditingAnime] = useState<AnimeRecord | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  
+  const toast = useToast();
+
+  // Real Data Fetching strictly from Firebase Firestore database collections
   const fetchRealData = useCallback(async () => {
     try {
-      // 1. Fetch real catalog anime & submissions
-      const localRecords: AnimeRecord[] = dbService.getAllAnimeRecords();
-      let serverSubmissions: AnimeRecord[] = [];
+      // 1. Fetch anime records STRICTLY and EXCLUSIVELY from real Firestore database collections
+      const firestoreAnimeMap = new Map<string, AnimeRecord>();
+
+      // A. Query 'animes' collection in Firestore
       try {
-        const res = await fetch(`/api/submissions?t=${Date.now()}`, { cache: 'no-store' });
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const text = await res.text();
-            if (text && !text.trim().startsWith('<')) {
-              const json = JSON.parse(text);
-              serverSubmissions = Array.isArray(json) ? json : (json.data || json.record || []);
-            }
+        const animesSnap = await getDocs(collection(db, 'animes'));
+        animesSnap.forEach((docSnap) => {
+          const rec = normalizeFirestoreAnime(docSnap.id, docSnap.data());
+          if (rec && rec.id && rec.title) {
+            firestoreAnimeMap.set(rec.id, rec);
           }
-        }
-      } catch {
-        // Fallback silently to local / firestore data
+        });
+      } catch (err) {
+        console.warn('[Admin] Firestore animes collection query notice:', err);
       }
 
-      // Merge records uniquely by id
-      const allRecordsMap = new Map<string, AnimeRecord>();
-      serverSubmissions.forEach((r) => { if (r && r.id) allRecordsMap.set(r.id, r); });
-      localRecords.forEach((r) => { if (r && r.id && !allRecordsMap.has(r.id)) allRecordsMap.set(r.id, r); });
-      const allAnime = Array.from(allRecordsMap.values());
+      // B. Query 'anime' collection in Firestore in case singular collection name was used
+      try {
+        const animeSnap = await getDocs(collection(db, 'anime'));
+        animeSnap.forEach((docSnap) => {
+          if (!firestoreAnimeMap.has(docSnap.id)) {
+            const rec = normalizeFirestoreAnime(docSnap.id, docSnap.data());
+            if (rec && rec.id && rec.title) {
+              firestoreAnimeMap.set(rec.id, rec);
+            }
+          }
+        });
+      } catch (err) {
+        console.warn('[Admin] Firestore anime collection query notice:', err);
+      }
 
-      // 2. Fetch real user feedbacks
+      // C. Query 'submissions' collection in Firestore
+      try {
+        const subsSnap = await getDocs(collection(db, 'submissions'));
+        subsSnap.forEach((docSnap) => {
+          if (!firestoreAnimeMap.has(docSnap.id)) {
+            const rec = normalizeFirestoreAnime(docSnap.id, docSnap.data());
+            if (rec && rec.id && rec.title) {
+              firestoreAnimeMap.set(rec.id, rec);
+            }
+          }
+        });
+      } catch (err) {
+        console.warn('[Admin] Firestore submissions collection query notice:', err);
+      }
+
+      // STRICT: allAnime is exclusively what came from real Firebase collections!
+      // Completely ignore & remove any default/mock/dummy anime data!
+      const allAnime = Array.from(firestoreAnimeMap.values()).filter((item) => {
+        if (!item || !item.id || !item.title) return false;
+        const titleLower = item.title.trim().toLowerCase();
+        const idLower = item.id.trim().toLowerCase();
+        if (titleLower.startsWith('dummy') || titleLower.startsWith('test anime') || titleLower.startsWith('anime submission #')) return false;
+        if (idLower.startsWith('sub_test') || idLower.startsWith('sub_refactor') || idLower === 'sub-test-1' || idLower === 'test-jujutsu') return false;
+        return true;
+      });
+
+      // Save strictly to catalog state
+      setCatalogTitles(allAnime);
+
+      // 2. Fetch real user feedbacks from Firestore or storage
       let feedbackList: any[] = [];
       try {
-        const localFbRaw = localStorage.getItem('anidub_feedback');
-        if (localFbRaw) {
-          const parsed = JSON.parse(localFbRaw);
-          if (Array.isArray(parsed)) feedbackList = parsed;
+        const fbSnap = await getDocs(collection(db, 'feedback'));
+        if (!fbSnap.empty) {
+          fbSnap.forEach((d) => {
+            feedbackList.push({ id: d.id, ...d.data() });
+          });
         }
       } catch {}
+
+      if (feedbackList.length === 0) {
+        try {
+          const localFbRaw = localStorage.getItem('anidub_feedback');
+          if (localFbRaw) {
+            const parsed = JSON.parse(localFbRaw);
+            if (Array.isArray(parsed)) feedbackList = parsed;
+          }
+        } catch {}
+      }
 
       // 3. Query Firestore for real-time collections (watchlists, users, analytics, streams)
       let firestoreWatchlistsCount = 0;
@@ -217,12 +363,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       let firestoreActivities: ActivityEvent[] = [];
 
       try {
-        // Fetch Firestore watchlists collection
         const watchlistsColl = collection(db, 'watchlists');
         const watchlistsSnap = await getDocs(watchlistsColl);
         firestoreWatchlistsCount = watchlistsSnap.size;
       } catch (err) {
-        // Fallback to local watchlist items if Firestore collection is fresh
         try {
           const savedWatchlist = localStorage.getItem('anidub_local_watchlist');
           const parsed = savedWatchlist ? JSON.parse(savedWatchlist) : [];
@@ -231,7 +375,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       try {
-        // Fetch Firestore users collection or active sessions
         const usersColl = collection(db, 'users');
         const usersSnap = await getDocs(usersColl);
         firestoreUsersCount = usersSnap.size;
@@ -240,7 +383,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       try {
-        // Fetch Firestore dub_streams / streams collection
         const streamsColl = collection(db, 'dub_streams');
         const streamsSnap = await getDocs(streamsColl);
         firestoreStreamsCount = streamsSnap.size;
@@ -249,7 +391,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       try {
-        // Fetch Firestore activities / submissions collection for feed
         const actColl = collection(db, 'activities');
         const actQuery = query(actColl, orderBy('timestamp', 'desc'), limit(15));
         const actSnap = await getDocs(actQuery);
@@ -270,22 +411,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }
       } catch {}
 
-      // 4. Calculate actual statistics
+      // 4. Calculate actual statistics strictly from real Firebase uploads
       const totalAnimeCount = allAnime.length;
       const totalSubsCount = allAnime.length;
       const pendingCount = allAnime.filter(a => a.status === 'pending' || a.submissionStatus === 'pending').length;
       
-      // Calculate total dub streams from total upvotes + firestore stream actions
       const totalUpvotes = allAnime.reduce((acc, curr) => acc + Number(curr.likes || curr.upvotes || 0), 0);
       const computedStreams = firestoreStreamsCount > 0 ? firestoreStreamsCount : totalUpvotes;
 
-      // Active Users: combined unique catalog contributors + watchlist saves + registered users
       const computedActiveUsers = Math.max(
         firestoreUsersCount,
-        firestoreWatchlistsCount + pendingCount + (totalAnimeCount > 0 ? Math.ceil(totalAnimeCount * 0.4) : 1)
+        firestoreWatchlistsCount + pendingCount + (totalAnimeCount > 0 ? Math.ceil(totalAnimeCount * 0.4) : (firestoreUsersCount > 0 ? 1 : 0))
       );
 
-      // 5. Generate Real Most Watchlisted / Upvoted Titles (Bar Chart)
+      // 5. Generate Real Most Watchlisted / Upvoted Titles strictly from Firebase uploads
       const sortedByPopularity: WatchlistStat[] = [...allAnime]
         .sort((a, b) => Number(b.likes || b.upvotes || 0) - Number(a.likes || a.upvotes || 0))
         .slice(0, 6)
@@ -297,7 +436,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           dubs: Array.isArray(a.dubs) ? a.dubs : [],
         }));
 
-      // 6. Generate Real Regional Dub Language Distribution (Donut Chart)
+      // 6. Generate Real Regional Dub Language Distribution strictly from Firebase uploads
       const dubCounts: Record<string, number> = {};
       let totalDubMentions = 0;
 
@@ -322,7 +461,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           color: LANGUAGE_COLORS[name] || '#8b5cf6',
         }));
 
-      // 7. Generate Real Activity Timeline from Catalog Timestamps (Area Chart)
+      // 7. Generate Real Activity Timeline from Catalog Timestamps
       const dayBuckets: Record<string, { active: number; views: number }> = {
         Mon: { active: 0, views: 0 },
         Tue: { active: 0, views: 0 },
@@ -384,10 +523,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         });
       });
 
-      // Sort chronological descending
       activities.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-      // Update state with actual real data
+      // Update state with strictly real Firebase data
       setActiveUsers(computedActiveUsers);
       setTotalWatchlists(firestoreWatchlistsCount);
       setDubStreams(computedStreams);
@@ -407,14 +545,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, []);
 
-  // Set up real-time listener with Firestore (onSnapshot) and local database events
+  // Set up real-time listener with Firestore (onSnapshot)
   useEffect(() => {
     fetchRealData();
 
-    // Subscribe to local catalog changes
-    const unsubscribeDb = dbService.subscribe(() => {
-      fetchRealData();
-    });
+    // Direct real-time listeners on Firestore collections
+    let unsubAnimes: (() => void) | null = null;
+    let unsubAnime: (() => void) | null = null;
+    let unsubSubs: (() => void) | null = null;
+
+    try {
+      unsubAnimes = onSnapshot(collection(db, 'animes'), () => {
+        fetchRealData();
+      }, (e) => console.warn('[Admin] Firestore animes listener notice:', e));
+    } catch {}
+
+    try {
+      unsubAnime = onSnapshot(collection(db, 'anime'), () => {
+        fetchRealData();
+      }, (e) => console.warn('[Admin] Firestore anime listener notice:', e));
+    } catch {}
+
+    try {
+      unsubSubs = onSnapshot(collection(db, 'submissions'), () => {
+        fetchRealData();
+      }, (e) => console.warn('[Admin] Firestore submissions listener notice:', e));
+    } catch {}
 
     // Real-time listener on Firestore analytics/realtime document
     let unsubscribeFirestore: (() => void) | null = null;
@@ -431,17 +587,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             setIsConnected(true);
           }
         },
-        (error) => {
-          // Fallback seamlessly to local & server API
-          console.warn('[Admin] Firestore snapshot listener notice:', error.message);
-        }
+        () => {}
       );
-    } catch (e) {
-      console.warn('[Admin] Firestore real-time initialization:', e);
-    }
+    } catch {}
 
     return () => {
-      unsubscribeDb();
+      if (unsubAnimes) unsubAnimes();
+      if (unsubAnime) unsubAnime();
+      if (unsubSubs) unsubSubs();
       if (unsubscribeFirestore) unsubscribeFirestore();
     };
   }, [fetchRealData]);
@@ -451,6 +604,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsRefreshing(true);
     await fetchRealData();
     setTimeout(() => setIsRefreshing(false), 500);
+  };
+
+  // Filtered anime list for Manage Anime tab
+  const filteredCatalog = useMemo(() => {
+    return catalogTitles.filter((item) => {
+      if (searchManageQuery.trim()) {
+        const q = searchManageQuery.toLowerCase().trim();
+        const matchesTitle = item.title?.toLowerCase().includes(q);
+        const matchesRomaji = item.romajiTitle?.toLowerCase().includes(q);
+        const matchesGenre = item.genres?.some(g => g.toLowerCase().includes(q));
+        if (!matchesTitle && !matchesRomaji && !matchesGenre) return false;
+      }
+      if (selectedManageLang !== 'All') {
+        const hasLang = (item.dubs || []).some(
+          d => String(d).toLowerCase() === selectedManageLang.toLowerCase()
+        );
+        if (!hasLang) return false;
+      }
+      return true;
+    });
+  }, [catalogTitles, searchManageQuery, selectedManageLang]);
+
+  // Permanently delete anime from real Firebase Firestore database
+  const handleDeleteConfirm = async () => {
+    if (!animeToDelete) return;
+    setIsDeleting(true);
+    try {
+      // 1. Delete from Firestore 'animes' collection
+      await deleteDoc(doc(db, 'animes', animeToDelete.id));
+
+      // 2. Delete from 'anime' singular collection if exists
+      try {
+        await deleteDoc(doc(db, 'anime', animeToDelete.id));
+      } catch {}
+
+      // 3. Delete from 'submissions' collection if exists
+      try {
+        await deleteDoc(doc(db, 'submissions', animeToDelete.id));
+      } catch {}
+
+      // 4. Log admin delete activity
+      try {
+        await setDoc(doc(db, 'activities', `del-${Date.now()}`), {
+          user: 'Admin',
+          action: 'deleted',
+          animeTitle: animeToDelete.title,
+          timestamp: new Date(),
+        });
+      } catch {}
+
+      // 5. Clean up local service cache and notify listeners
+      dbService.deleteSubmission(animeToDelete.id);
+
+      toast.success('Anime Deleted Permanently', `"${animeToDelete.title}" was removed from Cloud Firestore.`);
+      await fetchRealData();
+    } catch (err: any) {
+      console.error('[Admin] Firestore deletion error:', err);
+      toast.error('Deletion Failed', err?.message || 'Could not delete item from database.');
+    } finally {
+      setIsDeleting(false);
+      setAnimeToDelete(null);
+    }
+  };
+
+  // Trigger edit flow
+  const handleTriggerEdit = (anime: AnimeRecord) => {
+    if (onEditAnime) {
+      onEditAnime(anime);
+    } else {
+      setEditingAnime(anime);
+    }
   };
 
   // Exit Admin / Logout handler (clears session and redirects to '/')
@@ -521,6 +745,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="flex gap-1.5 mt-3 pt-1 border-t border-neutral-800/60 overflow-x-auto scrollbar-none">
           {[
             { id: 'overview', label: 'Overview' },
+            { id: 'catalog', label: `Manage Anime (${catalogTitles.length})` },
             { id: 'watchlists', label: 'Popular & Watchlists' },
             { id: 'dubs', label: 'Regional Dubs' },
             { id: 'feed', label: 'Live User Feed' },
@@ -559,10 +784,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-baseline gap-1.5">
               <span>{activeUsers.toLocaleString()}</span>
             </div>
-            <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-purple-400">
+            <button
+              onClick={() => setActiveTab('catalog')}
+              className="mt-1 flex items-center gap-1 text-[11px] font-bold text-purple-400 hover:text-purple-300 transition-colors cursor-pointer text-left"
+            >
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>{totalAnime} in catalog</span>
-            </div>
+              <span>{totalAnime} in catalog (Manage)</span>
+            </button>
           </motion.div>
 
           {/* Metric 2: Total Watchlists */}
@@ -802,6 +1030,308 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </motion.div>
         )}
 
+        {/* 5.5 Manage Anime / Catalog Tab View */}
+        {activeTab === 'catalog' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4"
+          >
+            {/* Top Toolbar */}
+            <div className="p-4 rounded-3xl bg-[#131926] border border-neutral-800/90 shadow-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-black text-white flex items-center gap-2">
+                    <Database className="w-4 h-4 text-purple-400" />
+                    <span>Manage Anime Catalog</span>
+                  </h2>
+                  <p className="text-xs text-neutral-400">
+                    Live records fetched directly from Cloud Firestore ({catalogTitles.length} total)
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-600/30 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add New Anime</span>
+                  </button>
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className="p-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 text-xs font-bold transition-all cursor-pointer"
+                    title="Refresh from Firebase"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-purple-400' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Search & Language Filters */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2 border-t border-neutral-800/80">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    type="text"
+                    value={searchManageQuery}
+                    onChange={(e) => setSearchManageQuery(e.target.value)}
+                    placeholder="Search catalog titles..."
+                    className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-700/80 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500"
+                  />
+                  {searchManageQuery && (
+                    <button
+                      onClick={() => setSearchManageQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Language Filter Chips */}
+                <div className="flex items-center gap-1 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
+                  {['All', 'Tamil', 'Telugu', 'Hindi', 'Malayalam', 'Kannada'].map((lang) => (
+                    <button
+                      key={lang}
+                      onClick={() => setSelectedManageLang(lang)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
+                        selectedManageLang === lang
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-neutral-800/80 text-neutral-400 hover:text-white border border-neutral-700/50'
+                      }`}
+                    >
+                      {lang}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Anime List Grid */}
+            {filteredCatalog.length === 0 ? (
+              <div className="p-8 rounded-3xl bg-[#131926] border border-neutral-800/90 shadow-xl text-center space-y-3">
+                <FolderOpen className="w-10 h-10 mx-auto text-neutral-600" />
+                <h3 className="font-bold text-white text-sm">
+                  {catalogTitles.length === 0
+                    ? 'No Anime Uploaded to Database'
+                    : 'No Matching Anime Found'}
+                </h3>
+                <p className="text-xs text-neutral-400 max-w-sm mx-auto">
+                  {catalogTitles.length === 0
+                    ? 'Your Firestore database currently has no anime documents. Click "Add New Anime" to upload your first title.'
+                    : 'Try clearing your search query or language filter.'}
+                </p>
+                {catalogTitles.length === 0 ? (
+                  <button
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs cursor-pointer shadow-md"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Upload First Anime</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { setSearchManageQuery(''); setSelectedManageLang('All'); }}
+                    className="text-xs text-purple-400 hover:underline font-bold cursor-pointer"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {filteredCatalog.map((anime) => (
+                  <div
+                    key={anime.id}
+                    className="p-3 sm:p-4 rounded-2xl bg-[#131926] border border-neutral-800/90 hover:border-neutral-700/90 shadow-lg transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {anime.poster ? (
+                        <img
+                          src={anime.poster}
+                          alt={anime.title}
+                          className="w-12 h-16 sm:w-14 sm:h-20 object-cover rounded-xl bg-neutral-800 shrink-0 border border-neutral-700/60 shadow-md"
+                        />
+                      ) : (
+                        <div className="w-12 h-16 sm:w-14 sm:h-20 rounded-xl bg-purple-950/40 border border-purple-800/40 flex items-center justify-center shrink-0 text-purple-400 shadow-md">
+                          <Tv className="w-6 h-6" />
+                        </div>
+                      )}
+                      
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                            anime.status === 'approved'
+                              ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/40'
+                              : 'bg-amber-950/60 text-amber-400 border border-amber-800/40'
+                          }`}>
+                            {anime.status || 'approved'}
+                          </span>
+                          <span className="text-[10px] text-neutral-400 font-mono">
+                            ID: {anime.id}
+                          </span>
+                          {anime.releaseYear && (
+                            <span className="text-[10px] text-neutral-400">
+                              • {anime.releaseYear}
+                            </span>
+                          )}
+                          {anime.episodes && (
+                            <span className="text-[10px] text-neutral-400">
+                              • {anime.episodes} eps
+                            </span>
+                          )}
+                        </div>
+
+                        <h3 className="font-bold text-white text-sm sm:text-base leading-tight truncate">
+                          {anime.title}
+                        </h3>
+                        {anime.romajiTitle && anime.romajiTitle !== anime.title && (
+                          <p className="text-xs text-neutral-400 truncate italic">
+                            {anime.romajiTitle}
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                          {(anime.dubs || []).length === 0 ? (
+                            <span className="text-[11px] text-neutral-500 italic">No dubs configured</span>
+                          ) : (
+                            (anime.dubs || []).map((dub) => (
+                              <span
+                                key={dub}
+                                className="text-[10px] px-2 py-0.5 rounded font-bold text-white shadow-xs"
+                                style={{ backgroundColor: LANGUAGE_COLORS[dub] || '#8b5cf6' }}
+                              >
+                                {dub}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons: Edit and Delete */}
+                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-neutral-800/60 w-full sm:w-auto justify-end">
+                      <button
+                        onClick={() => handleTriggerEdit(anime)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 text-xs font-bold transition-all cursor-pointer"
+                        title={`Edit ${anime.title}`}
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        onClick={() => setAnimeToDelete(anime)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-rose-100 border border-rose-500/40 text-xs font-bold transition-all cursor-pointer"
+                        title={`Delete ${anime.title}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Actual Database Uploads strictly from Firebase */}
+        {(activeTab === 'overview' || activeTab === 'dubs') && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-3xl bg-[#131926] border border-neutral-800/90 shadow-xl space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Actual Firestore Uploads</span>
+                </h3>
+                <p className="text-[11px] text-neutral-400">Strictly from real Firebase database (no dummy/mock records)</p>
+              </div>
+              <span className="text-xs font-extrabold text-purple-300 bg-purple-950/60 px-2.5 py-0.5 rounded-lg border border-purple-800/40">
+                {catalogTitles.length} {catalogTitles.length === 1 ? 'Title' : 'Titles'}
+              </span>
+            </div>
+
+            {catalogTitles.length === 0 ? (
+              <div className="py-8 text-center text-xs text-neutral-400 space-y-2">
+                <FolderOpen className="w-8 h-8 mx-auto text-neutral-600 mb-1" />
+                <p className="font-semibold text-neutral-300">No titles in Firebase database yet</p>
+                <p className="text-[11px] text-neutral-500 max-w-sm mx-auto">
+                  Only titles uploaded to your Firestore database appear here and count towards the regional dub chart and totals.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-neutral-800/60">
+                {catalogTitles.map((anime) => (
+                  <div key={anime.id} className="py-2.5 flex items-center justify-between text-xs gap-3">
+                    <div className="flex items-center gap-2.5 truncate min-w-0 flex-1">
+                      {anime.poster ? (
+                        <img
+                          src={anime.poster}
+                          alt={anime.title}
+                          className="w-8 h-10 object-cover rounded-md bg-neutral-800 shrink-0 border border-neutral-700/50"
+                        />
+                      ) : (
+                        <div className="w-8 h-10 rounded-md bg-purple-950/40 border border-purple-800/40 flex items-center justify-center shrink-0 text-purple-400">
+                          <Tv className="w-4 h-4" />
+                        </div>
+                      )}
+                      <div className="min-w-0 truncate">
+                        <div className="font-bold text-white truncate text-xs">{anime.title}</div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {(anime.dubs || []).length === 0 ? (
+                            <span className="text-[10px] text-neutral-500 italic">No dubs listed</span>
+                          ) : (
+                            (anime.dubs || []).map((dub) => (
+                              <span
+                                key={dub}
+                                className="text-[10px] px-1.5 py-0.5 rounded font-semibold text-white shadow-xs"
+                                style={{ backgroundColor: LANGUAGE_COLORS[dub] || '#8b5cf6' }}
+                              >
+                                {dub}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                        anime.status === 'approved' 
+                          ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/40'
+                          : 'bg-amber-950/60 text-amber-400 border border-amber-800/40'
+                      }`}>
+                        {anime.status || 'approved'}
+                      </span>
+                      <button
+                        onClick={() => handleTriggerEdit(anime)}
+                        className="p-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                        title="Edit Title"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setAnimeToDelete(anime)}
+                        className="p-1 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-white transition-colors cursor-pointer"
+                        title="Delete Title"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
         {/* 6. Real-Time User Feed (Original Submissions & Feedback) */}
         {(activeTab === 'overview' || activeTab === 'feed') && (
           <div className="p-4 rounded-3xl bg-[#131926] border border-neutral-800/90 shadow-xl space-y-3">
@@ -841,11 +1371,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span className="text-[10px] text-neutral-500 font-mono">
                         {act.time}
                       </span>
-                      {onEditAnime && act.action !== 'feedback' && (
+                      {act.action !== 'feedback' && (
                         <button
                           onClick={() => {
-                            const rawItem = dbService.getAnimeById(act.id.replace('sub-', ''));
-                            if (rawItem) onEditAnime(rawItem);
+                            const rawItem = catalogTitles.find(a => a.id === act.id.replace('sub-', '')) || dbService.getAnimeById(act.id.replace('sub-', ''));
+                            if (rawItem) handleTriggerEdit(rawItem);
                           }}
                           className="p-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white transition-colors cursor-pointer"
                           title="Edit this anime"
@@ -861,6 +1391,135 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
       </main>
+
+      {/* 7. Permanent Delete Confirmation Modal */}
+      <AnimatePresence>
+        {animeToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isDeleting && setAnimeToDelete(null)}
+              className="fixed inset-0 bg-black/80 backdrop-blur-md"
+            />
+
+            {/* Dialog Card */}
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative w-full max-w-md bg-[#111726] border border-rose-500/30 rounded-3xl p-6 shadow-2xl z-10 space-y-4 text-white"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-black text-base text-white leading-tight">
+                    Permanently Delete Anime?
+                  </h3>
+                  <p className="text-xs text-neutral-400 mt-1">
+                    This will permanently remove this record from your real Cloud Firestore database. This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              {/* Item Preview Card */}
+              <div className="p-3 rounded-2xl bg-neutral-900/80 border border-neutral-800 flex items-center gap-3">
+                {animeToDelete.poster ? (
+                  <img
+                    src={animeToDelete.poster}
+                    alt={animeToDelete.title}
+                    className="w-10 h-14 object-cover rounded-lg bg-neutral-800 shrink-0"
+                  />
+                ) : (
+                  <div className="w-10 h-14 rounded-lg bg-neutral-800 flex items-center justify-center text-neutral-500 shrink-0">
+                    <Tv className="w-5 h-5" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-white text-xs truncate">
+                    {animeToDelete.title}
+                  </div>
+                  <div className="text-[11px] text-neutral-400 font-mono mt-0.5 truncate">
+                    ID: {animeToDelete.id}
+                  </div>
+                  <div className="flex gap-1 flex-wrap mt-1">
+                    {(animeToDelete.dubs || []).map((dub) => (
+                      <span
+                        key={dub}
+                        className="text-[9px] px-1.5 py-0.2 rounded font-semibold text-white"
+                        style={{ backgroundColor: LANGUAGE_COLORS[dub] || '#8b5cf6' }}
+                      >
+                        {dub}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAnimeToDelete(null)}
+                  disabled={isDeleting}
+                  className="px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteConfirm}
+                  disabled={isDeleting}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold text-xs transition-all shadow-md shadow-rose-950/50 cursor-pointer disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Deleting from Firebase...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Permanently Delete</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Internal Edit Modal Flow */}
+      {editingAnime && (
+        <SubmitDubModal
+          isOpen={true}
+          editAnime={editingAnime}
+          onClose={() => setEditingAnime(null)}
+          onSuccess={() => {
+            setEditingAnime(null);
+            fetchRealData();
+            toast.success('Anime Updated', 'Database record updated successfully.');
+          }}
+        />
+      )}
+
+      {/* Internal Add Anime Modal Flow */}
+      {isAddModalOpen && (
+        <SubmitDubModal
+          isOpen={true}
+          onClose={() => setIsAddModalOpen(false)}
+          onSuccess={() => {
+            setIsAddModalOpen(false);
+            fetchRealData();
+            toast.success('Anime Added', 'New anime successfully added to database.');
+          }}
+        />
+      )}
     </div>
   );
 };

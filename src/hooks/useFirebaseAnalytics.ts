@@ -4,15 +4,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { 
   collection, 
   doc, 
+  getDocs,
   onSnapshot, 
   query, 
   orderBy, 
   limit,
-  setDoc,
+  setDoc, 
   serverTimestamp 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { dbService } from '../services/databaseService';
 import { AnimeRecord } from '../types/database';
 
 export interface WatchlistStat {
@@ -95,6 +95,57 @@ const LANGUAGE_COLORS: Record<string, string> = {
   Japanese: '#ec4899',  // Pink
 };
 
+function normalizeRecord(id: string, data: any): AnimeRecord {
+  let rawDubs: any[] = [];
+  if (Array.isArray(data?.dubs)) rawDubs = data.dubs;
+  else if (Array.isArray(data?.languages)) rawDubs = data.languages;
+  else if (Array.isArray(data?.dubLanguages)) rawDubs = data.dubLanguages;
+  else if (Array.isArray(data?.dubDetails)) rawDubs = data.dubDetails.map((d: any) => d?.language || d);
+  else if (typeof data?.dub === 'string' && data.dub.trim()) rawDubs = [data.dub.trim()];
+  else if (typeof data?.language === 'string' && data.language.trim()) rawDubs = [data.language.trim()];
+
+  const dubs = rawDubs.map((d: any) => (typeof d === 'string' ? d.trim() : (d?.name || d?.language || ''))).filter(Boolean);
+  const likes = Number(data?.likes || data?.upvotes || data?.votes || 0);
+
+  return {
+    id: id,
+    title: (data?.title || data?.name || 'Untitled Anime').trim(),
+    romajiTitle: (data?.romajiTitle || data?.japaneseTitle || '').trim(),
+    poster: data?.poster || data?.image || data?.cover || '',
+    banner: data?.banner || data?.bannerImage || '',
+    studio: data?.studio || 'Animation Studio',
+    synopsis: data?.synopsis || data?.description || '',
+    type: data?.type || 'TV Series',
+    episodes: Number(data?.episodes) || 12,
+    status: data?.status || data?.submissionStatus || 'approved',
+    submissionStatus: data?.submissionStatus || data?.status || 'approved',
+    releaseYear: Number(data?.releaseYear) || Number(data?.year) || new Date().getFullYear(),
+    rating: data?.rating || data?.score || 8.0,
+    genres: Array.isArray(data?.genres) ? data.genres : [],
+    themes: Array.isArray(data?.themes) ? data.themes : [],
+    dubs: dubs as any,
+    dubDetails: dubs.map((lang: string) => ({
+      language: lang as any,
+      available: true,
+      platform: Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'],
+      notes: `Available in ${lang}`,
+    })),
+    platforms: Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'],
+    characters: Array.isArray(data?.characters) ? data.characters : [],
+    likes,
+    upvotes: likes,
+    submittedAt: data?.submittedAt || data?.createdAt || new Date().toISOString(),
+    updatedAt: data?.updatedAt || data?.submittedAt || new Date().toISOString(),
+    submittedBy: data?.submittedBy || {
+      userId: data?.userId || 'admin',
+      userName: data?.userName || 'Admin',
+      userEmail: data?.userEmail || '',
+    },
+    reviewedBy: data?.reviewedBy,
+    reviewedAt: data?.reviewedAt,
+  };
+}
+
 export function useFirebaseAnalytics() {
   const [data, setData] = useState<RealtimeAnalyticsState>({
     totalAnime: 0,
@@ -116,57 +167,60 @@ export function useFirebaseAnalytics() {
 
   const refreshRealData = useCallback(async () => {
     try {
-      // 1. Fetch real anime records from local service
-      const localRecords = dbService.getAllAnimeRecords();
+      // 1. Fetch anime records strictly from real Firebase database
+      const firestoreAnimeMap = new Map<string, AnimeRecord>();
 
-      // 2. Fetch real submissions from server API
-      let serverSubmissions: AnimeRecord[] = [];
       try {
-        const res = await fetch(`/api/submissions?t=${Date.now()}`, { cache: 'no-store' });
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const text = await res.text();
-            if (text && !text.trim().startsWith('<')) {
-              const json = JSON.parse(text);
-              serverSubmissions = Array.isArray(json) ? json : (json.data || json.record || []);
-            }
-          }
-        }
-      } catch {
-        // Fallback silently to local records
+        const snap = await getDocs(collection(db, 'animes'));
+        snap.forEach(d => {
+          const rec = normalizeRecord(d.id, d.data());
+          if (rec && rec.id && rec.title) firestoreAnimeMap.set(rec.id, rec);
+        });
+      } catch (err) {
+        console.warn('[Analytics] Firestore animes read notice:', err);
       }
 
-      // Merge records uniquely by id
-      const allRecordsMap = new Map<string, AnimeRecord>();
-      serverSubmissions.forEach(r => { if (r && r.id) allRecordsMap.set(r.id, r); });
-      localRecords.forEach(r => { if (r && r.id && !allRecordsMap.has(r.id)) allRecordsMap.set(r.id, r); });
-      const allAnime = Array.from(allRecordsMap.values());
+      try {
+        const snap = await getDocs(collection(db, 'submissions'));
+        snap.forEach(d => {
+          if (!firestoreAnimeMap.has(d.id)) {
+            const rec = normalizeRecord(d.id, d.data());
+            if (rec && rec.id && rec.title) firestoreAnimeMap.set(rec.id, rec);
+          }
+        });
+      } catch (err) {
+        console.warn('[Analytics] Firestore submissions read notice:', err);
+      }
 
-      // 3. Fetch real user feedbacks
+      // Filter out any dummy anime strictly
+      const allAnime = Array.from(firestoreAnimeMap.values()).filter(item => {
+        if (!item || !item.id || !item.title) return false;
+        const titleLower = item.title.trim().toLowerCase();
+        const idLower = item.id.trim().toLowerCase();
+        if (titleLower.startsWith('dummy') || titleLower.startsWith('test anime') || titleLower.startsWith('anime submission #')) return false;
+        if (idLower.startsWith('sub_test') || idLower.startsWith('sub_refactor') || idLower === 'sub-test-1' || idLower === 'test-jujutsu') return false;
+        return true;
+      });
+
+      // 2. Fetch real user feedbacks
       let feedbackList: any[] = [];
       try {
-        const localFbRaw = localStorage.getItem('anidub_feedback');
-        if (localFbRaw) {
-          const parsed = JSON.parse(localFbRaw);
-          if (Array.isArray(parsed)) feedbackList = parsed;
-        }
+        const fbSnap = await getDocs(collection(db, 'feedback'));
+        fbSnap.forEach(d => feedbackList.push({ id: d.id, ...d.data() }));
       } catch {}
 
-      // 4. Calculate real metrics
+      // 3. Query Firestore for watchlists
+      let totalWatchlists = 0;
+      try {
+        const watchlistsColl = collection(db, 'watchlists');
+        const watchlistsSnap = await getDocs(watchlistsColl);
+        totalWatchlists = watchlistsSnap.size;
+      } catch {}
+
+      // 4. Calculate real metrics strictly from real Firebase uploads
       const totalAnime = allAnime.length;
       const pendingSubmissions = allAnime.filter(a => a.status === 'pending' || a.submissionStatus === 'pending').length;
       const totalSubmissions = allAnime.length;
-
-      // Real watchlist count
-      let totalWatchlists = 0;
-      try {
-        const savedWatchlist = localStorage.getItem('anidub_local_watchlist');
-        const parsed = savedWatchlist ? JSON.parse(savedWatchlist) : [];
-        if (Array.isArray(parsed)) totalWatchlists = parsed.length;
-      } catch {}
-
-      // Real upvotes/streams
       const totalUpvotes = allAnime.reduce((acc, curr) => acc + Number(curr.likes || curr.upvotes || 0), 0);
 
       // 5. Calculate real Most Watchlisted / Upvoted
@@ -206,7 +260,7 @@ export function useFirebaseAnalytics() {
           color: LANGUAGE_COLORS[name] || '#8b5cf6',
         }));
 
-      // 7. Calculate real Activity Timeline (e.g. past hours/days)
+      // 7. Calculate real Activity Timeline
       const dayBuckets: Record<string, { active: number; views: number }> = {
         Mon: { active: 0, views: 0 },
         Tue: { active: 0, views: 0 },
@@ -270,8 +324,7 @@ export function useFirebaseAnalytics() {
 
       activities.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-      setData(prev => ({
-        ...prev,
+      setData({
         totalAnime,
         totalSubmissions,
         pendingSubmissions,
@@ -287,7 +340,7 @@ export function useFirebaseAnalytics() {
         isFallback: false,
         lastUpdated: new Date(),
         isLoading: false,
-      }));
+      });
 
     } catch (error) {
       console.error('[Analytics] Failed to aggregate real data:', error);
@@ -299,10 +352,21 @@ export function useFirebaseAnalytics() {
     // Initial fetch
     refreshRealData();
 
-    // Subscribe to local database changes (when user submits, edits, or bookmarks)
-    const unsubscribeDb = dbService.subscribe(() => {
-      refreshRealData();
-    });
+    // Direct real-time listeners on Firestore collections
+    let unsubAnimes: (() => void) | null = null;
+    let unsubSubs: (() => void) | null = null;
+
+    try {
+      unsubAnimes = onSnapshot(collection(db, 'animes'), () => {
+        refreshRealData();
+      }, () => {});
+    } catch {}
+
+    try {
+      unsubSubs = onSnapshot(collection(db, 'submissions'), () => {
+        refreshRealData();
+      }, () => {});
+    } catch {}
 
     // Real-time listener for Firestore if configured
     let unsubscribeFirestore: (() => void) | null = null;
@@ -321,19 +385,17 @@ export function useFirebaseAnalytics() {
             }));
           }
         },
-        () => {
-          // Silent fallback to API & local database
-        }
+        () => {}
       );
     } catch {}
 
     return () => {
-      unsubscribeDb();
+      if (unsubAnimes) unsubAnimes();
+      if (unsubSubs) unsubSubs();
       if (unsubscribeFirestore) unsubscribeFirestore();
     };
   }, [refreshRealData]);
 
-  // Real data refresh handler
   const pushRealtimeUpdate = useCallback(async () => {
     await refreshRealData();
   }, [refreshRealData]);

@@ -1,10 +1,19 @@
 import { AnimeRecord, DubReview, WatchlistEntry, SubmissionStatus } from '../types/database';
 import { Anime, DubLanguage } from '../types/anime';
+import { db } from '../lib/firebase';
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  getDocs, 
+  deleteDoc, 
+  updateDoc 
+} from 'firebase/firestore';
 
 const DB_ANIME_KEY = 'anidub_db_anime_records';
 const DB_REVIEWS_KEY = 'anidub_db_reviews';
 const DB_WATCHLIST_KEY = 'anidub_db_watchlists';
-const CLEAN_SLATE_KEY = 'anidub_purged_all_fake_data_v4';
+const CLEAN_SLATE_KEY = 'anidub_purged_mock_strict_firebase_v7';
 
 class DatabaseService {
   private listeners: (() => void)[] = [];
@@ -27,11 +36,12 @@ class DatabaseService {
   private initDatabase() {
     if (typeof window === 'undefined') return;
     try {
-      // Clear legacy dummy/mock placeholder data to start completely fresh
+      // Completely wipe any legacy dummy/mock placeholder data from localStorage
       if (!localStorage.getItem(CLEAN_SLATE_KEY)) {
         localStorage.setItem(DB_ANIME_KEY, JSON.stringify([]));
         localStorage.setItem(DB_REVIEWS_KEY, JSON.stringify([]));
         localStorage.setItem(DB_WATCHLIST_KEY, JSON.stringify([]));
+        localStorage.removeItem('anidub_cached_catalog');
         localStorage.removeItem('anidub_feedback');
         localStorage.setItem(CLEAN_SLATE_KEY, 'true');
       } else {
@@ -40,10 +50,13 @@ class DatabaseService {
           try {
             const parsed = JSON.parse(existing);
             if (Array.isArray(parsed)) {
+              // Strictly purge any dummy anime
               const sanitized = parsed.filter((item: any) => {
                 if (!item || !item.title || !item.id) return false;
-                if (item.title.startsWith('Anime Submission #') || item.title.startsWith('Dummy Anime')) return false;
-                if (item.id.startsWith('sub_test') || item.id.startsWith('sub_refactor') || item.id === 'sub-test-1' || item.id === 'test-jujutsu') return false;
+                const title = (item.title || '').trim().toLowerCase();
+                const id = (item.id || '').trim().toLowerCase();
+                if (title.startsWith('anime submission #') || title.startsWith('dummy anime') || title.startsWith('test anime')) return false;
+                if (id.startsWith('sub_test') || id.startsWith('sub_refactor') || id === 'sub-test-1' || id === 'test-jujutsu') return false;
                 return true;
               });
               localStorage.setItem(DB_ANIME_KEY, JSON.stringify(sanitized));
@@ -51,9 +64,6 @@ class DatabaseService {
           } catch {}
         } else {
           localStorage.setItem(DB_ANIME_KEY, JSON.stringify([]));
-        }
-        if (!localStorage.getItem(DB_REVIEWS_KEY)) {
-          localStorage.setItem(DB_REVIEWS_KEY, JSON.stringify([]));
         }
       }
     } catch (e) {
@@ -157,7 +167,7 @@ class DatabaseService {
     return all.find((a) => a.id === id) || null;
   }
 
-  // --- 3. User Submission: Saves with status "pending" ---
+  // --- 3. User Submission: Saves with status "pending" to Firestore ---
   public submitDubInfo(data: Omit<AnimeRecord, 'id' | 'submissionStatus' | 'submittedAt'>): AnimeRecord {
     const id = 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
     const newRecord: AnimeRecord = {
@@ -171,7 +181,23 @@ class DatabaseService {
     const records = this.getAllAnimeRecords();
     this.saveAnimeRecords([newRecord, ...records]);
 
-    // Asynchronously sync with backend submissions API
+    // Persist directly to Firestore real database
+    try {
+      setDoc(doc(db, 'submissions', id), newRecord).catch((e) => console.warn('Firestore submissions setDoc error:', e));
+      setDoc(doc(db, 'animes', id), newRecord).catch((e) => console.warn('Firestore animes setDoc error:', e));
+      setDoc(doc(db, 'activities', `act-${id}`), {
+        user: newRecord.submittedBy?.userName || 'Community User',
+        action: 'submitted',
+        animeTitle: newRecord.title,
+        timestamp: new Date(),
+        language: newRecord.dubs?.[0] || 'Tamil',
+        status: 'pending'
+      }).catch(() => {});
+    } catch (fsErr) {
+      console.warn('Firestore write error in submitDubInfo:', fsErr);
+    }
+
+    // Asynchronously notify backend submissions API
     fetch('/api/submissions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -197,6 +223,20 @@ class DatabaseService {
     };
 
     this.saveAnimeRecords(records);
+
+    // Sync approval to Firestore
+    try {
+      setDoc(doc(db, 'animes', id), records[targetIndex], { merge: true }).catch(() => {});
+      setDoc(doc(db, 'submissions', id), {
+        status: 'approved',
+        submissionStatus: 'approved',
+        reviewedBy: reviewerName,
+        reviewedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch(() => {});
+    } catch (e) {
+      console.warn('Firestore approval sync error:', e);
+    }
 
     // Notify backend via PUT request
     fetch('/api/submissions', {
@@ -225,6 +265,19 @@ class DatabaseService {
 
     this.saveAnimeRecords(records);
 
+    // Sync rejection to Firestore
+    try {
+      setDoc(doc(db, 'submissions', id), {
+        status: 'rejected',
+        submissionStatus: 'rejected',
+        reviewedBy: reviewerName,
+        rejectionReason: reason,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch(() => {});
+    } catch (e) {
+      console.warn('Firestore rejection sync error:', e);
+    }
+
     // Notify backend via PUT request
     fetch('/api/submissions', {
       method: 'PUT',
@@ -249,6 +302,16 @@ class DatabaseService {
 
     this.saveAnimeRecords(records);
 
+    // Sync update to Firestore
+    try {
+      setDoc(doc(db, 'animes', id), {
+        ...updatedData,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch(() => {});
+    } catch (e) {
+      console.warn('Firestore update sync error:', e);
+    }
+
     // Notify backend via PUT request
     fetch('/api/submissions', {
       method: 'PUT',
@@ -263,6 +326,15 @@ class DatabaseService {
     const records = this.getAllAnimeRecords();
     const filtered = records.filter((r) => r.id !== id);
     this.saveAnimeRecords(filtered);
+
+    // Delete directly from Firestore
+    try {
+      deleteDoc(doc(db, 'animes', id)).catch(() => {});
+      deleteDoc(doc(db, 'anime', id)).catch(() => {});
+      deleteDoc(doc(db, 'submissions', id)).catch(() => {});
+    } catch (e) {
+      console.warn('Firestore delete sync error:', e);
+    }
 
     // Global Auto-Cleanup: Remove deleted anime from the current browser's local watchlists
     try {
@@ -310,6 +382,13 @@ class DatabaseService {
       this.saveAnimeRecords(records);
     }
 
+    // Update in Firestore
+    try {
+      setDoc(doc(db, 'animes', id), { likes: newLikes, upvotes: newLikes }, { merge: true }).catch(() => {});
+    } catch (e) {
+      console.warn('Firestore upvote error:', e);
+    }
+
     try {
       await fetch('/api/submissions', {
         method: 'PUT',
@@ -324,109 +403,50 @@ class DatabaseService {
     return newLikes;
   }
 
-  // --- 5. Server Sync: Pulls updates approved via Telegram Webhook & Firestore ---
+  // --- 5. Server Sync: Strictly syncs from Firestore database ---
   public async syncWithServer(): Promise<void> {
     // Check if browser is offline
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      console.info('[AniDub DB] Offline detected. Operating purely from cached local catalog.');
       return;
     }
 
     try {
-      // 1. Direct sync with Firestore when available
+      // Query real Firestore collections strictly
+      const firestoreMap = new Map<string, AnimeRecord>();
+
       try {
-        const { db } = await import('../lib/firebase');
-        const { collection, getDocs, limit, query } = await import('firebase/firestore');
-        const animesColl = collection(db, 'animes');
-        const snap = await getDocs(query(animesColl, limit(100)));
-        if (!snap.empty) {
-          const firestoreRecords: AnimeRecord[] = [];
-          snap.forEach((d) => {
+        const animesSnap = await getDocs(collection(db, 'animes'));
+        animesSnap.forEach((d) => {
+          const item = d.data() as AnimeRecord;
+          const normalized = this.normalizeRecord({ ...item, id: d.id });
+          if (normalized && normalized.id && normalized.title) {
+            firestoreMap.set(normalized.id, normalized);
+          }
+        });
+      } catch (err) {
+        console.warn('[AniDub DB] Firestore animes sync notice:', err);
+      }
+
+      try {
+        const subsSnap = await getDocs(collection(db, 'submissions'));
+        subsSnap.forEach((d) => {
+          if (!firestoreMap.has(d.id)) {
             const item = d.data() as AnimeRecord;
-            firestoreRecords.push(this.normalizeRecord({ ...item, id: d.id }));
-          });
-          if (firestoreRecords.length > 0) {
-            const local = this.getAllAnimeRecords();
-            const mergedMap = new Map<string, AnimeRecord>();
-            local.forEach((r) => mergedMap.set(r.id, r));
-            firestoreRecords.forEach((r) => mergedMap.set(r.id, { ...(mergedMap.get(r.id) || {}), ...r }));
-            this.saveAnimeRecords(Array.from(mergedMap.values()));
+            const normalized = this.normalizeRecord({ ...item, id: d.id });
+            if (normalized && normalized.id && normalized.title) {
+              firestoreMap.set(normalized.id, normalized);
+            }
           }
-        }
-      } catch {
-        // Silent fallback to server endpoint
+        });
+      } catch (err) {
+        console.warn('[AniDub DB] Firestore submissions sync notice:', err);
       }
 
-      // 2. Safe sync with server submissions API
-      const res = await fetch(`/api/submissions?t=${Date.now()}`, {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-        },
-      });
-
-      if (!res.ok) {
-        return;
-      }
-
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        return;
-      }
-
-      const text = await res.text();
-      if (!text || text.trim().startsWith('<')) {
-        return;
-      }
-
-      const json = JSON.parse(text);
-      const serverList: AnimeRecord[] = Array.isArray(json) ? json : (json.data || json.record || []);
-      if (!Array.isArray(serverList)) return;
-
-      // Cache raw response for resilient offline browsing
-      try {
-        localStorage.setItem('anidub_cached_catalog', JSON.stringify(serverList));
-        localStorage.setItem('anidub_catalog_last_cached', new Date().toISOString());
-      } catch (cacheErr) {
-        console.warn('[AniDub DB] Failed to cache catalog:', cacheErr);
-      }
-
-      const localList = this.getAllAnimeRecords();
-      let hasChanges = false;
-      const merged = [...localList];
-
-      for (const serverItem of serverList) {
-        const normalized = this.normalizeRecord(serverItem);
-        const localIdx = merged.findIndex((l) => l.id === normalized.id);
-        if (localIdx !== -1) {
-          if (
-            merged[localIdx].submissionStatus !== normalized.submissionStatus ||
-            merged[localIdx].status !== normalized.status ||
-            (normalized.likes && normalized.likes !== merged[localIdx].likes)
-          ) {
-            merged[localIdx] = {
-              ...merged[localIdx],
-              ...normalized,
-              submissionStatus: normalized.submissionStatus,
-              status: normalized.status || normalized.submissionStatus,
-              reviewedBy: normalized.reviewedBy || merged[localIdx].reviewedBy,
-              reviewedAt: normalized.reviewedAt || merged[localIdx].reviewedAt,
-            };
-            hasChanges = true;
-          }
-        } else {
-          // New submission approved or stored on server
-          merged.unshift(normalized);
-          hasChanges = true;
-        }
-      }
-
-      if (hasChanges || (serverList.length > 0 && localList.length === 0)) {
-        this.saveAnimeRecords(merged);
-      }
-    } catch {
-      // Safe fallback to offline cache
+      const firestoreList = Array.from(firestoreMap.values());
+      // STRICT: Save exactly what is in Firestore to localStorage cache without merging mock data!
+      this.saveAnimeRecords(firestoreList);
+    } catch (e) {
+      console.warn('[AniDub DB] Sync error:', e);
     }
   }
 
