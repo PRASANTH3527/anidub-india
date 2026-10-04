@@ -462,6 +462,30 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       const success = dbService.updateAnime(activeAnime.id, payload);
       setIsSubmitting(false);
       if (success) {
+        // Trigger Telegram notification for updated anime
+        try {
+          fetch('/api/telegram/broadcast-anime', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: `🔔 Anime Updated: ${title.trim()}`,
+              text: `🔔 Anime Updated: ${title.trim()}`,
+              anime: {
+                id: activeAnime.id,
+                title: title.trim(),
+                poster: poster || defaultCover,
+                synopsis: synopsis.trim(),
+                genres: genres.join(', '),
+                languages: derivedGlobalDubs,
+                episodes: airingStatus === 'Ongoing' ? (currentlyAiringEpisode || 'Ongoing') : (seasonDetails[0]?.episodeCount || 'Completed'),
+                score: rating || 'N/A',
+              },
+            }),
+          }).catch((err) => console.warn('Failed to send Telegram notification:', err));
+        } catch (e) {
+          console.warn('Telegram trigger error:', e);
+        }
+
         toast.success('Anime Updated!', `"${title.trim()}" has been successfully updated.`);
         onClose();
         onSuccess?.();
@@ -494,6 +518,30 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         userEmail: currentUser?.email || 'contributor@anidub.in',
       },
     });
+
+    // Trigger Telegram notification for added anime
+    try {
+      fetch('/api/telegram/broadcast-anime', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `🔔 Anime Added: ${title.trim()}`,
+          text: `🔔 Anime Added: ${title.trim()}`,
+          anime: {
+            id: newRecord.id,
+            title: title.trim(),
+            poster: poster || defaultCover,
+            synopsis: synopsis.trim(),
+            genres: genres.join(', '),
+            languages: derivedGlobalDubs,
+            episodes: airingStatus === 'Ongoing' ? (currentlyAiringEpisode || 'Ongoing') : (seasonDetails[0]?.episodeCount || 'Completed'),
+            score: rating || 'N/A',
+          },
+        }),
+      }).catch((err) => console.warn('Failed to send Telegram notification:', err));
+    } catch (e) {
+      console.warn('Telegram trigger error:', e);
+    }
 
     setIsSubmitting(false);
     setIsSuccess(true);

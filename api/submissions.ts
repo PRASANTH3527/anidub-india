@@ -290,6 +290,12 @@ export default async function handler(req: any, res: any) {
         };
         const success = await writeJsonBin(current);
         if (!success) return res.status(503).json({ error: 'Failed to update JSONBin' });
+
+        const animeTitle = current[targetIdx]?.title || updatedData?.title || 'Anime';
+        const dubList = Array.isArray(current[targetIdx]?.dubs) ? current[targetIdx].dubs.join(', ') : 'Regional Dub';
+        const telegramText = `🔔 *Anime Updated:* ${animeTitle}\n\n🎙️ *Dubs:* ${dubList}\n🆔 *ID:* \`${id}\`\n⏱️ *Updated At:* ${new Date().toLocaleString('en-IN')}`;
+        sendTelegramAlert(telegramText).catch(() => {});
+
         return res.status(200).json(current[targetIdx]);
       }
 
