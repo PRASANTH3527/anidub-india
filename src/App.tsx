@@ -917,7 +917,9 @@ function AppContent() {
 
                   <div className="max-w-6xl mx-auto px-4">
                     <Suspense fallback={<SkeletonGrid count={8} />}>
-                      {approvedAnime.length > 0 ? (
+                      {isLoading ? (
+                        <SkeletonGrid count={8} />
+                      ) : approvedAnime.length > 0 ? (
                         <AnimeGridWithInfiniteScroll
                           animeList={activeSortedAnime}
                           visibleCount={visibleCount}
@@ -932,24 +934,23 @@ function AppContent() {
                         />
                       ) : (
                         <div className="text-center py-16 bg-[#131926]/50 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto shadow-xl">
-                          {/* Empty state logic... */}
                           <div className="w-14 h-14 rounded-2xl bg-primary-theme/10 border border-primary-theme/20 flex items-center justify-center mx-auto mb-4 text-primary-theme">
-                            <Sparkles className="w-7 h-7" />
+                            <PlusCircle className="w-7 h-7" />
                           </div>
                           <h3 className="font-heading font-black text-xl text-white mb-2">
-                            Fresh Database Ready
+                            No Dubbed Anime Found
                           </h3>
                           <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
-                            All mock entries have been cleared. The database is empty and waiting for real anime submissions!
+                            The database is currently empty. Be the first to contribute by submitting regional dub information!
                           </p>
                           <button
                             onClick={() => setIsSubmitModalOpen(true)}
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 btn-primary-theme text-white text-sm font-black py-3.5 px-8 rounded-2xl transition-all cursor-pointer shadow-lg active:scale-95 flex items-center mx-auto group"
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 btn-primary-theme text-white text-sm font-black py-3.5 px-8 rounded-2xl transition-all cursor-pointer shadow-lg active:scale-95 group"
                           >
                             <div className="bg-white/20 p-1 rounded-lg group-hover:rotate-90 transition-transform duration-300">
                               <PlusCircle className="w-5 h-5" />
                             </div>
-                            <span>Submit First Dub Info</span>
+                            <span>Submit Dub Info</span>
                           </button>
                         </div>
                       )}

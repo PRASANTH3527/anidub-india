@@ -345,14 +345,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       // STRICT: allAnime is exclusively what came from real Firebase collections!
-      // Completely ignore & remove any default/mock/dummy anime data!
       const allAnime = Array.from(firestoreAnimeMap.values()).filter((item) => {
-        if (!item || !item.id || !item.title) return false;
-        const titleLower = item.title.trim().toLowerCase();
-        const idLower = item.id.trim().toLowerCase();
-        if (titleLower.startsWith('dummy') || titleLower.startsWith('test anime') || titleLower.startsWith('anime submission #')) return false;
-        if (idLower.startsWith('sub_test') || idLower.startsWith('sub_refactor') || idLower === 'sub-test-1' || idLower === 'test-jujutsu') return false;
-        return true;
+        return item && (item.id || item.title || (item as any).name);
       });
 
       // Save strictly to catalog state

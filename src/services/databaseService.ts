@@ -8,7 +8,8 @@ import {
   setDoc, 
   getDocs, 
   deleteDoc, 
-  updateDoc 
+  updateDoc,
+  onSnapshot
 } from 'firebase/firestore';
 
 const DB_ANIME_KEY = 'anidub_db_anime_records';
@@ -25,21 +26,53 @@ class DatabaseService {
   constructor() {
     this.initDatabase();
     this.checkQuotaStatus();
-    
-    // Initial sync only if data is stale
-    if (this.shouldSync()) {
-      this.syncWithServer();
-    }
+    this.startRealtimeSync();
+  }
 
-    if (typeof window !== 'undefined') {
-      // Sync much less frequently (every 1 hour instead of 30 mins)
-      setInterval(() => {
-        if (this.shouldSync()) this.syncWithServer();
-      }, 3600000);
+  private startRealtimeSync() {
+    if (this.isQuotaLimited || typeof window === 'undefined') return;
 
-      window.addEventListener('focus', () => {
-        if (this.shouldSync()) this.syncWithServer();
+    try {
+      const collections = ['animes', 'anime', 'submissions'];
+      
+      collections.forEach(collName => {
+        onSnapshot(collection(db, collName), (snapshot) => {
+          const currentRecords = this.getAllAnimeRecords();
+          const firestoreMap = new Map<string, AnimeRecord>();
+          
+          // Seed map with current records to preserve other collections' data
+          currentRecords.forEach(r => firestoreMap.set(r.id, r));
+
+          snapshot.docs.forEach(d => {
+            const data = d.data();
+            const normalized = this.normalizeRecord({ ...data, id: d.id });
+            
+            if (normalized && normalized.id && normalized.title) {
+              // If it's from main 'animes' or 'anime' collection and lacks status, treat as approved
+              // This handles legacy data or direct uploads without explicit status fields
+              if ((collName === 'animes' || collName === 'anime') && 
+                  (!data.status || data.status === 'pending') && 
+                  (!data.submissionStatus || data.submissionStatus === 'pending')) {
+                normalized.status = 'approved';
+                normalized.submissionStatus = 'approved';
+              }
+              
+              firestoreMap.set(normalized.id, normalized);
+            }
+          });
+
+          const updatedList = Array.from(firestoreMap.values());
+          this.saveAnimeRecords(updatedList);
+          localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
+        }, (err) => {
+          if (this.isQuotaExceededError(err)) {
+            this.setQuotaExceeded();
+          }
+          console.warn(`[AniDub DB] Real-time sync error for ${collName}:`, err);
+        });
       });
+    } catch (e) {
+      console.warn('[AniDub DB] Failed to start real-time sync:', e);
     }
   }
 
@@ -53,6 +86,7 @@ class DatabaseService {
         this.isQuotaLimited = true;
       } else {
         localStorage.removeItem(QUOTA_EXCEEDED_KEY);
+        this.isQuotaLimited = false;
       }
     }
   }
@@ -97,16 +131,11 @@ class DatabaseService {
           try {
             const parsed = JSON.parse(existing);
             if (Array.isArray(parsed)) {
-              // Strictly purge any dummy anime
-              const sanitized = parsed.filter((item: any) => {
-                if (!item || !item.title || !item.id) return false;
-                const title = (item.title || '').trim().toLowerCase();
-                const id = (item.id || '').trim().toLowerCase();
-                if (title.startsWith('anime submission #') || title.startsWith('dummy anime') || title.startsWith('test anime')) return false;
-                if (id.startsWith('sub_test') || id.startsWith('sub_refactor') || id === 'sub-test-1' || id === 'test-jujutsu') return false;
-                return true;
-              });
-              localStorage.setItem(DB_ANIME_KEY, JSON.stringify(sanitized));
+              // Ensure all cached records are normalized but don't strictly purge titles
+              const normalized = parsed
+                .filter((item: any) => item && (item.id || item.title || item.name))
+                .map((item) => this.normalizeRecord(item));
+              localStorage.setItem(DB_ANIME_KEY, JSON.stringify(normalized));
             }
           } catch {}
         } else {
@@ -129,38 +158,68 @@ class DatabaseService {
     this.listeners.forEach((l) => l());
   }
 
-  private normalizeRecord(r: any): AnimeRecord {
-    if (!r) return r;
-    const dubs = Array.isArray(r.dubs) ? r.dubs : [];
-    const platforms = Array.isArray(r.platforms) ? r.platforms : [];
-    const genres = Array.isArray(r.genres) ? r.genres : [];
-    const themes = Array.isArray(r.themes) ? r.themes : [];
-    const characters = Array.isArray(r.characters) ? r.characters : [];
-    const dubDetails = Array.isArray(r.dubDetails)
-      ? r.dubDetails.map((d: any) => ({
-          ...d,
-          platform: Array.isArray(d?.platform) ? d.platform : (d?.platform ? [d.platform] : ['Crunchyroll']),
-        }))
-      : dubs.map((lang: string) => ({
-          language: lang,
-          available: true,
-          platform: platforms.map((p: any) => p?.name || p),
-          notes: `Available in ${lang}`,
-        }));
+  private normalizeRecord(data: any): AnimeRecord {
+    if (!data) return data;
+    
+    // Extract languages/dubs safely (Sync with AdminDashboard logic)
+    let rawDubs: any[] = [];
+    if (Array.isArray(data?.dubs)) {
+      rawDubs = data.dubs;
+    } else if (Array.isArray(data?.languages)) {
+      rawDubs = data.languages;
+    } else if (Array.isArray(data?.dubLanguages)) {
+      rawDubs = data.dubLanguages;
+    } else if (Array.isArray(data?.dubDetails)) {
+      rawDubs = data.dubDetails.map((d: any) => d?.language || d);
+    } else if (typeof data?.dub === 'string' && data.dub.trim()) {
+      rawDubs = [data.dub.trim()];
+    } else if (typeof data?.language === 'string' && data.language.trim()) {
+      rawDubs = [data.language.trim()];
+    }
 
-    const likes = Number(r.likes || r.upvotes || 0);
+    const dubs: string[] = rawDubs
+      .map((d: any) => (typeof d === 'string' ? d.trim() : (d?.name || d?.language || '')))
+      .filter(Boolean);
 
-    return {
-      ...r,
+    const likes = Number(data?.likes || data?.upvotes || data?.votes || 0);
+    const platforms = Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'];
+
+    const normalized: AnimeRecord = {
+      ...data,
+      id: data.id,
+      title: (data?.title || data?.name || 'Untitled Anime').trim(),
+      romajiTitle: (data?.romajiTitle || data?.japaneseTitle || '').trim(),
+      poster: data?.poster || data?.image || data?.cover || '',
+      banner: data?.banner || data?.bannerImage || '',
+      studio: data?.studio || 'Animation Studio',
+      synopsis: data?.synopsis || data?.description || '',
+      type: data?.type || 'TV Series',
+      episodes: Number(data?.episodes) || 12,
+      status: data?.status || data?.submissionStatus || 'pending',
+      submissionStatus: data?.submissionStatus || data?.status || 'pending',
+      releaseYear: Number(data?.releaseYear) || Number(data?.year) || new Date().getFullYear(),
+      rating: data?.rating || data?.score || 8.0,
+      genres: Array.isArray(data?.genres) ? data.genres : [],
+      themes: Array.isArray(data?.themes) ? data.themes : [],
+      dubs: dubs as any,
+      dubDetails: Array.isArray(data?.dubDetails)
+        ? data.dubDetails.map((d: any) => ({
+            ...d,
+            platform: Array.isArray(d?.platform) ? d.platform : (d?.platform ? [d.platform] : platforms),
+          }))
+        : dubs.map((lang: string) => ({
+            language: lang as any,
+            available: true,
+            platform: platforms,
+            notes: `Available in ${lang}`,
+          })),
+      platforms,
+      characters: Array.isArray(data?.characters) ? data.characters : [],
       likes,
       upvotes: likes,
-      dubs,
-      genres,
-      themes,
-      platforms,
-      characters,
-      dubDetails,
     };
+
+    return normalized;
   }
 
   public getAllAnimeRecords(): AnimeRecord[] {
@@ -169,15 +228,10 @@ class DatabaseService {
       const raw = localStorage.getItem(DB_ANIME_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
       if (!Array.isArray(parsed)) return [];
+      
+      // Removed strict title filtering to ensure real data is not blocked
       return parsed
-        .filter((item: any) => {
-          if (!item || !item.title || !item.id) return false;
-          const title = (item.title || '').trim();
-          const id = (item.id || '').trim();
-          if (title.startsWith('Anime Submission #') || title.startsWith('Dummy Anime') || title.startsWith('Test Anime')) return false;
-          if (id.startsWith('sub_test') || id.startsWith('sub_refactor') || id === 'sub-test-1' || id === 'test-jujutsu') return false;
-          return true;
-        })
+        .filter((item: any) => item && (item.id || item.title || item.name))
         .map((item) => this.normalizeRecord(item));
     } catch {
       return [];
@@ -487,50 +541,41 @@ class DatabaseService {
     try {
       // Query real Firestore collections strictly
       const firestoreMap = new Map<string, AnimeRecord>();
+      const collections = ['animes', 'anime', 'submissions'];
 
-      try {
-        const animesSnap = await getDocs(collection(db, 'animes'));
-        animesSnap.forEach((d) => {
-          const item = d.data() as AnimeRecord;
-          const normalized = this.normalizeRecord({ ...item, id: d.id });
-          if (normalized && normalized.id && normalized.title) {
-            firestoreMap.set(normalized.id, normalized);
-          }
-        });
-      } catch (err) {
-        if (this.isQuotaExceededError(err)) {
-          this.setQuotaExceeded();
-          console.error('[AniDub DB] Firestore Read Quota Exceeded. Upgrade or wait until tomorrow: https://console.firebase.google.com/project/keen-matrix-p40ks/firestore/databases/ai-studio-anidubindiadubbe-5d6f2b65-be54-4278-868a-15922d0100a3/data?openUpgradeDialog=true');
-          return; 
-        }
-        console.warn('[AniDub DB] Firestore animes sync notice:', err);
-      }
-
-      try {
-        const subsSnap = await getDocs(collection(db, 'submissions'));
-        subsSnap.forEach((d) => {
-          if (!firestoreMap.has(d.id)) {
-            const item = d.data() as AnimeRecord;
-            const normalized = this.normalizeRecord({ ...item, id: d.id });
+      for (const collName of collections) {
+        try {
+          const snap = await getDocs(collection(db, collName));
+          snap.forEach((d) => {
+            const data = d.data();
+            const normalized = this.normalizeRecord({ ...data, id: d.id });
+            
             if (normalized && normalized.id && normalized.title) {
-              firestoreMap.set(normalized.id, normalized);
+              // If it's from main 'animes' or 'anime' collection and lacks status, treat as approved
+              if ((collName === 'animes' || collName === 'anime') && 
+                  (!data.status || data.status === 'pending') && 
+                  (!data.submissionStatus || data.submissionStatus === 'pending')) {
+                normalized.status = 'approved';
+                normalized.submissionStatus = 'approved';
+              }
+              
+              if (!firestoreMap.has(normalized.id)) {
+                firestoreMap.set(normalized.id, normalized);
+              }
             }
+          });
+        } catch (err) {
+          if (this.isQuotaExceededError(err)) {
+            this.setQuotaExceeded();
+            return; 
           }
-        });
-      } catch (err) {
-        if (this.isQuotaExceededError(err)) {
-          this.setQuotaExceeded();
-          console.error('[AniDub DB] Firestore Quota Exceeded during submissions sync.');
-          return;
+          console.warn(`[AniDub DB] Firestore ${collName} sync notice:`, err);
         }
-        console.warn('[AniDub DB] Firestore submissions sync notice:', err);
       }
 
       const firestoreList = Array.from(firestoreMap.values());
-      // STRICT: Save exactly what is in Firestore to localStorage cache without merging mock data!
       this.saveAnimeRecords(firestoreList);
       
-      // Update last sync timestamp
       if (typeof window !== 'undefined') {
         localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
       }
