@@ -29,7 +29,7 @@ import {
   Zap,
   Globe
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { AnimeRecord } from '../types/database';
 import AdminDashboard from './AdminDashboard';
 

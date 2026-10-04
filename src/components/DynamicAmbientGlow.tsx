@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { FastAverageColor, FastAverageColorResult } from 'fast-average-color';
 
 interface DynamicAmbientGlowProps {

@@ -13,7 +13,7 @@ import {
   DownloadCloud, 
   CheckCircle2 
 } from 'lucide-react';
-import { motion, useMotionValue, useTransform } from 'framer-motion';
+import { motion, useMotionValue, useTransform } from 'motion/react';
 import { Anime, DubLanguage } from '../types/anime';
 import { useToast } from './Toast';
 import { dbService } from '../services/databaseService';

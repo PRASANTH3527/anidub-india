@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useRef, Suspense, lazy } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import { Navbar, NavTab } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { AnimatedStats } from './components/AnimatedStats';
