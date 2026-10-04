@@ -181,11 +181,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       try {
         const res = await fetch(`/api/submissions?t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
-          const json = await res.json();
-          serverSubmissions = Array.isArray(json) ? json : (json.data || json.record || []);
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const text = await res.text();
+            if (text && !text.trim().startsWith('<')) {
+              const json = JSON.parse(text);
+              serverSubmissions = Array.isArray(json) ? json : (json.data || json.record || []);
+            }
+          }
         }
-      } catch (e) {
-        console.warn('[Admin] Server submissions fetch error:', e);
+      } catch {
+        // Fallback silently to local / firestore data
       }
 
       // Merge records uniquely by id

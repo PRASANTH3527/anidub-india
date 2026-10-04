@@ -324,7 +324,7 @@ class DatabaseService {
     return newLikes;
   }
 
-  // --- 5. Server Sync: Pulls updates approved via Telegram Webhook ---
+  // --- 5. Server Sync: Pulls updates approved via Telegram Webhook & Firestore ---
   public async syncWithServer(): Promise<void> {
     // Check if browser is offline
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -333,6 +333,31 @@ class DatabaseService {
     }
 
     try {
+      // 1. Direct sync with Firestore when available
+      try {
+        const { db } = await import('../lib/firebase');
+        const { collection, getDocs, limit, query } = await import('firebase/firestore');
+        const animesColl = collection(db, 'animes');
+        const snap = await getDocs(query(animesColl, limit(100)));
+        if (!snap.empty) {
+          const firestoreRecords: AnimeRecord[] = [];
+          snap.forEach((d) => {
+            const item = d.data() as AnimeRecord;
+            firestoreRecords.push(this.normalizeRecord({ ...item, id: d.id }));
+          });
+          if (firestoreRecords.length > 0) {
+            const local = this.getAllAnimeRecords();
+            const mergedMap = new Map<string, AnimeRecord>();
+            local.forEach((r) => mergedMap.set(r.id, r));
+            firestoreRecords.forEach((r) => mergedMap.set(r.id, { ...(mergedMap.get(r.id) || {}), ...r }));
+            this.saveAnimeRecords(Array.from(mergedMap.values()));
+          }
+        }
+      } catch {
+        // Silent fallback to server endpoint
+      }
+
+      // 2. Safe sync with server submissions API
       const res = await fetch(`/api/submissions?t=${Date.now()}`, {
         cache: 'no-store',
         headers: {
@@ -340,15 +365,26 @@ class DatabaseService {
           Pragma: 'no-cache',
         },
       });
+
       if (!res.ok) {
-        console.warn(`[AniDub DB] Server returned HTTP ${res.status}. Falling back to offline cache.`);
         return;
       }
-      const json = await res.json();
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return;
+      }
+
+      const text = await res.text();
+      if (!text || text.trim().startsWith('<')) {
+        return;
+      }
+
+      const json = JSON.parse(text);
       const serverList: AnimeRecord[] = Array.isArray(json) ? json : (json.data || json.record || []);
       if (!Array.isArray(serverList)) return;
 
-      // Cache raw JSONBin response for resilient offline browsing
+      // Cache raw response for resilient offline browsing
       try {
         localStorage.setItem('anidub_cached_catalog', JSON.stringify(serverList));
         localStorage.setItem('anidub_catalog_last_cached', new Date().toISOString());
@@ -389,8 +425,8 @@ class DatabaseService {
       if (hasChanges || (serverList.length > 0 && localList.length === 0)) {
         this.saveAnimeRecords(merged);
       }
-    } catch (e) {
-      console.warn('Sync with server error (falling back to offline cache):', e);
+    } catch {
+      // Safe fallback to offline cache
     }
   }
 
