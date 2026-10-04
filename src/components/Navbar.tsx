@@ -96,12 +96,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Primary Nav Tabs (Icon-only minimalist design) */}
-        <nav className="hidden sm:flex items-center gap-1.5 md:gap-2">
-          {/* Library / Directory */}
+        {/* Primary Nav Tabs: Centered between Logo and Theme Toggle (Icon-only, no text labels) */}
+        <nav className="flex items-center justify-center gap-1 sm:gap-2 flex-1 mx-1 sm:mx-4">
+          {/* 1. Directory */}
           <button
             onClick={() => setActiveTab('library')}
-            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
               activeTab === 'library'
                 ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -112,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Compass className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'library' ? 'scale-110' : ''}`} />
           </button>
 
-          {/* Search Shortcut */}
+          {/* 2. Search */}
           <button
             onClick={() => {
               setActiveTab('library');
@@ -124,17 +124,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }
               }, 100);
             }}
-            className="w-10 h-10 flex items-center justify-center rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800/60 transition-all active:scale-90 cursor-pointer"
+            className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800/60 transition-all active:scale-90 cursor-pointer"
             title="Search Anime"
             aria-label="Search Anime"
           >
             <Search className="w-5 h-5" />
           </button>
 
-          {/* For You */}
+          {/* 3. For You */}
           <button
             onClick={() => setActiveTab('foryou')}
-            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
               activeTab === 'foryou'
                 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -145,10 +145,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Sparkles className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'foryou' ? 'scale-110' : ''}`} />
           </button>
 
-          {/* Watchlist */}
+          {/* 4. Watchlist */}
           <button
             onClick={() => setActiveTab('watchlist')}
-            className={`relative w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`relative w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
               activeTab === 'watchlist'
                 ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -168,7 +168,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {(isAdmin || currentUser?.email === 'prasanth01236@gmail.com') && (
             <button
               onClick={() => setActiveTab('analytics')}
-              className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+              className={`w-9 h-9 sm:w-10 sm:h-10 hidden md:flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
                 activeTab === 'analytics'
                   ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50 shadow-sm'
                   : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -180,7 +180,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Profile / Account */}
+          {/* 5. Profile */}
           <button
             onClick={() => {
               if (onOpenProfileModal) {
@@ -189,7 +189,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setActiveTab('profile');
               }
             }}
-            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
               activeTab === 'profile'
                 ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'

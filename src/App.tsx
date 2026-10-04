@@ -24,7 +24,6 @@ import { LocalProfileModal, LocalUserProfile, ANIME_AVATAR_PRESETS } from './com
 import { RecentlyViewedRow } from './components/RecentlyViewedRow';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminAnalyticsDashboard } from './components/AdminAnalyticsDashboard';
-import { BottomNav } from './components/BottomNav';
 import { PullToRefresh } from './components/PullToRefresh';
 import { dbService } from './services/databaseService';
 import { authService } from './services/authService';
@@ -758,19 +757,12 @@ function AppContent() {
             onToggleLanguage={handleToggleLanguage}
             isAdmin={isAdmin}
           />
-          {/* Mobile Navigation Tabs (Moved from bottom to top) */}
-          <BottomNav
-            activeTab={activeTab === 'library' && feedView === 'foryou' ? 'foryou' : activeTab}
-            setActiveTab={handleTabChange}
-            watchlistCount={filteredWatchlistIds.length}
-            uiLanguage={uiLanguage}
-          />
         </>
       )}
 
       {/* 2. Gentle Offline Mode Banner */}
       {isOffline && (
-        <div className="sticky top-[112px] sm:top-16 z-30 bg-gradient-to-r from-amber-950/95 via-amber-900/95 to-yellow-950/95 border-b border-amber-600/40 text-amber-200 px-4 py-2 text-xs shadow-lg backdrop-blur-md transition-all duration-300">
+        <div className="sticky top-16 z-30 bg-gradient-to-r from-amber-950/95 via-amber-900/95 to-yellow-950/95 border-b border-amber-600/40 text-amber-200 px-4 py-2 text-xs shadow-lg backdrop-blur-md transition-all duration-300">
           <div className="flex items-center gap-2 max-w-4xl mx-auto w-full justify-center text-center">
             <WifiOff className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
             <span>
