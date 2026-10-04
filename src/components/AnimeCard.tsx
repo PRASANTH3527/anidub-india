@@ -10,7 +10,8 @@ import {
   Flame, 
   Flag, 
   DownloadCloud, 
-  CheckCircle2 
+  CheckCircle2,
+  Heart
 } from 'lucide-react';
 import { Anime, DubLanguage } from '../types/anime';
 import { useToast } from './Toast';
@@ -24,6 +25,8 @@ export interface AnimeCardProps {
   onToggleBookmark: (anime: Anime) => void;
   onSelect: (anime: Anime) => void;
   onReport?: (anime: Anime) => void;
+  onToggleLike?: (anime: Anime) => void;
+  onToggleUpvote?: (anime: Anime) => void;
 }
 
 const DUB_BADGE_STYLES: Record<DubLanguage, { bg: string; text: string; label: string }> = {
@@ -41,6 +44,8 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   onToggleBookmark,
   onSelect,
   onReport,
+  onToggleLike,
+  onToggleUpvote,
 }) => {
   const [imageError, setImageError] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -61,7 +66,33 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     };
   }, [displayImage]);
 
-  // Local vote check
+  // Like (Heart) state
+  const [isLiked, setIsLiked] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('anidub_liked_anime_ids');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.includes(anime.id)) return true;
+        }
+      } catch {}
+    }
+    return Boolean(isBookmarked);
+  });
+
+  const [heartCount, setHeartCount] = useState<number>(() => {
+    return Number(anime.likes || 0);
+  });
+  const [isLiking, setIsLiking] = useState(false);
+
+  // Sync isLiked if isBookmarked changes from external state
+  useEffect(() => {
+    if (isBookmarked) {
+      setIsLiked(true);
+    }
+  }, [isBookmarked]);
+
+  // Upvote (Fire) state
   const [isUpvoted, setIsUpvoted] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -75,12 +106,15 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     return false;
   });
 
-  const [likeCount, setLikeCount] = useState<number>(() => Number(anime.likes || anime.upvotes || 0));
+  const [upvoteCount, setUpvoteCount] = useState<number>(() => {
+    return Number(anime.upvotes || anime.likes || 0);
+  });
   const [isUpvoting, setIsUpvoting] = useState(false);
 
   // Manual 1-Tap Offline Poster Caching
   const handleToggleCachePoster = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
     if (isCaching) return;
 
     if (isCached) {
@@ -104,6 +138,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
     const shareUrl = `${window.location.origin}/#anime/${anime.id}`;
     const dubList = (anime.dubs || []).join(', ');
     const shareData = {
@@ -130,33 +165,85 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     }
   };
 
-  const handleUpvote = async (e: React.MouseEvent) => {
+  // Like (Heart) Handler
+  const handleLike = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isUpvoted || isUpvoting) {
-      if (isUpvoted) {
-        toast.info('Already Upvoted 🔥', `You have already cast your vote for "${anime.title}".`);
-      }
-      return;
-    }
+    e.preventDefault();
+    if (isLiking) return;
+    setIsLiking(true);
 
-    setIsUpvoting(true);
-    const updatedCount = likeCount + 1;
-    setLikeCount(updatedCount);
-    setIsUpvoted(true);
+    const nextLiked = !isLiked;
+    setIsLiked(nextLiked);
+    setHeartCount((prev) => Math.max(0, nextLiked ? prev + 1 : prev - 1));
 
     try {
-      const saved = localStorage.getItem('anidub_upvoted_anime_ids');
-      const list: string[] = saved ? JSON.parse(saved) : [];
-      if (!list.includes(anime.id)) {
-        list.push(anime.id);
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('anidub_liked_anime_ids');
+        let list: string[] = saved ? JSON.parse(saved) : [];
+        if (!Array.isArray(list)) list = [];
+        if (nextLiked) {
+          if (!list.includes(anime.id)) list.push(anime.id);
+        } else {
+          list = list.filter((id) => id !== anime.id);
+        }
+        localStorage.setItem('anidub_liked_anime_ids', JSON.stringify(list));
+      }
+    } catch {}
+
+    if (onToggleLike) {
+      onToggleLike(anime);
+    } else if (onToggleBookmark && nextLiked !== isBookmarked) {
+      onToggleBookmark(anime);
+    }
+
+    if (nextLiked) {
+      toast.success('Liked! ❤️', `Added "${anime.title}" to favorites.`);
+    } else {
+      toast.info('Unliked', `Removed "${anime.title}" from favorites.`);
+    }
+
+    setTimeout(() => setIsLiking(false), 200);
+  };
+
+  // Upvote (Fire) Handler
+  const handleUpvote = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isUpvoting) return;
+    setIsUpvoting(true);
+
+    const nextUpvoted = !isUpvoted;
+    setIsUpvoted(nextUpvoted);
+    const newCount = Math.max(0, nextUpvoted ? upvoteCount + 1 : upvoteCount - 1);
+    setUpvoteCount(newCount);
+
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('anidub_upvoted_anime_ids');
+        let list: string[] = saved ? JSON.parse(saved) : [];
+        if (!Array.isArray(list)) list = [];
+        if (nextUpvoted) {
+          if (!list.includes(anime.id)) list.push(anime.id);
+        } else {
+          list = list.filter((id) => id !== anime.id);
+        }
         localStorage.setItem('anidub_upvoted_anime_ids', JSON.stringify(list));
       }
-      await dbService.upvoteAnime(anime.id);
-      toast.success('Upvoted! 🔥', `"${anime.title}" upvoted! Community votes: ${updatedCount}`);
+
+      if (nextUpvoted) {
+        await dbService.upvoteAnime(anime.id);
+        toast.success('Upvoted! 🔥', `"${anime.title}" upvoted! Community votes: ${newCount}`);
+      } else {
+        toast.info('Vote Removed', `Removed upvote for "${anime.title}".`);
+      }
     } catch (err) {
-      console.warn('Error recording upvote:', err);
+      console.warn('Error handling upvote:', err);
     } finally {
       setIsUpvoting(false);
+    }
+
+    if (onToggleUpvote) {
+      onToggleUpvote(anime);
     }
   };
 
@@ -186,7 +273,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         <div className="absolute inset-0 bg-gradient-to-t from-[#0d121c] via-transparent to-black/40 pointer-events-none" />
 
         {/* Top-Left Badges */}
-        <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1.5">
+        <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1.5 pointer-events-none">
           {isTrending && (
             <span className="inline-flex items-center gap-1 bg-gradient-to-r from-orange-600 via-amber-600 to-rose-600 text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shadow-lg border border-orange-400/40">
               <Flame className="w-3 h-3 fill-current text-amber-200" />
@@ -204,15 +291,17 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 
         {/* Top-Right Action Buttons */}
         <div 
-          className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5" 
+          className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5 pointer-events-auto" 
           onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           {/* Offline Poster Download Button */}
           <button
             type="button"
             onClick={handleToggleCachePoster}
+            onMouseDown={(e) => e.stopPropagation()}
             title={isCached ? 'Poster cached for offline viewing' : 'Download poster for offline use'}
-            className={`p-1.5 rounded-full backdrop-blur-md border transition-all active:scale-90 ${
+            className={`p-1.5 rounded-full backdrop-blur-md border transition-all active:scale-90 cursor-pointer pointer-events-auto ${
               isCached 
                 ? 'bg-emerald-950/80 text-emerald-400 border-emerald-500/40' 
                 : 'bg-black/60 text-neutral-300 hover:text-white border-white/10'
@@ -225,8 +314,9 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onReport(anime); }}
+              onMouseDown={(e) => e.stopPropagation()}
               title="Report issue"
-              className="p-1.5 rounded-full bg-black/60 backdrop-blur-md text-neutral-400 hover:text-rose-400 border border-white/10 active:scale-90 transition-all"
+              className="p-1.5 rounded-full bg-black/60 backdrop-blur-md text-neutral-400 hover:text-rose-400 border border-white/10 active:scale-90 transition-all cursor-pointer pointer-events-auto"
             >
               <Flag className="w-3.5 h-3.5" />
             </button>
@@ -235,18 +325,36 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
           <button
             type="button"
             onClick={handleShare}
+            onMouseDown={(e) => e.stopPropagation()}
             title="Share anime"
-            className="p-1.5 rounded-full bg-black/60 backdrop-blur-md text-neutral-300 hover:text-white border border-white/10 active:scale-90 transition-all"
+            className="p-1.5 rounded-full bg-black/60 backdrop-blur-md text-neutral-300 hover:text-white border border-white/10 active:scale-90 transition-all cursor-pointer pointer-events-auto"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
           </button>
 
+          {/* Like (Heart) Button in Top-Right Overlay */}
+          <button
+            type="button"
+            onClick={handleLike}
+            onMouseDown={(e) => e.stopPropagation()}
+            title={isLiked ? 'Unlike' : 'Like'}
+            className={`p-1.5 rounded-full backdrop-blur-md border transition-all active:scale-90 cursor-pointer pointer-events-auto ${
+              isLiked 
+                ? 'bg-rose-600 text-white border-rose-400/50 shadow-lg shadow-rose-950/40' 
+                : 'bg-black/60 text-neutral-300 hover:text-rose-400 border-white/10'
+            }`}
+          >
+            <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-current text-white' : ''}`} />
+          </button>
+
+          {/* Watchlist (Bookmark) Button */}
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onToggleBookmark(anime); }}
+            onMouseDown={(e) => e.stopPropagation()}
             title={isBookmarked ? 'Remove from Watchlist' : 'Add to Watchlist'}
-            className={`p-1.5 rounded-full backdrop-blur-md border border-white/10 active:scale-90 transition-all ${
-              isBookmarked ? 'bg-purple-600 text-white shadow-lg' : 'bg-black/60 text-neutral-300'
+            className={`p-1.5 rounded-full backdrop-blur-md border border-white/10 active:scale-90 transition-all cursor-pointer pointer-events-auto ${
+              isBookmarked ? 'bg-purple-600 text-white shadow-lg' : 'bg-black/60 text-neutral-300 hover:text-white'
             }`}
           >
             <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current' : ''}`} />
@@ -254,7 +362,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         </div>
 
         {/* Poster Bottom Stats (Rating & Status) */}
-        <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between text-[11px] font-bold text-white/90">
+        <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between text-[11px] font-bold text-white/90 pointer-events-none">
           <div className="flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-md backdrop-blur-sm border border-white/10">
             <Star className="w-3 h-3 text-orange-500 fill-orange-500" />
             <span className="text-orange-400 font-black">CR</span>
@@ -295,8 +403,12 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
           </div>
         </div>
 
-        {/* Bottom Platform and Upvote Bar */}
-        <div className="mt-3 pt-2 border-t border-neutral-800/70 flex items-center justify-between gap-2">
+        {/* Bottom Platform and Like/Upvote Bar */}
+        <div 
+          className="mt-3 pt-2 border-t border-neutral-800/70 flex items-center justify-between gap-2 relative z-10 pointer-events-auto"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <div className="flex items-center gap-1 min-w-0">
             {(anime.platforms || []).slice(0, 2).map((p) => (
               <span key={p.name} className="text-[9px] font-semibold bg-[#1a2133] text-neutral-400 px-1.5 py-0.5 rounded truncate">
@@ -305,19 +417,41 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={handleUpvote}
-            disabled={isUpvoting}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all active:scale-95 ${
-              isUpvoted 
-                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40' 
-                : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:text-white'
-            }`}
-          >
-            <Flame className={`w-3 h-3 ${isUpvoted ? 'fill-current' : ''}`} />
-            <span>{likeCount}</span>
-          </button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Like (Heart) Button */}
+            <button
+              type="button"
+              onClick={handleLike}
+              onMouseDown={(e) => e.stopPropagation()}
+              disabled={isLiking}
+              title={isLiked ? 'Unlike' : 'Like'}
+              className={`pointer-events-auto flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all active:scale-90 cursor-pointer ${
+                isLiked 
+                  ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' 
+                  : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:text-rose-400 hover:border-rose-500/30'
+              }`}
+            >
+              <Heart className={`w-3 h-3 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} />
+              <span>{heartCount}</span>
+            </button>
+
+            {/* Upvote (Fire) Button */}
+            <button
+              type="button"
+              onClick={handleUpvote}
+              onMouseDown={(e) => e.stopPropagation()}
+              disabled={isUpvoting}
+              title={isUpvoted ? 'Upvoted' : 'Upvote'}
+              className={`pointer-events-auto flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all active:scale-90 cursor-pointer ${
+                isUpvoted 
+                  ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40' 
+                  : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:text-orange-400 hover:border-orange-500/30'
+              }`}
+            >
+              <Flame className={`w-3 h-3 ${isUpvoted ? 'fill-orange-500 text-orange-500' : ''}`} />
+              <span>{upvoteCount}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

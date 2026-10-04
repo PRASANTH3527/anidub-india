@@ -75,7 +75,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [romajiTitle, setRomajiTitle] = useState('');
   const [poster, setPoster] = useState(''); // This will now store Base64
   const [synopsis, setSynopsis] = useState('');
-  const [releaseYear, setReleaseYear] = useState(new Date().getFullYear());
+  const [releaseYear, setReleaseYear] = useState<number | ''>(new Date().getFullYear());
   const [rating, setRating] = useState<number | ''>('');
   const [episodes, setEpisodes] = useState<number>(12);
   const [type, setType] = useState<AnimeType>('TV Series');
@@ -334,7 +334,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     const currentLangs = seasonDetails[entryIdx].languages || [];
     let updatedLangs: DubLanguage[];
     if (currentLangs.includes(lang)) {
-      if (currentLangs.length <= 1) return; // Must have at least one
       updatedLangs = currentLangs.filter(l => l !== lang);
     } else {
       updatedLangs = [...currentLangs, lang];
@@ -384,9 +383,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
   const toggleGenre = (genre: string) => {
     if (genres.includes(genre)) {
-      if (genres.length > 1) {
-        setGenres(genres.filter((g) => g !== genre));
-      }
+      setGenres(genres.filter((g) => g !== genre));
     } else {
       setGenres([...genres, genre]);
     }
@@ -396,12 +393,14 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Only Anime Title is strictly required
+    if (!title.trim()) return;
+
     // DERIVE GLOBAL LANGUAGES: Merge all unique languages selected across all seasons
-    const derivedGlobalDubs = Array.from(new Set(
+    const rawLanguages = Array.from(new Set(
       seasonDetails.flatMap(s => s.languages || [])
     )) as DubLanguage[];
-
-    if (!title.trim() || derivedGlobalDubs.length === 0) return;
+    const derivedGlobalDubs = rawLanguages.length > 0 ? rawLanguages : (['Tamil'] as DubLanguage[]);
 
     setIsSubmitting(true);
 
@@ -409,18 +408,22 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       poster.trim() ||
       'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
 
-    const platforms = streamingPartners.map(p => ({
-      name: p.name,
-      url: p.url.trim() || 'https://www.crunchyroll.com',
-    }));
+    const platforms = streamingPartners
+      .filter(p => p.url?.trim() || p.name)
+      .map(p => ({
+        name: p.name,
+        url: p.url.trim() || 'https://www.crunchyroll.com',
+      }));
+
+    const finalPlatforms = platforms.length > 0 ? platforms : [{ name: 'Crunchyroll' as StreamingPlatform, url: 'https://www.crunchyroll.com' }];
 
     const totalEpisodes = seasonDetails.reduce((acc, s) => acc + (Number(s.episodeCount) || 0), 0);
     
     const dubDetails = derivedGlobalDubs.map((lang) => ({
       language: lang,
       available: true,
-      platform: streamingPartners.map(p => p.name),
-      notes: `Verified ${lang} dub available on ${streamingPartners.map(p => p.name).join(', ')}`,
+      platform: finalPlatforms.map(p => p.name),
+      notes: `Verified ${lang} dub available on ${finalPlatforms.map(p => p.name).join(', ')}`,
     }));
 
     const payload = {
@@ -428,31 +431,31 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       romajiTitle: romajiTitle.trim() || title.trim(),
       poster: defaultCover,
       imageUrl: defaultCover,
-      synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available in ${derivedGlobalDubs.join(', ')}.`,
-      releaseYear: releaseYear || new Date().getFullYear(),
+      synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available on AniDub India.`,
+      releaseYear: releaseYear ? Number(releaseYear) : new Date().getFullYear(),
       originalReleaseDate: `${releaseYear || new Date().getFullYear()}`,
-      rating: rating !== '' ? Number(rating) : undefined,
+      rating: (rating !== '' && rating !== undefined) ? Number(rating) : undefined,
       episodes: totalEpisodes || 12,
-      seasons: seasonDetails.filter(s => s.type === 'Season').length,
-      totalSeasons: seasonDetails.filter(s => s.type === 'Season').length,
+      seasons: seasonDetails.filter(s => s.type === 'Season').length || 1,
+      totalSeasons: seasonDetails.filter(s => s.type === 'Season').length || 1,
       seasonDetails: seasonDetails.map(s => ({
-        type: s.type,
-        label: s.label,
+        type: s.type || 'Season',
+        label: s.label || '1',
         episodeCount: Number(s.episodeCount) || 0,
-        languages: s.languages
+        languages: s.languages && s.languages.length > 0 ? s.languages : derivedGlobalDubs
       })),
-      currentSeason: airingStatus === 'Ongoing' ? (Number(currentSeason) || 1) : undefined,
-      currentlyAiringEpisode: airingStatus === 'Ongoing' ? (Number(currentlyAiringEpisode) || 1) : undefined,
+      currentSeason: airingStatus === 'Ongoing' && currentSeason !== '' ? Number(currentSeason) : undefined,
+      currentlyAiringEpisode: airingStatus === 'Ongoing' && currentlyAiringEpisode !== '' ? Number(currentlyAiringEpisode) : undefined,
       type: type || 'TV Series',
       studio: studio.trim() || 'Animation Studio',
-      status: airingStatus,
-      airingStatus,
+      status: airingStatus || 'Ongoing',
+      airingStatus: airingStatus || 'Ongoing',
       releaseDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
       airingDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
-      genres: genres.length > 0 ? genres : ['Action', 'Fantasy'],
+      genres: genres.length > 0 ? genres : ['Action'],
       dubs: derivedGlobalDubs,
       dubDetails,
-      platforms,
+      platforms: finalPlatforms,
     };
 
     if (isEditMode && editAnime) {
@@ -654,7 +657,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               {/* Poster Image File Upload */}
               <div>
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                  <span>Anime Poster (Upload File) <span className="text-rose-400">*</span></span>
+                  <span>Anime Poster (Upload File)</span>
                   {autoFilled && <span className="text-[10px] text-emerald-400 font-semibold">✓ Auto-filled from MAL</span>}
                 </label>
                 <div className="flex gap-3 items-center">
@@ -699,7 +702,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               {/* Dynamic Multi-Platform Links */}
               <div className="space-y-2">
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                  <span>Streaming Partners (Multi-Link) <span className="text-rose-400">*</span></span>
+                  <span>Streaming Partners (Multi-Link)</span>
                   <button 
                     type="button" 
                     onClick={addStreamingPartner}
@@ -731,7 +734,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                       <div className="flex-1 relative">
                         <input
                           type="url"
-                          required
                           value={partner.url}
                           onChange={(e) => updateStreamingPartner(idx, 'url', e.target.value)}
                           placeholder="Link (e.g. https://...)"
@@ -756,7 +758,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               <div className={`grid grid-cols-1 ${airingStatus === 'Ongoing' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
                 <div>
                   <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                    <span>Type <span className="text-rose-400">*</span></span>
+                    <span>Type</span>
                     <span className="text-[10px] text-purple-400 font-semibold">Format</span>
                   </label>
                   <select
@@ -774,7 +776,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
                 <div>
                   <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                    <span>Status <span className="text-rose-400">*</span></span>
+                    <span>Status</span>
                     <span className="text-[10px] text-purple-400 font-semibold">Airing State</span>
                   </label>
                   <select
@@ -791,11 +793,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 {airingStatus === 'Ongoing' && (
                   <div className="animate-fadeIn">
                     <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                      <span>Release Day <span className="text-rose-400">*</span></span>
+                      <span>Release Day</span>
                       <span className="text-[10px] text-emerald-400 font-semibold">Schedule Tab</span>
                     </label>
                     <select
-                      required
                       value={releaseDay}
                       onChange={(e) => setReleaseDay(e.target.value as ReleaseDay)}
                       className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer text-xs"
@@ -815,7 +816,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Tv className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Mixed Entries (Seasons, OVAs, Movies) <span className="text-rose-400">*</span></span>
+                    <span>Mixed Entries (Seasons, OVAs, Movies)</span>
                   </div>
                   <button 
                     type="button" 
@@ -847,7 +848,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                         <div className="col-span-3">
                           <input
                             type="text"
-                            required
                             value={entry.label}
                             onChange={(e) => updateEntryField(idx, 'label', e.target.value)}
                             placeholder="Label (e.g. 1)"
@@ -857,8 +857,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                         <div className="col-span-3">
                           <input
                             type="number"
-                            required
-                            min={1}
                             value={entry.episodeCount}
                             onChange={(e) => updateEntryField(idx, 'episodeCount', e.target.value)}
                             placeholder="Eps"
@@ -954,7 +952,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               {/* Explicit Genre Selector (Action, Comedy, Shonen, etc.) */}
               <div>
                 <label className="block font-bold text-neutral-300 mb-1.5 flex items-center justify-between">
-                  <span>Genres (Action, Comedy, Shonen, etc.) <span className="text-rose-400">*</span></span>
+                  <span>Genres (Action, Comedy, Shonen, etc.)</span>
                   <span className="text-[10px] text-purple-400 font-semibold">{genres.length} selected</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5 p-3 rounded-2xl bg-[#141b29] border border-neutral-700/80 max-h-36 overflow-y-auto no-scrollbar">
@@ -999,8 +997,9 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                   <input
                     type="number"
                     value={releaseYear}
-                    onChange={(e) => setReleaseYear(parseInt(e.target.value) || 2024)}
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white text-xs"
+                    onChange={(e) => setReleaseYear(e.target.value === '' ? '' : parseInt(e.target.value) || 2024)}
+                    placeholder="e.g. 2024"
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white placeholder-neutral-500 text-xs"
                   />
                 </div>
                 <div>
