@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const botToken = process.env.TELEGRAM_ANIME_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || body.botToken;
+    const botToken = process.env.TELEGRAM_ANIME_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || body.botToken || '8648317719:AAHZ7wxQefZT5QdKCpc61epWJ4mGAgJvgdc';
     const channelId = process.env.TELEGRAM_ANIME_CHANNEL_ID || process.env.ADMIN_CHAT_ID || body.channelId || '8769442354';
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://anidub.in';
 

@@ -21,6 +21,8 @@ import { DubLanguage, StreamingPlatform, AnimeType, ReleaseDay } from '../types/
 import { dbService } from '../services/databaseService';
 import { authService } from '../services/authService';
 import { useToast } from './Toast';
+import { db } from '../lib/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 interface SubmitDubModalProps {
   isOpen: boolean;
@@ -459,18 +461,34 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     };
 
     if (isEditMode && activeAnime) {
+      // 1. Direct write to live Firebase Firestore database
+      try {
+        await setDoc(doc(db, 'animes', activeAnime.id), {
+          ...payload,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+
+        await setDoc(doc(db, 'submissions', activeAnime.id), {
+          ...payload,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      } catch (fsEditErr) {
+        console.error('[Firestore Direct Edit Error]', fsEditErr);
+      }
+
+      // 2. Also update local cache via databaseService
       const success = dbService.updateAnime(activeAnime.id, payload);
       
       if (success) {
-        // Dispatch Telegram admin notification (similar to Feedback form)
+        // Dispatch Telegram admin notification
         try {
-          await fetch('/api/telegram/broadcast-anime', {
+          const telegramMessage = `🔔 Anime Updated: ${title.trim()}`;
+          await fetch('/api/telegram', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            keepalive: true,
             body: JSON.stringify({
-              message: `🔔 Anime Updated: ${title.trim()}`,
-              text: `🔔 Anime Updated: ${title.trim()}`,
+              message: telegramMessage,
+              text: telegramMessage,
               title: title.trim(),
               anime: {
                 id: activeAnime.id,
@@ -499,10 +517,16 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       return;
     }
 
-    // STRICT APPROVAL GATE: Every submission is saved with status: "pending"
-    // Pending anime are NEVER returned in getApprovedAnime() and stay completely hidden from public feeds
-    const newRecord = dbService.submitDubInfo({
+    // Creating new record ID
+    const newId = 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
+
+    const newRecord: AnimeRecord = {
       ...payload,
+      id: newId,
+      status: 'pending',
+      submissionStatus: 'pending',
+      submittedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       themes: ['Super Power', 'Indian Dub'],
       characters: [
         {
@@ -521,20 +545,57 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         userName: currentUser?.displayName || 'Community Member',
         userEmail: currentUser?.email || 'contributor@anidub.in',
       },
+      likes: 0,
+      upvotes: 0,
+    };
+
+    // 1. Save new anime data DIRECTLY to live Firebase Firestore database collections ('animes' and 'submissions')
+    try {
+      await setDoc(doc(db, 'animes', newId), {
+        ...newRecord,
+        createdAt: new Date().toISOString(),
+        serverCreatedAt: serverTimestamp(),
+      });
+
+      await setDoc(doc(db, 'submissions', newId), {
+        ...newRecord,
+        createdAt: new Date().toISOString(),
+        serverCreatedAt: serverTimestamp(),
+      });
+
+      // Log activity event in Firestore
+      await setDoc(doc(db, 'activities', `act-${newId}`), {
+        user: newRecord.submittedBy?.userName || 'Community User',
+        action: 'submitted',
+        animeTitle: newRecord.title,
+        timestamp: new Date(),
+        language: newRecord.dubs?.[0] || 'Tamil',
+        status: 'pending',
+      });
+    } catch (firestoreError) {
+      console.error('[Firestore Direct Save Error]', firestoreError);
+    }
+
+    // 2. Also register in local databaseService cache
+    dbService.submitDubInfo({
+      ...payload,
+      themes: ['Super Power', 'Indian Dub'],
+      characters: newRecord.characters,
+      submittedBy: newRecord.submittedBy,
     });
 
-    // Dispatch Telegram admin notification (similar to Feedback form)
+    // 3. Inside onSubmit, add a fetch call to the Telegram API route to send '🔔 New Anime Submitted: [Title]'
     try {
-      await fetch('/api/telegram/broadcast-anime', {
+      const telegramAlertMsg = `🔔 New Anime Submitted: ${title.trim()}`;
+      await fetch('/api/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        keepalive: true,
         body: JSON.stringify({
-          message: `🔔 Anime Added: ${title.trim()}`,
-          text: `🔔 Anime Added: ${title.trim()}`,
+          message: telegramAlertMsg,
+          text: telegramAlertMsg,
           title: title.trim(),
           anime: {
-            id: newRecord.id,
+            id: newId,
             title: title.trim(),
             poster: poster || defaultCover,
             synopsis: synopsis.trim(),
@@ -545,8 +606,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           },
         }),
       });
-    } catch (err) {
-      console.warn('Telegram notification error:', err);
+    } catch (telegramError) {
+      console.warn('Telegram notification error:', telegramError);
     }
 
     setIsSubmitting(false);
