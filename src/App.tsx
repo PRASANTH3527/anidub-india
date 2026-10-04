@@ -42,19 +42,10 @@ function AppContent() {
   const toast = useToast();
 
   // 1. Theme State (Dark / Light Mode)
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('anidub_theme');
-      if (saved === 'light' || saved === 'dark') return saved;
-      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-        return 'light';
-      }
-    }
-    return 'dark';
-  });
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   // Bilingual UI State (English / Tamil)
-  const [uiLanguage, setUiLanguage] = useState<SupportedLanguage>(getSavedUiLanguage());
+  const [uiLanguage, setUiLanguage] = useState<SupportedLanguage>('en');
 
   const handleToggleLanguage = () => {
     const next = uiLanguage === 'en' ? 'ta' : 'en';
@@ -85,12 +76,12 @@ function AppContent() {
   };
 
   // 2. Offline Mode Support: detect connectivity changes
-  const [isOffline, setIsOffline] = useState(() => {
-    if (typeof navigator !== 'undefined') return !navigator.onLine;
-    return false;
-  });
+  const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOffline(true);
+    }
     const handleOnline = () => {
       setIsOffline(false);
       toast.success('Back Online', 'Connected to live database.');
@@ -118,21 +109,10 @@ function AppContent() {
 
   // Local User Profile State (persisted in localStorage)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [localProfile, setLocalProfile] = useState<LocalUserProfile>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('anidub_local_user_profile');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && parsed.nickname && parsed.avatar) return parsed;
-        }
-      } catch {}
-    }
-    return {
-      nickname: 'Anime Fan',
-      avatar: ANIME_AVATAR_PRESETS[0].url,
-      favoriteLanguage: 'Tamil',
-    };
+  const [localProfile, setLocalProfile] = useState<LocalUserProfile>({
+    nickname: 'Anime Fan',
+    avatar: ANIME_AVATAR_PRESETS[0].url,
+    favoriteLanguage: 'Tamil',
   });
 
   const handleSaveLocalProfile = (profile: LocalUserProfile) => {
@@ -144,18 +124,44 @@ function AppContent() {
   const [isSurpriseModalOpen, setIsSurpriseModalOpen] = useState(false);
 
   // Recently Viewed History (Keeps maximum 10 most recent anime IDs in localStorage)
-  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('anidub_recently_viewed');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) return parsed.slice(0, 10);
-        }
-      } catch {}
+  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([]);
+
+  // Local Watchlist (Zero login required, persists in browser localStorage)
+  const [localWatchlistIds, setLocalWatchlistIds] = useState<string[]>([]);
+
+  // Initial client hydration effect from localStorage
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem('anidub_theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') {
+        setTheme(savedTheme);
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        setTheme('light');
+      }
+
+      setUiLanguage(getSavedUiLanguage());
+
+      const savedProfile = localStorage.getItem('anidub_local_user_profile');
+      if (savedProfile) {
+        const parsed = JSON.parse(savedProfile);
+        if (parsed && parsed.nickname && parsed.avatar) setLocalProfile(parsed);
+      }
+
+      const savedRecent = localStorage.getItem('anidub_recently_viewed');
+      if (savedRecent) {
+        const parsedRecent = JSON.parse(savedRecent);
+        if (Array.isArray(parsedRecent)) setRecentlyViewedIds(parsedRecent.slice(0, 10));
+      }
+
+      const savedWatchlist = localStorage.getItem('anidub_local_watchlist');
+      if (savedWatchlist) {
+        const parsedWatchlist = JSON.parse(savedWatchlist);
+        if (Array.isArray(parsedWatchlist)) setLocalWatchlistIds(parsedWatchlist);
+      }
+    } catch (e) {
+      console.warn('Storage sync warning:', e);
     }
-    return [];
-  });
+  }, []);
 
   const trackRecentlyViewed = (animeId: string) => {
     if (!animeId) return;
@@ -179,20 +185,6 @@ function AppContent() {
 
   // Report Modal state
   const [reportingAnime, setReportingAnime] = useState<{ id: string; title: string; poster?: string } | null>(null);
-
-  // Local Watchlist (Zero login required, persists in browser localStorage)
-  const [localWatchlistIds, setLocalWatchlistIds] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('anidub_local_watchlist');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
 
   // Filtered Watchlist (Only IDs that exist in the main database)
   // This ensures the badge count in the Navbar is always accurate even if items are deleted by admin
