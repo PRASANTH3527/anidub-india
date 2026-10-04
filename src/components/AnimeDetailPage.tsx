@@ -28,6 +28,7 @@ import { dbService } from '../services/databaseService';
 import { authService } from '../services/authService';
 import { updateSeoTags, buildAnimeSeo } from '../utils/seo';
 import DynamicAmbientGlow from './DynamicAmbientGlow';
+import { useReducedMotion, useIsMobile } from '../hooks/useMediaQuery';
 
 interface AnimeDetailPageProps {
   anime: Anime;
@@ -151,11 +152,15 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
   const heroImage = anime.imageUrl || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
 
+  const isReducedMotion = useReducedMotion();
+  const isMobile = useIsMobile();
+  const shouldReduceAnimation = isReducedMotion || isMobile;
+
   return (
     <motion.div 
-      initial={{ opacity: 0 }}
+      initial={shouldReduceAnimation ? { opacity: 1 } : { opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      exit={shouldReduceAnimation ? { opacity: 1 } : { opacity: 0 }}
       transition={{ duration: 0.3 }}
       className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-8"
     >
@@ -198,16 +203,18 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
       {/* Main Hero Header Card (Motion Wrapper) */}
       <motion.div 
-        initial={{ opacity: 0, y: 15 }}
+        initial={shouldReduceAnimation ? { opacity: 1, y: 0 } : { opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: "easeOut" }}
         className="relative rounded-3xl overflow-hidden bg-[#131926] border border-neutral-800 shadow-2xl"
       >
         {/* Blurred Backdrop Banner */}
-        <div className="relative h-64 sm:h-80 w-full overflow-hidden bg-gradient-to-r from-purple-950 via-slate-900 to-neutral-900">
+        <div className="relative h-64 sm:h-80 w-full overflow-hidden bg-gradient-to-r from-[var(--primary-badge)] via-slate-900 to-neutral-900">
           <img
             src={heroImage}
             alt={anime.title}
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover blur-lg opacity-25 scale-110"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#131926] via-[#131926]/70 to-transparent" />
@@ -220,14 +227,16 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <DynamicAmbientGlow imageUrl={heroImage} className="shrink-0 mx-auto md:mx-0 group">
             {/* Poster Card (Shared Element Transition) */}
             <motion.div 
-              layoutId={`anime-poster-${anime.id}`}
+              layoutId={shouldReduceAnimation ? undefined : `anime-poster-${anime.id}`}
               transition={{ type: "spring", stiffness: 350, damping: 28 }}
-              className="relative z-10 w-44 sm:w-56 aspect-[3/4.2] rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.85)] border-2 border-neutral-700/80 bg-neutral-900 group-hover:scale-[1.02] transition-transform duration-300"
+              className="relative z-10 w-44 sm:w-56 aspect-[3/4.2] rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.85)] border-2 border-neutral-700/80 bg-neutral-900 sm:group-hover:scale-[1.02] transition-transform duration-300"
             >
               <motion.img
-                layoutId={`anime-poster-img-${anime.id}`}
+                layoutId={shouldReduceAnimation ? undefined : `anime-poster-img-${anime.id}`}
                 src={heroImage}
                 alt={anime.title}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover"
               />
               <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1 max-w-[80%]">
@@ -248,7 +257,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             <div>
               {/* Type, Year & Status pill */}
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-2">
-                <span className="bg-purple-950/90 text-purple-300 border border-purple-800/40 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                <span className="badge-primary-theme text-xs font-bold px-2.5 py-0.5 rounded-full">
                   {anime.type}
                 </span>
                 <span className="text-xs text-neutral-400 font-semibold">
@@ -289,14 +298,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 <span className="text-[11px] text-orange-500 font-black">CR RATING</span>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-black/50 border border-purple-800/80 px-3 py-1.5 rounded-xl">
-                <Volume2 className="w-4 h-4 text-purple-400" />
-                <span className="font-extrabold text-purple-300 text-sm">★ {averageDubScore}</span>
+              <div className="flex items-center gap-1.5 bg-black/50 border border-primary-theme/60 px-3 py-1.5 rounded-xl">
+                <Volume2 className="w-4 h-4 text-accent-theme" />
+                <span className="font-extrabold text-primary-theme text-sm">★ {averageDubScore}</span>
                 <span className="text-[11px] text-neutral-400">Dub Quality</span>
               </div>
 
               <div className="flex items-center gap-1.5 bg-black/50 border border-neutral-700/80 px-3 py-1.5 rounded-xl">
-                <Building2 className="w-4 h-4 text-purple-400" />
+                <Building2 className="w-4 h-4 text-accent-theme" />
                 <span className="text-xs text-neutral-200 font-semibold">{anime.studio}</span>
               </div>
 
@@ -316,8 +325,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 onClick={() => onToggleWatchlist(anime)}
                 className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg ${
                   isBookmarked
-                    ? 'bg-purple-600 text-white shadow-purple-600/40'
-                    : 'bg-[#1a2336] hover:bg-[#222e47] text-neutral-200 border border-neutral-700 hover:border-purple-500/50'
+                    ? 'btn-primary-theme text-white'
+                    : 'bg-[#1a2336] hover:bg-[#222e47] text-neutral-200 border border-neutral-700 hover:border-primary-theme/50'
                 }`}
               >
                 <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
@@ -371,7 +380,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   {(anime.genres || []).map((genre) => (
                     <span
                       key={genre}
-                      className="text-xs font-semibold bg-[#182032] text-purple-200 border border-neutral-700/80 px-3 py-1 rounded-full"
+                      className="text-xs font-semibold bg-[#182032] text-accent-theme border border-neutral-700/80 px-3 py-1 rounded-full"
                     >
                       {genre}
                     </span>
@@ -388,7 +397,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     {(anime.themes || []).map((theme) => (
                       <span
                         key={theme}
-                        className="text-xs font-semibold bg-[#182032] text-neutral-300 border border-neutral-800 px-3 py-1 rounded-full"
+                        className="text-xs font-semibold bg-[#182032] text-neutral-300 border border-neutral-700/80 px-3 py-1 rounded-full"
                       >
                         {theme}
                       </span>
@@ -402,7 +411,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           {/* Main Characters & Voice Actors Section (Fulfills exact prompt requirement) */}
           <div className="bg-[#131926] border border-neutral-800 rounded-3xl p-6 sm:p-7 shadow-xl space-y-5">
             <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-purple-400" />
+              <Users className="w-5 h-5 text-accent-theme" />
               <h2 className="font-heading font-black text-lg text-white">
                 Main Characters & Voice Actors
               </h2>
@@ -421,14 +430,16 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     <img
                       src={char.characterImage}
                       alt={char.characterName}
+                      loading="lazy"
+                      decoding="async"
                       className="w-14 h-14 rounded-xl object-cover shrink-0 border border-neutral-700"
                     />
                     <div className="min-w-0 flex-grow">
                       <div className="flex items-center justify-between gap-1">
                         <h4 className="font-bold text-xs text-white truncate">
-                          {char.characterName}
+                           {char.characterName}
                         </h4>
-                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-950/80 text-purple-300 border border-purple-800/40 shrink-0">
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded badge-primary-theme shrink-0">
                           {char.role}
                         </span>
                       </div>
@@ -459,7 +470,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-neutral-800">
               <div>
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-purple-400" />
+                  <MessageSquare className="w-5 h-5 text-accent-theme" />
                   <h3 className="font-heading font-black text-xl text-white">
                     Dub Quality Reviews & Ratings
                   </h3>
@@ -470,7 +481,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               </div>
 
               {/* Overall Dub Quality badge */}
-              <div className="flex items-center gap-2 bg-[#182032] border border-purple-800/60 px-4 py-2 rounded-2xl shrink-0">
+              <div className="flex items-center gap-2 bg-[#182032] border border-primary-theme/60 px-4 py-2 rounded-2xl shrink-0">
                 <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
                 <div>
                   <span className="font-black text-white text-base leading-none block">
@@ -488,13 +499,13 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               <h4 className="font-bold text-sm text-white flex items-center justify-between">
                 <span>Leave a Dub Quality Review</span>
                 {currentUser ? (
-                  <span className="text-[11px] text-purple-300 font-medium">
+                  <span className="text-[11px] text-accent-theme font-medium">
                     Posting as: <strong>{currentUser.displayName}</strong>
                   </span>
                 ) : (
                   <button
                     onClick={onOpenAuthModal}
-                    className="text-xs text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1 cursor-pointer"
+                    className="text-xs text-accent-theme hover:text-primary-theme underline font-semibold flex items-center gap-1 cursor-pointer"
                   >
                     <LogIn className="w-3.5 h-3.5" />
                     <span>Sign in with Google to Review</span>
@@ -545,7 +556,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     <select
                       value={languageInput}
                       onChange={(e) => setLanguageInput(e.target.value as DubLanguage)}
-                      className="bg-[#131926] border border-neutral-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                      className="bg-[#131926] border border-neutral-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-primary-theme cursor-pointer"
                     >
                       {anime.dubs.map((l) => (
                         <option key={l} value={l}>
@@ -564,7 +575,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     value={commentInput}
                     onChange={(e) => setCommentInput(e.target.value)}
                     placeholder="How was the dialogue delivery, voice actor performance, script translation, and sound effects balance?..."
-                    className="w-full bg-[#131926] border border-neutral-700/80 focus:border-purple-500 rounded-xl p-3 text-xs text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+                    className="w-full bg-[#131926] border border-neutral-700/80 focus:border-primary-theme rounded-xl p-3 text-xs text-white placeholder-neutral-500 outline-none focus:ring-1 focus:ring-primary-theme resize-none"
                   />
                 </div>
 
@@ -572,7 +583,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   <button
                     type="submit"
                     disabled={isSubmittingReview || !commentInput.trim()}
-                    className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-purple-600/30"
+                    className="px-5 py-2.5 rounded-xl btn-primary-theme disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-lg"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>Submit Dub Review</span>
@@ -598,12 +609,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                         <img
                           src={rev.userAvatar}
                           alt={rev.userName}
-                          className="w-8 h-8 rounded-full object-cover border border-purple-500/40"
+                          loading="lazy"
+                          decoding="async"
+                          className="w-8 h-8 rounded-full object-cover border border-primary-theme/40"
                         />
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-xs text-white">{rev.userName}</span>
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800/40">
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded badge-primary-theme">
                               {rev.language} Dub
                             </span>
                           </div>
@@ -633,7 +646,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     <div className="flex items-center justify-end pt-1">
                       <button
                         onClick={() => handleLike(rev.id)}
-                        className="flex items-center gap-1.5 text-[11px] text-neutral-400 hover:text-purple-300 transition-colors cursor-pointer group"
+                        className="flex items-center gap-1.5 text-[11px] text-neutral-400 hover:text-accent-theme transition-colors cursor-pointer group"
                       >
                         <ThumbsUp className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
                         <span>Helpful ({rev.likes})</span>
@@ -657,7 +670,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           {/* Dub Status Breakdown Card */}
           <div className="bg-[#131926] border border-neutral-800 rounded-3xl p-6 shadow-xl space-y-4">
             <div className="flex items-center gap-2">
-              <Volume2 className="w-5 h-5 text-purple-400" />
+              <Volume2 className="w-5 h-5 text-accent-theme" />
               <h3 className="font-heading font-black text-base text-white">
                 Indian Dub Availability
               </h3>
@@ -719,7 +732,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               {(anime.platforms || []).map((p) => {
                 const colorClass = Object.keys(PLATFORM_COLORS).find(k => p.name.includes(k)) 
                   ? PLATFORM_COLORS[Object.keys(PLATFORM_COLORS).find(k => p.name.includes(k))!] 
-                  : 'hover:bg-purple-900/30 border-neutral-700/80 hover:border-purple-500/50 text-neutral-100';
+                  : 'hover:bg-primary-theme/20 border-neutral-700/80 hover:border-primary-theme/50 text-neutral-100';
 
                 return (
                   <a
@@ -740,15 +753,15 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           {/* Anime Production Details Panel */}
           <div className="bg-[#131926] border border-neutral-800 rounded-3xl p-6 shadow-xl space-y-3.5 text-xs font-medium">
             <h3 className="font-heading font-black text-base text-white flex items-center gap-2">
-              <Tv className="w-4 h-4 text-purple-400" />
+              <Tv className="w-4 h-4 text-accent-theme" />
               <span>Production & Airing</span>
             </h3>
 
             <div className="space-y-2.5 divide-y divide-neutral-800/80 text-neutral-300">
               {/* Progress Summary (Dynamic Mixed Entries) */}
               {(anime.seasonDetails && anime.seasonDetails.length > 0) ? (
-                <div className="bg-purple-950/20 rounded-xl p-3 border border-purple-500/20 mb-2 space-y-3">
-                  <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-purple-300">
+                <div className="bg-primary-theme/10 rounded-xl p-3 border border-primary-theme/20 mb-2 space-y-3">
+                  <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-accent-theme">
                     <span>Series Progress Breakdown</span>
                     <Sparkles className="w-3 h-3" />
                   </div>
@@ -762,7 +775,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                             {s.languages && s.languages.length > 0 && (
                               <div className="flex gap-0.5">
                                 {s.languages.map(l => (
-                                  <span key={l} className="text-[7px] font-bold px-1 py-0.2 rounded bg-purple-900/40 text-purple-200 border border-purple-700/30">
+                                  <span key={l} className="text-[7px] font-bold px-1 py-0.2 rounded badge-primary-theme">
                                     {l.substring(0, 2)}
                                   </span>
                                 ))}
@@ -770,20 +783,20 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                             )}
                           </div>
                         </div>
-                        <span className="text-purple-300 text-[10px] font-black">{s.episodeCount} EP</span>
+                        <span className="text-accent-theme text-[10px] font-black">{s.episodeCount} EP</span>
                       </div>
                     ))}
                   </div>
-                  <div className="flex justify-between items-center pt-1.5 border-t border-purple-500/20">
-                    <span className="text-[10px] font-bold text-purple-400 uppercase">Total Scope</span>
+                  <div className="flex justify-between items-center pt-1.5 border-t border-primary-theme/20">
+                    <span className="text-[10px] font-bold text-accent-theme uppercase">Total Scope</span>
                     <span className="text-white text-[10px] font-black">
                       {anime.seasonDetails.filter(s => s.type === 'Season').length} Seasons • {anime.episodes} Episodes
                     </span>
                   </div>
                 </div>
               ) : (anime.totalSeasons || anime.episodesPerSeason) && (
-                <div className="bg-purple-950/20 rounded-xl p-3 border border-purple-500/20 mb-2 space-y-2">
-                  <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-purple-300">
+                <div className="bg-primary-theme/10 rounded-xl p-3 border border-primary-theme/20 mb-2 space-y-2">
+                  <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-accent-theme">
                     <span>Series Scope</span>
                     <Sparkles className="w-3 h-3" />
                   </div>
@@ -871,7 +884,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 Approved regional dubs sharing {(anime.dubs || []).join(' & ')} audio
               </p>
             </div>
-            <span className="text-xs text-purple-400 font-bold bg-[#131929] px-3 py-1 rounded-full border border-neutral-800">
+            <span className="text-xs text-accent-theme font-bold bg-[#131929] px-3 py-1 rounded-full border border-neutral-800">
               {similarShows.length} {similarShows.length === 1 ? 'title' : 'titles'}
             </span>
           </div>
@@ -881,16 +894,18 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               <div
                 key={show.id}
                 onClick={() => onSelectSimilarAnime?.(show)}
-                className="bg-[#131926] border border-neutral-800 hover:border-purple-500/50 rounded-2xl p-3.5 cursor-pointer group transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/20 active:scale-[0.98] flex gap-3.5"
+                className="bg-[#131926] border border-neutral-800 hover:border-primary-theme/50 rounded-2xl p-3.5 cursor-pointer group transition-all duration-300 hover:shadow-xl hover:shadow-primary-theme/20 active:scale-[0.98] flex gap-3.5"
               >
                 <img
                   src={show.poster || show.imageUrl}
                   alt={show.title}
-                  className="w-20 aspect-[3/4.2] object-cover rounded-xl shrink-0 group-hover:scale-105 transition-transform duration-300 shadow"
+                  loading="lazy"
+                  decoding="async"
+                  className="w-20 aspect-[3/4.2] object-cover rounded-xl shrink-0 sm:group-hover:scale-105 transition-transform duration-300 shadow"
                 />
                 <div className="flex flex-col justify-between flex-grow min-w-0">
                   <div>
-                    <h4 className="font-bold text-sm text-white truncate group-hover:text-purple-300 transition-colors">
+                    <h4 className="font-bold text-sm text-white truncate group-hover:text-primary-theme transition-colors">
                       {show.title}
                     </h4>
                     <p className="text-[11px] text-neutral-400 mt-0.5">
@@ -898,7 +913,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     </p>
                     <div className="flex flex-wrap gap-1 mt-2">
                       {(show.dubs || []).slice(0, 2).map((d) => (
-                        <span key={d} className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/40">
+                        <span key={d} className="text-[9px] font-bold px-1.5 py-0.5 rounded badge-primary-theme">
                           {d} Dub
                         </span>
                       ))}
@@ -907,7 +922,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
                   <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-1.5 border-t border-neutral-800/70">
                     <span className="text-orange-500 font-black">CR ★ {show.rating ? show.rating.toFixed(1) : 'N/A'}</span>
-                    <span className="text-purple-400 font-semibold group-hover:translate-x-0.5 transition-transform">
+                    <span className="text-accent-theme font-semibold group-hover:translate-x-0.5 transition-transform">
                       View details →
                     </span>
                   </div>

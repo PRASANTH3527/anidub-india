@@ -15,23 +15,69 @@ const DB_ANIME_KEY = 'anidub_db_anime_records';
 const DB_REVIEWS_KEY = 'anidub_db_reviews';
 const DB_WATCHLIST_KEY = 'anidub_db_watchlists';
 const CLEAN_SLATE_KEY = 'anidub_purged_mock_strict_firebase_v7';
+const QUOTA_EXCEEDED_KEY = 'anidub_firestore_quota_exceeded_timestamp';
+const LAST_SYNC_KEY = 'anidub_db_last_sync_timestamp';
 
 class DatabaseService {
   private listeners: (() => void)[] = [];
+  private isQuotaLimited = false;
 
   constructor() {
     this.initDatabase();
-    this.syncWithServer();
+    this.checkQuotaStatus();
+    
+    // Initial sync only if data is stale
+    if (this.shouldSync()) {
+      this.syncWithServer();
+    }
 
     if (typeof window !== 'undefined') {
-      setInterval(() => this.syncWithServer(), 8000);
-      window.addEventListener('focus', () => this.syncWithServer());
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          this.syncWithServer();
-        }
+      // Sync much less frequently (every 1 hour instead of 30 mins)
+      setInterval(() => {
+        if (this.shouldSync()) this.syncWithServer();
+      }, 3600000);
+
+      window.addEventListener('focus', () => {
+        if (this.shouldSync()) this.syncWithServer();
       });
     }
+  }
+
+  private checkQuotaStatus() {
+    if (typeof window === 'undefined') return;
+    const quotaTimestamp = localStorage.getItem(QUOTA_EXCEEDED_KEY);
+    if (quotaTimestamp) {
+      const hoursSinceExceeded = (Date.now() - Number(quotaTimestamp)) / (1000 * 60 * 60);
+      // Reset quota status after 24 hours
+      if (hoursSinceExceeded < 24) {
+        this.isQuotaLimited = true;
+      } else {
+        localStorage.removeItem(QUOTA_EXCEEDED_KEY);
+      }
+    }
+  }
+
+  private shouldSync(): boolean {
+    if (typeof window === 'undefined') return false;
+    if (this.isQuotaLimited) return false;
+    const lastSync = localStorage.getItem(LAST_SYNC_KEY);
+    if (!lastSync) return true;
+    
+    // Only auto-sync if data is older than 12 hours (was 4)
+    const hoursSinceSync = (Date.now() - Number(lastSync)) / (1000 * 60 * 60);
+    return hoursSinceSync > 12;
+  }
+
+  private setQuotaExceeded() {
+    this.isQuotaLimited = true;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(QUOTA_EXCEEDED_KEY, Date.now().toString());
+    }
+  }
+
+  private isQuotaExceededError(err: any): boolean {
+    const msg = String(err?.message || err || '').toLowerCase();
+    return msg.includes('quota limit exceeded') || msg.includes('quota exceeded');
   }
 
   private initDatabase() {
@@ -118,6 +164,7 @@ class DatabaseService {
   }
 
   public getAllAnimeRecords(): AnimeRecord[] {
+    if (typeof window === 'undefined') return [];
     try {
       const raw = localStorage.getItem(DB_ANIME_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
@@ -432,8 +479,8 @@ class DatabaseService {
 
   // --- 5. Server Sync: Strictly syncs from Firestore database ---
   public async syncWithServer(): Promise<void> {
-    // Check if browser is offline
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    // Check if browser is offline or quota limited
+    if (this.isQuotaLimited || (typeof navigator !== 'undefined' && !navigator.onLine)) {
       return;
     }
 
@@ -451,6 +498,11 @@ class DatabaseService {
           }
         });
       } catch (err) {
+        if (this.isQuotaExceededError(err)) {
+          this.setQuotaExceeded();
+          console.error('[AniDub DB] Firestore Read Quota Exceeded. Upgrade or wait until tomorrow: https://console.firebase.google.com/project/keen-matrix-p40ks/firestore/databases/ai-studio-anidubindiadubbe-5d6f2b65-be54-4278-868a-15922d0100a3/data?openUpgradeDialog=true');
+          return; 
+        }
         console.warn('[AniDub DB] Firestore animes sync notice:', err);
       }
 
@@ -466,24 +518,43 @@ class DatabaseService {
           }
         });
       } catch (err) {
+        if (this.isQuotaExceededError(err)) {
+          this.setQuotaExceeded();
+          console.error('[AniDub DB] Firestore Quota Exceeded during submissions sync.');
+          return;
+        }
         console.warn('[AniDub DB] Firestore submissions sync notice:', err);
       }
 
       const firestoreList = Array.from(firestoreMap.values());
       // STRICT: Save exactly what is in Firestore to localStorage cache without merging mock data!
       this.saveAnimeRecords(firestoreList);
+      
+      // Update last sync timestamp
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
+      }
     } catch (e) {
       console.warn('[AniDub DB] Sync error:', e);
     }
   }
 
   public async forceRefresh(): Promise<AnimeRecord[]> {
+    this.isQuotaLimited = false; // Try resetting on force refresh
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(QUOTA_EXCEEDED_KEY);
+    }
     await this.syncWithServer();
     return this.getApprovedAnime();
   }
 
+  public getIsQuotaLimited(): boolean {
+    return this.isQuotaLimited;
+  }
+
   // --- 5. Dub Reviews Management ---
   public getReviewsForAnime(animeId: string): DubReview[] {
+    if (typeof window === 'undefined') return [];
     try {
       const raw = localStorage.getItem(DB_REVIEWS_KEY);
       const all: DubReview[] = raw ? JSON.parse(raw) : [];
@@ -527,6 +598,7 @@ class DatabaseService {
 
   // --- 6. User Watchlist Persistence ---
   public getUserWatchlist(userId: string): WatchlistEntry[] {
+    if (typeof window === 'undefined') return [];
     try {
       const raw = localStorage.getItem(DB_WATCHLIST_KEY);
       const all: WatchlistEntry[] = raw ? JSON.parse(raw) : [];

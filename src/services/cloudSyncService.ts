@@ -6,7 +6,6 @@ export interface CloudBackupPayload {
   nickname: string;
   avatar: string;
   favoriteLanguage: string;
-  theme: string;
   watchlist: string[]; // anime IDs
   upvotes: string[]; // anime IDs
   xp?: number;
@@ -29,7 +28,6 @@ class CloudSyncService {
       nickname: profile.nickname,
       avatar: profile.avatar,
       favoriteLanguage: profile.favoriteLanguage || 'Tamil',
-      theme: localStorage.getItem('anidub_accent_theme') || 'standard-purple',
       watchlist: JSON.parse(localStorage.getItem('anidub_local_watchlist') || '[]'),
       upvotes: JSON.parse(localStorage.getItem('anidub_upvoted_anime_ids') || '[]'),
       xp: Number(localStorage.getItem('anidub_user_xp') || 0),
@@ -48,11 +46,8 @@ class CloudSyncService {
         nickname: data.nickname,
         avatar: data.avatar,
         favoriteLanguage: data.favoriteLanguage,
-        theme: data.theme
       }));
     }
-
-    if (data.theme) localStorage.setItem('anidub_accent_theme', data.theme);
     if (data.watchlist) localStorage.setItem('anidub_local_watchlist', JSON.stringify(data.watchlist));
     if (data.upvotes) localStorage.setItem('anidub_upvoted_anime_ids', JSON.stringify(data.upvotes));
     if (data.xp !== undefined) localStorage.setItem('anidub_user_xp', data.xp.toString());

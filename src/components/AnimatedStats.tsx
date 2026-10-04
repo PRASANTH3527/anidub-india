@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tv, Flame, Languages, CheckCircle2, TrendingUp, Sparkles, Film } from 'lucide-react';
 import { SupportedLanguage, translate } from '../utils/i18n';
+import { useReducedMotion, useIsMobile } from '../hooks/useMediaQuery';
 
 interface AnimatedStatsProps {
   totalAnime: number;
@@ -13,10 +14,18 @@ interface AnimatedStatsProps {
 
 function useCountUp(target: number, duration: number = 1200): number {
   const [count, setCount] = useState(0);
+  const isReducedMotion = useReducedMotion();
+  const isMobile = useIsMobile();
+  const skipAnimation = isReducedMotion || isMobile;
 
   useEffect(() => {
     if (target === 0) {
       setCount(0);
+      return;
+    }
+
+    if (skipAnimation) {
+      setCount(target);
       return;
     }
 
@@ -39,7 +48,7 @@ function useCountUp(target: number, duration: number = 1200): number {
 
     frameId = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frameId);
-  }, [target, duration]);
+  }, [target, duration, skipAnimation]);
 
   return count;
 }
@@ -60,14 +69,14 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
         
         {/* 1. Total Anime */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-purple-500/30 rounded-2xl p-4 sm:p-5 shadow-xl hover:border-purple-500/50 transition-all duration-300 group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-purple-600/10 rounded-full blur-2xl pointer-events-none group-hover:bg-purple-600/20 transition-all" />
+        <div className="relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-primary-theme/30 rounded-2xl p-4 sm:p-5 shadow-xl hover:border-primary-theme/50 transition-all duration-300 group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-primary-theme/10 rounded-full blur-2xl pointer-events-none group-hover:bg-primary-theme/20 transition-all" />
           
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
               {translate('statsAnime', lang)}
             </span>
-            <div className="w-8 h-8 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
+            <div className="w-8 h-8 rounded-xl bg-primary-theme/20 border border-primary-theme/30 flex items-center justify-center text-primary-theme">
               <Tv className="w-4 h-4" />
             </div>
           </div>
@@ -76,7 +85,7 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
             <span className="font-heading font-black text-2xl sm:text-3xl lg:text-4xl text-white tracking-tight">
               {animatedAnimeCount}
             </span>
-            <span className="text-purple-400 font-bold text-xs">+</span>
+            <span className="text-primary-theme font-bold text-xs">+</span>
           </div>
 
           <p className="text-[11px] text-neutral-400 mt-1 flex items-center gap-1">

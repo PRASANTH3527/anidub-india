@@ -3,18 +3,15 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { 
   AnimeTheme, 
-  ANIME_THEMES, 
-  applyAnimeTheme, 
-  getSavedAnimeTheme,
-  getRecommendedThemeForAvatar 
+  ANIME_THEMES 
 } from '../utils/theme';
 import { ANIME_AVATARS_50, AnimeAvatarPreset } from '../data/animeAvatars50';
+import { DubLanguage } from '../types/anime';
 
 export interface LocalUserProfile {
   nickname: string;
   avatar: string;
-  favoriteLanguage?: string;
-  theme?: string;
+  favoriteLanguage: DubLanguage | 'All';
 }
 
 interface ThemeContextType {
@@ -24,7 +21,7 @@ interface ThemeContextType {
   nickname: string;
   userProfile: LocalUserProfile;
   setTheme: (themeId: string) => void;
-  setAvatar: (avatarUrl: string, autoMatchTheme?: boolean) => void;
+  setAvatar: (avatarUrl: string) => void;
   setNickname: (nickname: string) => void;
   updateUserProfile: (updates: Partial<LocalUserProfile>) => void;
   availableThemes: AnimeTheme[];
@@ -37,25 +34,17 @@ const DEFAULT_NICKNAME = 'Anime Fan';
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<AnimeTheme>(() => {
-    return getSavedAnimeTheme();
-  });
-  const [themeId, setThemeIdState] = useState<string>(() => {
-    return getSavedAnimeTheme().id;
-  });
+  // Always use default theme
+  const [theme] = useState<AnimeTheme>(ANIME_THEMES[0]);
+  const [themeId] = useState<string>(ANIME_THEMES[0].id);
 
   const [avatar, setAvatarState] = useState<string>(DEFAULT_AVATAR);
   const [nickname, setNicknameState] = useState<string>(DEFAULT_NICKNAME);
-  const [favoriteLanguage, setFavoriteLanguage] = useState<string>('Tamil');
+  const [favoriteLanguage, setFavoriteLanguage] = useState<DubLanguage | 'All'>('Tamil');
 
   // Initialize from localStorage on client mount
   useEffect(() => {
     try {
-      const savedTheme = getSavedAnimeTheme();
-      setThemeState(savedTheme);
-      setThemeIdState(savedTheme.id);
-      applyAnimeTheme(savedTheme.id);
-
       // Load Profile
       const rawProfile = localStorage.getItem('anidub_local_user_profile');
       if (rawProfile) {
@@ -63,14 +52,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (parsed.avatar) setAvatarState(parsed.avatar);
         if (parsed.nickname) setNicknameState(parsed.nickname);
         if (parsed.favoriteLanguage) setFavoriteLanguage(parsed.favoriteLanguage);
-        if (parsed.theme) {
-          const matched = ANIME_THEMES.find((t) => t.id === parsed.theme);
-          if (matched) {
-            setThemeState(matched);
-            setThemeIdState(matched.id);
-            applyAnimeTheme(matched.id);
-          }
-        }
       } else {
         const legacyAvatar = localStorage.getItem('anidub_user_avatar');
         if (legacyAvatar) setAvatarState(legacyAvatar);
@@ -80,53 +61,26 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  // Set Theme Handler
-  const setTheme = useCallback((newThemeId: string) => {
-    const updatedTheme = applyAnimeTheme(newThemeId);
-    setThemeState(updatedTheme);
-    setThemeIdState(updatedTheme.id);
+  // Theme Handler (Placeholder)
+  const setTheme = useCallback(() => {}, []);
 
-    try {
-      localStorage.setItem('anidub_accent_theme', updatedTheme.id);
-      const raw = localStorage.getItem('anidub_local_user_profile');
-      const existing = raw ? JSON.parse(raw) : {};
-      localStorage.setItem(
-        'anidub_local_user_profile',
-        JSON.stringify({ ...existing, theme: updatedTheme.id })
-      );
-    } catch {}
-  }, []);
-
-  // Set Avatar Handler (optionally auto matching character accent theme)
-  const setAvatar = useCallback((avatarUrl: string, autoMatchTheme: boolean = false) => {
+  // Set Avatar Handler
+  const setAvatar = useCallback((avatarUrl: string) => {
     setAvatarState(avatarUrl);
     try {
       localStorage.setItem('anidub_user_avatar', avatarUrl);
       const raw = localStorage.getItem('anidub_local_user_profile');
       const existing = raw ? JSON.parse(raw) : {};
       
-      let nextThemeId = existing.theme || themeId;
-      if (autoMatchTheme) {
-        const preset = ANIME_AVATARS_50.find((a) => a.url === avatarUrl);
-        if (preset) {
-          const recTheme = getRecommendedThemeForAvatar(`${preset.character} ${preset.series}`);
-          nextThemeId = recTheme.id;
-          applyAnimeTheme(recTheme.id);
-          setThemeState(recTheme);
-          setThemeIdState(recTheme.id);
-        }
-      }
-
       localStorage.setItem(
         'anidub_local_user_profile',
         JSON.stringify({
           ...existing,
           avatar: avatarUrl,
-          theme: nextThemeId,
         })
       );
     } catch {}
-  }, [themeId]);
+  }, []);
 
   // Set Nickname Handler
   const setNickname = useCallback((newNick: string) => {
@@ -147,12 +101,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (updates.nickname !== undefined) setNicknameState(updates.nickname);
     if (updates.avatar !== undefined) setAvatarState(updates.avatar);
     if (updates.favoriteLanguage !== undefined) setFavoriteLanguage(updates.favoriteLanguage);
-    if (updates.theme !== undefined) {
-      const matched = ANIME_THEMES.find((t) => t.id === updates.theme) || ANIME_THEMES[0];
-      setThemeState(matched);
-      setThemeIdState(matched.id);
-      applyAnimeTheme(matched.id);
-    }
 
     try {
       const raw = localStorage.getItem('anidub_local_user_profile');
@@ -163,7 +111,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
       localStorage.setItem('anidub_local_user_profile', JSON.stringify(merged));
       if (updates.avatar) localStorage.setItem('anidub_user_avatar', updates.avatar);
-      if (updates.theme) localStorage.setItem('anidub_accent_theme', updates.theme);
     } catch {}
   }, []);
 
@@ -171,7 +118,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     nickname,
     avatar,
     favoriteLanguage,
-    theme: themeId,
   };
 
   return (

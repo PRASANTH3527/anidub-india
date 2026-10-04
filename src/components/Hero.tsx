@@ -46,7 +46,7 @@ export const Hero: React.FC<HeroProps> = ({ totalCount, onOpenSurpriseMe, uiLang
         <div className="mt-5 flex items-center justify-center">
           <button
             onClick={onOpenSurpriseMe}
-            className="group relative px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-purple-600 hover:from-amber-400 hover:via-orange-400 hover:to-purple-500 text-white font-extrabold text-xs sm:text-sm shadow-xl shadow-orange-500/25 active:scale-95 transition-all flex items-center gap-2 cursor-pointer border border-amber-300/40"
+            className="group relative px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-[var(--primary-accent)] hover:from-amber-400 hover:via-orange-400 hover:brightness-110 text-white font-extrabold text-xs sm:text-sm shadow-xl shadow-orange-500/25 active:scale-95 transition-all flex items-center gap-2 cursor-pointer border border-amber-300/40"
           >
             <Dices className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
             <span>{translate('surpriseMe', lang)}</span>

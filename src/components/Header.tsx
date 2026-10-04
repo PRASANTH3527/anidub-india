@@ -46,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSecretTrigger,
   onOpenAuthModal,
   onOpenProfileModal,
+  localProfile,
   uiLanguage = 'en',
   onToggleLanguage,
   isAdmin = false,

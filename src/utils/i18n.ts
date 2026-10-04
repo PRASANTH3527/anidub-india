@@ -48,21 +48,20 @@ export const TRANSLATIONS = {
     // Profile Modal & Backup/Restore
     profileModalTitle: 'Anime Character Avatars & Profile',
     profileModalSubtitle: 'Choose any legendary anime character as your local display picture (DP)',
-    primaryAccentTheme: 'Primary Accent Theme',
-    instantThemeHint: 'Applied instantly across app',
     yourNickname: 'Your Nickname',
     favoriteDubLanguage: 'Favorite Dub Language',
     shareProfile: 'Share My Profile',
     cancel: 'Cancel',
-    saveProfileAndTheme: 'Save Profile & Theme',
+    saveProfile: 'Save Profile',
+    saveProfileAndTheme: 'Save Profile',
     
     // Backup & Restore
     backupSectionTitle: 'Profile Backup & Cloud-Free Transfer',
-    backupSectionSubtitle: 'Backup your entire watchlist, custom avatar, theme & upvotes to move between devices',
+    backupSectionSubtitle: 'Backup your entire watchlist, custom avatar & upvotes to move between devices',
     exportBackupBtn: 'Export Data (.json)',
     importBackupBtn: 'Import Data (.json)',
     exportSuccess: 'Backup file generated and downloaded successfully!',
-    importSuccess: 'Profile, watchlist, and theme successfully restored!',
+    importSuccess: 'Profile and watchlist successfully restored!',
     importInvalid: 'Invalid backup file. Please select a valid AniDub backup .json file.',
     
     // Cloud Sync
@@ -136,17 +135,16 @@ export const TRANSLATIONS = {
     // Profile Modal & Backup/Restore
     profileModalTitle: 'அனிமே அவதாரங்கள் & சுயவிவரம்',
     profileModalSubtitle: 'உங்களுக்குப் பிடித்த அனிமே கதாநாயகனை சுயவிவரப் படமாக அமைக்கவும்',
-    primaryAccentTheme: 'முக்கிய வண்ண தீம்',
-    instantThemeHint: 'செயலி முழுவதும் உடனடியாகப் பயன்படுத்தப்படும்',
     yourNickname: 'உங்கள் புனைப்பெயர்',
     favoriteDubLanguage: 'விருப்பமான டப்பிங் மொழி',
     shareProfile: 'சுயவிவரத்தைப் பகிரவும்',
     cancel: 'ரத்து செய்',
-    saveProfileAndTheme: 'சுயவிவரம் & தீமைச் சேமி',
+    saveProfile: 'சுயவிவரத்தைச் சேமி',
+    saveProfileAndTheme: 'சுயவிவரத்தைச் சேமி',
     
     // Backup & Restore
     backupSectionTitle: 'சுயவிவர காப்புப்பிரதி & மீட்பு',
-    backupSectionSubtitle: 'உங்கள் பட்டியல், அவதார், தீம் மற்றும் வாக்குகளை வேறு சாதனத்திற்கு மாற்ற காப்புப்பிரதி எடுக்கவும்',
+    backupSectionSubtitle: 'உங்கள் பட்டியல், அவதார் மற்றும் வாக்குகளை வேறு சாதனத்திற்கு மாற்ற காப்புப்பிரதி எடுக்கவும்',
     exportBackupBtn: 'காப்புப்பிரதி பதிவிறக்கு (.json)',
     importBackupBtn: 'தரவை மீட்டமை (.json)',
     exportSuccess: 'காப்புப்பிரதி கோப்பு வெற்றிகரமாகப் பதிவிறக்கப்பட்டது!',

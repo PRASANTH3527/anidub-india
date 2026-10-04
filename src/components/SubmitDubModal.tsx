@@ -722,13 +722,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       />
 
       {/* Modal Card */}
-      <div className="relative w-full max-w-xl bg-[#111726]/95 border border-purple-500/30 rounded-3xl shadow-2xl overflow-hidden z-10 my-auto text-neutral-100 backdrop-blur-xl max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-xl bg-[#111726]/95 border border-primary-theme/30 rounded-3xl shadow-2xl overflow-hidden z-10 my-auto text-neutral-100 backdrop-blur-xl max-h-[90vh] flex flex-col">
         
         {/* Header */}
-        <div className="p-5 border-b border-neutral-800 flex items-center justify-between bg-gradient-to-r from-purple-950/40 via-transparent to-transparent shrink-0">
+        <div className="p-5 border-b border-neutral-800 flex items-center justify-between bg-gradient-to-r from-[var(--primary-badge)]/40 via-transparent to-transparent shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-600/30 border border-purple-500/40 flex items-center justify-center text-purple-300">
-              <Film className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl badge-primary-theme flex items-center justify-center">
+              <Film className="w-4 h-4 text-accent-theme" />
             </div>
             <div>
               <h3 className="font-heading font-black text-lg text-white leading-tight">
@@ -743,7 +743,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+            className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -773,7 +773,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
                   <span>Anime Title (Type to Auto-Fill via MyAnimeList) <span className="text-rose-400">*</span></span>
                   {isSearchingJikan && (
-                    <span className="text-[10px] text-purple-400 flex items-center gap-1">
+                    <span className="text-[10px] text-accent-theme flex items-center gap-1">
                       <Loader2 className="w-3 h-3 animate-spin" />
                       Searching MAL...
                     </span>
@@ -789,7 +789,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                       setAutoFilled(false);
                     }}
                     placeholder="e.g. Solo Leveling, Demon Slayer, Jujutsu Kaisen..."
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-purple-500 rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-white placeholder-neutral-500 outline-none transition-all"
                   />
                   <Search className="w-4 h-4 text-neutral-500 absolute right-3 top-3 pointer-events-none" />
                 </div>
@@ -827,8 +827,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
                 {/* Auto-fill Dropdown Results from Jikan */}
                 {showDropdown && jikanResults.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-[#141b29] border border-purple-500/40 rounded-2xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-neutral-800">
-                    <div className="p-2 text-[10px] font-bold text-purple-300 bg-purple-950/40 flex items-center gap-1.5">
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-[#141b29] border border-primary-theme/40 rounded-2xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-neutral-800">
+                    <div className="p-2 text-[10px] font-bold text-accent-theme bg-[var(--primary-badge)]/40 flex items-center gap-1.5">
                       <Sparkles className="w-3 h-3" />
                       <span>Select anime to 1-click auto-fill poster, synopsis, studio & year:</span>
                     </div>
@@ -836,7 +836,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                       <div
                         key={item.mal_id}
                         onClick={() => handleSelectJikan(item)}
-                        className="p-2.5 flex items-center gap-3 hover:bg-purple-950/30 cursor-pointer transition-colors"
+                        className="p-2.5 flex items-center gap-3 hover:bg-[var(--primary-badge)]/30 cursor-pointer transition-colors"
                       >
                         <img
                           src={item.images.jpg.image_url}
@@ -864,9 +864,9 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 <div className="flex gap-3 items-center">
                   <div 
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 h-20 border-2 border-dashed border-neutral-700 hover:border-purple-500 rounded-2xl bg-[#171e2e] flex flex-col items-center justify-center cursor-pointer transition-all group"
+                    className="flex-1 h-20 border-2 border-dashed border-neutral-700 hover:border-primary-theme rounded-2xl bg-[#171e2e] flex flex-col items-center justify-center cursor-pointer transition-all group"
                   >
-                    <Upload className="w-5 h-5 text-neutral-500 group-hover:text-purple-400 mb-1" />
+                    <Upload className="w-5 h-5 text-neutral-500 group-hover:text-accent-theme mb-1" />
                     <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider group-hover:text-neutral-200">
                       {poster ? 'Change Photo' : 'Select Photo'}
                     </span>
@@ -883,7 +883,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                       <img
                         src={poster}
                         alt="Preview"
-                        className="w-14 h-20 object-cover rounded-xl border border-purple-500/50 shadow-xl"
+                        className="w-14 h-20 object-cover rounded-xl border border-primary-theme/50 shadow-xl"
                       />
                       <button 
                         type="button"
@@ -907,7 +907,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                   <button 
                     type="button" 
                     onClick={addStreamingPartner}
-                    className="text-[10px] text-purple-400 font-bold hover:text-purple-300 flex items-center gap-1"
+                    className="text-[10px] text-accent-theme font-bold hover:text-primary-theme flex items-center gap-1 cursor-pointer"
                   >
                     <Plus className="w-3 h-3" />
                     Add Platform
@@ -921,7 +921,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                         <select
                           value={partner.name}
                           onChange={(e) => updateStreamingPartner(idx, 'name', e.target.value)}
-                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-2.5 py-2 text-[11px] text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-2.5 py-2 text-[11px] text-white focus:outline-none focus:border-primary-theme cursor-pointer"
                         >
                           <option value="Crunchyroll">Crunchyroll</option>
                           <option value="Netflix">Netflix</option>
@@ -938,14 +938,14 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                           value={partner.url}
                           onChange={(e) => updateStreamingPartner(idx, 'url', e.target.value)}
                           placeholder="Link (e.g. https://...)"
-                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-[11px] text-white placeholder-neutral-600 focus:outline-none focus:border-purple-500"
+                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-[11px] text-white placeholder-neutral-600 focus:outline-none focus:border-primary-theme"
                         />
                       </div>
                       {streamingPartners.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeStreamingPartner(idx)}
-                          className="p-2.5 rounded-xl bg-neutral-800/50 text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-all border border-neutral-700/40"
+                          className="p-2.5 rounded-xl bg-neutral-800/50 text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-all border border-neutral-700/40 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -960,12 +960,12 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 <div>
                   <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
                     <span>Type</span>
-                    <span className="text-[10px] text-purple-400 font-semibold">Format</span>
+                    <span className="text-[10px] text-accent-theme font-semibold">Format</span>
                   </label>
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value as AnimeType)}
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer text-xs"
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
                   >
                     <option value="TV Series">TV Series</option>
                     <option value="Movie">Movie</option>
@@ -978,12 +978,12 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 <div>
                   <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
                     <span>Status</span>
-                    <span className="text-[10px] text-purple-400 font-semibold">Airing State</span>
+                    <span className="text-[10px] text-accent-theme font-semibold">Airing State</span>
                   </label>
                   <select
                     value={airingStatus}
                     onChange={(e) => setAiringStatus(e.target.value as 'Ongoing' | 'Completed')}
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer text-xs"
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
                   >
                     <option value="Ongoing">Ongoing (Simulcast)</option>
                     <option value="Completed">Completed</option>
@@ -1000,7 +1000,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                     <select
                       value={releaseDay}
                       onChange={(e) => setReleaseDay(e.target.value as ReleaseDay)}
-                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 cursor-pointer text-xs"
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
                     >
                       {ALL_DAYS.map((day) => (
                         <option key={day} value={day}>
@@ -1016,13 +1016,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               <div className="space-y-3">
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <Tv className="w-3.5 h-3.5 text-purple-400" />
+                    <Tv className="w-3.5 h-3.5 text-accent-theme" />
                     <span>Mixed Entries (Seasons, OVAs, Movies)</span>
                   </div>
                   <button 
                     type="button" 
                     onClick={addEntry}
-                    className="text-[10px] text-purple-400 font-bold hover:text-purple-300 flex items-center gap-1"
+                    className="text-[10px] text-accent-theme font-bold hover:text-primary-theme flex items-center gap-1 cursor-pointer"
                   >
                     <Plus className="w-3 h-3" />
                     Add Entry
@@ -1037,7 +1037,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                           <select
                             value={entry.type}
                             onChange={(e) => updateEntryField(idx, 'type', e.target.value)}
-                            className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl px-2 py-1.5 text-[10px] sm:text-[11px] text-white outline-none cursor-pointer"
+                            className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-primary-theme rounded-xl px-2 py-1.5 text-[10px] sm:text-[11px] text-white outline-none cursor-pointer"
                           >
                             <option value="Season">Season</option>
                             <option value="Movie">Movie</option>

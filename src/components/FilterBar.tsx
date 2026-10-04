@@ -30,7 +30,7 @@ interface FilterBarProps {
   allAnime?: AnimeRecord[];
 }
 
-export const FilterBar: React.FC<FilterBarProps> = ({
+export const FilterBar: React.FC<FilterBarProps> = React.memo(({
   searchQuery,
   setSearchQuery,
   selectedLanguage,
@@ -344,7 +344,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             className={`p-2 rounded-xl transition-all duration-200 cursor-pointer active:scale-90 flex items-center justify-center ${
               isListening
                 ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/40 ring-2 ring-rose-400 animate-pulse'
-                : 'text-neutral-400 hover:text-purple-300 hover:bg-neutral-800/80'
+                : 'text-neutral-400 hover:text-accent-theme hover:bg-neutral-800/80'
             }`}
             title={isListening ? 'Listening to speech... click to stop' : 'Search with your voice'}
             aria-label="Voice Search"
@@ -515,4 +515,4 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       </div>
     </div>
   );
-};
+});

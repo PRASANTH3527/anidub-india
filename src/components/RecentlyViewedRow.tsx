@@ -145,7 +145,8 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
                   src={poster}
                   alt={anime.title}
                   loading="lazy"
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  decoding="async"
+                  className="w-full h-full object-cover transition-transform duration-500 sm:group-hover:scale-105"
                 />
 
                 {/* Dark Vignette Overlay */}

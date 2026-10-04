@@ -121,8 +121,8 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
       trend: `${approvedCount} approved`, 
       isUp: true, 
       icon: Film, 
-      color: 'text-purple-400',
-      glow: 'shadow-purple-500/20'
+      color: 'text-accent-theme',
+      glow: 'shadow-primary-theme'
     },
     { 
       label: 'Total Upvotes', 
@@ -130,8 +130,8 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
       trend: `${pendingCount} pending`, 
       isUp: true, 
       icon: Eye, 
-      color: 'text-indigo-400',
-      glow: 'shadow-indigo-500/20'
+      color: 'text-primary-theme',
+      glow: 'shadow-primary-theme'
     },
     { 
       label: 'Approved Titles', 
@@ -158,12 +158,12 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
       {/* Header */}
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center gap-2 text-purple-400 mb-1">
+          <div className="flex items-center gap-2 text-accent-theme mb-1">
             <LayoutDashboard className="w-4 h-4" />
             <span className="text-[10px] font-black uppercase tracking-[0.2em]">Management Console</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-heading font-black tracking-tight">
-            Admin <span className="text-purple-500">Analytics</span>
+            Admin <span className="text-primary-theme">Analytics</span>
           </h1>
         </div>
 
@@ -174,7 +174,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
               onClick={() => setViewMode('mobile_stream')}
               className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                 viewMode === 'mobile_stream'
-                  ? 'bg-purple-600 text-white shadow-sm'
+                  ? 'btn-primary-theme shadow-sm'
                   : 'text-neutral-400 hover:text-white'
               }`}
             >
@@ -184,7 +184,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
               onClick={() => setViewMode('desktop_console')}
               className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                 viewMode === 'desktop_console'
-                  ? 'bg-purple-600 text-white shadow-sm'
+                  ? 'btn-primary-theme shadow-sm'
                   : 'text-neutral-400 hover:text-white'
               }`}
             >

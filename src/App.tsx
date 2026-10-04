@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef, Suspense, lazy } from 'react';
+import React, { useState, useMemo, useEffect, useRef, Suspense, lazy, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Navbar, NavTab } from './components/Navbar';
 import { Hero } from './components/Hero';
@@ -24,22 +24,30 @@ import { LocalProfileModal, LocalUserProfile, ANIME_AVATAR_PRESETS } from './com
 import { RecentlyViewedRow } from './components/RecentlyViewedRow';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminAnalyticsDashboard } from './components/AdminAnalyticsDashboard';
-import { PullToRefresh } from './components/PullToRefresh';
 import { dbService } from './services/databaseService';
 import { authService } from './services/authService';
 import { AnimeRecord, WatchlistEntry } from './types/database';
 import { Anime, WatchlistItem, DubLanguage } from './types/anime';
 import { updateSeoTags } from './utils/seo';
-import { applyAnimeTheme, getSavedAnimeTheme } from './utils/theme';
 import { computeForYouRecommendations, ForYouAnalysis } from './utils/recommendations';
 import { getSavedUiLanguage, setSavedUiLanguage, translate, SupportedLanguage } from './utils/i18n';
-import { ChevronDown, Frown, Sparkles, PlusCircle, ShieldCheck, X, RefreshCw, WifiOff, Dices, Languages, Zap, Activity } from 'lucide-react';
+import { ChevronDown, Frown, Sparkles, PlusCircle, ShieldCheck, X, WifiOff, Dices, Languages, Zap, Activity } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
+import { useTheme } from './context/ThemeContext';
+import { useReducedMotion, useIsMobile } from './hooks/useMediaQuery';
 
 const INITIAL_VISIBLE_COUNT = 12;
 
 function AppContent() {
   const toast = useToast();
+  const { 
+    userProfile: localProfile, 
+    updateUserProfile: handleSaveLocalProfile 
+  } = useTheme();
+
+  const isReducedMotion = useReducedMotion();
+  const isMobile = useIsMobile();
+  const shouldReduceAnimation = isReducedMotion || isMobile;
 
   // 1. Theme State (Dark / Light Mode)
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -109,16 +117,6 @@ function AppContent() {
 
   // Local User Profile State (persisted in localStorage)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [localProfile, setLocalProfile] = useState<LocalUserProfile>({
-    nickname: 'Anime Fan',
-    avatar: ANIME_AVATAR_PRESETS[0].url,
-    favoriteLanguage: 'Tamil',
-  });
-
-  const handleSaveLocalProfile = (profile: LocalUserProfile) => {
-    setLocalProfile(profile);
-    localStorage.setItem('anidub_local_user_profile', JSON.stringify(profile));
-  };
 
   // 'Surprise Me' Roulette Modal State
   const [isSurpriseModalOpen, setIsSurpriseModalOpen] = useState(false);
@@ -140,12 +138,6 @@ function AppContent() {
       }
 
       setUiLanguage(getSavedUiLanguage());
-
-      const savedProfile = localStorage.getItem('anidub_local_user_profile');
-      if (savedProfile) {
-        const parsed = JSON.parse(savedProfile);
-        if (parsed && parsed.nickname && parsed.avatar) setLocalProfile(parsed);
-      }
 
       const savedRecent = localStorage.getItem('anidub_recently_viewed');
       if (savedRecent) {
@@ -278,14 +270,25 @@ function AppContent() {
     setIsSubmitModalOpen(true);
   };
 
-  // Initial server sync to load fresh approved anime immediately on every page visit
+  // Initial server sync to load fresh approved anime immediately only if stale
   useEffect(() => {
-    setIsLoading(true);
-    dbService.forceRefresh().then((freshList) => {
-      setApprovedAnime(freshList);
-    }).finally(() => {
-      setIsLoading(false);
-    });
+    // Only force refresh if explicitly needed (e.g. first time or very old)
+    // databaseService.constructor already handles conditional sync
+    // We just need to make sure the state is updated if it DOES sync
+    const checkAndSync = async () => {
+      // If we have no data, we MUST sync
+      const current = dbService.getApprovedAnime();
+      if (current.length === 0) {
+        setIsLoading(true);
+        try {
+          const freshList = await dbService.forceRefresh();
+          setApprovedAnime(freshList);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+    checkAndSync();
   }, []);
 
   // Subscribe to DB & Auth changes
@@ -374,20 +377,20 @@ function AppContent() {
   }, []);
 
   // Open anime detail
-  const handleOpenAnimeDetail = (anime: Anime) => {
+  const handleOpenAnimeDetail = useCallback((anime: Anime) => {
     trackRecentlyViewed(anime.id);
     setViewingAnimeId(anime.id);
     window.location.hash = `anime/${anime.id}`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, []);
 
-  const handleBackToLibrary = () => {
+  const handleBackToLibrary = useCallback(() => {
     setViewingAnimeId(null);
     window.location.hash = activeTab;
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, [activeTab]);
 
-  const handleTabChange = (tab: NavTab) => {
+  const handleTabChange = useCallback((tab: NavTab) => {
     setViewingAnimeId(null);
     setActiveTab(tab);
     if (tab === 'foryou') {
@@ -399,15 +402,15 @@ function AppContent() {
     window.location.hash = tab;
     setVisibleCount(INITIAL_VISIBLE_COUNT);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, []);
 
-  const handleRestoreSuccess = () => {
+  const handleRestoreSuccess = useCallback(() => {
     // Force refresh state from localStorage after a successful backup import
     window.location.reload();
-  };
+  }, []);
 
   // Local Watchlist Toggle (No account required, saved in localStorage & PWA Background Sync)
-  const handleToggleWatchlist = (anime: Anime) => {
+  const handleToggleWatchlist = useCallback((anime: Anime) => {
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
     setLocalWatchlistIds((prev) => {
@@ -432,7 +435,7 @@ function AppContent() {
 
     const uid = currentUser?.uid || 'guest';
     dbService.toggleWatchlist(uid, anime.id);
-  };
+  }, [currentUser]);
 
   // PWA Background Sync event listener
   useEffect(() => {
@@ -458,7 +461,7 @@ function AppContent() {
     }
   };
 
-  const handleToggleWatchedStatus = (animeId: string) => {
+  const handleToggleWatchedStatus = useCallback((animeId: string) => {
     const userId = currentUser?.uid || 'guest';
     const newStatus = dbService.toggleWatchlistStatus(userId, animeId);
     if (newStatus === 'watched') {
@@ -466,9 +469,9 @@ function AppContent() {
     } else {
       toast.info('Marked as Plan to Watch', 'Moved back to queue.');
     }
-  };
+  }, [currentUser]);
 
-  const handleRemoveFromWatchlist = (animeId: string) => {
+  const handleRemoveFromWatchlist = useCallback((animeId: string) => {
     setLocalWatchlistIds((prev) => {
       const updated = prev.filter((id) => id !== animeId);
       localStorage.setItem('anidub_local_watchlist', JSON.stringify(updated));
@@ -478,7 +481,7 @@ function AppContent() {
       dbService.removeFromWatchlist(currentUser.uid, animeId);
     }
     toast.info('Removed from Watchlist', 'Item removed from your list.');
-  };
+  }, [currentUser]);
 
   // Language counts for filter pills
   const languageCounts = useMemo(() => {
@@ -629,11 +632,6 @@ function AppContent() {
   // ==========================================================================
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // Initialize saved anime accent theme on mount
-  useEffect(() => {
-    applyAnimeTheme(getSavedAnimeTheme().id);
-  }, []);
-
   // Automatically load next batch as sentinel enters viewport
   useEffect(() => {
     if (!sentinelRef.current) return;
@@ -679,14 +677,15 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white transition-colors duration-300">
+    <div className="min-h-screen bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-primary-theme selection:text-white transition-colors duration-300">
       {/* Secret Password Modal */}
       {showSecretLogin && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-          <div className="w-full max-w-sm bg-[#121829] border border-purple-500/40 rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-sm bg-[#121829] border border-primary-theme rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200"
+               style={{ boxShadow: '0 20px 50px -10px var(--primary-glow)' }}>
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-heading font-black text-white flex items-center gap-2 text-base">
-                <ShieldCheck className="w-5 h-5 text-purple-400" />
+                <ShieldCheck className="w-5 h-5 text-accent-theme" />
                 Stealth Admin Access
               </h3>
               <button 
@@ -716,7 +715,7 @@ function AppContent() {
                     setAdminPassword(e.target.value);
                     if (adminError) setAdminError('');
                   }}
-                  className={`w-full bg-[#0a0d14] border ${adminError ? 'border-rose-500 ring-1 ring-rose-500' : 'border-neutral-700/80 focus:border-purple-500 focus:ring-1 focus:ring-purple-500'} rounded-2xl px-4 py-3 text-sm text-white placeholder-neutral-500 outline-none transition-all`}
+                  className={`w-full bg-[#0a0d14] border ${adminError ? 'border-rose-500 ring-1 ring-rose-500' : 'border-neutral-700/80 focus:border-primary-theme focus:ring-1 focus:ring-primary-theme'} rounded-2xl px-4 py-3 text-sm text-white placeholder-neutral-500 outline-none transition-all`}
                 />
                 {adminError && (
                   <p className="text-xs text-rose-400 font-medium mt-1.5">{adminError}</p>
@@ -725,7 +724,7 @@ function AppContent() {
 
               <button 
                 type="submit"
-                className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-[0.98] text-white text-xs font-bold rounded-2xl transition-all shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-3 btn-primary-theme active:scale-[0.98] text-white text-xs font-bold rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
               >
                 <ShieldCheck className="w-4 h-4" />
                 <span>Unlock Live Dashboard</span>
@@ -756,7 +755,7 @@ function AppContent() {
         </>
       )}
 
-      {/* 2. Gentle Offline Mode Banner */}
+      {/* 2. Gentle Offline Mode & Quota Banners */}
       {isOffline && (
         <div className="sticky top-16 z-30 bg-gradient-to-r from-amber-950/95 via-amber-900/95 to-yellow-950/95 border-b border-amber-600/40 text-amber-200 px-4 py-2 text-xs shadow-lg backdrop-blur-md transition-all duration-300">
           <div className="flex items-center gap-2 max-w-4xl mx-auto w-full justify-center text-center">
@@ -768,17 +767,27 @@ function AppContent() {
         </div>
       )}
 
+      {dbService.getIsQuotaLimited() && !isOffline && (
+        <div className="sticky top-16 z-30 bg-gradient-to-r from-rose-950/95 via-rose-900/95 to-red-950/95 border-b border-rose-600/40 text-rose-200 px-4 py-2 text-xs shadow-lg backdrop-blur-md transition-all duration-300">
+          <div className="flex items-center gap-2 max-w-4xl mx-auto w-full justify-center text-center">
+            <Zap className="w-4 h-4 text-rose-400 shrink-0 animate-pulse" />
+            <span>
+              <strong>Firestore Quota Reached:</strong> Live updates are paused for today. You are viewing cached data from your last successful sync.
+            </span>
+          </div>
+        </div>
+      )}
+
       <main className="flex-grow pt-4 sm:pt-6 pb-12 transition-all duration-500">
-        <PullToRefresh onRefresh={dbService.syncWithServer.bind(dbService)}>
-          {/* Stealth Admin Dashboard Integration */}
-          {isAdmin && activeTab === 'library' && (
-            <div className="mb-6">
-               <AdminDashboard 
-                 onExitAdmin={handleExitAdmin} 
-                 onEditAnime={handleEditAnime}
-               />
-            </div>
-          )}
+        {/* Stealth Admin Dashboard Integration */}
+        {isAdmin && activeTab === 'library' && (
+          <div className="mb-6">
+             <AdminDashboard 
+               onExitAdmin={handleExitAdmin} 
+               onEditAnime={handleEditAnime}
+             />
+          </div>
+        )}
 
         {/* 1. Dedicated Information Page (Route #anime/:id) */}
         <Suspense fallback={<div className="max-w-6xl mx-auto px-4 py-8"><SkeletonGrid count={4} /></div>}>
@@ -799,10 +808,10 @@ function AppContent() {
             ) : (
               <motion.div
                 key="catalog-view"
-                initial={{ opacity: 0 }}
+                initial={shouldReduceAnimation ? { opacity: 1 } : { opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
+                exit={shouldReduceAnimation ? { opacity: 1 } : { opacity: 0 }}
+                transition={shouldReduceAnimation ? { duration: 0 } : { duration: 0.25 }}
               >
               {/* 2. Main Dub Library (ONLY FETCHES APPROVED ANIME) */}
               {activeTab === 'library' && (
@@ -924,7 +933,7 @@ function AppContent() {
                       ) : (
                         <div className="text-center py-16 bg-[#131926]/50 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto shadow-xl">
                           {/* Empty state logic... */}
-                          <div className="w-14 h-14 rounded-2xl bg-purple-950/60 border border-purple-800/60 flex items-center justify-center mx-auto mb-4 text-purple-400">
+                          <div className="w-14 h-14 rounded-2xl bg-primary-theme/10 border border-primary-theme/20 flex items-center justify-center mx-auto mb-4 text-primary-theme">
                             <Sparkles className="w-7 h-7" />
                           </div>
                           <h3 className="font-heading font-black text-xl text-white mb-2">
@@ -935,7 +944,7 @@ function AppContent() {
                           </p>
                           <button
                             onClick={() => setIsSubmitModalOpen(true)}
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-black py-3.5 px-8 rounded-2xl transition-all cursor-pointer shadow-[0_10px_25px_rgba(168,85,247,0.4)] hover:shadow-[0_15px_35px_rgba(168,85,247,0.5)] active:scale-95 flex items-center mx-auto group"
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 btn-primary-theme text-white text-sm font-black py-3.5 px-8 rounded-2xl transition-all cursor-pointer shadow-lg active:scale-95 flex items-center mx-auto group"
                           >
                             <div className="bg-white/20 p-1 rounded-lg group-hover:rotate-90 transition-transform duration-300">
                               <PlusCircle className="w-5 h-5" />
@@ -1025,8 +1034,6 @@ function AppContent() {
             )}
           </AnimatePresence>
         </Suspense>
-
-        </PullToRefresh>
       </main>
 
       {/* Footer & Feedback */}

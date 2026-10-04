@@ -154,8 +154,8 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
     <div className="w-full max-w-5xl mx-auto px-4 py-8">
       {/* Top Banner */}
       <div className="text-center max-w-2xl mx-auto mb-8 space-y-2">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-950/60 border border-purple-800/40 text-purple-300 text-xs font-semibold">
-          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full badge-primary-theme text-xs font-semibold">
+          <Sparkles className="w-3.5 h-3.5 text-accent-theme" />
           <span>Interactive Anime Matchmaker</span>
         </div>
         <h2 className="font-heading font-black text-2xl sm:text-4xl text-white">
@@ -170,14 +170,14 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
       {step < 5 && (
         <div className="max-w-xl mx-auto mb-8">
           <div className="flex items-center justify-between text-xs font-semibold text-neutral-400 mb-2">
-            <span className={step >= 1 ? 'text-purple-400' : ''}>1. Genres</span>
-            <span className={step >= 2 ? 'text-purple-400' : ''}>2. Themes</span>
-            <span className={step >= 3 ? 'text-purple-400' : ''}>3. Watched Anime</span>
-            <span className={step >= 4 ? 'text-purple-400' : ''}>4. Language</span>
+            <span className={step >= 1 ? 'text-accent-theme' : ''}>1. Genres</span>
+            <span className={step >= 2 ? 'text-accent-theme' : ''}>2. Themes</span>
+            <span className={step >= 3 ? 'text-accent-theme' : ''}>3. Watched Anime</span>
+            <span className={step >= 4 ? 'text-accent-theme' : ''}>4. Language</span>
           </div>
           <div className="w-full bg-[#171e2e] h-2 rounded-full overflow-hidden">
             <div
-              className="bg-gradient-to-r from-purple-600 to-indigo-500 h-full transition-all duration-300 rounded-full"
+              className="bg-primary-theme h-full transition-all duration-300 rounded-full"
               style={{ width: `${(step / 4) * 100}%` }}
             />
           </div>
@@ -203,7 +203,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                   onClick={() => toggleGenre(genre)}
                   className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
                     isSelected
-                      ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 ring-2 ring-purple-400/40'
+                      ? 'active-tab-theme text-white ring-2 ring-accent-theme/40'
                       : 'bg-[#182032] text-neutral-300 hover:bg-[#202940] border border-neutral-700/60'
                   }`}
                 >
@@ -221,7 +221,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
             <button
               onClick={() => setStep(2)}
               disabled={selectedGenres.length === 0}
-              className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg shadow-purple-600/30 disabled:opacity-50"
+              className="px-5 py-2.5 rounded-xl btn-primary-theme text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
             >
               <span>Next: Select Themes</span>
               <ArrowRight className="w-4 h-4" />
@@ -249,7 +249,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                   onClick={() => toggleTheme(theme)}
                   className={`p-3 rounded-xl text-xs font-bold text-left transition-all cursor-pointer flex items-center justify-between ${
                     isSelected
-                      ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 ring-2 ring-purple-400/40'
+                      ? 'active-tab-theme text-white ring-2 ring-accent-theme/40'
                       : 'bg-[#182032] text-neutral-300 hover:bg-[#202940] border border-neutral-700/60'
                   }`}
                 >
@@ -271,7 +271,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
             <button
               onClick={() => setStep(3)}
               disabled={selectedThemes.length === 0}
-              className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg shadow-purple-600/30 disabled:opacity-50"
+              className="px-5 py-2.5 rounded-xl btn-primary-theme text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
             >
               <span>Next: Watched Anime</span>
               <ArrowRight className="w-4 h-4" />
@@ -297,7 +297,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
               value={searchWatchedInput}
               onChange={(e) => setSearchWatchedInput(e.target.value)}
               placeholder="Filter by title to find what you've seen..."
-              className="w-full bg-[#182032] border border-neutral-700/80 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500"
+              className="w-full bg-[#182032] border border-neutral-700/80 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none focus:border-primary-theme"
             />
           </div>
 
@@ -317,7 +317,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     onClick={() => toggleWatched(anime.id)}
                     className={`flex items-center gap-2 p-2 rounded-xl text-left border transition-all cursor-pointer ${
                       isWatched
-                        ? 'bg-purple-900/50 border-purple-500 text-white'
+                        ? 'bg-primary-theme/20 border-primary-theme text-white'
                         : 'bg-[#182032] border-neutral-800 text-neutral-300 hover:border-neutral-700'
                     }`}
                   >
@@ -334,7 +334,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                         {anime.releaseYear}
                       </span>
                     </div>
-                    {isWatched && <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />}
+                    {isWatched && <Check className="w-3.5 h-3.5 text-accent-theme shrink-0" />}
                   </button>
                 );
               })}
@@ -355,7 +355,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
               </span>
               <button
                 onClick={() => setStep(4)}
-                className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg shadow-purple-600/30"
+                className="px-5 py-2.5 rounded-xl btn-primary-theme text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg"
               >
                 <span>Next: Dub Preference</span>
                 <ArrowRight className="w-4 h-4" />
@@ -384,7 +384,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                   onClick={() => setPreferredLanguage(lang)}
                   className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between ${
                     isSelected
-                      ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 ring-2 ring-purple-400/40'
+                      ? 'active-tab-theme text-white ring-2 ring-accent-theme/40'
                       : 'bg-[#182032] text-neutral-300 hover:bg-[#202940] border border-neutral-700/60'
                   }`}
                 >
@@ -405,7 +405,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
             </button>
             <button
               onClick={() => setStep(5)}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-extrabold flex items-center gap-2 cursor-pointer shadow-lg shadow-purple-600/40"
+              className="px-6 py-2.5 rounded-xl btn-primary-theme text-white text-xs font-extrabold flex items-center gap-2 cursor-pointer shadow-lg"
             >
               <Sparkles className="w-4 h-4" />
               <span>Generate Recommendations</span>
@@ -443,7 +443,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
               return (
                 <div
                   key={anime.id}
-                  className="bg-[#131926] border border-neutral-800/90 hover:border-purple-500/50 rounded-2xl p-4 sm:p-5 flex gap-4 transition-all duration-300 shadow-md group relative overflow-hidden"
+                  className="bg-[#131926] border border-neutral-800/90 hover:border-primary-theme/50 rounded-2xl p-4 sm:p-5 flex gap-4 transition-all duration-300 shadow-md group relative overflow-hidden"
                 >
                   {/* Poster */}
                   <div
@@ -466,8 +466,8 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     <div>
                       {/* Match Badge & Type */}
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="bg-purple-950/80 text-purple-300 border border-purple-700/50 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
-                          <Sparkles className="w-3 h-3 text-purple-400" />
+                        <span className="badge-primary-theme text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-accent-theme" />
                           <span>{matchPercentage}% Match</span>
                         </span>
                         <span className="text-[11px] text-neutral-400">
@@ -478,7 +478,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                       {/* Title */}
                       <h4
                         onClick={() => onSelectAnime(anime)}
-                        className="font-bold text-base text-white hover:text-purple-300 transition-colors cursor-pointer line-clamp-1"
+                        className="font-bold text-base text-white hover:text-accent-theme transition-colors cursor-pointer line-clamp-1"
                       >
                         {anime.title}
                       </h4>
@@ -501,7 +501,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                         {(anime.dubs || []).map((d) => (
                           <span
                             key={d}
-                            className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-neutral-800 text-neutral-300 border border-neutral-700"
+                            className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#182032] text-neutral-300 border border-neutral-700"
                           >
                             {d}
                           </span>
@@ -513,7 +513,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     <div className="flex items-center gap-2 pt-3 border-t border-neutral-800/70 mt-3">
                       <button
                         onClick={() => onSelectAnime(anime)}
-                        className="flex-grow py-1.5 px-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-xs font-bold transition-colors cursor-pointer text-center"
+                        className="flex-grow py-1.5 px-3 rounded-xl bg-primary-theme/20 hover:bg-primary-theme/30 text-accent-theme border border-primary-theme/30 text-xs font-bold transition-all cursor-pointer text-center"
                       >
                         View Info Page
                       </button>
@@ -522,7 +522,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                         onClick={() => onToggleWatchlist(anime)}
                         className={`p-2 rounded-xl border transition-colors cursor-pointer ${
                           inWatchlist
-                            ? 'bg-purple-600 text-white border-purple-500'
+                            ? 'bg-primary-theme text-white border-primary-theme'
                             : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border-neutral-700'
                         }`}
                         title={inWatchlist ? 'In Watchlist' : 'Add to Watchlist'}

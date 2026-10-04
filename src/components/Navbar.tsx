@@ -247,7 +247,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {currentUser && (
             <div 
               onClick={onOpenAuthModal}
-              className="p-0.5 rounded-full border border-purple-500/40 cursor-pointer active:scale-90 transition-transform hidden xs:block"
+              className="p-0.5 rounded-full border border-primary-theme/40 cursor-pointer active:scale-90 transition-transform hidden xs:block"
               title={`Logged in as ${currentUser.displayName}`}
             >
               <img

@@ -70,9 +70,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     <div className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-in fade-in duration-300">
       
       {/* Header Banner */}
-      <div className="bg-[#121829] border border-purple-500/30 rounded-3xl p-5 sm:p-7 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-[#121829] border border-primary-theme/30 rounded-3xl p-5 sm:p-7 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 ring-2 ring-purple-400/40">
+          <div className="w-12 h-12 rounded-2xl bg-primary-theme flex items-center justify-center text-white shadow-lg shadow-primary-theme/30 ring-2 ring-accent-theme/40">
             <Bookmark className="w-6 h-6 fill-current" />
           </div>
           <div>
@@ -80,7 +80,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               <h2 className="font-heading font-black text-xl sm:text-2xl text-white tracking-tight">
                 My Personal Watchlist
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold badge-primary-theme">
                 {bookmarkedAnime.length} {bookmarkedAnime.length === 1 ? 'saved' : 'saved'}
               </span>
             </div>
@@ -96,9 +96,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             <button
               onClick={handleCacheAllPosters}
               disabled={isCachingAll}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-semibold transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary-theme/20 hover:bg-primary-theme/30 border border-primary-theme/40 text-accent-theme hover:text-white text-xs font-semibold transition-all active:scale-95 cursor-pointer disabled:opacity-50"
             >
-              <DownloadCloud className={`w-3.5 h-3.5 ${isCachingAll ? 'animate-bounce text-purple-400' : ''}`} />
+              <DownloadCloud className={`w-3.5 h-3.5 ${isCachingAll ? 'animate-bounce text-accent-theme' : ''}`} />
               <span>{isCachingAll ? 'Saving Offline...' : 'Save All Posters Offline'}</span>
             </button>
             <button
@@ -121,7 +121,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search within your saved watchlist..."
-            className="w-full bg-[#121829] border border-neutral-800 focus:border-purple-500 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
+            className="w-full bg-[#121829] border border-neutral-800 focus:border-primary-theme rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
           />
         </div>
       )}
@@ -144,20 +144,20 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       ) : bookmarkedAnime.length === 0 ? (
         /* Empty State */
         <div className="text-center py-20 bg-[#121829]/60 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto shadow-2xl space-y-4">
-          <div className="w-16 h-16 rounded-3xl bg-purple-950/60 border border-purple-800/60 flex items-center justify-center mx-auto text-purple-400 shadow-xl">
+          <div className="w-16 h-16 rounded-3xl bg-primary-theme/10 border border-primary-theme/20 flex items-center justify-center mx-auto text-primary-theme shadow-xl">
             <Bookmark className="w-8 h-8" />
           </div>
           <div className="space-y-1.5">
             <h3 className="font-heading font-black text-xl text-white">
               Your Watchlist is Empty
             </h3>
-            <p className="text-xs text-neutral-400 max-w-sm mx-auto leading-relaxed">
+            <p className="text-xs text-neutral-400 max-sm mx-auto leading-relaxed">
               Explore the dubbed directory and tap the bookmark or heart icon on any anime card to save it here for fast offline access.
             </p>
           </div>
           <button
             onClick={onBrowseLibrary}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white text-xs font-bold shadow-lg shadow-purple-600/30 transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl btn-primary-theme active:scale-95 text-white text-xs font-bold shadow-lg transition-all cursor-pointer"
           >
             <Compass className="w-4 h-4" />
             <span>Browse Dub Directory</span>

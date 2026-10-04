@@ -74,7 +74,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
       <div className="relative w-full max-w-3xl bg-[#111724] border border-neutral-700/70 rounded-2xl shadow-2xl overflow-hidden z-10 my-auto text-neutral-100 max-h-[90vh] flex flex-col">
         
         {/* Header Banner / Backdrop */}
-        <div className="relative h-44 sm:h-56 w-full overflow-hidden bg-gradient-to-r from-purple-950 to-neutral-900 shrink-0">
+        <div className="relative h-44 sm:h-56 w-full overflow-hidden bg-gradient-to-r from-primary-theme/40 to-neutral-900 shrink-0">
           <img
             src={anime.poster}
             alt={anime.title}
@@ -96,7 +96,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
               title={isBookmarked ? 'Remove from Watchlist' : 'Add to Watchlist'}
               className={`p-2 rounded-full backdrop-blur-md transition-colors ${
                 isBookmarked 
-                  ? 'bg-purple-600 text-white' 
+                  ? 'btn-primary-theme text-white' 
                   : 'bg-black/60 hover:bg-neutral-800 text-neutral-300 hover:text-white'
               }`}
             >
@@ -150,8 +150,8 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
           {/* Indian Dub Breakdown Section */}
           <div className="bg-[#182030] rounded-xl p-4 border border-neutral-800">
             <div className="flex items-center gap-2 mb-3">
-              <Volume2 className="w-4 h-4 text-purple-400" />
-              <h4 className="text-xs font-bold uppercase tracking-wider text-purple-300">
+              <Volume2 className="w-4 h-4 text-accent-theme" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-primary-theme">
                 Indian Language Dub Availability
               </h4>
             </div>
@@ -210,10 +210,10 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
                   href={platform.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 bg-[#1b2336] hover:bg-purple-900/30 text-neutral-200 hover:text-white px-3.5 py-2 rounded-xl border border-neutral-700 hover:border-purple-500/50 text-xs font-semibold transition-all group shadow-sm"
+                  className="flex items-center gap-2 bg-[#1b2336] hover:bg-primary-theme/20 text-neutral-200 hover:text-white px-3.5 py-2 rounded-xl border border-neutral-700 hover:border-primary-theme/50 text-xs font-semibold transition-all group shadow-sm"
                 >
                   <span>{platform.name}</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-neutral-400 group-hover:text-purple-300 transition-colors" />
+                  <ExternalLink className="w-3.5 h-3.5 text-neutral-400 group-hover:text-accent-theme transition-colors" />
                 </a>
               ))}
             </div>

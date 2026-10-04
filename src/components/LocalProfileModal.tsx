@@ -9,7 +9,6 @@ import {
   Zap, 
   Search, 
   Film, 
-  Flame, 
   Share2,
   Download,
   Upload,
@@ -22,20 +21,13 @@ import {
 import { DubLanguage } from '../types/anime';
 import { useToast } from './Toast';
 import { ANIME_AVATARS_50, AnimeAvatarPreset } from '../data/animeAvatars50';
-import { ANIME_THEMES, applyAnimeTheme, getSavedAnimeTheme, AnimeTheme } from '../utils/theme';
 import { SupportedLanguage, getSavedUiLanguage, setSavedUiLanguage, translate } from '../utils/i18n';
 import { cloudSyncService } from '../services/cloudSyncService';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, LocalUserProfile } from '../context/ThemeContext';
 
-export { ANIME_AVATARS_50, type AnimeAvatarPreset };
+export type { LocalUserProfile };
+export { ANIME_AVATARS_50, type AnimeAvatarPreset } from '../data/animeAvatars50';
 export const ANIME_AVATAR_PRESETS = ANIME_AVATARS_50;
-
-export interface LocalUserProfile {
-  nickname: string;
-  avatar: string;
-  favoriteLanguage?: DubLanguage | 'All';
-  theme?: string;
-}
 
 interface LocalProfileModalProps {
   isOpen: boolean;
@@ -58,6 +50,75 @@ const POPULAR_SERIES_FILTER = [
   'My Hero Academia',
   'Hunter x Hunter',
 ];
+
+const AvatarItem = React.memo(({ 
+  preset, 
+  isSelected, 
+  onSelect 
+}: { 
+  preset: AnimeAvatarPreset; 
+  isSelected: boolean; 
+  onSelect: (url: string) => void;
+}) => {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(preset.url)}
+      title={`${preset.character} (${preset.series})`}
+      className={`group relative flex flex-col items-center p-2 rounded-2xl transition-all cursor-pointer select-none active:scale-95 ${
+        isSelected
+          ? 'bg-[var(--primary-badge)]/40 border border-primary-theme shadow-lg shadow-primary-theme'
+          : 'bg-[#131929]/70 hover:bg-[#1a2338] border border-neutral-800/80 hover:border-neutral-700'
+      }`}
+    >
+      <div className="relative">
+        <div
+          className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-neutral-900 transition-all duration-200 ${
+            isSelected
+              ? 'ring-4 ring-accent-theme ring-offset-2 ring-offset-[#0a0e17] border-2 scale-105 shadow-md shadow-primary-theme'
+              : 'border border-neutral-700/80 group-hover:scale-105'
+          }`}
+          style={{
+            borderColor: isSelected ? 'var(--primary-accent)' : undefined,
+          }}
+        >
+          <img
+            src={preset.url}
+            alt={preset.name}
+            className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-110"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+
+        {isSelected && (
+          <div className="absolute -top-1 -right-1 w-5 h-5 btn-primary-theme rounded-full flex items-center justify-center border-2 border-[#0a0e17] shadow-md animate-in zoom-in-75 duration-150">
+            <Check className="w-3 h-3 text-white stroke-[3]" />
+          </div>
+        )}
+
+        {preset.isElectric && !isSelected && (
+          <div
+            className="absolute -bottom-1 -right-1 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center shadow-md border border-neutral-900"
+            title="Thunder / Lightning"
+          >
+            <Zap className="w-2.5 h-2.5 text-black fill-current" />
+          </div>
+        )}
+      </div>
+
+      <span
+        className={`text-[10px] sm:text-[11px] font-bold text-center mt-1.5 truncate w-full tracking-tight ${
+          isSelected
+            ? 'text-primary-theme font-black'
+            : 'text-neutral-300 group-hover:text-white'
+        }`}
+      >
+        {preset.name}
+      </span>
+    </button>
+  );
+});
 
 export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
   isOpen,
@@ -90,21 +151,11 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
   const [favLanguage, setFavLanguage] = useState<DubLanguage | 'All'>(
     currentProfile.favoriteLanguage || 'Tamil'
   );
-  const [selectedThemeId, setSelectedThemeId] = useState<string>(() => {
-    return currentProfile.theme || globalThemeId || getSavedAnimeTheme().id;
-  });
 
   // Cloud Sync State
   const [cloudUsername, setCloudUsername] = useState('');
   const [cloudPassword, setCloudPassword] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
-
-  const handleSelectTheme = (themeId: string) => {
-    setSelectedThemeId(themeId);
-    setGlobalTheme(themeId);
-    const theme = applyAnimeTheme(themeId);
-    toast.info('Theme Preview', `Accent theme switched to ${theme.name}`);
-  };
 
   // Avatar search & series category filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -189,12 +240,10 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
           nickname: cleanNick,
           avatar: selectedAvatar,
           favoriteLanguage: favLanguage,
-          theme: selectedThemeId,
         },
         watchlist: JSON.parse(localStorage.getItem('anidub_local_watchlist') || '[]'),
         upvotes: JSON.parse(localStorage.getItem('anidub_upvoted_anime_ids') || '[]'),
         recentlyViewed: JSON.parse(localStorage.getItem('anidub_recently_viewed') || '[]'),
-        theme: localStorage.getItem('anidub_accent_theme') || selectedThemeId,
         uiLanguage: localStorage.getItem('anidub_ui_lang') || 'en',
       };
 
@@ -248,13 +297,6 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
           localStorage.setItem('anidub_recently_viewed', JSON.stringify(data.recentlyViewed));
         }
 
-        // Restore theme
-        if (data.theme) {
-          localStorage.setItem('anidub_accent_theme', data.theme);
-          setSelectedThemeId(data.theme);
-          applyAnimeTheme(data.theme);
-        }
-
         // Restore UI Language
         if (data.uiLanguage && (data.uiLanguage === 'en' || data.uiLanguage === 'ta')) {
           setSavedUiLanguage(data.uiLanguage);
@@ -266,15 +308,10 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
           if (data.profile.nickname) setNickname(data.profile.nickname);
           if (data.profile.avatar) setSelectedAvatar(data.profile.avatar);
           if (data.profile.favoriteLanguage) setFavLanguage(data.profile.favoriteLanguage);
-          if (data.profile.theme) {
-            setSelectedThemeId(data.profile.theme);
-            applyAnimeTheme(data.profile.theme);
-          }
           const restoredProfile: LocalUserProfile = {
             nickname: data.profile.nickname || 'Anime Fan',
             avatar: data.profile.avatar || selectedAvatar,
             favoriteLanguage: data.profile.favoriteLanguage || 'Tamil',
-            theme: data.profile.theme || selectedThemeId,
           };
           onSaveProfile(restoredProfile);
         }
@@ -336,14 +373,12 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
     e.preventDefault();
     const cleanNick = nickname.trim() || 'Anime Fan';
 
-    setGlobalTheme(selectedThemeId);
     setGlobalAvatar(selectedAvatar);
 
     const updated: LocalUserProfile = {
       nickname: cleanNick,
       avatar: selectedAvatar,
       favoriteLanguage: favLanguage,
-      theme: selectedThemeId,
     };
 
     updateUserProfile(updated);
@@ -526,75 +561,17 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
               <div className="max-h-64 sm:max-h-72 overflow-y-auto pr-1.5 space-y-2 scrollbar-thin">
                 {filteredAvatars.length > 0 ? (
                   <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 sm:gap-2.5">
-                    {filteredAvatars.map((preset) => {
-                      const isSelected = selectedAvatar === preset.url;
-
-                      return (
-                        <button
-                          type="button"
-                          key={preset.id}
-                          onClick={() => {
-                            setSelectedAvatar(preset.url);
-                            setGlobalAvatar(preset.url);
-                          }}
-                          title={`${preset.character} (${preset.series})`}
-                          className={`group relative flex flex-col items-center p-2 rounded-2xl transition-all cursor-pointer select-none active:scale-95 ${
-                            isSelected
-                              ? 'bg-[var(--primary-badge)]/40 border border-primary-theme shadow-lg shadow-primary-theme'
-                              : 'bg-[#131929]/70 hover:bg-[#1a2338] border border-neutral-800/80 hover:border-neutral-700'
-                          }`}
-                        >
-                          {/* Circular Image Frame with Ring Highlight Animation */}
-                          <div className="relative">
-                            <div
-                              className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-neutral-900 transition-all duration-200 ${
-                                isSelected
-                                  ? 'ring-4 ring-accent-theme ring-offset-2 ring-offset-[#0a0e17] border-2 scale-105 shadow-md shadow-primary-theme'
-                                  : 'border border-neutral-700/80 group-hover:scale-105'
-                              }`}
-                              style={{
-                                borderColor: isSelected ? 'var(--primary-accent)' : undefined,
-                              }}
-                            >
-                              <img
-                                src={preset.url}
-                                alt={preset.name}
-                                className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-110"
-                                loading="lazy"
-                              />
-                            </div>
-
-                            {/* Selected Checkmark Badge */}
-                            {isSelected && (
-                              <div className="absolute -top-1 -right-1 w-5 h-5 btn-primary-theme rounded-full flex items-center justify-center border-2 border-[#0a0e17] shadow-md animate-in zoom-in-75 duration-150">
-                                <Check className="w-3 h-3 text-white stroke-[3]" />
-                              </div>
-                            )}
-
-                            {/* Electric Lightning Indicator for Zenitsu / Killua */}
-                            {preset.isElectric && !isSelected && (
-                              <div
-                                className="absolute -bottom-1 -right-1 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center shadow-md border border-neutral-900"
-                                title="Thunder / Lightning"
-                              >
-                                <Zap className="w-2.5 h-2.5 text-black fill-current" />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Name label */}
-                          <span
-                            className={`text-[10px] sm:text-[11px] font-bold text-center mt-1.5 truncate w-full tracking-tight ${
-                              isSelected
-                                ? 'text-primary-theme font-black'
-                                : 'text-neutral-300 group-hover:text-white'
-                            }`}
-                          >
-                            {preset.name}
-                          </span>
-                        </button>
-                      );
-                    })}
+                    {filteredAvatars.map((preset) => (
+                      <AvatarItem
+                        key={preset.id}
+                        preset={preset}
+                        isSelected={selectedAvatar === preset.url}
+                        onSelect={(url) => {
+                          setSelectedAvatar(url);
+                          setGlobalAvatar(url);
+                        }}
+                      />
+                    ))}
                   </div>
                 ) : (
                   <div className="py-12 text-center text-neutral-400 space-y-2">
@@ -611,54 +588,6 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                     </button>
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* Dynamic Anime Accent Theme Selector */}
-            <div className="space-y-2 pt-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-accent-theme" />
-                  <span>Primary Accent Theme</span>
-                </label>
-                <span className="text-[11px] text-neutral-400 font-medium">
-                  Applied instantly across app
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {ANIME_THEMES.map((theme) => {
-                  const isSelected = selectedThemeId === theme.id;
-                  return (
-                    <button
-                      type="button"
-                      key={theme.id}
-                      onClick={() => handleSelectTheme(theme.id)}
-                      className={`flex items-center gap-2 p-2 rounded-xl text-left transition-all cursor-pointer select-none active:scale-95 ${
-                        isSelected
-                          ? 'bg-[#1a2035] border-2 shadow-md'
-                          : 'bg-[#0d121f] border border-neutral-800 hover:border-neutral-700'
-                      }`}
-                      style={{
-                        borderColor: isSelected ? theme.primary : undefined,
-                        boxShadow: isSelected ? `0 0 14px ${theme.glow}` : undefined,
-                      }}
-                    >
-                      <span
-                        className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
-                        style={{ backgroundColor: theme.previewColor }}
-                      />
-                      <div className="flex flex-col min-w-0">
-                        <span className={`text-[11px] font-bold truncate ${isSelected ? 'text-white' : 'text-neutral-300'}`}>
-                          {theme.name.split(' (')[0]}
-                        </span>
-                        <span className="text-[9px] text-neutral-500 truncate">
-                          {theme.character}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
               </div>
             </div>
 
@@ -789,7 +718,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                   className="px-5 py-2.5 rounded-xl btn-primary-theme active:scale-95 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-lg"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>{translate('saveProfileAndTheme', uiLang)}</span>
+                  <span>{translate('saveProfile', uiLang)}</span>
                 </button>
               </div>
             </div>

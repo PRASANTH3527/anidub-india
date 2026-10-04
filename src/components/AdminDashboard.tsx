@@ -28,7 +28,6 @@ import {
   Clock,
   Flame,
   Globe,
-  RefreshCw,
   Sparkles,
   ChevronRight,
   ShieldCheck,
@@ -261,7 +260,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'catalog' | 'watchlists' | 'dubs' | 'feed'>('overview');
 
   // Pending Moderation State
@@ -631,13 +629,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
   }, [fetchRealData]);
 
-  // Refresh handler
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await fetchRealData();
-    setTimeout(() => setIsRefreshing(false), 500);
-  };
-
   // Filtered anime list for Manage Anime tab
   const filteredCatalog = useMemo(() => {
     return catalogTitles.filter((item) => {
@@ -865,7 +856,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // STRICT ACCESS CONTROL: If not authenticated as Admin, show Security Gate
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-[#0b0f17] text-neutral-100 flex items-center justify-center p-4 selection:bg-purple-600 selection:text-white">
+      <div className="min-h-screen bg-[#0b0f17] text-neutral-100 flex items-center justify-center p-4 selection:bg-accent-theme selection:text-white">
         <div className="w-full max-w-md bg-[#131926] border border-rose-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-center animate-in fade-in duration-300">
           <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400 shadow-lg shadow-rose-950/40">
             <Lock className="w-8 h-8" />
@@ -896,7 +887,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     setPasscodeError('');
                   }}
                   placeholder="Enter administrator passcode"
-                  className="w-full px-4 py-3 rounded-xl bg-neutral-900 border border-neutral-700/80 focus:border-purple-500 text-white text-sm outline-none transition-all placeholder:text-neutral-600 pr-10"
+                  className="w-full px-4 py-3 rounded-xl bg-neutral-900 border border-neutral-700/80 focus:border-accent-theme text-white text-sm outline-none transition-all placeholder:text-neutral-600 pr-10"
                   autoFocus
                 />
                 <KeyRound className="w-4 h-4 text-neutral-500 absolute right-3.5 top-3.5" />
@@ -912,7 +903,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button
               type="submit"
               disabled={isVerifying || !passcode.trim()}
-              className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-sm transition-all shadow-lg shadow-purple-600/30 cursor-pointer disabled:opacity-50"
+              className="w-full py-3 rounded-xl btn-primary-theme active:scale-95 text-white font-bold text-sm transition-all shadow-lg cursor-pointer disabled:opacity-50"
             >
               {isVerifying ? 'Verifying...' : 'Unlock Admin Panel'}
             </button>
@@ -937,12 +928,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f17] text-neutral-100 pb-16 font-sans antialiased selection:bg-purple-600 selection:text-white">
+    <div className="min-h-screen bg-[#0b0f17] text-neutral-100 pb-16 font-sans antialiased selection:bg-accent-theme selection:text-white">
       {/* 1. Mobile-First Top Header */}
       <header className="sticky top-0 z-40 bg-[#0b0f17]/95 backdrop-blur-md border-b border-neutral-800/80 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-purple-600/30">
+            <div className="w-8 h-8 rounded-xl btn-primary-theme flex items-center justify-center shadow-lg">
               <Zap className="w-4 h-4 text-white" />
             </div>
             <div>
@@ -963,17 +954,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          {/* Header Action Buttons: Refresh & Exit Admin (Logout) */}
+          {/* Header Action Buttons: Exit Admin (Logout) */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleRefresh}
-              disabled={isRefreshing || isLoading}
-              className="p-2 rounded-xl bg-neutral-800/80 hover:bg-neutral-700/80 active:scale-95 border border-neutral-700/60 text-neutral-300 text-xs font-bold transition-all cursor-pointer"
-              title="Refresh real data"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing || isLoading ? 'animate-spin text-purple-400' : ''}`} />
-            </button>
-
             {/* Exit Admin / Logout Button */}
             <button
               onClick={handleExitAdmin}
@@ -1003,7 +985,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 activeTab === tab.id
                   ? tab.id === 'pending' && pendingSubmissions > 0
                     ? 'bg-amber-500 text-black shadow-md shadow-amber-500/30'
-                    : 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                    : 'bg-primary-theme text-white shadow-md shadow-primary-theme'
                   : tab.id === 'pending' && pendingSubmissions > 0
                   ? 'bg-amber-950/70 text-amber-300 border border-amber-500/50 hover:bg-amber-900/60'
                   : 'bg-[#131926] text-neutral-400 hover:text-white border border-neutral-800'
@@ -1027,7 +1009,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-semibold text-neutral-400">Active Users</span>
-              <div className="w-6 h-6 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+              <div className="w-6 h-6 rounded-lg bg-primary-theme/10 border border-primary-theme/20 flex items-center justify-center text-accent-theme">
                 <Users className="w-3.5 h-3.5" />
               </div>
             </div>
@@ -1036,7 +1018,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
             <button
               onClick={() => setActiveTab('catalog')}
-              className="mt-1 flex items-center gap-1 text-[11px] font-bold text-purple-400 hover:text-purple-300 transition-colors cursor-pointer text-left"
+              className="mt-1 flex items-center gap-1 text-[11px] font-bold text-accent-theme hover:text-primary-theme transition-colors cursor-pointer text-left"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>{totalAnime} in catalog (Manage)</span>
@@ -1099,7 +1081,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-semibold text-neutral-400">Dub Streams</span>
-              <div className="w-6 h-6 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+              <div className="w-6 h-6 rounded-lg bg-primary-theme/10 border border-primary-theme/20 flex items-center justify-center text-primary-theme">
                 <Flame className="w-3.5 h-3.5" />
               </div>
             </div>
@@ -1121,7 +1103,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           >
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-accent-theme">
                   Weekly Activity Distribution
                 </h3>
                 <p className="text-[11px] text-neutral-400">Aggregated from real catalog timestamps</p>
@@ -1136,8 +1118,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <AreaChart data={trafficData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
                   <defs>
                     <linearGradient id="purpleGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.6} />
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.0} />
+                      <stop offset="5%" stopColor="var(--primary-accent)" stopOpacity={0.6} />
+                      <stop offset="95%" stopColor="var(--primary-accent)" stopOpacity={0.0} />
                     </linearGradient>
                   </defs>
                   <XAxis
@@ -1155,7 +1137,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Area
                     type="monotone"
                     dataKey="views"
-                    stroke="#a855f7"
+                    stroke="var(--primary-accent)"
                     strokeWidth={2.5}
                     fillOpacity={1}
                     fill="url(#purpleGradient)"
@@ -1307,15 +1289,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleRefresh}
-                    disabled={isRefreshing}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 text-xs font-bold transition-all cursor-pointer"
-                    title="Refresh live submissions from Firebase"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-                    <span>Refresh</span>
-                  </button>
                   <button
                     onClick={() => setActiveTab('catalog')}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all cursor-pointer"
@@ -1515,14 +1488,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <Plus className="w-4 h-4" />
                     <span>Add New Anime</span>
-                  </button>
-                  <button
-                    onClick={handleRefresh}
-                    disabled={isRefreshing}
-                    className="p-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 text-xs font-bold transition-all cursor-pointer"
-                    title="Refresh from Firebase"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-purple-400' : ''}`} />
                   </button>
                 </div>
               </div>
@@ -1852,7 +1817,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {(activeTab === 'overview' || activeTab === 'feed') && (
           <div className="p-4 rounded-3xl bg-[#131926] border border-neutral-800/90 shadow-xl space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-accent-theme flex items-center gap-1.5">
                 <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
                 <span>Real-Time Feed</span>
               </h3>
@@ -1872,7 +1837,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className={`w-2 h-2 rounded-full shrink-0 ${
                         act.action === 'feedback' ? 'bg-amber-400' :
                         act.action === 'updated' ? 'bg-cyan-400' :
-                        act.action === 'approved' ? 'bg-emerald-400' : 'bg-purple-500'
+                        act.action === 'approved' ? 'bg-emerald-400' : 'bg-primary-theme'
                       }`} />
                       <span className="font-bold text-white truncate max-w-[100px]">{act.user}</span>
                       <span className="text-neutral-400 text-[11px] shrink-0">
@@ -1880,7 +1845,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                          act.action === 'updated' ? 'updated' :
                          act.action === 'approved' ? 'approved' : 'submitted'}
                       </span>
-                      <span className="text-purple-300 font-medium truncate">{act.animeTitle}</span>
+                      <span className="text-primary-theme font-medium truncate">{act.animeTitle}</span>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">

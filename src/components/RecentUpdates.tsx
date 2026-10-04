@@ -48,7 +48,7 @@ export const RecentUpdates: React.FC = () => {
                 onClick={() => setCurrentIndex(i)}
                 className={`transition-all duration-300 rounded-full ${
                   i === currentIndex
-                    ? 'w-5 h-1.5 bg-purple-500'
+                    ? 'w-5 h-1.5 bg-primary-theme'
                     : 'w-1.5 h-1.5 bg-neutral-700 hover:bg-neutral-600'
                 }`}
                 title={`Update ${i + 1}`}
@@ -60,7 +60,7 @@ export const RecentUpdates: React.FC = () => {
         {/* Current Active Item */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-h-[44px]">
           <div className="flex items-start sm:items-center gap-3">
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-700/50 shrink-0">
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded badge-primary-theme shrink-0">
               {currentNews.tag}
             </span>
             <p className="text-sm font-semibold text-neutral-200 line-clamp-2">

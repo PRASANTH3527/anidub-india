@@ -45,12 +45,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
       <div onClick={onClose} className="fixed inset-0 bg-black/80 backdrop-blur-md" />
 
       {/* Modal Dialog */}
-      <div className="relative w-full max-w-md bg-[#111726]/95 border border-purple-500/30 rounded-3xl p-6 sm:p-7 shadow-2xl z-10 space-y-6 text-neutral-100 backdrop-blur-xl">
+      <div className="relative w-full max-w-md bg-[#111726]/95 border border-primary-theme/30 rounded-3xl p-6 sm:p-7 shadow-2xl z-10 space-y-6 text-neutral-100 backdrop-blur-xl">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-600/30 border border-purple-500/40 flex items-center justify-center text-purple-300">
+            <div className="w-8 h-8 rounded-xl bg-primary-theme/30 border border-primary-theme/40 flex items-center justify-center text-primary-theme">
               <LogIn className="w-4 h-4" />
             </div>
             <div>
@@ -120,7 +120,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               value={customEmail}
               onChange={(e) => setCustomEmail(e.target.value)}
               placeholder="e.g. prasanth@gmail.com"
-              className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500"
+              className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-primary-theme"
             />
           </div>
 
@@ -133,13 +133,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               value={customName}
               onChange={(e) => setCustomName(e.target.value)}
               placeholder="e.g. Prasanth"
-              className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500"
+              className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-primary-theme"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-colors cursor-pointer"
+            className="w-full py-2.5 rounded-xl btn-primary-theme text-white font-bold text-xs transition-colors cursor-pointer"
           >
             Enter AniDub Account
           </button>

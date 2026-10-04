@@ -37,7 +37,7 @@ const DUB_BADGE_STYLES: Record<DubLanguage, { bg: string; text: string; label: s
   Kannada: { bg: 'bg-[#e11d48]', text: 'text-rose-100', label: 'Kan' },
 };
 
-export const AnimeCard: React.FC<AnimeCardProps> = ({
+export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
   anime,
   isBookmarked,
   isTrending,
@@ -250,7 +250,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   return (
     <div 
       onClick={() => onSelect(anime)}
-      className="group relative flex flex-col h-full bg-[#131926] rounded-2xl overflow-hidden border border-neutral-800/80 hover:border-purple-500/40 hover:scale-[1.02] active:scale-[0.99] transition-all duration-300 cursor-pointer shadow-md hover:shadow-xl hover:shadow-purple-950/20 select-none"
+      className="group relative flex flex-col h-full bg-[#131926] rounded-2xl overflow-hidden border border-neutral-800/80 hover:border-primary-theme sm:hover:scale-[1.02] active:scale-[0.99] transition-all duration-300 cursor-pointer shadow-md hover:shadow-xl hover:shadow-primary-theme/20 select-none will-change-transform"
     >
       {/* Poster Section (Lightweight, No 3D Perspective) */}
       <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
@@ -259,12 +259,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
             src={displayImage}
             alt={anime.title}
             loading="lazy"
+            decoding="async"
             onError={() => setImageError(true)}
-            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
+            className="w-full h-full object-cover object-center sm:group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-[#1a1e2d] to-[#0f131d] flex flex-col items-center justify-center p-4 text-center">
-            <Sparkles className="w-8 h-8 text-purple-400 mb-2 opacity-50" />
+            <Sparkles className="w-8 h-8 text-accent-theme mb-2 opacity-50" />
             <span className="text-xs font-semibold text-neutral-300">{anime.title}</span>
             <span className="text-[10px] text-neutral-500 mt-1">Image Cached Offline</span>
           </div>
@@ -307,7 +308,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
                 : 'bg-black/60 text-neutral-300 hover:text-white border-white/10'
             }`}
           >
-            <DownloadCloud className={`w-3.5 h-3.5 ${isCaching ? 'animate-bounce text-purple-400' : ''}`} />
+            <DownloadCloud className={`w-3.5 h-3.5 ${isCaching ? 'animate-bounce text-accent-theme' : ''}`} />
           </button>
 
           {onReport && (
@@ -354,7 +355,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
             onMouseDown={(e) => e.stopPropagation()}
             title={isBookmarked ? 'Remove from Watchlist' : 'Add to Watchlist'}
             className={`p-1.5 rounded-full backdrop-blur-md border border-white/10 active:scale-90 transition-all cursor-pointer pointer-events-auto ${
-              isBookmarked ? 'bg-purple-600 text-white shadow-lg' : 'bg-black/60 text-neutral-300 hover:text-white'
+              isBookmarked ? 'bg-primary-theme text-white shadow-lg' : 'bg-black/60 text-neutral-300 hover:text-white'
             }`}
           >
             <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current' : ''}`} />
@@ -392,7 +393,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
             })}
           </div>
 
-          <h3 className="font-bold text-sm text-neutral-100 line-clamp-1 group-hover:text-purple-300 transition-colors">
+          <h3 className="font-bold text-sm text-neutral-100 line-clamp-1 group-hover:text-primary-theme transition-colors">
             {anime.title}
           </h3>
 
@@ -456,6 +457,6 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
       </div>
     </div>
   );
-};
+});
 
 export default AnimeCard;

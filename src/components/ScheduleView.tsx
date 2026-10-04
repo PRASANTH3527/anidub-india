@@ -34,8 +34,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
     <div className="w-full max-w-5xl mx-auto px-4 py-6">
       {/* Header */}
       <div className="text-center mb-8 space-y-2">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-950/60 border border-purple-800/40 text-purple-300 text-xs font-semibold">
-          <Calendar className="w-3.5 h-3.5 text-purple-400" />
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full badge-primary-theme text-xs font-semibold">
+          <Calendar className="w-3.5 h-3.5 text-accent-theme" />
           <span>Weekly Indian Dub Broadcast Schedule</span>
         </div>
         <h2 className="font-heading font-black text-2xl sm:text-3xl text-white">
@@ -57,14 +57,14 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
               onClick={() => setSelectedDay(day)}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 shrink-0 cursor-pointer flex items-center gap-2 ${
                 isSelected
-                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+                  ? 'btn-primary-theme text-white shadow-primary-theme'
                   : 'bg-[#131926] text-neutral-400 hover:text-white hover:bg-[#1a2336] border border-neutral-800'
               }`}
             >
               <span>{day}</span>
               {count > 0 && (
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                  isSelected ? 'bg-purple-800 text-white' : 'bg-neutral-800 text-neutral-300'
+                  isSelected ? 'bg-primary-theme text-white' : 'bg-neutral-800 text-neutral-300'
                 }`}>
                   {count}
                 </span>
@@ -81,12 +81,14 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
             <div
               key={anime.id}
               onClick={() => onSelectAnime(anime)}
-              className="bg-[#131926] border border-neutral-800 hover:border-purple-500/50 rounded-xl p-3.5 flex gap-3.5 cursor-pointer group transition-all"
+              className="bg-[#131926] border border-neutral-800 hover:border-primary-theme/50 rounded-xl p-3.5 flex gap-3.5 cursor-pointer group transition-all"
             >
               <img
                 src={anime.imageUrl || anime.poster}
                 alt={anime.title}
-                className="w-20 aspect-[3/4.2] object-cover rounded-lg shrink-0 shadow-md group-hover:scale-102 transition-transform"
+                loading="lazy"
+                decoding="async"
+                className="w-20 aspect-[3/4.2] object-cover rounded-lg shrink-0 shadow-md sm:group-hover:scale-102 transition-transform"
               />
               <div className="flex flex-col justify-between flex-grow">
                 <div>
@@ -94,7 +96,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
                     <Clock className="w-3 h-3" />
                     <span>Every {getAnimeDay(anime)}</span>
                   </div>
-                  <h4 className="font-bold text-sm text-neutral-100 group-hover:text-purple-300 line-clamp-1">
+                  <h4 className="font-bold text-sm text-neutral-100 group-hover:text-primary-theme line-clamp-1">
                     {anime.title}
                   </h4>
                   <p className="text-[11px] text-neutral-400 mt-0.5">
@@ -107,7 +109,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
                     {(anime.dubs || []).map((dub) => (
                       <span
                         key={dub}
-                        className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/40"
+                        className="text-[9px] font-bold px-1.5 py-0.5 rounded badge-primary-theme"
                       >
                         {dub} Dub
                       </span>
@@ -116,7 +118,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
 
                   <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-1 border-t border-neutral-800/60">
                     <span>{anime.platforms && anime.platforms[0]?.name ? anime.platforms[0].name : 'Crunchyroll'}</span>
-                    <span className="text-purple-400 font-semibold group-hover:underline">
+                    <span className="text-accent-theme font-semibold group-hover:underline">
                       View details →
                     </span>
                   </div>
