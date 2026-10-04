@@ -8,6 +8,7 @@
   --primary-badge: #881337;
   --primary-border: rgba(225, 29, 72, 0.45);
   --primary-ring: rgba(225, 29, 72, 0.6);
+  --primary-accent-rgb: 225, 29, 72;
 }
 
 @layer base {
@@ -41,12 +42,30 @@
   border-color: var(--primary-border);
 }
 
+.border-accent-theme {
+  border-color: var(--primary-accent);
+}
+
 .ring-primary-theme {
   --tw-ring-color: var(--primary-ring);
 }
 
+.ring-accent-theme {
+  --tw-ring-color: var(--primary-accent);
+}
+
 .shadow-primary-theme {
   box-shadow: 0 10px 25px -5px var(--primary-glow);
+}
+
+.glow-primary-theme {
+  box-shadow: 0 0 20px 0 var(--primary-glow);
+}
+
+.badge-primary-theme {
+  background-color: var(--primary-badge);
+  color: var(--primary-light);
+  border: 1px solid var(--primary-border);
 }
 
 .btn-primary-theme {
@@ -57,7 +76,7 @@
 }
 
 .btn-primary-theme:hover {
-  filter: brightness(1.1);
+  filter: brightness(1.12);
   transform: translateY(-1px);
 }
 

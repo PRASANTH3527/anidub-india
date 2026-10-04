@@ -216,7 +216,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
       {/* Search Bar Container */}
       <div className="relative group" ref={dropdownRef}>
-        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-400 group-focus-within:text-purple-400 transition-colors">
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-400 group-focus-within:text-accent-theme transition-colors">
           <Search className="w-4 h-4 sm:w-5 sm:h-5" />
         </div>
         <input
@@ -235,7 +235,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           className={`w-full bg-[#121829]/95 border rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-12 pr-24 text-sm text-neutral-100 placeholder-neutral-500 outline-none transition-all duration-200 shadow-xl backdrop-blur-md ${
             isListening
               ? 'border-rose-500 ring-4 ring-rose-500/25 bg-rose-950/20'
-              : 'border-neutral-700/80 group-hover:border-neutral-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20'
+              : 'border-neutral-700/80 group-hover:border-neutral-600 focus:border-accent-theme focus:ring-2 focus:ring-[var(--primary-ring)]'
           }`}
         />
 
@@ -244,10 +244,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           <div className="absolute left-0 right-0 top-full mt-2 bg-[#121829]/98 border border-neutral-700/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 backdrop-blur-xl">
             {localSearch.trim().length >= 2 ? (
               <>
-                <div className="p-3 bg-purple-950/30 border-b border-neutral-800 flex items-center justify-between">
+                <div className="p-3 bg-[var(--primary-badge)]/30 border-b border-neutral-800 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Search className="w-3.5 h-3.5 text-purple-400" />
-                    <span className="text-[10px] font-black uppercase tracking-wider text-purple-200">Matching Titles</span>
+                    <Search className="w-3.5 h-3.5 text-accent-theme" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-primary-theme">Matching Titles</span>
                   </div>
                   <span className="text-[9px] text-neutral-500 font-bold uppercase">{liveResults.length} Results</span>
                 </div>
@@ -260,14 +260,14 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                           setLocalSearch(anime.title);
                           setShowDropdown(false);
                         }}
-                        className="flex items-center gap-3 p-3 hover:bg-purple-600/10 cursor-pointer group transition-colors"
+                        className="flex items-center gap-3 p-3 hover:bg-[var(--primary-accent)]/10 cursor-pointer group transition-colors"
                       >
                         <div className="relative w-10 h-14 rounded-lg overflow-hidden border border-neutral-700 shrink-0">
                           <img src={anime.poster} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
                           <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
                         </div>
                         <div className="min-w-0 flex-grow">
-                          <p className="text-xs font-bold text-white truncate group-hover:text-purple-300 transition-colors">{anime.title}</p>
+                          <p className="text-xs font-bold text-white truncate group-hover:text-primary-theme transition-colors">{anime.title}</p>
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-[10px] text-neutral-400">{anime.type} • {anime.releaseYear}</span>
                             <div className="flex items-center gap-0.5 text-orange-500 font-black text-[9px]">
@@ -281,7 +281,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                             ))}
                           </div>
                         </div>
-                        <PlayCircle className="w-5 h-5 text-neutral-600 group-hover:text-purple-400 transition-colors opacity-0 group-hover:opacity-100" />
+                        <PlayCircle className="w-5 h-5 text-neutral-600 group-hover:text-accent-theme transition-colors opacity-0 group-hover:opacity-100" />
                       </div>
                     ))
                   ) : (
@@ -294,9 +294,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               </>
             ) : trendingSuggestions.length > 0 && (
               <>
-                <div className="p-3 bg-purple-950/30 border-b border-neutral-800 flex items-center gap-2">
+                <div className="p-3 bg-[var(--primary-badge)]/30 border-b border-neutral-800 flex items-center gap-2">
                   <Flame className="w-4 h-4 text-orange-400" />
-                  <span className="text-[11px] font-black uppercase tracking-wider text-purple-200">Trending Right Now</span>
+                  <span className="text-[11px] font-black uppercase tracking-wider text-primary-theme">Trending Right Now</span>
                 </div>
                 <div className="max-h-60 overflow-y-auto divide-y divide-neutral-800/50">
                   {trendingSuggestions.map((anime: AnimeRecord) => (
@@ -308,9 +308,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                       }}
                       className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer group transition-colors"
                     >
-                      <img src={anime.poster} className="w-8 h-10 object-cover rounded-lg border border-neutral-700 group-hover:border-purple-500/50" />
+                      <img src={anime.poster} className="w-8 h-10 object-cover rounded-lg border border-neutral-700 group-hover:border-primary-theme" />
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-white truncate group-hover:text-purple-300 transition-colors">{anime.title}</p>
+                        <p className="text-xs font-bold text-white truncate group-hover:text-primary-theme transition-colors">{anime.title}</p>
                         <p className="text-[10px] text-neutral-500">{anime.type} • {anime.releaseYear} • ★ {anime.rating || '8.0'}</p>
                       </div>
                       <div className="ml-auto text-[10px] font-black text-orange-500 flex items-center gap-1">
@@ -388,14 +388,14 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                 onClick={() => setSelectedLanguage(langItem.name)}
                 className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 shrink-0 cursor-pointer flex items-center gap-2 active:scale-95 ${
                   isSelected
-                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 ring-2 ring-purple-400/40'
+                    ? 'active-tab-theme text-white shadow-primary-theme ring-2 ring-accent-theme'
                     : 'bg-[#141b2c] text-neutral-300 hover:text-white hover:bg-[#1c253d] border border-neutral-800 hover:border-neutral-700'
                 }`}
               >
                 <span>{langItem.name}</span>
                 {count !== undefined && count > 0 && (
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                    isSelected ? 'bg-purple-800 text-white' : 'bg-[#0f1422] text-neutral-400'
+                    isSelected ? 'bg-[var(--primary-badge)] text-white' : 'bg-[#0f1422] text-neutral-400'
                   }`}>
                     {count}
                   </span>
@@ -410,7 +410,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
         {/* Genre Filter */}
         <div className={`flex items-center gap-2 bg-[#121829] border rounded-xl px-3 py-2 text-xs transition-colors ${
-          selectedGenre !== 'All Genres' ? 'border-purple-500/70 bg-purple-950/20' : 'border-neutral-800 hover:border-neutral-700'
+          selectedGenre !== 'All Genres' ? 'border-primary-theme bg-[var(--primary-badge)]/20' : 'border-neutral-800 hover:border-neutral-700'
         }`}>
           <span className="text-neutral-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-wider shrink-0">
             Genre
@@ -430,7 +430,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
         {/* Type Filter */}
         <div className={`flex items-center gap-2 bg-[#121829] border rounded-xl px-3 py-2 text-xs transition-colors ${
-          selectedType !== 'All Types' ? 'border-purple-500/70 bg-purple-950/20' : 'border-neutral-800 hover:border-neutral-700'
+          selectedType !== 'All Types' ? 'border-primary-theme bg-[var(--primary-badge)]/20' : 'border-neutral-800 hover:border-neutral-700'
         }`}>
           <span className="text-neutral-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-wider shrink-0">
             Type
@@ -450,7 +450,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
         {/* Airing Status Filter */}
         <div className={`flex items-center gap-2 bg-[#121829] border rounded-xl px-3 py-2 text-xs transition-colors ${
-          selectedStatus !== 'All' ? 'border-purple-500/70 bg-purple-950/20' : 'border-neutral-800 hover:border-neutral-700'
+          selectedStatus !== 'All' ? 'border-primary-theme bg-[var(--primary-badge)]/20' : 'border-neutral-800 hover:border-neutral-700'
         }`}>
           <span className="text-neutral-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-wider shrink-0">
             Status
@@ -493,14 +493,14 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         <div className="flex items-center gap-2">
           {isLoading ? (
             <span className="text-neutral-400 animate-pulse font-medium flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-purple-500 animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-primary-theme animate-ping" />
               Filtering live catalog...
             </span>
           ) : (
             <span className="text-neutral-400 font-medium">
               Showing <strong className="text-white font-bold">{totalFiltered}</strong> {totalFiltered === 1 ? 'anime' : 'anime titles'}
               {selectedLanguage !== 'All' && (
-                <span className="text-purple-300"> with <strong className="text-purple-200">{selectedLanguage}</strong> dub</span>
+                <span className="text-primary-theme"> with <strong className="text-accent-theme">{selectedLanguage}</strong> dub</span>
               )}
             </span>
           )}

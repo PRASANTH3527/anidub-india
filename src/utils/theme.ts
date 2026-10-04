@@ -110,6 +110,42 @@ export const ANIME_THEMES: AnimeTheme[] = [
 ];
 
 /**
+ * Converts a hex string into an RGB triplet (e.g., "225, 29, 72")
+ */
+export function hexToRgb(hex: string): string {
+  let c = hex.replace('#', '');
+  if (c.length === 3) {
+    c = c.split('').map((x) => x + x).join('');
+  }
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return '225, 29, 72';
+  return `${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}`;
+}
+
+/**
+ * Determine recommended theme based on avatar name/character
+ */
+export function getRecommendedThemeForAvatar(characterOrSeries: string): AnimeTheme {
+  const lower = characterOrSeries.toLowerCase();
+  if (lower.includes('zenitsu') || lower.includes('thunder')) {
+    return ANIME_THEMES.find((t) => t.id === 'zenitsu-yellow') || ANIME_THEMES[1];
+  }
+  if (lower.includes('naruto') || lower.includes('kurama') || lower.includes('shippuden')) {
+    return ANIME_THEMES.find((t) => t.id === 'naruto-orange') || ANIME_THEMES[2];
+  }
+  if (lower.includes('gojo') || lower.includes('limitless') || lower.includes('megumi')) {
+    return ANIME_THEMES.find((t) => t.id === 'gojo-blue') || ANIME_THEMES[3];
+  }
+  if (lower.includes('zoro') || lower.includes('one piece') || lower.includes('luffy')) {
+    return ANIME_THEMES.find((t) => t.id === 'zoro-green') || ANIME_THEMES[4];
+  }
+  if (lower.includes('lelouch') || lower.includes('geass') || lower.includes('violet')) {
+    return ANIME_THEMES.find((t) => t.id === 'default-purple') || ANIME_THEMES[5];
+  }
+  return ANIME_THEMES[0];
+}
+
+/**
  * Apply the selected theme across document styles and persist to localStorage
  */
 export function applyAnimeTheme(themeId: string): AnimeTheme {
@@ -117,6 +153,9 @@ export function applyAnimeTheme(themeId: string): AnimeTheme {
 
   if (typeof document !== 'undefined') {
     const root = document.documentElement;
+    const rgb = hexToRgb(theme.primary);
+    
+    // Core CSS custom variables
     root.style.setProperty('--primary-accent', theme.primary);
     root.style.setProperty('--primary-glow', theme.glow);
     root.style.setProperty('--primary-gradient', theme.gradient);
@@ -124,6 +163,18 @@ export function applyAnimeTheme(themeId: string): AnimeTheme {
     root.style.setProperty('--primary-badge', theme.badge);
     root.style.setProperty('--primary-border', theme.border);
     root.style.setProperty('--primary-ring', theme.ring);
+    root.style.setProperty('--primary-accent-rgb', rgb);
+
+    // Dynamic Tailwind purple overrides so all components instantly adopt the chosen accent color
+    root.style.setProperty('--color-purple-600', theme.primary);
+    root.style.setProperty('--color-purple-500', theme.primary);
+    root.style.setProperty('--color-purple-400', theme.light);
+    root.style.setProperty('--color-purple-300', theme.light);
+    root.style.setProperty('--color-purple-700', theme.badge);
+    root.style.setProperty('--color-purple-800', theme.badge);
+    root.style.setProperty('--color-purple-900', theme.badge);
+    root.style.setProperty('--color-purple-950', `${theme.badge}bb`);
+
     root.setAttribute('data-anime-theme', theme.id);
   }
 

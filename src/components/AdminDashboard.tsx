@@ -47,7 +47,10 @@ import {
   Layers,
   Film,
   X,
-  Loader2
+  Loader2,
+  Lock,
+  KeyRound,
+  ShieldAlert
 } from 'lucide-react';
 // Direct Firebase Firestore import as requested
 import { db } from '../lib/firebase';
@@ -64,6 +67,7 @@ import {
   DocumentData
 } from 'firebase/firestore';
 import { dbService } from '../services/databaseService';
+import { authService } from '../services/authService';
 import { AnimeRecord } from '../types/database';
 import { SubmitDubModal } from './SubmitDubModal';
 import { useToast } from './Toast';
@@ -275,6 +279,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingAnime, setEditingAnime] = useState<AnimeRecord | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   
+  // Admin Authentication Gate State
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    return authService.isAdmin();
+  });
+  const [passcode, setPasscode] = useState('');
+  const [passcodeError, setPasscodeError] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  // Sync auth state
+  useEffect(() => {
+    const unsub = authService.subscribe(() => {
+      setIsAdmin(authService.isAdmin());
+    });
+    return () => unsub();
+  }, []);
+
   const toast = useToast();
 
   // Real Data Fetching strictly from Firebase Firestore database collections
@@ -643,8 +663,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [catalogTitles, searchManageQuery, selectedManageLang, selectedManageStatus]);
 
+  // Admin Passcode verification handler
+  const handleAdminPasscodeLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsVerifying(true);
+    const trimmed = passcode.trim();
+    if (trimmed === 'admin123' || trimmed === 'prasanth123' || trimmed === 'admin@anidub.in' || trimmed === '8648317719') {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('anidub_is_admin', 'true');
+        localStorage.setItem('anidub_is_admin', 'true');
+      }
+      setIsAdmin(true);
+      setPasscodeError('');
+      setIsVerifying(false);
+      toast.success('Admin Authenticated', 'Access granted to AniDub Admin Dashboard.');
+      fetchRealData();
+    } else {
+      setIsVerifying(false);
+      setPasscodeError('Invalid Admin Passcode. Access denied.');
+    }
+  };
+
   // Approve pending anime submission in live Firebase Firestore
   const handleApprove = async (anime: AnimeRecord) => {
+    if (!authService.isAdmin()) {
+      toast.error('Unauthorized', 'Admin privileges required to approve anime.');
+      return;
+    }
+
     setApprovingId(anime.id);
     try {
       const updateData = {
@@ -709,6 +755,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Reject pending anime submission
   const handleReject = async (anime: AnimeRecord) => {
+    if (!authService.isAdmin()) {
+      toast.error('Unauthorized', 'Admin privileges required to reject anime.');
+      return;
+    }
+
     try {
       const updateData = {
         status: 'rejected',
@@ -737,6 +788,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Permanently delete anime from real Firebase Firestore database
   const handleDeleteConfirm = async () => {
+    if (!authService.isAdmin()) {
+      toast.error('Unauthorized', 'Admin privileges required to delete records.');
+      return;
+    }
+
     if (!animeToDelete) return;
     setIsDeleting(true);
     try {
@@ -779,6 +835,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Trigger edit flow
   const handleTriggerEdit = (anime: AnimeRecord) => {
+    if (!authService.isAdmin()) {
+      toast.error('Unauthorized', 'Admin privileges required to edit anime.');
+      return;
+    }
+
     if (onEditAnime) {
       onEditAnime(anime);
     } else {
@@ -792,6 +853,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       sessionStorage.removeItem('anidub_is_admin');
       localStorage.removeItem('anidub_is_admin');
     }
+    setIsAdmin(false);
     onExitAdmin?.();
     try {
       router.push('/');
@@ -799,6 +861,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       window.location.href = '/';
     }
   };
+
+  // STRICT ACCESS CONTROL: If not authenticated as Admin, show Security Gate
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-[#0b0f17] text-neutral-100 flex items-center justify-center p-4 selection:bg-purple-600 selection:text-white">
+        <div className="w-full max-w-md bg-[#131926] border border-rose-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-center animate-in fade-in duration-300">
+          <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400 shadow-lg shadow-rose-950/40">
+            <Lock className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-950/80 text-rose-300 border border-rose-500/30">
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>Admin Authentication Required</span>
+            </div>
+            <h2 className="text-xl font-black text-white tracking-tight">AniDub Admin Panel</h2>
+            <p className="text-xs text-neutral-400 leading-relaxed max-w-xs mx-auto">
+              This dashboard and live Firestore database operations are restricted to verified administrators. Enter your admin key to proceed.
+            </p>
+          </div>
+
+          <form onSubmit={handleAdminPasscodeLogin} className="space-y-4 text-left">
+            <div>
+              <label className="block text-[11px] font-bold text-neutral-300 uppercase tracking-wider mb-1.5">
+                Admin Passcode / Key
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  value={passcode}
+                  onChange={(e) => {
+                    setPasscode(e.target.value);
+                    setPasscodeError('');
+                  }}
+                  placeholder="Enter administrator passcode"
+                  className="w-full px-4 py-3 rounded-xl bg-neutral-900 border border-neutral-700/80 focus:border-purple-500 text-white text-sm outline-none transition-all placeholder:text-neutral-600 pr-10"
+                  autoFocus
+                />
+                <KeyRound className="w-4 h-4 text-neutral-500 absolute right-3.5 top-3.5" />
+              </div>
+              {passcodeError && (
+                <p className="text-xs text-rose-400 mt-1.5 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>{passcodeError}</span>
+                </p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isVerifying || !passcode.trim()}
+              className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-sm transition-all shadow-lg shadow-purple-600/30 cursor-pointer disabled:opacity-50"
+            >
+              {isVerifying ? 'Verifying...' : 'Unlock Admin Panel'}
+            </button>
+          </form>
+
+          <div className="pt-2 border-t border-neutral-800/80">
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.location.href = '/';
+                }
+              }}
+              className="text-xs text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            >
+              ← Return to AniDub Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0b0f17] text-neutral-100 pb-16 font-sans antialiased selection:bg-purple-600 selection:text-white">
@@ -1296,46 +1432,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     {/* Action Buttons: Approve, Edit, Reject, Delete */}
                     <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-800/80 flex-wrap">
-                      <button
-                        onClick={() => handleApprove(anime)}
-                        disabled={approvingId === anime.id}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs transition-all shadow-md shadow-emerald-950/50 cursor-pointer disabled:opacity-50"
-                        title="Approve and publish to live catalog"
-                      >
-                        {approvingId === anime.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                        )}
-                        <span>Approve Anime</span>
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleApprove(anime)}
+                          disabled={approvingId === anime.id}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs transition-all shadow-md shadow-emerald-950/50 cursor-pointer disabled:opacity-50"
+                          title="Approve and publish to live catalog"
+                        >
+                          {approvingId === anime.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          )}
+                          <span>Approve Anime</span>
+                        </button>
+                      )}
 
-                      <button
-                        onClick={() => handleTriggerEdit(anime)}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 font-bold text-xs transition-all cursor-pointer"
-                        title="Edit anime details before approving"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                        <span>Edit Details</span>
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleTriggerEdit(anime)}
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 font-bold text-xs transition-all cursor-pointer"
+                          title="Edit anime details before approving"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          <span>Edit Details</span>
+                        </button>
+                      )}
 
-                      <button
-                        onClick={() => handleReject(anime)}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 hover:text-amber-100 border border-amber-500/40 font-bold text-xs transition-all cursor-pointer"
-                        title="Reject submission"
-                      >
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        <span>Reject</span>
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleReject(anime)}
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 hover:text-amber-100 border border-amber-500/40 font-bold text-xs transition-all cursor-pointer"
+                          title="Reject submission"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          <span>Reject</span>
+                        </button>
+                      )}
 
-                      <button
-                        onClick={() => setAnimeToDelete(anime)}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-rose-100 border border-rose-500/40 font-bold text-xs transition-all cursor-pointer"
-                        title="Delete permanently"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                        <span>Delete</span>
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => setAnimeToDelete(anime)}
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-rose-100 border border-rose-500/40 font-bold text-xs transition-all cursor-pointer"
+                          title="Delete permanently"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Delete</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1562,23 +1706,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </button>
                       )}
 
-                      <button
-                        onClick={() => handleTriggerEdit(anime)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 text-xs font-bold transition-all cursor-pointer"
-                        title={`Edit ${anime.title}`}
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                        <span>Edit</span>
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleTriggerEdit(anime)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 text-xs font-bold transition-all cursor-pointer"
+                          title={`Edit ${anime.title}`}
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                      )}
 
-                      <button
-                        onClick={() => setAnimeToDelete(anime)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-rose-100 border border-rose-500/40 text-xs font-bold transition-all cursor-pointer"
-                        title={`Delete ${anime.title}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                        <span>Delete</span>
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => setAnimeToDelete(anime)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-rose-100 border border-rose-500/40 text-xs font-bold transition-all cursor-pointer"
+                          title={`Delete ${anime.title}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Delete</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1674,20 +1822,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <span>Approve</span>
                         </button>
                       )}
-                      <button
-                        onClick={() => handleTriggerEdit(anime)}
-                        className="p-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors cursor-pointer"
-                        title="Edit Title"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setAnimeToDelete(anime)}
-                        className="p-1 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-white transition-colors cursor-pointer"
-                        title="Delete Title"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleTriggerEdit(anime)}
+                          className="p-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                          title="Edit Title"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button
+                          onClick={() => setAnimeToDelete(anime)}
+                          className="p-1 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-white transition-colors cursor-pointer"
+                          title="Delete Title"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1735,7 +1887,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span className="text-[10px] text-neutral-500 font-mono">
                         {act.time}
                       </span>
-                      {act.action !== 'feedback' && (
+                      {act.action !== 'feedback' && isAdmin && (
                         <button
                           onClick={() => {
                             const rawItem = catalogTitles.find(a => a.id === act.id.replace('sub-', '')) || dbService.getAnimeById(act.id.replace('sub-', ''));

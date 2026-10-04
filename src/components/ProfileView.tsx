@@ -15,6 +15,7 @@ import {
   ExternalLink 
 } from 'lucide-react';
 import { Anime, WatchlistItem, DubLanguage, UserProfile } from '../types/anime';
+import { useTheme } from '../context/ThemeContext';
 
 interface ProfileViewProps {
   allAnime: Anime[];
@@ -126,7 +127,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       {/* Profile Header Card */}
       <div className="bg-[#131926] border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
         {/* Glow */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+        <div 
+          className="absolute top-0 right-0 w-80 h-80 rounded-full blur-3xl pointer-events-none opacity-20"
+          style={{ background: 'var(--primary-glow)' }}
+        />
 
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 relative z-10">
           {/* Avatar */}
@@ -134,7 +138,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <img
               src={profile.avatar}
               alt={profile.username}
-              className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2 border-purple-500/50 shadow-xl"
+              className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2 shadow-xl"
+              style={{
+                borderColor: 'var(--primary-accent)',
+                boxShadow: `0 0 20px var(--primary-glow)`,
+              }}
             />
             <span className="absolute bottom-1 right-1 w-4 h-4 bg-emerald-500 border-2 border-[#131926] rounded-full" />
           </div>
@@ -178,7 +186,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 <div className="flex gap-2 pt-1">
                   <button
                     onClick={saveProfile}
-                    className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer"
+                    className="px-3 py-1 btn-primary-theme text-white text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" />
                     <span>Save</span>
@@ -197,8 +205,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   <h2 className="font-heading font-black text-2xl text-white">
                     {profile.username}
                   </h2>
-                  <span className="bg-purple-950/80 text-purple-300 border border-purple-800/40 text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-purple-400" />
+                  <span className="badge-primary-theme text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-accent-theme" />
                     <span>{profile.favoriteLanguage} Dub Enthusiast</span>
                   </span>
                   <button
@@ -236,7 +244,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </div>
               <div className="bg-[#182032] border border-neutral-800 px-3 py-1.5 rounded-xl">
                 <span className="text-neutral-500 block text-[10px] uppercase font-bold">Episodes Seen</span>
-                <span className="font-extrabold text-purple-300 text-sm">~{totalEpisodesWatched} ep</span>
+                <span className="font-extrabold text-primary-theme text-sm">~{totalEpisodesWatched} ep</span>
               </div>
             </div>
           </div>
@@ -248,7 +256,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-neutral-800">
           <div>
             <h3 className="font-heading font-black text-xl text-white flex items-center gap-2">
-              <Bookmark className="w-5 h-5 text-purple-400" />
+              <Bookmark className="w-5 h-5 text-accent-theme" />
               <span>My Watchlist</span>
             </h3>
             <p className="text-xs text-neutral-400">
@@ -263,7 +271,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search in watchlist..."
-              className="w-full bg-[#131926] border border-neutral-700 rounded-xl py-2 pl-3 pr-8 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500"
+              className="w-full bg-[#131926] border border-neutral-700 rounded-xl py-2 pl-3 pr-8 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-accent-theme"
             />
             <Search className="w-3.5 h-3.5 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
@@ -275,7 +283,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             onClick={() => setFilterStatus('all')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               filterStatus === 'all'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                ? 'active-tab-theme text-white'
                 : 'bg-[#131926] text-neutral-400 hover:text-white border border-neutral-800'
             }`}
           >

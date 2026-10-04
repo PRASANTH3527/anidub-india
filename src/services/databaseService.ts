@@ -1,6 +1,7 @@
 import { AnimeRecord, DubReview, WatchlistEntry, SubmissionStatus } from '../types/database';
 import { Anime, DubLanguage } from '../types/anime';
 import { db } from '../lib/firebase';
+import { authService } from './authService';
 import { 
   collection, 
   doc, 
@@ -209,6 +210,11 @@ class DatabaseService {
 
   // --- 4. Moderation Actions (Approve/Reject/Delete) ---
   public approveSubmission(id: string, notes?: string, reviewerName: string = 'Admin (prasanth123)'): boolean {
+    if (!authService.isAdmin()) {
+      console.error('[Security Violation] Unauthorized approveSubmission write blocked for id:', id);
+      return false;
+    }
+
     const records = this.getAllAnimeRecords();
     const targetIndex = records.findIndex((r) => r.id === id);
     if (targetIndex === -1) return false;
@@ -249,6 +255,11 @@ class DatabaseService {
   }
 
   public rejectSubmission(id: string, reason?: string, reviewerName: string = 'Admin (prasanth123)'): boolean {
+    if (!authService.isAdmin()) {
+      console.error('[Security Violation] Unauthorized rejectSubmission write blocked for id:', id);
+      return false;
+    }
+
     const records = this.getAllAnimeRecords();
     const targetIndex = records.findIndex((r) => r.id === id);
     if (targetIndex === -1) return false;
@@ -289,6 +300,12 @@ class DatabaseService {
   }
 
   public updateAnime(id: string, updatedData: Partial<AnimeRecord>): boolean {
+    // CRITICAL SECURITY CHECK: Only authenticated Admins can update anime records
+    if (!authService.isAdmin()) {
+      console.error('[Security Violation] Unauthorized updateAnime write blocked for id:', id);
+      return false;
+    }
+
     const records = this.getAllAnimeRecords();
     const targetIndex = records.findIndex((r) => r.id === id);
     if (targetIndex === -1) return false;
@@ -308,6 +325,10 @@ class DatabaseService {
         ...updatedData,
         updatedAt: new Date().toISOString(),
       }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'anime', id), {
+        ...updatedData,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch(() => {});
     } catch (e) {
       console.warn('Firestore update sync error:', e);
     }
@@ -323,6 +344,12 @@ class DatabaseService {
   }
 
   public deleteSubmission(id: string): boolean {
+    // CRITICAL SECURITY CHECK: Only authenticated Admins can delete anime records
+    if (!authService.isAdmin()) {
+      console.error('[Security Violation] Unauthorized deleteSubmission write blocked for id:', id);
+      return false;
+    }
+
     const records = this.getAllAnimeRecords();
     const filtered = records.filter((r) => r.id !== id);
     this.saveAnimeRecords(filtered);

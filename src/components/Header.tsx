@@ -13,6 +13,7 @@ import {
   Languages,
   BarChart3
 } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 export type NavTab = 'library' | 'foryou' | 'watchlist' | 'schedule' | 'recommendations' | 'profile' | 'analytics';
 
@@ -49,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleLanguage,
   isAdmin = false,
 }) => {
+  const { avatar: globalAvatar, theme: currentTheme } = useTheme();
   const tapHistoryRef = React.useRef<number[]>([]);
 
   const handleLogoClick = () => {
@@ -74,6 +76,8 @@ export const Header: React.FC<HeaderProps> = ({
     }, 100);
   };
 
+  const activeAvatar = globalAvatar || localProfile?.avatar;
+
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0b0f17]/90 backdrop-blur-md border-b border-neutral-800/80 transition-colors">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
@@ -84,13 +88,13 @@ export const Header: React.FC<HeaderProps> = ({
           className="flex items-center gap-1.5 sm:gap-2.5 cursor-pointer group select-none shrink-0 active:scale-[0.97] transition-transform"
           title="AniDub India — Click to go to Library"
         >
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-purple-600/30 group-hover:scale-105 transition-transform duration-200">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl btn-primary-theme flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-200">
             <Film className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </div>
           <div className="flex flex-col hidden xs:flex">
             <div className="flex items-center gap-1">
-              <span className="font-heading font-black text-lg sm:text-xl tracking-tight text-white group-hover:text-purple-300 transition-colors">
-                Ani<span className="text-purple-400">Dub</span>
+              <span className="font-heading font-black text-lg sm:text-xl tracking-tight text-white group-hover:text-primary-theme transition-colors">
+                Ani<span className="text-accent-theme">Dub</span>
               </span>
               <span className="bg-gradient-to-r from-orange-500 via-white to-green-500 bg-clip-text text-transparent font-bold text-[8px] sm:text-[10px] tracking-wider uppercase border border-neutral-700/60 rounded px-1">
                 IN
@@ -107,7 +111,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => setActiveTab('library')}
             className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
               activeTab === 'library'
-                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
+                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
             }`}
             title="Browse Directory"
@@ -148,15 +152,15 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => setActiveTab('watchlist')}
             className={`relative w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
               activeTab === 'watchlist'
-                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
+                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
             }`}
             title="My Watchlist"
             aria-label="Watchlist"
           >
-            <Bookmark className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'watchlist' ? 'scale-110 fill-purple-400/20' : ''}`} />
+            <Bookmark className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'watchlist' ? 'scale-110 fill-current' : ''}`} />
             {watchlistCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[9px] font-black rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5 border border-[#0b0f17] shadow-sm">
+              <span className="absolute -top-1 -right-1 btn-primary-theme text-white text-[9px] font-black rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5 border border-[#0b0f17] shadow-sm">
                 {watchlistCount}
               </span>
             )}
@@ -169,17 +173,17 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setActiveTab('analytics')}
               className={`w-9 h-9 sm:w-10 sm:h-10 hidden md:flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
                 activeTab === 'analytics'
-                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50 shadow-sm'
+                  ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
                   : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
               }`}
               title="Platform Analytics"
               aria-label="Platform Analytics"
             >
-              <BarChart3 className="w-5 h-5 text-purple-400" />
+              <BarChart3 className="w-5 h-5 text-accent-theme" />
             </button>
           )}
 
-          {/* Profile */}
+          {/* Profile & Avatar */}
           <button
             type="button"
             onClick={() => {
@@ -191,13 +195,24 @@ export const Header: React.FC<HeaderProps> = ({
             }}
             className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
               activeTab === 'profile'
-                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
+                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
             }`}
             title="Profile & Settings"
             aria-label="Profile"
           >
-            <User className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'profile' ? 'scale-110' : ''}`} />
+            {activeAvatar ? (
+              <div 
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden border-2 shadow-sm shrink-0"
+                style={{
+                  borderColor: activeTab === 'profile' ? 'var(--primary-accent)' : 'var(--primary-border)',
+                }}
+              >
+                <img src={activeAvatar} alt="Profile" className="w-full h-full object-cover object-top" />
+              </div>
+            ) : (
+              <User className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'profile' ? 'scale-110' : ''}`} />
+            )}
           </button>
         </nav>
 
@@ -215,7 +230,7 @@ export const Header: React.FC<HeaderProps> = ({
             {theme === 'dark' ? (
               <Sun className="w-4.5 h-4.5 sm:w-4 sm:h-4 text-amber-400 transition-transform duration-200" />
             ) : (
-              <Moon className="w-4.5 h-4.5 sm:w-4 sm:h-4 text-purple-400 transition-transform duration-200" />
+              <Moon className="w-4.5 h-4.5 sm:w-4 sm:h-4 text-accent-theme transition-transform duration-200" />
             )}
           </button>
 
@@ -227,7 +242,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-neutral-800/60 hover:bg-neutral-700/80 active:scale-95 border border-neutral-700/40 text-[10px] font-black text-neutral-300 hover:text-white transition-all cursor-pointer"
               title="Switch Language"
             >
-              <Languages className="w-3.5 h-3.5 text-rose-500" />
+              <Languages className="w-3.5 h-3.5 text-accent-theme" />
               <span>{uiLanguage === 'en' ? 'தமிழ்' : 'EN'}</span>
             </button>
           )}
@@ -237,7 +252,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onOpenAuthModal}
-              className="hidden xs:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-xs font-semibold active:scale-95 transition-all cursor-pointer"
+              className="hidden xs:flex items-center gap-1 px-2.5 py-1.5 rounded-xl badge-primary-theme text-xs font-semibold active:scale-95 transition-all cursor-pointer"
             >
               <span>Account</span>
             </button>

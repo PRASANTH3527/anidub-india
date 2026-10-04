@@ -265,6 +265,10 @@ function AppContent() {
   const [animeToEdit, setAnimeToEdit] = useState<AnimeRecord | null>(null);
 
   const handleEditAnime = (anime: AnimeRecord) => {
+    if (!isAdmin) {
+      toast.error('Unauthorized', 'Admin privileges required to edit anime details.');
+      return;
+    }
     setAnimeToEdit(anime);
     setIsSubmitModalOpen(true);
   };

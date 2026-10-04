@@ -136,9 +136,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [isSuccess, setIsSuccess] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Derived state
-  const isEditMode = !!editAnime || !!localEditAnime;
-  const activeAnime = editAnime || localEditAnime;
+  // Derived state & Admin security check
+  const isAdmin = authService.isAdmin();
+  const isEditMode = isAdmin && (!!editAnime || !!localEditAnime);
+  const activeAnime = isEditMode ? (editAnime || localEditAnime) : (editAnime || localEditAnime);
 
   // Debounced Jikan API search
   useEffect(() => {
@@ -276,6 +277,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   }, [title, isEditMode, autoFilled]);
 
   const handleEditDuplicate = () => {
+    if (!authService.isAdmin()) {
+      toast.error('Unauthorized', 'Access Denied: Only verified administrators can edit existing anime titles.');
+      return;
+    }
     if (duplicateAnime) {
       setLocalEditAnime(duplicateAnime);
       setDuplicateAnime(null);
@@ -477,8 +482,60 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       platforms: finalPlatforms,
     };
 
-    if (isEditMode && activeAnime) {
-      // 1. Direct write to live Firebase Firestore database
+    if (activeAnime && (isEditMode || editAnime || localEditAnime)) {
+      // CRITICAL SECURITY CHECK: Verify authenticated as Admin
+      if (!authService.isAdmin()) {
+        console.warn('[Security Violation] Non-admin attempted direct edit on anime:', activeAnime.id);
+
+        // Security requirement: Block direct live update and save as pending edit submission for admin review
+        const proposalId = 'sub-edit-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
+        const editProposalData = cleanFirestoreData({
+          ...payload,
+          id: proposalId,
+          targetAnimeId: activeAnime.id,
+          originalTitle: activeAnime.title,
+          isEditProposal: true,
+          status: 'pending',
+          submissionStatus: 'pending',
+          submittedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          submittedBy: {
+            userId: currentUser?.uid || 'guest-user',
+            userName: currentUser?.displayName || 'Community Contributor',
+            userEmail: currentUser?.email || 'contributor@anidub.in',
+          },
+        });
+
+        try {
+          await setDoc(doc(db, 'submissions', proposalId), editProposalData);
+        } catch (err) {
+          console.error('[Firestore Edit Proposal Error]', err);
+        }
+
+        // Notify Telegram of pending edit proposal
+        try {
+          const telegramAlertMsg = `🔔 Proposed Edit Submitted: ${title.trim()} (Pending Admin Review)`;
+          await fetch('/api/telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: telegramAlertMsg,
+              text: telegramAlertMsg,
+              title: title.trim(),
+            }),
+          });
+        } catch {}
+
+        setIsSubmitting(false);
+        toast.error(
+          'Unauthorized Direct Edit',
+          'Only verified Administrators can edit live anime directly. Your changes have been securely submitted as a pending review for Admin approval.'
+        );
+        onClose();
+        return;
+      }
+
+      // 1. Authenticated Admin Direct write to live Firebase Firestore database
       try {
         const sanitizedEditPayload = cleanFirestoreData({
           ...payload,
@@ -749,15 +806,22 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                         <p className="text-xs text-neutral-200 font-medium">
                           <span className="font-bold">"{duplicateAnime.title}"</span> already exists with <span className="text-amber-400 font-bold">{duplicateAnime.dubs.join(', ')}</span> dubs.
                         </p>
+                        {!isAdmin && (
+                          <p className="text-[11px] text-amber-300/80 mt-1">
+                            This title is already registered. To submit new dub languages or suggest corrections, submit a new review request or contact an administrator.
+                          </p>
+                        )}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleEditDuplicate}
-                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-black uppercase tracking-tight transition-all active:scale-95 whitespace-nowrap shadow-lg shadow-amber-500/20"
-                    >
-                      Edit Existing Entry
-                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={handleEditDuplicate}
+                        className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-black uppercase tracking-tight transition-all active:scale-95 whitespace-nowrap shadow-lg shadow-amber-500/20 cursor-pointer"
+                      >
+                        Edit Existing Entry
+                      </button>
+                    )}
                   </div>
                 )}
 

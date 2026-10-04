@@ -25,6 +25,7 @@ import { ANIME_AVATARS_50, AnimeAvatarPreset } from '../data/animeAvatars50';
 import { ANIME_THEMES, applyAnimeTheme, getSavedAnimeTheme, AnimeTheme } from '../utils/theme';
 import { SupportedLanguage, getSavedUiLanguage, setSavedUiLanguage, translate } from '../utils/i18n';
 import { cloudSyncService } from '../services/cloudSyncService';
+import { useTheme } from '../context/ThemeContext';
 
 export { ANIME_AVATARS_50, type AnimeAvatarPreset };
 export const ANIME_AVATAR_PRESETS = ANIME_AVATARS_50;
@@ -70,18 +71,27 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
   const toast = useToast();
   const uiLang = uiLanguage || getSavedUiLanguage();
   
+  const { 
+    theme: currentTheme, 
+    themeId: globalThemeId, 
+    setTheme: setGlobalTheme, 
+    avatar: globalAvatar, 
+    setAvatar: setGlobalAvatar, 
+    updateUserProfile 
+  } = useTheme();
+
   // Tab State
   const [activeModalTab, setActiveModalTab] = useState<'identity' | 'sync'>('identity');
 
   const [nickname, setNickname] = useState(currentProfile.nickname || 'Anime Fan');
   const [selectedAvatar, setSelectedAvatar] = useState(
-    currentProfile.avatar || ANIME_AVATARS_50[0].url
+    currentProfile.avatar || globalAvatar || ANIME_AVATARS_50[0].url
   );
   const [favLanguage, setFavLanguage] = useState<DubLanguage | 'All'>(
     currentProfile.favoriteLanguage || 'Tamil'
   );
   const [selectedThemeId, setSelectedThemeId] = useState<string>(() => {
-    return currentProfile.theme || getSavedAnimeTheme().id;
+    return currentProfile.theme || globalThemeId || getSavedAnimeTheme().id;
   });
 
   // Cloud Sync State
@@ -91,6 +101,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
 
   const handleSelectTheme = (themeId: string) => {
     setSelectedThemeId(themeId);
+    setGlobalTheme(themeId);
     const theme = applyAnimeTheme(themeId);
     toast.info('Theme Preview', `Accent theme switched to ${theme.name}`);
   };
@@ -325,7 +336,8 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
     e.preventDefault();
     const cleanNick = nickname.trim() || 'Anime Fan';
 
-    applyAnimeTheme(selectedThemeId);
+    setGlobalTheme(selectedThemeId);
+    setGlobalAvatar(selectedAvatar);
 
     const updated: LocalUserProfile = {
       nickname: cleanNick,
@@ -334,6 +346,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
       theme: selectedThemeId,
     };
 
+    updateUserProfile(updated);
     onSaveProfile(updated);
     toast.success('Profile Saved!', `Welcome, ${cleanNick}! Set to ${currentSelectedPreset.name}.`);
     onClose();
@@ -348,18 +361,23 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
       />
 
       {/* Modal Container */}
-      <div className="relative w-full max-w-2xl bg-[#121829] border border-purple-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl z-10 animate-in zoom-in-95 duration-200">
+      <div 
+        className="relative w-full max-w-2xl bg-[#121829] border border-primary-theme rounded-3xl p-5 sm:p-6 shadow-2xl z-10 animate-in zoom-in-95 duration-200"
+        style={{
+          boxShadow: `0 20px 50px -10px var(--primary-glow)`,
+        }}
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 shrink-0">
+            <div className="w-10 h-10 rounded-2xl btn-primary-theme flex items-center justify-center text-white shadow-lg shrink-0">
               <User className="w-5 h-5" />
             </div>
             <div>
               <h3 className="font-heading font-black text-white text-base sm:text-lg flex items-center gap-1.5">
                 {translate('profileModalTitle', uiLang)}
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-900/60 border border-purple-500/40 text-purple-300">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full badge-primary-theme">
                   50 Top Characters
                 </span>
               </h3>
@@ -383,7 +401,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
             onClick={() => setActiveModalTab('identity')}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeModalTab === 'identity'
-                ? 'bg-purple-600 text-white shadow-lg'
+                ? 'active-tab-theme text-white'
                 : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40'
             }`}
           >
@@ -394,7 +412,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
             onClick={() => setActiveModalTab('sync')}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeModalTab === 'sync'
-                ? 'bg-purple-600 text-white shadow-lg'
+                ? 'active-tab-theme text-white'
                 : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40'
             }`}
           >
@@ -410,7 +428,13 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
             <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-[#0c101a] border border-neutral-800/90 shadow-inner">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-purple-500 ring-4 ring-purple-500/30 shadow-xl bg-neutral-900 shrink-0 transition-transform duration-300">
+                  <div 
+                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 shadow-xl bg-neutral-900 shrink-0 transition-transform duration-300"
+                    style={{
+                      borderColor: 'var(--primary-accent)',
+                      boxShadow: `0 0 16px var(--primary-glow)`,
+                    }}
+                  >
                     <img
                       src={selectedAvatar}
                       alt={currentSelectedPreset.name}
@@ -425,7 +449,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                 </div>
 
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-accent-theme">
                     Selected Character DP
                   </span>
                   <h4 className="font-heading font-black text-sm sm:text-base text-white">
@@ -437,8 +461,8 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                 </div>
               </div>
 
-              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-800/50 text-[11px] text-purple-200 font-semibold">
-                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl badge-primary-theme text-[11px] font-semibold">
+                <Sparkles className="w-3.5 h-3.5 text-accent-theme" />
                 <span>Instant Navbar Sync</span>
               </div>
             </div>
@@ -462,7 +486,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search characters (e.g., Zenitsu, Gojo, Luffy, Levi, Zoro, Deku)..."
-                  className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-xl py-2 pl-9 pr-8 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
+                  className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-accent-theme rounded-xl py-2 pl-9 pr-8 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
                 />
                 {searchQuery && (
                   <button
@@ -486,7 +510,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                       onClick={() => setSelectedSeries(series)}
                       className={`px-2.5 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer ${
                         isSelected
-                          ? 'bg-purple-600 text-white shadow-sm'
+                          ? 'active-tab-theme text-white'
                           : 'bg-[#151c2e] text-neutral-400 hover:text-neutral-200 border border-neutral-800'
                       }`}
                     >
@@ -499,7 +523,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
 
             {/* Highly Optimized, Beautifully Scrollable 50 Avatars Grid */}
             <div className="relative rounded-2xl bg-[#0a0e17] border border-neutral-800/90 p-2 sm:p-3">
-              <div className="max-h-64 sm:max-h-72 overflow-y-auto pr-1.5 space-y-2 scrollbar-thin scrollbar-thumb-purple-600/50 scrollbar-track-neutral-900/60 hover:scrollbar-thumb-purple-500">
+              <div className="max-h-64 sm:max-h-72 overflow-y-auto pr-1.5 space-y-2 scrollbar-thin">
                 {filteredAvatars.length > 0 ? (
                   <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 sm:gap-2.5">
                     {filteredAvatars.map((preset) => {
@@ -509,11 +533,14 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                         <button
                           type="button"
                           key={preset.id}
-                          onClick={() => setSelectedAvatar(preset.url)}
+                          onClick={() => {
+                            setSelectedAvatar(preset.url);
+                            setGlobalAvatar(preset.url);
+                          }}
                           title={`${preset.character} (${preset.series})`}
                           className={`group relative flex flex-col items-center p-2 rounded-2xl transition-all cursor-pointer select-none active:scale-95 ${
                             isSelected
-                              ? 'bg-purple-950/80 border border-purple-500/80 shadow-lg shadow-purple-950/60'
+                              ? 'bg-[var(--primary-badge)]/40 border border-primary-theme shadow-lg shadow-primary-theme'
                               : 'bg-[#131929]/70 hover:bg-[#1a2338] border border-neutral-800/80 hover:border-neutral-700'
                           }`}
                         >
@@ -522,9 +549,12 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                             <div
                               className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-neutral-900 transition-all duration-200 ${
                                 isSelected
-                                  ? 'ring-4 ring-purple-500 ring-offset-2 ring-offset-[#0a0e17] border-2 border-purple-300 scale-105 shadow-md shadow-purple-600/40 animate-pulse'
-                                  : 'border border-neutral-700/80 group-hover:border-purple-400/60 group-hover:scale-105'
+                                  ? 'ring-4 ring-accent-theme ring-offset-2 ring-offset-[#0a0e17] border-2 scale-105 shadow-md shadow-primary-theme'
+                                  : 'border border-neutral-700/80 group-hover:scale-105'
                               }`}
+                              style={{
+                                borderColor: isSelected ? 'var(--primary-accent)' : undefined,
+                              }}
                             >
                               <img
                                 src={preset.url}
@@ -536,7 +566,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
 
                             {/* Selected Checkmark Badge */}
                             {isSelected && (
-                              <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-full flex items-center justify-center border-2 border-[#0a0e17] shadow-md animate-in zoom-in-75 duration-150">
+                              <div className="absolute -top-1 -right-1 w-5 h-5 btn-primary-theme rounded-full flex items-center justify-center border-2 border-[#0a0e17] shadow-md animate-in zoom-in-75 duration-150">
                                 <Check className="w-3 h-3 text-white stroke-[3]" />
                               </div>
                             )}
@@ -556,7 +586,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                           <span
                             className={`text-[10px] sm:text-[11px] font-bold text-center mt-1.5 truncate w-full tracking-tight ${
                               isSelected
-                                ? 'text-purple-200 font-black'
+                                ? 'text-primary-theme font-black'
                                 : 'text-neutral-300 group-hover:text-white'
                             }`}
                           >
@@ -575,7 +605,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                         setSearchQuery('');
                         setSelectedSeries('All (50)');
                       }}
-                      className="text-xs text-purple-400 hover:text-purple-300 font-bold"
+                      className="text-xs text-accent-theme hover:underline font-bold"
                     >
                       Reset Search Filter
                     </button>
@@ -646,7 +676,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                   placeholder="e.g. ZenitsuFan, GojoDomain, DubOtaku..."
                   maxLength={24}
                   required
-                  className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-2xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 outline-none transition-colors"
+                  className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-accent-theme rounded-2xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 outline-none transition-colors"
                 />
               </div>
 
@@ -658,12 +688,12 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                 <select
                   value={favLanguage}
                   onChange={(e) => setFavLanguage(e.target.value as any)}
-                  className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-2xl px-3 sm:px-4 py-2.5 text-xs sm:text-sm text-white outline-none cursor-pointer"
+                  className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-accent-theme rounded-2xl px-3 sm:px-4 py-2.5 text-xs sm:text-sm text-white outline-none cursor-pointer"
                 >
                   <option value="Tamil" className="bg-[#121829]">Tamil Dubs (தமிழ்)</option>
                   <option value="Telugu" className="bg-[#121829]">Telugu Dubs (తెలుగు)</option>
                   <option value="Hindi" className="bg-[#121829]">Hindi Dubs (हिंदी)</option>
-                  <option value="Malayalam" className="bg-[#121829]">Malayalam Dubs (മലയാളம்)</option>
+                  <option value="Malayalam" className="bg-[#121829]">Malayalam Dubs (മലയാളം)</option>
                   <option value="Kannada" className="bg-[#121829]">Kannada Dubs (ಕನ್ನಡ)</option>
                   <option value="All" className="bg-[#121829]">All Indian Regional Dubs</option>
                 </select>
@@ -695,7 +725,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                 {/* Language Switcher in Profile */}
                 <div className="flex items-center gap-1 shrink-0 self-start sm:self-auto">
                   <span className="text-[10px] font-bold text-neutral-400 flex items-center gap-1 mr-1">
-                    <Languages className="w-3 h-3 text-purple-400" />
+                    <Languages className="w-3 h-3 text-accent-theme" />
                     <span>UI:</span>
                   </span>
                   <button
@@ -716,9 +746,9 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                 <button
                   type="button"
                   onClick={handleExportData}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-purple-950/40 hover:bg-purple-900/60 active:scale-95 text-purple-200 border border-purple-500/40 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl badge-primary-theme hover:brightness-110 active:scale-95 text-xs font-bold transition-all cursor-pointer shadow-sm"
                 >
-                  <Download className="w-3.5 h-3.5 text-purple-400" />
+                  <Download className="w-3.5 h-3.5 text-accent-theme" />
                   <span>{translate('exportBackupBtn', uiLang)}</span>
                 </button>
 
@@ -739,10 +769,10 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
               <button
                 type="button"
                 onClick={handleShareProfile}
-                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 active:scale-95 text-purple-300 hover:text-white border border-purple-600/40 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl badge-primary-theme hover:brightness-110 active:scale-95 text-xs font-bold transition-all cursor-pointer shadow-sm"
                 title="Share your Otaku profile & stats"
               >
-                <Share2 className="w-3.5 h-3.5 text-purple-400" />
+                <Share2 className="w-3.5 h-3.5 text-accent-theme" />
                 <span>{translate('shareProfile', uiLang)}</span>
               </button>
 
@@ -768,8 +798,8 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
           <div className="space-y-5 py-6">
             <div className="p-4 rounded-3xl bg-[#0d121f] border border-neutral-800 space-y-4 shadow-inner">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                  <Cloud className="w-6 h-6" />
+                <div className="w-12 h-12 rounded-2xl badge-primary-theme flex items-center justify-center">
+                  <Cloud className="w-6 h-6 text-accent-theme" />
                 </div>
                 <div>
                   <h4 className="font-heading font-black text-white text-lg">{translate('cloudTabTitle', uiLang)}</h4>
@@ -789,7 +819,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                       value={cloudUsername}
                       onChange={(e) => setCloudUsername(e.target.value)}
                       placeholder="Enter a unique username..."
-                      className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-2xl py-3 pl-10 pr-4 text-sm text-white placeholder-neutral-600 outline-none transition-all"
+                      className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-accent-theme rounded-2xl py-3 pl-10 pr-4 text-sm text-white placeholder-neutral-600 outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -805,7 +835,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                       value={cloudPassword}
                       onChange={(e) => setCloudPassword(e.target.value)}
                       placeholder="Secret password..."
-                      className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-purple-500 rounded-2xl py-3 pl-10 pr-4 text-sm text-white placeholder-neutral-600 outline-none transition-all"
+                      className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-accent-theme rounded-2xl py-3 pl-10 pr-4 text-sm text-white placeholder-neutral-600 outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -815,7 +845,7 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                 <button
                   onClick={handleCloudBackup}
                   disabled={isSyncing}
-                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white text-sm font-black transition-all shadow-lg shadow-purple-600/20 active:scale-95 cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl btn-primary-theme disabled:opacity-50 text-white text-sm font-black transition-all active:scale-95 cursor-pointer"
                 >
                   {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
                   <span>{translate('cloudBackupBtn', uiLang)}</span>
@@ -830,8 +860,8 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                 </button>
               </div>
 
-              <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-800/20 text-center">
-                <p className="text-[10px] font-bold text-purple-300 leading-relaxed uppercase tracking-tighter">
+              <div className="p-3 rounded-xl badge-primary-theme text-center">
+                <p className="text-[10px] font-bold text-primary-theme leading-relaxed uppercase tracking-tighter">
                   {translate('cloudSafeNote', uiLang)}
                 </p>
               </div>
