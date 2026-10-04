@@ -2,21 +2,39 @@
 // AniDub India — Firebase & Firestore Client Configuration
 // ==============================================================================
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { getFirestore, Firestore, doc, getDocFromServer } from 'firebase/firestore';
+import firebaseConfigJson from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDemoAniDubIndiaApiKey_2026',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'anidub-india.firebaseapp.com',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'anidub-india-prod',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'anidub-india.appspot.com',
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '712933804987',
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '1:712933804987:web:anidub9018273',
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || firebaseConfigJson.apiKey,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || firebaseConfigJson.appId,
 };
 
 // Initialize Firebase App safely (singleton pattern for Next.js hot-reload)
 export const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Initialize Cloud Firestore
-export const db: Firestore = getFirestore(app);
+// Initialize Cloud Firestore with target database ID
+const databaseId = firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.firestoreDatabaseId !== '(default)'
+  ? firebaseConfigJson.firestoreDatabaseId
+  : undefined;
+
+export const db: Firestore = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+
+// Connection test helper
+export async function testConnection(): Promise<boolean> {
+  try {
+    await getDocFromServer(doc(db, 'system', 'connection'));
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('[Firebase] Client appears offline or firestore connecting...');
+    }
+    return false;
+  }
+}
 
 export default db;

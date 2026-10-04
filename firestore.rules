@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-deny global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+
+    // Anime catalog collection
+    match /animes/{animeId} {
+      allow read: if isValidId(animeId);
+      allow create, update: if isValidId(animeId) 
+        && request.resource.data.title is string 
+        && request.resource.data.title.size() <= 200;
+      allow delete: if false;
+    }
+
+    // Watchlists collection
+    match /watchlists/{watchlistId} {
+      allow read: if isValidId(watchlistId);
+      allow create, update: if isValidId(watchlistId)
+        && request.resource.data.animeId is string;
+      allow delete: if isValidId(watchlistId);
+    }
+
+    // Submissions collection for admin moderation
+    match /submissions/{submissionId} {
+      allow read: if isValidId(submissionId);
+      allow create: if isValidId(submissionId)
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 200;
+      allow update, delete: if isValidId(submissionId);
+    }
+
+    // Feedback collection
+    match /feedback/{feedbackId} {
+      allow read: if isValidId(feedbackId);
+      allow create: if isValidId(feedbackId)
+        && request.resource.data.feedback is string
+        && request.resource.data.feedback.size() <= 2000;
+      allow update, delete: if false;
+    }
+
+    // Real-time activities feed collection
+    match /activities/{activityId} {
+      allow read: if isValidId(activityId);
+      allow create: if isValidId(activityId)
+        && request.resource.data.user is string
+        && request.resource.data.action is string;
+      allow update, delete: if false;
+    }
+
+    // Analytics / Realtime aggregated stats
+    match /analytics/{docId} {
+      allow read: if isValidId(docId);
+      allow write: if isValidId(docId);
+    }
+
+    // System connection probe doc
+    match /system/{docId} {
+      allow read: if isValidId(docId);
+      allow write: if false;
+    }
+  }
+}
