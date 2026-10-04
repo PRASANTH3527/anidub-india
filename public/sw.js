@@ -2,7 +2,7 @@
 // AniDub India — Service Worker with PWA Background Sync & IndexedDB Queue
 // ==============================================================================
 
-const CACHE_NAME = 'anidub-pwa-v2';
+const CACHE_NAME = 'anidub-pwa-v3';
 const POSTER_CACHE_NAME = 'anidub-posters-v2';
 const MAX_POSTERS = 120;
 const DB_NAME = 'anidub-offline-db';
