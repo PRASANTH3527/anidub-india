@@ -227,8 +227,8 @@ class DatabaseService {
   public normalizeRecord(data: any): AnimeRecord {
     if (!data) return data;
     
-    // Support specific language code mapping
-    const langMap: Record<string, DubLanguage> = {
+    // STRICT Mapping for Language Codes to UI Names
+    const langCodeToFull: Record<string, DubLanguage> = {
       'Ta': 'Tamil',
       'Te': 'Telugu',
       'Hi': 'Hindi',
@@ -241,112 +241,72 @@ class DatabaseService {
       'Kannada': 'Kannada'
     };
 
-    const mapLang = (l: string) => langMap[l] || l as DubLanguage;
+    const mapLangs = (langs: any): DubLanguage[] => {
+      if (!Array.isArray(langs)) return [];
+      return langs
+        .map(l => (typeof l === 'string' ? langCodeToFull[l] || l : (l?.name || l?.language || '')))
+        .filter(Boolean) as DubLanguage[];
+    };
 
-    // Extract languages/dubs safely (Sync with AdminDashboard logic)
-    let rawDubs: any[] = [];
-    if (Array.isArray(data?.dubs)) {
-      rawDubs = data.dubs;
-    } else if (Array.isArray(data?.languages)) {
-      rawDubs = data.languages;
-    } else if (Array.isArray(data?.dubLanguages)) {
-      rawDubs = data.dubLanguages;
-    } else if (Array.isArray(data?.dubDetails)) {
-      rawDubs = data.dubDetails.map((d: any) => d?.language || d);
-    } else if (typeof data?.dub === 'string' && data.dub.trim()) {
-      rawDubs = [data.dub.trim()];
-    } else if (typeof data?.language === 'string' && data.language.trim()) {
-      rawDubs = [data.language.trim()];
-    }
+    // Extract Top-Level Dubs
+    const dubs = mapLangs(data.dubs || data.languages || data.availableIn || []);
 
-    const dubs: DubLanguage[] = rawDubs
-      .map((d: any) => (typeof d === 'string' ? mapLang(d.trim()) : mapLang(d?.name || d?.language || '')))
-      .filter(Boolean) as DubLanguage[];
-
-    const likes = Number(data?.likes || data?.upvotes || data?.votes || 0);
-    const rawPlatforms = Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'];
-    const platforms: { name: StreamingPlatform; url: string }[] = rawPlatforms.map((p: any) => {
-      if (typeof p === 'string') {
-        return { name: p as StreamingPlatform, url: 'https://crunchyroll.com' };
-      }
-      return {
-        name: (p.name || p.platform || 'Crunchyroll') as StreamingPlatform,
-        url: p.url || 'https://crunchyroll.com',
-      };
-    });
-
-    // Robust title extraction
-    const title = (
-      data?.title || 
-      data?.name || 
-      data?.animeTitle || 
-      data?.anime_title || 
-      data?.title_en || 
-      data?.englishTitle || 
-      'Untitled Anime'
-    ).trim();
-
-    // Mapping seasons from specific JSON format
-    let seasonDetails = Array.isArray(data?.seasonDetails) ? data.seasonDetails : (Array.isArray(data?.mixedEntries) ? data.mixedEntries : []);
-    
-    if (seasonDetails.length === 0 && Array.isArray(data?.seasons)) {
-      seasonDetails = data.seasons.map((s: any) => ({
+    // STRICT Seasons (mixedEntries) Mapping
+    let seasonDetails: any[] = [];
+    const rawSeasons = data.seasons || data.mixedEntries || data.seasonDetails || [];
+    if (Array.isArray(rawSeasons)) {
+      seasonDetails = rawSeasons.map((s: any) => ({
         type: s.type || 'Season',
-        label: String(s.seasonNumber || s.label || '1'),
+        label: String(s.seasonNumber || s.number || s.label || '1'),
         episodeCount: Number(s.episodes || s.episodeCount || 12),
-        languages: Array.isArray(s.availableIn) ? s.availableIn.map(mapLang) : (Array.isArray(s.languages) ? s.languages.map(mapLang) : dubs)
+        languages: mapLangs(s.availableIn || s.languages || dubs)
       }));
+    } else {
+      // Default fallback if no seasons array found
+      seasonDetails = [{ 
+        type: 'Season', 
+        label: '1', 
+        episodeCount: Number(data.episodes) || 12, 
+        languages: dubs.length > 0 ? dubs : ['Tamil'] 
+      }];
     }
 
-    // Capture airing status separately if 'status' is being used for moderation
-    let airingStatus = data?.airingStatus;
-    if (!airingStatus && (data?.status === 'Ongoing' || data?.status === 'Completed')) {
-      airingStatus = data.status;
+    // Status Mapping: "Ongoing" -> "Ongoing" (UI handles display as "Ongoing (Simulcast)")
+    let airingStatus: 'Ongoing' | 'Completed' = 'Completed';
+    const rawStatus = String(data.status || data.airingStatus || '').toLowerCase();
+    if (rawStatus.includes('ongoing') || rawStatus.includes('airing') || rawStatus.includes('simulcast')) {
+      airingStatus = 'Ongoing';
+    } else if (rawStatus.includes('completed') || rawStatus.includes('finished')) {
+      airingStatus = 'Completed';
     }
+
+    const title = (data.title || data.name || 'Untitled').trim();
 
     const normalized: AnimeRecord = {
       ...data,
       id: data.id,
       title,
-      romajiTitle: (data?.romajiTitle || data?.japaneseTitle || data?.title_jp || '').trim(),
-      poster: data?.poster || data?.image || data?.cover || data?.posterImage || '',
-      banner: data?.banner || data?.bannerImage || data?.coverImage || '',
-      studio: data?.studio || data?.animationStudio || 'Animation Studio',
-      synopsis: data?.synopsis || data?.description || '',
-      type: data?.type || 'TV Series',
-      episodes: Number(data?.episodes) || 12,
-      status: data?.status || data?.submissionStatus || 'pending',
-      airingStatus: airingStatus || 'Completed',
-      submissionStatus: data?.submissionStatus || data?.status || 'pending',
-      releaseYear: Number(data?.releaseYear) || Number(data?.year) || new Date().getFullYear(),
-      rating: data?.rating || data?.score || 8.0,
-      genres: Array.isArray(data?.genres) ? data.genres : [],
-      themes: Array.isArray(data?.themes) ? data.themes : [],
+      romajiTitle: (data.romajiTitle || data.japaneseTitle || '').trim(),
+      poster: data.poster || data.image || '',
+      banner: data.banner || data.coverImage || '',
+      studio: data.studio || data.animationStudio || 'Animation Studio',
+      synopsis: data.synopsis || data.description || '',
+      type: data.type || 'TV Series',
+      episodes: Number(data.episodes) || 12,
+      status: data.status || 'pending', // Moderation status
+      airingStatus, // Actual show status (Ongoing/Completed)
+      submissionStatus: data.submissionStatus || 'pending',
+      releaseYear: Number(data.releaseYear || data.year) || new Date().getFullYear(),
+      rating: Number(data.rating || data.score) || 8.0,
+      genres: Array.isArray(data.genres) ? data.genres : [],
       dubs,
-      seasonDetails: seasonDetails.map((s: any) => ({
-        ...s,
-        languages: Array.isArray(s.languages) ? s.languages.map(mapLang) : (Array.isArray(s.availableIn) ? s.availableIn.map(mapLang) : dubs)
-      })),
-      dubDetails: Array.isArray(data?.dubDetails)
-        ? data.dubDetails.map((d: any) => ({
-            ...d,
-            language: mapLang(d.language || d),
-            platform: Array.isArray(d?.platform) 
-              ? d.platform 
-              : (d?.platform ? [d.platform] : platforms.map(p => p.name)),
-          }))
-        : dubs.map((lang: DubLanguage) => ({
-            language: lang,
-            available: true,
-            platform: platforms.map(p => p.name),
-            notes: `Available in ${lang}`,
-          })),
-      platforms,
-      characters: Array.isArray(data?.characters) ? data.characters : [],
-      likes,
-      upvotes: likes,
-      createdAt: data?.createdAt || data?.submittedAt || new Date().toISOString(),
-      updatedAt: data?.updatedAt || data?.submittedAt || new Date().toISOString(),
+      seasonDetails,
+      mixedEntries: seasonDetails, // Redundant field for strict JSON support if needed
+      platforms: Array.isArray(data.platforms) ? data.platforms.map((p: any) => ({
+        name: (p.name || p) as StreamingPlatform,
+        url: p.url || '#'
+      })) : [{ name: 'Crunchyroll', url: '#' }],
+      updatedAt: new Date().toISOString(),
     };
 
     return normalized;
