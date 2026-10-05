@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, X, SlidersHorizontal, RotateCcw, Sparkles, Flame, Filter, Mic, MicOff, Star, PlayCircle } from 'lucide-react';
-import { ALL_GENRES, ALL_TYPES, ALL_STATUSES, ALL_LANGUAGES } from '../data/animeData';
+import { ALL_GENRES, ALL_TYPES, ALL_STATUSES, ALL_LANGUAGES, ALL_PLATFORMS } from '../data/animeData';
 import { useToast } from './Toast';
 import { SupportedLanguage, translate } from '../utils/i18n';
 import { AnimeRecord } from '../types/database';
@@ -13,6 +13,8 @@ interface FilterBarProps {
   setSelectedLanguage: (lang: string) => void;
   selectedGenre: string;
   setSelectedGenre: (genre: string) => void;
+  selectedPlatform?: string;
+  setSelectedPlatform?: (platform: string) => void;
   selectedType: string;
   setSelectedType: (type: string) => void;
   selectedStatus: string;
@@ -37,6 +39,8 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
   setSelectedLanguage,
   selectedGenre,
   setSelectedGenre,
+  selectedPlatform = 'All Platforms',
+  setSelectedPlatform,
   selectedType,
   setSelectedType,
   selectedStatus,
@@ -170,6 +174,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
     searchQuery.trim() !== '',
     selectedLanguage !== 'All',
     selectedGenre !== 'All Genres',
+    selectedPlatform !== 'All Platforms',
     selectedType !== 'All Types',
     selectedStatus !== 'All',
   ].filter(Boolean).length;
@@ -406,8 +411,8 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
         </div>
       </div>
 
-      {/* Advanced Multi-Filtering Row: Genre AND Type AND Status AND Sort Simultaneously */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+      {/* Advanced Multi-Filtering Row: Genre AND Platform AND Type AND Status AND Sort Simultaneously */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-1">
         {/* Genre Filter */}
         <div className={`flex items-center gap-2 bg-[#121829] border rounded-xl px-3 py-2 text-xs transition-colors ${
           selectedGenre !== 'All Genres' ? 'border-primary-theme bg-[var(--primary-badge)]/20' : 'border-neutral-800 hover:border-neutral-700'
@@ -423,6 +428,26 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
             {ALL_GENRES.map((g) => (
               <option key={g} value={g} className="bg-[#121829] text-neutral-200">
                 {g}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Platform Filter */}
+        <div className={`flex items-center gap-2 bg-[#121829] border rounded-xl px-3 py-2 text-xs transition-colors ${
+          selectedPlatform !== 'All Platforms' ? 'border-primary-theme bg-[var(--primary-badge)]/20' : 'border-neutral-800 hover:border-neutral-700'
+        }`}>
+          <span className="text-neutral-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-wider shrink-0">
+            Platform
+          </span>
+          <select
+            value={selectedPlatform}
+            onChange={(e) => setSelectedPlatform && setSelectedPlatform(e.target.value)}
+            className="w-full bg-transparent text-neutral-200 font-semibold focus:outline-none cursor-pointer truncate"
+          >
+            {ALL_PLATFORMS.map((p) => (
+              <option key={p} value={p} className="bg-[#121829] text-neutral-200">
+                {p}
               </option>
             ))}
           </select>

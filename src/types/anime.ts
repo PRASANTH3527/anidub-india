@@ -1,4 +1,4 @@
-export type DubLanguage = 'Tamil' | 'Telugu' | 'Hindi' | 'Malayalam' | 'Kannada';
+export type DubLanguage = 'Tamil' | 'Telugu' | 'Hindi' | 'Malayalam' | 'Kannada' | 'Bengali';
 
 export type AnimeType = 'TV Series' | 'Movie' | 'Special' | 'OVA' | 'ONA';
 
@@ -87,6 +87,7 @@ export interface Anime {
   platforms: {
     name: StreamingPlatform;
     url: string;
+    languages?: DubLanguage[];
   }[];
   featured?: boolean;
   addedDate?: string; // ISO date

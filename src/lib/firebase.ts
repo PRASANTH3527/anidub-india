@@ -3,6 +3,7 @@
 // ==============================================================================
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
 // Silence technical Firestore logs (prevents 'Could not reach Cloud Firestore backend' noise)
@@ -19,6 +20,11 @@ const firebaseConfig = {
 
 // Initialize Firebase App safely (singleton pattern for Next.js hot-reload)
 export const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+// Initialize Firebase Auth
+export const auth: Auth = getAuth(app);
+export const googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // Initialize Cloud Firestore with target database ID
 const databaseId = firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.firestoreDatabaseId !== '(default)'

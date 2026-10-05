@@ -181,11 +181,13 @@ class DatabaseService {
       'Hi': 'Hindi',
       'Ma': 'Malayalam',
       'Ka': 'Kannada',
+      'Be': 'Bengali',
       'Tamil': 'Tamil',
       'Telugu': 'Telugu',
       'Hindi': 'Hindi',
       'Malayalam': 'Malayalam',
-      'Kannada': 'Kannada'
+      'Kannada': 'Kannada',
+      'Bengali': 'Bengali'
     };
 
     const mapLangs = (langs: any): DubLanguage[] => {
@@ -233,6 +235,10 @@ class DatabaseService {
 
     const title = (data.title || data.name || 'Untitled').trim();
 
+    const rawPlatforms = Array.isArray(data.platforms) 
+      ? data.platforms 
+      : (Array.isArray(data.streamingPartners) ? data.streamingPartners : []);
+
     const normalized: AnimeRecord = {
       ...data,
       id: data.id,
@@ -253,10 +259,11 @@ class DatabaseService {
       dubs,
       seasonDetails,
       mixedEntries: seasonDetails, // Redundant field for strict JSON support if needed
-      platforms: Array.isArray(data.platforms) ? data.platforms.map((p: any) => ({
-        name: (p.name || p) as StreamingPlatform,
-        url: p.url || '#'
-      })) : [{ name: 'Crunchyroll', url: '#' }],
+      platforms: rawPlatforms.length > 0 ? rawPlatforms.map((p: any) => ({
+        name: (p.name || p.platform || p) as StreamingPlatform,
+        url: p.url || '#',
+        languages: mapLangs(p.languages || p.availableIn || dubs)
+      })) : [{ name: 'Crunchyroll', url: '#', languages: dubs }],
       updatedAt: new Date().toISOString(),
     };
 

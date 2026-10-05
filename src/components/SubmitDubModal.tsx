@@ -48,7 +48,7 @@ interface SubmitDubModalProps {
   editAnime?: AnimeRecord | null;
 }
 
-const ALL_LANGS: DubLanguage[] = ['Tamil', 'Telugu', 'Hindi', 'Malayalam', 'Kannada'];
+const ALL_LANGS: DubLanguage[] = ['Tamil', 'Telugu', 'Hindi', 'Malayalam', 'Kannada', 'Bengali'];
 const ALL_DAYS: ReleaseDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const AVAILABLE_GENRES = [
   'Action',
@@ -114,8 +114,12 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number | ''>('');
 
   // Multi-Platform Links
-  const [streamingPartners, setStreamingPartners] = useState<{ name: StreamingPlatform; url: string }[]>([
-    { name: 'Crunchyroll', url: '' }
+  const [streamingPartners, setStreamingPartners] = useState<{ 
+    name: StreamingPlatform; 
+    url: string;
+    languages: DubLanguage[];
+  }[]>([
+    { name: 'Crunchyroll', url: '', languages: ['Tamil'] }
   ]);
 
   const [airingStatus, setAiringStatus] = useState<'Ongoing' | 'Completed'>('Ongoing');
@@ -217,7 +221,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       if (activeAnime.platforms && activeAnime.platforms.length > 0) {
         setStreamingPartners(activeAnime.platforms.map(p => ({
           name: p.name as StreamingPlatform,
-          url: p.url
+          url: p.url,
+          languages: p.languages || activeAnime.dubs || ['Tamil']
         })));
       }
       setAutoFilled(true); // Treat as auto-filled so Jikan search doesn't trigger immediately
@@ -236,7 +241,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setCurrentSeason('');
       setCurrentlyAiringEpisode('');
       setRating('');
-      setStreamingPartners([{ name: 'Crunchyroll', url: '' }]);
+      setStreamingPartners([{ name: 'Crunchyroll', url: '', languages: ['Tamil'] }]);
       setAiringStatus('Ongoing');
       setReleaseDay('Saturday');
       setAutoFilled(false);
@@ -303,7 +308,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   };
 
   const addStreamingPartner = () => {
-    setStreamingPartners([...streamingPartners, { name: 'Crunchyroll', url: '' }]);
+    setStreamingPartners([...streamingPartners, { name: 'Crunchyroll', url: '', languages: ['Tamil'] }]);
   };
 
   const removeStreamingPartner = (index: number) => {
@@ -312,10 +317,21 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     }
   };
 
-  const updateStreamingPartner = (index: number, field: 'name' | 'url', value: string) => {
+  const updateStreamingPartner = (index: number, field: 'name' | 'url' | 'languages', value: any) => {
     const updated = [...streamingPartners];
     updated[index] = { ...updated[index], [field]: value };
     setStreamingPartners(updated);
+  };
+
+  const toggleLanguageForPlatform = (platformIdx: number, lang: DubLanguage) => {
+    const currentLangs = streamingPartners[platformIdx].languages || [];
+    let updatedLangs: DubLanguage[];
+    if (currentLangs.includes(lang)) {
+      updatedLangs = currentLangs.filter(l => l !== lang);
+    } else {
+      updatedLangs = [...currentLangs, lang];
+    }
+    updateStreamingPartner(platformIdx, 'languages', updatedLangs);
   };
 
   // Dynamic Season / Entry Logic
@@ -437,9 +453,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       .map(p => ({
         name: p.name,
         url: p.url.trim() || 'https://www.crunchyroll.com',
+        languages: p.languages && p.languages.length > 0 ? p.languages : derivedGlobalDubs
       }));
 
-    const finalPlatforms = platforms.length > 0 ? platforms : [{ name: 'Crunchyroll' as StreamingPlatform, url: 'https://www.crunchyroll.com' }];
+    const finalPlatforms = platforms.length > 0 ? platforms : [{ name: 'Crunchyroll' as StreamingPlatform, url: 'https://www.crunchyroll.com', languages: derivedGlobalDubs }];
 
     const totalEpisodes = seasonDetails.reduce((acc, s) => acc + (Number(s.episodeCount) || 0), 0);
     
@@ -698,7 +715,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setTitle('');
       setPoster('');
       setSynopsis('');
-      setStreamingPartners([{ name: 'Crunchyroll', url: '' }]);
+      setStreamingPartners([{ name: 'Crunchyroll', url: '', languages: ['Tamil'] }]);
       setType('TV Series');
       setGenres(['Action', 'Fantasy']);
       setAiringStatus('Ongoing');
@@ -927,41 +944,67 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                   </button>
                 </label>
                 
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {streamingPartners.map((partner, idx) => (
-                    <div key={idx} className="flex gap-2 items-start animate-in slide-in-from-left-2 duration-200">
-                      <div className="w-1/3">
-                        <select
-                          value={partner.name}
-                          onChange={(e) => updateStreamingPartner(idx, 'name', e.target.value)}
-                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-2.5 py-2 text-[11px] text-white focus:outline-none focus:border-primary-theme cursor-pointer"
-                        >
-                          <option value="Crunchyroll">Crunchyroll</option>
-                          <option value="Netflix">Netflix</option>
-                          <option value="JioCinema">JioCinema</option>
-                          <option value="YouTube (Muse India)">Muse India</option>
-                          <option value="YouTube (Ani-One)">Ani-One</option>
-                          <option value="Disney+ Hotstar">Hotstar</option>
-                          <option value="Prime Video">Prime</option>
-                        </select>
+                    <div key={idx} className="bg-[#141b29] border border-neutral-800 rounded-2xl p-3 animate-in slide-in-from-left-2 duration-200 space-y-2">
+                      <div className="flex gap-2 items-start">
+                        <div className="w-1/3">
+                          <select
+                            value={partner.name}
+                            onChange={(e) => updateStreamingPartner(idx, 'name', e.target.value)}
+                            className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-2.5 py-2 text-[11px] text-white focus:outline-none focus:border-primary-theme cursor-pointer"
+                          >
+                            <option value="Crunchyroll">Crunchyroll</option>
+                            <option value="Netflix">Netflix</option>
+                            <option value="JioCinema">JioCinema</option>
+                            <option value="YouTube (Muse India)">Muse India</option>
+                            <option value="YouTube (Ani-One)">Ani-One</option>
+                            <option value="Disney+ Hotstar">Hotstar</option>
+                            <option value="Prime Video">Prime</option>
+                          </select>
+                        </div>
+                        <div className="flex-1 relative">
+                          <input
+                            type="url"
+                            value={partner.url}
+                            onChange={(e) => updateStreamingPartner(idx, 'url', e.target.value)}
+                            placeholder="Link (e.g. https://...)"
+                            className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-[11px] text-white placeholder-neutral-600 focus:outline-none focus:border-primary-theme"
+                          />
+                        </div>
+                        {streamingPartners.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeStreamingPartner(idx)}
+                            className="p-2.5 rounded-xl bg-neutral-800/50 text-neutral-500 hover:text-purple-400 hover:bg-purple-950/20 transition-all border border-neutral-700/40 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
-                      <div className="flex-1 relative">
-                        <input
-                          type="url"
-                          value={partner.url}
-                          onChange={(e) => updateStreamingPartner(idx, 'url', e.target.value)}
-                          placeholder="Link (e.g. https://...)"
-                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-[11px] text-white placeholder-neutral-600 focus:outline-none focus:border-primary-theme"
-                        />
-                      </div>
+
+                      {/* Per-Platform Language Toggles - Only shown if 2 or more streaming partners */}
                       {streamingPartners.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeStreamingPartner(idx)}
-                          className="p-2.5 rounded-xl bg-neutral-800/50 text-neutral-500 hover:text-purple-400 hover:bg-purple-950/20 transition-all border border-neutral-700/40 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex flex-wrap items-center gap-1.5 px-1 pt-1 border-t border-neutral-800/50">
+                          <span className="text-[9px] font-bold text-neutral-500 uppercase mr-1">Dub Languages on this Platform:</span>
+                          {ALL_LANGS.map(lang => {
+                            const isSelected = partner.languages?.includes(lang);
+                            return (
+                              <button
+                                key={lang}
+                                type="button"
+                                onClick={() => toggleLanguageForPlatform(idx, lang)}
+                                className={`px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all border cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-orange-600/20 border-orange-500 text-orange-300' 
+                                    : 'bg-neutral-900 border-neutral-800 text-neutral-500 hover:border-neutral-700'
+                                }`}
+                              >
+                                {lang.substring(0, 2)}
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   ))}

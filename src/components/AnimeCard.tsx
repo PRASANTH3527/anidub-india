@@ -35,6 +35,7 @@ const DUB_BADGE_STYLES: Record<DubLanguage, { bg: string; text: string; label: s
   Hindi: { bg: 'bg-[#059669]', text: 'text-emerald-100', label: 'Hin' },
   Malayalam: { bg: 'bg-[#7c3aed]', text: 'text-purple-100', label: 'Mal' },
   Kannada: { bg: 'bg-indigo-600', text: 'text-indigo-100', label: 'Kan' },
+  Bengali: { bg: 'bg-pink-600', text: 'text-pink-100', label: 'Ben' },
 };
 
 export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({

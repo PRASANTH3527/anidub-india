@@ -32,6 +32,7 @@ const DUB_BADGE_STYLES: Record<DubLanguage, { bg: string; text: string; label: s
   Hindi: { bg: 'bg-[#059669]', text: 'text-emerald-100', label: 'Hindi' },
   Malayalam: { bg: 'bg-[#7c3aed]', text: 'text-purple-100', label: 'Malayalam' },
   Kannada: { bg: 'bg-indigo-600', text: 'text-indigo-100', label: 'Kannada' },
+  Bengali: { bg: 'bg-pink-600', text: 'text-pink-100', label: 'Bengali' },
 };
 
 export const SurpriseRouletteModal: React.FC<SurpriseRouletteModalProps> = ({

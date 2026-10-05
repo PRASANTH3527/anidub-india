@@ -48,6 +48,7 @@ const DUB_LANGUAGE_BADGES: Record<DubLanguage, { bg: string; text: string; borde
   Hindi: { bg: 'bg-emerald-950/70', text: 'text-emerald-300', border: 'border-emerald-700/60' },
   Malayalam: { bg: 'bg-purple-950/70', text: 'text-purple-300', border: 'border-purple-700/60' },
   Kannada: { bg: 'bg-indigo-950/70', text: 'text-indigo-300', border: 'border-indigo-700/60' },
+  Bengali: { bg: 'bg-pink-950/70', text: 'text-pink-300', border: 'border-pink-700/60' },
 };
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -776,16 +777,27 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   : 'hover:bg-primary-theme/20 border-neutral-700/80 hover:border-primary-theme/50 text-neutral-100';
 
                 return (
-                  <a
-                    key={p.name}
-                    href={p.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`flex items-center justify-between p-3 rounded-xl bg-[#182032] border transition-all group font-bold text-xs ${colorClass}`}
-                  >
-                    <span>Watch on {p.name}</span>
-                    <ExternalLink className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 transition-opacity" />
-                  </a>
+                  <div key={p.name} className="space-y-1">
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex items-center justify-between p-3 rounded-xl bg-[#182032] border transition-all group font-bold text-xs ${colorClass}`}
+                    >
+                      <span>Watch on {p.name}</span>
+                      <ExternalLink className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    </a>
+                    {anime.platforms && anime.platforms.length > 1 && p.languages && p.languages.length > 0 && (
+                      <div className="flex flex-wrap gap-1 px-1.5">
+                        <span className="text-[8px] font-bold text-neutral-500 uppercase">Available:</span>
+                        {p.languages.map(l => (
+                          <span key={l} className="text-[8px] font-bold text-accent-theme bg-accent-theme/10 px-1 rounded">
+                            {l}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>

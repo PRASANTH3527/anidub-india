@@ -47,13 +47,18 @@ export function updateSeoTags(config: SeoConfig) {
   );
 
   // 4. OpenGraph Tags
+  updateMetaTag('property', 'og:site_name', 'AniDub India');
+  updateMetaTag('property', 'og:type', 'video.other');
   updateMetaTag('property', 'og:title', config.title);
   updateMetaTag('property', 'og:description', config.description);
   if (config.ogImage) {
     updateMetaTag('property', 'og:image', config.ogImage);
+    updateMetaTag('property', 'og:image:secure_url', config.ogImage);
+    updateMetaTag('property', 'og:image:alt', config.title);
   }
 
   // 5. Twitter Card Tags
+  updateMetaTag('name', 'twitter:card', 'summary_large_image');
   updateMetaTag('name', 'twitter:title', config.title);
   updateMetaTag('name', 'twitter:description', config.description);
   if (config.ogImage) {
@@ -90,7 +95,7 @@ export function buildAnimeSeo(anime: Anime): SeoConfig {
     : 'Crunchyroll, Netflix';
   const title = `${anime?.title || 'Anime'} (${dubList} Dub) — Where to Watch & Episodes | AniDub India`;
   
-  const description = `Watch ${anime?.title || 'Anime'} dubbed in ${dubList}. Check official streaming platforms (${platforms}), Indian dub cast, release date (${anime?.originalReleaseDate || anime?.releaseYear || 'Recent'}), and dub quality ratings.`;
+  const description = `Available in ${dubList}. Watch ${anime?.title || 'Anime'} legally on ${platforms}. Episode guides, official Indian dub voice cast, and high quality streaming links on AniDub India.`;
 
   const keywords = [
     `${anime.title} Tamil dub`,

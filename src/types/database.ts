@@ -63,6 +63,7 @@ export interface AnimeRecord {
   platforms: {
     name: StreamingPlatform;
     url: string;
+    languages?: DubLanguage[];
   }[];
   airingDay?: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
   featured?: boolean;

@@ -38,6 +38,17 @@ export const ALL_TYPES = ['All Types', 'TV Series', 'Movie', 'Special', 'OVA', '
 
 export const ALL_STATUSES = ['All', 'Ongoing', 'Completed', 'Airing', 'Upcoming'];
 
+export const ALL_PLATFORMS = [
+  'All Platforms',
+  'Crunchyroll',
+  'Netflix',
+  'JioCinema',
+  'YouTube (Muse India)',
+  'YouTube (Ani-One)',
+  'Disney+ Hotstar',
+  'Prime Video',
+];
+
 export const ALL_LANGUAGES: { name: string; short: string; bg: string; text: string; border: string }[] = [
   { name: 'All', short: 'All', bg: 'bg-purple-600', text: 'text-white', border: 'border-purple-500' },
   { name: 'Tamil', short: 'Tam', bg: 'bg-amber-600', text: 'text-amber-100', border: 'border-amber-500' },
@@ -45,4 +56,5 @@ export const ALL_LANGUAGES: { name: string; short: string; bg: string; text: str
   { name: 'Hindi', short: 'Hin', bg: 'bg-emerald-600', text: 'text-emerald-100', border: 'border-emerald-500' },
   { name: 'Malayalam', short: 'Mal', bg: 'bg-violet-600', text: 'text-violet-100', border: 'border-violet-500' },
   { name: 'Kannada', short: 'Kan', bg: 'bg-indigo-600', text: 'text-indigo-100', border: 'border-indigo-500' },
+  { name: 'Bengali', short: 'Ben', bg: 'bg-pink-600', text: 'text-pink-100', border: 'border-pink-500' },
 ];

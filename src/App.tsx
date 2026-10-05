@@ -200,6 +200,7 @@ function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState<string>('All');
   const [selectedGenre, setSelectedGenre] = useState<string>('All Genres');
+  const [selectedPlatform, setSelectedPlatform] = useState<string>('All Platforms');
   const [selectedType, setSelectedType] = useState<string>('All Types');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [sortBy, setSortBy] = useState<string>('Most Upvoted');
@@ -544,6 +545,22 @@ function AppContent() {
         }
       }
 
+      // Platform filter
+      if (selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
+        const target = selectedPlatform.toLowerCase();
+        const hasPlatform = anime.platforms?.some((p) => {
+          const pName = typeof p === 'string' ? p : p?.name;
+          if (!pName) return false;
+          const lowerP = pName.toLowerCase();
+          if (target.includes('muse')) return lowerP.includes('muse');
+          if (target.includes('ani-one')) return lowerP.includes('ani-one');
+          return lowerP.includes(target) || target.includes(lowerP);
+        });
+        if (!hasPlatform) {
+          return false;
+        }
+      }
+
       // Type filter
       if (selectedType !== 'All Types') {
         if (anime.type !== selectedType) {
@@ -561,7 +578,7 @@ function AppContent() {
 
       return true;
     });
-  }, [approvedAnime, searchQuery, selectedLanguage, selectedGenre, selectedType, selectedStatus]);
+  }, [approvedAnime, searchQuery, selectedLanguage, selectedGenre, selectedPlatform, selectedType, selectedStatus]);
 
   // ==========================================================================
   // Sorting Engine: Most Upvoted, Newest, Oldest, Recently Added, Highest Rated, Title A-Z
@@ -654,6 +671,7 @@ function AppContent() {
     setSearchQuery('');
     setSelectedLanguage('All');
     setSelectedGenre('All Genres');
+    setSelectedPlatform('All Platforms');
     setSelectedType('All Types');
     setSelectedStatus('All');
     setSortBy('Most Upvoted');
@@ -813,6 +831,11 @@ function AppContent() {
                     selectedGenre={selectedGenre}
                     setSelectedGenre={(g) => {
                       setSelectedGenre(g);
+                      setVisibleCount(INITIAL_VISIBLE_COUNT);
+                    }}
+                    selectedPlatform={selectedPlatform}
+                    setSelectedPlatform={(p) => {
+                      setSelectedPlatform(p);
                       setVisibleCount(INITIAL_VISIBLE_COUNT);
                     }}
                     selectedType={selectedType}

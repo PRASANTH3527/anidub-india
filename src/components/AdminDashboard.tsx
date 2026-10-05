@@ -43,6 +43,9 @@ import {
   Upload,
   RotateCcw,
   RefreshCw,
+  Link2,
+  Layers,
+  Clock,
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import {
@@ -67,6 +70,7 @@ const LANGUAGE_COLORS: Record<string, string> = {
   Telugu: '#0ea5e9',
   Malayalam: '#8b5cf6',
   Kannada: '#3b82f6',
+  Bengali: '#db2777',
   English: '#6366f1',
   Japanese: '#a855f7',
 };
@@ -143,6 +147,124 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [trafficData, setTrafficData] = useState<TrafficPoint[]>([]);
   const [mostWatchlisted, setMostWatchlisted] = useState<WatchlistStat[]>([]);
   const [dubBreakdown, setDubBreakdown] = useState<DubLanguageMetric[]>([]);
+
+  // =========================================================================
+  // ZERO-QUOTA METRICS & INSIGHTS: Derived strictly from cached catalogTitles
+  // =========================================================================
+
+  // 1. Language Distribution (Pie / Donut Chart)
+  const languageDistribution = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let totalDubs = 0;
+    catalogTitles.forEach(a => {
+      (a.dubs || []).forEach(d => {
+        counts[d] = (counts[d] || 0) + 1;
+        totalDubs++;
+      });
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({
+        name,
+        count,
+        value: count,
+        percent: totalDubs > 0 ? Math.round((count / totalDubs) * 100) : 0,
+        color: LANGUAGE_COLORS[name] || '#8b5cf6',
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [catalogTitles]);
+
+  // 2. Genre Distribution (Bar Chart of top catalog genres)
+  const genreDistribution = useMemo(() => {
+    const genreCounts: Record<string, number> = {};
+    catalogTitles.forEach(a => {
+      (a.genres || []).forEach(g => {
+        const clean = typeof g === 'string' ? g.trim() : '';
+        if (clean && clean !== 'All Genres') {
+          genreCounts[clean] = (genreCounts[clean] || 0) + 1;
+        }
+      });
+    });
+    return Object.entries(genreCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 7);
+  }, [catalogTitles]);
+
+  // 3. Anime Status: Ongoing vs Completed ratio (Donut / Pie Chart)
+  const statusDistribution = useMemo(() => {
+    let ongoing = 0;
+    let completed = 0;
+    catalogTitles.forEach(a => {
+      const status = String(a.airingStatus || a.status || '').toLowerCase();
+      if (status.includes('ongoing') || status.includes('airing') || status.includes('simulcast')) {
+        ongoing++;
+      } else {
+        completed++;
+      }
+    });
+    const total = ongoing + completed;
+    return [
+      {
+        name: 'Completed',
+        count: completed,
+        value: completed,
+        percent: total > 0 ? Math.round((completed / total) * 100) : 0,
+        color: '#10b981', // Emerald
+      },
+      {
+        name: 'Ongoing',
+        count: ongoing,
+        value: ongoing,
+        percent: total > 0 ? Math.round((ongoing / total) * 100) : 0,
+        color: '#f59e0b', // Amber
+      },
+    ];
+  }, [catalogTitles]);
+
+  // 4. Platform Links Count & Breakdown
+  const platformStats = useMemo(() => {
+    let totalLinks = 0;
+    const platformCounts: Record<string, number> = {};
+    catalogTitles.forEach(a => {
+      (a.platforms || []).forEach(p => {
+        totalLinks++;
+        const pName = typeof p === 'string' ? p : (p?.name || 'Other');
+        let normName = pName;
+        const lower = pName.toLowerCase();
+        if (lower.includes('crunchyroll')) normName = 'Crunchyroll';
+        else if (lower.includes('netflix')) normName = 'Netflix';
+        else if (lower.includes('jio')) normName = 'JioCinema';
+        else if (lower.includes('muse')) normName = 'YouTube (Muse)';
+        else if (lower.includes('ani-one')) normName = 'YouTube (Ani-One)';
+        else if (lower.includes('youtube')) normName = 'YouTube';
+        else if (lower.includes('prime')) normName = 'Prime Video';
+        else if (lower.includes('hotstar') || lower.includes('disney')) normName = 'Hotstar';
+
+        platformCounts[normName] = (platformCounts[normName] || 0) + 1;
+      });
+    });
+
+    const breakdown = Object.entries(platformCounts)
+      .map(([name, count]) => {
+        let color = '#8b5cf6';
+        if (name === 'Crunchyroll') color = '#f97316';
+        else if (name === 'Netflix') color = '#ef4444';
+        else if (name === 'JioCinema') color = '#06b6d4';
+        else if (name.includes('YouTube')) color = '#e11d48';
+        else if (name.includes('Hotstar')) color = '#3b82f6';
+        else if (name.includes('Prime')) color = '#14b8a6';
+
+        return {
+          name,
+          count,
+          percent: totalLinks > 0 ? Math.round((count / totalLinks) * 100) : 0,
+          color,
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+
+    return { totalLinks, breakdown };
+  }, [catalogTitles]);
 
   // UI State
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -467,70 +589,222 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* Stats Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: 'Active Users', value: activeUsers, icon: Users, color: 'text-purple-400' },
-                { label: 'Total Saves', value: totalWatchlists, icon: Bookmark, color: 'text-emerald-400' },
-                { label: 'Catalog Size', value: catalogTitles.length, icon: Tv, color: 'text-blue-400' },
-                { label: 'Pending Review', value: pendingSubmissions, icon: Inbox, color: 'text-amber-400' },
+                { label: 'Catalog Size', value: catalogTitles.length, unit: 'Titles', icon: Tv, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+                { label: 'Platform Links', value: platformStats.totalLinks, unit: 'Active Links', icon: Link2, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+                { label: 'Total Saves', value: totalWatchlists, unit: 'Upvotes', icon: Bookmark, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                { label: 'Pending Review', value: pendingSubmissions, unit: 'Awaiting', icon: Inbox, color: 'text-amber-400', bg: 'bg-amber-500/10' },
               ].map(stat => (
                 <div key={stat.label} className="p-5 rounded-3xl bg-[#131926] border border-neutral-800 shadow-xl space-y-2">
                   <div className="flex items-center justify-between text-neutral-500">
-                    <stat.icon className="w-5 h-5" />
-                    <ArrowUpRight className="w-4 h-4 opacity-50" />
+                    <div className={`p-2 rounded-xl ${stat.bg}`}>
+                      <stat.icon className={`w-5 h-5 ${stat.color}`} />
+                    </div>
+                    <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">{stat.unit}</span>
                   </div>
-                  <div className="text-2xl font-black">{stat.value.toLocaleString()}</div>
+                  <div className="text-2xl font-black text-white">{stat.value.toLocaleString()}</div>
                   <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">{stat.label}</p>
                 </div>
               ))}
             </div>
 
-            {/* Charts Grid */}
+            {/* Visual Charts Grid: Recharts Pie & Bar charts (Zero-Quota, Cached) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Regional Dub Pie Chart */}
-              <div className="p-6 rounded-3xl bg-[#131926] border border-neutral-800 shadow-xl space-y-6">
+              {/* 1. Regional Dub Language Distribution (Pie Chart) */}
+              <div className="p-6 rounded-3xl bg-[#131926] border border-neutral-800 shadow-xl space-y-5">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-black flex items-center gap-2">
+                  <h3 className="font-black text-white text-sm sm:text-base flex items-center gap-2">
                     <Globe className="w-4 h-4 text-purple-400" />
-                    <span>Regional Dub Distribution</span>
+                    <span>Language Distribution</span>
                   </h3>
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300">
+                    {languageDistribution.length} Languages
+                  </span>
                 </div>
-                <div className="flex flex-col sm:flex-row items-center gap-8">
+                <div className="flex flex-col sm:flex-row items-center gap-6">
                   <div className="h-44 w-44 shrink-0">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={dubBreakdown} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={4} dataKey="value">
-                          {dubBreakdown.map((e, i) => <Cell key={i} fill={e.color} stroke="none" />)}
+                        <Pie
+                          data={languageDistribution}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={45}
+                          outerRadius={70}
+                          paddingAngle={3}
+                          dataKey="count"
+                        >
+                          {languageDistribution.map((entry, index) => (
+                            <Cell key={`lang-cell-${index}`} fill={entry.color} stroke="none" />
+                          ))}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#0b0f17',
+                            border: '1px solid #27272a',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            color: '#fff',
+                          }}
+                          formatter={(value: any, name: any) => [`${value} Anime`, name]}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-3 flex-1 text-xs">
-                    {dubBreakdown.map(d => (
-                      <div key={d.name} className="flex items-center gap-2">
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
-                        <span className="text-neutral-400 font-bold">{d.name}</span>
-                        <span className="text-white font-black">{d.value}%</span>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 flex-1 text-xs w-full">
+                    {languageDistribution.slice(0, 6).map((item) => (
+                      <div key={item.name} className="flex items-center justify-between bg-black/20 px-3 py-2 rounded-xl border border-neutral-800/80">
+                        <div className="flex items-center gap-2 truncate">
+                          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                          <span className="text-neutral-300 font-bold truncate text-[11px]">{item.name}</span>
+                        </div>
+                        <span className="text-white font-black text-[11px] shrink-0">
+                          {item.count} <span className="text-neutral-500 font-normal text-[10px]">({item.percent}%)</span>
+                        </span>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
 
-              {/* Popularity Bar Chart */}
-              <div className="p-6 rounded-3xl bg-[#131926] border border-neutral-800 shadow-xl space-y-6">
-                <h3 className="font-black flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-emerald-400" />
-                  <span>Top Ranking Titles</span>
-                </h3>
+              {/* 2. Top Genres Distribution (Bar Chart) */}
+              <div className="p-6 rounded-3xl bg-[#131926] border border-neutral-800 shadow-xl space-y-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-black text-white text-sm sm:text-base flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-emerald-400" />
+                    <span>Genre Distribution</span>
+                  </h3>
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+                    Top {genreDistribution.length} Genres
+                  </span>
+                </div>
                 <div className="h-48 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={mostWatchlisted} margin={{ left: -30 }}>
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 10 }} tickFormatter={v => v.length > 8 ? v.slice(0, 7) + '...' : v} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 10 }} />
-                      <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0b0f17', border: '1px solid #27272a', borderRadius: '12px', fontSize: '10px' }} />
-                      <Bar dataKey="count" fill="#8b5cf6" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {genreDistribution.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={genreDistribution} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                        <XAxis
+                          dataKey="name"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: '#a1a1aa', fontSize: 10 }}
+                          tickFormatter={(v) => (v.length > 9 ? v.slice(0, 8) + '..' : v)}
+                        />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 10 }} />
+                        <Tooltip
+                          cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                          contentStyle={{
+                            backgroundColor: '#0b0f17',
+                            border: '1px solid #27272a',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            color: '#fff',
+                          }}
+                          formatter={(value: any) => [`${value} Anime`, 'Count']}
+                        />
+                        <Bar dataKey="count" fill="#10b981" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-neutral-500">
+                      No genre metadata available in catalog
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 3. Anime Status: Ongoing vs Completed Ratio (Donut / Pie Chart) */}
+              <div className="p-6 rounded-3xl bg-[#131926] border border-neutral-800 shadow-xl space-y-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-black text-white text-sm sm:text-base flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                    <span>Anime Airing Status Ratio</span>
+                  </h3>
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold">
+                    <span className="text-emerald-400">{statusDistribution[0]?.percent || 0}% Completed</span>
+                    <span className="text-neutral-600">•</span>
+                    <span className="text-amber-400">{statusDistribution[1]?.percent || 0}% Ongoing</span>
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center gap-6">
+                  <div className="h-44 w-44 shrink-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={statusDistribution}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={45}
+                          outerRadius={70}
+                          paddingAngle={4}
+                          dataKey="count"
+                        >
+                          {statusDistribution.map((entry, index) => (
+                            <Cell key={`status-cell-${index}`} fill={entry.color} stroke="none" />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#0b0f17',
+                            border: '1px solid #27272a',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            color: '#fff',
+                          }}
+                          formatter={(value: any, name: any) => [`${value} Anime`, name]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="space-y-3 flex-1 w-full text-xs">
+                    {statusDistribution.map((s) => (
+                      <div key={s.name} className="p-3.5 rounded-2xl bg-black/20 border border-neutral-800/80 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }} />
+                            <span className="text-neutral-200 font-bold">{s.name}</span>
+                          </div>
+                          <span className="text-white font-black">{s.count} titles <span className="text-neutral-400 font-normal">({s.percent}%)</span></span>
+                        </div>
+                        <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${s.percent}%`, backgroundColor: s.color }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Streaming Platform Links Breakdown */}
+              <div className="p-6 rounded-3xl bg-[#131926] border border-neutral-800 shadow-xl space-y-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-black text-white text-sm sm:text-base flex items-center gap-2">
+                    <Link2 className="w-4 h-4 text-cyan-400" />
+                    <span>Total Platform Links</span>
+                  </h3>
+                  <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300">
+                    {platformStats.totalLinks} Total Links
+                  </span>
+                </div>
+                <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+                  {platformStats.breakdown.length > 0 ? (
+                    platformStats.breakdown.map((p) => (
+                      <div key={p.name} className="p-3 rounded-2xl bg-black/20 border border-neutral-800/80 flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                          <span className="text-xs font-bold text-neutral-200">{p.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 sm:w-32 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${p.percent}%`, backgroundColor: p.color }} />
+                          </div>
+                          <span className="text-xs font-black text-white w-8 text-right">{p.count}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="h-32 flex items-center justify-center text-xs text-neutral-500">
+                      No streaming platform links cataloged yet
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
