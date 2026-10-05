@@ -18,6 +18,11 @@ const DB_WATCHLIST_KEY = 'anidub_db_watchlists';
 const QUOTA_EXCEEDED_KEY = 'anidub_firestore_quota_exceeded_timestamp';
 const LAST_SYNC_KEY = 'anidub_db_last_sync_timestamp';
 
+// --- TELEGRAM NOTIFICATION CONFIG ---
+// Replace these with your actual bot credentials
+const TELEGRAM_BOT_TOKEN = '8648317719:AAHZ7wxQefZT5QdKCpc61epWJ4mGAgJvgdc'; 
+const TELEGRAM_CHAT_ID = '8769442354'; 
+
 class DatabaseService {
   private listeners: (() => void)[] = [];
   private isQuotaLimited = false;
@@ -220,7 +225,7 @@ class DatabaseService {
     this.listeners.forEach((l) => l());
   }
 
-  private normalizeRecord(data: any): AnimeRecord {
+  public normalizeRecord(data: any): AnimeRecord {
     if (!data) return data;
     
     // Extract languages/dubs safely (Sync with AdminDashboard logic)
@@ -428,6 +433,36 @@ class DatabaseService {
     };
 
     this.saveAnimeRecords(records);
+
+    // --- TELEGRAM NOTIFICATION (Auto-trigger on Approval) ---
+    const anime = records[targetIndex];
+    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID && !TELEGRAM_BOT_TOKEN.includes('YOUR_BOT')) {
+      const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://anidub.in';
+      const watchUrl = `${siteUrl}/anime/${anime.id}`;
+      
+      const caption = [
+        `🔔 <b>New Anime Approved!</b>`,
+        ``,
+        `🎬 <b>${anime.title}</b>`,
+        `🎙️ <b>Languages:</b> ${anime.dubs.join(' • ')}`,
+        `🏷️ <b>Genres:</b> ${anime.genres.join(', ')}`,
+        `📅 <b>Year:</b> ${anime.releaseYear}`,
+        ``,
+        `🚀 <b>Watch now on AniDub India:</b>`,
+        `<a href="${watchUrl}">${watchUrl}</a>`
+      ].join('\n');
+
+      const endpoint = anime.poster ? 'sendPhoto' : 'sendMessage';
+      const body = anime.poster 
+        ? { chat_id: TELEGRAM_CHAT_ID, photo: anime.poster, caption, parse_mode: 'HTML' }
+        : { chat_id: TELEGRAM_CHAT_ID, text: caption, parse_mode: 'HTML' };
+
+      fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).catch(err => console.warn('[Telegram Notify Error]', err));
+    }
 
     // Sync approval to Firestore
     try {
@@ -663,58 +698,75 @@ class DatabaseService {
     URL.revokeObjectURL(url);
   }
 
-  public async bulkImportAnime(jsonData: any[]): Promise<{ success: number; failed: number }> {
-    if (!authService.isAdmin() || !Array.isArray(jsonData)) return { success: 0, failed: 0 };
+  public async bulkImportAnime(jsonData: any[]): Promise<{ added: number; updated: number; failed: number }> {
+    if (!authService.isAdmin() || !Array.isArray(jsonData)) return { added: 0, updated: 0, failed: 0 };
     
-    let successCount = 0;
+    let addedCount = 0;
+    let updatedCount = 0;
     let failedCount = 0;
+    
     const currentRecords = this.getAllAnimeRecords();
-    const newRecords: AnimeRecord[] = [];
     const importPromises: Promise<void>[] = [];
 
     for (const item of jsonData) {
       try {
-        const id = item.id || ('sub-' + Math.random().toString(36).substring(2, 9));
+        const rawTitle = (item.title || item.name || '').trim();
+        if (!rawTitle) {
+          failedCount++;
+          continue;
+        }
+
+        // Smart Upsert: Check if an anime with the same title already exists (case-insensitive)
+        const existing = currentRecords.find(r => 
+          r.title.toLowerCase().trim() === rawTitle.toLowerCase() ||
+          (r.romajiTitle && r.romajiTitle.toLowerCase().trim() === rawTitle.toLowerCase())
+        );
+
+        let finalId = existing ? existing.id : (item.id || ('sub-' + Math.random().toString(36).substring(2, 9)));
         
-        // Force moderation fields regardless of JSON content
-        const moderationOverrides = {
-          status: 'pending',
-          submissionStatus: 'pending',
-          isDeleted: false,
+        const moderationOverrides: Partial<AnimeRecord> = {
           updatedAt: new Date().toISOString(),
-          submittedAt: item.submittedAt || new Date().toISOString()
+          isDeleted: false,
         };
 
+        // Strict Moderation: Every NEW anime must automatically be assigned a 'pending' state
+        if (!existing) {
+          moderationOverrides.status = 'pending';
+          moderationOverrides.submissionStatus = 'pending';
+          addedCount++;
+        } else {
+          updatedCount++;
+        }
+
+        // Safely merge metadata: Existing data + JSON data + Overrides
         const normalized = this.normalizeRecord({ 
+          ...(existing || {}), 
           ...item, 
-          id,
+          id: finalId,
           ...moderationOverrides
         });
         
         if (normalized && normalized.title) {
-          newRecords.push(normalized);
-          // Directly upload to multiple collections for redundancy as required
+          // Direct upload to multiple collections for redundancy
           const collections = ['animes', 'anime', 'submissions'];
           collections.forEach(coll => {
-            importPromises.push(setDoc(doc(db, coll, id), normalized, { merge: true }));
+            importPromises.push(setDoc(doc(db, coll, finalId), normalized, { merge: true }));
           });
           
           // Log activity for each imported item
-          importPromises.push(setDoc(doc(db, 'activities', `act-import-${id}`), {
-            user: 'Admin (Bulk Import)',
-            action: 'submitted',
+          importPromises.push(setDoc(doc(db, 'activities', `act-import-${finalId}-${Date.now()}`), {
+            user: 'Admin (Smart Import)',
+            action: existing ? 'updated' : 'submitted',
             animeTitle: normalized.title,
             timestamp: new Date(),
             language: normalized.dubs?.[0] || 'Tamil',
-            status: 'pending'
+            status: normalized.status
           }));
-          
-          successCount++;
         } else {
           failedCount++;
         }
       } catch (err) {
-        console.error('[Bulk Import Item Error]', err);
+        console.error('[Smart Import Item Error]', err);
         failedCount++;
       }
     }
@@ -724,15 +776,10 @@ class DatabaseService {
       await Promise.allSettled(importPromises);
     }
 
-    if (newRecords.length > 0) {
-      // Merge with existing, avoiding duplicates by ID
-      const recordMap = new Map<string, AnimeRecord>();
-      currentRecords.forEach(r => recordMap.set(r.id, r));
-      newRecords.forEach(r => recordMap.set(r.id, r));
-      this.saveAnimeRecords(Array.from(recordMap.values()));
-    }
+    // Force a local sync to ensure the dashboard reflects changes immediately
+    await this.syncWithServer();
 
-    return { success: successCount, failed: failedCount };
+    return { added: addedCount, updated: updatedCount, failed: failedCount };
   }
 
   public async upvoteAnime(id: string): Promise<number> {
