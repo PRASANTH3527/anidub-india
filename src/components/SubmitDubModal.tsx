@@ -176,7 +176,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setType(activeAnime.type || 'TV Series');
       setStudio(activeAnime.studio || '');
       setGenres(activeAnime.genres || ['Action']);
-      setAiringStatus(activeAnime.status === 'Ongoing' ? 'Ongoing' : 'Completed');
+      setAiringStatus(activeAnime.airingStatus || (activeAnime.status === 'Ongoing' ? 'Ongoing' : 'Completed'));
       if (activeAnime.releaseDay) setReleaseDay(activeAnime.releaseDay as ReleaseDay);
       
       if (activeAnime.seasonDetails && activeAnime.seasonDetails.length > 0) {
