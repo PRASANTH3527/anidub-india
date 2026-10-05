@@ -679,8 +679,8 @@ class DatabaseService {
           id,
           submittedAt: item.submittedAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          status: item.status || 'approved',
-          submissionStatus: item.submissionStatus || 'approved'
+          status: 'pending',
+          submissionStatus: 'pending'
         });
         
         if (normalized && normalized.title) {
@@ -690,6 +690,17 @@ class DatabaseService {
           collections.forEach(coll => {
             importPromises.push(setDoc(doc(db, coll, id), normalized, { merge: true }));
           });
+          
+          // Log activity for each imported item
+          importPromises.push(setDoc(doc(db, 'activities', `act-import-${id}`), {
+            user: 'Admin (Bulk Import)',
+            action: 'submitted',
+            animeTitle: normalized.title,
+            timestamp: new Date(),
+            language: normalized.dubs?.[0] || 'Tamil',
+            status: 'pending'
+          }));
+          
           successCount++;
         } else {
           failedCount++;

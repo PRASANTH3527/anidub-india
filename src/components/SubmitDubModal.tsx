@@ -779,19 +779,32 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                     </span>
                   )}
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    value={title}
-                    onChange={(e) => {
-                      setTitle(e.target.value);
-                      setAutoFilled(false);
-                    }}
-                    placeholder="e.g. Solo Leveling, Demon Slayer, Jujutsu Kaisen..."
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-white placeholder-neutral-500 outline-none transition-all"
-                  />
-                  <Search className="w-4 h-4 text-neutral-500 absolute right-3 top-3 pointer-events-none" />
+                <div className="relative flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      required
+                      value={title}
+                      onChange={(e) => {
+                        setTitle(e.target.value);
+                        setAutoFilled(false);
+                      }}
+                      placeholder="e.g. Solo Leveling, Demon Slayer, Jujutsu Kaisen..."
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-white placeholder-neutral-500 outline-none transition-all"
+                    />
+                    <Search className="w-4 h-4 text-neutral-500 absolute right-3 top-3 pointer-events-none" />
+                  </div>
+                  {isEditMode && (
+                    <button
+                      type="button"
+                      onClick={() => setAutoFilled(false)}
+                      className="px-3 rounded-xl bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-white hover:bg-neutral-700 transition-all font-bold text-[10px] uppercase flex items-center gap-1.5 shrink-0"
+                      title="Trigger MAL Search"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-accent-theme" />
+                      <span>Search MAL</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Duplicate Warning Alert */}
