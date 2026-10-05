@@ -43,13 +43,9 @@ export async function searchJikanAnime(query: string): Promise<JikanAnimeResult[
   lastRequestTime = Date.now();
 
   try {
-    const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(cleanQuery)}&limit=6&sfw=true`;
-    const response = await fetch(url);
+    const response = await fetch(`/api/jikan?q=${encodeURIComponent(cleanQuery)}&limit=6`);
 
     if (!response.ok) {
-      if (response.status === 429) {
-        console.warn('Jikan API rate limit reached, will back off');
-      }
       return getFallbackSearchResults(cleanQuery);
     }
 

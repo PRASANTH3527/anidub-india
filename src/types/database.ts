@@ -1,6 +1,6 @@
 import { DubLanguage, StreamingPlatform, AnimeType, AnimeStatus, CharacterVoiceActor } from './anime';
 
-export type { DubLanguage };
+export type { DubLanguage, StreamingPlatform };
 
 export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
 
@@ -13,6 +13,7 @@ export interface DubReview {
   language: DubLanguage;
   rating: number; // 1 to 5
   comment: string;
+  isSpoiler?: boolean;
   createdAt: string;
   likes: number;
 }
@@ -72,7 +73,9 @@ export interface AnimeRecord {
     userEmail?: string;
   };
   submittedAt: string;
+  createdAt?: string;
   updatedAt?: string;
+  isDeleted?: boolean;
   reviewedBy?: string;
   reviewedAt?: string;
   likes?: number;

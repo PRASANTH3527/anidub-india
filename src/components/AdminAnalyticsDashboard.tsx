@@ -81,11 +81,21 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
   const trendingAnimeData = useMemo(() => {
     return [...allAnime]
       .sort((a, b) => Number(b.likes || b.upvotes || 0) - Number(a.likes || a.upvotes || 0))
-      .slice(0, 6)
+      .slice(0, 5)
       .map(anime => ({
-        name: anime.title.length > 10 ? anime.title.substring(0, 8) + '..' : anime.title,
+        name: anime.title.length > 12 ? anime.title.substring(0, 10) + '..' : anime.title,
         votes: Number(anime.likes || anime.upvotes || 0)
       }));
+  }, [allAnime]);
+
+  const languageDistributionData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allAnime.forEach(a => {
+      (a.dubs || []).forEach(d => {
+        counts[d] = (counts[d] || 0) + 1;
+      });
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [allAnime]);
 
   const dailyTrafficData = useMemo(() => {
@@ -311,7 +321,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
             </div>
           </motion.div>
 
-          {/* Top Categories/Watchlist Pie */}
+          {/* Language Distribution Pie Chart */}
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -319,15 +329,15 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
             className="p-6 rounded-3xl bg-[#131926]/40 border border-white/5 backdrop-blur-xl shadow-2xl"
           >
             <div className="mb-6">
-              <h3 className="text-lg font-black tracking-tight">Watchlist Distribution</h3>
-              <p className="text-xs text-neutral-500">Most saved titles this week</p>
+              <h3 className="text-lg font-black tracking-tight">Dub Language Reach</h3>
+              <p className="text-xs text-neutral-500">Distribution of regional audio tracks</p>
             </div>
 
             <div className="h-[250px] w-full relative">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={watchlistData}
+                    data={languageDistributionData}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
@@ -335,7 +345,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
                     paddingAngle={8}
                     dataKey="value"
                   >
-                    {watchlistData.map((entry, index) => (
+                    {languageDistributionData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -346,14 +356,14 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
               </ResponsiveContainer>
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="text-center">
-                  <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Total</p>
-                  <p className="text-2xl font-black">1.2K</p>
+                  <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Langs</p>
+                  <p className="text-2xl font-black">{languageDistributionData.length}</p>
                 </div>
               </div>
             </div>
 
-            <div className="mt-4 space-y-2">
-              {watchlistData.map((entry, idx) => (
+            <div className="mt-4 space-y-2 max-h-[120px] overflow-y-auto custom-scrollbar">
+              {languageDistributionData.map((entry, idx) => (
                 <div key={entry.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />

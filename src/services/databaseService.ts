@@ -1,4 +1,4 @@
-import { AnimeRecord, DubReview, WatchlistEntry, SubmissionStatus } from '../types/database';
+import { AnimeRecord, DubReview, WatchlistEntry, SubmissionStatus, StreamingPlatform } from '../types/database';
 import { Anime, DubLanguage } from '../types/anime';
 import { db } from '../lib/firebase';
 import { authService } from './authService';
@@ -82,10 +82,12 @@ class DatabaseService {
           }
         }, (err) => {
           if (this.isQuotaExceededError(err)) {
-            this.setQuotaExceeded();
+            const isQuota = !String(err?.code || '').toLowerCase().includes('unavailable');
+            this.setQuotaExceeded(isQuota);
             this.stopRealtimeSync();
+          } else {
+            console.warn(`[AniDub DB] Real-time sync error for ${collName}:`, err);
           }
-          console.warn(`[AniDub DB] Real-time sync error for ${collName}:`, err);
         });
         this.listeners.push(unsub);
       });
@@ -132,17 +134,45 @@ class DatabaseService {
     return hoursSinceSync > 12;
   }
 
-  private setQuotaExceeded() {
+  private async setQuotaExceeded(isQuota = true) {
+    if (this.isQuotaLimited) return; // Avoid duplicate alerts
+    
     this.isQuotaLimited = true;
     if (typeof window !== 'undefined') {
       localStorage.setItem(QUOTA_EXCEEDED_KEY, Date.now().toString());
     }
     this.notify();
+
+    // Silent background Telegram Alert to Admin
+    try {
+      const message = isQuota 
+        ? '⚠️ Admin Alert: Firestore Quota Reached for today! App is now using cached data.'
+        : '⚠️ Admin Alert: Firestore backend is currently UNAVAILABLE (Network/Service). App is using cached data.';
+      
+      fetch('/api/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          title: isQuota ? 'Firestore Quota Reached' : 'Firestore Unavailable',
+        }),
+      }).catch(() => {});
+    } catch (e) {
+      // Complete silence
+    }
   }
 
   private isQuotaExceededError(err: any): boolean {
     const msg = String(err?.message || err || '').toLowerCase();
-    return msg.includes('quota limit exceeded') || msg.includes('quota exceeded');
+    const code = String(err?.code || '').toLowerCase();
+    return (
+      msg.includes('quota limit exceeded') || 
+      msg.includes('quota exceeded') || 
+      code === 'resource-exhausted' ||
+      code.includes('quota') ||
+      code === 'unavailable' ||
+      msg.includes('could not reach cloud firestore backend')
+    );
   }
 
   private initDatabase() {
@@ -214,7 +244,16 @@ class DatabaseService {
       .filter(Boolean);
 
     const likes = Number(data?.likes || data?.upvotes || data?.votes || 0);
-    const platforms = Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'];
+    const rawPlatforms = Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'];
+    const platforms: { name: StreamingPlatform; url: string }[] = rawPlatforms.map((p: any) => {
+      if (typeof p === 'string') {
+        return { name: p as StreamingPlatform, url: 'https://crunchyroll.com' };
+      }
+      return {
+        name: (p.name || p.platform || 'Crunchyroll') as StreamingPlatform,
+        url: p.url || 'https://crunchyroll.com',
+      };
+    });
 
     // Robust title extraction
     const title = (
@@ -248,18 +287,22 @@ class DatabaseService {
       dubDetails: Array.isArray(data?.dubDetails)
         ? data.dubDetails.map((d: any) => ({
             ...d,
-            platform: Array.isArray(d?.platform) ? d.platform : (d?.platform ? [d.platform] : platforms),
+            platform: Array.isArray(d?.platform) 
+              ? d.platform 
+              : (d?.platform ? [d.platform] : platforms.map(p => p.name)),
           }))
         : dubs.map((lang: string) => ({
             language: lang as any,
             available: true,
-            platform: platforms,
+            platform: platforms.map(p => p.name),
             notes: `Available in ${lang}`,
           })),
       platforms,
       characters: Array.isArray(data?.characters) ? data.characters : [],
       likes,
       upvotes: likes,
+      createdAt: data?.createdAt || data?.submittedAt || new Date().toISOString(),
+      updatedAt: data?.updatedAt || data?.submittedAt || new Date().toISOString(),
     };
 
     return normalized;
@@ -299,18 +342,23 @@ class DatabaseService {
   // --- 1. Main public query: ONLY FETCH APPROVED ANIME ---
   public getApprovedAnime(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => a.status === 'approved' || (a as any).submissionStatus === 'approved');
+    return all.filter((a) => (a.status === 'approved' || (a as any).submissionStatus === 'approved') && !a.isDeleted);
   }
 
-  // --- 2. Admin queries: PENDING & REJECTED ---
+  // --- 2. Admin queries: PENDING, REJECTED & DELETED ---
   public getPendingSubmissions(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => a.status === 'pending' || (a as any).submissionStatus === 'pending');
+    return all.filter((a) => (a.status === 'pending' || (a as any).submissionStatus === 'pending') && !a.isDeleted);
   }
 
   public getRejectedSubmissions(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => a.status === 'rejected' || (a as any).submissionStatus === 'rejected');
+    return all.filter((a) => (a.status === 'rejected' || (a as any).submissionStatus === 'rejected') && !a.isDeleted);
+  }
+
+  public getDeletedSubmissions(): AnimeRecord[] {
+    const all = this.getAllAnimeRecords();
+    return all.filter((a) => a.isDeleted === true);
   }
 
   public getAnimeById(id: string): AnimeRecord | null {
@@ -494,9 +542,66 @@ class DatabaseService {
   }
 
   public deleteSubmission(id: string): boolean {
-    // CRITICAL SECURITY CHECK: Only authenticated Admins can delete anime records
+    // Soft Delete Implementation
     if (!authService.isAdmin()) {
       console.error('[Security Violation] Unauthorized deleteSubmission write blocked for id:', id);
+      return false;
+    }
+
+    const records = this.getAllAnimeRecords();
+    const targetIndex = records.findIndex((r) => r.id === id);
+    if (targetIndex === -1) return false;
+
+    records[targetIndex] = {
+      ...records[targetIndex],
+      isDeleted: true,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.saveAnimeRecords(records);
+
+    // Sync soft delete to Firestore
+    try {
+      const update = { isDeleted: true, updatedAt: new Date().toISOString() };
+      setDoc(doc(db, 'animes', id), update, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'submissions', id), update, { merge: true }).catch(() => {});
+    } catch (e) {
+      console.warn('Firestore soft delete sync error:', e);
+    }
+
+    this.notify();
+    return true;
+  }
+
+  public restoreSubmission(id: string): boolean {
+    if (!authService.isAdmin()) return false;
+
+    const records = this.getAllAnimeRecords();
+    const targetIndex = records.findIndex((r) => r.id === id);
+    if (targetIndex === -1) return false;
+
+    records[targetIndex] = {
+      ...records[targetIndex],
+      isDeleted: false,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.saveAnimeRecords(records);
+
+    try {
+      const update = { isDeleted: false, updatedAt: new Date().toISOString() };
+      setDoc(doc(db, 'animes', id), update, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'submissions', id), update, { merge: true }).catch(() => {});
+    } catch {}
+
+    this.notify();
+    return true;
+  }
+
+  public permanentlyDeleteSubmission(id: string): boolean {
+    // CRITICAL SECURITY CHECK: Only authenticated Admins can delete anime records
+    if (!authService.isAdmin()) {
+      console.error('[Security Violation] Unauthorized permanent delete write blocked for id:', id);
       return false;
     }
 
@@ -510,7 +615,7 @@ class DatabaseService {
       deleteDoc(doc(db, 'anime', id)).catch(() => {});
       deleteDoc(doc(db, 'submissions', id)).catch(() => {});
     } catch (e) {
-      console.warn('Firestore delete sync error:', e);
+      console.warn('Firestore permanent delete sync error:', e);
     }
 
     // Global Auto-Cleanup: Remove deleted anime from the current browser's local watchlists
@@ -522,7 +627,6 @@ class DatabaseService {
         localStorage.setItem(DB_WATCHLIST_KEY, JSON.stringify(filteredWatchlists));
       }
 
-      // Also clean up the public local_watchlist key used for guest users
       const publicWatchlist = localStorage.getItem('anidub_local_watchlist');
       if (publicWatchlist) {
         const ids: string[] = JSON.parse(publicWatchlist);
@@ -533,7 +637,7 @@ class DatabaseService {
       console.warn('Watchlist cleanup error after deletion:', e);
     }
 
-    // Notify backend via PUT / DELETE
+    // Notify backend
     fetch('/api/submissions', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -542,6 +646,62 @@ class DatabaseService {
 
     this.notify();
     return true;
+  }
+
+  // --- 5. Data Management: Backup & Bulk Import ---
+  public exportBackup() {
+    const data = this.getAllAnimeRecords();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `anidub_backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  public async bulkImportAnime(jsonData: any[]): Promise<{ success: number; failed: number }> {
+    if (!authService.isAdmin() || !Array.isArray(jsonData)) return { success: 0, failed: 0 };
+    
+    let successCount = 0;
+    let failedCount = 0;
+    const currentRecords = this.getAllAnimeRecords();
+    const newRecords: AnimeRecord[] = [];
+
+    for (const item of jsonData) {
+      try {
+        const id = item.id || ('sub-' + Math.random().toString(36).substring(2, 9));
+        const normalized = this.normalizeRecord({ 
+          ...item, 
+          id,
+          submittedAt: item.submittedAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+        
+        if (normalized && normalized.title) {
+          newRecords.push(normalized);
+          // Async sync to Firestore
+          setDoc(doc(db, 'animes', id), normalized, { merge: true }).catch(() => {});
+          successCount++;
+        } else {
+          failedCount++;
+        }
+      } catch {
+        failedCount++;
+      }
+    }
+
+    if (newRecords.length > 0) {
+      // Merge with existing, avoiding duplicates by ID
+      const recordMap = new Map<string, AnimeRecord>();
+      currentRecords.forEach(r => recordMap.set(r.id, r));
+      newRecords.forEach(r => recordMap.set(r.id, r));
+      this.saveAnimeRecords(Array.from(recordMap.values()));
+    }
+
+    return { success: successCount, failed: failedCount };
   }
 
   public async upvoteAnime(id: string): Promise<number> {
@@ -619,7 +779,8 @@ class DatabaseService {
           });
         } catch (err) {
           if (this.isQuotaExceededError(err)) {
-            this.setQuotaExceeded();
+            const isQuota = !String(err?.code || '').toLowerCase().includes('unavailable');
+            this.setQuotaExceeded(isQuota);
             return; 
           }
         }
@@ -660,6 +821,13 @@ class DatabaseService {
     } catch {
       return [];
     }
+  }
+
+  public getAverageRatingForAnime(animeId: string): number {
+    const reviews = this.getReviewsForAnime(animeId);
+    if (reviews.length === 0) return 0;
+    const sum = reviews.reduce((acc, r) => acc + (r.rating || 0), 0);
+    return Number((sum / reviews.length).toFixed(1));
   }
 
   public addReview(reviewData: Omit<DubReview, 'id' | 'createdAt' | 'likes'>): DubReview {

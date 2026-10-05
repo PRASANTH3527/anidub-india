@@ -2,8 +2,11 @@
 // AniDub India — Firebase & Firestore Client Configuration
 // ==============================================================================
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, Firestore, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
 import firebaseConfigJson from '../../firebase-applet-config.json';
+
+// Silence technical Firestore logs (prevents 'Could not reach Cloud Firestore backend' noise)
+setLogLevel('silent');
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || firebaseConfigJson.apiKey,

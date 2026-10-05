@@ -50,7 +50,11 @@ import {
   Lock,
   KeyRound,
   ShieldAlert,
-  RefreshCw
+  RefreshCw,
+  Download,
+  Upload,
+  RotateCcw,
+  FileJson
 } from 'lucide-react';
 // Direct Firebase Firestore import as requested
 import { db } from '../lib/firebase';
@@ -68,7 +72,7 @@ import {
 } from 'firebase/firestore';
 import { dbService } from '../services/databaseService';
 import { authService } from '../services/authService';
-import { AnimeRecord } from '../types/database';
+import { AnimeRecord, StreamingPlatform } from '../types/database';
 import { SubmitDubModal } from './SubmitDubModal';
 import { useToast } from './Toast';
 
@@ -195,7 +199,19 @@ function normalizeFirestoreAnime(id: string, data: any): AnimeRecord {
     'Untitled Anime'
   ).trim();
 
+  const rawPlatforms = Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'];
+  const platforms: { name: StreamingPlatform; url: string }[] = rawPlatforms.map((p: any) => {
+    if (typeof p === 'string') {
+      return { name: p as StreamingPlatform, url: 'https://crunchyroll.com' };
+    }
+    return {
+      name: (p.name || p.platform || 'Crunchyroll') as StreamingPlatform,
+      url: p.url || 'https://crunchyroll.com',
+    };
+  });
+
   return {
+    ...data,
     id: id,
     title,
     romajiTitle: (data?.romajiTitle || data?.japaneseTitle || data?.title_jp || '').trim(),
@@ -221,10 +237,10 @@ function normalizeFirestoreAnime(id: string, data: any): AnimeRecord {
       : dubs.map((lang: string) => ({
           language: lang as any,
           available: true,
-          platform: Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'],
+          platform: platforms.map(p => p.name),
           notes: `Available in ${lang}`,
         })),
-    platforms: Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'],
+    platforms,
     characters: Array.isArray(data?.characters) ? data.characters : [],
     likes: likes,
     upvotes: likes,
@@ -272,7 +288,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'catalog' | 'watchlists' | 'dubs' | 'feed'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'catalog' | 'watchlists' | 'dubs' | 'feed' | 'trash'>('overview');
 
   // Pending Moderation State
   const [pendingList, setPendingList] = useState<AnimeRecord[]>([]);
@@ -283,6 +299,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedManageLang, setSelectedManageLang] = useState<string>('All');
   const [selectedManageStatus, setSelectedManageStatus] = useState<'All' | 'pending' | 'approved'>('All');
   
+  // Recycle Bin State
+  const [deletedList, setDeletedList] = useState<AnimeRecord[]>([]);
+  const [isRestoring, setIsRestoring] = useState<boolean>(false);
+  const [isImporting, setIsImporting] = useState<boolean>(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
   // Modals state for Edit and Delete
   const [animeToDelete, setAnimeToDelete] = useState<AnimeRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
@@ -345,21 +367,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
 
       // 100% DATA SAFETY FALLBACK: If live fetch returned 0 but we have cached data, use the cache
-      // This prevents the Admin Dashboard from appearing empty during quota hits
       if (allAnime.length === 0) {
         const cached = dbService.getAllAnimeRecords();
         if (cached.length > 0) {
-          console.log('[Admin] Live fetch empty, falling back to local cache.');
           allAnime = cached;
         }
       }
 
       // Save strictly to catalog state
-      setCatalogTitles(allAnime);
+      setCatalogTitles(allAnime.filter(a => !a.isDeleted));
+      setDeletedList(allAnime.filter(a => a.isDeleted === true));
 
       // Extract pending submissions awaiting admin review
       const pendingItems = allAnime.filter(
-        (a) => a.status === 'pending' || a.submissionStatus === 'pending'
+        (a) => (a.status === 'pending' || a.submissionStatus === 'pending') && !a.isDeleted
       );
       setPendingList(pendingItems);
       setPendingSubmissions(pendingItems.length);
@@ -453,10 +474,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         firestoreWatchlistsCount + pendingCount + (totalAnimeCount > 0 ? Math.ceil(totalAnimeCount * 0.4) : (firestoreUsersCount > 0 ? 1 : 0))
       );
 
-      // 5. Generate Real Most Watchlisted / Upvoted Titles strictly from Firebase uploads
+      // 5. Generate Real Top 5 Upvoted Titles strictly from Firebase uploads
       const sortedByPopularity: WatchlistStat[] = [...allAnime]
         .sort((a, b) => Number(b.likes || b.upvotes || 0) - Number(a.likes || a.upvotes || 0))
-        .slice(0, 6)
+        .slice(0, 5)
         .map((a) => ({
           id: a.id,
           name: a.title,
@@ -568,8 +589,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setIsConnected(true);
       setLastUpdated(new Date());
       setIsLoading(false);
-    } catch (error) {
-      console.error('[Admin] Error fetching real database analytics:', error);
+    } catch (error: any) {
+      const msg = String(error?.message || '').toLowerCase();
+      const code = String(error?.code || '').toLowerCase();
+      const isSilent = code === 'unavailable' || code.includes('quota') || msg.includes('offline') || msg.includes('could not reach');
+      if (!isSilent) {
+        console.error('[Admin] Error fetching real database analytics:', error);
+      }
       setIsLoading(false);
     }
   }, []);
@@ -768,32 +794,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!animeToDelete) return;
     setIsDeleting(true);
     try {
-      // 1. Delete from Firestore 'animes' collection
-      await deleteDoc(doc(db, 'animes', animeToDelete.id));
-
-      // 2. Delete from 'anime' singular collection if exists
-      try {
-        await deleteDoc(doc(db, 'anime', animeToDelete.id));
-      } catch {}
-
-      // 3. Delete from 'submissions' collection if exists
-      try {
-        await deleteDoc(doc(db, 'submissions', animeToDelete.id));
-      } catch {}
-
-      // 4. Log admin delete activity
-      try {
-        await setDoc(doc(db, 'activities', `del-${Date.now()}`), {
-          user: 'Admin',
-          action: 'deleted',
-          animeTitle: animeToDelete.title,
-          timestamp: new Date(),
-        });
-      } catch {}
-
-      // 5. Clean up local service cache and notify listeners
-      dbService.deleteSubmission(animeToDelete.id);
-
+      dbService.permanentlyDeleteSubmission(animeToDelete.id);
       toast.success('Anime Deleted Permanently', `"${animeToDelete.title}" was removed from Cloud Firestore.`);
       await fetchRealData();
     } catch (err: any) {
@@ -803,6 +804,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setIsDeleting(false);
       setAnimeToDelete(null);
     }
+  };
+
+  // Soft Delete handler
+  const handleSoftDelete = async (anime: AnimeRecord) => {
+    if (!authService.isAdmin()) return;
+    try {
+      dbService.deleteSubmission(anime.id); // This is now soft delete in service
+      toast.success('Moved to Trash', `"${anime.title}" has been moved to the Recycle Bin.`);
+      await fetchRealData();
+    } catch (err: any) {
+      toast.error('Action Failed', err?.message || 'Could not move to trash.');
+    }
+  };
+
+  // Restore from trash handler
+  const handleRestore = async (anime: AnimeRecord) => {
+    if (!authService.isAdmin()) return;
+    setIsRestoring(true);
+    try {
+      dbService.restoreSubmission(anime.id);
+      toast.success('Anime Restored', `"${anime.title}" has been returned to the catalog.`);
+      await fetchRealData();
+    } catch (err: any) {
+      toast.error('Restore Failed', err?.message || 'Could not restore item.');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  // Export data as JSON backup
+  const handleExportBackup = () => {
+    dbService.exportBackup();
+    toast.success('Backup Exported', 'Anime data has been downloaded as JSON.');
+  };
+
+  // Bulk Import handler
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        if (!Array.isArray(json)) throw new Error('Invalid format: Expected an array of anime objects.');
+        
+        setIsImporting(true);
+        const result = await dbService.bulkImportAnime(json);
+        toast.success('Import Complete', `Successfully imported ${result.success} items. (${result.failed} failed)`);
+        await fetchRealData();
+      } catch (err: any) {
+        toast.error('Import Failed', err.message);
+      } finally {
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
   };
 
   // Trigger edit flow
@@ -930,7 +989,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </span>
               </div>
               <p className="text-[10px] text-neutral-400 font-mono">
-                {isConnected ? 'Firebase Firestore & Database Synced' : 'Database & API Synced'}
+                {isConnected ? 'Database & Cloud Synced' : 'Database & API Synced'}
               </p>
             </div>
           </div>
@@ -953,11 +1012,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="flex gap-1.5 mt-3 pt-1 border-t border-neutral-800/60 overflow-x-auto scrollbar-none">
           {[
             { id: 'overview', label: 'Overview' },
-            { id: 'pending', label: `Pending Approvals (${pendingSubmissions})` },
-            { id: 'catalog', label: `Manage Anime (${catalogTitles.length})` },
-            { id: 'watchlists', label: 'Popular & Watchlists' },
-            { id: 'dubs', label: 'Regional Dubs' },
-            { id: 'feed', label: 'Live User Feed' },
+            { id: 'pending', label: `Pending (${pendingSubmissions})` },
+            { id: 'catalog', label: `Catalog (${catalogTitles.length})` },
+            { id: 'trash', label: `Trash (${deletedList.length})` },
+            { id: 'feed', label: 'User Feed' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1140,12 +1198,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400">
-                  Most Upvoted / Saved Titles
+                  Top 5 Most Upvoted Titles
                 </h3>
-                <p className="text-[11px] text-neutral-400">Real upvote & save ranking</p>
+                <p className="text-[11px] text-neutral-400">Total community engagement 🔥</p>
               </div>
               <span className="text-[10px] font-bold text-neutral-400 bg-neutral-800/80 px-2 py-0.5 rounded">
-                Top {mostWatchlisted.length}
+                Live Ranking
               </span>
             </div>
 
@@ -1194,9 +1252,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400">
-                  Regional Dub Distribution
+                  Anime by Dubbed Languages
                 </h3>
-                <p className="text-[11px] text-neutral-400">Real language audio across catalog</p>
+                <p className="text-[11px] text-neutral-400">Regional audio track distribution 🌍</p>
               </div>
               <Globe className="w-4 h-4 text-purple-400" />
             </div>
@@ -1464,6 +1522,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={handleExportBackup}
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 text-[10px] font-bold transition-all cursor-pointer"
+                    title="Download all anime data as JSON"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export Backup</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isImporting}
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 text-[10px] font-bold transition-all cursor-pointer disabled:opacity-50"
+                    title="Upload anime data from JSON"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{isImporting ? 'Importing...' : 'Bulk Import'}</span>
+                  </button>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handleFileImport} 
+                    accept=".json" 
+                    className="hidden" 
+                  />
+
+                  <button
                     onClick={() => setIsAddModalOpen(true)}
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-600/30 active:scale-95 transition-all cursor-pointer"
                   >
@@ -1543,7 +1627,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </h3>
                 <p className="text-xs text-neutral-400 max-w-sm mx-auto">
                   {catalogTitles.length === 0
-                    ? 'Syncing with Firestore collections. If you have uploaded documents to "animes", "anime", or "submissions", they will appear here automatically.'
+                    ? 'Syncing with cloud database. If you have uploaded records recently, they will appear here automatically.'
                     : 'Try clearing your search query or language filter.'}
                 </p>
                 {catalogTitles.length === 0 ? (
@@ -1614,6 +1698,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               • {anime.episodes} eps
                             </span>
                           )}
+                          {(anime.updatedAt || anime.submittedAt) && (
+                            <span className="text-[10px] text-neutral-500 font-mono italic">
+                              • Updated {formatRelativeTime(anime.updatedAt || anime.submittedAt)}
+                            </span>
+                          )}
                         </div>
 
                         <h3 className="font-bold text-white text-sm sm:text-base leading-tight truncate">
@@ -1674,14 +1763,89 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                       {isAdmin && (
                         <button
-                          onClick={() => setAnimeToDelete(anime)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 text-xs font-bold transition-all cursor-pointer"
-                          title={`Delete ${anime.title}`}
+                          onClick={() => handleSoftDelete(anime)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-red-950/40 text-neutral-400 hover:text-red-400 border border-neutral-700 hover:border-red-900/50 text-xs font-bold transition-all cursor-pointer"
+                          title={`Move ${anime.title} to Trash`}
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-purple-400" />
-                          <span>Delete</span>
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Trash</span>
                         </button>
                       )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* 5.6 Recycle Bin / Trash View */}
+        {activeTab === 'trash' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4"
+          >
+            <div className="p-4 rounded-3xl bg-[#131926] border border-red-500/30 shadow-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-black text-white flex items-center gap-2">
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                    <span>Recycle Bin</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-500/20 text-red-400 border border-red-500/40">
+                      {deletedList.length} Items in Trash
+                    </span>
+                  </h2>
+                  <p className="text-xs text-neutral-400">Items here are hidden from users but can be restored or erased permanently.</p>
+                </div>
+              </div>
+            </div>
+
+            {deletedList.length === 0 ? (
+              <div className="p-12 rounded-3xl bg-[#131926] border border-neutral-800/90 shadow-xl text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-neutral-800 flex items-center justify-center text-neutral-600 mx-auto">
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <h3 className="font-bold text-white text-sm">Recycle Bin is Empty</h3>
+                <p className="text-xs text-neutral-400">Deleted items will appear here for 100% safety.</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {deletedList.map((anime) => (
+                  <div
+                    key={anime.id}
+                    className="p-3 rounded-2xl bg-red-950/5 border border-red-900/20 hover:border-red-500/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1 opacity-80">
+                      {anime.poster ? (
+                        <img src={anime.poster} className="w-10 h-14 object-cover rounded-lg bg-neutral-800 border border-neutral-700/60 grayscale" alt="" />
+                      ) : (
+                         <div className="w-10 h-14 rounded-lg bg-neutral-800 flex items-center justify-center text-neutral-500 grayscale border border-neutral-700/60">
+                           <Tv className="w-4 h-4" />
+                         </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                         <h3 className="font-bold text-white text-sm truncate">{anime.title}</h3>
+                         <p className="text-[10px] text-neutral-500 font-mono italic">ID: {anime.id} • Deleted {formatRelativeTime(anime.updatedAt)}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleRestore(anime)}
+                        disabled={isRestoring}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 text-[10px] font-black transition-all cursor-pointer"
+                      >
+                        <RotateCcw className={`w-3.5 h-3.5 ${isRestoring ? 'animate-spin' : ''}`} />
+                        <span>RESTORE</span>
+                      </button>
+                      <button
+                        onClick={() => setAnimeToDelete(anime)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/40 text-[10px] font-black transition-all cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>ERASE</span>
+                      </button>
                     </div>
                   </div>
                 ))}

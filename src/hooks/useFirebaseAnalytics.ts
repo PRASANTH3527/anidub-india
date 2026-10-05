@@ -13,7 +13,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { AnimeRecord } from '../types/database';
+import { AnimeRecord, StreamingPlatform } from '../types/database';
 
 export interface WatchlistStat {
   id: string;
@@ -127,10 +127,18 @@ function normalizeRecord(id: string, data: any): AnimeRecord {
     dubDetails: dubs.map((lang: string) => ({
       language: lang as any,
       available: true,
-      platform: Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'],
+      platform: Array.isArray(data?.platforms) 
+        ? (typeof data.platforms[0] === 'string' ? data.platforms : data.platforms.map((p: any) => p.name || p.platform))
+        : ['Crunchyroll'],
       notes: `Available in ${lang}`,
     })),
-    platforms: Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll'],
+    platforms: (Array.isArray(data?.platforms) ? data.platforms : ['Crunchyroll']).map((p: any) => {
+      if (typeof p === 'string') return { name: p as StreamingPlatform, url: 'https://crunchyroll.com' };
+      return { 
+        name: (p.name || p.platform || 'Crunchyroll') as StreamingPlatform, 
+        url: p.url || 'https://crunchyroll.com' 
+      };
+    }),
     characters: Array.isArray(data?.characters) ? data.characters : [],
     likes,
     upvotes: likes,
@@ -176,8 +184,13 @@ export function useFirebaseAnalytics() {
           const rec = normalizeRecord(d.id, d.data());
           if (rec && rec.id && rec.title) firestoreAnimeMap.set(rec.id, rec);
         });
-      } catch (err) {
-        console.warn('[Analytics] Firestore animes read notice:', err);
+      } catch (err: any) {
+        const msg = String(err?.message || '').toLowerCase();
+        const code = String(err?.code || '').toLowerCase();
+        const isSilent = code === 'unavailable' || code.includes('quota') || msg.includes('offline');
+        if (!isSilent) {
+          console.warn('[Analytics] Firestore animes read notice:', err);
+        }
       }
 
       try {
@@ -188,8 +201,13 @@ export function useFirebaseAnalytics() {
             if (rec && rec.id && rec.title) firestoreAnimeMap.set(rec.id, rec);
           }
         });
-      } catch (err) {
-        console.warn('[Analytics] Firestore submissions read notice:', err);
+      } catch (err: any) {
+        const msg = String(err?.message || '').toLowerCase();
+        const code = String(err?.code || '').toLowerCase();
+        const isSilent = code === 'unavailable' || code.includes('quota') || msg.includes('offline');
+        if (!isSilent) {
+          console.warn('[Analytics] Firestore submissions read notice:', err);
+        }
       }
 
       // Filter out any dummy anime strictly

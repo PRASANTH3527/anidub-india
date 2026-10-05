@@ -78,6 +78,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const [ratingInput, setRatingInput] = useState<number>(5);
   const [languageInput, setLanguageInput] = useState<DubLanguage>(anime.dubs[0] || 'Tamil');
   const [commentInput, setCommentInput] = useState<string>('');
+  const [isSpoilerInput, setIsSpoilerInput] = useState(false);
+  const [unblurredReviews, setUnblurredReviews] = useState<Set<string>>(new Set());
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [hoverRating, setHoverRating] = useState<number>(0);
 
@@ -126,9 +128,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       language: languageInput,
       rating: ratingInput,
       comment: commentInput.trim(),
+      isSpoiler: isSpoilerInput,
     });
 
     setCommentInput('');
+    setIsSpoilerInput(false);
     setIsSubmittingReview(false);
   };
 
@@ -579,7 +583,20 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   />
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <div className="relative flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={isSpoilerInput}
+                        onChange={(e) => setIsSpoilerInput(e.target.checked)}
+                        className="peer h-4 w-4 rounded border-neutral-700 bg-neutral-800 text-primary-theme focus:ring-primary-theme/30 cursor-pointer appearance-none transition-all checked:bg-primary-theme"
+                      />
+                      <Check className="absolute h-3 w-3 text-white opacity-0 peer-checked:opacity-100 left-0.5 pointer-events-none transition-opacity" />
+                    </div>
+                    <span className="text-[11px] font-bold text-neutral-400 group-hover:text-neutral-300">Contains Spoilers?</span>
+                  </label>
+
                   <button
                     type="submit"
                     disabled={isSubmittingReview || !commentInput.trim()}
@@ -639,9 +656,33 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-xs text-neutral-300 leading-relaxed">
-                      {rev.comment}
-                    </p>
+                    <div className="relative">
+                      {rev.isSpoiler && !unblurredReviews.has(rev.id) ? (
+                        <div 
+                          onClick={() => {
+                            const next = new Set(unblurredReviews);
+                            next.add(rev.id);
+                            setUnblurredReviews(next);
+                          }}
+                          className="relative p-4 rounded-xl bg-neutral-900/50 border border-neutral-800 cursor-pointer overflow-hidden group"
+                        >
+                          <p className="text-xs text-neutral-300 blur-md select-none">
+                            {rev.comment}
+                          </p>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 group-hover:bg-black/20 transition-colors">
+                            <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1.5 bg-black/60 px-3 py-1 rounded-full border border-amber-500/30">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              Spoiler Content
+                            </span>
+                            <span className="text-[9px] text-neutral-400 mt-2 font-bold">Tap to reveal review</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-neutral-300 leading-relaxed">
+                          {rev.comment}
+                        </p>
+                      )}
+                    </div>
 
                     <div className="flex items-center justify-end pt-1">
                       <button

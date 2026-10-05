@@ -364,10 +364,19 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
 
         {/* Poster Bottom Stats (Rating & Status) */}
         <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between text-[11px] font-bold text-white/90 pointer-events-none">
-          <div className="flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-md backdrop-blur-sm border border-white/10">
-            <Star className="w-3 h-3 text-orange-500 fill-orange-500" />
-            <span className="text-orange-400 font-black">CR</span>
-            <span>{anime.rating ? anime.rating.toFixed(1) : 'N/A'}</span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-md backdrop-blur-sm border border-white/10">
+              <Star className="w-3 h-3 text-orange-500 fill-orange-500" />
+              <span className="text-orange-400 font-black">CR</span>
+              <span>{anime.rating ? anime.rating.toFixed(1) : 'N/A'}</span>
+            </div>
+            {dbService.getAverageRatingForAnime(anime.id) > 0 && (
+              <div className="flex items-center gap-1 bg-primary-theme/80 px-2 py-0.5 rounded-md backdrop-blur-sm border border-primary-light/30">
+                <Heart className="w-3 h-3 text-white fill-current" />
+                <span className="text-white font-black">USER</span>
+                <span>{dbService.getAverageRatingForAnime(anime.id)}</span>
+              </div>
+            )}
           </div>
           {anime.status === 'Ongoing' && (
             <span className="flex items-center gap-1 bg-emerald-950/80 text-emerald-400 border border-emerald-700/50 px-1.5 py-0.5 rounded text-[10px]">

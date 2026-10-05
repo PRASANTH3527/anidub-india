@@ -92,12 +92,10 @@ function AppContent() {
     }
     const handleOnline = () => {
       setIsOffline(false);
-      toast.success('Back Online', 'Connected to live database.');
       dbService.syncWithServer();
     };
     const handleOffline = () => {
       setIsOffline(true);
-      toast.info('Offline Mode Active', 'Browsing cached catalog and your local watchlist.');
     };
 
     window.addEventListener('online', handleOnline);
@@ -901,10 +899,10 @@ function AppContent() {
                             <Database className="w-7 h-7" />
                           </div>
                           <h3 className="font-heading font-black text-xl text-white mb-2">
-                            Connecting to Live Database...
+                            Connecting...
                           </h3>
                           <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
-                            We're connecting to the live Firestore collections. If you have uploaded anime recently, they should appear here momentarily.
+                            Establishing a connection to our database. Your dubbed anime list should appear here momentarily.
                           </p>
                           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                             <button
