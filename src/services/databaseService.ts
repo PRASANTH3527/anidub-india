@@ -19,9 +19,8 @@ const QUOTA_EXCEEDED_KEY = 'anidub_firestore_quota_exceeded_timestamp';
 const LAST_SYNC_KEY = 'anidub_db_last_sync_timestamp';
 
 // --- TELEGRAM NOTIFICATION CONFIG ---
-// Replace these with your actual bot credentials
 const TELEGRAM_BOT_TOKEN = '8648317719:AAHZ7wxQefZT5QdKCpc61epWJ4mGAgJvgdc'; 
-const TELEGRAM_CHAT_ID = '8769442354'; 
+const TELEGRAM_CHAT_ID = '8769442354'; // ENTER YOUR CHANNEL ID HERE (e.g. @mychannel or -100...)
 
 class DatabaseService {
   private listeners: (() => void)[] = [];
@@ -436,20 +435,21 @@ class DatabaseService {
 
     // --- TELEGRAM NOTIFICATION (Auto-trigger on Approval) ---
     const anime = records[targetIndex];
-    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID && !TELEGRAM_BOT_TOKEN.includes('YOUR_BOT')) {
+    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
       const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://anidub.in';
       const watchUrl = `${siteUrl}/anime/${anime.id}`;
       
       const caption = [
-        `🔔 <b>New Anime Approved!</b>`,
+        `🌟 <b>New Dubbed Anime Live!</b> 🌟`,
         ``,
-        `🎬 <b>${anime.title}</b>`,
+        `🎬 <b>Title:</b> ${anime.title}`,
         `🎙️ <b>Languages:</b> ${anime.dubs.join(' • ')}`,
         `🏷️ <b>Genres:</b> ${anime.genres.join(', ')}`,
-        `📅 <b>Year:</b> ${anime.releaseYear}`,
+        `📅 <b>Release Year:</b> ${anime.releaseYear}`,
         ``,
-        `🚀 <b>Watch now on AniDub India:</b>`,
-        `<a href="${watchUrl}">${watchUrl}</a>`
+        `🔗 <b>Watch Now:</b> <a href="${watchUrl}">${watchUrl}</a>`,
+        ``,
+        `✨ <i>Enjoy high-quality Indian dubs on AniDub India!</i>`
       ].join('\n');
 
       const endpoint = anime.poster ? 'sendPhoto' : 'sendMessage';
