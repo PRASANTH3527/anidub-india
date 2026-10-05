@@ -9,7 +9,15 @@ import {
   getDocs, 
   deleteDoc, 
   updateDoc,
-  onSnapshot
+  onSnapshot,
+  writeBatch,
+  query,
+  where,
+  orderBy,
+  limit,
+  startAfter,
+  Timestamp,
+  serverTimestamp
 } from 'firebase/firestore';
 
 const DB_ANIME_KEY = 'anidub_db_anime_records';
@@ -37,74 +45,18 @@ class DatabaseService {
   }
 
   /**
-   * Starts real-time listeners for essential collections only.
-   * Optimized to avoid hitting Firestore quotas.
+   * DISABLED: No longer using real-time listeners to prevent quota exhaustion.
+   * Manual refresh in Admin Panel is the preferred way now.
    */
   public startRealtimeSync() {
-    if (this.isQuotaLimited || typeof window === 'undefined') return;
-    if (this.listeners.length > 0) return; // Already active
-
-    try {
-      // Optimized: Only listen to the main catalog and submissions
-      // Other collections like 'anime', 'titles' are likely redundant for real-time updates
-      const essentialCollections = ['animes', 'submissions'];
-      
-      essentialCollections.forEach(collName => {
-        const unsub = onSnapshot(collection(db, collName), (snapshot) => {
-          const currentRecords = this.getAllAnimeRecords();
-          const firestoreMap = new Map<string, AnimeRecord>();
-          
-          // Seed map with current records to preserve data from other collections
-          currentRecords.forEach(r => firestoreMap.set(r.id, r));
-
-          let changed = false;
-          snapshot.docChanges().forEach(change => {
-            const data = change.doc.data();
-            if (change.type === 'removed') {
-              if (firestoreMap.has(change.doc.id)) {
-                firestoreMap.delete(change.doc.id);
-                changed = true;
-              }
-            } else {
-              const normalized = this.normalizeRecord({ ...data, id: change.doc.id });
-              if (normalized && normalized.id && normalized.title) {
-                firestoreMap.set(normalized.id, normalized);
-                changed = true;
-              }
-            }
-          });
-
-          if (changed || snapshot.docs.length === 0) {
-            const updatedList = Array.from(firestoreMap.values());
-            this.saveAnimeRecords(updatedList);
-            localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
-          }
-        }, (err) => {
-          if (this.isQuotaExceededError(err)) {
-            const isQuota = !String(err?.code || '').toLowerCase().includes('unavailable');
-            this.setQuotaExceeded(isQuota);
-            this.stopRealtimeSync();
-          } else {
-            console.warn(`[AniDub DB] Real-time sync error for ${collName}:`, err);
-          }
-        });
-        this.listeners.push(unsub);
-      });
-    } catch (e) {
-      console.warn('[AniDub DB] Failed to start real-time sync:', e);
-    }
+    // Disabled as per optimization requirement
   }
 
   /**
-   * Stop all active Firestore listeners
+   * DISABLED
    */
   public stopRealtimeSync() {
-    this.listeners.forEach(unsub => {
-      try {
-        unsub();
-      } catch {}
-    });
-    this.listeners = [];
+    // Disabled as per optimization requirement
   }
 
   private checkQuotaStatus() {
@@ -704,7 +656,13 @@ class DatabaseService {
     let failedCount = 0;
     
     const currentRecords = this.getAllAnimeRecords();
-    const importPromises: Promise<void>[] = [];
+    const newItemsForLocal: AnimeRecord[] = [];
+
+    // Firestore allows up to 500 operations per batch
+    const BATCH_SIZE = 450; 
+    let currentBatch = writeBatch(db);
+    let operationCount = 0;
+    const batchPromises: Promise<void>[] = [];
 
     for (const item of jsonData) {
       try {
@@ -714,85 +672,87 @@ class DatabaseService {
           continue;
         }
 
-        // Smart Upsert: Check if an anime with the same title already exists (case-insensitive)
         const existing = currentRecords.find(r => 
-          r.title.toLowerCase().trim() === rawTitle.toLowerCase() ||
-          (r.romajiTitle && r.romajiTitle.toLowerCase().trim() === rawTitle.toLowerCase())
+          (item.id && r.id === item.id) ||
+          r.title.toLowerCase().trim() === rawTitle.toLowerCase()
         );
 
-        let finalId = existing ? existing.id : (item.id || ('sub-' + Math.random().toString(36).substring(2, 9)));
+        const finalId = existing ? existing.id : (item.id || ('sub-' + Math.random().toString(36).substring(2, 9)));
         
-        const moderationOverrides: Partial<AnimeRecord> = {
-          updatedAt: new Date().toISOString(),
-          isDeleted: false,
-        };
-
-        // Map JSON status to airingStatus if it's an airing status to avoid conflict
-        const jsonStatus = String(item.status || '').toLowerCase();
-        let airingStatus: 'Ongoing' | 'Completed' | undefined = undefined;
-        
+        const jsonStatus = String(item.status || item.airingStatus || '').toLowerCase();
+        let airingStatus: 'Ongoing' | 'Completed' = 'Completed';
         if (jsonStatus.includes('ongoing') || jsonStatus.includes('airing') || jsonStatus.includes('simulcast')) {
           airingStatus = 'Ongoing';
-        } else if (jsonStatus.includes('completed') || jsonStatus.includes('finished')) {
-          airingStatus = 'Completed';
         }
 
-        // Strict Moderation: Every NEW anime must automatically be assigned a 'pending' state
-        if (!existing) {
-          moderationOverrides.status = 'pending';
-          moderationOverrides.submissionStatus = 'pending';
-          moderationOverrides.submittedAt = item.submittedAt || new Date().toISOString();
-          moderationOverrides.createdAt = item.createdAt || new Date().toISOString();
-          addedCount++;
-        } else {
-          updatedCount++;
-        }
-
-        // Safely merge metadata: Existing data + JSON data + Overrides
         const normalized = this.normalizeRecord({ 
           ...(existing || {}), 
           ...item, 
           id: finalId,
-          airingStatus: airingStatus || (existing?.airingStatus) || 'Completed',
-          ...moderationOverrides
+          airingStatus: airingStatus,
+          status: 'pending',
+          submissionStatus: 'pending',
+          isDeleted: false,
+          createdAt: item.createdAt || existing?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          submittedAt: item.submittedAt || existing?.submittedAt || new Date().toISOString()
         });
-        
-        // Final Force: Ensure normalization didn't re-map airing status back to status field if existing was empty
+
         normalized.status = 'pending';
         normalized.submissionStatus = 'pending';
-        
+
         if (normalized && normalized.title) {
-          // Direct upload to multiple collections for redundancy
-          const collections = ['animes', 'anime', 'submissions'];
-          collections.forEach(coll => {
-            importPromises.push(setDoc(doc(db, coll, finalId), normalized, { merge: true }));
-          });
-          
-          // Log activity for each imported item
-          importPromises.push(setDoc(doc(db, 'activities', `act-import-${finalId}-${Date.now()}`), {
-            user: 'Admin (Smart Import)',
+          // Add to batch
+          const subRef = doc(db, 'submissions', finalId);
+          const animeRef = doc(db, 'animes', finalId);
+          const actRef = doc(db, 'activities', `act-import-${finalId}-${Date.now()}`);
+
+          currentBatch.set(subRef, normalized, { merge: true });
+          currentBatch.set(animeRef, normalized, { merge: true });
+          currentBatch.set(actRef, {
+            user: 'Admin (Bulk)',
             action: existing ? 'updated' : 'submitted',
             animeTitle: normalized.title,
-            timestamp: new Date(),
+            timestamp: serverTimestamp(),
             language: normalized.dubs?.[0] || 'Tamil',
-            status: normalized.status
-          }));
+            status: 'pending'
+          });
+
+          operationCount += 3;
+          newItemsForLocal.push(normalized);
+          if (existing) updatedCount++; else addedCount++;
+
+          // Commit if batch is full
+          if (operationCount >= BATCH_SIZE) {
+            batchPromises.push(currentBatch.commit());
+            currentBatch = writeBatch(db);
+            operationCount = 0;
+          }
         } else {
           failedCount++;
         }
       } catch (err) {
-        console.error('[Smart Import Item Error]', err);
+        console.error('[Batch Import Error]', err);
         failedCount++;
       }
     }
 
-    // Wait for all Firestore writes to complete
-    if (importPromises.length > 0) {
-      await Promise.allSettled(importPromises);
+    // Final batch commit
+    if (operationCount > 0) {
+      batchPromises.push(currentBatch.commit());
     }
 
-    // Force a local sync to ensure the dashboard reflects changes immediately
-    await this.syncWithServer();
+    if (batchPromises.length > 0) {
+      await Promise.allSettled(batchPromises);
+      
+      const mergedRecords = [...currentRecords];
+      newItemsForLocal.forEach(newItem => {
+        const idx = mergedRecords.findIndex(r => r.id === newItem.id);
+        if (idx !== -1) mergedRecords[idx] = newItem;
+        else mergedRecords.push(newItem);
+      });
+      this.saveAnimeRecords(mergedRecords);
+    }
 
     return { added: addedCount, updated: updatedCount, failed: failedCount };
   }

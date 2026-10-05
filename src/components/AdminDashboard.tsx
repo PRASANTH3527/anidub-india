@@ -42,6 +42,7 @@ import {
   Download,
   Upload,
   RotateCcw,
+  RefreshCw,
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import {
@@ -167,7 +168,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => unsub();
   }, []);
 
-  const fetchRealData = useCallback(async () => {
+  const fetchRealData = useCallback(async (force = false) => {
+    // Optimization: Skip if we already have data and are not forcing a refresh
+    if (!force && catalogTitles.length > 0) return;
+
+    setIsLoading(true);
     try {
       const collections = ['animes', 'submissions', 'anime'];
       const firestoreAnimeMap = new Map<string, AnimeRecord>();
@@ -256,12 +261,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     if (isAdmin) {
       fetchRealData();
-      dbService.startRealtimeSync();
-      const unsub = dbService.subscribe(fetchRealData);
-      return () => {
-        unsub();
-        dbService.stopRealtimeSync();
-      };
+      // Optimization: No more onSnapshot or auto-refresh
     }
   }, [isAdmin, fetchRealData]);
 
@@ -417,6 +417,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
           
           <div className="flex items-center gap-2">
+            <button 
+              onClick={() => fetchRealData(true)} 
+              disabled={isLoading}
+              className="p-1.5 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white transition-all border border-neutral-700 disabled:opacity-50"
+              title="Refresh Data"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
             <button onClick={() => router.push('/')} className="px-3 py-1.5 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white text-xs font-bold transition-all border border-neutral-700 cursor-pointer flex items-center gap-1.5">
               <Globe className="w-3.5 h-3.5" />
               <span>Catalog</span>
