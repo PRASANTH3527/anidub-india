@@ -727,22 +727,25 @@ class DatabaseService {
           isDeleted: false,
         };
 
+        // Map JSON status to airingStatus if it's an airing status to avoid conflict
+        const jsonStatus = String(item.status || '').toLowerCase();
+        let airingStatus: 'Ongoing' | 'Completed' | undefined = undefined;
+        
+        if (jsonStatus.includes('ongoing') || jsonStatus.includes('airing') || jsonStatus.includes('simulcast')) {
+          airingStatus = 'Ongoing';
+        } else if (jsonStatus.includes('completed') || jsonStatus.includes('finished')) {
+          airingStatus = 'Completed';
+        }
+
         // Strict Moderation: Every NEW anime must automatically be assigned a 'pending' state
         if (!existing) {
           moderationOverrides.status = 'pending';
           moderationOverrides.submissionStatus = 'pending';
           moderationOverrides.submittedAt = item.submittedAt || new Date().toISOString();
+          moderationOverrides.createdAt = item.createdAt || new Date().toISOString();
           addedCount++;
         } else {
           updatedCount++;
-        }
-
-        // Map JSON status to airingStatus if it's an airing status to avoid conflict
-        const jsonStatus = String(item.status || '').toLowerCase();
-        if (jsonStatus.includes('ongoing') || jsonStatus.includes('airing') || jsonStatus.includes('simulcast')) {
-          item.airingStatus = 'Ongoing';
-        } else if (jsonStatus.includes('completed') || jsonStatus.includes('finished')) {
-          item.airingStatus = 'Completed';
         }
 
         // Safely merge metadata: Existing data + JSON data + Overrides
@@ -750,8 +753,13 @@ class DatabaseService {
           ...(existing || {}), 
           ...item, 
           id: finalId,
+          airingStatus: airingStatus || (existing?.airingStatus) || 'Completed',
           ...moderationOverrides
         });
+        
+        // Final Force: Ensure normalization didn't re-map airing status back to status field if existing was empty
+        normalized.status = 'pending';
+        normalized.submissionStatus = 'pending';
         
         if (normalized && normalized.title) {
           // Direct upload to multiple collections for redundancy
