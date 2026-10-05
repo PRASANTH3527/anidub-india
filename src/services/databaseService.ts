@@ -68,11 +68,6 @@ class DatabaseService {
             } else {
               const normalized = this.normalizeRecord({ ...data, id: change.doc.id });
               if (normalized && normalized.id && normalized.title) {
-                // Auto-approve logic for live data
-                if (data.status !== 'rejected' && data.submissionStatus !== 'rejected') {
-                  normalized.status = 'approved';
-                  normalized.submissionStatus = 'approved';
-                }
                 firestoreMap.set(normalized.id, normalized);
                 changed = true;
               }
@@ -273,10 +268,14 @@ class DatabaseService {
 
     // Status Mapping: "Ongoing" -> "Ongoing" (UI handles display as "Ongoing (Simulcast)")
     let airingStatus: 'Ongoing' | 'Completed' = 'Completed';
-    const rawStatus = String(data.status || data.airingStatus || '').toLowerCase();
-    if (rawStatus.includes('ongoing') || rawStatus.includes('airing') || rawStatus.includes('simulcast')) {
+    // Prioritize airingStatus field, fallback to status if it's not a moderation state
+    const statusVal = String(data.status || '').toLowerCase();
+    const isModerationStatus = ['pending', 'approved', 'rejected'].includes(statusVal);
+    const rawAiringStatus = String(data.airingStatus || (!isModerationStatus ? data.status : '') || '').toLowerCase();
+
+    if (rawAiringStatus.includes('ongoing') || rawAiringStatus.includes('airing') || rawAiringStatus.includes('simulcast')) {
       airingStatus = 'Ongoing';
-    } else if (rawStatus.includes('completed') || rawStatus.includes('finished')) {
+    } else if (rawAiringStatus.includes('completed') || rawAiringStatus.includes('finished')) {
       airingStatus = 'Completed';
     }
 
@@ -732,9 +731,18 @@ class DatabaseService {
         if (!existing) {
           moderationOverrides.status = 'pending';
           moderationOverrides.submissionStatus = 'pending';
+          moderationOverrides.submittedAt = item.submittedAt || new Date().toISOString();
           addedCount++;
         } else {
           updatedCount++;
+        }
+
+        // Map JSON status to airingStatus if it's an airing status to avoid conflict
+        const jsonStatus = String(item.status || '').toLowerCase();
+        if (jsonStatus.includes('ongoing') || jsonStatus.includes('airing') || jsonStatus.includes('simulcast')) {
+          item.airingStatus = 'Ongoing';
+        } else if (jsonStatus.includes('completed') || jsonStatus.includes('finished')) {
+          item.airingStatus = 'Completed';
         }
 
         // Safely merge metadata: Existing data + JSON data + Overrides
@@ -844,11 +852,6 @@ class DatabaseService {
             const normalized = this.normalizeRecord({ ...data, id: d.id });
             
             if (normalized && normalized.id && normalized.title) {
-              if (data.status !== 'rejected' && data.submissionStatus !== 'rejected') {
-                normalized.status = 'approved';
-                normalized.submissionStatus = 'approved';
-              }
-              
               if (!firestoreMap.has(normalized.id)) {
                 firestoreMap.set(normalized.id, normalized);
               }
