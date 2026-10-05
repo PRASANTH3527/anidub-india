@@ -273,7 +273,7 @@ class DatabaseService {
       romajiTitle: (data?.romajiTitle || data?.japaneseTitle || data?.title_jp || '').trim(),
       poster: data?.poster || data?.image || data?.cover || data?.posterImage || '',
       banner: data?.banner || data?.bannerImage || data?.coverImage || '',
-      studio: data?.studio || 'Animation Studio',
+      studio: data?.studio || data?.animationStudio || 'Animation Studio',
       synopsis: data?.synopsis || data?.description || '',
       type: data?.type || 'TV Series',
       episodes: Number(data?.episodes) || 12,
@@ -284,6 +284,7 @@ class DatabaseService {
       genres: Array.isArray(data?.genres) ? data.genres : [],
       themes: Array.isArray(data?.themes) ? data.themes : [],
       dubs: dubs as any,
+      seasonDetails: Array.isArray(data?.seasonDetails) ? data.seasonDetails : (Array.isArray(data?.mixedEntries) ? data.mixedEntries : []),
       dubDetails: Array.isArray(data?.dubDetails)
         ? data.dubDetails.map((d: any) => ({
             ...d,
@@ -674,13 +675,20 @@ class DatabaseService {
     for (const item of jsonData) {
       try {
         const id = item.id || ('sub-' + Math.random().toString(36).substring(2, 9));
+        
+        // Force moderation fields regardless of JSON content
+        const moderationOverrides = {
+          status: 'pending',
+          submissionStatus: 'pending',
+          isDeleted: false,
+          updatedAt: new Date().toISOString(),
+          submittedAt: item.submittedAt || new Date().toISOString()
+        };
+
         const normalized = this.normalizeRecord({ 
           ...item, 
           id,
-          submittedAt: item.submittedAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          status: 'pending',
-          submissionStatus: 'pending'
+          ...moderationOverrides
         });
         
         if (normalized && normalized.title) {
