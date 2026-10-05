@@ -1437,6 +1437,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             Submitted by: <strong className="text-neutral-200">{anime.submittedBy?.userName || 'Community User'}</strong>
                             {anime.submittedBy?.userEmail && ` (${anime.submittedBy.userEmail})`}
                             {' • '}{formatRelativeTime(anime.submittedAt)}
+                            {anime.updatedAt && anime.updatedAt !== anime.submittedAt && (
+                              <span className="text-amber-500/80 font-medium">
+                                {' • '}Last Updated: {formatRelativeTime(anime.updatedAt)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1444,54 +1449,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     {/* Action Buttons: Approve, Edit, Reject, Delete */}
                     <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-800/80 flex-wrap">
-                      {isAdmin && (
-                        <button
-                          onClick={() => handleApprove(anime)}
-                          disabled={approvingId === anime.id}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs transition-all shadow-md shadow-emerald-950/50 cursor-pointer disabled:opacity-50"
-                          title="Approve and publish to live catalog"
-                        >
-                          {approvingId === anime.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                          )}
-                          <span>Approve Anime</span>
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleApprove(anime)}
+                        disabled={approvingId === anime.id}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs transition-all shadow-md shadow-emerald-950/50 cursor-pointer disabled:opacity-50"
+                        title="Approve and publish to live catalog"
+                      >
+                        {approvingId === anime.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                        <span>Approve Anime</span>
+                      </button>
 
-                      {isAdmin && (
-                        <button
-                          onClick={() => handleTriggerEdit(anime)}
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 font-bold text-xs transition-all cursor-pointer"
-                          title="Edit anime details before approving"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                          <span>Edit Details</span>
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleTriggerEdit(anime)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 font-bold text-xs transition-all cursor-pointer"
+                        title="Edit anime details before approving"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <span>Edit Details</span>
+                      </button>
 
-                      {isAdmin && (
-                        <button
-                          onClick={() => handleReject(anime)}
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 hover:text-amber-100 border border-amber-500/40 font-bold text-xs transition-all cursor-pointer"
-                          title="Reject submission"
-                        >
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          <span>Reject</span>
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleReject(anime)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 hover:text-amber-100 border border-amber-500/40 font-bold text-xs transition-all cursor-pointer"
+                        title="Reject submission"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>Reject</span>
+                      </button>
 
-                      {isAdmin && (
-                        <button
-                          onClick={() => setAnimeToDelete(anime)}
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-purple-100 border border-purple-500/40 font-bold text-xs transition-all cursor-pointer"
-                          title="Delete permanently"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-purple-400" />
-                          <span>Delete</span>
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleSoftDelete(anime)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-neutral-800 hover:bg-red-950/40 text-neutral-400 hover:text-red-400 border border-neutral-700 hover:border-red-900/50 text-xs font-bold transition-all cursor-pointer"
+                        title={`Move ${anime.title} to Trash`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Trash</span>
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -1700,7 +1697,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           )}
                           {(anime.updatedAt || anime.submittedAt) && (
                             <span className="text-[10px] text-neutral-500 font-mono italic">
-                              • Updated {formatRelativeTime(anime.updatedAt || anime.submittedAt)}
+                              • Last Updated {formatRelativeTime(anime.updatedAt || anime.submittedAt)}
                             </span>
                           )}
                         </div>
@@ -1750,27 +1747,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </button>
                       )}
 
-                      {isAdmin && (
-                        <button
-                          onClick={() => handleTriggerEdit(anime)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 text-xs font-bold transition-all cursor-pointer"
-                          title={`Edit ${anime.title}`}
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                          <span>Edit</span>
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleTriggerEdit(anime)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 text-xs font-bold transition-all cursor-pointer"
+                        title={`Edit ${anime.title}`}
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
 
-                      {isAdmin && (
-                        <button
-                          onClick={() => handleSoftDelete(anime)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-red-950/40 text-neutral-400 hover:text-red-400 border border-neutral-700 hover:border-red-900/50 text-xs font-bold transition-all cursor-pointer"
-                          title={`Move ${anime.title} to Trash`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Trash</span>
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleSoftDelete(anime)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-red-950/40 text-neutral-400 hover:text-red-400 border border-neutral-700 hover:border-red-900/50 text-xs font-bold transition-all cursor-pointer"
+                        title={`Move ${anime.title} to Trash`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Trash</span>
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -1941,24 +1934,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <span>Approve</span>
                         </button>
                       )}
-                      {isAdmin && (
-                        <button
-                          onClick={() => handleTriggerEdit(anime)}
-                          className="p-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors cursor-pointer"
-                          title="Edit Title"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      {isAdmin && (
-                        <button
-                          onClick={() => setAnimeToDelete(anime)}
-                          className="p-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white transition-colors cursor-pointer"
-                          title="Delete Title"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-purple-400" />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleTriggerEdit(anime)}
+                        className="p-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                        title="Edit Title"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleSoftDelete(anime)}
+                        className="p-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white transition-colors cursor-pointer"
+                        title="Move to Trash"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-purple-400" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -2006,7 +1995,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span className="text-[10px] text-neutral-500 font-mono">
                         {act.time}
                       </span>
-                      {act.action !== 'feedback' && isAdmin && (
+                      {act.action !== 'feedback' && (
                         <button
                           onClick={() => {
                             const rawItem = catalogTitles.find(a => a.id === act.id.replace('sub-', '')) || dbService.getAnimeById(act.id.replace('sub-', ''));
