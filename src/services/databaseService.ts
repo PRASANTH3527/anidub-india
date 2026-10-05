@@ -669,6 +669,7 @@ class DatabaseService {
     let failedCount = 0;
     const currentRecords = this.getAllAnimeRecords();
     const newRecords: AnimeRecord[] = [];
+    const importPromises: Promise<void>[] = [];
 
     for (const item of jsonData) {
       try {
@@ -677,20 +678,31 @@ class DatabaseService {
           ...item, 
           id,
           submittedAt: item.submittedAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          status: item.status || 'approved',
+          submissionStatus: item.submissionStatus || 'approved'
         });
         
         if (normalized && normalized.title) {
           newRecords.push(normalized);
-          // Async sync to Firestore
-          setDoc(doc(db, 'animes', id), normalized, { merge: true }).catch(() => {});
+          // Directly upload to multiple collections for redundancy as required
+          const collections = ['animes', 'anime', 'submissions'];
+          collections.forEach(coll => {
+            importPromises.push(setDoc(doc(db, coll, id), normalized, { merge: true }));
+          });
           successCount++;
         } else {
           failedCount++;
         }
-      } catch {
+      } catch (err) {
+        console.error('[Bulk Import Item Error]', err);
         failedCount++;
       }
+    }
+
+    // Wait for all Firestore writes to complete
+    if (importPromises.length > 0) {
+      await Promise.allSettled(importPromises);
     }
 
     if (newRecords.length > 0) {
