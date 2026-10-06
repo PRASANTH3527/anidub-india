@@ -275,7 +275,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
-  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
   const [animeToDelete, setAnimeToDelete] = useState<AnimeRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [editingAnime, setEditingAnime] = useState<AnimeRecord | null>(null);
@@ -345,26 +345,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!force && catalogTitles.length > 0) return;
 
     setIsLoading(true);
+    console.log('Step 0: fetchRealData starting (Source: SERVER)');
     try {
+      const { getDocsFromServer, collection, query, where } = await import('firebase/firestore');
+      
+      // 1. Fetch PENDING items strictly from SERVER for the Moderation Queue
+      const pendingMap = new Map<string, AnimeRecord>();
       const collections = ['animes', 'submissions', 'anime'];
-      const firestoreAnimeMap = new Map<string, AnimeRecord>();
-
+      
       for (const collName of collections) {
         try {
-          const snap = await getDocs(collection(db, collName));
+          const q = query(collection(db, collName), where('status', '==', 'pending'));
+          const snap = await getDocsFromServer(q);
+          snap.forEach((d) => {
+            const rec = dbService.normalizeRecord({ ...d.data(), id: d.id });
+            if (rec && rec.id) pendingMap.set(rec.id, rec);
+          });
+        } catch (err) {
+          console.warn(`[Admin] Error fetching pending from ${collName}:`, err);
+        }
+      }
+
+      // 2. Fetch ALL active items for the Catalog/Manage tab
+      const firestoreAnimeMap = new Map<string, AnimeRecord>();
+      for (const collName of collections) {
+        try {
+          const snap = await getDocsFromServer(collection(db, collName));
           snap.forEach((d) => {
             const rec = dbService.normalizeRecord({ ...d.data(), id: d.id });
             if (rec && rec.id && rec.title) firestoreAnimeMap.set(rec.id, rec);
           });
         } catch (err) {
-          console.warn(`[Admin] Error fetching ${collName}:`, err);
+          console.warn(`[Admin] Error fetching all from ${collName}:`, err);
         }
       }
 
       const allAnime = Array.from(firestoreAnimeMap.values());
       const activeAnime = allAnime.filter(a => !a.isDeleted);
       const trashAnime = allAnime.filter(a => a.isDeleted);
-      const pendingItems = activeAnime.filter(a => a.status === 'pending' || a.submissionStatus === 'pending');
+      const pendingItems = Array.from(pendingMap.values()).filter(a => !a.isDeleted);
 
       setCatalogTitles(activeAnime);
       setDeletedList(trashAnime);
@@ -527,66 +546,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleApprove = async (anime: AnimeRecord) => {
     console.log('Step 1: handleApprove Clicked', anime.id, anime.title);
-    setApprovingId(anime.id);
+    setProcessingId(anime.id);
+    
+    // CAPTURE CURRENT STATE FOR REVERSION
+    const prevPending = [...pendingList];
+    const prevCatalog = [...catalogTitles];
+    const prevCount = pendingSubmissions;
+
     try {
-      console.log('Step 2: Calling dbService.approveSubmission...');
+      console.log('Step 2: Optimistic UI Update...');
+      setPendingList(prev => prev.filter(p => p.id !== anime.id));
+      setPendingSubmissions(prev => Math.max(0, prev - 1));
+      setCatalogTitles(prev => {
+        const next: AnimeRecord[] = [
+          { ...anime, status: 'approved' as any, submissionStatus: 'approved' as any },
+          ...prev.filter(a => a.id !== anime.id)
+        ];
+        return next;
+      });
+
+      console.log('Step 3: Calling dbService.approveSubmission...');
       const success = await dbService.approveSubmission(anime.id, undefined, 'Admin');
+      
       if (success) {
-        console.log('Step 3: Firestore success. Updating local state...');
+        console.log('Step 4: Firestore success.');
         toast.success('Approved', `"${anime.title}" is now live.`);
-        // Immediately update local state for snappy UI
-        setPendingList(prev => {
-          const next = prev.filter(p => p.id !== anime.id);
-          console.log('Step 4: pendingList state updated. Old:', prev.length, 'New:', next.length);
-          return next;
-        });
-        setPendingSubmissions(prev => Math.max(0, prev - 1));
-        setCatalogTitles(prev => {
-          const next: AnimeRecord[] = [
-            { ...anime, status: 'approved' as any, submissionStatus: 'approved' as any },
-            ...prev.filter(a => a.id !== anime.id)
-          ];
-          console.log('Step 5: catalogTitles state updated.');
-          return next;
-        });
-        
-        console.log('Step 6: Moderation cycle complete. Skipping immediate fetchRealData to avoid flicker.');
       } else {
-        console.warn('Step 2b: dbService.approveSubmission returned false');
-        toast.error('Error', 'Could not approve anime.');
+        throw new Error('Database service returned failure');
       }
     } catch (err: any) {
-      console.error('Step 2c: handleApprove FATAL ERROR:', err);
-      toast.error('Approve Failed', isQuotaError(err) ? 'Database limit reached. Please try again later.' : 'An unexpected error occurred.');
+      console.error('Step X: handleApprove FAILED. Reverting state...', err);
+      setPendingList(prevPending);
+      setCatalogTitles(prevCatalog);
+      setPendingSubmissions(prevCount);
+      toast.error('Approve Failed', isQuotaError(err) ? 'Database limit reached.' : 'An unexpected error occurred.');
     } finally {
-      setApprovingId(null);
+      setProcessingId(null);
     }
   };
 
   const handleReject = async (anime: AnimeRecord) => {
     console.log('Step 1: handleReject Clicked', anime.id, anime.title);
+    setProcessingId(anime.id);
+
+    const prevPending = [...pendingList];
+    const prevCatalog = [...catalogTitles];
+    const prevCount = pendingSubmissions;
+
     try {
-      console.log('Step 2: Calling dbService.rejectSubmission...');
-      await dbService.rejectSubmission(anime.id, undefined, 'Admin');
-      console.log('Step 3: Firestore success. Updating local state...');
-      toast.info('Rejected', `"${anime.title}" marked as rejected.`);
-      // Immediately update local state
-      setPendingList(prev => {
-        const next = prev.filter(p => p.id !== anime.id);
-        console.log('Step 4: pendingList state updated. Old:', prev.length, 'New:', next.length);
-        return next;
-      });
+      console.log('Step 2: Optimistic UI Update...');
+      setPendingList(prev => prev.filter(p => p.id !== anime.id));
       setPendingSubmissions(prev => Math.max(0, prev - 1));
       setCatalogTitles(prev => {
         const next: AnimeRecord[] = prev.map(a => a.id === anime.id ? { ...a, status: 'rejected' as any, submissionStatus: 'rejected' as any } : a);
-        console.log('Step 5: catalogTitles state updated.');
         return next;
       });
+
+      console.log('Step 3: Calling dbService.rejectSubmission...');
+      const success = await dbService.rejectSubmission(anime.id, undefined, 'Admin');
       
-      console.log('Step 6: Moderation cycle complete. Skipping immediate fetchRealData.');
+      if (success) {
+        console.log('Step 4: Firestore success.');
+        toast.info('Rejected', `"${anime.title}" marked as rejected.`);
+      } else {
+        throw new Error('Database service returned failure');
+      }
     } catch (err: any) {
-      console.error('Step 2b: handleReject FATAL ERROR:', err);
+      console.error('Step X: handleReject FAILED. Reverting state...', err);
+      setPendingList(prevPending);
+      setCatalogTitles(prevCatalog);
+      setPendingSubmissions(prevCount);
       toast.error('Reject Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -1417,12 +1449,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
                     <div className="flex items-center gap-2 mt-auto pt-4 border-t border-neutral-800/60">
-                      <button onClick={() => handleApprove(anime)} disabled={approvingId === anime.id} className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2 uppercase">
-                        {approvingId === anime.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                      <button onClick={() => handleApprove(anime)} disabled={processingId === anime.id} className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2 uppercase">
+                        {processingId === anime.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                         APPROVE
                       </button>
-                      <button onClick={() => handleTriggerEdit(anime)} className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-[10px] border border-neutral-700 transition-all uppercase">EDIT</button>
-                      <button onClick={() => handleReject(anime)} className="px-4 py-2.5 rounded-xl bg-red-600/10 hover:bg-red-600/20 text-red-400 font-bold text-[10px] border border-red-500/20 transition-all uppercase">REJECT</button>
+                      <button onClick={() => handleTriggerEdit(anime)} disabled={processingId === anime.id} className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-[10px] border border-neutral-700 transition-all uppercase disabled:opacity-50">EDIT</button>
+                      <button onClick={() => handleReject(anime)} disabled={processingId === anime.id} className="px-4 py-2.5 rounded-xl bg-red-600/10 hover:bg-red-600/20 text-red-400 font-bold text-[10px] border border-red-500/20 transition-all uppercase disabled:opacity-50 flex items-center justify-center gap-1.5">
+                        {processingId === anime.id ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                        REJECT
+                      </button>
                     </div>
                   </div>
                 ))}
