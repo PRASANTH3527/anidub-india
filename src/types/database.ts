@@ -101,6 +101,21 @@ export interface WatchlistEntry {
   completedAt?: string;
 }
 
+export interface AnimeCollection {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  title: string;
+  description: string;
+  animeIds: string[];
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string;
+  likes: number;
+  views: number;
+}
+
 export interface JikanAnimeResult {
   mal_id: number;
   title: string;

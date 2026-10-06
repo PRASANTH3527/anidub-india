@@ -12,10 +12,18 @@ import {
   Flame, 
   Tv, 
   Eye, 
-  ExternalLink 
+  ExternalLink,
+  Dna,
+  Layers,
+  PlusCircle,
+  Share2
 } from 'lucide-react';
 import { Anime, WatchlistItem, DubLanguage, UserProfile } from '../types/anime';
 import { useTheme } from '../context/ThemeContext';
+import { AnimeDNAProfile } from './AnimeDNAProfile';
+import { dbService } from '../services/databaseService';
+import { AnimeCollection } from '../types/database';
+import { useToast } from './Toast';
 
 interface ProfileViewProps {
   allAnime: Anime[];
@@ -43,6 +51,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const [filterStatus, setFilterStatus] = useState<'all' | 'plan_to_watch' | 'watched'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [profileTab, setProfileTab] = useState<'watchlist' | 'dna' | 'collections'>('watchlist');
+  const toast = useToast();
   
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editName, setEditName] = useState(globalNickname);
@@ -211,32 +221,55 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </div>
       </div>
+      
+      {/* Profile Sub-Navigation */}
+      <div className="flex items-center gap-1 p-1 rounded-2xl bg-[#131926] border border-neutral-800 w-fit">
+        {[
+          { id: 'watchlist', label: 'Watchlist', icon: Bookmark },
+          { id: 'dna', label: 'Anime DNA', icon: Dna },
+          { id: 'collections', label: 'Collections', icon: Layers },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setProfileTab(tab.id as any)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              profileTab === tab.id
+                ? 'bg-primary-theme text-white shadow-lg'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <tab.icon className="w-3.5 h-3.5" />
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
 
-      {/* Watchlist Section */}
-      <div className="space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-neutral-800">
-          <div>
-            <h3 className="font-heading font-black text-xl text-white flex items-center gap-2">
-              <Bookmark className="w-5 h-5 text-accent-theme" />
-              <span>My Watchlist</span>
-            </h3>
-            <p className="text-xs text-neutral-400">
-              Manage what you're watching, mark completed anime, and track your progress.
-            </p>
-          </div>
+      {/* Main Content Area based on Active Tab */}
+      {profileTab === 'watchlist' && (
+        <div className="space-y-5 animate-in fade-in duration-500">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-neutral-800">
+            <div>
+              <h3 className="font-heading font-black text-xl text-white flex items-center gap-2">
+                <Bookmark className="w-5 h-5 text-accent-theme" />
+                <span>My Watchlist</span>
+              </h3>
+              <p className="text-xs text-neutral-400">
+                Manage what you're watching, mark completed anime, and track your progress.
+              </p>
+            </div>
 
-          {/* Search bar inside Watchlist */}
-          <div className="relative w-full sm:w-64">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search in watchlist..."
-              className="w-full bg-[#131926] border border-neutral-700 rounded-xl py-2 pl-3 pr-8 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-accent-theme"
-            />
-            <Search className="w-3.5 h-3.5 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            {/* Search bar inside Watchlist */}
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search in watchlist..."
+                className="w-full bg-[#131926] border border-neutral-700 rounded-xl py-2 pl-3 pr-8 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-accent-theme"
+              />
+              <Search className="w-3.5 h-3.5 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
-        </div>
 
         {/* Watchlist Filter Status Tabs */}
         <div className="flex items-center gap-2">
@@ -417,7 +450,72 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         )}
       </div>
+    )}
 
+    {/* Anime DNA Profile Tab */}
+      {profileTab === 'dna' && (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+           <div className="pb-6 mb-6 border-b border-neutral-800">
+              <h3 className="font-heading font-black text-xl text-white flex items-center gap-2">
+                <Dna className="w-5 h-5 text-emerald-400" />
+                <span>Your Anime DNA</span>
+              </h3>
+              <p className="text-xs text-neutral-400">
+                Deep analysis of your watching habits, studio preferences, and linguistic profile.
+              </p>
+           </div>
+           <AnimeDNAProfile watchedAnime={combinedList.filter(l => l.item.status === 'watched').map(l => l.anime)} />
+        </div>
+      )}
+
+      {/* Collections Management Tab */}
+      {profileTab === 'collections' && (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-neutral-800">
+              <div>
+                <h3 className="font-heading font-black text-xl text-white flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-primary-theme" />
+                  <span>Custom Collections</span>
+                </h3>
+                <p className="text-xs text-neutral-400">
+                  Curate your own public lists and share them with the community.
+                </p>
+              </div>
+              <button 
+                onClick={() => {
+                  toast.info('Feature Coming Soon', 'Custom collection creation is being finalized with Firestore sync.');
+                }}
+                className="flex items-center gap-2 px-4 py-2 btn-primary-theme text-white text-xs font-black rounded-xl shadow-lg active:scale-95 transition-all cursor-pointer"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Create New List</span>
+              </button>
+           </div>
+
+           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Sample Static List for UX Demo */}
+              <div className="bg-[#131926] border border-neutral-800 rounded-3xl p-5 space-y-4 hover:border-primary-theme/50 transition-colors group cursor-pointer">
+                 <div className="aspect-[2/1] bg-neutral-900 rounded-2xl overflow-hidden flex gap-0.5">
+                    {combinedList.slice(0, 3).map((l, i) => (
+                      <img key={i} src={l.anime.poster} className="w-1/3 h-full object-cover opacity-60" />
+                    ))}
+                    {combinedList.length === 0 && <div className="w-full h-full flex items-center justify-center text-neutral-800 font-black text-2xl italic">EMPTY</div>}
+                 </div>
+                 <div className="space-y-1">
+                    <h4 className="font-black text-white group-hover:text-primary-theme transition-colors">My Top 10 All-Time Favorites</h4>
+                    <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">{combinedList.length} Items • Public</p>
+                 </div>
+                 <div className="flex items-center justify-between pt-2 border-t border-neutral-800/50">
+                    <div className="flex items-center gap-2">
+                       <img src={globalAvatar} className="w-5 h-5 rounded-full border border-primary-theme/30" />
+                       <span className="text-[10px] font-bold text-neutral-400">{globalNickname}</span>
+                    </div>
+                    <Share2 className="w-3.5 h-3.5 text-neutral-500 group-hover:text-white transition-colors" />
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

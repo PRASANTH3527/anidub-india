@@ -481,11 +481,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleDeleteConfirm = async () => {
     if (!animeToDelete) return;
     setIsDeleting(true);
-    dbService.permanentlyDeleteSubmission(animeToDelete.id);
-    toast.success('Erased', 'Record permanently removed.');
-    setAnimeToDelete(null);
-    setIsDeleting(false);
-    fetchRealData();
+    try {
+      await dbService.permanentlyDeleteSubmission(animeToDelete.id);
+      toast.success('Erased', 'Record permanently removed.');
+      setAnimeToDelete(null);
+      fetchRealData();
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      toast.error('Failed to Delete', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {

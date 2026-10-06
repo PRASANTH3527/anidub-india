@@ -1,4 +1,4 @@
-import { AnimeRecord, DubReview, WatchlistEntry, SubmissionStatus, StreamingPlatform } from '../types/database';
+import { AnimeRecord, DubReview, WatchlistEntry, SubmissionStatus, StreamingPlatform, AnimeCollection } from '../types/database';
 import { Anime, DubLanguage } from '../types/anime';
 import { db } from '../lib/firebase';
 import { authService } from './authService';
@@ -23,6 +23,7 @@ import {
 const DB_ANIME_KEY = 'anidub_db_anime_records';
 const DB_REVIEWS_KEY = 'anidub_db_reviews';
 const DB_WATCHLIST_KEY = 'anidub_db_watchlists';
+const DB_COLLECTIONS_KEY = 'anidub_db_collections';
 const QUOTA_EXCEEDED_KEY = 'anidub_firestore_quota_exceeded_timestamp';
 const LAST_SYNC_KEY = 'anidub_db_last_sync_timestamp';
 
@@ -1097,10 +1098,11 @@ class DatabaseService {
     return Number((sum / reviews.length).toFixed(1));
   }
 
-  public addReview(reviewData: Omit<DubReview, 'id' | 'createdAt' | 'likes'>): DubReview {
+  public async addReview(reviewData: Omit<DubReview, 'id' | 'createdAt' | 'likes'>): Promise<DubReview> {
+    const reviewId = 'rev-' + Date.now().toString(36);
     const newReview: DubReview = {
       ...reviewData,
-      id: 'rev-' + Date.now().toString(36),
+      id: reviewId,
       createdAt: new Date().toISOString(),
       likes: 0,
     };
@@ -1109,9 +1111,24 @@ class DatabaseService {
       const raw = localStorage.getItem(DB_REVIEWS_KEY);
       const all: DubReview[] = raw ? JSON.parse(raw) : [];
       localStorage.setItem(DB_REVIEWS_KEY, JSON.stringify([newReview, ...all]));
+      
+      // Sync to Firestore
+      try {
+        await setDoc(doc(db, 'reviews', reviewId), {
+          ...newReview,
+          serverCreatedAt: serverTimestamp(),
+        });
+      } catch (fsErr: any) {
+        console.warn('[Firestore Review Sync Error]', fsErr);
+        if (isQuotaError(fsErr)) {
+          throw fsErr; // Re-throw to let component handle quota hit
+        }
+      }
+      
       this.notify();
     } catch (e) {
       console.error('Error adding review:', e);
+      throw e;
     }
 
     return newReview;
@@ -1205,6 +1222,69 @@ class DatabaseService {
       return 'plan_to_watch';
     } catch {
       return 'plan_to_watch';
+    }
+  }
+
+  // --- 7. Public Anime Collections ---
+  public async createCollection(data: Omit<AnimeCollection, 'id' | 'createdAt' | 'updatedAt' | 'likes' | 'views'>): Promise<AnimeCollection> {
+    const id = 'col-' + Math.random().toString(36).substring(2, 9);
+    const now = new Date().toISOString();
+    const newCollection: AnimeCollection = {
+      ...data,
+      id,
+      createdAt: now,
+      updatedAt: now,
+      likes: 0,
+      views: 0
+    };
+
+    try {
+      const raw = localStorage.getItem(DB_COLLECTIONS_KEY);
+      const all: AnimeCollection[] = raw ? JSON.parse(raw) : [];
+      localStorage.setItem(DB_COLLECTIONS_KEY, JSON.stringify([newCollection, ...all]));
+      
+      // Persist to Firestore if public
+      if (newCollection.isPublic) {
+        await setDoc(doc(db, 'collections', id), newCollection);
+      }
+      
+      this.notify();
+      return newCollection;
+    } catch (e) {
+      console.error('Error creating collection:', e);
+      return newCollection;
+    }
+  }
+
+  public async getPublicCollection(id: string): Promise<AnimeCollection | null> {
+    // Try local cache first
+    try {
+      const raw = localStorage.getItem(DB_COLLECTIONS_KEY);
+      const all: AnimeCollection[] = raw ? JSON.parse(raw) : [];
+      const local = all.find(c => c.id === id);
+      if (local) return local;
+    } catch {}
+
+    // Fallback to Firestore
+    try {
+      const { getDoc } = await import('firebase/firestore');
+      const snap = await getDoc(doc(db, 'collections', id));
+      if (snap.exists()) {
+        return snap.data() as AnimeCollection;
+      }
+    } catch (e) {
+      console.error('Error fetching public collection:', e);
+    }
+    return null;
+  }
+
+  public getUserCollections(userId: string): AnimeCollection[] {
+    try {
+      const raw = localStorage.getItem(DB_COLLECTIONS_KEY);
+      const all: AnimeCollection[] = raw ? JSON.parse(raw) : [];
+      return all.filter(c => c.userId === userId);
+    } catch {
+      return [];
     }
   }
 }

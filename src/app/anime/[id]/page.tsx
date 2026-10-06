@@ -60,5 +60,46 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function AnimeDynamicRoute({ params }: PageProps) {
   const { id } = await params;
-  redirect(`/#anime/${id}`);
+  const anime = ANIME_DATABASE.find((a) => a.id === id);
+
+  if (!anime) {
+    redirect('/');
+  }
+
+  // Schema.org Structured Data for SEO Rich Snippets
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': anime.type === 'Movie' ? 'Movie' : 'TVSeries',
+    name: anime.title,
+    alternativeName: [anime.romajiTitle, anime.nativeTitle].filter(Boolean),
+    description: anime.synopsis,
+    image: anime.imageUrl || anime.poster,
+    datePublished: anime.releaseYear ? `${anime.releaseYear}-01-01` : undefined,
+    genre: anime.genres,
+    productionCompany: {
+      '@type': 'Organization',
+      name: anime.studio || (anime as any).animationStudio,
+    },
+    aggregateRating: anime.rating ? {
+      '@type': 'AggregateRating',
+      ratingValue: anime.rating,
+      bestRating: '10',
+      worstRating: '1',
+      ratingCount: (anime as any).upvotes || (anime as any).likes || 100,
+    } : undefined,
+  };
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      {/* Client-side navigation to the hash route handled by the root App component */}
+      <div className="min-h-screen bg-[#0b0f17] flex items-center justify-center">
+        <div className="animate-pulse text-neutral-500 font-bold">Redirecting to {anime.title}...</div>
+      </div>
+      <script dangerouslySetInnerHTML={{ __html: `window.location.href = '/#anime/${id}';` }} />
+    </>
+  );
 }

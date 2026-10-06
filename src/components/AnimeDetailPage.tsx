@@ -174,7 +174,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   };
 
   // Submit new review
-  const handleReviewSubmit = (e: React.FormEvent) => {
+  const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentInput.trim()) return;
 
@@ -184,20 +184,34 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     }
 
     setIsSubmittingReview(true);
-    dbService.addReview({
-      animeId: anime.id,
-      userId: currentUser.uid,
-      userName: currentUser.displayName,
-      userAvatar: currentUser.photoURL,
-      language: languageInput,
-      rating: ratingInput,
-      comment: commentInput.trim(),
-      isSpoiler: isSpoilerInput,
-    });
+    try {
+      await dbService.addReview({
+        animeId: anime.id,
+        userId: currentUser.uid,
+        userName: currentUser.displayName,
+        userAvatar: currentUser.photoURL,
+        language: languageInput,
+        rating: ratingInput,
+        comment: commentInput.trim(),
+        isSpoiler: isSpoilerInput,
+      });
 
-    setCommentInput('');
-    setIsSpoilerInput(false);
-    setIsSubmittingReview(false);
+      setCommentInput('');
+      setIsSpoilerInput(false);
+      toast.success('Review Submitted', 'Thank you for your feedback!');
+      loadReviews();
+    } catch (err: any) {
+      console.error('[Review submission error]:', err);
+      const isQuota = isQuotaError && isQuotaError(err);
+      toast.error(
+        isQuota ? 'Database limit reached' : 'Review Failed',
+        isQuota 
+          ? 'Database limit reached. Please try again later.' 
+          : 'Could not submit review. Please check your connection and try again.'
+      );
+    } finally {
+      setIsSubmittingReview(false);
+    }
   };
 
   const handleLike = (reviewId: string) => {

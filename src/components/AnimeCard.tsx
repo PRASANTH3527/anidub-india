@@ -17,6 +17,7 @@ import { Anime, DubLanguage } from '../types/anime';
 import { useToast } from './Toast';
 import { dbService } from '../services/databaseService';
 import { posterCacheService } from '../services/posterCacheService';
+import { ParallaxCard } from './ParallaxCard';
 
 export interface AnimeCardProps {
   anime: Anime;
@@ -249,12 +250,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
   };
 
   return (
-    <div 
-      onClick={() => onSelect(anime)}
-      className="group relative flex flex-col h-full bg-[#131926] rounded-2xl overflow-hidden border border-neutral-800/80 hover:border-primary-theme sm:hover:scale-[1.02] active:scale-[0.99] transition-all duration-300 cursor-pointer shadow-md hover:shadow-xl hover:shadow-primary-theme/20 select-none will-change-transform"
-    >
-      {/* Poster Section (Lightweight, No 3D Perspective) */}
-      <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
+    <ParallaxCard className="h-full">
+      <div 
+        onClick={() => onSelect(anime)}
+        className="group relative flex flex-col h-full bg-[#131926] transition-all duration-300 cursor-pointer select-none"
+      >
+        {/* Poster Section (Lightweight, No 3D Perspective) */}
+        <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
         {!imageError ? (
           <img
             src={displayImage}
@@ -466,7 +468,8 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
         </div>
       </div>
     </div>
-  );
+  </ParallaxCard>
+);
 });
 
 export default AnimeCard;

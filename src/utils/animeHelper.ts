@@ -1,74 +1,70 @@
-import { Anime, CharacterVoiceActor } from '../types/anime';
-import { ANIME_DATABASE } from '../data/animeData';
-import { ANIME_ENRICHMENT_MAP, ALL_RECOMMENDATION_THEMES } from '../data/animeEnrichment';
+import { Anime, DubLanguage } from '../types/anime';
+import { AnimeRecord } from '../types/database';
 
-// Helper to provide realistic fallback characters based on anime genres/title
-const getFallbackCharacters = (anime: Anime): CharacterVoiceActor[] => {
-  return [
-    {
-      characterName: `Protagonist of ${anime.title.split(':')[0]}`,
-      role: 'Main',
-      characterImage: anime.poster,
-      japaneseVA: 'Kenjiro Tsuda / Mamoru Miyano',
-      indianVA: {
-        language: anime.dubs[0] || 'Tamil',
-        actor: 'Leading Indian Dub Voice Artist',
-      },
-    },
-    {
-      characterName: 'Key Companion / Rival',
-      role: 'Main',
-      characterImage: anime.poster,
-      japaneseVA: 'Takahiro Sakurai / Saori Hayami',
-      indianVA: {
-        language: anime.dubs[1] || anime.dubs[0] || 'Hindi',
-        actor: 'Featured Regional Voice Artist',
-      },
-    },
-    {
-      characterName: 'Mentor / Supporting Ally',
-      role: 'Supporting',
-      characterImage: anime.poster,
-      japaneseVA: 'Takehito Koyasu',
-    },
-  ];
-};
+export interface AnimeDNA {
+  topStudios: { name: string; count: number; percentage: number }[];
+  topLanguages: { name: string; count: number; percentage: number }[];
+  topGenres: { name: string; count: number; percentage: number }[];
+  totalWatched: number;
+  totalTimeEstimated: number; // in minutes
+}
 
-// Returns fully enriched anime list
-export const getEnrichedAnimeList = (): Anime[] => {
-  return ANIME_DATABASE.map((item) => {
-    const enrichment = ANIME_ENRICHMENT_MAP[item.id];
-    const defaultDate = `October ${10 + (item.releaseYear % 15)}, ${item.releaseYear}`;
-    
-    // Auto derive themes from genres if not in enrichment map
-    const defaultThemes: string[] = [];
-    if (item.genres.includes('Action') || item.genres.includes('Shonen')) {
-      defaultThemes.push('Super Power', 'High Stakes Survival');
-    }
-    if (item.genres.includes('Fantasy') || item.genres.includes('Supernatural')) {
-      defaultThemes.push('Dark Fantasy', 'Magic & Humanity');
-    }
-    if (item.genres.includes('Isekai')) {
-      defaultThemes.push('Reincarnation / Isekai', 'Underdog to OP');
-    }
-    if (item.genres.includes('Romance') || item.genres.includes('Slice of Life')) {
-      defaultThemes.push('Wholesome Romance', 'School Life & Youth');
-    }
-    if (item.genres.includes('Sports')) {
-      defaultThemes.push('Sports Tournament', 'Ego & Rivalry');
-    }
-    if (item.genres.includes('Comedy')) {
-      defaultThemes.push('Overpowered Hero Parody');
-    }
-    if (defaultThemes.length === 0) {
-      defaultThemes.push('Grand Adventure');
-    }
-
+/**
+ * Analyzes a list of anime to extract "DNA" patterns (preferred studios, languages, etc.)
+ */
+export function calculateAnimeDNA(watchedAnime: Anime[]): AnimeDNA {
+  const total = watchedAnime.length;
+  if (total === 0) {
     return {
-      ...item,
-      originalReleaseDate: enrichment?.originalReleaseDate || item.originalReleaseDate || defaultDate,
-      themes: enrichment?.themes || item.themes || defaultThemes,
-      characters: enrichment?.characters || item.characters || getFallbackCharacters(item),
+      topStudios: [],
+      topLanguages: [],
+      topGenres: [],
+      totalWatched: 0,
+      totalTimeEstimated: 0,
     };
+  }
+
+  const studios: Record<string, number> = {};
+  const languages: Record<string, number> = {};
+  const genres: Record<string, number> = {};
+  let totalMinutes = 0;
+
+  watchedAnime.forEach((anime) => {
+    // Studio analysis
+    const studio = anime.studio || (anime as any).animationStudio || 'Unknown';
+    studios[studio] = (studios[studio] || 0) + 1;
+
+    // Language analysis
+    (anime.dubs || []).forEach((lang) => {
+      languages[lang] = (languages[lang] || 0) + 1;
+    });
+
+    // Genre analysis
+    (anime.genres || []).forEach((genre) => {
+      genres[genre] = (genres[genre] || 0) + 1;
+    });
+
+    // Time estimation (Avg 24 mins per episode)
+    const episodes = anime.episodes || 12;
+    totalMinutes += episodes * 24;
   });
-};
+
+  const sortAndMap = (record: Record<string, number>) => {
+    return Object.entries(record)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({
+        name,
+        count,
+        percentage: Math.round((count / total) * 100),
+      }));
+  };
+
+  return {
+    topStudios: sortAndMap(studios),
+    topLanguages: sortAndMap(languages),
+    topGenres: sortAndMap(genres),
+    totalWatched: total,
+    totalTimeEstimated: totalMinutes,
+  };
+}

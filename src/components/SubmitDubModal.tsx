@@ -161,7 +161,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         setJikanResults(results);
         setShowDropdown(results.length > 0);
       } catch (e) {
-        console.error(e);
+        console.error('[Jikan Search Error]', e);
+        toast.error('Search Failed', 'Could not fetch anime data from MyAnimeList.');
       } finally {
         setIsSearchingJikan(false);
       }
@@ -445,264 +446,325 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
     setIsSubmitting(true);
 
-    const defaultCover =
-      poster.trim() ||
-      'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
+    try {
+      const defaultCover =
+        poster.trim() ||
+        'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
 
-    const platforms = streamingPartners
-      .filter(p => p.url?.trim() || p.name)
-      .map(p => ({
-        name: p.name,
-        url: p.url.trim() || 'https://www.crunchyroll.com',
-        languages: p.languages && p.languages.length > 0 ? p.languages : derivedGlobalDubs
+      const platforms = streamingPartners
+        .filter(p => p.url?.trim() || p.name)
+        .map(p => ({
+          name: p.name,
+          url: p.url.trim() || 'https://www.crunchyroll.com',
+          languages: p.languages && p.languages.length > 0 ? p.languages : derivedGlobalDubs
+        }));
+
+      const finalPlatforms = platforms.length > 0 ? platforms : [{ name: 'Crunchyroll' as StreamingPlatform, url: 'https://www.crunchyroll.com', languages: derivedGlobalDubs }];
+
+      const totalEpisodes = seasonDetails.reduce((acc, s) => acc + (Number(s.episodeCount) || 0), 0);
+      
+      const dubDetails = derivedGlobalDubs.map((lang) => ({
+        language: lang,
+        available: true,
+        platform: finalPlatforms.map(p => p.name),
+        notes: `Verified ${lang} dub available on ${finalPlatforms.map(p => p.name).join(', ')}`,
       }));
 
-    const finalPlatforms = platforms.length > 0 ? platforms : [{ name: 'Crunchyroll' as StreamingPlatform, url: 'https://www.crunchyroll.com', languages: derivedGlobalDubs }];
+      const payload = {
+        title: title.trim(),
+        romajiTitle: romajiTitle.trim() || title.trim(),
+        poster: defaultCover,
+        imageUrl: defaultCover,
+        synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available on AniDub India.`,
+        releaseYear: releaseYear ? Number(releaseYear) : new Date().getFullYear(),
+        originalReleaseDate: `${releaseYear || new Date().getFullYear()}`,
+        rating: (rating !== '' && rating !== undefined) ? Number(rating) : undefined,
+        episodes: totalEpisodes || 12,
+        seasons: seasonDetails.filter(s => s.type === 'Season').length || 1,
+        totalSeasons: seasonDetails.filter(s => s.type === 'Season').length || 1,
+        seasonDetails: seasonDetails.map(s => ({
+          type: s.type || 'Season',
+          label: s.label || '1',
+          episodeCount: Number(s.episodeCount) || 0,
+          languages: s.languages && s.languages.length > 0 ? s.languages : derivedGlobalDubs
+        })),
+        currentSeason: airingStatus === 'Ongoing' && currentSeason !== '' ? Number(currentSeason) : undefined,
+        currentlyAiringEpisode: airingStatus === 'Ongoing' && currentlyAiringEpisode !== '' ? Number(currentlyAiringEpisode) : undefined,
+        type: type || 'TV Series',
+        studio: studio.trim() || 'Animation Studio',
+        status: airingStatus || 'Ongoing',
+        airingStatus: airingStatus || 'Ongoing',
+        releaseDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
+        airingDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
+        genres: genres.length > 0 ? genres : ['Action'],
+        dubs: derivedGlobalDubs,
+        dubDetails,
+        platforms: finalPlatforms,
+      };
 
-    const totalEpisodes = seasonDetails.reduce((acc, s) => acc + (Number(s.episodeCount) || 0), 0);
-    
-    const dubDetails = derivedGlobalDubs.map((lang) => ({
-      language: lang,
-      available: true,
-      platform: finalPlatforms.map(p => p.name),
-      notes: `Verified ${lang} dub available on ${finalPlatforms.map(p => p.name).join(', ')}`,
-    }));
+      if (activeAnime && (isEditMode || editAnime || localEditAnime)) {
+        // CRITICAL SECURITY CHECK: Verify authenticated as Admin
+        if (!authService.isAdmin()) {
+          console.warn('[Security Violation] Non-admin attempted direct edit on anime:', activeAnime.id);
 
-    const payload = {
-      title: title.trim(),
-      romajiTitle: romajiTitle.trim() || title.trim(),
-      poster: defaultCover,
-      imageUrl: defaultCover,
-      synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available on AniDub India.`,
-      releaseYear: releaseYear ? Number(releaseYear) : new Date().getFullYear(),
-      originalReleaseDate: `${releaseYear || new Date().getFullYear()}`,
-      rating: (rating !== '' && rating !== undefined) ? Number(rating) : undefined,
-      episodes: totalEpisodes || 12,
-      seasons: seasonDetails.filter(s => s.type === 'Season').length || 1,
-      totalSeasons: seasonDetails.filter(s => s.type === 'Season').length || 1,
-      seasonDetails: seasonDetails.map(s => ({
-        type: s.type || 'Season',
-        label: s.label || '1',
-        episodeCount: Number(s.episodeCount) || 0,
-        languages: s.languages && s.languages.length > 0 ? s.languages : derivedGlobalDubs
-      })),
-      currentSeason: airingStatus === 'Ongoing' && currentSeason !== '' ? Number(currentSeason) : undefined,
-      currentlyAiringEpisode: airingStatus === 'Ongoing' && currentlyAiringEpisode !== '' ? Number(currentlyAiringEpisode) : undefined,
-      type: type || 'TV Series',
-      studio: studio.trim() || 'Animation Studio',
-      status: airingStatus || 'Ongoing',
-      airingStatus: airingStatus || 'Ongoing',
-      releaseDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
-      airingDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
-      genres: genres.length > 0 ? genres : ['Action'],
-      dubs: derivedGlobalDubs,
-      dubDetails,
-      platforms: finalPlatforms,
-    };
+          // Security requirement: Block direct live update and save as pending edit submission for admin review
+          const proposalId = 'sub-edit-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
+          const editProposalData = cleanFirestoreData({
+            ...payload,
+            id: proposalId,
+            targetAnimeId: activeAnime.id,
+            originalTitle: activeAnime.title,
+            isEditProposal: true,
+            status: 'pending',
+            submissionStatus: 'pending',
+            submittedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            submittedBy: {
+              userId: currentUser?.uid || 'guest-user',
+              userName: currentUser?.displayName || 'Community Contributor',
+              userEmail: currentUser?.email || 'contributor@anidub.in',
+            },
+          });
 
-    if (activeAnime && (isEditMode || editAnime || localEditAnime)) {
-      // CRITICAL SECURITY CHECK: Verify authenticated as Admin
-      if (!authService.isAdmin()) {
-        console.warn('[Security Violation] Non-admin attempted direct edit on anime:', activeAnime.id);
+          try {
+            await setDoc(doc(db, 'submissions', proposalId), editProposalData);
+          } catch (err) {
+            console.error('[Firestore Edit Proposal Error]', err);
+            if (isQuotaError(err)) {
+              throw err; // Re-throw to be caught by main catch block
+            }
+          }
 
-        // Security requirement: Block direct live update and save as pending edit submission for admin review
-        const proposalId = 'sub-edit-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
-        const editProposalData = cleanFirestoreData({
-          ...payload,
-          id: proposalId,
-          targetAnimeId: activeAnime.id,
-          originalTitle: activeAnime.title,
-          isEditProposal: true,
-          status: 'pending',
-          submissionStatus: 'pending',
-          submittedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          submittedBy: {
-            userId: currentUser?.uid || 'guest-user',
-            userName: currentUser?.displayName || 'Community Contributor',
-            userEmail: currentUser?.email || 'contributor@anidub.in',
-          },
-        });
+          // Notify Telegram of pending edit proposal
+          try {
+            const telegramAlertMsg = `🔔 Proposed Edit Submitted: ${title.trim()} (Pending Admin Review)`;
+            await fetch('/api/telegram', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: telegramAlertMsg,
+                text: telegramAlertMsg,
+                title: title.trim(),
+              }),
+            });
+          } catch {}
 
-        try {
-          await setDoc(doc(db, 'submissions', proposalId), editProposalData);
-        } catch (err) {
-          console.error('[Firestore Edit Proposal Error]', err);
+          toast.error(
+            'Unauthorized Direct Edit',
+            'Only verified Administrators can edit live anime directly. Your changes have been securely submitted as a pending review for Admin approval.'
+          );
+          onClose();
+          return;
         }
 
-        // Notify Telegram of pending edit proposal
+        // 1. Authenticated Admin Direct write to live Firebase Firestore database
         try {
-          const telegramAlertMsg = `🔔 Proposed Edit Submitted: ${title.trim()} (Pending Admin Review)`;
-          await fetch('/api/telegram', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: telegramAlertMsg,
-              text: telegramAlertMsg,
-              title: title.trim(),
-            }),
+          const sanitizedEditPayload = cleanFirestoreData({
+            ...payload,
+            updatedAt: new Date().toISOString(),
           });
-        } catch {}
 
-        setIsSubmitting(false);
-        toast.error(
-          'Unauthorized Direct Edit',
-          'Only verified Administrators can edit live anime directly. Your changes have been securely submitted as a pending review for Admin approval.'
-        );
-        onClose();
+          await setDoc(doc(db, 'animes', activeAnime.id), sanitizedEditPayload, { merge: true });
+          try {
+            await setDoc(doc(db, 'anime', activeAnime.id), sanitizedEditPayload, { merge: true });
+          } catch {}
+          try {
+            await setDoc(doc(db, 'submissions', activeAnime.id), sanitizedEditPayload, { merge: true });
+          } catch {}
+        } catch (fsEditErr) {
+          console.error('[Firestore Direct Edit Error]', fsEditErr);
+          if (isQuotaError(fsEditErr)) throw fsEditErr;
+        }
+
+        // 2. Also update local cache via databaseService
+        const success = dbService.updateAnime(activeAnime.id, payload);
+        
+        if (success) {
+          // Dispatch Telegram admin notification
+          try {
+            const telegramMessage = `🔔 Anime Updated: ${title.trim()}`;
+            await fetch('/api/telegram', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: telegramMessage,
+                text: telegramMessage,
+                title: title.trim(),
+                anime: {
+                  id: activeAnime.id,
+                  title: title.trim(),
+                  poster: poster || defaultCover,
+                  synopsis: synopsis.trim(),
+                  genres: genres.join(', '),
+                  languages: derivedGlobalDubs,
+                  episodes: airingStatus === 'Ongoing' ? (currentlyAiringEpisode || 'Ongoing') : (seasonDetails[0]?.episodeCount || 'Completed'),
+                  score: rating || 'N/A',
+                },
+              }),
+            });
+          } catch (err) {
+            console.warn('Telegram notification error:', err);
+          }
+
+          toast.success('Anime Updated!', `"${title.trim()}" has been successfully updated.`);
+          onClose();
+          onSuccess?.();
+        } else {
+          toast.error('Update Failed', 'Could not update the record.');
+        }
         return;
       }
 
-      // 1. Authenticated Admin Direct write to live Firebase Firestore database
+      // Creating new record ID
+      const newId = 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
+
+      const newRecord: AnimeRecord = {
+        ...payload,
+        id: newId,
+        status: 'pending',
+        submissionStatus: 'pending',
+        submittedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        themes: ['Super Power', 'Indian Dub'],
+        characters: [
+          {
+            characterName: `Protagonist of ${title.trim()}`,
+            role: 'Main',
+            characterImage: defaultCover,
+            japaneseVA: 'Original Cast',
+            indianVA: {
+              language: derivedGlobalDubs[0],
+              actor: 'Regional Voice Cast',
+            },
+          },
+        ],
+        submittedBy: {
+          userId: currentUser?.uid || 'guest-user',
+          userName: currentUser?.displayName || 'Community Member',
+          userEmail: currentUser?.email || 'contributor@anidub.in',
+        },
+        likes: 0,
+        upvotes: 0,
+      };
+
+      let isQuotaHit = false;
+
+      // 1. Save new anime data DIRECTLY to live Firebase Firestore database collections ('animes', 'anime', and 'submissions')
       try {
-        const sanitizedEditPayload = cleanFirestoreData({
-          ...payload,
-          updatedAt: new Date().toISOString(),
+        const sanitizedDocData = cleanFirestoreData({
+          ...newRecord,
+          createdAt: new Date().toISOString(),
+          serverCreatedAt: serverTimestamp(),
         });
 
-        await setDoc(doc(db, 'animes', activeAnime.id), sanitizedEditPayload, { merge: true });
+        await setDoc(doc(db, 'animes', newId), sanitizedDocData);
+
         try {
-          await setDoc(doc(db, 'anime', activeAnime.id), sanitizedEditPayload, { merge: true });
+          await setDoc(doc(db, 'anime', newId), sanitizedDocData);
         } catch {}
-        try {
-          await setDoc(doc(db, 'submissions', activeAnime.id), sanitizedEditPayload, { merge: true });
-        } catch {}
-      } catch (fsEditErr) {
-        console.error('[Firestore Direct Edit Error]', fsEditErr);
+
+        await setDoc(doc(db, 'submissions', newId), sanitizedDocData);
+
+        // Log activity event in Firestore
+        await setDoc(doc(db, 'activities', `act-${newId}`), {
+          user: newRecord.submittedBy?.userName || 'Community User',
+          action: 'submitted',
+          animeTitle: newRecord.title,
+          timestamp: new Date(),
+          language: newRecord.dubs?.[0] || 'Tamil',
+          status: 'pending',
+        });
+      } catch (firestoreError: any) {
+        console.error('[Firestore Direct Save Error]', firestoreError);
+        if (isQuotaError(firestoreError)) {
+          isQuotaHit = true;
+        } else {
+          throw firestoreError;
+        }
       }
 
-      // 2. Also update local cache via databaseService
-      const success = dbService.updateAnime(activeAnime.id, payload);
-      
-      if (success) {
-        // Dispatch Telegram admin notification
+      // Graceful Quota Handling for Normal Users (Guest/Logged-in)
+      if (isQuotaHit) {
         try {
-          const telegramMessage = `🔔 Anime Updated: ${title.trim()}`;
-          await fetch('/api/telegram', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: telegramMessage,
-              text: telegramMessage,
-              title: title.trim(),
-              anime: {
-                id: activeAnime.id,
-                title: title.trim(),
-                poster: poster || defaultCover,
-                synopsis: synopsis.trim(),
-                genres: genres.join(', '),
-                languages: derivedGlobalDubs,
-                episodes: airingStatus === 'Ongoing' ? (currentlyAiringEpisode || 'Ongoing') : (seasonDetails[0]?.episodeCount || 'Completed'),
-                score: rating || 'N/A',
-              },
-            }),
+          // 1. IndexedDB queue with Background Sync API support
+          syncManager.enqueueUserSubmission(newRecord).catch((e) => {
+            console.warn('[IndexedDB enqueue notice]:', e);
           });
+
+          // 2. LocalStorage backup
+          const existing = JSON.parse(localStorage.getItem(USER_PENDING_SUBMISSIONS_KEY) || '[]');
+          const list = Array.isArray(existing) ? existing : [];
+          list.push(newRecord);
+          localStorage.setItem(USER_PENDING_SUBMISSIONS_KEY, JSON.stringify(list));
         } catch (err) {
-          console.warn('Telegram notification error:', err);
+          console.warn('Failed to save to user_pending_submissions:', err);
         }
 
-        setIsSubmitting(false);
-        toast.success('Anime Updated!', `"${title.trim()}" has been successfully updated.`);
-        onClose();
-        onSuccess?.();
-      } else {
-        setIsSubmitting(false);
-        toast.error('Update Failed', 'Could not update the record.');
+        // Also register in local databaseService cache so the user sees their title immediately
+        dbService.submitDubInfoLocally(newRecord);
+
+        // Friendly toast as strictly specified
+        toast.info('Saved locally! Will sync automatically when traffic reduces.');
+
+        setIsSuccess(true);
+
+        setTimeout(() => {
+          setIsSuccess(false);
+          setTitle('');
+          setPoster('');
+          setSynopsis('');
+          setStreamingPartners([{ name: 'Crunchyroll', url: '', languages: ['Tamil'] }]);
+          setType('TV Series');
+          setGenres(['Action', 'Fantasy']);
+          setAiringStatus('Ongoing');
+          setReleaseDay('Saturday');
+          setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil'] }]);
+          setCurrentSeason('');
+          setCurrentlyAiringEpisode('');
+          setRating('');
+          setAutoFilled(false);
+          onClose();
+          onSuccess?.();
+        }, 1800);
+        return;
       }
-      return;
-    }
 
-    // Creating new record ID
-    const newId = 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
-
-    const newRecord: AnimeRecord = {
-      ...payload,
-      id: newId,
-      status: 'pending',
-      submissionStatus: 'pending',
-      submittedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      themes: ['Super Power', 'Indian Dub'],
-      characters: [
-        {
-          characterName: `Protagonist of ${title.trim()}`,
-          role: 'Main',
-          characterImage: defaultCover,
-          japaneseVA: 'Original Cast',
-          indianVA: {
-            language: derivedGlobalDubs[0],
-            actor: 'Regional Voice Cast',
-          },
-        },
-      ],
-      submittedBy: {
-        userId: currentUser?.uid || 'guest-user',
-        userName: currentUser?.displayName || 'Community Member',
-        userEmail: currentUser?.email || 'contributor@anidub.in',
-      },
-      likes: 0,
-      upvotes: 0,
-    };
-
-    let isQuotaHit = false;
-
-    // 1. Save new anime data DIRECTLY to live Firebase Firestore database collections ('animes', 'anime', and 'submissions')
-    try {
-      const sanitizedDocData = cleanFirestoreData({
-        ...newRecord,
-        createdAt: new Date().toISOString(),
-        serverCreatedAt: serverTimestamp(),
+      // 2. Also register in local databaseService cache
+      dbService.submitDubInfo({
+        ...payload,
+        themes: ['Super Power', 'Indian Dub'],
+        characters: newRecord.characters,
+        submittedBy: newRecord.submittedBy,
       });
 
-      await setDoc(doc(db, 'animes', newId), sanitizedDocData);
-
+      // 3. Inside onSubmit, add a fetch call to the Telegram API route to send '🔔 New Anime Submitted: [Title]'
       try {
-        await setDoc(doc(db, 'anime', newId), sanitizedDocData);
-      } catch {}
-
-      await setDoc(doc(db, 'submissions', newId), sanitizedDocData);
-
-      // Log activity event in Firestore
-      await setDoc(doc(db, 'activities', `act-${newId}`), {
-        user: newRecord.submittedBy?.userName || 'Community User',
-        action: 'submitted',
-        animeTitle: newRecord.title,
-        timestamp: new Date(),
-        language: newRecord.dubs?.[0] || 'Tamil',
-        status: 'pending',
-      });
-    } catch (firestoreError: any) {
-      console.error('[Firestore Direct Save Error]', firestoreError);
-      if (isQuotaError(firestoreError)) {
-        isQuotaHit = true;
-      }
-    }
-
-    // Graceful Quota Handling for Normal Users (Guest/Logged-in)
-    if (isQuotaHit) {
-      try {
-        // 1. IndexedDB queue with Background Sync API support
-        syncManager.enqueueUserSubmission(newRecord).catch((e) => {
-          console.warn('[IndexedDB enqueue notice]:', e);
+        const telegramAlertMsg = `🔔 New Anime Submitted: ${title.trim()}`;
+        await fetch('/api/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: telegramAlertMsg,
+            text: telegramAlertMsg,
+            title: title.trim(),
+            anime: {
+              id: newId,
+              title: title.trim(),
+              poster: poster || defaultCover,
+              synopsis: synopsis.trim(),
+              genres: genres.join(', '),
+              languages: derivedGlobalDubs,
+              episodes: airingStatus === 'Ongoing' ? (currentlyAiringEpisode || 'Ongoing') : (seasonDetails[0]?.episodeCount || 'Completed'),
+              score: rating || 'N/A',
+            },
+          }),
         });
-
-        // 2. LocalStorage backup
-        const existing = JSON.parse(localStorage.getItem(USER_PENDING_SUBMISSIONS_KEY) || '[]');
-        const list = Array.isArray(existing) ? existing : [];
-        list.push(newRecord);
-        localStorage.setItem(USER_PENDING_SUBMISSIONS_KEY, JSON.stringify(list));
-      } catch (err) {
-        console.warn('Failed to save to user_pending_submissions:', err);
+      } catch (telegramError) {
+        console.warn('Telegram notification error:', telegramError);
       }
 
-      // Also register in local databaseService cache so the user sees their title immediately
-      dbService.submitDubInfoLocally(newRecord);
-
-      // Friendly toast as strictly specified
-      toast.info('Saved locally! Will sync automatically when traffic reduces.');
-
-      setIsSubmitting(false);
       setIsSuccess(true);
+      toast.success('Anime Submitted Successfully!', `"${title.trim()}" is now pending stealth admin approval.`);
 
       setTimeout(() => {
         setIsSuccess(false);
@@ -721,66 +783,19 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         setAutoFilled(false);
         onClose();
         onSuccess?.();
-      }, 1800);
-      return;
+      }, 2400);
+    } catch (err: any) {
+      console.error('[Submission error]:', err);
+      const isQuota = isQuotaError(err);
+      toast.error(
+        isQuota ? 'Database limit reached' : 'Submission Failed',
+        isQuota 
+          ? 'Database limit reached. Please try again later.' 
+          : 'An unexpected error occurred. Please check your connection and try again.'
+      );
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // 2. Also register in local databaseService cache
-    dbService.submitDubInfo({
-      ...payload,
-      themes: ['Super Power', 'Indian Dub'],
-      characters: newRecord.characters,
-      submittedBy: newRecord.submittedBy,
-    });
-
-    // 3. Inside onSubmit, add a fetch call to the Telegram API route to send '🔔 New Anime Submitted: [Title]'
-    try {
-      const telegramAlertMsg = `🔔 New Anime Submitted: ${title.trim()}`;
-      await fetch('/api/telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: telegramAlertMsg,
-          text: telegramAlertMsg,
-          title: title.trim(),
-          anime: {
-            id: newId,
-            title: title.trim(),
-            poster: poster || defaultCover,
-            synopsis: synopsis.trim(),
-            genres: genres.join(', '),
-            languages: derivedGlobalDubs,
-            episodes: airingStatus === 'Ongoing' ? (currentlyAiringEpisode || 'Ongoing') : (seasonDetails[0]?.episodeCount || 'Completed'),
-            score: rating || 'N/A',
-          },
-        }),
-      });
-    } catch (telegramError) {
-      console.warn('Telegram notification error:', telegramError);
-    }
-
-    setIsSubmitting(false);
-    setIsSuccess(true);
-    toast.success('Anime Submitted Successfully!', `"${title.trim()}" is now pending stealth admin approval.`);
-
-    setTimeout(() => {
-      setIsSuccess(false);
-      setTitle('');
-      setPoster('');
-      setSynopsis('');
-      setStreamingPartners([{ name: 'Crunchyroll', url: '', languages: ['Tamil'] }]);
-      setType('TV Series');
-      setGenres(['Action', 'Fantasy']);
-      setAiringStatus('Ongoing');
-      setReleaseDay('Saturday');
-      setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil'] }]);
-      setCurrentSeason('');
-      setCurrentlyAiringEpisode('');
-      setRating('');
-      setAutoFilled(false);
-      onClose();
-      onSuccess?.();
-    }, 2400);
   };
 
   return (

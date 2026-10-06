@@ -1,173 +1,96 @@
 'use client';
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
 
 interface ParallaxCardProps {
   children: React.ReactNode;
   className?: string;
-  enableGyroscope?: boolean;
-  maxTilt?: number;
+  glareOpacity?: number;
 }
 
-/**
- * 3D Tilt Anime Card Component with Framer Motion
- * 
- * Features:
- * - Fluid pointer & touch-based 3D tilt physics (responsive on mobile & desktop)
- * - Spring-damped return with zero jitter (mass: 0.5, stiffness: 220, damping: 20)
- * - Specular holographic glare / shimmer reflection tracking the light angle
- * - Reactive counter-shadow providing tangible elevation in 3D space
- * - Optional mobile DeviceOrientation (gyroscope) subtle tilt
- * - Multi-layer z-depth preservation (preserve-3d)
- */
 export const ParallaxCard: React.FC<ParallaxCardProps> = ({ 
   children, 
   className = '',
-  enableGyroscope = false,
-  maxTilt = 16
+  glareOpacity = 0.4
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isHovered, setIsHovered] = useState(false);
-
-  // 1. Normalized motion coordinates (-0.5 to 0.5)
+  const cardRef = useRef<HTMLDivElement>(null);
+  
+  // Motion values for tilt
   const x = useMotionValue(0);
   const y = useMotionValue(0);
 
-  // 2. High-performance spring physics for ultra-smooth responsiveness
-  const springConfig = { damping: 22, stiffness: 220, mass: 0.45 };
-  const xSpring = useSpring(x, springConfig);
-  const ySpring = useSpring(y, springConfig);
+  // Smooth springs for fluid motion
+  const mouseXSpring = useSpring(x, { stiffness: 150, damping: 20 });
+  const mouseYSpring = useSpring(y, { stiffness: 150, damping: 20 });
 
-  // 3. Transform values into 3D rotations
-  const rotateX = useTransform(ySpring, [-0.5, 0.5], [maxTilt, -maxTilt]);
-  const rotateY = useTransform(xSpring, [-0.5, 0.5], [-maxTilt, maxTilt]);
+  // Transforms for 3D tilt
+  const rotateX = useTransform(mouseYSpring, [-0.5, 0.5], ["10deg", "-10deg"]);
+  const rotateY = useTransform(mouseXSpring, [-0.5, 0.5], ["-10deg", "10deg"]);
 
-  // 4. Glare / Specular holographic highlight coordinate transforms
-  const glareX = useTransform(xSpring, [-0.5, 0.5], ['0%', '100%']);
-  const glareY = useTransform(ySpring, [-0.5, 0.5], ['0%', '100%']);
-  const glareOpacity = useTransform(xSpring, [-0.5, 0, 0.5], [0.35, 0.08, 0.35]);
+  // Glare effect transforms
+  const glareX = useTransform(mouseXSpring, [-0.5, 0.5], ["0%", "100%"]);
+  const glareY = useTransform(mouseYSpring, [-0.5, 0.5], ["0%", "100%"]);
 
-  // 5. Dynamic 3D depth shadow (moves in opposing direction to create lighting illusion)
-  const shadowX = useTransform(xSpring, [-0.5, 0.5], [18, -18]);
-  const shadowY = useTransform(ySpring, [-0.5, 0.5], [22, -22]);
-  const shadowBlur = useTransform(ySpring, [-0.5, 0, 0.5], ['32px', '16px', '32px']);
+  const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return;
 
-  // Pointer & Touch Move handler
-  const handlePointerMove = useCallback((event: React.PointerEvent) => {
-    if (!containerRef.current) return;
-    setIsHovered(true);
+    const rect = cardRef.current.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+    
+    // Calculate normalized mouse position from -0.5 to 0.5
+    const mouseX = (event.clientX - rect.left) / width - 0.5;
+    const mouseY = (event.clientY - rect.top) / height - 0.5;
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const px = (event.clientX - rect.left) / rect.width;
-    const py = (event.clientY - rect.top) / rect.height;
+    x.set(mouseX);
+    y.set(mouseY);
+  };
 
-    // Clamp coordinates cleanly to prevent overshoot
-    const clampedX = Math.max(0, Math.min(1, px));
-    const clampedY = Math.max(0, Math.min(1, py));
-
-    x.set(clampedX - 0.5);
-    y.set(clampedY - 0.5);
-  }, [x, y]);
-
-  const handlePointerLeave = useCallback(() => {
-    setIsHovered(false);
-    // Smooth reset via spring physics
+  const handleMouseLeave = () => {
     x.set(0);
     y.set(0);
-  }, [x, y]);
-
-  // Optional subtle mobile gyroscope tilt
-  useEffect(() => {
-    if (!enableGyroscope || typeof window === 'undefined') return;
-
-    const handleOrientation = (e: DeviceOrientationEvent) => {
-      if (isHovered) return; // User touch/pointer takes precedence
-      if (e.gamma !== null && e.beta !== null) {
-        // gamma: left-to-right (-90 to 90), beta: front-to-back (-180 to 180)
-        const normX = Math.max(-0.5, Math.min(0.5, e.gamma / 60));
-        const normY = Math.max(-0.5, Math.min(0.5, (e.beta - 45) / 60));
-        x.set(normX);
-        y.set(normY);
-      }
-    };
-
-    window.addEventListener('deviceorientation', handleOrientation);
-    return () => window.removeEventListener('deviceorientation', handleOrientation);
-  }, [enableGyroscope, isHovered, x, y]);
+  };
 
   return (
-    <div 
-      className={`relative select-none ${className}`}
-      style={{ perspective: '1100px' }}
+    <div
+      ref={cardRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      className={`perspective-1000 ${className}`}
+      style={{ perspective: '1000px' }}
     >
       <motion.div
-        ref={containerRef}
-        onPointerMove={handlePointerMove}
-        onPointerLeave={handlePointerLeave}
-        onPointerCancel={handlePointerLeave}
         style={{
           rotateX,
           rotateY,
-          transformStyle: 'preserve-3d',
+          transformStyle: "preserve-3d",
         }}
-        whileTap={{ scale: 0.985 }}
-        className="relative w-full h-full rounded-2xl cursor-pointer transform-gpu will-change-transform"
+        className="relative w-full h-full"
+        whileHover={{ scale: 1.02 }}
+        transition={{ type: "spring", stiffness: 400, damping: 30 }}
       >
-        {/* Dynamic 3D Drop Shadow behind Card */}
-        <motion.div 
-          className="absolute inset-2 rounded-2xl bg-black/60 z-0 pointer-events-none transition-opacity duration-300"
-          style={{
-            x: shadowX,
-            y: shadowY,
-            filter: useTransform(shadowBlur, (b) => `blur(${b})`),
-            translateZ: '-30px',
-            opacity: isHovered ? 0.75 : 0.45,
-          }}
-        />
-
-        {/* Ambient Color Glow Border Accent */}
-        <motion.div
-          className="absolute -inset-[1px] rounded-2xl bg-gradient-to-tr from-purple-500/20 via-sky-500/10 to-transparent pointer-events-none z-10"
-          style={{
-            opacity: isHovered ? 0.9 : 0.2,
-            transition: 'opacity 0.25s ease',
-          }}
-        />
-
-        {/* Card Content Outer Container */}
-        <div 
-          className="relative z-20 w-full h-full rounded-2xl overflow-hidden border border-white/10 bg-[#131926] shadow-xl"
-          style={{ transformStyle: 'preserve-3d' }}
-        >
+        {/* Main Content */}
+        <div className="w-full h-full relative z-10 overflow-hidden rounded-2xl border border-white/10 bg-neutral-900 shadow-2xl">
           {children}
-
-          {/* Holographic Glare / Specular Sheen Layer */}
+          
+          {/* Dynamic Glare Effect */}
           <motion.div
-            className="absolute inset-0 z-40 pointer-events-none transition-opacity duration-300"
             style={{
-              background: useTransform(
-                [glareX, glareY],
-                ([gx, gy]) =>
-                  `radial-gradient(circle 380px at ${gx} ${gy}, rgba(255,255,255,0.2) 0%, rgba(168,85,247,0.08) 35%, transparent 70%)`
-              ),
-              opacity: isHovered ? glareOpacity : 0,
-            }}
-          />
-
-          {/* Premium Diagonal Sheen Angle */}
-          <motion.div
-            className="absolute inset-0 z-40 pointer-events-none bg-gradient-to-tr from-transparent via-white/5 to-transparent"
-            style={{
-              translateX: useTransform(xSpring, [-0.5, 0.5], ['-80%', '80%']),
-              translateY: useTransform(ySpring, [-0.5, 0.5], ['-80%', '80%']),
-              opacity: isHovered ? 0.8 : 0,
-            }}
+              background: `radial-gradient(circle at var(--glare-x) var(--glare-y), rgba(255, 255, 255, ${glareOpacity}) 0%, transparent 70%)`,
+              "--glare-x": glareX,
+              "--glare-y": glareY,
+            } as any}
+            className="absolute inset-0 pointer-events-none z-20 mix-blend-soft-light opacity-0 group-hover:opacity-100 transition-opacity duration-300"
           />
         </div>
+
+        {/* 3D Reflection Highlight */}
+        <div 
+          className="absolute inset-0 z-0 rounded-2xl bg-gradient-to-br from-white/10 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500" 
+          style={{ transform: "translateZ(-10px)" }}
+        />
       </motion.div>
     </div>
   );
 };
-
-export default ParallaxCard;

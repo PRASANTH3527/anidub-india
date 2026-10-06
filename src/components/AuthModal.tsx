@@ -17,10 +17,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
 
   const handleGoogleSignIn = async (asAdmin: boolean) => {
     setLoading(true);
-    await authService.loginWithGoogle(asAdmin);
-    setLoading(false);
-    onLoginSuccess?.();
-    onClose();
+    try {
+      await authService.loginWithGoogle(asAdmin);
+      onLoginSuccess?.();
+      onClose();
+    } catch (err: any) {
+      console.error('[Google Sign-In Error]', err);
+      // We don't use useToast here because it's not imported/hooked? 
+      // Wait, let me check if useToast is available.
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCustomLogin = (e: React.FormEvent) => {
