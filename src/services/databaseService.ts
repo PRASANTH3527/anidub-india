@@ -1,8 +1,9 @@
 import { AnimeRecord, DubReview, WatchlistEntry, SubmissionStatus, StreamingPlatform, AnimeCollection } from '../types/database';
 import { Anime, DubLanguage } from '../types/anime';
 import { db, rtdb } from '../lib/firebase';
-import { ref, set, get, remove, child, update } from 'firebase/database';
+import { ref, set, get as rtdbGet, remove, child, update } from 'firebase/database';
 import { authService } from './authService';
+import { get, set as idbSet, del, clear } from 'idb-keyval';
 import { 
   collection, 
   doc, 
@@ -56,6 +57,8 @@ const TELEGRAM_CHAT_ID = '8769442354'; // ENTER YOUR CHANNEL ID HERE (e.g. @mych
 class DatabaseService {
   private listeners: (() => void)[] = [];
   private isQuotaLimited = false;
+  private animeRecords: AnimeRecord[] = [];
+  private isInitialized = false;
 
   constructor() {
     this.initDatabase();
@@ -149,38 +152,42 @@ class DatabaseService {
     );
   }
 
-  private initDatabase() {
+  private async initDatabase() {
     if (typeof window === 'undefined') return;
     try {
-      // Ensure the keys exist in localStorage without clearing them
-      if (!localStorage.getItem(DB_ANIME_KEY)) {
-        localStorage.setItem(DB_ANIME_KEY, JSON.stringify([]));
-      }
-      if (!localStorage.getItem(DB_REVIEWS_KEY)) {
-        localStorage.setItem(DB_REVIEWS_KEY, JSON.stringify([]));
-      }
-      if (!localStorage.getItem(DB_WATCHLIST_KEY)) {
-        localStorage.setItem(DB_WATCHLIST_KEY, JSON.stringify([]));
-      }
-      
-      const existing = localStorage.getItem(DB_ANIME_KEY);
-      if (existing) {
-        try {
-          const parsed = JSON.parse(existing);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            // Re-normalize existing records to keep them up to date with schema changes
-            const normalized = parsed
-              .filter((item: any) => item && (item.id || item.title || item.name))
-              .map((item) => this.normalizeRecord(item));
-            localStorage.setItem(DB_ANIME_KEY, JSON.stringify(normalized));
+      // 1. Load from IndexedDB (Priority)
+      const idbData = await get(DB_ANIME_KEY);
+      if (idbData && Array.isArray(idbData)) {
+        this.animeRecords = idbData.map(item => this.normalizeRecord(item));
+        console.log(`[AniDub DB] Loaded ${this.animeRecords.length} records from IndexedDB.`);
+      } else {
+        // 2. Migration: Load from Legacy localStorage if IDB is empty
+        const legacyData = localStorage.getItem(DB_ANIME_KEY);
+        if (legacyData) {
+          try {
+            const parsed = JSON.parse(legacyData);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              this.animeRecords = parsed.map(item => this.normalizeRecord(item));
+              console.log(`[AniDub DB] Migrated ${this.animeRecords.length} records from localStorage to IndexedDB.`);
+              // Persist to IDB and clear legacy
+              await idbSet(DB_ANIME_KEY, this.animeRecords);
+              localStorage.removeItem(DB_ANIME_KEY);
+            }
+          } catch (e) {
+            console.warn('[AniDub DB] Migration failed:', e);
           }
-        } catch (e) {
-          console.warn('Cache migration warning:', e);
         }
       }
+
+      this.isInitialized = true;
+      this.notify();
     } catch (e) {
       console.error('Database initialization error:', e);
     }
+  }
+
+  public getAllAnimeRecords(): AnimeRecord[] {
+    return this.animeRecords;
   }
 
   public subscribe(listener: () => void): () => void {
@@ -293,34 +300,25 @@ class DatabaseService {
     return normalized;
   }
 
-  public getAllAnimeRecords(): AnimeRecord[] {
-    if (typeof window === 'undefined') return [];
-    try {
-      const raw = localStorage.getItem(DB_ANIME_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) return [];
-      
-      return parsed
-        .filter((item: any) => item && (item.id || item.title || item.name))
-        .map((item) => this.normalizeRecord(item));
-    } catch {
-      return [];
-    }
-  }
-
-  private saveAnimeRecords(records: AnimeRecord[]) {
+  private async saveAnimeRecords(records: AnimeRecord[]) {
     try {
       // 100% DATA SAFETY: Never overwrite existing cache with an empty array during sync
-      const current = this.getAllAnimeRecords();
-      if (records.length === 0 && current.length > 0) {
+      if (records.length === 0 && this.animeRecords.length > 0) {
         console.warn('[AniDub DB] Safety Block: Prevented overwriting cache with empty data.');
         return;
       }
       
-      localStorage.setItem(DB_ANIME_KEY, JSON.stringify(records));
+      this.animeRecords = records;
+      await idbSet(DB_ANIME_KEY, records);
       this.notify();
     } catch (e) {
       console.error('Save anime records error:', e);
+      // Fallback to localStorage for small updates if IDB fails (though unlikely)
+      if (!isQuotaError(e)) {
+        try {
+          localStorage.setItem(DB_ANIME_KEY, JSON.stringify(records));
+        } catch {}
+      }
     }
   }
 
@@ -363,7 +361,7 @@ class DatabaseService {
     };
 
     const records = this.getAllAnimeRecords();
-    this.saveAnimeRecords([newRecord, ...records]);
+    await this.saveAnimeRecords([newRecord, ...records]);
 
     let isQuotaHit = false;
 
@@ -434,7 +432,7 @@ class DatabaseService {
       updatedAt: new Date().toISOString(),
     };
 
-    this.saveAnimeRecords(records);
+    await this.saveAnimeRecords(records);
 
     // --- TELEGRAM NOTIFICATION (Auto-trigger on Approval) ---
     const anime = records[targetIndex];
@@ -512,7 +510,7 @@ class DatabaseService {
       rejectionReason: reason,
     };
 
-    this.saveAnimeRecords(records);
+    await this.saveAnimeRecords(records);
 
     // Sync rejection to Firestore across all relevant collections
     try {
@@ -564,7 +562,7 @@ class DatabaseService {
       updatedAt: new Date().toISOString(),
     };
 
-    this.saveAnimeRecords(records);
+    await this.saveAnimeRecords(records);
 
     // Sync update to Firestore
     try {
@@ -610,7 +608,7 @@ class DatabaseService {
       updatedAt: new Date().toISOString(),
     };
 
-    this.saveAnimeRecords(records);
+    await this.saveAnimeRecords(records);
 
     // Sync soft delete to Firestore
     try {
@@ -639,7 +637,7 @@ class DatabaseService {
       updatedAt: new Date().toISOString(),
     };
 
-    this.saveAnimeRecords(records);
+    await this.saveAnimeRecords(records);
 
     try {
       const update = { isDeleted: false, updatedAt: new Date().toISOString() };
@@ -662,7 +660,7 @@ class DatabaseService {
 
     const records = this.getAllAnimeRecords();
     const filtered = records.filter((r) => r.id !== id);
-    this.saveAnimeRecords(filtered);
+    await this.saveAnimeRecords(filtered);
 
     // Delete directly from Firestore
     try {
@@ -895,7 +893,7 @@ class DatabaseService {
         if (idx !== -1) mergedRecords[idx] = newItem;
         else mergedRecords.push(newItem);
       });
-      this.saveAnimeRecords(mergedRecords);
+      await this.saveAnimeRecords(mergedRecords);
     }
 
     if (queue.length === 0) {
@@ -1044,7 +1042,7 @@ class DatabaseService {
         likes: newLikes,
         upvotes: newLikes,
       };
-      this.saveAnimeRecords(records);
+      await this.saveAnimeRecords(records);
     }
 
     // Update in Firestore
@@ -1111,7 +1109,7 @@ class DatabaseService {
 
       if (firestoreMap.size > 0) {
         const firestoreList = Array.from(firestoreMap.values());
-        this.saveAnimeRecords(firestoreList);
+        await this.saveAnimeRecords(firestoreList);
         if (typeof window !== 'undefined') {
           localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
         }
@@ -1361,7 +1359,7 @@ class DatabaseService {
   public async getPendingRtdbSubmissions(): Promise<any[]> {
     try {
       const dbRef = ref(rtdb);
-      const snapshot = await get(child(dbRef, 'pending_submissions'));
+      const snapshot = await rtdbGet(child(dbRef, 'pending_submissions'));
       if (snapshot.exists()) {
         const data = snapshot.val();
         return Object.entries(data).map(([id, val]: [string, any]) => ({
@@ -1424,7 +1422,7 @@ class DatabaseService {
   public async getAdminPendingRtdbUploads(): Promise<any[]> {
     try {
       const dbRef = ref(rtdb);
-      const snapshot = await get(child(dbRef, 'admin_pending_uploads'));
+      const snapshot = await rtdbGet(child(dbRef, 'admin_pending_uploads'));
       if (snapshot.exists()) {
         const data = snapshot.val();
         return Object.entries(data).map(([id, val]: [string, any]) => ({

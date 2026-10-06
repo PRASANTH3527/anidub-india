@@ -345,22 +345,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!force && catalogTitles.length > 0) return;
 
     setIsLoading(true);
-    console.log('Step 0: fetchRealData starting (Source: SERVER)');
+    console.log('Step 0: fetchRealData starting (Attempting Server Source)');
     try {
-      const { getDocsFromServer, collection, query, where } = await import('firebase/firestore');
+      const { getDocsFromServer, getDocs, collection, query, where } = await import('firebase/firestore');
       
-      // 1. Fetch PENDING items strictly from SERVER for the Moderation Queue
+      // Helper to fetch with fallback
+      const fetchWithFallback = async (q: any) => {
+        try {
+          return await getDocsFromServer(q);
+        } catch (err) {
+          console.warn('[Admin] Server fetch failed, falling back to cache:', err);
+          return await getDocs(q);
+        }
+      };
+
+      // 1. Fetch PENDING items for the Moderation Queue
       const pendingMap = new Map<string, AnimeRecord>();
       const collections = ['animes', 'submissions', 'anime'];
       
       for (const collName of collections) {
         try {
+          console.log(`[Admin] Fetching pending from: ${collName}`);
           const q = query(collection(db, collName), where('status', '==', 'pending'));
-          const snap = await getDocsFromServer(q);
+          const snap = await fetchWithFallback(q);
+          console.log(`[Admin] Received ${snap.size} pending from ${collName}`);
           snap.forEach((d) => {
-            const rec = dbService.normalizeRecord({ ...d.data(), id: d.id });
+            const rec = dbService.normalizeRecord({ ...(d.data() as any), id: d.id });
             if (rec && rec.id) pendingMap.set(rec.id, rec);
           });
+          // Small delay to prevent burst limit hit
+          await new Promise(r => setTimeout(r, 100));
         } catch (err) {
           console.warn(`[Admin] Error fetching pending from ${collName}:`, err);
         }
@@ -370,11 +384,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const firestoreAnimeMap = new Map<string, AnimeRecord>();
       for (const collName of collections) {
         try {
-          const snap = await getDocsFromServer(collection(db, collName));
+          console.log(`[Admin] Fetching all from: ${collName}`);
+          const q = collection(db, collName);
+          const snap = await fetchWithFallback(q);
+          console.log(`[Admin] Received ${snap.size} all from ${collName}`);
           snap.forEach((d) => {
-            const rec = dbService.normalizeRecord({ ...d.data(), id: d.id });
+            const rec = dbService.normalizeRecord({ ...(d.data() as any), id: d.id });
             if (rec && rec.id && rec.title) firestoreAnimeMap.set(rec.id, rec);
           });
+          // Small delay to prevent burst limit hit
+          await new Promise(r => setTimeout(r, 200));
         } catch (err) {
           console.warn(`[Admin] Error fetching all from ${collName}:`, err);
         }

@@ -5,6 +5,7 @@
   "authDomain": "keen-matrix-p40ks.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-anidubindiadubbe-5d6f2b65-be54-4278-868a-15922d0100a3",
   "storageBucket": "keen-matrix-p40ks.firebasestorage.app",
+  "databaseURL": "https://keen-matrix-p40ks-default-rtdb.asia-southeast1.firebasedatabase.app",
   "messagingSenderId": "331310745726",
   "measurementId": "",
   "oAuthClientId": "331310745726-ubp604kosh867ahk1ku2q7f4ed3brbja.apps.googleusercontent.com",
