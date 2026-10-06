@@ -180,9 +180,61 @@ async function replayWatchlistQueue() {
 }
 
 // --- Sync Event Listener ---
+const SUBMISSION_SYNC_TAG = 'anidub-sync-queue';
+
+async function replaySubmissionQueue() {
+  console.log('[ServiceWorker] Background Sync event: Checking anidub_sync_db...');
+  try {
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open('anidub_sync_db', 1);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+
+    if (!db.objectStoreNames.contains('user_pending_submissions')) return;
+
+    const items = await new Promise((resolve, reject) => {
+      const tx = db.transaction('user_pending_submissions', 'readonly');
+      const store = tx.objectStore('user_pending_submissions');
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+
+    if (!items || items.length === 0) return;
+
+    for (const item of items) {
+      try {
+        const res = await fetch('/api/submissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item),
+        });
+
+        if (res.ok) {
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction('user_pending_submissions', 'readwrite');
+            const store = tx.objectStore('user_pending_submissions');
+            const req = store.delete(item.id);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+          });
+          console.log(`[ServiceWorker] Synced user submission #${item.id} via Background Sync.`);
+        }
+      } catch (err) {
+        console.warn(`[ServiceWorker] Background sync POST failed for #${item.id}:`, err);
+      }
+    }
+  } catch (err) {
+    console.warn('[ServiceWorker] Background Sync error:', err);
+  }
+}
+
 self.addEventListener('sync', (event) => {
   if (event.tag === SYNC_TAG) {
     event.waitUntil(replayWatchlistQueue());
+  } else if (event.tag === SUBMISSION_SYNC_TAG || event.tag === 'sync-submissions') {
+    event.waitUntil(replaySubmissionQueue());
   }
 });
 

@@ -2,7 +2,14 @@
 // AniDub India — Firebase & Firestore Client Configuration
 // ==============================================================================
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  Firestore, 
+  doc, 
+  getDocFromServer, 
+  setLogLevel,
+  enableMultiTabIndexedDbPersistence
+} from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
@@ -32,6 +39,19 @@ const databaseId = firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.
   : undefined;
 
 export const db: Firestore = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+
+// Native Multi-Tab IndexedDB Offline Persistence
+if (typeof window !== 'undefined') {
+  enableMultiTabIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn('[Firestore Persistence] Multiple tabs open; persistence active in primary tab.');
+    } else if (err.code === 'unimplemented') {
+      console.warn('[Firestore Persistence] Browser does not support multi-tab IndexedDB persistence.');
+    } else {
+      console.info('[Firestore Persistence] Persistence status:', err?.message || err);
+    }
+  });
+}
 
 // Connection test helper
 export async function testConnection(): Promise<boolean> {

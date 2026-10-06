@@ -106,6 +106,18 @@ function AppContent() {
     };
   }, []);
 
+  // Background sync for user_pending_submissions on app load
+  useEffect(() => {
+    const syncUserPending = async () => {
+      try {
+        await dbService.syncUserPendingSubmissions();
+      } catch (err) {
+        // Silently catch errors
+      }
+    };
+    syncUserPending();
+  }, []);
+
   // 3. Reactive DB State: Home & Search feeds ONLY fetch approved anime
   const [approvedAnime, setApprovedAnime] = useState<AnimeRecord[]>(() => dbService.getApprovedAnime());
   const [allAnimeRecords, setAllAnimeRecords] = useState<AnimeRecord[]>(() => dbService.getAllAnimeRecords());

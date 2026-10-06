@@ -58,6 +58,7 @@ import {
   limit,
 } from 'firebase/firestore';
 import { dbService } from '../services/databaseService';
+import { syncManager } from '../services/syncManager';
 import { authService } from '../services/authService';
 import { AnimeRecord } from '../types/database';
 import { SubmitDubModal } from './SubmitDubModal';
@@ -277,7 +278,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [editingAnime, setEditingAnime] = useState<AnimeRecord | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [pendingUploadsCount, setPendingUploadsCount] = useState<number>(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const checkPendingUploads = useCallback(async () => {
+    try {
+      const localItems = dbService.getAdminPendingUploads();
+      const idbCount = await syncManager.getAdminPendingCount();
+      setPendingUploadsCount(Math.max(localItems.length, idbCount));
+    } catch {
+      const localItems = dbService.getAdminPendingUploads();
+      setPendingUploadsCount(localItems.length);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkPendingUploads();
+    const unsub = syncManager.subscribe((status) => {
+      setPendingUploadsCount((prev) => Math.max(status.adminQueueCount, prev));
+    });
+    return () => unsub();
+  }, [checkPendingUploads]);
 
   // Auth State
   const [isAdmin, setIsAdmin] = useState<boolean>(() => authService.isAdmin());
@@ -466,18 +487,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     reader.onload = async (ev) => {
       try {
         const json = JSON.parse(ev.target?.result as string);
+        if (!Array.isArray(json)) {
+          toast.error('Invalid Format', 'JSON file must contain an array of anime objects.');
+          return;
+        }
         setIsImporting(true);
-        const res = await dbService.bulkImportAnime(json);
+
+        // 1. Enqueue into IndexedDB Queue
+        await syncManager.enqueueAdminUploads(json);
+
+        // 2. Process in chunks using Firestore writeBatch (<= 250 ops per batch)
+        const batchRes = await syncManager.processAdminBatchUpload();
+        await checkPendingUploads();
         
-        const summary = [
-          res.added > 0 ? `${res.added} New added to Pending` : '',
-          res.updated > 0 ? `${res.updated} Existing updated` : '',
-          res.failed > 0 ? `${res.failed} Failed` : ''
-        ].filter(Boolean).join(', ');
-        
-        toast.success('Import Complete', summary || 'No changes made.');
-        fetchRealData();
-      } catch { 
+        if (batchRes.quotaHit) {
+          toast.error(
+            'Firestore Quota Hit',
+            `${batchRes.remaining} pending uploads saved safely in IndexedDB queue. Click 'Resume Upload' once quota resets.`
+          );
+        } else {
+          const summary = [
+            batchRes.added > 0 ? `${batchRes.added} New records batched to Firestore` : '',
+            batchRes.failed > 0 ? `${batchRes.failed} Failed` : ''
+          ].filter(Boolean).join(', ');
+          
+          toast.success('Import Complete', summary || 'All records processed in batches.');
+        }
+        fetchRealData(true);
+      } catch (err) { 
         toast.error('Error', 'Invalid JSON file structure.'); 
       }
       finally { 
@@ -486,6 +523,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleResumeUpload = async () => {
+    setIsImporting(true);
+    try {
+      const batchRes = await syncManager.processAdminBatchUpload();
+      const legacyRes = await dbService.resumeBulkImport();
+      await checkPendingUploads();
+
+      const quotaHit = batchRes.quotaHit || legacyRes.quotaHit;
+      const totalRemaining = batchRes.remaining + legacyRes.remaining;
+      const totalAdded = batchRes.added + legacyRes.added;
+
+      if (quotaHit) {
+        toast.error(
+          'Quota Hit Again',
+          `${totalRemaining} pending uploads still stored safely in queue. Resume again when traffic reduces.`
+        );
+      } else {
+        const summary = [
+          totalAdded > 0 ? `${totalAdded} Processed` : '',
+          batchRes.failed > 0 ? `${batchRes.failed} Failed` : ''
+        ].filter(Boolean).join(', ');
+        toast.success('Resume Upload Complete', summary || 'All queued items processed.');
+      }
+      fetchRealData(true);
+    } catch (err) {
+      toast.error('Resume Failed', 'Could not resume pending uploads.');
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const handleExitAdmin = () => {
@@ -583,6 +651,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </header>
 
       <main className="max-w-6xl mx-auto p-4 space-y-6">
+        {/* Local Queue Quota Hit Alert & Resume Button */}
+        {pendingUploadsCount > 0 && (
+          <div className="bg-amber-950/40 border border-amber-500/40 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-center gap-3.5 w-full sm:w-auto">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-black text-white">
+                    {pendingUploadsCount} pending uploads (Quota hit)
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 uppercase tracking-widest border border-amber-500/30">
+                    Saved in Queue
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Firestore daily quota was reached during bulk import. The remaining items are safely stored locally in IndexedDB / local queue.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end shrink-0">
+              <button
+                onClick={handleResumeUpload}
+                disabled={isImporting}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${isImporting ? 'animate-spin' : ''}`} />
+                <span>Resume Upload</span>
+              </button>
+              <button
+                onClick={async () => {
+                  if (confirm(`Are you sure you want to discard all ${pendingUploadsCount} pending items from the queue?`)) {
+                    await syncManager.clearAdminPendingUploads();
+                    dbService.clearAdminPendingUploads();
+                    checkPendingUploads();
+                    toast.info('Queue Discarded', 'Pending local upload queue cleared.');
+                  }
+                }}
+                className="p-2.5 rounded-xl bg-neutral-800/80 hover:bg-neutral-800 text-neutral-400 hover:text-red-400 border border-neutral-700/60 transition-all cursor-pointer"
+                title="Discard pending queue"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Overview Tab */}
         {activeTab === 'overview' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">

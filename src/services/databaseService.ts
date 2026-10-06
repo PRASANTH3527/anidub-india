@@ -26,6 +26,27 @@ const DB_WATCHLIST_KEY = 'anidub_db_watchlists';
 const QUOTA_EXCEEDED_KEY = 'anidub_firestore_quota_exceeded_timestamp';
 const LAST_SYNC_KEY = 'anidub_db_last_sync_timestamp';
 
+export const ADMIN_PENDING_UPLOADS_KEY = 'admin_pending_uploads';
+export const USER_PENDING_SUBMISSIONS_KEY = 'user_pending_submissions';
+
+export function isQuotaError(err: any): boolean {
+  if (!err) return false;
+  const code = String(err.code || '');
+  const msg = String(err.message || '').toLowerCase();
+  const name = String(err.name || '').toLowerCase();
+  return (
+    code === 'resource-exhausted' ||
+    code === 'quota-exceeded' ||
+    msg.includes('resource-exhausted') ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('quota exceeded') ||
+    msg.includes('quota') ||
+    msg.includes('too many requests') ||
+    msg.includes('rate limit') ||
+    name.includes('quota')
+  );
+}
+
 // --- TELEGRAM NOTIFICATION CONFIG ---
 const TELEGRAM_BOT_TOKEN = '8648317719:AAHZ7wxQefZT5QdKCpc61epWJ4mGAgJvgdc'; 
 const TELEGRAM_CHAT_ID = '8769442354'; // ENTER YOUR CHANNEL ID HERE (e.g. @mychannel or -100...)
@@ -655,27 +676,58 @@ class DatabaseService {
     URL.revokeObjectURL(url);
   }
 
-  public async bulkImportAnime(jsonData: any[]): Promise<{ added: number; updated: number; failed: number }> {
-    if (!authService.isAdmin() || !Array.isArray(jsonData)) return { added: 0, updated: 0, failed: 0 };
+  public async bulkImportAnime(jsonData: any[], isResume = false): Promise<{ 
+    added: number; 
+    updated: number; 
+    failed: number; 
+    quotaHit: boolean; 
+    remaining: number 
+  }> {
+    if (!authService.isAdmin() || !Array.isArray(jsonData)) {
+      return { added: 0, updated: 0, failed: 0, quotaHit: false, remaining: 0 };
+    }
     
+    // 1. If fresh import (not resume), save the entire JSON array to localStorage first
+    if (!isResume) {
+      try {
+        localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(jsonData));
+      } catch (err) {
+        console.warn('[Bulk Import] Could not save initial queue to localStorage:', err);
+      }
+    }
+
+    let queue: any[] = [];
+    try {
+      const stored = localStorage.getItem(ADMIN_PENDING_UPLOADS_KEY);
+      queue = stored ? JSON.parse(stored) : [...jsonData];
+    } catch {
+      queue = [...jsonData];
+    }
+
     let addedCount = 0;
     let updatedCount = 0;
     let failedCount = 0;
-    
+    let quotaHit = false;
+
     const currentRecords = this.getAllAnimeRecords();
     const newItemsForLocal: AnimeRecord[] = [];
 
-    // Firestore allows up to 500 operations per batch
-    const BATCH_SIZE = 450; 
-    let currentBatch = writeBatch(db);
-    let operationCount = 0;
-    const batchPromises: Promise<void>[] = [];
-
-    for (const item of jsonData) {
+    // Process each anime in the local queue
+    while (queue.length > 0) {
+      const item = queue[0];
       try {
         const rawTitle = (item.title || item.name || '').trim();
         if (!rawTitle) {
           failedCount++;
+          // Remove invalid item from queue and update storage
+          queue.shift();
+          try {
+            if (queue.length > 0) {
+              localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(queue));
+            } else {
+              localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
+            }
+          } catch {}
           continue;
         }
 
@@ -709,14 +761,14 @@ class DatabaseService {
         normalized.submissionStatus = 'pending';
 
         if (normalized && normalized.title) {
-          // Add to batch
           const subRef = doc(db, 'submissions', finalId);
           const animeRef = doc(db, 'animes', finalId);
           const actRef = doc(db, 'activities', `act-import-${finalId}-${Date.now()}`);
 
-          currentBatch.set(subRef, normalized, { merge: true });
-          currentBatch.set(animeRef, normalized, { merge: true });
-          currentBatch.set(actRef, {
+          const batch = writeBatch(db);
+          batch.set(subRef, normalized, { merge: true });
+          batch.set(animeRef, normalized, { merge: true });
+          batch.set(actRef, {
             user: 'Admin (Bulk)',
             action: existing ? 'updated' : 'submitted',
             animeTitle: normalized.title,
@@ -725,33 +777,62 @@ class DatabaseService {
             status: 'pending'
           });
 
-          operationCount += 3;
+          await batch.commit();
+
+          // SUCCESS: Remove this anime from local queue immediately
+          queue.shift();
+          try {
+            if (queue.length > 0) {
+              localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(queue));
+            } else {
+              localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
+            }
+          } catch (e) {
+            console.warn('[Bulk Import] LocalStorage update warning:', e);
+          }
+
           newItemsForLocal.push(normalized);
           if (existing) updatedCount++; else addedCount++;
-
-          // Commit if batch is full
-          if (operationCount >= BATCH_SIZE) {
-            batchPromises.push(currentBatch.commit());
-            currentBatch = writeBatch(db);
-            operationCount = 0;
-          }
         } else {
           failedCount++;
+          queue.shift();
+          try {
+            if (queue.length > 0) {
+              localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(queue));
+            } else {
+              localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
+            }
+          } catch {}
         }
-      } catch (err) {
-        console.error('[Batch Import Error]', err);
-        failedCount++;
+      } catch (err: any) {
+        console.error('[Bulk Import Item Error]', err);
+        // Check if resource-exhausted (quota limit) error occurs
+        if (isQuotaError(err)) {
+          console.warn(`[Bulk Import Quota Hit] Stopping loop immediately. ${queue.length} items safely retained in ${ADMIN_PENDING_UPLOADS_KEY}.`);
+          quotaHit = true;
+          this.setQuotaExceeded(true);
+          // Keep the remaining items safely in localStorage
+          try {
+            localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(queue));
+          } catch {}
+          break; // STOP THE LOOP IMMEDIATELY!
+        } else {
+          // Other error on this individual item (e.g., malformed payload)
+          failedCount++;
+          queue.shift();
+          try {
+            if (queue.length > 0) {
+              localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(queue));
+            } else {
+              localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
+            }
+          } catch {}
+        }
       }
     }
 
-    // Final batch commit
-    if (operationCount > 0) {
-      batchPromises.push(currentBatch.commit());
-    }
-
-    if (batchPromises.length > 0) {
-      await Promise.allSettled(batchPromises);
-      
+    // Merge successfully uploaded items into local memory/cache
+    if (newItemsForLocal.length > 0) {
       const mergedRecords = [...currentRecords];
       newItemsForLocal.forEach(newItem => {
         const idx = mergedRecords.findIndex(r => r.id === newItem.id);
@@ -761,7 +842,138 @@ class DatabaseService {
       this.saveAnimeRecords(mergedRecords);
     }
 
-    return { added: addedCount, updated: updatedCount, failed: failedCount };
+    if (queue.length === 0) {
+      try {
+        localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
+      } catch {}
+    }
+
+    return { 
+      added: addedCount, 
+      updated: updatedCount, 
+      failed: failedCount, 
+      quotaHit, 
+      remaining: queue.length 
+    };
+  }
+
+  public getAdminPendingUploads(): any[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(ADMIN_PENDING_UPLOADS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public clearAdminPendingUploads(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
+    } catch {}
+  }
+
+  public async resumeBulkImport(): Promise<{ 
+    added: number; 
+    updated: number; 
+    failed: number; 
+    quotaHit: boolean; 
+    remaining: number 
+  }> {
+    const queue = this.getAdminPendingUploads();
+    if (!queue || queue.length === 0) {
+      return { added: 0, updated: 0, failed: 0, quotaHit: false, remaining: 0 };
+    }
+    return this.bulkImportAnime(queue, true);
+  }
+
+  public submitDubInfoLocally(newRecord: AnimeRecord): AnimeRecord {
+    const records = this.getAllAnimeRecords();
+    const existingIndex = records.findIndex((r) => r.id === newRecord.id);
+    if (existingIndex !== -1) {
+      records[existingIndex] = newRecord;
+    } else {
+      records.unshift(newRecord);
+    }
+    this.saveAnimeRecords(records);
+    return newRecord;
+  }
+
+  public async syncUserPendingSubmissions(): Promise<{ synced: number; remaining: number }> {
+    if (typeof window === 'undefined') return { synced: 0, remaining: 0 };
+    let queue: AnimeRecord[] = [];
+    try {
+      const raw = localStorage.getItem(USER_PENDING_SUBMISSIONS_KEY);
+      if (!raw) return { synced: 0, remaining: 0 };
+      queue = JSON.parse(raw);
+      if (!Array.isArray(queue) || queue.length === 0) return { synced: 0, remaining: 0 };
+    } catch {
+      return { synced: 0, remaining: 0 };
+    }
+
+    let synced = 0;
+    while (queue.length > 0) {
+      const item = queue[0];
+      try {
+        const docData = {
+          ...item,
+          status: 'pending',
+          submissionStatus: 'pending',
+          createdAt: item.createdAt || new Date().toISOString(),
+          serverCreatedAt: serverTimestamp(),
+        };
+
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'submissions', item.id), docData, { merge: true });
+        batch.set(doc(db, 'animes', item.id), docData, { merge: true });
+        batch.set(doc(db, 'activities', `act-${item.id}`), {
+          user: item.submittedBy?.userName || 'Community User',
+          action: 'submitted',
+          animeTitle: item.title,
+          timestamp: serverTimestamp(),
+          language: item.dubs?.[0] || 'Tamil',
+          status: 'pending'
+        });
+
+        await batch.commit();
+
+        // Successful upload! Remove from local queue
+        queue.shift();
+        synced++;
+        if (queue.length > 0) {
+          localStorage.setItem(USER_PENDING_SUBMISSIONS_KEY, JSON.stringify(queue));
+        } else {
+          localStorage.removeItem(USER_PENDING_SUBMISSIONS_KEY);
+        }
+      } catch (err: any) {
+        if (isQuotaError(err)) {
+          // Still resource-exhausted; keep remaining items safely in localStorage and stop
+          try {
+            localStorage.setItem(USER_PENDING_SUBMISSIONS_KEY, JSON.stringify(queue));
+          } catch {}
+          break;
+        } else {
+          // If specific document format error, remove it to prevent indefinite queue blockage
+          queue.shift();
+          try {
+            if (queue.length > 0) {
+              localStorage.setItem(USER_PENDING_SUBMISSIONS_KEY, JSON.stringify(queue));
+            } else {
+              localStorage.removeItem(USER_PENDING_SUBMISSIONS_KEY);
+            }
+          } catch {}
+        }
+      }
+    }
+
+    if (queue.length === 0) {
+      try {
+        localStorage.removeItem(USER_PENDING_SUBMISSIONS_KEY);
+      } catch {}
+    }
+
+    return { synced, remaining: queue.length };
   }
 
   public async upvoteAnime(id: string): Promise<number> {

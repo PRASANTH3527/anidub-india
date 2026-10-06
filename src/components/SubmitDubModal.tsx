@@ -18,7 +18,8 @@ import {
 import { searchJikanAnime, formatJikanToAnime } from '../services/jikanApi';
 import { JikanAnimeResult, AnimeRecord } from '../types/database';
 import { DubLanguage, StreamingPlatform, AnimeType, ReleaseDay } from '../types/anime';
-import { dbService } from '../services/databaseService';
+import { dbService, isQuotaError, USER_PENDING_SUBMISSIONS_KEY } from '../services/databaseService';
+import { syncManager } from '../services/syncManager';
 import { authService } from '../services/authService';
 import { useToast } from './Toast';
 import { db } from '../lib/firebase';
@@ -643,6 +644,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       upvotes: 0,
     };
 
+    let isQuotaHit = false;
+
     // 1. Save new anime data DIRECTLY to live Firebase Firestore database collections ('animes', 'anime', and 'submissions')
     try {
       const sanitizedDocData = cleanFirestoreData({
@@ -668,8 +671,58 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         language: newRecord.dubs?.[0] || 'Tamil',
         status: 'pending',
       });
-    } catch (firestoreError) {
+    } catch (firestoreError: any) {
       console.error('[Firestore Direct Save Error]', firestoreError);
+      if (isQuotaError(firestoreError)) {
+        isQuotaHit = true;
+      }
+    }
+
+    // Graceful Quota Handling for Normal Users (Guest/Logged-in)
+    if (isQuotaHit) {
+      try {
+        // 1. IndexedDB queue with Background Sync API support
+        syncManager.enqueueUserSubmission(newRecord).catch((e) => {
+          console.warn('[IndexedDB enqueue notice]:', e);
+        });
+
+        // 2. LocalStorage backup
+        const existing = JSON.parse(localStorage.getItem(USER_PENDING_SUBMISSIONS_KEY) || '[]');
+        const list = Array.isArray(existing) ? existing : [];
+        list.push(newRecord);
+        localStorage.setItem(USER_PENDING_SUBMISSIONS_KEY, JSON.stringify(list));
+      } catch (err) {
+        console.warn('Failed to save to user_pending_submissions:', err);
+      }
+
+      // Also register in local databaseService cache so the user sees their title immediately
+      dbService.submitDubInfoLocally(newRecord);
+
+      // Friendly toast as strictly specified
+      toast.info('Saved locally! Will sync automatically when traffic reduces.');
+
+      setIsSubmitting(false);
+      setIsSuccess(true);
+
+      setTimeout(() => {
+        setIsSuccess(false);
+        setTitle('');
+        setPoster('');
+        setSynopsis('');
+        setStreamingPartners([{ name: 'Crunchyroll', url: '', languages: ['Tamil'] }]);
+        setType('TV Series');
+        setGenres(['Action', 'Fantasy']);
+        setAiringStatus('Ongoing');
+        setReleaseDay('Saturday');
+        setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil'] }]);
+        setCurrentSeason('');
+        setCurrentlyAiringEpisode('');
+        setRating('');
+        setAutoFilled(false);
+        onClose();
+        onSuccess?.();
+      }, 1800);
+      return;
     }
 
     // 2. Also register in local databaseService cache
