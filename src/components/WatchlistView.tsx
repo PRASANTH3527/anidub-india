@@ -49,19 +49,25 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const handleCacheAllPosters = async () => {
     if (bookmarkedAnime.length === 0 || isCachingAll) return;
     setIsCachingAll(true);
-    toast.info('Caching Watchlist Posters...', `Downloading posters for ${bookmarkedAnime.length} anime so you can view offline.`);
+    try {
+      toast.info('Caching Watchlist Posters...', `Downloading posters for ${bookmarkedAnime.length} anime so you can view offline.`);
 
-    const urls = bookmarkedAnime
-      .map((a) => a.imageUrl || a.poster)
-      .filter(Boolean) as string[];
+      const urls = bookmarkedAnime
+        .map((a) => a.imageUrl || a.poster)
+        .filter(Boolean) as string[];
 
-    const result = await posterCacheService.cacheMultiplePosters(urls);
-    setIsCachingAll(false);
+      const result = await posterCacheService.cacheMultiplePosters(urls);
 
-    toast.success(
-      'Watchlist Cached Offline! 💾',
-      `Successfully stored ${result.success} anime poster(s) in local PWA cache.`
-    );
+      toast.success(
+        'Watchlist Cached Offline! 💾',
+        `Successfully stored ${result.success} anime poster(s) in local PWA cache.`
+      );
+    } catch (err: any) {
+      console.error('[Watchlist Cache Error]', err);
+      toast.error('Caching Failed', 'An error occurred while saving posters for offline use.');
+    } finally {
+      setIsCachingAll(false);
+    }
   };
 
   return (

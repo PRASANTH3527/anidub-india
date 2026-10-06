@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { Anime, WatchlistItem, DubLanguage } from '../types/anime';
 import { DubReview } from '../types/database';
-import { dbService } from '../services/databaseService';
+import { dbService, isQuotaError } from '../services/databaseService';
 import { authService } from '../services/authService';
 import { updateSeoTags, buildAnimeSeo } from '../utils/seo';
 import DynamicAmbientGlow from './DynamicAmbientGlow';
@@ -32,6 +32,7 @@ import { useReducedMotion, useIsMobile } from '../hooks/useMediaQuery';
 import { FastAverageColor } from 'fast-average-color';
 import { MoreLikeThisSection } from './MoreLikeThisSection';
 import { SmartWatchButton } from './SmartWatchButton';
+import { useToast } from './Toast';
 
 interface AnimeDetailPageProps {
   anime: Anime;
@@ -75,6 +76,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   allAnime = [],
 }) => {
   const currentUser = authService.getCurrentUser();
+  const toast = useToast();
   const [copied, setCopied] = useState(false);
 
   // Reviews & Rating System state

@@ -127,13 +127,19 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
       }
     } else {
       setIsCaching(true);
-      const success = await posterCacheService.cachePoster(displayImage);
-      setIsCaching(false);
-      if (success) {
-        setIsCached(true);
-        toast.success('Saved for Offline! 💾', `Poster for "${anime.title}" cached. You can now view it without internet.`);
-      } else {
-        toast.error('Caching Failed', 'Could not cache poster. Check network connection.');
+      try {
+        const success = await posterCacheService.cachePoster(displayImage);
+        if (success) {
+          setIsCached(true);
+          toast.success('Saved for Offline! 💾', `Poster for "${anime.title}" cached. You can now view it without internet.`);
+        } else {
+          toast.error('Caching Failed', 'Could not cache poster. Check network connection.');
+        }
+      } catch (err: any) {
+        console.error('[Poster Cache Error]', err);
+        toast.error('Caching Error', 'An unexpected error occurred while caching the poster.');
+      } finally {
+        setIsCaching(false);
       }
     }
   };

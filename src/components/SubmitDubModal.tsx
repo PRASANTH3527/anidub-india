@@ -683,28 +683,31 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         }
       }
 
-      // Graceful Quota Handling for Normal Users (Guest/Logged-in)
+      // Graceful Quota Handling for Normal Users (Cloud Fallback via RTDB)
       if (isQuotaHit) {
         try {
-          // 1. IndexedDB queue with Background Sync API support
+          // 1. RTDB Cloud Fallback Queue (Bypasses Firestore Quota)
+          await dbService.saveToRtdbFallback('pending_submissions', newRecord);
+
+          // 2. IndexedDB queue with Background Sync API support (Local redundancy)
           syncManager.enqueueUserSubmission(newRecord).catch((e) => {
             console.warn('[IndexedDB enqueue notice]:', e);
           });
 
-          // 2. LocalStorage backup
+          // 3. LocalStorage backup
           const existing = JSON.parse(localStorage.getItem(USER_PENDING_SUBMISSIONS_KEY) || '[]');
           const list = Array.isArray(existing) ? existing : [];
           list.push(newRecord);
           localStorage.setItem(USER_PENDING_SUBMISSIONS_KEY, JSON.stringify(list));
         } catch (err) {
-          console.warn('Failed to save to user_pending_submissions:', err);
+          console.warn('Failed to save to cloud fallback queue:', err);
         }
 
         // Also register in local databaseService cache so the user sees their title immediately
         dbService.submitDubInfoLocally(newRecord);
 
-        // Friendly toast as strictly specified
-        toast.info('Saved locally! Will sync automatically when traffic reduces.');
+        // Friendly success toast as strictly specified (User doesn't need to know about the quota hit technically)
+        toast.success('Submission Successful!', 'Your anime dub info has been received and is pending admin approval.');
 
         setIsSuccess(true);
 

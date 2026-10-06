@@ -204,12 +204,18 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
       return;
     }
     setIsSyncing(true);
-    const result = await cloudSyncService.backupToCloud(cloudUsername, cloudPassword);
-    setIsSyncing(false);
-    if (result.success) {
-      toast.success('Cloud Backup Saved!', 'Your watchlist and profile are now synced to JSONBin.');
-    } else {
-      toast.error('Backup Failed', result.error || 'Check your credentials.');
+    try {
+      const result = await cloudSyncService.backupToCloud(cloudUsername, cloudPassword);
+      if (result.success) {
+        toast.success('Cloud Backup Saved!', 'Your watchlist and profile are now synced to JSONBin.');
+      } else {
+        toast.error('Backup Failed', result.error || 'Check your credentials.');
+      }
+    } catch (err: any) {
+      console.error('[Cloud Backup Error]', err);
+      toast.error('Backup Error', 'An unexpected error occurred during backup.');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -219,13 +225,19 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
       return;
     }
     setIsSyncing(true);
-    const result = await cloudSyncService.restoreFromCloud(cloudUsername, cloudPassword);
-    setIsSyncing(false);
-    if (result.success) {
-      toast.success('Profile Restored!', 'Data successfully fetched from cloud. Refreshing...');
-      onRestoreSuccess?.();
-    } else {
-      toast.error('Restore Failed', result.error || 'User not found or wrong password.');
+    try {
+      const result = await cloudSyncService.restoreFromCloud(cloudUsername, cloudPassword);
+      if (result.success) {
+        toast.success('Profile Restored!', 'Data successfully fetched from cloud. Refreshing...');
+        onRestoreSuccess?.();
+      } else {
+        toast.error('Restore Failed', result.error || 'User not found or wrong password.');
+      }
+    } catch (err: any) {
+      console.error('[Cloud Restore Error]', err);
+      toast.error('Restore Error', 'An unexpected error occurred during restore.');
+    } finally {
+      setIsSyncing(false);
     }
   };
 

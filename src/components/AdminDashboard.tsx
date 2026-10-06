@@ -57,12 +57,13 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { dbService } from '../services/databaseService';
+import { dbService, isQuotaError } from '../services/databaseService';
 import { syncManager } from '../services/syncManager';
 import { authService } from '../services/authService';
 import { useUploadProgress } from '../hooks/useUploadProgress';
 import { AnimeRecord } from '../types/database';
 import { SubmitDubModal } from './SubmitDubModal';
+import { PendingQueueDashboard } from './PendingQueueDashboard';
 import { useToast } from './Toast';
 
 // Color palette for regional dub languages
@@ -270,7 +271,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // UI State
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'catalog' | 'trash' | 'feed'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'catalog' | 'trash' | 'feed' | 'queue'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -280,6 +281,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingAnime, setEditingAnime] = useState<AnimeRecord | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [pendingUploadsCount, setPendingUploadsCount] = useState<number>(0);
+  const [rtdbPendingCount, setRtdbPendingCount] = useState<number>(0);
+  const [rtdbPendingUploadsCount, setRtdbPendingUploadsCount] = useState<number>(0);
+  const [isSyncingRtdb, setIsSyncingRtdb] = useState(false);
+  const [isSyncingRtdbUploads, setIsSyncingRtdbUploads] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Enterprise Serverless Queue Progress Hook (system/upload_status)
@@ -297,6 +302,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } catch {
       const localItems = dbService.getAdminPendingUploads();
       setPendingUploadsCount(localItems.length);
+    }
+
+    // Check Cloud Fallback (RTDB) for User Submissions
+    try {
+      const rtdbItems = await dbService.getPendingRtdbSubmissions();
+      setRtdbPendingCount(rtdbItems.length);
+    } catch (e) {
+      console.warn('[Admin] Failed to check User RTDB fallback:', e);
+    }
+
+    // Check Cloud Fallback (RTDB) for Admin Bulk JSON Uploads
+    try {
+      const adminRtdbItems = await dbService.getAdminPendingRtdbUploads();
+      setRtdbPendingUploadsCount(adminRtdbItems.length);
+    } catch (e) {
+      console.warn('[Admin] Failed to check Admin RTDB fallback:', e);
     }
   }, []);
 
@@ -451,31 +472,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleApprove = async (anime: AnimeRecord) => {
     setApprovingId(anime.id);
-    const success = dbService.approveSubmission(anime.id, undefined, 'Admin');
-    if (success) toast.success('Approved', `"${anime.title}" is now live.`);
-    else toast.error('Error', 'Could not approve anime.');
-    setApprovingId(null);
-    fetchRealData();
+    try {
+      const success = await dbService.approveSubmission(anime.id, undefined, 'Admin');
+      if (success) {
+        toast.success('Approved', `"${anime.title}" is now live.`);
+      } else {
+        toast.error('Error', 'Could not approve anime.');
+      }
+      fetchRealData();
+    } catch (err: any) {
+      console.error('Approve error:', err);
+      toast.error('Approve Failed', isQuotaError(err) ? 'Database limit reached. Please try again later.' : 'An unexpected error occurred.');
+    } finally {
+      setApprovingId(null);
+    }
   };
 
   const handleReject = async (anime: AnimeRecord) => {
-    dbService.rejectSubmission(anime.id, undefined, 'Admin');
-    toast.info('Rejected', `"${anime.title}" marked as rejected.`);
-    fetchRealData();
+    try {
+      await dbService.rejectSubmission(anime.id, undefined, 'Admin');
+      toast.info('Rejected', `"${anime.title}" marked as rejected.`);
+      fetchRealData();
+    } catch (err: any) {
+      console.error('Reject error:', err);
+      toast.error('Reject Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
+    }
   };
 
   const handleSoftDelete = async (anime: AnimeRecord) => {
-    dbService.deleteSubmission(anime.id);
-    toast.success('Moved to Trash', `"${anime.title}" can be restored later.`);
-    fetchRealData();
+    try {
+      await dbService.deleteSubmission(anime.id);
+      toast.success('Moved to Trash', `"${anime.title}" can be restored later.`);
+      fetchRealData();
+    } catch (err: any) {
+      console.error('Soft delete error:', err);
+      toast.error('Delete Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
+    }
   };
 
   const handleRestore = async (anime: AnimeRecord) => {
     setIsRestoring(true);
-    dbService.restoreSubmission(anime.id);
-    toast.success('Restored', `"${anime.title}" is back in catalog.`);
-    setIsRestoring(false);
-    fetchRealData();
+    try {
+      await dbService.restoreSubmission(anime.id);
+      toast.success('Restored', `"${anime.title}" is back in catalog.`);
+      fetchRealData();
+    } catch (err: any) {
+      console.error('Restore error:', err);
+      toast.error('Restore Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
+    } finally {
+      setIsRestoring(false);
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -578,6 +624,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleSyncRtdbSubmissions = async () => {
+    setIsSyncingRtdb(true);
+    try {
+      const result = await dbService.syncRtdbToFirestore();
+      if (result.success > 0) {
+        toast.success(
+          'RTDB Sync Complete',
+          `${result.success} submissions synced from cloud fallback queue to Firestore.`
+        );
+      } else if (result.failed > 0) {
+        toast.error('RTDB Sync Failed', 'Check logs for details.');
+      } else {
+        toast.info('RTDB Sync', 'No pending submissions found in cloud fallback.');
+      }
+      checkPendingUploads();
+      fetchRealData(true);
+    } catch (err) {
+      console.error('[RTDB Sync Error]', err);
+      toast.error('Sync Error', 'An unexpected error occurred during RTDB sync.');
+    } finally {
+      setIsSyncingRtdb(false);
+    }
+  };
+
+  const handleSyncAdminRtdbUploads = async () => {
+    setIsSyncingRtdbUploads(true);
+    try {
+      const result = await dbService.syncAdminRtdbToFirestore();
+      if (result.success > 0) {
+        toast.success(
+          'Bulk Upload Sync Complete',
+          `${result.success} records synced from cloud fallback queue to Firestore.`
+        );
+      } else if (result.failed > 0) {
+        toast.error('Sync Failed', 'Some items could not be synced.');
+      } else {
+        toast.info('RTDB Sync', 'No pending bulk uploads found in cloud fallback.');
+      }
+      checkPendingUploads();
+      fetchRealData(true);
+    } catch (err) {
+      console.error('[RTDB Admin Sync Error]', err);
+      toast.error('Sync Error', 'An unexpected error occurred during bulk upload sync.');
+    } finally {
+      setIsSyncingRtdbUploads(false);
+    }
+  };
+
   const handleExitAdmin = () => {
     sessionStorage.removeItem('anidub_is_admin');
     localStorage.removeItem('anidub_is_admin');
@@ -654,6 +748,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             { id: 'pending', label: `Pending (${pendingSubmissions})`, icon: Inbox },
             { id: 'catalog', label: 'Manage', icon: Database },
             { id: 'feed', label: 'Feed', icon: Radio },
+            { id: 'queue', label: `Cloud Queue (${rtdbPendingCount + rtdbPendingUploadsCount})`, icon: Database },
             { id: 'trash', label: 'Trash', icon: Trash2 },
           ].map((tab) => (
             <button
@@ -778,6 +873,84 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <span>{serverQueueProgress.error}</span>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Admin Cloud Fallback (RTDB) Sync Alert */}
+        {rtdbPendingUploadsCount > 0 && (
+          <div className="bg-purple-950/40 border border-purple-500/40 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-center gap-3.5 w-full sm:w-auto">
+              <div className="w-10 h-10 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-black text-white">
+                    {rtdbPendingUploadsCount} Pending JSON Bulk Uploads
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 uppercase tracking-widest border border-purple-500/30">
+                    Admin RTDB Queue
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Remaining items from your JSON bulk import were saved to RTDB when Firestore quota was hit. Sync them now.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end shrink-0">
+              <button
+                onClick={handleSyncAdminRtdbUploads}
+                disabled={isSyncingRtdbUploads}
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50"
+              >
+                {isSyncingRtdbUploads ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                <span>Sync Pending JSON Uploads</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Cloud Fallback (RTDB) Sync Alert */}
+        {rtdbPendingCount > 0 && (
+          <div className="bg-indigo-950/40 border border-indigo-500/40 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-center gap-3.5 w-full sm:w-auto">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                <Database className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-black text-white">
+                    {rtdbPendingCount} Cloud Fallback Submissions
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 uppercase tracking-widest border border-indigo-500/30">
+                    RTDB Queue
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Submissions saved to Realtime Database fallback when Firestore quota was hit. Sync them back to Firestore now.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end shrink-0">
+              <button
+                onClick={handleSyncRtdbSubmissions}
+                disabled={isSyncingRtdb}
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50"
+              >
+                {isSyncingRtdb ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                <span>Sync to Firestore</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -1212,6 +1385,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 ))
               )}
             </div>
+          </div>
+        )}
+
+        {/* RTDB Cloud Queue Tab */}
+        {activeTab === 'queue' && (
+          <div className="animate-in fade-in duration-300">
+            <PendingQueueDashboard onSyncSuccess={() => {
+              checkPendingUploads();
+              fetchRealData(true);
+            }} />
           </div>
         )}
       </main>

@@ -1,6 +1,7 @@
 import { AnimeRecord, DubReview, WatchlistEntry, SubmissionStatus, StreamingPlatform, AnimeCollection } from '../types/database';
 import { Anime, DubLanguage } from '../types/anime';
-import { db } from '../lib/firebase';
+import { db, rtdb } from '../lib/firebase';
+import { ref, set, get, remove, child, update } from 'firebase/database';
 import { authService } from './authService';
 import { 
   collection, 
@@ -391,7 +392,7 @@ class DatabaseService {
   }
 
   // --- 4. Moderation Actions (Approve/Reject/Delete) ---
-  public approveSubmission(id: string, notes?: string, reviewerName: string = 'Admin (prasanth123)'): boolean {
+  public async approveSubmission(id: string, notes?: string, reviewerName: string = 'Admin (prasanth123)'): Promise<boolean> {
     if (!authService.isAdmin()) {
       console.error('[Security Violation] Unauthorized approveSubmission write blocked for id:', id);
       return false;
@@ -445,16 +446,17 @@ class DatabaseService {
 
     // Sync approval to Firestore
     try {
-      setDoc(doc(db, 'animes', id), records[targetIndex], { merge: true }).catch(() => {});
-      setDoc(doc(db, 'submissions', id), {
+      await setDoc(doc(db, 'animes', id), records[targetIndex], { merge: true });
+      await setDoc(doc(db, 'submissions', id), {
         status: 'approved',
         submissionStatus: 'approved',
         reviewedBy: reviewerName,
         reviewedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      }, { merge: true }).catch(() => {});
-    } catch (e) {
+      }, { merge: true });
+    } catch (e: any) {
       console.warn('Firestore approval sync error:', e);
+      if (isQuotaError(e)) throw e;
     }
 
     // Notify backend via PUT request
@@ -467,7 +469,7 @@ class DatabaseService {
     return true;
   }
 
-  public rejectSubmission(id: string, reason?: string, reviewerName: string = 'Admin (prasanth123)'): boolean {
+  public async rejectSubmission(id: string, reason?: string, reviewerName: string = 'Admin (prasanth123)'): Promise<boolean> {
     if (!authService.isAdmin()) {
       console.error('[Security Violation] Unauthorized rejectSubmission write blocked for id:', id);
       return false;
@@ -491,15 +493,16 @@ class DatabaseService {
 
     // Sync rejection to Firestore
     try {
-      setDoc(doc(db, 'submissions', id), {
+      await setDoc(doc(db, 'submissions', id), {
         status: 'rejected',
         submissionStatus: 'rejected',
         reviewedBy: reviewerName,
         rejectionReason: reason,
         updatedAt: new Date().toISOString(),
-      }, { merge: true }).catch(() => {});
-    } catch (e) {
+      }, { merge: true });
+    } catch (e: any) {
       console.warn('Firestore rejection sync error:', e);
+      if (isQuotaError(e)) throw e;
     }
 
     // Notify backend via PUT request
@@ -512,7 +515,7 @@ class DatabaseService {
     return true;
   }
 
-  public updateAnime(id: string, updatedData: Partial<AnimeRecord>): boolean {
+  public async updateAnime(id: string, updatedData: Partial<AnimeRecord>): Promise<boolean> {
     // CRITICAL SECURITY CHECK: Only authenticated Admins can update anime records
     if (!authService.isAdmin()) {
       console.error('[Security Violation] Unauthorized updateAnime write blocked for id:', id);
@@ -534,16 +537,19 @@ class DatabaseService {
 
     // Sync update to Firestore
     try {
-      setDoc(doc(db, 'animes', id), {
+      await setDoc(doc(db, 'animes', id), {
         ...updatedData,
         updatedAt: new Date().toISOString(),
-      }, { merge: true }).catch(() => {});
-      setDoc(doc(db, 'anime', id), {
-        ...updatedData,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true }).catch(() => {});
-    } catch (e) {
+      }, { merge: true });
+      try {
+        await setDoc(doc(db, 'anime', id), {
+          ...updatedData,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      } catch {}
+    } catch (e: any) {
       console.warn('Firestore update sync error:', e);
+      if (isQuotaError(e)) throw e;
     }
 
     // Notify backend via PUT request
@@ -556,7 +562,7 @@ class DatabaseService {
     return true;
   }
 
-  public deleteSubmission(id: string): boolean {
+  public async deleteSubmission(id: string): Promise<boolean> {
     // Soft Delete Implementation
     if (!authService.isAdmin()) {
       console.error('[Security Violation] Unauthorized deleteSubmission write blocked for id:', id);
@@ -578,17 +584,18 @@ class DatabaseService {
     // Sync soft delete to Firestore
     try {
       const update = { isDeleted: true, updatedAt: new Date().toISOString() };
-      setDoc(doc(db, 'animes', id), update, { merge: true }).catch(() => {});
-      setDoc(doc(db, 'submissions', id), update, { merge: true }).catch(() => {});
-    } catch (e) {
+      await setDoc(doc(db, 'animes', id), update, { merge: true });
+      await setDoc(doc(db, 'submissions', id), update, { merge: true });
+    } catch (e: any) {
       console.warn('Firestore soft delete sync error:', e);
+      if (isQuotaError(e)) throw e;
     }
 
     this.notify();
     return true;
   }
 
-  public restoreSubmission(id: string): boolean {
+  public async restoreSubmission(id: string): Promise<boolean> {
     if (!authService.isAdmin()) return false;
 
     const records = this.getAllAnimeRecords();
@@ -605,15 +612,17 @@ class DatabaseService {
 
     try {
       const update = { isDeleted: false, updatedAt: new Date().toISOString() };
-      setDoc(doc(db, 'animes', id), update, { merge: true }).catch(() => {});
-      setDoc(doc(db, 'submissions', id), update, { merge: true }).catch(() => {});
-    } catch {}
+      await setDoc(doc(db, 'animes', id), update, { merge: true });
+      await setDoc(doc(db, 'submissions', id), update, { merge: true });
+    } catch (e: any) {
+      if (isQuotaError(e)) throw e;
+    }
 
     this.notify();
     return true;
   }
 
-  public permanentlyDeleteSubmission(id: string): boolean {
+  public async permanentlyDeleteSubmission(id: string): Promise<boolean> {
     // CRITICAL SECURITY CHECK: Only authenticated Admins can delete anime records
     if (!authService.isAdmin()) {
       console.error('[Security Violation] Unauthorized permanent delete write blocked for id:', id);
@@ -626,11 +635,12 @@ class DatabaseService {
 
     // Delete directly from Firestore
     try {
-      deleteDoc(doc(db, 'animes', id)).catch(() => {});
-      deleteDoc(doc(db, 'anime', id)).catch(() => {});
-      deleteDoc(doc(db, 'submissions', id)).catch(() => {});
-    } catch (e) {
+      await deleteDoc(doc(db, 'animes', id));
+      await deleteDoc(doc(db, 'anime', id));
+      await deleteDoc(doc(db, 'submissions', id));
+    } catch (e: any) {
       console.warn('Firestore permanent delete sync error:', e);
+      if (isQuotaError(e)) throw e;
     }
 
     // Global Auto-Cleanup: Remove deleted anime from the current browser's local watchlists
@@ -648,8 +658,8 @@ class DatabaseService {
         const filteredIds = ids.filter((watchlistId) => watchlistId !== id);
         localStorage.setItem('anidub_local_watchlist', JSON.stringify(filteredIds));
       }
-    } catch (e) {
-      console.warn('Watchlist cleanup error after deletion:', e);
+    } catch (cleanErr) {
+      console.warn('Watchlist cleanup error:', cleanErr);
     }
 
     // Notify backend
@@ -809,13 +819,27 @@ class DatabaseService {
         console.error('[Bulk Import Item Error]', err);
         // Check if resource-exhausted (quota limit) error occurs
         if (isQuotaError(err)) {
-          console.warn(`[Bulk Import Quota Hit] Stopping loop immediately. ${queue.length} items safely retained in ${ADMIN_PENDING_UPLOADS_KEY}.`);
+          console.warn(`[Bulk Import Quota Hit] Breaking loop and saving ${queue.length} remaining items to RTDB fallback.`);
           quotaHit = true;
           this.setQuotaExceeded(true);
-          // Keep the remaining items safely in localStorage
+
+          // 1. RTDB Cloud Fallback: Save all remaining un-uploaded items in one go
           try {
-            localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(queue));
+            const rtdbBatch: Record<string, any> = {};
+            queue.forEach(item => {
+              const id = item.id || ('batch-' + Math.random().toString(36).substring(2, 9));
+              rtdbBatch[id] = { ...item, fallbackAt: new Date().toISOString() };
+            });
+            await update(ref(rtdb, 'admin_pending_uploads'), rtdbBatch);
+          } catch (rtdbErr) {
+            console.error('[RTDB Admin Fallback Error]', rtdbErr);
+          }
+
+          // 2. Clear local localStorage queue to avoid double processing (it's now in RTDB)
+          try {
+            localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
           } catch {}
+
           break; // STOP THE LOOP IMMEDIATELY!
         } else {
           // Other error on this individual item (e.g., malformed payload)
@@ -1286,6 +1310,153 @@ class DatabaseService {
     } catch {
       return [];
     }
+  }
+
+  // --- 8. RTDB Cloud Fallback Queue ---
+  public async saveToRtdbFallback(node: string, data: any): Promise<boolean> {
+    try {
+      const id = data.id || ('fallback-' + Date.now().toString(36));
+      await set(ref(rtdb, `${node}/${id}`), {
+        ...data,
+        fallbackAt: new Date().toISOString(),
+      });
+      return true;
+    } catch (e) {
+      console.error(`[RTDB Fallback Error] Failed to save to ${node}:`, e);
+      return false;
+    }
+  }
+
+  public async getPendingRtdbSubmissions(): Promise<any[]> {
+    try {
+      const dbRef = ref(rtdb);
+      const snapshot = await get(child(dbRef, 'pending_submissions'));
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        return Object.entries(data).map(([id, val]: [string, any]) => ({
+          ...val,
+          id: val.id || id,
+        }));
+      }
+      return [];
+    } catch (e) {
+      console.error('[RTDB Fetch Error] Could not get pending submissions:', e);
+      return [];
+    }
+  }
+
+  public async syncRtdbToFirestore(): Promise<{ success: number; failed: number }> {
+    const pending = await this.getPendingRtdbSubmissions();
+    if (pending.length === 0) return { success: 0, failed: 0 };
+
+    let successCount = 0;
+    let failedCount = 0;
+    
+    // Batch write to Firestore
+    const batch = writeBatch(db);
+    const syncedIds: string[] = [];
+
+    for (const item of pending) {
+      try {
+        const id = item.id;
+        const sanitized = this.normalizeRecord(item);
+        const docRef = doc(db, 'animes', id);
+        batch.set(docRef, sanitized, { merge: true });
+        
+        // Also add to submissions collection
+        const subRef = doc(db, 'submissions', id);
+        batch.set(subRef, sanitized, { merge: true });
+        
+        syncedIds.push(id);
+        successCount++;
+      } catch (err) {
+        console.error(`[RTDB Sync] Failed to prepare item ${item.id}:`, err);
+        failedCount++;
+      }
+    }
+
+    if (syncedIds.length > 0) {
+      try {
+        await batch.commit();
+        // Upon success, delete from RTDB
+        for (const id of syncedIds) {
+          await remove(ref(rtdb, `pending_submissions/${id}`));
+        }
+      } catch (err) {
+        console.error('[RTDB Sync] Firestore batch commit failed:', err);
+        return { success: 0, failed: pending.length };
+      }
+    }
+
+    this.notify();
+    return { success: successCount, failed: failedCount };
+  }
+
+  public async getAdminPendingRtdbUploads(): Promise<any[]> {
+    try {
+      const dbRef = ref(rtdb);
+      const snapshot = await get(child(dbRef, 'admin_pending_uploads'));
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        return Object.entries(data).map(([id, val]: [string, any]) => ({
+          ...val,
+          id: val.id || id,
+        }));
+      }
+      return [];
+    } catch (e) {
+      console.error('[RTDB Admin Fetch Error] Could not get admin pending uploads:', e);
+      return [];
+    }
+  }
+
+  public async syncAdminRtdbToFirestore(): Promise<{ success: number; failed: number }> {
+    const pending = await this.getAdminPendingRtdbUploads();
+    if (pending.length === 0) return { success: 0, failed: 0 };
+
+    let successCount = 0;
+    let failedCount = 0;
+    
+    // Firestore Batch Write (Max 500 docs, but we'll assume the RTDB queue is manageable or user will sync multiple times)
+    const batch = writeBatch(db);
+    const syncedIds: string[] = [];
+
+    for (const item of pending) {
+      try {
+        const id = item.id;
+        // status is usually 'pending' for uploads
+        const normalized = this.normalizeRecord({
+          ...item,
+          status: 'pending',
+          submissionStatus: 'pending'
+        });
+        
+        batch.set(doc(db, 'animes', id), normalized, { merge: true });
+        batch.set(doc(db, 'submissions', id), normalized, { merge: true });
+        
+        syncedIds.push(id);
+        successCount++;
+      } catch (err) {
+        console.error(`[RTDB Admin Sync] Failed item ${item.id}:`, err);
+        failedCount++;
+      }
+    }
+
+    if (syncedIds.length > 0) {
+      try {
+        await batch.commit();
+        // Clear from RTDB upon success
+        for (const id of syncedIds) {
+          await remove(ref(rtdb, `admin_pending_uploads/${id}`));
+        }
+      } catch (err) {
+        console.error('[RTDB Admin Sync] Commit failed:', err);
+        return { success: 0, failed: pending.length };
+      }
+    }
+
+    this.notify();
+    return { success: successCount, failed: failedCount };
   }
 }
 

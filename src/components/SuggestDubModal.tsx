@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Send, CheckCircle2, Film, Plus } from 'lucide-react';
+import { X, Send, CheckCircle2, Film, Plus, Loader2 } from 'lucide-react';
 import { DubLanguage } from '../types/anime';
 
 interface SuggestDubModalProps {
@@ -14,33 +14,45 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
   const [sourceLink, setSourceLink] = useState('');
   const [notes, setNotes] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!animeName.trim()) return;
 
-    const submission = {
-      animeName,
-      language,
-      platform,
-      sourceLink,
-      notes,
-      date: new Date().toISOString(),
-    };
+    setIsSubmitting(true);
+    try {
+      const submission = {
+        animeName,
+        language,
+        platform,
+        sourceLink,
+        notes,
+        date: new Date().toISOString(),
+      };
 
-    const list = JSON.parse(localStorage.getItem('anidub_submissions') || '[]');
-    localStorage.setItem('anidub_submissions', JSON.stringify([submission, ...list]));
+      // Simulate a small delay for better UX consistent with other forms
+      await new Promise(resolve => setTimeout(resolve, 600));
 
-    setSubmitted(true);
-    setTimeout(() => {
-      setSubmitted(false);
-      onClose();
-      setAnimeName('');
-      setSourceLink('');
-      setNotes('');
-    }, 2200);
+      const list = JSON.parse(localStorage.getItem('anidub_submissions') || '[]');
+      localStorage.setItem('anidub_submissions', JSON.stringify([submission, ...list]));
+
+      setSubmitted(true);
+      setTimeout(() => {
+        setSubmitted(false);
+        onClose();
+        setAnimeName('');
+        setSourceLink('');
+        setNotes('');
+      }, 2200);
+    } catch (err) {
+      console.error('Submission error:', err);
+      // Even though it's local only, we handle errors for future-proofing
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -156,12 +168,17 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
 
           <button
             type="submit"
-            className="w-full mt-2 py-3.5 btn-primary-theme text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95 group"
+            disabled={isSubmitting}
+            className="w-full mt-2 py-3.5 btn-primary-theme text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95 group disabled:opacity-50"
           >
-            <div className="bg-white/20 p-1 rounded-lg group-hover:rotate-90 transition-transform duration-300">
-              <Plus className="w-4 h-4 text-white" strokeWidth={3} />
-            </div>
-            <span>Submit Dub Information</span>
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <div className="bg-white/20 p-1 rounded-lg group-hover:rotate-90 transition-transform duration-300">
+                <Plus className="w-4 h-4 text-white" strokeWidth={3} />
+              </div>
+            )}
+            <span>{isSubmitting ? 'Submitting...' : 'Submit Dub Information'}</span>
           </button>
           </form>
         )}
