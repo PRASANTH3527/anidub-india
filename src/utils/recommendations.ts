@@ -127,7 +127,7 @@ export function computeForYouRecommendations(
     score += Math.min(upvotes, 30);
 
     // Rating boost
-    const rating = Number(anime.rating || 4.5);
+    const rating = Number(anime.rating || 8.5);
     score += rating * 4;
 
     // Prioritize unwatched or saved anime

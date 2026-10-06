@@ -11,7 +11,7 @@ export interface DubReview {
   userName: string;
   userAvatar: string;
   language: DubLanguage;
-  rating: number; // 1 to 5
+  rating: number; // 0 to 10
   comment: string;
   isSpoiler?: boolean;
   createdAt: string;

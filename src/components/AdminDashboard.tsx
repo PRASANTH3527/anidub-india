@@ -437,6 +437,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, [isAdmin, fetchRealData]);
 
+  // Automated Alert for Background Worker Failures
+  useEffect(() => {
+    if (serverQueueProgress.status === 'failed') {
+      toast.error(
+        'Queue Processing Failed',
+        serverQueueProgress.error || 'The background upload worker encountered a fatal error and stopped.'
+      );
+    }
+  }, [serverQueueProgress.status, serverQueueProgress.error]);
+
   const handleTriggerEdit = (anime: AnimeRecord) => {
     if (onEditAnime) onEditAnime(anime);
     else setEditingAnime(anime);
@@ -477,13 +487,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (success) {
         toast.success('Approved', `"${anime.title}" is now live.`);
         // Immediately update local state for snappy UI
-        setCatalogTitles(prev => prev.map(a => a.id === anime.id ? { ...a, status: 'approved', submissionStatus: 'approved' } : a));
         setPendingList(prev => prev.filter(p => p.id !== anime.id));
         setPendingSubmissions(prev => Math.max(0, prev - 1));
+        setCatalogTitles(prev => [
+          { ...anime, status: 'approved', submissionStatus: 'approved' },
+          ...prev.filter(a => a.id !== anime.id)
+        ]);
+        
+        // Delay refresh slightly to allow Firestore consistency
+        setTimeout(() => fetchRealData(true), 2000);
       } else {
         toast.error('Error', 'Could not approve anime.');
       }
-      fetchRealData(true);
     } catch (err: any) {
       console.error('Approve error:', err);
       toast.error('Approve Failed', isQuotaError(err) ? 'Database limit reached. Please try again later.' : 'An unexpected error occurred.');
@@ -500,7 +515,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setPendingList(prev => prev.filter(p => p.id !== anime.id));
       setPendingSubmissions(prev => Math.max(0, prev - 1));
       setCatalogTitles(prev => prev.map(a => a.id === anime.id ? { ...a, status: 'rejected', submissionStatus: 'rejected' } : a));
-      fetchRealData(true);
+      
+      setTimeout(() => fetchRealData(true), 2000);
     } catch (err: any) {
       console.error('Reject error:', err);
       toast.error('Reject Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
@@ -517,7 +533,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setPendingSubmissions(prev => Math.max(0, prev - 1));
       const deletedItem = dbService.normalizeRecord({ ...anime, isDeleted: true });
       setDeletedList(prev => [deletedItem, ...prev]);
-      fetchRealData(true);
+      
+      setTimeout(() => fetchRealData(true), 2000);
     } catch (err: any) {
       console.error('Soft delete error:', err);
       toast.error('Delete Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
@@ -533,7 +550,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setDeletedList(prev => prev.filter(a => a.id !== anime.id));
       const restoredItem = dbService.normalizeRecord({ ...anime, isDeleted: false });
       setCatalogTitles(prev => [restoredItem, ...prev]);
-      fetchRealData(true);
+      
+      setTimeout(() => fetchRealData(true), 2000);
     } catch (err: any) {
       console.error('Restore error:', err);
       toast.error('Restore Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
@@ -551,7 +569,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Immediately update local state
       setDeletedList(prev => prev.filter(a => a.id !== animeToDelete.id));
       setAnimeToDelete(null);
-      fetchRealData(true);
+      
+      setTimeout(() => fetchRealData(true), 2000);
     } catch (err: any) {
       console.error('Delete error:', err);
       toast.error('Failed to Delete', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
@@ -791,17 +810,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Real-time Serverless Queue Progress UI (Listening to Firestore system/upload_status) */}
         {(serverQueueProgress.status === 'processing' || 
           serverQueueProgress.status === 'queued' || 
+          serverQueueProgress.status === 'failed' ||
           (serverQueueProgress.status === 'completed' && serverQueueProgress.totalItems > 0)) && (
-          <div className="bg-[#131926] border border-purple-500/30 rounded-3xl p-5 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-3 duration-300">
+          <div className={`bg-[#131926] border rounded-3xl p-5 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-3 duration-300 ${
+            serverQueueProgress.status === 'failed' ? 'border-red-500/30' : 'border-purple-500/30'
+          }`}>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
                   serverQueueProgress.status === 'completed' 
                     ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                    : serverQueueProgress.status === 'failed'
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
                     : 'bg-purple-500/20 text-purple-400 border border-purple-500/30 animate-pulse'
                 }`}>
                   {serverQueueProgress.status === 'completed' ? (
                     <CheckCircle2 className="w-5 h-5" />
+                  ) : serverQueueProgress.status === 'failed' ? (
+                    <AlertCircle className="w-5 h-5" />
                   ) : (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   )}
@@ -811,11 +837,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <h4 className="text-sm font-black text-white">
                       {serverQueueProgress.status === 'completed' 
                         ? 'Bulk Upload Completed' 
+                        : serverQueueProgress.status === 'failed'
+                        ? 'Bulk Upload Failed'
                         : 'Serverless Queue Processing'}
                     </h4>
                     <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
                       serverQueueProgress.status === 'completed'
                         ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : serverQueueProgress.status === 'failed'
+                        ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                         : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                     }`}>
                       {serverQueueProgress.status}
@@ -824,6 +854,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <p className="text-xs text-neutral-400 mt-0.5">
                     {serverQueueProgress.status === 'completed' 
                       ? `Successfully processed ${serverQueueProgress.successCount} of ${serverQueueProgress.totalItems} items into Firestore.` 
+                      : serverQueueProgress.status === 'failed'
+                      ? `Processing stopped. ${serverQueueProgress.processedItems} items processed before failure.`
                       : `Processing batch ${serverQueueProgress.currentBatch} of ${serverQueueProgress.totalBatches} (${serverQueueProgress.processedItems} / ${serverQueueProgress.totalItems} processed)`}
                   </p>
                 </div>
@@ -840,13 +872,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="flex gap-2">
-                  {serverQueueProgress.status === 'completed' ? (
+                  {serverQueueProgress.status === 'completed' || serverQueueProgress.status === 'failed' ? (
                     <button
                       onClick={() => {
                         resetServerProgress();
                         fetchRealData(true);
                       }}
-                      className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all cursor-pointer shadow-lg active:scale-95"
+                      className={`px-3.5 py-2 rounded-xl text-white text-xs font-bold transition-all cursor-pointer shadow-lg active:scale-95 ${
+                        serverQueueProgress.status === 'failed' ? 'bg-red-600 hover:bg-red-500' : 'bg-purple-600 hover:bg-purple-500'
+                      }`}
                     >
                       Dismiss
                     </button>

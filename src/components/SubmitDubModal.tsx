@@ -1233,15 +1233,21 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-neutral-400 mb-1 text-[10px] uppercase tracking-wider">Global Rating</label>
+                  <label className="block font-bold text-neutral-400 mb-1 text-[10px] uppercase tracking-wider">Global Rating (0-10)</label>
                   <div className="relative">
                     <input
                       type="number"
                       step="0.1"
                       min="0"
                       max="10"
+                      required
                       value={rating}
-                      onChange={(e) => setRating(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? '' : parseFloat(e.target.value);
+                        if (val === '' || (val >= 0 && val <= 10)) {
+                          setRating(val);
+                        }
+                      }}
                       placeholder="e.g. 8.5"
                       className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white placeholder-neutral-500 text-xs focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition-all"
                     />

@@ -172,7 +172,7 @@ CREATE TABLE dub_reviews (
     user_name VARCHAR(128) NOT NULL,
     user_avatar TEXT,
     language VARCHAR(32) NOT NULL,
-    rating INT CHECK (rating >= 1 AND rating <= 5) NOT NULL,
+    rating NUMERIC(3, 1) CHECK (rating >= 0 AND rating <= 10) NOT NULL,
     comment TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     likes INT DEFAULT 0

@@ -626,8 +626,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                           min="0"
                           max="10"
                           step="0.1"
+                          required
                           value={ratingInput}
-                          onChange={(e) => setRatingInput(parseFloat(e.target.value))}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            if (val >= 0 && val <= 10) {
+                              setRatingInput(val);
+                            }
+                          }}
                           className="w-full h-1.5 bg-[#131926] rounded-lg appearance-none cursor-pointer accent-amber-500 border border-neutral-800"
                         />
                       </div>

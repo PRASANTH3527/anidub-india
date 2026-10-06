@@ -151,7 +151,8 @@ export async function executeBulkUploadWorker(params: ProcessQueueParams): Promi
         lastError = err;
         console.warn(`[Worker] Batch ${batchIndex + 1}/${totalBatches} failed on attempt ${attempt}:`, err?.message || err);
 
-        if (isResourceExhausted(err) && attempt < MAX_RETRY_ATTEMPTS) {
+        const isQuota = isResourceExhausted(err);
+        if (isQuota && attempt < MAX_RETRY_ATTEMPTS) {
           // Exponential backoff with jitter
           const backoffDelay = (BASE_BACKOFF_MS * Math.pow(2, attempt - 1)) + Math.round(Math.random() * 500);
           console.info(`[Worker] Firestore quota hit. Backing off for ${backoffDelay}ms before retry...`);
@@ -163,9 +164,26 @@ export async function executeBulkUploadWorker(params: ProcessQueueParams): Promi
           });
 
           await sleep(backoffDelay);
-        } else if (!isResourceExhausted(err)) {
-          // Non-quota error (schema / corrupt fields)
-          break;
+        } else {
+          // FATAL ERROR OR RETRIES EXHAUSTED: Stop the entire job
+          console.error(`[Worker] Fatal error or retries exhausted in Job ${jobId}. Breaking loop.`);
+          
+          await updateUploadProgress({
+            jobId,
+            status: 'failed',
+            error: `Processing stopped due to fatal error: ${err?.message || 'Unknown error'}. Remaining ${items.length - processedCount} items were not processed.`,
+            completedAt: new Date().toISOString(),
+          });
+          
+          return {
+            jobId,
+            totalItems,
+            successCount,
+            failedCount: failedCount + chunk.length,
+            dlqCount: allDlqItems.length,
+            status: 'failed',
+            error: err?.message,
+          };
         }
       }
     }
