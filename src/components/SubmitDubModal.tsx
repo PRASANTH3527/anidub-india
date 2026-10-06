@@ -615,16 +615,9 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         return;
       }
 
-      // Creating new record ID
-      const newId = 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
-
-      const newRecord: AnimeRecord = {
+      // Creating new record ID is now handled by dbService.submitDubInfo
+      const newRecord = await dbService.submitDubInfo({
         ...payload,
-        id: newId,
-        status: 'pending',
-        submissionStatus: 'pending',
-        submittedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
         themes: ['Super Power', 'Indian Dub'],
         characters: [
           {
@@ -645,102 +638,11 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         },
         likes: 0,
         upvotes: 0,
-      };
-
-      let isQuotaHit = false;
-
-      // 1. Save new anime data DIRECTLY to live Firebase Firestore database collections ('animes', 'anime', and 'submissions')
-      try {
-        const sanitizedDocData = cleanFirestoreData({
-          ...newRecord,
-          createdAt: new Date().toISOString(),
-          serverCreatedAt: serverTimestamp(),
-        });
-
-        await setDoc(doc(db, 'animes', newId), sanitizedDocData);
-
-        try {
-          await setDoc(doc(db, 'anime', newId), sanitizedDocData);
-        } catch {}
-
-        await setDoc(doc(db, 'submissions', newId), sanitizedDocData);
-
-        // Log activity event in Firestore
-        await setDoc(doc(db, 'activities', `act-${newId}`), {
-          user: newRecord.submittedBy?.userName || 'Community User',
-          action: 'submitted',
-          animeTitle: newRecord.title,
-          timestamp: new Date(),
-          language: newRecord.dubs?.[0] || 'Tamil',
-          status: 'pending',
-        });
-      } catch (firestoreError: any) {
-        console.error('[Firestore Direct Save Error]', firestoreError);
-        if (isQuotaError(firestoreError)) {
-          isQuotaHit = true;
-        } else {
-          throw firestoreError;
-        }
-      }
-
-      // Graceful Quota Handling for Normal Users (Cloud Fallback via RTDB)
-      if (isQuotaHit) {
-        try {
-          // 1. RTDB Cloud Fallback Queue (Bypasses Firestore Quota)
-          await dbService.saveToRtdbFallback('pending_submissions', newRecord);
-
-          // 2. IndexedDB queue with Background Sync API support (Local redundancy)
-          syncManager.enqueueUserSubmission(newRecord).catch((e) => {
-            console.warn('[IndexedDB enqueue notice]:', e);
-          });
-
-          // 3. LocalStorage backup
-          const existing = JSON.parse(localStorage.getItem(USER_PENDING_SUBMISSIONS_KEY) || '[]');
-          const list = Array.isArray(existing) ? existing : [];
-          list.push(newRecord);
-          localStorage.setItem(USER_PENDING_SUBMISSIONS_KEY, JSON.stringify(list));
-        } catch (err) {
-          console.warn('Failed to save to cloud fallback queue:', err);
-        }
-
-        // Also register in local databaseService cache so the user sees their title immediately
-        dbService.submitDubInfoLocally(newRecord);
-
-        // Friendly success toast as strictly specified (User doesn't need to know about the quota hit technically)
-        toast.success('Submission Successful!', 'Your anime dub info has been received and is pending admin approval.');
-
-        setIsSuccess(true);
-
-        setTimeout(() => {
-          setIsSuccess(false);
-          setTitle('');
-          setPoster('');
-          setSynopsis('');
-          setStreamingPartners([{ name: 'Crunchyroll', url: '', languages: ['Tamil'] }]);
-          setType('TV Series');
-          setGenres(['Action', 'Fantasy']);
-          setAiringStatus('Ongoing');
-          setReleaseDay('Saturday');
-          setSeasonDetails([{ type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil'] }]);
-          setCurrentSeason('');
-          setCurrentlyAiringEpisode('');
-          setRating('');
-          setAutoFilled(false);
-          onClose();
-          onSuccess?.();
-        }, 1800);
-        return;
-      }
-
-      // 2. Also register in local databaseService cache
-      dbService.submitDubInfo({
-        ...payload,
-        themes: ['Super Power', 'Indian Dub'],
-        characters: newRecord.characters,
-        submittedBy: newRecord.submittedBy,
       });
 
-      // 3. Inside onSubmit, add a fetch call to the Telegram API route to send '🔔 New Anime Submitted: [Title]'
+      const newId = newRecord.id;
+
+      // 3. Dispatch Telegram admin notification
       try {
         const telegramAlertMsg = `🔔 New Anime Submitted: ${title.trim()}`;
         await fetch('/api/telegram', {
@@ -1331,16 +1233,16 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-neutral-400 mb-1 text-[10px] uppercase tracking-wider">Crunchyroll Rating</label>
+                  <label className="block font-bold text-neutral-400 mb-1 text-[10px] uppercase tracking-wider">Global Rating</label>
                   <div className="relative">
                     <input
                       type="number"
                       step="0.1"
                       min="0"
-                      max="5"
+                      max="10"
                       value={rating}
                       onChange={(e) => setRating(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                      placeholder="e.g. 4.8"
+                      placeholder="e.g. 8.5"
                       className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white placeholder-neutral-500 text-xs focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition-all"
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">

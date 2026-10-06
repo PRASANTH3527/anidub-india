@@ -24,20 +24,54 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
 
     setIsSubmitting(true);
     try {
+      const submissionId = 'sub-' + Date.now().toString(36);
       const submission = {
-        animeName,
-        language,
-        platform,
-        sourceLink,
-        notes,
-        date: new Date().toISOString(),
+        id: submissionId,
+        title: animeName.trim(),
+        dubs: [language],
+        platforms: [{ name: platform, url: sourceLink || '#' }],
+        synopsis: notes.trim() || 'No additional notes provided.',
+        status: 'pending',
+        submissionStatus: 'pending',
+        submittedAt: new Date().toISOString(),
+        isSuggestion: true
       };
 
-      // Simulate a small delay for better UX consistent with other forms
-      await new Promise(resolve => setTimeout(resolve, 600));
+      let isQuotaHit = false;
+      
+      // Try Firestore first
+      try {
+        const { db } = await import('../lib/firebase');
+        const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
+        
+        const sanitized = {
+          ...submission,
+          createdAt: new Date().toISOString(),
+          serverCreatedAt: serverTimestamp()
+        };
+        
+        await setDoc(doc(db, 'submissions', submissionId), sanitized);
+        await setDoc(doc(db, 'activities', `act-${submissionId}`), {
+          user: 'Community Member',
+          action: 'suggested',
+          animeTitle: submission.title,
+          timestamp: new Date(),
+          language: language,
+          status: 'pending'
+        });
+      } catch (fsErr: any) {
+        const { isQuotaError } = await import('../services/databaseService');
+        if (isQuotaError(fsErr)) {
+          isQuotaHit = true;
+        } else {
+          throw fsErr;
+        }
+      }
 
-      const list = JSON.parse(localStorage.getItem('anidub_submissions') || '[]');
-      localStorage.setItem('anidub_submissions', JSON.stringify([submission, ...list]));
+      if (isQuotaHit) {
+        const { dbService } = await import('../services/databaseService');
+        await dbService.saveToRtdbFallback('pending_submissions', submission);
+      }
 
       setSubmitted(true);
       setTimeout(() => {
@@ -49,7 +83,16 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
       }, 2200);
     } catch (err) {
       console.error('Submission error:', err);
-      // Even though it's local only, we handle errors for future-proofing
+      // Fallback to local storage if all else fails
+      const list = JSON.parse(localStorage.getItem('anidub_submissions') || '[]');
+      localStorage.setItem('anidub_submissions', JSON.stringify([{
+        animeName,
+        language,
+        platform,
+        sourceLink,
+        notes,
+        date: new Date().toISOString(),
+      }, ...list]));
     } finally {
       setIsSubmitting(false);
     }

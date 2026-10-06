@@ -145,7 +145,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
                 {/* Rating Pill */}
                 <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/75 backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-full text-[10px] font-bold text-amber-300 shadow">
                   <Star className="w-3 h-3 fill-current text-amber-400" />
-                  <span>{anime.rating?.toFixed(1) || '8.5'}</span>
+                  <span>{anime.rating ? `${anime.rating.toFixed(1)}/10` : '8.5/10'}</span>
                 </div>
 
                 {/* Bookmark Toggle Button */}

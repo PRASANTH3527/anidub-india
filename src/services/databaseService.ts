@@ -351,8 +351,8 @@ class DatabaseService {
     return all.find((a) => a.id === id) || null;
   }
 
-  // --- 3. User Submission: Saves with status "pending" to Firestore ---
-  public submitDubInfo(data: Omit<AnimeRecord, 'id' | 'submissionStatus' | 'submittedAt'>): AnimeRecord {
+  // --- 3. User Submission: Saves with status "pending" to Firestore with RTDB Fallback ---
+  public async submitDubInfo(data: Omit<AnimeRecord, 'id' | 'submissionStatus' | 'submittedAt'>): Promise<AnimeRecord> {
     const id = 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
     const newRecord: AnimeRecord = {
       ...data,
@@ -365,20 +365,43 @@ class DatabaseService {
     const records = this.getAllAnimeRecords();
     this.saveAnimeRecords([newRecord, ...records]);
 
+    let isQuotaHit = false;
+
     // Persist directly to Firestore real database
     try {
-      setDoc(doc(db, 'submissions', id), newRecord).catch((e) => console.warn('Firestore submissions setDoc error:', e));
-      setDoc(doc(db, 'animes', id), newRecord).catch((e) => console.warn('Firestore animes setDoc error:', e));
-      setDoc(doc(db, 'activities', `act-${id}`), {
+      const sanitized = {
+        ...newRecord,
+        createdAt: new Date().toISOString(),
+        serverCreatedAt: serverTimestamp(),
+      };
+      
+      await setDoc(doc(db, 'submissions', id), sanitized);
+      await setDoc(doc(db, 'animes', id), sanitized);
+      await setDoc(doc(db, 'activities', `act-${id}`), {
         user: newRecord.submittedBy?.userName || 'Community User',
         action: 'submitted',
         animeTitle: newRecord.title,
         timestamp: new Date(),
         language: newRecord.dubs?.[0] || 'Tamil',
         status: 'pending'
-      }).catch(() => {});
-    } catch (fsErr) {
+      });
+    } catch (fsErr: any) {
       console.warn('Firestore write error in submitDubInfo:', fsErr);
+      if (this.isQuotaExceededError(fsErr)) {
+        isQuotaHit = true;
+        this.setQuotaExceeded(true);
+      } else {
+        throw fsErr;
+      }
+    }
+
+    // RTDB Fallback if Firestore Quota Hit
+    if (isQuotaHit) {
+      try {
+        await this.saveToRtdbFallback('pending_submissions', newRecord);
+      } catch (rtdbErr) {
+        console.error('[RTDB Fallback Error]', rtdbErr);
+      }
     }
 
     // Asynchronously notify backend submissions API

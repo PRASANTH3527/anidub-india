@@ -476,10 +476,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const success = await dbService.approveSubmission(anime.id, undefined, 'Admin');
       if (success) {
         toast.success('Approved', `"${anime.title}" is now live.`);
+        // Immediately update local state for snappy UI
+        setCatalogTitles(prev => prev.map(a => a.id === anime.id ? { ...a, status: 'approved', submissionStatus: 'approved' } : a));
+        setPendingList(prev => prev.filter(p => p.id !== anime.id));
+        setPendingSubmissions(prev => Math.max(0, prev - 1));
       } else {
         toast.error('Error', 'Could not approve anime.');
       }
-      fetchRealData();
+      fetchRealData(true);
     } catch (err: any) {
       console.error('Approve error:', err);
       toast.error('Approve Failed', isQuotaError(err) ? 'Database limit reached. Please try again later.' : 'An unexpected error occurred.');
@@ -492,7 +496,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       await dbService.rejectSubmission(anime.id, undefined, 'Admin');
       toast.info('Rejected', `"${anime.title}" marked as rejected.`);
-      fetchRealData();
+      // Immediately update local state
+      setPendingList(prev => prev.filter(p => p.id !== anime.id));
+      setPendingSubmissions(prev => Math.max(0, prev - 1));
+      setCatalogTitles(prev => prev.map(a => a.id === anime.id ? { ...a, status: 'rejected', submissionStatus: 'rejected' } : a));
+      fetchRealData(true);
     } catch (err: any) {
       console.error('Reject error:', err);
       toast.error('Reject Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
@@ -503,7 +511,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       await dbService.deleteSubmission(anime.id);
       toast.success('Moved to Trash', `"${anime.title}" can be restored later.`);
-      fetchRealData();
+      // Immediately update local state for responsive UI
+      setCatalogTitles(prev => prev.filter(a => a.id !== anime.id));
+      setPendingList(prev => prev.filter(p => p.id !== anime.id));
+      setPendingSubmissions(prev => Math.max(0, prev - 1));
+      const deletedItem = dbService.normalizeRecord({ ...anime, isDeleted: true });
+      setDeletedList(prev => [deletedItem, ...prev]);
+      fetchRealData(true);
     } catch (err: any) {
       console.error('Soft delete error:', err);
       toast.error('Delete Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
@@ -515,7 +529,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       await dbService.restoreSubmission(anime.id);
       toast.success('Restored', `"${anime.title}" is back in catalog.`);
-      fetchRealData();
+      // Immediately update local state
+      setDeletedList(prev => prev.filter(a => a.id !== anime.id));
+      const restoredItem = dbService.normalizeRecord({ ...anime, isDeleted: false });
+      setCatalogTitles(prev => [restoredItem, ...prev]);
+      fetchRealData(true);
     } catch (err: any) {
       console.error('Restore error:', err);
       toast.error('Restore Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
@@ -530,8 +548,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       await dbService.permanentlyDeleteSubmission(animeToDelete.id);
       toast.success('Erased', 'Record permanently removed.');
+      // Immediately update local state
+      setDeletedList(prev => prev.filter(a => a.id !== animeToDelete.id));
       setAnimeToDelete(null);
-      fetchRealData();
+      fetchRealData(true);
     } catch (err: any) {
       console.error('Delete error:', err);
       toast.error('Failed to Delete', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
@@ -819,17 +839,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                {serverQueueProgress.status === 'completed' && (
-                  <button
-                    onClick={() => {
-                      resetServerProgress();
-                      fetchRealData(true);
-                    }}
-                    className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all cursor-pointer shadow-lg active:scale-95"
-                  >
-                    Dismiss
-                  </button>
-                )}
+                <div className="flex gap-2">
+                  {serverQueueProgress.status === 'completed' ? (
+                    <button
+                      onClick={() => {
+                        resetServerProgress();
+                        fetchRealData(true);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all cursor-pointer shadow-lg active:scale-95"
+                    >
+                      Dismiss
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        if (confirm('Manually reset progress? This will only clear the UI status, not stop any running background worker.')) {
+                          resetServerProgress();
+                        }
+                      }}
+                      className="p-2 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white transition-all border border-neutral-700 cursor-pointer"
+                      title="Reset Progress UI"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 

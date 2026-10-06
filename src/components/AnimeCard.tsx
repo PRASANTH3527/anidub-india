@@ -376,8 +376,8 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-md backdrop-blur-sm border border-white/10">
               <Star className="w-3 h-3 text-orange-500 fill-orange-500" />
-              <span className="text-orange-400 font-black">CR</span>
-              <span>{anime.rating ? anime.rating.toFixed(1) : 'N/A'}</span>
+              <span className="text-orange-400 font-black">RATING</span>
+              <span>{anime.rating ? `${anime.rating.toFixed(1)}/10` : 'N/A'}</span>
             </div>
             {dbService.getAverageRatingForAnime(anime.id) > 0 && (
               <div className="flex items-center gap-1 bg-primary-theme/80 px-2 py-0.5 rounded-md backdrop-blur-sm border border-primary-light/30">

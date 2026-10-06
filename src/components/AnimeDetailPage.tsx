@@ -81,7 +81,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
   // Reviews & Rating System state
   const [reviews, setReviews] = useState<DubReview[]>([]);
-  const [ratingInput, setRatingInput] = useState<number>(5);
+  const [ratingInput, setRatingInput] = useState<number>(8.5);
   const [languageInput, setLanguageInput] = useState<DubLanguage>(anime.dubs[0] || 'Tamil');
   const [commentInput, setCommentInput] = useState<string>('');
   const [isSpoilerInput, setIsSpoilerInput] = useState(false);
@@ -223,7 +223,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   // Average community dub rating
   const averageDubScore = reviews.length > 0
     ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1)
-    : '4.8';
+    : '9.2';
 
   // Similar anime: dynamically filter and show up to 3 other approved anime sharing the same language
   const similarShows = allAnime
@@ -393,13 +393,13 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 sm:gap-4 pt-1">
               <div className="flex items-center gap-1.5 bg-black/50 border border-neutral-700/80 px-3 py-1.5 rounded-xl">
                 <Star className="w-4 h-4 text-orange-500 fill-orange-500" />
-                <span className="font-extrabold text-white text-sm">{anime.rating ? anime.rating.toFixed(1) : 'N/A'}</span>
-                <span className="text-[11px] text-orange-500 font-black">CR RATING</span>
+                <span className="font-extrabold text-white text-sm">{anime.rating ? `${anime.rating.toFixed(1)}/10` : 'N/A'}</span>
+                <span className="text-[11px] text-orange-500 font-black">GLOBAL RATING</span>
               </div>
 
               <div className="flex items-center gap-1.5 bg-black/50 border border-primary-theme/60 px-3 py-1.5 rounded-xl">
                 <Volume2 className="w-4 h-4 text-accent-theme" />
-                <span className="font-extrabold text-primary-theme text-sm">★ {averageDubScore}</span>
+                <span className="font-extrabold text-primary-theme text-sm">{averageDubScore}/10</span>
                 <span className="text-[11px] text-neutral-400">Dub Quality</span>
               </div>
 
@@ -584,7 +584,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
                 <div>
                   <span className="font-black text-white text-base leading-none block">
-                    {averageDubScore} / 5
+                    {averageDubScore} / 10
                   </span>
                   <span className="text-[10px] text-neutral-400">
                     {reviews.length} {reviews.length === 1 ? 'Review' : 'Reviews'}
@@ -615,35 +615,28 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               <form onSubmit={handleReviewSubmit} className="space-y-3.5">
                 {/* Star rating selector */}
                 <div className="flex flex-wrap items-center gap-4">
-                  <div>
+                  <div className="flex-1 min-w-[200px]">
                     <label className="block text-[11px] font-bold text-neutral-400 mb-1">
-                      Dub Quality Rating (1 to 5 Stars)
+                      Dub Quality Rating (0.0 to 10.0)
                     </label>
-                    <div className="flex items-center gap-1.5">
-                      {[1, 2, 3, 4, 5].map((star) => {
-                        const active = (hoverRating || ratingInput) >= star;
-                        return (
-                          <button
-                            type="button"
-                            key={star}
-                            onClick={() => setRatingInput(star)}
-                            onMouseEnter={() => setHoverRating(star)}
-                            onMouseLeave={() => setHoverRating(0)}
-                            className="p-1 cursor-pointer transition-transform hover:scale-110"
-                          >
-                            <Star
-                              className={`w-5 h-5 ${
-                                active
-                                  ? 'text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]'
-                                  : 'text-neutral-600'
-                              }`}
-                            />
-                          </button>
-                        );
-                      })}
-                      <span className="text-xs font-bold text-amber-300 ml-2">
-                        {ratingInput} of 5 Stars
-                      </span>
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex-1">
+                        <input
+                          type="range"
+                          min="0"
+                          max="10"
+                          step="0.1"
+                          value={ratingInput}
+                          onChange={(e) => setRatingInput(parseFloat(e.target.value))}
+                          className="w-full h-1.5 bg-[#131926] rounded-lg appearance-none cursor-pointer accent-amber-500 border border-neutral-800"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-[#131926] border border-neutral-700 px-3 py-1 rounded-xl shrink-0">
+                        <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                        <span className="text-sm font-black text-amber-300">
+                          {ratingInput.toFixed(1)}/10
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -738,16 +731,10 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                         </div>
                       </div>
 
-                      {/* Stars */}
-                      <div className="flex items-center gap-1 bg-black/40 px-2 py-1 rounded-lg border border-white/5">
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star
-                            key={i}
-                            className={`w-3 h-3 ${
-                              i < rev.rating ? 'text-amber-400 fill-amber-400' : 'text-neutral-700'
-                            }`}
-                          />
-                        ))}
+                      {/* Rating Display */}
+                      <div className="flex items-center gap-1.5 bg-black/40 px-2.5 py-1 rounded-lg border border-white/5">
+                        <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                        <span className="text-xs font-black text-amber-300">{rev.rating.toFixed(1)}/10</span>
                       </div>
                     </div>
 
