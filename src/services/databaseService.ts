@@ -514,15 +514,23 @@ class DatabaseService {
 
     this.saveAnimeRecords(records);
 
-    // Sync rejection to Firestore
+    // Sync rejection to Firestore across all relevant collections
     try {
-      await setDoc(doc(db, 'submissions', id), {
+      const updatePayload = {
         status: 'rejected',
         submissionStatus: 'rejected',
         reviewedBy: reviewerName,
         rejectionReason: reason,
         updatedAt: new Date().toISOString(),
-      }, { merge: true });
+      };
+      
+      await setDoc(doc(db, 'submissions', id), updatePayload, { merge: true });
+      try {
+        await setDoc(doc(db, 'animes', id), updatePayload, { merge: true });
+      } catch {}
+      try {
+        await setDoc(doc(db, 'anime', id), updatePayload, { merge: true });
+      } catch {}
     } catch (e: any) {
       console.warn('Firestore rejection sync error:', e);
       if (isQuotaError(e)) throw e;
@@ -1374,40 +1382,38 @@ class DatabaseService {
 
     let successCount = 0;
     let failedCount = 0;
-    
-    // Batch write to Firestore
-    const batch = writeBatch(db);
-    const syncedIds: string[] = [];
+    const CHUNK_SIZE = 150; // 150 items * 2 docs = 300 ops (well under 500 limit)
 
-    for (const item of pending) {
-      try {
-        const id = item.id;
-        const sanitized = this.normalizeRecord(item);
-        const docRef = doc(db, 'animes', id);
-        batch.set(docRef, sanitized, { merge: true });
-        
-        // Also add to submissions collection
-        const subRef = doc(db, 'submissions', id);
-        batch.set(subRef, sanitized, { merge: true });
-        
-        syncedIds.push(id);
-        successCount++;
-      } catch (err) {
-        console.error(`[RTDB Sync] Failed to prepare item ${item.id}:`, err);
-        failedCount++;
-      }
-    }
+    for (let i = 0; i < pending.length; i += CHUNK_SIZE) {
+      const chunk = pending.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      const syncedIds: string[] = [];
 
-    if (syncedIds.length > 0) {
-      try {
-        await batch.commit();
-        // Upon success, delete from RTDB
-        for (const id of syncedIds) {
-          await remove(ref(rtdb, `pending_submissions/${id}`));
+      for (const item of chunk) {
+        try {
+          const id = item.id;
+          const sanitized = this.normalizeRecord(item);
+          batch.set(doc(db, 'animes', id), sanitized, { merge: true });
+          batch.set(doc(db, 'submissions', id), sanitized, { merge: true });
+          syncedIds.push(id);
+        } catch (err) {
+          console.error(`[RTDB Sync] Failed to prepare item ${item.id}:`, err);
+          failedCount++;
         }
-      } catch (err) {
-        console.error('[RTDB Sync] Firestore batch commit failed:', err);
-        return { success: 0, failed: pending.length };
+      }
+
+      if (syncedIds.length > 0) {
+        try {
+          await batch.commit();
+          // Upon success, delete from RTDB
+          for (const id of syncedIds) {
+            await remove(ref(rtdb, `pending_submissions/${id}`));
+          }
+          successCount += syncedIds.length;
+        } catch (err) {
+          console.error('[RTDB Sync] Firestore batch commit failed:', err);
+          failedCount += chunk.length - (chunk.length - syncedIds.length);
+        }
       }
     }
 
@@ -1439,42 +1445,44 @@ class DatabaseService {
 
     let successCount = 0;
     let failedCount = 0;
-    
-    // Firestore Batch Write (Max 500 docs, but we'll assume the RTDB queue is manageable or user will sync multiple times)
-    const batch = writeBatch(db);
-    const syncedIds: string[] = [];
+    const CHUNK_SIZE = 150; // 150 items * 2 docs = 300 ops
 
-    for (const item of pending) {
-      try {
-        const id = item.id;
-        // status is usually 'pending' for uploads
-        const normalized = this.normalizeRecord({
-          ...item,
-          status: 'pending',
-          submissionStatus: 'pending'
-        });
-        
-        batch.set(doc(db, 'animes', id), normalized, { merge: true });
-        batch.set(doc(db, 'submissions', id), normalized, { merge: true });
-        
-        syncedIds.push(id);
-        successCount++;
-      } catch (err) {
-        console.error(`[RTDB Admin Sync] Failed item ${item.id}:`, err);
-        failedCount++;
-      }
-    }
+    for (let i = 0; i < pending.length; i += CHUNK_SIZE) {
+      const chunk = pending.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      const syncedIds: string[] = [];
 
-    if (syncedIds.length > 0) {
-      try {
-        await batch.commit();
-        // Clear from RTDB upon success
-        for (const id of syncedIds) {
-          await remove(ref(rtdb, `admin_pending_uploads/${id}`));
+      for (const item of chunk) {
+        try {
+          const id = item.id;
+          const normalized = this.normalizeRecord({
+            ...item,
+            status: 'pending',
+            submissionStatus: 'pending'
+          });
+          
+          batch.set(doc(db, 'animes', id), normalized, { merge: true });
+          batch.set(doc(db, 'submissions', id), normalized, { merge: true });
+          
+          syncedIds.push(id);
+        } catch (err) {
+          console.error(`[RTDB Admin Sync] Failed item ${item.id}:`, err);
+          failedCount++;
         }
-      } catch (err) {
-        console.error('[RTDB Admin Sync] Commit failed:', err);
-        return { success: 0, failed: pending.length };
+      }
+
+      if (syncedIds.length > 0) {
+        try {
+          await batch.commit();
+          // Clear from RTDB upon success
+          for (const id of syncedIds) {
+            await remove(ref(rtdb, `admin_pending_uploads/${id}`));
+          }
+          successCount += syncedIds.length;
+        } catch (err) {
+          console.error('[RTDB Admin Sync] Commit failed:', err);
+          failedCount += chunk.length - (chunk.length - syncedIds.length);
+        }
       }
     }
 

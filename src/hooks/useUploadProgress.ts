@@ -115,11 +115,16 @@ export function useUploadProgress() {
 
       if (!res.ok && res.status !== 202) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `Upload failed with status: ${res.status}`);
+        const errMsg = errJson.error || `Upload failed with status: ${res.status}`;
+        setProgress(prev => ({ ...prev, status: 'failed', error: errMsg }));
+        throw new Error(errMsg);
       }
 
       const data = await res.json();
       return data;
+    } catch (err: any) {
+      setProgress(prev => ({ ...prev, status: 'failed', error: err?.message || 'Failed to start upload' }));
+      throw err;
     } finally {
       setIsSubmitting(false);
     }

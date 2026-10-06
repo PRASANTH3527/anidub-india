@@ -74,185 +74,212 @@ function normalizeAnimeForBatch(item: any, id: string): any {
  */
 export async function executeBulkUploadWorker(params: ProcessQueueParams): Promise<WorkerResult> {
   const { jobId, items, adminUser = 'Admin (Queue Worker)' } = params;
-  const db = getServerFirestore();
-  const totalItems = items.length;
-  const totalBatches = Math.ceil(totalItems / BATCH_SIZE);
+  
+  try {
+    const db = getServerFirestore();
+    const totalItems = items.length;
+    const totalBatches = Math.ceil(totalItems / BATCH_SIZE);
 
-  let processedCount = 0;
-  let successCount = 0;
-  let failedCount = 0;
-  const allDlqItems: DLQItem[] = [];
+    let processedCount = 0;
+    let successCount = 0;
+    let failedCount = 0;
+    const allDlqItems: DLQItem[] = [];
 
-  console.info(`[Worker] Started processing Job ${jobId} (${totalItems} items across ${totalBatches} batches)...`);
+    console.info(`[Worker] Step 0: Job ${jobId} initialized with ${totalItems} items.`);
 
-  // Initialize progress doc in Firestore
-  await updateUploadProgress({
-    jobId,
-    status: 'processing',
-    totalItems,
-    processedItems: 0,
-    successCount: 0,
-    failedCount: 0,
-    dlqCount: 0,
-    currentBatch: 0,
-    totalBatches,
-    percentage: 0,
-    startedAt: new Date().toISOString(),
-    error: null,
-  });
-
-  for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-    const startIdx = batchIndex * BATCH_SIZE;
-    const chunk = items.slice(startIdx, startIdx + BATCH_SIZE);
-    const chunkIds: string[] = [];
-
-    let attempt = 0;
-    let batchCommitted = false;
-    let lastError: any = null;
-
-    // Retry loop with Exponential Backoff
-    while (attempt < MAX_RETRY_ATTEMPTS && !batchCommitted) {
-      attempt++;
-      try {
-        const batch = writeBatch(db);
-
-        for (const rawItem of chunk) {
-          const rawTitle = (rawItem.title || rawItem.name || '').trim();
-          if (!rawTitle) {
-            continue;
-          }
-
-          const docId = rawItem.id || `bulk-${jobId}-${Math.random().toString(36).substring(2, 9)}`;
-          chunkIds.push(docId);
-
-          const normalized = normalizeAnimeForBatch(rawItem, docId);
-
-          const subRef = doc(db, 'submissions', docId);
-          const animeRef = doc(db, 'animes', docId);
-          const actRef = doc(db, 'activities', `act-bulk-${docId}-${Date.now()}`);
-
-          batch.set(subRef, normalized, { merge: true });
-          batch.set(animeRef, normalized, { merge: true });
-          batch.set(actRef, {
-            user: adminUser,
-            action: 'submitted',
-            animeTitle: normalized.title,
-            timestamp: serverTimestamp(),
-            language: normalized.dubs?.[0] || 'Tamil',
-            status: 'pending',
-          });
-        }
-
-        // Commit Firestore batched write
-        await batch.commit();
-        batchCommitted = true;
-        successCount += chunk.length;
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`[Worker] Batch ${batchIndex + 1}/${totalBatches} failed on attempt ${attempt}:`, err?.message || err);
-
-        const isQuota = isResourceExhausted(err);
-        if (isQuota && attempt < MAX_RETRY_ATTEMPTS) {
-          // Exponential backoff with jitter
-          const backoffDelay = (BASE_BACKOFF_MS * Math.pow(2, attempt - 1)) + Math.round(Math.random() * 500);
-          console.info(`[Worker] Firestore quota hit. Backing off for ${backoffDelay}ms before retry...`);
-
-          // Notify frontend that we are currently rate-limited and backing off
-          await updateUploadProgress({
-            jobId,
-            error: `Rate limit hit. Automatically retrying batch in ${Math.round(backoffDelay / 1000)}s (Attempt ${attempt}/${MAX_RETRY_ATTEMPTS})...`,
-          });
-
-          await sleep(backoffDelay);
-        } else {
-          // FATAL ERROR OR RETRIES EXHAUSTED: Stop the entire job
-          console.error(`[Worker] Fatal error or retries exhausted in Job ${jobId}. Breaking loop.`);
-          
-          await updateUploadProgress({
-            jobId,
-            status: 'failed',
-            error: `Processing stopped due to fatal error: ${err?.message || 'Unknown error'}. Remaining ${items.length - processedCount} items were not processed.`,
-            completedAt: new Date().toISOString(),
-          });
-          
-          return {
-            jobId,
-            totalItems,
-            successCount,
-            failedCount: failedCount + chunk.length,
-            dlqCount: allDlqItems.length,
-            status: 'failed',
-            error: err?.message,
-          };
-        }
-      }
-    }
-
-    if (!batchCommitted) {
-      // Permanently failed batch -> Send items to Dead Letter Queue (DLQ)
-      failedCount += chunk.length;
-      const batchDlq: DLQItem[] = chunk.map((item, idx) => ({
-        id: chunkIds[idx] || `dlq-item-${Date.now()}-${idx}`,
-        jobId,
-        failedAt: new Date().toISOString(),
-        reason: lastError?.message || 'Permanent batch write failure',
-        errorStack: lastError?.stack || undefined,
-        payload: item,
-        retryAttempts: attempt,
-      }));
-
-      allDlqItems.push(...batchDlq);
-      await recordDLQItems(batchDlq);
-    }
-
-    processedCount += chunk.length;
-
-    // Update real-time progress after each batch completes
-    const lastItemTitle = chunk[chunk.length - 1]?.title || chunk[chunk.length - 1]?.name || '';
+    // Initialize progress doc in Firestore
     await updateUploadProgress({
       jobId,
       status: 'processing',
-      processedItems: processedCount,
-      successCount,
-      failedCount,
-      dlqCount: allDlqItems.length,
-      currentBatch: batchIndex + 1,
+      totalItems,
+      processedItems: 0,
+      successCount: 0,
+      failedCount: 0,
+      dlqCount: 0,
+      currentBatch: 0,
       totalBatches,
-      percentage: Math.min(100, Math.round((processedCount / totalItems) * 100)),
-      lastProcessedTitle: lastItemTitle,
+      percentage: 0,
+      startedAt: new Date().toISOString(),
       error: null,
     });
 
-    // Smart Rate Limiting throttle delay between batches
-    if (batchIndex < totalBatches - 1) {
-      await sleep(THROTTLE_DELAY_MS);
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      console.log(`[Worker] Step 1: Starting Batch ${batchIndex + 1}/${totalBatches}`);
+      const startIdx = batchIndex * BATCH_SIZE;
+      const chunk = items.slice(startIdx, startIdx + BATCH_SIZE);
+      const chunkIds: string[] = [];
+
+      let attempt = 0;
+      let batchCommitted = false;
+      let lastError: any = null;
+
+      // Retry loop with Exponential Backoff
+      while (attempt < MAX_RETRY_ATTEMPTS && !batchCommitted) {
+        attempt++;
+        console.log(`[Worker] Step 2: Attempt ${attempt}/${MAX_RETRY_ATTEMPTS} for Batch ${batchIndex + 1}`);
+        try {
+          const batch = writeBatch(db);
+
+          for (const rawItem of chunk) {
+            const rawTitle = (rawItem.title || rawItem.name || '').trim();
+            if (!rawTitle) {
+              console.warn('[Worker] Skipping item with no title');
+              continue;
+            }
+
+            const docId = rawItem.id || `bulk-${jobId}-${Math.random().toString(36).substring(2, 9)}`;
+            chunkIds.push(docId);
+
+            const normalized = normalizeAnimeForBatch(rawItem, docId);
+
+            const subRef = doc(db, 'submissions', docId);
+            const animeRef = doc(db, 'animes', docId);
+            const actRef = doc(db, 'activities', `act-bulk-${docId}-${Date.now()}`);
+
+            batch.set(subRef, normalized, { merge: true });
+            batch.set(animeRef, normalized, { merge: true });
+            batch.set(actRef, {
+              user: adminUser,
+              action: 'submitted',
+              animeTitle: normalized.title,
+              timestamp: serverTimestamp(),
+              language: normalized.dubs?.[0] || 'Tamil',
+              status: 'pending',
+            });
+          }
+
+          console.log(`[Worker] Step 3: Committing Batch ${batchIndex + 1} (${chunk.length} items)...`);
+          // Commit Firestore batched write
+          await batch.commit();
+          console.log(`[Worker] Step 4: Batch ${batchIndex + 1} COMMITTED SUCCESS.`);
+          batchCommitted = true;
+          successCount += chunk.length;
+        } catch (err: any) {
+          lastError = err;
+          const isQuota = isResourceExhausted(err);
+          console.warn(`[Worker] Step 5: Batch ${batchIndex + 1} FAILED. QuotaError: ${isQuota}. Error:`, err?.message || err);
+
+          if (isQuota && attempt < MAX_RETRY_ATTEMPTS) {
+            // Exponential backoff with jitter
+            const backoffDelay = (BASE_BACKOFF_MS * Math.pow(2, attempt - 1)) + Math.round(Math.random() * 500);
+            console.info(`[Worker] Firestore quota hit. Backing off for ${backoffDelay}ms before retry...`);
+
+            // Notify frontend that we are currently rate-limited and backing off
+            await updateUploadProgress({
+              jobId,
+              error: `Rate limit hit. Automatically retrying batch in ${Math.round(backoffDelay / 1000)}s (Attempt ${attempt}/${MAX_RETRY_ATTEMPTS})...`,
+            });
+
+            await sleep(backoffDelay);
+          } else {
+            // FATAL ERROR OR RETRIES EXHAUSTED: Stop the entire job
+            console.error(`[Worker] Step 6: FATAL error or retries exhausted for Batch ${batchIndex + 1}. BREAKING LOOP.`);
+            
+            await updateUploadProgress({
+              jobId,
+              status: 'failed',
+              error: `Processing stopped due to fatal error: ${err?.message || 'Unknown error'}. Remaining ${items.length - processedCount} items were not processed.`,
+              completedAt: new Date().toISOString(),
+            });
+            
+            return {
+              jobId,
+              totalItems,
+              successCount,
+              failedCount: failedCount + chunk.length,
+              dlqCount: allDlqItems.length,
+              status: 'failed',
+              error: err?.message,
+            };
+          }
+        }
+      }
+
+      if (!batchCommitted) {
+        // Permanently failed batch -> Send items to Dead Letter Queue (DLQ)
+        failedCount += chunk.length;
+        const batchDlq: DLQItem[] = chunk.map((item, idx) => ({
+          id: chunkIds[idx] || `dlq-item-${Date.now()}-${idx}`,
+          jobId,
+          failedAt: new Date().toISOString(),
+          reason: lastError?.message || 'Permanent batch write failure',
+          errorStack: lastError?.stack || undefined,
+          payload: item,
+          retryAttempts: attempt,
+        }));
+
+        allDlqItems.push(...batchDlq);
+        await recordDLQItems(batchDlq);
+      }
+
+      processedCount += chunk.length;
+
+      // Update real-time progress after each batch completes
+      const lastItemTitle = chunk[chunk.length - 1]?.title || chunk[chunk.length - 1]?.name || '';
+      await updateUploadProgress({
+        jobId,
+        status: 'processing',
+        processedItems: processedCount,
+        successCount,
+        failedCount,
+        dlqCount: allDlqItems.length,
+        currentBatch: batchIndex + 1,
+        totalBatches,
+        percentage: Math.min(100, Math.round((processedCount / totalItems) * 100)),
+        lastProcessedTitle: lastItemTitle,
+        error: null,
+      });
+
+      // Smart Rate Limiting throttle delay between batches
+      if (batchIndex < totalBatches - 1) {
+        await sleep(THROTTLE_DELAY_MS);
+      }
     }
+
+    // Final job status update
+    const finalStatus = failedCount === totalItems ? 'failed' : 'completed';
+    await updateUploadProgress({
+      jobId,
+      status: finalStatus,
+      processedItems: totalItems,
+      successCount,
+      failedCount,
+      dlqCount: allDlqItems.length,
+      percentage: 100,
+      completedAt: new Date().toISOString(),
+      error: failedCount > 0 ? `${failedCount} items sent to Dead Letter Queue (DLQ)` : null,
+    });
+
+    console.info(`[Worker] Job ${jobId} finished: ${successCount} succeeded, ${failedCount} sent to DLQ.`);
+
+    return {
+      jobId,
+      totalItems,
+      successCount,
+      failedCount,
+      dlqCount: allDlqItems.length,
+      status: finalStatus,
+    };
+  } catch (fatalErr: any) {
+    console.error(`[Worker] UNHANDLED FATAL CRASH for Job ${jobId}:`, fatalErr);
+    try {
+      await updateUploadProgress({
+        jobId,
+        status: 'failed',
+        error: `Worker crashed: ${fatalErr?.message || 'Unknown internal error'}`,
+        completedAt: new Date().toISOString()
+      });
+    } catch {}
+    return {
+      jobId,
+      totalItems: items.length,
+      successCount: 0,
+      failedCount: items.length,
+      dlqCount: 0,
+      status: 'failed',
+      error: fatalErr?.message
+    };
   }
-
-  // Final job status update
-  const finalStatus = failedCount === totalItems ? 'failed' : 'completed';
-  await updateUploadProgress({
-    jobId,
-    status: finalStatus,
-    processedItems: totalItems,
-    successCount,
-    failedCount,
-    dlqCount: allDlqItems.length,
-    percentage: 100,
-    completedAt: new Date().toISOString(),
-    error: failedCount > 0 ? `${failedCount} items sent to Dead Letter Queue (DLQ)` : null,
-  });
-
-  console.info(`[Worker] Job ${jobId} finished: ${successCount} succeeded, ${failedCount} sent to DLQ.`);
-
-  return {
-    jobId,
-    totalItems,
-    successCount,
-    failedCount,
-    dlqCount: allDlqItems.length,
-    status: finalStatus,
-  };
 }
 
 /**

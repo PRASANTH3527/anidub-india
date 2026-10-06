@@ -440,12 +440,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Automated Alert for Background Worker Failures
   useEffect(() => {
     if (serverQueueProgress.status === 'failed') {
+      console.log('[Queue] Progress status is FAILED. Alerting user.');
       toast.error(
         'Queue Processing Failed',
         serverQueueProgress.error || 'The background upload worker encountered a fatal error and stopped.'
       );
+    } else if (serverQueueProgress.status === 'completed') {
+      console.log('[Queue] Progress status is COMPLETED.');
     }
   }, [serverQueueProgress.status, serverQueueProgress.error]);
+
+  // Simulation: Fake Resource Exhausted Error
+  const handleSimulateUploadError = async () => {
+    console.log('[Simulation] Step 1: STARTING FAKE QUOTA ERROR SIMULATION...');
+    setIsImporting(true);
+    resetServerProgress();
+    
+    try {
+      const { setDoc, doc, serverTimestamp } = await import('firebase/firestore');
+      const jobId = 'sim_quota_' + Date.now();
+      const statusRef = doc(db, 'system', 'upload_status');
+      
+      console.log('[Simulation] Step 2: Setting initial processing state...');
+      await setDoc(statusRef, {
+        jobId,
+        status: 'processing',
+        totalItems: 5,
+        processedItems: 1,
+        percentage: 20,
+        error: null,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      await new Promise(r => setTimeout(r, 1500));
+      
+      console.log('[Simulation] Step 3: Triggering FAILED status with Quota message...');
+      await setDoc(statusRef, {
+        jobId,
+        status: 'failed',
+        error: 'Quota Exceeded (SIMULATED): 8 RESOURCE_EXHAUSTED: Quota exceeded for quota group "WriteRequestsPerProjectPerMinute".',
+        completedAt: new Date().toISOString(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      console.log('[Simulation] Step 4: SUCCESS. UI should now show failure icon and Dismiss button.');
+    } catch (err) {
+      console.error('[Simulation] Step X: Simulation execution failed:', err);
+    } finally {
+      console.log('[Simulation] Step Finally: Local spinner stopped.');
+      setIsImporting(false);
+    }
+  };
 
   const handleTriggerEdit = (anime: AnimeRecord) => {
     if (onEditAnime) onEditAnime(anime);
@@ -481,26 +526,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleApprove = async (anime: AnimeRecord) => {
+    console.log('Step 1: handleApprove Clicked', anime.id, anime.title);
     setApprovingId(anime.id);
     try {
+      console.log('Step 2: Calling dbService.approveSubmission...');
       const success = await dbService.approveSubmission(anime.id, undefined, 'Admin');
       if (success) {
+        console.log('Step 3: Firestore success. Updating local state...');
         toast.success('Approved', `"${anime.title}" is now live.`);
         // Immediately update local state for snappy UI
-        setPendingList(prev => prev.filter(p => p.id !== anime.id));
+        setPendingList(prev => {
+          const next = prev.filter(p => p.id !== anime.id);
+          console.log('Step 4: pendingList state updated. Old:', prev.length, 'New:', next.length);
+          return next;
+        });
         setPendingSubmissions(prev => Math.max(0, prev - 1));
-        setCatalogTitles(prev => [
-          { ...anime, status: 'approved', submissionStatus: 'approved' },
-          ...prev.filter(a => a.id !== anime.id)
-        ]);
+        setCatalogTitles(prev => {
+          const next: AnimeRecord[] = [
+            { ...anime, status: 'approved' as any, submissionStatus: 'approved' as any },
+            ...prev.filter(a => a.id !== anime.id)
+          ];
+          console.log('Step 5: catalogTitles state updated.');
+          return next;
+        });
         
-        // Delay refresh slightly to allow Firestore consistency
-        setTimeout(() => fetchRealData(true), 2000);
+        console.log('Step 6: Moderation cycle complete. Skipping immediate fetchRealData to avoid flicker.');
       } else {
+        console.warn('Step 2b: dbService.approveSubmission returned false');
         toast.error('Error', 'Could not approve anime.');
       }
     } catch (err: any) {
-      console.error('Approve error:', err);
+      console.error('Step 2c: handleApprove FATAL ERROR:', err);
       toast.error('Approve Failed', isQuotaError(err) ? 'Database limit reached. Please try again later.' : 'An unexpected error occurred.');
     } finally {
       setApprovingId(null);
@@ -508,24 +564,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleReject = async (anime: AnimeRecord) => {
+    console.log('Step 1: handleReject Clicked', anime.id, anime.title);
     try {
+      console.log('Step 2: Calling dbService.rejectSubmission...');
       await dbService.rejectSubmission(anime.id, undefined, 'Admin');
+      console.log('Step 3: Firestore success. Updating local state...');
       toast.info('Rejected', `"${anime.title}" marked as rejected.`);
       // Immediately update local state
-      setPendingList(prev => prev.filter(p => p.id !== anime.id));
+      setPendingList(prev => {
+        const next = prev.filter(p => p.id !== anime.id);
+        console.log('Step 4: pendingList state updated. Old:', prev.length, 'New:', next.length);
+        return next;
+      });
       setPendingSubmissions(prev => Math.max(0, prev - 1));
-      setCatalogTitles(prev => prev.map(a => a.id === anime.id ? { ...a, status: 'rejected', submissionStatus: 'rejected' } : a));
+      setCatalogTitles(prev => {
+        const next: AnimeRecord[] = prev.map(a => a.id === anime.id ? { ...a, status: 'rejected' as any, submissionStatus: 'rejected' as any } : a);
+        console.log('Step 5: catalogTitles state updated.');
+        return next;
+      });
       
-      setTimeout(() => fetchRealData(true), 2000);
+      console.log('Step 6: Moderation cycle complete. Skipping immediate fetchRealData.');
     } catch (err: any) {
-      console.error('Reject error:', err);
+      console.error('Step 2b: handleReject FATAL ERROR:', err);
       toast.error('Reject Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
     }
   };
 
   const handleSoftDelete = async (anime: AnimeRecord) => {
+    console.log('Step 1: handleSoftDelete Clicked', anime.id);
     try {
+      console.log('Step 2: Calling dbService.deleteSubmission...');
       await dbService.deleteSubmission(anime.id);
+      console.log('Step 3: Firestore success. Updating local state...');
       toast.success('Moved to Trash', `"${anime.title}" can be restored later.`);
       // Immediately update local state for responsive UI
       setCatalogTitles(prev => prev.filter(a => a.id !== anime.id));
@@ -533,27 +603,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setPendingSubmissions(prev => Math.max(0, prev - 1));
       const deletedItem = dbService.normalizeRecord({ ...anime, isDeleted: true });
       setDeletedList(prev => [deletedItem, ...prev]);
-      
-      setTimeout(() => fetchRealData(true), 2000);
+      console.log('Step 4: Local state updated. Skipping immediate refresh.');
     } catch (err: any) {
-      console.error('Soft delete error:', err);
+      console.error('Step 2b: Soft delete error:', err);
       toast.error('Delete Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
     }
   };
 
   const handleRestore = async (anime: AnimeRecord) => {
+    console.log('Step 1: handleRestore Clicked', anime.id);
     setIsRestoring(true);
     try {
+      console.log('Step 2: Calling dbService.restoreSubmission...');
       await dbService.restoreSubmission(anime.id);
+      console.log('Step 3: Firestore success. Updating local state...');
       toast.success('Restored', `"${anime.title}" is back in catalog.`);
       // Immediately update local state
       setDeletedList(prev => prev.filter(a => a.id !== anime.id));
       const restoredItem = dbService.normalizeRecord({ ...anime, isDeleted: false });
       setCatalogTitles(prev => [restoredItem, ...prev]);
-      
-      setTimeout(() => fetchRealData(true), 2000);
+      console.log('Step 4: Local state updated.');
     } catch (err: any) {
-      console.error('Restore error:', err);
+      console.error('Step 2b: Restore error:', err);
       toast.error('Restore Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
     } finally {
       setIsRestoring(false);
@@ -562,17 +633,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleDeleteConfirm = async () => {
     if (!animeToDelete) return;
+    console.log('Step 1: handleDeleteConfirm Clicked', animeToDelete.id);
     setIsDeleting(true);
     try {
+      console.log('Step 2: Calling dbService.permanentlyDeleteSubmission...');
       await dbService.permanentlyDeleteSubmission(animeToDelete.id);
+      console.log('Step 3: Firestore success. Updating local state...');
       toast.success('Erased', 'Record permanently removed.');
       // Immediately update local state
       setDeletedList(prev => prev.filter(a => a.id !== animeToDelete.id));
       setAnimeToDelete(null);
-      
-      setTimeout(() => fetchRealData(true), 2000);
+      console.log('Step 4: Local state updated.');
     } catch (err: any) {
-      console.error('Delete error:', err);
+      console.error('Step 2b: Permanent delete error:', err);
       toast.error('Failed to Delete', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
     } finally {
       setIsDeleting(false);
@@ -584,6 +657,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (ev) => {
+      console.log('Step 1: handleImport - File loaded');
       try {
         const json = JSON.parse(ev.target?.result as string);
         if (!Array.isArray(json)) {
@@ -591,22 +665,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           return;
         }
         setIsImporting(true);
+        console.log(`Step 2: Starting bulk upload for ${json.length} items`);
 
         try {
           // 1. Offload to Enterprise Serverless Queue Architecture with instant 202 Accepted
+          console.log('Step 3: Calling startBulkUpload (Serverless)...');
           await startBulkUpload(json);
           toast.success(
             'Bulk Upload Queued',
             `${json.length} items queued for serverless background processing. Track live progress below.`
           );
         } catch (apiErr: any) {
-          console.warn('[Backend Queue API notice - falling back to client batch write]:', apiErr);
+          console.warn('Step 3b: Serverless Queue failed, falling back to client-side syncManager:', apiErr);
           // 2. Client fallback: Enqueue into IndexedDB Queue
           await syncManager.enqueueAdminUploads(json);
+          console.log('Step 4: Calling syncManager.processAdminBatchUpload...');
           const batchRes = await syncManager.processAdminBatchUpload();
           await checkPendingUploads();
           
           if (batchRes.quotaHit) {
+            console.warn('Step 5: Client fallback hit Firestore quota.');
             toast.error(
               'Firestore Quota Hit',
               `${batchRes.remaining} pending uploads saved safely in IndexedDB queue. Click 'Resume Upload' once quota resets.`
@@ -617,14 +695,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               batchRes.failed > 0 ? `${batchRes.failed} Failed` : ''
             ].filter(Boolean).join(', ');
             
+            console.log('Step 5: Client fallback complete.', summary);
             toast.success('Import Complete', summary || 'All records processed in batches.');
           }
         }
-        fetchRealData(true);
+        // fetchRealData(true); // Don't fetch immediately, let the user decide or wait for background sync
       } catch (err) { 
+        console.error('Step X: Import fatal error:', err);
         toast.error('Error', 'Invalid JSON file structure.'); 
       }
       finally { 
+        console.log('Step Finally: Resetting isImporting state');
         setIsImporting(false); 
         if (fileInputRef.current) fileInputRef.current.value = ''; 
       }
@@ -871,7 +952,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleSimulateUploadError}
+                    className="px-3 py-1.5 rounded-lg bg-red-900/20 text-red-400 border border-red-900/30 text-[10px] font-black uppercase hover:bg-red-900/30 transition-all"
+                  >
+                    Simulate Error
+                  </button>
                   {serverQueueProgress.status === 'completed' || serverQueueProgress.status === 'failed' ? (
                     <button
                       onClick={() => {
