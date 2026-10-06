@@ -1,5 +1,5 @@
-import React, { useMemo, Suspense } from 'react';
-import { AnimeCard } from './AnimeCard';
+import React, { useMemo } from 'react';
+import { VirtualizedAnimeGrid } from './VirtualizedAnimeGrid';
 import { SkeletonCard, SkeletonGrid } from './SkeletonGrid';
 import { Anime } from '../types/anime';
 import { translate, SupportedLanguage } from '../utils/i18n';
@@ -40,19 +40,15 @@ export const AnimeGridWithInfiniteScroll: React.FC<AnimeGridWithInfiniteScrollPr
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4 sm:gap-6 will-change-transform">
-        {visibleAnime.map((anime) => (
-          <AnimeCard
-            key={anime.id}
-            anime={anime}
-            isBookmarked={localWatchlistIds.includes(anime.id)}
-            isTrending={trendingAnimeIds.includes(anime.id)}
-            onToggleBookmark={onToggleWatchlist}
-            onSelect={onOpenAnimeDetail}
-            onReport={onReport}
-          />
-        ))}
-      </div>
+      {/* High-Performance Virtualized Grid (2 cols mobile, 3-5 cols desktop) */}
+      <VirtualizedAnimeGrid
+        animeList={visibleAnime}
+        trendingAnimeIds={trendingAnimeIds}
+        localWatchlistIds={localWatchlistIds}
+        onToggleWatchlist={onToggleWatchlist}
+        onOpenAnimeDetail={onOpenAnimeDetail}
+        onReport={onReport}
+      />
 
       {/* Infinite Scroll Sentinel & Seamless Loader */}
       <div ref={sentinelRef} className="pt-8 pb-12 flex flex-col items-center justify-center min-h-[160px]">

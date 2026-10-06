@@ -107,11 +107,19 @@ export function buildAnimeSeo(anime: Anime): SeoConfig {
     `${anime.title} voice cast`,
   ];
 
+  const posterUrl = anime.imageUrl || anime.poster || '';
+  const studioName = (anime as any).animationStudio || anime.studio || '';
+  const dubQuery = Array.isArray(anime.dubs) ? anime.dubs.join(',') : 'Tamil,Telugu';
+  const ogDynamicUrl = `/api/og?title=${encodeURIComponent(anime.title || '')}&poster=${encodeURIComponent(posterUrl)}&dubs=${encodeURIComponent(dubQuery)}&studio=${encodeURIComponent(studioName)}&rating=${encodeURIComponent(String(anime.rating || '8.5'))}&type=${encodeURIComponent(anime.type || 'TV Series')}`;
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://anidub.in';
+  const fullOgUrl = `${origin}${ogDynamicUrl}`;
+
   return {
     title,
     description,
     keywords,
-    ogImage: anime.poster,
-    canonicalUrl: `${window.location.origin}/#anime/${anime.id}`,
+    ogImage: fullOgUrl,
+    canonicalUrl: `${origin}/#anime/${anime.id}`,
   };
 }

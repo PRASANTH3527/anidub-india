@@ -60,6 +60,7 @@ import {
 import { dbService } from '../services/databaseService';
 import { syncManager } from '../services/syncManager';
 import { authService } from '../services/authService';
+import { useUploadProgress } from '../hooks/useUploadProgress';
 import { AnimeRecord } from '../types/database';
 import { SubmitDubModal } from './SubmitDubModal';
 import { useToast } from './Toast';
@@ -281,6 +282,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [pendingUploadsCount, setPendingUploadsCount] = useState<number>(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Enterprise Serverless Queue Progress Hook (system/upload_status)
+  const { 
+    progress: serverQueueProgress, 
+    startBulkUpload, 
+    resetProgress: resetServerProgress 
+  } = useUploadProgress();
+
   const checkPendingUploads = useCallback(async () => {
     try {
       const localItems = dbService.getAdminPendingUploads();
@@ -493,25 +501,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }
         setIsImporting(true);
 
-        // 1. Enqueue into IndexedDB Queue
-        await syncManager.enqueueAdminUploads(json);
-
-        // 2. Process in chunks using Firestore writeBatch (<= 250 ops per batch)
-        const batchRes = await syncManager.processAdminBatchUpload();
-        await checkPendingUploads();
-        
-        if (batchRes.quotaHit) {
-          toast.error(
-            'Firestore Quota Hit',
-            `${batchRes.remaining} pending uploads saved safely in IndexedDB queue. Click 'Resume Upload' once quota resets.`
+        try {
+          // 1. Offload to Enterprise Serverless Queue Architecture with instant 202 Accepted
+          await startBulkUpload(json);
+          toast.success(
+            'Bulk Upload Queued',
+            `${json.length} items queued for serverless background processing. Track live progress below.`
           );
-        } else {
-          const summary = [
-            batchRes.added > 0 ? `${batchRes.added} New records batched to Firestore` : '',
-            batchRes.failed > 0 ? `${batchRes.failed} Failed` : ''
-          ].filter(Boolean).join(', ');
+        } catch (apiErr: any) {
+          console.warn('[Backend Queue API notice - falling back to client batch write]:', apiErr);
+          // 2. Client fallback: Enqueue into IndexedDB Queue
+          await syncManager.enqueueAdminUploads(json);
+          const batchRes = await syncManager.processAdminBatchUpload();
+          await checkPendingUploads();
           
-          toast.success('Import Complete', summary || 'All records processed in batches.');
+          if (batchRes.quotaHit) {
+            toast.error(
+              'Firestore Quota Hit',
+              `${batchRes.remaining} pending uploads saved safely in IndexedDB queue. Click 'Resume Upload' once quota resets.`
+            );
+          } else {
+            const summary = [
+              batchRes.added > 0 ? `${batchRes.added} New records batched to Firestore` : '',
+              batchRes.failed > 0 ? `${batchRes.failed} Failed` : ''
+            ].filter(Boolean).join(', ');
+            
+            toast.success('Import Complete', summary || 'All records processed in batches.');
+          }
         }
         fetchRealData(true);
       } catch (err) { 
@@ -651,6 +667,114 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </header>
 
       <main className="max-w-6xl mx-auto p-4 space-y-6">
+        {/* Real-time Serverless Queue Progress UI (Listening to Firestore system/upload_status) */}
+        {(serverQueueProgress.status === 'processing' || 
+          serverQueueProgress.status === 'queued' || 
+          (serverQueueProgress.status === 'completed' && serverQueueProgress.totalItems > 0)) && (
+          <div className="bg-[#131926] border border-purple-500/30 rounded-3xl p-5 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-3 duration-300">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                  serverQueueProgress.status === 'completed' 
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                    : 'bg-purple-500/20 text-purple-400 border border-purple-500/30 animate-pulse'
+                }`}>
+                  {serverQueueProgress.status === 'completed' ? (
+                    <CheckCircle2 className="w-5 h-5" />
+                  ) : (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-black text-white">
+                      {serverQueueProgress.status === 'completed' 
+                        ? 'Bulk Upload Completed' 
+                        : 'Serverless Queue Processing'}
+                    </h4>
+                    <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                      serverQueueProgress.status === 'completed'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                    }`}>
+                      {serverQueueProgress.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    {serverQueueProgress.status === 'completed' 
+                      ? `Successfully processed ${serverQueueProgress.successCount} of ${serverQueueProgress.totalItems} items into Firestore.` 
+                      : `Processing batch ${serverQueueProgress.currentBatch} of ${serverQueueProgress.totalBatches} (${serverQueueProgress.processedItems} / ${serverQueueProgress.totalItems} processed)`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="text-right">
+                  <div className="text-xl font-black text-white tracking-tight">
+                    {serverQueueProgress.processedItems} / {serverQueueProgress.totalItems}
+                  </div>
+                  <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">
+                    {serverQueueProgress.percentage}% Processed
+                  </div>
+                </div>
+
+                {serverQueueProgress.status === 'completed' && (
+                  <button
+                    onClick={() => {
+                      resetServerProgress();
+                      fetchRealData(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all cursor-pointer shadow-lg active:scale-95"
+                  >
+                    Dismiss
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Live Progress Bar */}
+            <div className="space-y-1.5">
+              <div className="w-full h-3 bg-neutral-900 rounded-full overflow-hidden p-0.5 border border-neutral-800">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    serverQueueProgress.status === 'completed'
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                      : 'bg-gradient-to-r from-purple-500 via-indigo-500 to-pink-500 animate-pulse'
+                  }`}
+                  style={{ width: `${serverQueueProgress.percentage}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1">
+                <span className="truncate max-w-[220px] sm:max-w-md">
+                  {serverQueueProgress.lastProcessedTitle 
+                    ? `Current: ${serverQueueProgress.lastProcessedTitle}` 
+                    : 'Streaming batched writes...'}
+                </span>
+                <div className="flex items-center gap-3 font-semibold">
+                  <span className="text-emerald-400">{serverQueueProgress.successCount} Successful</span>
+                  {serverQueueProgress.failedCount > 0 && (
+                    <span className="text-red-400">{serverQueueProgress.failedCount} Failed</span>
+                  )}
+                  {serverQueueProgress.dlqCount > 0 && (
+                    <span className="text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                      {serverQueueProgress.dlqCount} in DLQ
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Backoff / Rate limit banner if worker is currently retrying */}
+            {serverQueueProgress.error && (
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>{serverQueueProgress.error}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Local Queue Quota Hit Alert & Resume Button */}
         {pendingUploadsCount > 0 && (
           <div className="bg-amber-950/40 border border-amber-500/40 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300">

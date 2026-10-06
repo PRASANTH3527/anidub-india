@@ -146,7 +146,9 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
         const transcript = event.results?.[0]?.[0]?.transcript;
         if (transcript) {
           const cleanText = transcript.trim();
+          setLocalSearch(cleanText);
           setSearchQuery(cleanText);
+          setShowDropdown(true);
           toast.success('Voice Recognized', `Searching for: "${cleanText}"`);
         }
         setIsListening(false);
@@ -154,7 +156,14 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
 
       recognition.onerror = (event: any) => {
         setIsListening(false);
-        if (event.error !== 'no-speech') {
+        const err = event?.error;
+        if (err === 'not-allowed' || err === 'permission-denied') {
+          toast.info('Voice Search', 'Microphone access denied. Please allow microphone permission in your browser.');
+        } else if (err === 'audio-capture') {
+          toast.info('Voice Search', 'No microphone detected. Please check your audio input device.');
+        } else if (err === 'network') {
+          toast.info('Voice Search', 'Speech recognition network error. Please check your connection.');
+        } else if (err !== 'no-speech') {
           toast.info('Voice Search', 'Could not detect voice. Please try again or type directly.');
         }
       };

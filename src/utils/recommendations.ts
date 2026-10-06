@@ -149,3 +149,158 @@ export function computeForYouRecommendations(
     totalAnalyzed: watchlistAnimeIds.length + recentlyViewedIds.length,
   };
 }
+
+export interface RelatedAnimeMatch {
+  anime: Anime;
+  score: number;
+  matchPercentage: number;
+  matchReasons: string[];
+  isSameStudio: boolean;
+  sharedDubs: DubLanguage[];
+  studioName: string;
+}
+
+/**
+ * Smart 'More Like This' Recommendation Engine
+ * Ranks and suggests 5-10 related animes without relying on 'genres',
+ * placing the highest weight on animationStudio and shared dub languages.
+ */
+export function getMoreLikeThisRecommendations(
+  targetAnime: Anime,
+  allAnime: Anime[],
+  options: {
+    limit?: number; // 5 to 10 recommendations (default 8)
+    minScore?: number;
+  } = {}
+): RelatedAnimeMatch[] {
+  const { limit = 8, minScore = 10 } = options;
+
+  if (!targetAnime || !allAnime || allAnime.length === 0) {
+    return [];
+  }
+
+  // Normalize target attributes
+  const targetStudio = String((targetAnime as any).animationStudio || targetAnime.studio || '')
+    .trim()
+    .toLowerCase();
+  const targetDubs = (targetAnime.dubs || []).map((d) => d.toLowerCase());
+  const targetType = targetAnime.type;
+  const targetYear = Number(targetAnime.releaseYear) || 2023;
+  const targetPlatforms = (targetAnime.platforms || []).map((p) => p.name.toLowerCase());
+
+  const candidates = allAnime.filter(
+    (a) => a.id !== targetAnime.id && !((a as any).isDeleted || (a as any).status === 'rejected')
+  );
+
+  const scoredMatches: RelatedAnimeMatch[] = candidates.map((candidate) => {
+    let score = 0;
+    const matchReasons: string[] = [];
+    const sharedDubs: DubLanguage[] = [];
+
+    // 1. Animation Studio Match (HIGHEST WEIGHT: +55 points)
+    const candidateStudio = String((candidate as any).animationStudio || candidate.studio || '')
+      .trim();
+    const candidateStudioLower = candidateStudio.toLowerCase();
+    const isSameStudio =
+      Boolean(targetStudio) &&
+      targetStudio !== 'unknown' &&
+      candidateStudioLower === targetStudio;
+
+    if (isSameStudio) {
+      score += 55;
+      matchReasons.push(`Same Studio (${candidateStudio})`);
+    }
+
+    // 2. Shared Regional Dub Languages (+16 points per shared language)
+    (candidate.dubs || []).forEach((dub) => {
+      if (targetDubs.includes(dub.toLowerCase())) {
+        score += 16;
+        sharedDubs.push(dub);
+      }
+    });
+
+    if (sharedDubs.length > 0) {
+      if (sharedDubs.length === targetDubs.length && targetDubs.length > 1) {
+        score += 12; // Complete language parity bonus
+        matchReasons.push(`All ${sharedDubs.length} Dubs Match (${sharedDubs.join(', ')})`);
+      } else {
+        matchReasons.push(`Shares ${sharedDubs.join(' & ')} Audio`);
+      }
+
+      // First/primary dub language match bonus
+      if (
+        targetAnime.dubs?.[0] &&
+        candidate.dubs?.[0] &&
+        targetAnime.dubs[0].toLowerCase() === candidate.dubs[0].toLowerCase()
+      ) {
+        score += 8;
+      }
+    }
+
+    // 3. Same Format Match (TV Series, Movie, etc.: +10 points)
+    if (candidate.type && targetType && candidate.type === targetType) {
+      score += 10;
+      matchReasons.push(`Same Format (${candidate.type})`);
+    }
+
+    // 4. Release Era Proximity (+8 to +4 points)
+    const candYear = Number(candidate.releaseYear) || targetYear;
+    const yearDiff = Math.abs(targetYear - candYear);
+    if (yearDiff <= 1) {
+      score += 8;
+      matchReasons.push(`Contemporary Release (${candYear})`);
+    } else if (yearDiff <= 4) {
+      score += 4;
+      matchReasons.push(`Similar Era (${candYear})`);
+    }
+
+    // 5. Shared Streaming Platform (+6 points)
+    const candPlatforms = (candidate.platforms || []).map((p) => p.name.toLowerCase());
+    const commonPlatform = targetPlatforms.find((p) => candPlatforms.includes(p));
+    if (commonPlatform) {
+      score += 6;
+      const formattedName =
+        candidate.platforms?.find((p) => p.name.toLowerCase() === commonPlatform)?.name ||
+        commonPlatform;
+      matchReasons.push(`Stream on ${formattedName}`);
+    }
+
+    // 6. Airing / Status Consistency (+4 points)
+    if (candidate.status && targetAnime.status && candidate.status === targetAnime.status) {
+      score += 4;
+    }
+
+    // 7. Rating quality weighting (Normalized tie-breaker: up to 10 points)
+    const rating = Number(candidate.rating || 8.0);
+    score += Math.min(10, Math.round(rating));
+
+    // Calculate normalized percentage (cap at 99% for realism)
+    const maxTheoreticalScore = 120;
+    const matchPercentage = Math.min(99, Math.max(45, Math.round((score / maxTheoreticalScore) * 100)));
+
+    return {
+      anime: candidate,
+      score,
+      matchPercentage,
+      matchReasons: matchReasons.slice(0, 3), // Keep top 3 most compelling reasons
+      isSameStudio,
+      sharedDubs,
+      studioName: candidateStudio || 'Anime Studio',
+    };
+  });
+
+  // Sort descending by calculated score
+  scoredMatches.sort((a, b) => b.score - a.score);
+
+  // Return the desired slice between 5 and 10 items (clamped by user request)
+  const targetCount = Math.max(5, Math.min(10, limit));
+  const filtered = scoredMatches.filter((m) => m.score >= minScore);
+
+  // If filtered has fewer than 5 items, fallback to top scored items
+  if (filtered.length < 5 && scoredMatches.length > 0) {
+    return scoredMatches.slice(0, Math.min(targetCount, scoredMatches.length));
+  }
+
+  return filtered.slice(0, targetCount);
+}
+

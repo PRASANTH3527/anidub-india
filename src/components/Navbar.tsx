@@ -13,14 +13,15 @@ import {
   Heart,
   Languages,
   Search,
-  BarChart3
+  BarChart3,
+  Trophy
 } from 'lucide-react';
 import { authService } from '../services/authService';
 import { LocalUserProfile, ANIME_AVATAR_PRESETS } from './LocalProfileModal';
 import { SupportedLanguage, translate } from '../utils/i18n';
 import { useTheme } from '../context/ThemeContext';
 
-export type NavTab = 'library' | 'foryou' | 'watchlist' | 'schedule' | 'recommendations' | 'profile' | 'analytics';
+export type NavTab = 'library' | 'foryou' | 'watchlist' | 'schedule' | 'recommendations' | 'profile' | 'analytics' | 'tierlist';
 
 interface NavbarProps {
   activeTab: NavTab;
@@ -166,6 +167,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {watchlistCount}
               </span>
             )}
+          </button>
+
+          {/* 5. Viral Tier List Maker */}
+          <button
+            onClick={() => setActiveTab('tierlist')}
+            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+              activeTab === 'tierlist'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+            }`}
+            title="Anime Tier List Maker"
+            aria-label="Anime Tier List Maker"
+          >
+            <Trophy className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'tierlist' ? 'scale-110 text-amber-400' : ''}`} />
           </button>
 
           {/* Admin Analytics (Hidden for public) */}

@@ -24,6 +24,7 @@ import { LocalProfileModal, LocalUserProfile, ANIME_AVATAR_PRESETS } from './com
 import { RecentlyViewedRow } from './components/RecentlyViewedRow';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminAnalyticsDashboard } from './components/AdminAnalyticsDashboard';
+import { AnimeTierListMaker } from './components/AnimeTierListMaker';
 import { dbService } from './services/databaseService';
 import { authService } from './services/authService';
 import { AnimeRecord, WatchlistEntry } from './types/database';
@@ -1040,6 +1041,14 @@ function AppContent() {
                 <AdminAnalyticsDashboard 
                   allAnime={allAnimeRecords}
                   onBack={() => handleTabChange('library')}
+                />
+              )}
+
+              {/* 8. Viral Anime Tier List Maker */}
+              {activeTab === 'tierlist' && (
+                <AnimeTierListMaker
+                  allAnime={approvedAnime}
+                  onSelectAnime={handleOpenAnimeDetail}
                 />
               )}
               </motion.div>

@@ -29,6 +29,9 @@ import { authService } from '../services/authService';
 import { updateSeoTags, buildAnimeSeo } from '../utils/seo';
 import DynamicAmbientGlow from './DynamicAmbientGlow';
 import { useReducedMotion, useIsMobile } from '../hooks/useMediaQuery';
+import { FastAverageColor } from 'fast-average-color';
+import { MoreLikeThisSection } from './MoreLikeThisSection';
+import { SmartWatchButton } from './SmartWatchButton';
 
 interface AnimeDetailPageProps {
   anime: Anime;
@@ -83,6 +86,66 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const [unblurredReviews, setUnblurredReviews] = useState<Set<string>>(new Set());
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [hoverRating, setHoverRating] = useState<number>(0);
+
+  // Dynamic Dominant Color Theming (fast-average-color)
+  const [dominantTheme, setDominantTheme] = useState<{
+    hex: string;
+    rgb: string;
+    rgba: string;
+    gradient: string;
+    isReady: boolean;
+  }>({
+    hex: '#7c3aed',
+    rgb: 'rgb(124, 58, 237)',
+    rgba: 'rgba(124, 58, 237, 0.45)',
+    gradient: 'radial-gradient(ellipse 90% 60% at 50% -10%, rgba(124, 58, 237, 0.45) 0%, rgba(19, 25, 38, 0.85) 55%, #0b0f17 100%)',
+    isReady: false,
+  });
+
+  const heroImage = anime.imageUrl || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
+
+  useEffect(() => {
+    if (!heroImage) return;
+    const fac = new FastAverageColor();
+    let isCancelled = false;
+
+    fac
+      .getColorAsync(heroImage, {
+        algorithm: 'dominant',
+        crossOrigin: 'anonymous',
+        mode: 'precision',
+        defaultColor: [124, 58, 237, 255],
+      })
+      .then((color) => {
+        if (isCancelled) return;
+        const [r, g, b] = color.value;
+        const rgba = `rgba(${r}, ${g}, ${b}, 0.5)`;
+        const gradient = `radial-gradient(ellipse 90% 60% at 50% -10%, rgba(${r}, ${g}, ${b}, 0.55) 0%, rgba(19, 25, 38, 0.85) 55%, #0b0f17 100%)`;
+        setDominantTheme({
+          hex: color.hex,
+          rgb: `rgb(${r}, ${g}, ${b})`,
+          rgba,
+          gradient,
+          isReady: true,
+        });
+      })
+      .catch((err) => {
+        if (isCancelled) return;
+        console.warn('[AnimeDetailPage] CORS or color extraction error, using fallback:', err?.message || err);
+        setDominantTheme({
+          hex: '#7c3aed',
+          rgb: 'rgb(124, 58, 237)',
+          rgba: 'rgba(124, 58, 237, 0.45)',
+          gradient: 'radial-gradient(ellipse 90% 60% at 50% -10%, rgba(124, 58, 237, 0.45) 0%, rgba(19, 25, 38, 0.85) 55%, #0b0f17 100%)',
+          isReady: true,
+        });
+      });
+
+    return () => {
+      isCancelled = true;
+      fac.destroy();
+    };
+  }, [heroImage]);
 
   // Auto-inject SEO tags on mount and update when anime changes
   useEffect(() => {
@@ -155,8 +218,6 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     })
     .slice(0, 3);
 
-  const heroImage = anime.imageUrl || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
-
   const isReducedMotion = useReducedMotion();
   const isMobile = useIsMobile();
   const shouldReduceAnimation = isReducedMotion || isMobile;
@@ -167,14 +228,25 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       animate={{ opacity: 1 }}
       exit={shouldReduceAnimation ? { opacity: 1 } : { opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-8"
+      className="relative w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-8"
     >
-      
+      {/* Dynamic Dominant Color Themed Background at top of Details Page */}
+      <div 
+        className="fixed top-0 left-0 right-0 h-[520px] pointer-events-none -z-10 transition-all duration-700 ease-out"
+        style={{
+          background: dominantTheme.gradient,
+        }}
+        aria-hidden="true"
+      >
+        {/* Dark overlay ensuring text remains crystal clear and readable without overpowering glow */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-[#0b0f17]/75 to-[#0b0f17]" />
+      </div>
+
       {/* Top Navigation & Breadcrumbs */}
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#131926] hover:bg-[#1a2336] text-neutral-300 hover:text-white border border-neutral-800 text-xs font-semibold transition-colors cursor-pointer group shadow-sm"
+          className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#131926]/90 hover:bg-[#1a2336] text-neutral-300 hover:text-white border border-neutral-800 text-xs font-semibold transition-colors cursor-pointer group shadow-sm backdrop-blur-md"
         >
           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
           <span>Back to Dub Library</span>
@@ -186,7 +258,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => onReport(anime)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131926] hover:bg-purple-950/40 text-neutral-400 hover:text-purple-300 border border-neutral-800 hover:border-purple-500/40 text-xs font-semibold transition-all cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131926]/90 hover:bg-purple-950/40 text-neutral-400 hover:text-purple-300 border border-neutral-800 hover:border-purple-500/40 text-xs font-semibold transition-all cursor-pointer active:scale-95 backdrop-blur-md"
               title="Report broken link or wrong info"
             >
               <Flag className="w-3.5 h-3.5" />
@@ -198,7 +270,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleShare}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131926] hover:bg-[#1a2336] text-neutral-300 hover:text-white border border-neutral-800 text-xs font-semibold transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131926]/90 hover:bg-[#1a2336] text-neutral-300 hover:text-white border border-neutral-800 text-xs font-semibold transition-colors cursor-pointer backdrop-blur-md"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
             <span>{copied ? 'Link Copied!' : 'Share'}</span>
@@ -213,16 +285,22 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         transition={{ duration: 0.35, ease: "easeOut" }}
         className="relative rounded-3xl overflow-hidden bg-[#131926] border border-neutral-800 shadow-2xl"
       >
-        {/* Blurred Backdrop Banner */}
-        <div className="relative h-64 sm:h-80 w-full overflow-hidden bg-gradient-to-r from-[var(--primary-badge)] via-slate-900 to-neutral-900">
+        {/* Blurred Backdrop Banner with dynamic dominant color gradient & dark overlay */}
+        <div 
+          className="relative h-64 sm:h-80 w-full overflow-hidden transition-colors duration-700"
+          style={{
+            background: `linear-gradient(135deg, ${dominantTheme.rgba} 0%, rgba(19, 25, 38, 0.9) 65%, #131926 100%)`
+          }}
+        >
           <img
             src={heroImage}
             alt={anime.title}
             loading="lazy"
             decoding="async"
-            className="w-full h-full object-cover blur-lg opacity-25 scale-110"
+            crossOrigin="anonymous"
+            className="w-full h-full object-cover blur-lg opacity-30 scale-110"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#131926] via-[#131926]/70 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#131926] via-[#131926]/75 to-black/30" />
         </div>
 
         {/* Content overlapping banner */}
@@ -771,35 +849,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </p>
 
             <div className="space-y-2 pt-1">
-              {(anime.platforms || []).map((p) => {
-                const colorClass = Object.keys(PLATFORM_COLORS).find(k => p.name.includes(k)) 
-                  ? PLATFORM_COLORS[Object.keys(PLATFORM_COLORS).find(k => p.name.includes(k))!] 
-                  : 'hover:bg-primary-theme/20 border-neutral-700/80 hover:border-primary-theme/50 text-neutral-100';
-
-                return (
-                  <div key={p.name} className="space-y-1">
-                    <a
-                      href={p.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`flex items-center justify-between p-3 rounded-xl bg-[#182032] border transition-all group font-bold text-xs ${colorClass}`}
-                    >
-                      <span>Watch on {p.name}</span>
-                      <ExternalLink className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 transition-opacity" />
-                    </a>
-                    {anime.platforms && anime.platforms.length > 1 && p.languages && p.languages.length > 0 && (
-                      <div className="flex flex-wrap gap-1 px-1.5">
-                        <span className="text-[8px] font-bold text-neutral-500 uppercase">Available:</span>
-                        {p.languages.map(l => (
-                          <span key={l} className="text-[8px] font-bold text-accent-theme bg-accent-theme/10 px-1 rounded">
-                            {l}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {(anime.platforms || []).map((p) => (
+                <SmartWatchButton
+                  key={p.name}
+                  platformName={p.name}
+                  webUrl={p.url}
+                  languages={p.languages}
+                />
+              ))}
             </div>
           </div>
 
@@ -925,66 +982,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
       </div>
 
-      {/* Similar Anime Suggestions: You Might Also Like */}
-      {similarShows.length > 0 && (
-        <div className="pt-8 border-t border-neutral-800 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-heading font-black text-xl text-white">
-                You Might Also Like
-              </h3>
-              <p className="text-xs text-neutral-400 mt-0.5">
-                Approved regional dubs sharing {(anime.dubs || []).join(' & ')} audio
-              </p>
-            </div>
-            <span className="text-xs text-accent-theme font-bold bg-[#131929] px-3 py-1 rounded-full border border-neutral-800">
-              {similarShows.length} {similarShows.length === 1 ? 'title' : 'titles'}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {similarShows.map((show) => (
-              <div
-                key={show.id}
-                onClick={() => onSelectSimilarAnime?.(show)}
-                className="bg-[#131926] border border-neutral-800 hover:border-primary-theme/50 rounded-2xl p-3.5 cursor-pointer group transition-all duration-300 hover:shadow-xl hover:shadow-primary-theme/20 active:scale-[0.98] flex gap-3.5"
-              >
-                <img
-                  src={show.poster || show.imageUrl}
-                  alt={show.title}
-                  loading="lazy"
-                  decoding="async"
-                  className="w-20 aspect-[3/4.2] object-cover rounded-xl shrink-0 sm:group-hover:scale-105 transition-transform duration-300 shadow"
-                />
-                <div className="flex flex-col justify-between flex-grow min-w-0">
-                  <div>
-                    <h4 className="font-bold text-sm text-white truncate group-hover:text-primary-theme transition-colors">
-                      {show.title}
-                    </h4>
-                    <p className="text-[11px] text-neutral-400 mt-0.5">
-                      {show.type || 'TV Series'} • {show.releaseYear}
-                    </p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {(show.dubs || []).slice(0, 2).map((d) => (
-                        <span key={d} className="text-[9px] font-bold px-1.5 py-0.5 rounded badge-primary-theme">
-                          {d} Dub
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-1.5 border-t border-neutral-800/70">
-                    <span className="text-orange-500 font-black">CR ★ {show.rating ? show.rating.toFixed(1) : 'N/A'}</span>
-                    <span className="text-accent-theme font-semibold group-hover:translate-x-0.5 transition-transform">
-                      View details →
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Smart 'More Like This' Recommendation Section */}
+      <MoreLikeThisSection
+        currentAnime={anime}
+        allAnime={allAnime}
+        onSelectAnime={(selected) => onSelectSimilarAnime?.(selected)}
+        onToggleWatchlist={onToggleWatchlist}
+        limit={8}
+      />
 
     </motion.div>
   );
