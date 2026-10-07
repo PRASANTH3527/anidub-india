@@ -33,96 +33,47 @@ export function isMobileDevice(): { isMobile: boolean; isAndroid: boolean; isIOS
 export function buildDeepLink(platformName: string, webUrl: string): DeepLinkTarget {
   const normName = platformName.toLowerCase();
 
-  // 1. Netflix (nflx://)
+  let domainAndPath = 'www.crunchyroll.com';
+  try {
+    const parsed = new URL(webUrl);
+    domainAndPath = parsed.host + parsed.pathname + parsed.search;
+  } catch {
+    // fallback if webUrl is relative or invalid
+  }
+
+  let packageName = 'com.crunchyroll.crunchyrollapp';
+  let nativeScheme = `crunchyroll://${domainAndPath}`;
+
   if (normName.includes('netflix')) {
-    // Extract title id from https://www.netflix.com/title/80241842 or /watch/80241842
-    const match = webUrl.match(/(?:title|watch)\/([0-9]+)/);
-    const titleId = match ? match[1] : '';
-    const nativeScheme = titleId ? `nflx://www.netflix.com/title/${titleId}` : 'nflx://';
-    const androidIntent = titleId 
-      ? `intent://www.netflix.com/title/${titleId}#Intent;package=com.netflix.mediaclient;scheme=nflx;end`
-      : `intent://#Intent;package=com.netflix.mediaclient;scheme=nflx;end`;
-
-    return {
-      platformName: 'Netflix',
-      nativeScheme,
-      androidIntent,
-      webUrl,
-      packageName: 'com.netflix.mediaclient',
-    };
+    packageName = 'com.netflix.mediaclient';
+    nativeScheme = `nflx://${domainAndPath}`;
+  } else if (normName.includes('crunchyroll')) {
+    packageName = 'com.crunchyroll.crunchyroid';
+    nativeScheme = `crunchyroll://${domainAndPath}`;
+  } else if (normName.includes('jiocinema') || normName.includes('jio cinema')) {
+    packageName = 'com.jio.media.ondemand';
+    nativeScheme = `jiocinema://${domainAndPath}`;
+  } else if (normName.includes('hotstar') || normName.includes('disney')) {
+    packageName = 'in.startv.hotstar';
+    nativeScheme = `hotstar://${domainAndPath}`;
+  } else if (normName.includes('prime') || normName.includes('amazon')) {
+    packageName = 'com.amazon.avod.thirdpartyclient';
+    nativeScheme = `primevideo://${domainAndPath}`;
+  } else if (normName.includes('youtube')) {
+    packageName = 'com.google.android.youtube';
+    nativeScheme = `vnd.youtube://${domainAndPath}`;
   }
 
-  // 2. Crunchyroll (crunchyroll://)
-  if (normName.includes('crunchyroll')) {
-    // Extract series or episode slug
-    const match = webUrl.match(/series\/([A-Za-z0-9]+)/);
-    const seriesId = match ? match[1] : '';
-    const nativeScheme = seriesId ? `crunchyroll://series/${seriesId}` : 'crunchyroll://';
-    const androidIntent = seriesId
-      ? `intent://www.crunchyroll.com/series/${seriesId}#Intent;package=com.crunchyroll.crunchyrollapp;scheme=crunchyroll;end`
-      : `intent://#Intent;package=com.crunchyroll.crunchyrollapp;scheme=crunchyroll;end`;
+  // Android Intent URI scheme fallback as requested:
+  // intent://[URL_DOMAIN_AND_PATH]#Intent;scheme=https;package=[PACKAGE_NAME];end;
+  const androidIntent = `intent://${domainAndPath}#Intent;scheme=https;package=${packageName};end;`;
 
-    return {
-      platformName: 'Crunchyroll',
-      nativeScheme,
-      androidIntent,
-      webUrl,
-      packageName: 'com.crunchyroll.crunchyrollapp',
-    };
-  }
-
-  // 3. JioCinema (jiocinema://)
-  if (normName.includes('jiocinema') || normName.includes('jio cinema')) {
-    return {
-      platformName: 'JioCinema',
-      nativeScheme: 'jiocinema://',
-      androidIntent: 'intent://#Intent;package=com.jio.media.ondemand;scheme=jiocinema;end',
-      webUrl,
-      packageName: 'com.jio.media.ondemand',
-    };
-  }
-
-  // 4. Disney+ Hotstar (hotstar://)
-  if (normName.includes('hotstar') || normName.includes('disney')) {
-    return {
-      platformName: 'Disney+ Hotstar',
-      nativeScheme: 'hotstar://',
-      androidIntent: 'intent://#Intent;package=in.startv.hotstar;scheme=hotstar;end',
-      webUrl,
-      packageName: 'in.startv.hotstar',
-    };
-  }
-
-  // 5. Amazon Prime Video (primevideo://)
-  if (normName.includes('prime') || normName.includes('amazon')) {
-    return {
-      platformName: 'Prime Video',
-      nativeScheme: 'primevideo://',
-      androidIntent: 'intent://#Intent;package=com.amazon.avod.thirdpartyclient;scheme=primevideo;end',
-      webUrl,
-      packageName: 'com.amazon.avod.thirdpartyclient',
-    };
-  }
-
-  // 6. YouTube (vnd.youtube://)
-  if (normName.includes('youtube')) {
-    const videoMatch = webUrl.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
-    const videoId = videoMatch ? videoMatch[1] : '';
-    const nativeScheme = videoId ? `vnd.youtube:${videoId}` : 'vnd.youtube://';
-
-    return {
-      platformName: 'YouTube',
-      nativeScheme,
-      webUrl,
-      packageName: 'com.google.android.youtube',
-    };
-  }
-
-  // Generic fallback
   return {
     platformName,
-    nativeScheme: webUrl,
+    nativeScheme,
+    androidIntent,
     webUrl,
+    packageName,
   };
 }
 
