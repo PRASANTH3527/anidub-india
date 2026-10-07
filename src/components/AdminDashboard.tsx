@@ -636,10 +636,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handlePermanentDeleteLive = async (anime: AnimeRecord) => {
-    if (!window.confirm(`Are you sure you want to permanently delete "${anime.title}" from Firestore?`)) return;
+    if (!window.confirm(`Are you sure you want to permanently delete "${anime.title}" from the Supabase database?`)) return;
     try {
-      await (dbService as any).permanentlyDeleteLiveAnime(anime.id);
-      toast.success('Deleted Permanently', `"${anime.title}" has been permanently removed from Firestore.`);
+      await dbService.permanentlyDeleteLiveAnime(anime.id);
+      toast.success('Deleted Permanently', `"${anime.title}" has been permanently removed from Supabase.`);
       setCatalogTitles(prev => prev.filter(a => a.id !== anime.id));
     } catch (err: any) {
       toast.error('Delete Failed', err?.message || 'Could not delete item.');
@@ -715,12 +715,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           throw new Error('JSON file must contain an array of anime objects.');
         }
 
-        console.log(`Step 2: Starting RTDB bulk import for ${json.length} items to pending_animes`);
+        console.log(`Step 2: Starting Supabase bulk import for ${json.length} items to pending_animes`);
 
         const result = await dbService.bulkImportAnime(json);
-        console.log('Step 3: RTDB bulk import complete:', result);
+        console.log('Step 3: Supabase bulk import complete:', result);
 
-        toast.success('Successfully queued items into RTDB', `Success: Queued ${result.added} new items. Skipped ${result.skipped || 0} duplicates.`);
+        toast.success('Successfully uploaded items into Supabase', `Success: Added ${result.added} new items, Updated ${result.updated} items.`);
         await fetchRealData(true);
       } catch (err: any) { 
         console.error('Step X: Import fatal error:', err);
@@ -1022,7 +1022,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* Admin Cloud Fallback (RTDB) Sync Alert */}
+        {/* Admin Cloud Fallback (Supabase) Sync Alert */}
         {/* Local Queue Quota Hit Alert & Resume Button */}
         {pendingUploadsCount > 0 && (
           <div className="bg-amber-950/40 border border-amber-500/40 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300">
@@ -1509,7 +1509,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <AlertTriangle className="w-6 h-6" />
                 <h3 className="font-black text-xl">Confirm Delete</h3>
               </div>
-              <p className="text-xs text-neutral-400 leading-relaxed">You are about to permanently erase <span className="text-white font-bold">"{animeToDelete.title}"</span> from the Cloud Firestore database. This action cannot be undone.</p>
+              <p className="text-xs text-neutral-400 leading-relaxed">You are about to permanently erase <span className="text-white font-bold">"{animeToDelete.title}"</span> from the Supabase database. This action cannot be undone.</p>
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setAnimeToDelete(null)} disabled={isDeleting} className="flex-1 py-3 rounded-xl bg-neutral-800 text-white font-black text-xs">CANCEL</button>
                 <button onClick={handleDeleteConfirm} disabled={isDeleting} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-black text-xs shadow-lg shadow-red-600/20 disabled:opacity-50 uppercase">{isDeleting ? 'ERASING...' : 'DELETE'}</button>

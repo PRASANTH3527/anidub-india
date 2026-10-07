@@ -25,7 +25,7 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
 
     setIsSubmitting(true);
     try {
-      // STRICT RTDB ROUTING: Route all user suggestions strictly to RTDB pending_animes
+      // SUPABASE ROUTING: Route all user suggestions strictly to Supabase pending_animes
       await dbService.submitDubInfo({
         title: animeName.trim(),
         romajiTitle: "",

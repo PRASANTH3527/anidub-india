@@ -477,10 +477,18 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
             .upsert({ id: activeAnime.id, ...sanitizedEditPayload });
 
           if (error) {
-            console.error('[Supabase Direct Edit Error]', error);
+            if (error.code === 'PGRST205') {
+              console.info('[Supabase Info] Table anime_list not created yet in Supabase. Using local IndexedDB cache.');
+            } else {
+              console.error('[Supabase Direct Edit Error]', error);
+            }
           }
-        } catch (fsEditErr) {
-          console.error('[Supabase Direct Edit Catch]', fsEditErr);
+        } catch (fsEditErr: any) {
+          if (fsEditErr?.code === 'PGRST205' || String(fsEditErr?.message || '').includes('PGRST205')) {
+            console.info('[Supabase Info] Table not created yet.');
+          } else {
+            console.error('[Supabase Direct Edit Catch]', fsEditErr);
+          }
         }
 
         // 2. Also update local cache via databaseService
@@ -522,9 +530,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         return;
       }
 
-      // 1. STRICT RTDB ROUTING FOR NEW SUBMISSIONS:
-      // All submissions MUST be pushed ONLY to RTDB under `pending_animes`.
-      // It MUST NOT write to Firestore, avoiding quota limits for new submissions.
+      // 1. SUPABASE ROUTING FOR NEW SUBMISSIONS:
+      // All submissions MUST be pushed ONLY to Supabase under `pending_animes`.
       const newRecord = await dbService.submitDubInfo({
         ...payload,
         status: 'pending',
@@ -579,7 +586,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       }
 
       setIsSuccess(true);
-      toast.success('Anime Submitted Successfully!', `"${title.trim()}" is now pending admin approval in RTDB.`);
+      toast.success('Anime Submitted Successfully!', `"${title.trim()}" is now pending admin approval in Supabase.`);
 
       setTimeout(() => {
         setIsSuccess(false);

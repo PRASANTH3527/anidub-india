@@ -293,7 +293,11 @@ class DatabaseService {
       const nextCursor = items.length >= pageSize ? (startIndex + items.length) : null;
       return { items, lastDoc: nextCursor, fromCache: false };
     } catch (err: any) {
-      console.error('[Supabase Service] Error fetching approved anime with pagination:', err);
+      if (err?.code === 'PGRST205' || String(err?.message || '').includes('PGRST205')) {
+        console.info('[Supabase Info] Tables not created yet. Using IndexedDB local cache.');
+      } else {
+        console.error('[Supabase Service] Error fetching approved anime with pagination:', err);
+      }
       const approvedOnly = this.getApprovedAnime();
       const items = approvedOnly.slice(0, pageSize);
       return { items, lastDoc: null, fromCache: true };
@@ -327,7 +331,11 @@ class DatabaseService {
       const nextCursor = items.length >= pageSize ? (startIndex + items.length) : null;
       return { items, lastDoc: nextCursor };
     } catch (err: any) {
-      console.error(`[Supabase Service] Error fetching ${status} submissions:`, err);
+      if (err?.code === 'PGRST205' || String(err?.message || '').includes('PGRST205')) {
+        console.info('[Supabase Info] Tables not created yet.');
+      } else {
+        console.error(`[Supabase Service] Error fetching ${status} submissions:`, err);
+      }
       return { items: [], lastDoc: null };
     }
   }
@@ -640,8 +648,13 @@ class DatabaseService {
     await this.saveAnimeRecords(records);
 
     try {
-      await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).eq('id', id);
-    } catch {}
+      const { error } = await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).match({ id });
+      if (error) {
+        await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).eq('id', id);
+      }
+    } catch (err) {
+      console.error('[Supabase Soft Delete Exception]:', err);
+    }
 
     this.notify();
     return true;
@@ -663,8 +676,13 @@ class DatabaseService {
     await this.saveAnimeRecords(records);
 
     try {
-      await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).eq('id', id);
-    } catch {}
+      const { error } = await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).match({ id });
+      if (error) {
+        await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).eq('id', id);
+      }
+    } catch (err) {
+      console.error('[Supabase Restore Exception]:', err);
+    }
 
     this.notify();
     return true;
@@ -678,9 +696,11 @@ class DatabaseService {
     await this.saveAnimeRecords(filtered);
 
     try {
-      await supabase.from('pending_animes').delete().eq('id', id);
-      await supabase.from('anime_list').delete().eq('id', id);
-    } catch {}
+      await supabase.from('pending_animes').delete().match({ id });
+      await supabase.from('anime_list').delete().match({ id });
+    } catch (err) {
+      console.error('[Supabase Permanent Delete Exception]:', err);
+    }
 
     this.notify();
     return true;
@@ -690,9 +710,11 @@ class DatabaseService {
     if (!authService.isAdmin()) return false;
 
     try {
-      await supabase.from('anime_list').delete().eq('id', id);
-      await supabase.from('pending_animes').delete().eq('id', id);
-    } catch {}
+      await supabase.from('anime_list').delete().match({ id });
+      await supabase.from('pending_animes').delete().match({ id });
+    } catch (err) {
+      console.error('[Supabase Live Delete Exception]:', err);
+    }
 
     const records = this.getAllAnimeRecords();
     const filtered = records.filter((r) => r.id !== id);
@@ -784,52 +806,83 @@ class DatabaseService {
       return { added: 0, updated: 0, failed: 0, skipped: 0, quotaHit: false, remaining: 0 };
     }
 
-    const existingTitles = new Set<string>();
+    const existingById = new Map<string, AnimeRecord>();
+    const existingByTitle = new Map<string, AnimeRecord>();
 
-    // Check local cache for duplicates (zero read cost)
     if (this.animeRecords.length > 0) {
       this.animeRecords.forEach(a => {
+        if (a.id) existingById.set(String(a.id), a);
         const title = (a.title || '').trim().toLowerCase();
-        if (title) existingTitles.add(title);
+        if (title) existingByTitle.set(title, a);
       });
     }
 
-    const toInsert: any[] = [];
-    let skipped = 0;
+    const toUpsert: any[] = [];
+    let added = 0;
+    let updated = 0;
+    let failed = 0;
 
     jsonData.forEach((item, idx) => {
-      const rawTitle = (item.title || item.name || '').trim();
-      const lowerTitle = rawTitle.toLowerCase();
-      if (!rawTitle || existingTitles.has(lowerTitle)) {
-        skipped++;
-        return;
-      }
-      existingTitles.add(lowerTitle);
+      try {
+        const rawTitle = (item.title || item.name || '').trim();
+        if (!rawTitle) {
+          failed++;
+          return;
+        }
+        const lowerTitle = rawTitle.toLowerCase();
 
-      const id = item.id || `import_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
-      const normalized = this.normalizeRecord({ ...item, id, status: 'pending', submissionStatus: 'pending' });
-      toInsert.push(cleanSupabaseData(normalized));
+        // Match existing record by ID or by Title for upsert
+        const existingMatch = (item.id && existingById.get(String(item.id))) || existingByTitle.get(lowerTitle);
+        
+        const id = existingMatch ? existingMatch.id : (item.id || `import_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`);
+
+        if (existingMatch) {
+          updated++;
+        } else {
+          added++;
+        }
+
+        const normalized = this.normalizeRecord({
+          ...item,
+          id,
+          status: item.status || 'pending',
+          submissionStatus: item.submissionStatus || 'pending',
+          updatedAt: new Date().toISOString()
+        });
+
+        toUpsert.push(cleanSupabaseData(normalized));
+      } catch (err) {
+        failed++;
+      }
     });
 
-    if (toInsert.length > 0) {
+    if (toUpsert.length > 0) {
       try {
-        const { error } = await supabase.from('pending_animes').upsert(toInsert);
-        if (error) console.warn('[BulkImport] Supabase upsert notice:', error.message);
-      } catch (e) {
+        const { error } = await supabase.from('pending_animes').upsert(toUpsert);
+        if (error) {
+          if (error.code === 'PGRST205') {
+            console.info('[Supabase Info] pending_animes table not created yet. Using local IndexedDB cache.');
+          } else {
+            console.warn('[BulkImport] Supabase upsert notice:', error.message);
+          }
+        }
+      } catch (e: any) {
         console.warn('[BulkImport] Supabase upsert error:', e);
       }
 
       // Merge into local state
       const records = this.getAllAnimeRecords();
-      toInsert.forEach(item => records.unshift(item));
-      await this.saveAnimeRecords(records);
+      const recordMap = new Map(records.map(r => [r.id, r]));
+      toUpsert.forEach(item => recordMap.set(item.id, item));
+      this.animeRecords = Array.from(recordMap.values());
+      await this.saveAnimeRecords(this.animeRecords);
     }
 
     return {
-      added: toInsert.length,
-      updated: 0,
-      failed: 0,
-      skipped,
+      added,
+      updated,
+      failed,
+      skipped: 0,
       quotaHit: false,
       remaining: 0,
     };
