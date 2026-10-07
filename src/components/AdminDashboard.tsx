@@ -636,15 +636,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handlePermanentDeleteLive = async (anime: AnimeRecord) => {
-    if (!window.confirm(`Are you sure you want to permanently delete "${anime.title}" from the Supabase database?`)) return;
-    try {
-      await dbService.permanentlyDeleteLiveAnime(anime.id);
-      toast.success('Deleted Permanently', `"${anime.title}" has been permanently removed from Supabase.`);
-      setCatalogTitles(prev => prev.filter(a => a.id !== anime.id));
-    } catch (err: any) {
-      toast.error('Delete Failed', err?.message || 'Could not delete item.');
-    }
+  const handlePermanentDeleteLive = (anime: AnimeRecord) => {
+    setAnimeToDelete(anime);
   };
 
   const handleRestore = async (anime: AnimeRecord) => {
@@ -673,17 +666,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     console.log('Step 1: handleDeleteConfirm Clicked', animeToDelete.id);
     setIsDeleting(true);
     try {
-      console.log('Step 2: Calling dbService.permanentlyDeleteSubmission...');
-      await dbService.permanentlyDeleteSubmission(animeToDelete.id);
+      console.log('Step 2: Calling dbService.permanentlyDeleteLiveAnime...');
+      await dbService.permanentlyDeleteLiveAnime(animeToDelete.id);
       console.log('Step 3: Firestore success. Updating local state...');
-      toast.success('Erased', 'Record permanently removed.');
-      // Immediately update local state
+      toast.success('Deleted Permanently', `"${animeToDelete.title}" has been permanently removed.`);
+      // Immediately update local state across all lists
+      setCatalogTitles(prev => prev.filter(a => a.id !== animeToDelete.id));
       setDeletedList(prev => prev.filter(a => a.id !== animeToDelete.id));
+      setPendingList(prev => prev.filter(p => p.id !== animeToDelete.id));
       setAnimeToDelete(null);
       console.log('Step 4: Local state updated.');
     } catch (err: any) {
       console.error('Step 2b: Permanent delete error:', err);
-      toast.error('Failed to Delete', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
+      toast.error('Failed to Delete', isQuotaError(err) ? 'Database limit reached.' : (err?.message || 'An error occurred.'));
     } finally {
       setIsDeleting(false);
     }
