@@ -62,7 +62,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
   const [isListening, setIsListening] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [localSearch, setLocalSearch] = useState(searchQuery);
-  const debouncedSearch = useDebounce(localSearch, 500);
+  const debouncedSearch = useDebounce(localSearch, 650);
 
   const recognitionRef = useRef<any>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);

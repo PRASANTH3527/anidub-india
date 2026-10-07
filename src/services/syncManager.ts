@@ -65,6 +65,27 @@ const BASE_DELAY_MS = 60 * 1000;       // 1 minute
 const MAX_DELAY_MS = 16 * 60 * 1000;    // 16 minutes
 const BATCH_CHUNK_SIZE = 75;            // ~75 anime * 3 docs (animes, submissions, activities) = 225 ops per batch <= 250 limit
 
+// Helper to remove any undefined fields before saving to Firestore to prevent crashes
+function cleanFirestoreData(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(cleanFirestoreData);
+  if (typeof obj === 'object' && !(obj instanceof Date)) {
+    // Basic check to see if it looks like a Firestore FieldValue or complex object we shouldn't deep-clean
+    if (obj.constructor && (obj.constructor.name === 'FieldValue' || obj.constructor.name === 'Timestamp')) {
+      return obj;
+    }
+    const res: Record<string, any> = {};
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val !== undefined) {
+        res[key] = cleanFirestoreData(val);
+      }
+    }
+    return res;
+  }
+  return obj;
+}
+
 class SyncManager {
   private dbPromise: Promise<IDBPDatabase> | null = null;
   private isSyncingAdmin = false;
@@ -350,18 +371,16 @@ class SyncManager {
           const finalId = item.id;
           chunkIds.push(finalId);
 
-          const subRef = doc(db, 'submissions', finalId);
-          const animeRef = doc(db, 'animes', finalId);
+          const animeRef = doc(db, 'anime_list', finalId);
           const actRef = doc(db, 'activities', `act-import-${finalId}-${Date.now()}`);
 
-          const docData = {
+          const docData = cleanFirestoreData({
             ...item,
             status: 'pending',
             submissionStatus: 'pending',
             updatedAt: new Date().toISOString(),
-          };
+          });
 
-          batch.set(subRef, docData, { merge: true });
           batch.set(animeRef, docData, { merge: true });
           batch.set(actRef, {
             user: 'Admin (Bulk Sync)',
@@ -493,19 +512,17 @@ class SyncManager {
 
         for (const item of chunk) {
           chunkIds.push(item.id);
-          const subRef = doc(db, 'submissions', item.id);
-          const animeRef = doc(db, 'animes', item.id);
+          const animeRef = doc(db, 'anime_list', item.id);
           const actRef = doc(db, 'activities', `act-${item.id}`);
 
-          const docData = {
+          const docData = cleanFirestoreData({
             ...item,
             status: 'pending',
             submissionStatus: 'pending',
             createdAt: item.createdAt || new Date().toISOString(),
             serverCreatedAt: serverTimestamp(),
-          };
+          });
 
-          batch.set(subRef, docData, { merge: true });
           batch.set(animeRef, docData, { merge: true });
           batch.set(actRef, {
             user: item.submittedBy?.userName || 'Community User',

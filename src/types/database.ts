@@ -116,34 +116,3 @@ export interface AnimeCollection {
   views: number;
 }
 
-export interface JikanAnimeResult {
-  mal_id: number;
-  title: string;
-  title_english?: string;
-  title_japanese?: string;
-  images: {
-    jpg: {
-      image_url: string;
-      large_image_url: string;
-    };
-    webp?: {
-      image_url: string;
-      large_image_url: string;
-    };
-  };
-  synopsis?: string;
-  year?: number;
-  episodes?: number;
-  type?: string;
-  status?: string;
-  airing?: boolean;
-  broadcast?: { day?: string; time?: string; timezone?: string };
-  score?: number;
-  studios?: { name: string }[];
-  genres?: { name: string }[];
-  themes?: { name: string }[];
-  aired?: {
-    string?: string;
-    from?: string;
-  };
-}

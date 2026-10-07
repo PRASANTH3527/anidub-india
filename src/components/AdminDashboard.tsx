@@ -46,24 +46,15 @@ import {
   Link2,
   Layers,
   Clock,
+  X,
 } from 'lucide-react';
-import { db } from '../lib/firebase';
-import {
-  collection,
-  doc,
-  getDocs,
-  onSnapshot,
-  query,
-  orderBy,
-  limit,
-} from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { dbService, isQuotaError } from '../services/databaseService';
 import { syncManager } from '../services/syncManager';
 import { authService } from '../services/authService';
 import { useUploadProgress } from '../hooks/useUploadProgress';
 import { AnimeRecord } from '../types/database';
 import { SubmitDubModal } from './SubmitDubModal';
-import { PendingQueueDashboard } from './PendingQueueDashboard';
 import { useToast } from './Toast';
 
 // Color palette for regional dub languages
@@ -145,6 +136,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [pendingList, setPendingList] = useState<AnimeRecord[]>([]);
   const [deletedList, setDeletedList] = useState<AnimeRecord[]>([]);
   const [recentActivities, setRecentActivities] = useState<ActivityEvent[]>([]);
+
+  // Pagination State
+  const [lastDocPending, setLastDocPending] = useState<any>(null);
+  const [lastDocCatalog, setLastDocCatalog] = useState<any>(null);
+  const [hasMorePending, setHasMorePending] = useState(true);
+  const [hasMoreCatalog, setHasMoreCatalog] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   
   // Chart Data
   const [trafficData, setTrafficData] = useState<TrafficPoint[]>([]);
@@ -271,7 +269,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // UI State
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'catalog' | 'trash' | 'feed' | 'queue'>('overview');
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'catalog' | 'trash' | 'feed'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -281,10 +280,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingAnime, setEditingAnime] = useState<AnimeRecord | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [pendingUploadsCount, setPendingUploadsCount] = useState<number>(0);
-  const [rtdbPendingCount, setRtdbPendingCount] = useState<number>(0);
-  const [rtdbPendingUploadsCount, setRtdbPendingUploadsCount] = useState<number>(0);
-  const [isSyncingRtdb, setIsSyncingRtdb] = useState(false);
-  const [isSyncingRtdbUploads, setIsSyncingRtdbUploads] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Enterprise Serverless Queue Progress Hook (system/upload_status)
@@ -303,22 +298,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const localItems = dbService.getAdminPendingUploads();
       setPendingUploadsCount(localItems.length);
     }
-
-    // Check Cloud Fallback (RTDB) for User Submissions
-    try {
-      const rtdbItems = await dbService.getPendingRtdbSubmissions();
-      setRtdbPendingCount(rtdbItems.length);
-    } catch (e) {
-      console.warn('[Admin] Failed to check User RTDB fallback:', e);
-    }
-
-    // Check Cloud Fallback (RTDB) for Admin Bulk JSON Uploads
-    try {
-      const adminRtdbItems = await dbService.getAdminPendingRtdbUploads();
-      setRtdbPendingUploadsCount(adminRtdbItems.length);
-    } catch (e) {
-      console.warn('[Admin] Failed to check Admin RTDB fallback:', e);
-    }
   }, []);
 
   useEffect(() => {
@@ -335,87 +314,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [passcodeError, setPasscodeError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
 
+
   useEffect(() => {
     const unsub = authService.subscribe(() => setIsAdmin(authService.isAdmin()));
     return () => unsub();
   }, []);
 
+  const catalogTitlesRef = React.useRef(catalogTitles);
+  useEffect(() => {
+    catalogTitlesRef.current = catalogTitles;
+  }, [catalogTitles]);
+
   const fetchRealData = useCallback(async (force = false) => {
     // Optimization: Skip if we already have data and are not forcing a refresh
-    if (!force && catalogTitles.length > 0) return;
+    if (!force && catalogTitlesRef.current.length > 0) return;
 
     setIsLoading(true);
-    console.log('Step 0: fetchRealData starting (Attempting Server Source)');
     try {
-      const { getDocsFromServer, getDocs, collection, query, where } = await import('firebase/firestore');
-      
-      // Helper to fetch with fallback
-      const fetchWithFallback = async (q: any) => {
-        try {
-          return await getDocsFromServer(q);
-        } catch (err) {
-          console.warn('[Admin] Server fetch failed, falling back to cache:', err);
-          return await getDocs(q);
-        }
-      };
+      // 1. Fetch Paginated PENDING
+      const pendingRes = await dbService.getSubmissionsPaginated('pending', null, 20);
+      setPendingList(pendingRes.items);
+      setLastDocPending(pendingRes.lastDoc);
+      setHasMorePending(pendingRes.items.length === 20);
+      setPendingSubmissions(pendingRes.items.length); // Rough count for badge
 
-      // 1. Fetch PENDING items for the Moderation Queue
-      const pendingMap = new Map<string, AnimeRecord>();
-      const collections = ['animes', 'submissions', 'anime'];
-      
-      for (const collName of collections) {
-        try {
-          console.log(`[Admin] Fetching pending from: ${collName}`);
-          const q = query(collection(db, collName), where('status', '==', 'pending'));
-          const snap = await fetchWithFallback(q);
-          console.log(`[Admin] Received ${snap.size} pending from ${collName}`);
-          snap.forEach((d) => {
-            const rec = dbService.normalizeRecord({ ...(d.data() as any), id: d.id });
-            if (rec && rec.id) pendingMap.set(rec.id, rec);
-          });
-          // Small delay to prevent burst limit hit
-          await new Promise(r => setTimeout(r, 100));
-        } catch (err) {
-          console.warn(`[Admin] Error fetching pending from ${collName}:`, err);
-        }
-      }
+      // 2. Fetch Paginated APPROVED (Catalog)
+      const catalogRes = await dbService.getApprovedAnimePaginated(null, 20);
+      setCatalogTitles(catalogRes.items);
+      setLastDocCatalog(catalogRes.lastDoc);
+      setHasMoreCatalog(catalogRes.items.length === 20);
 
-      // 2. Fetch ALL active items for the Catalog/Manage tab
-      const firestoreAnimeMap = new Map<string, AnimeRecord>();
-      for (const collName of collections) {
-        try {
-          console.log(`[Admin] Fetching all from: ${collName}`);
-          const q = collection(db, collName);
-          const snap = await fetchWithFallback(q);
-          console.log(`[Admin] Received ${snap.size} all from ${collName}`);
-          snap.forEach((d) => {
-            const rec = dbService.normalizeRecord({ ...(d.data() as any), id: d.id });
-            if (rec && rec.id && rec.title) firestoreAnimeMap.set(rec.id, rec);
-          });
-          // Small delay to prevent burst limit hit
-          await new Promise(r => setTimeout(r, 200));
-        } catch (err) {
-          console.warn(`[Admin] Error fetching all from ${collName}:`, err);
-        }
-      }
-
-      const allAnime = Array.from(firestoreAnimeMap.values());
-      const activeAnime = allAnime.filter(a => !a.isDeleted);
-      const trashAnime = allAnime.filter(a => a.isDeleted);
-      const pendingItems = Array.from(pendingMap.values()).filter(a => !a.isDeleted);
-
-      setCatalogTitles(activeAnime);
-      setDeletedList(trashAnime);
-      setPendingList(pendingItems);
-      setPendingSubmissions(pendingItems.length);
-
-      // Aggregates for Metrics & Charts
-      const totalWatchlistsCount = activeAnime.reduce((acc, curr) => acc + (curr.likes || 0), 0);
+      // Aggregates for Metrics (Still need a way to get total count cheaply or just use visible list)
+      const totalWatchlistsCount = catalogRes.items.reduce((acc, curr) => acc + (curr.likes || 0), 0);
       setTotalWatchlists(totalWatchlistsCount);
       setActiveUsers(Math.floor(totalWatchlistsCount * 0.4) + 12);
 
       // Popularity Bar Chart
-      const sortedByPopularity = [...activeAnime]
+      const sortedByPopularity = [...catalogRes.items]
         .sort((a, b) => (b.likes || 0) - (a.likes || 0))
         .slice(0, 5)
         .map(a => ({ id: a.id, name: a.title, count: a.likes || 0 }));
@@ -424,7 +359,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Dub Breakdown Pie Chart
       const dubCounts: Record<string, number> = {};
       let totalDubs = 0;
-      activeAnime.forEach(a => {
+      catalogRes.items.forEach(a => {
         (a.dubs || []).forEach(d => {
           dubCounts[d] = (dubCounts[d] || 0) + 1;
           totalDubs++;
@@ -438,42 +373,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       })).sort((a, b) => b.count - a.count).slice(0, 6);
       setDubBreakdown(breakdown);
 
-      // Traffic Area Chart (Simulated based on timestamps)
+      // Traffic Area Chart (Simulated)
       const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      const traffic = days.map(day => ({ time: day, views: Math.floor(Math.random() * 50) + 10 }));
-      setTrafficData(traffic);
+      setTrafficData(days.map(day => ({ time: day, views: Math.floor(Math.random() * 50) + 10 })));
 
-      // Recent Feed
-      const actColl = collection(db, 'activities');
-      const actQuery = query(actColl, orderBy('timestamp', 'desc'), limit(15));
-      const actSnap = await getDocs(actQuery);
-      const activities: ActivityEvent[] = [];
-      actSnap.forEach(d => {
-        const data = d.data();
-        activities.push({
-          id: d.id,
-          user: data.user || 'User',
-          action: data.action || 'viewed',
-          animeTitle: data.animeTitle || 'Unknown',
-          time: formatRelativeTime(data.timestamp?.toDate ? data.timestamp.toDate() : data.timestamp),
-          timestamp: data.timestamp?.toMillis ? data.timestamp.toMillis() : Date.now()
-        });
-      });
-      setRecentActivities(activities);
+      // Recent Feed via Supabase
+      try {
+        const { data: actRows } = await supabase
+          .from('activities')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(15);
 
-      setIsLoading(false);
+        if (actRows) {
+          const activities: ActivityEvent[] = actRows.map((data: any) => ({
+            id: data.id || `act-${Math.random()}`,
+            user: data.user || 'User',
+            action: data.action || 'viewed',
+            animeTitle: data.animeTitle || 'Unknown',
+            time: formatRelativeTime(data.timestamp),
+            timestamp: typeof data.timestamp === 'number' ? data.timestamp : Date.now()
+          }));
+          setRecentActivities(activities);
+        }
+      } catch (actErr) {
+        console.warn('[Admin] Activities fetch warning:', actErr);
+      }
     } catch (error) {
       console.error('[Admin] Global Fetch Error:', error);
+    } finally {
       setIsLoading(false);
+      setIsSyncing(false);
     }
   }, []);
+
+  const handleManualRefresh = async () => {
+    setIsSyncing(true);
+    try {
+      await fetchRealData(true);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const loadMorePending = async () => {
+    if (!lastDocPending || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const res = await dbService.getSubmissionsPaginated('pending', lastDocPending, 15);
+      setPendingList(prev => [...prev, ...res.items]);
+      setLastDocPending(res.lastDoc);
+      setHasMorePending(res.items.length === 15);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const loadMoreCatalog = async () => {
+    if (!lastDocCatalog || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const res = await dbService.getApprovedAnimePaginated(lastDocCatalog, 20);
+      setCatalogTitles(prev => [...prev, ...res.items]);
+      setLastDocCatalog(res.lastDoc);
+      setHasMoreCatalog(res.items.length === 20);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     if (isAdmin) {
       fetchRealData();
       // Optimization: No more onSnapshot or auto-refresh
     }
-  }, [isAdmin, fetchRealData]);
+  }, [isAdmin]);
 
   // Automated Alert for Background Worker Failures
   useEffect(() => {
@@ -495,31 +469,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     resetServerProgress();
     
     try {
-      const { setDoc, doc, serverTimestamp } = await import('firebase/firestore');
       const jobId = 'sim_quota_' + Date.now();
-      const statusRef = doc(db, 'system', 'upload_status');
       
       console.log('[Simulation] Step 2: Setting initial processing state...');
-      await setDoc(statusRef, {
+      await supabase.from('system_status').upsert({
+        id: 'upload_status',
         jobId,
         status: 'processing',
         totalItems: 5,
         processedItems: 1,
         percentage: 20,
         error: null,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+        updatedAt: new Date().toISOString()
+      });
 
       await new Promise(r => setTimeout(r, 1500));
       
       console.log('[Simulation] Step 3: Triggering FAILED status with Quota message...');
-      await setDoc(statusRef, {
+      await supabase.from('system_status').upsert({
+        id: 'upload_status',
         jobId,
         status: 'failed',
-        error: 'Quota Exceeded (SIMULATED): 8 RESOURCE_EXHAUSTED: Quota exceeded for quota group "WriteRequestsPerProjectPerMinute".',
+        error: 'Quota Exceeded (SIMULATED): 8 RESOURCE_EXHAUSTED: Quota exceeded for write requests.',
         completedAt: new Date().toISOString(),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+        updatedAt: new Date().toISOString()
+      });
 
       console.log('[Simulation] Step 4: SUCCESS. UI should now show failure icon and Dismiss button.');
     } catch (err) {
@@ -661,6 +635,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handlePermanentDeleteLive = async (anime: AnimeRecord) => {
+    if (!window.confirm(`Are you sure you want to permanently delete "${anime.title}" from Firestore?`)) return;
+    try {
+      await (dbService as any).permanentlyDeleteLiveAnime(anime.id);
+      toast.success('Deleted Permanently', `"${anime.title}" has been permanently removed from Firestore.`);
+      setCatalogTitles(prev => prev.filter(a => a.id !== anime.id));
+    } catch (err: any) {
+      toast.error('Delete Failed', err?.message || 'Could not delete item.');
+    }
+  };
+
   const handleRestore = async (anime: AnimeRecord) => {
     console.log('Step 1: handleRestore Clicked', anime.id);
     setIsRestoring(true);
@@ -706,54 +691,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setIsImporting(true);
+    toast.info('Processing JSON...', 'Reading uploaded file contents...');
+
     const reader = new FileReader();
     reader.onload = async (ev) => {
       console.log('Step 1: handleImport - File loaded');
       try {
-        const json = JSON.parse(ev.target?.result as string);
-        if (!Array.isArray(json)) {
-          toast.error('Invalid Format', 'JSON file must contain an array of anime objects.');
-          return;
+        const textContent = ev.target?.result as string;
+        if (!textContent) {
+          throw new Error('Uploaded file is empty.');
         }
-        setIsImporting(true);
-        console.log(`Step 2: Starting bulk upload for ${json.length} items`);
 
+        let json: any;
         try {
-          // 1. Offload to Enterprise Serverless Queue Architecture with instant 202 Accepted
-          console.log('Step 3: Calling startBulkUpload (Serverless)...');
-          await startBulkUpload(json);
-          toast.success(
-            'Bulk Upload Queued',
-            `${json.length} items queued for serverless background processing. Track live progress below.`
-          );
-        } catch (apiErr: any) {
-          console.warn('Step 3b: Serverless Queue failed, falling back to client-side syncManager:', apiErr);
-          // 2. Client fallback: Enqueue into IndexedDB Queue
-          await syncManager.enqueueAdminUploads(json);
-          console.log('Step 4: Calling syncManager.processAdminBatchUpload...');
-          const batchRes = await syncManager.processAdminBatchUpload();
-          await checkPendingUploads();
-          
-          if (batchRes.quotaHit) {
-            console.warn('Step 5: Client fallback hit Firestore quota.');
-            toast.error(
-              'Firestore Quota Hit',
-              `${batchRes.remaining} pending uploads saved safely in IndexedDB queue. Click 'Resume Upload' once quota resets.`
-            );
-          } else {
-            const summary = [
-              batchRes.added > 0 ? `${batchRes.added} New records batched to Firestore` : '',
-              batchRes.failed > 0 ? `${batchRes.failed} Failed` : ''
-            ].filter(Boolean).join(', ');
-            
-            console.log('Step 5: Client fallback complete.', summary);
-            toast.success('Import Complete', summary || 'All records processed in batches.');
-          }
+          json = JSON.parse(textContent);
+        } catch (parseErr: any) {
+          throw new Error('Invalid JSON format: ' + (parseErr.message || 'Could not parse JSON structure.'));
         }
-        // fetchRealData(true); // Don't fetch immediately, let the user decide or wait for background sync
-      } catch (err) { 
+
+        if (!Array.isArray(json)) {
+          throw new Error('JSON file must contain an array of anime objects.');
+        }
+
+        console.log(`Step 2: Starting RTDB bulk import for ${json.length} items to pending_animes`);
+
+        const result = await dbService.bulkImportAnime(json);
+        console.log('Step 3: RTDB bulk import complete:', result);
+
+        toast.success('Successfully queued items into RTDB', `Success: Queued ${result.added} new items. Skipped ${result.skipped || 0} duplicates.`);
+        await fetchRealData(true);
+      } catch (err: any) { 
         console.error('Step X: Import fatal error:', err);
-        toast.error('Error', 'Invalid JSON file structure.'); 
+        toast.error('Import Failed', err?.message || 'An unexpected error occurred during import.'); 
       }
       finally { 
         console.log('Step Finally: Resetting isImporting state');
@@ -761,7 +732,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         if (fileInputRef.current) fileInputRef.current.value = ''; 
       }
     };
-    reader.readAsText(file);
+
+    reader.onerror = (error) => {
+      console.error('FileReader error:', error);
+      toast.error('File Error', 'Failed to read the selected file.');
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    try {
+      reader.readAsText(file);
+    } catch (readErr: any) {
+      console.error('reader.readAsText error:', readErr);
+      toast.error('File Error', 'Could not initiate reading file.');
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleResumeUpload = async () => {
@@ -792,54 +778,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       toast.error('Resume Failed', 'Could not resume pending uploads.');
     } finally {
       setIsImporting(false);
-    }
-  };
-
-  const handleSyncRtdbSubmissions = async () => {
-    setIsSyncingRtdb(true);
-    try {
-      const result = await dbService.syncRtdbToFirestore();
-      if (result.success > 0) {
-        toast.success(
-          'RTDB Sync Complete',
-          `${result.success} submissions synced from cloud fallback queue to Firestore.`
-        );
-      } else if (result.failed > 0) {
-        toast.error('RTDB Sync Failed', 'Check logs for details.');
-      } else {
-        toast.info('RTDB Sync', 'No pending submissions found in cloud fallback.');
-      }
-      checkPendingUploads();
-      fetchRealData(true);
-    } catch (err) {
-      console.error('[RTDB Sync Error]', err);
-      toast.error('Sync Error', 'An unexpected error occurred during RTDB sync.');
-    } finally {
-      setIsSyncingRtdb(false);
-    }
-  };
-
-  const handleSyncAdminRtdbUploads = async () => {
-    setIsSyncingRtdbUploads(true);
-    try {
-      const result = await dbService.syncAdminRtdbToFirestore();
-      if (result.success > 0) {
-        toast.success(
-          'Bulk Upload Sync Complete',
-          `${result.success} records synced from cloud fallback queue to Firestore.`
-        );
-      } else if (result.failed > 0) {
-        toast.error('Sync Failed', 'Some items could not be synced.');
-      } else {
-        toast.info('RTDB Sync', 'No pending bulk uploads found in cloud fallback.');
-      }
-      checkPendingUploads();
-      fetchRealData(true);
-    } catch (err) {
-      console.error('[RTDB Admin Sync Error]', err);
-      toast.error('Sync Error', 'An unexpected error occurred during bulk upload sync.');
-    } finally {
-      setIsSyncingRtdbUploads(false);
     }
   };
 
@@ -894,13 +832,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
           
           <div className="flex items-center gap-2">
+
             <button 
-              onClick={() => fetchRealData(true)} 
-              disabled={isLoading}
-              className="p-1.5 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white transition-all border border-neutral-700 disabled:opacity-50"
+              onClick={handleManualRefresh} 
+              disabled={isSyncing || isLoading}
+              className="p-1.5 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white transition-all border border-neutral-700 disabled:opacity-50 cursor-pointer"
               title="Refresh Data"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             </button>
             <button onClick={() => router.push('/')} className="px-3 py-1.5 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white text-xs font-bold transition-all border border-neutral-700 cursor-pointer flex items-center gap-1.5">
               <Globe className="w-3.5 h-3.5" />
@@ -919,7 +858,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             { id: 'pending', label: `Pending (${pendingSubmissions})`, icon: Inbox },
             { id: 'catalog', label: 'Manage', icon: Database },
             { id: 'feed', label: 'Feed', icon: Radio },
-            { id: 'queue', label: `Cloud Queue (${rtdbPendingCount + rtdbPendingUploadsCount})`, icon: Database },
             { id: 'trash', label: 'Trash', icon: Trash2 },
           ].map((tab) => (
             <button
@@ -939,6 +877,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </header>
 
       <main className="max-w-6xl mx-auto p-4 space-y-6">
+
+
         {/* Real-time Serverless Queue Progress UI (Listening to Firestore system/upload_status) */}
         {(serverQueueProgress.status === 'processing' || 
           serverQueueProgress.status === 'queued' || 
@@ -1083,83 +1023,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {/* Admin Cloud Fallback (RTDB) Sync Alert */}
-        {rtdbPendingUploadsCount > 0 && (
-          <div className="bg-purple-950/40 border border-purple-500/40 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="flex items-center gap-3.5 w-full sm:w-auto">
-              <div className="w-10 h-10 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
-                <Upload className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-black text-white">
-                    {rtdbPendingUploadsCount} Pending JSON Bulk Uploads
-                  </h4>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 uppercase tracking-widest border border-purple-500/30">
-                    Admin RTDB Queue
-                  </span>
-                </div>
-                <p className="text-xs text-neutral-400 mt-0.5">
-                  Remaining items from your JSON bulk import were saved to RTDB when Firestore quota was hit. Sync them now.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end shrink-0">
-              <button
-                onClick={handleSyncAdminRtdbUploads}
-                disabled={isSyncingRtdbUploads}
-                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50"
-              >
-                {isSyncingRtdbUploads ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                <span>Sync Pending JSON Uploads</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Cloud Fallback (RTDB) Sync Alert */}
-        {rtdbPendingCount > 0 && (
-          <div className="bg-indigo-950/40 border border-indigo-500/40 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="flex items-center gap-3.5 w-full sm:w-auto">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
-                <Database className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-black text-white">
-                    {rtdbPendingCount} Cloud Fallback Submissions
-                  </h4>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 uppercase tracking-widest border border-indigo-500/30">
-                    RTDB Queue
-                  </span>
-                </div>
-                <p className="text-xs text-neutral-400 mt-0.5">
-                  Submissions saved to Realtime Database fallback when Firestore quota was hit. Sync them back to Firestore now.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end shrink-0">
-              <button
-                onClick={handleSyncRtdbSubmissions}
-                disabled={isSyncingRtdb}
-                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50"
-              >
-                {isSyncingRtdb ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                <span>Sync to Firestore</span>
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Local Queue Quota Hit Alert & Resume Button */}
         {pendingUploadsCount > 0 && (
           <div className="bg-amber-950/40 border border-amber-500/40 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300">
@@ -1454,33 +1317,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <p className="text-neutral-500 font-bold">Queue is empty. You're all caught up!</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {pendingList.map(anime => (
-                  <div key={anime.id} className="p-4 rounded-3xl bg-[#131926] border border-amber-500/30 shadow-xl space-y-4 flex flex-col">
-                    <div className="flex gap-4">
-                      <img src={anime.poster || undefined} className="w-20 h-28 object-cover rounded-2xl bg-neutral-800 shadow-2xl border border-neutral-700/50" alt="" />
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <h3 className="font-black text-lg truncate leading-tight">{anime.title}</h3>
-                        <p className="text-[10px] text-neutral-500 font-mono">#{anime.id}</p>
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {anime.dubs.map(d => <span key={d} className="px-2 py-0.5 rounded-lg text-[9px] font-black text-white" style={{ backgroundColor: LANGUAGE_COLORS[d] || '#52525b' }}>{d.toUpperCase()}</span>)}
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {pendingList.map(anime => (
+                    <div key={anime.id} className="p-4 rounded-3xl bg-[#131926] border border-amber-500/30 shadow-xl space-y-4 flex flex-col">
+                      <div className="flex gap-4">
+                        <img src={anime.poster || undefined} className="w-20 h-28 object-cover rounded-2xl bg-neutral-800 shadow-2xl border border-neutral-700/50" alt="" />
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <h3 className="font-black text-lg truncate leading-tight">{anime.title}</h3>
+                          <p className="text-[10px] text-neutral-500 font-mono">#{anime.id}</p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {anime.dubs.map(d => <span key={d} className="px-2 py-0.5 rounded-lg text-[9px] font-black text-white" style={{ backgroundColor: LANGUAGE_COLORS[d] || '#52525b' }}>{d.toUpperCase()}</span>)}
+                          </div>
                         </div>
                       </div>
+                      <div className="flex items-center gap-2 mt-auto pt-4 border-t border-neutral-800/60">
+                        <button onClick={() => handleApprove(anime)} disabled={processingId === anime.id} className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2 uppercase">
+                          {processingId === anime.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                          APPROVE
+                        </button>
+                        <button onClick={() => handleTriggerEdit(anime)} disabled={processingId === anime.id} className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-[10px] border border-neutral-700 transition-all uppercase disabled:opacity-50">EDIT</button>
+                        <button onClick={() => handleReject(anime)} disabled={processingId === anime.id} className="px-4 py-2.5 rounded-xl bg-red-600/10 hover:bg-red-600/20 text-red-400 font-bold text-[10px] border border-red-500/20 transition-all uppercase disabled:opacity-50 flex items-center justify-center gap-1.5">
+                          {processingId === anime.id ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                          REJECT
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 mt-auto pt-4 border-t border-neutral-800/60">
-                      <button onClick={() => handleApprove(anime)} disabled={processingId === anime.id} className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2 uppercase">
-                        {processingId === anime.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                        APPROVE
-                      </button>
-                      <button onClick={() => handleTriggerEdit(anime)} disabled={processingId === anime.id} className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-[10px] border border-neutral-700 transition-all uppercase disabled:opacity-50">EDIT</button>
-                      <button onClick={() => handleReject(anime)} disabled={processingId === anime.id} className="px-4 py-2.5 rounded-xl bg-red-600/10 hover:bg-red-600/20 text-red-400 font-bold text-[10px] border border-red-500/20 transition-all uppercase disabled:opacity-50 flex items-center justify-center gap-1.5">
-                        {processingId === anime.id ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                        REJECT
-                      </button>
-                    </div>
+                  ))}
+                </div>
+
+                {hasMorePending && lastDocPending && (
+                  <div className="flex justify-center py-6">
+                    <button
+                      onClick={loadMorePending}
+                      disabled={isLoadingMore}
+                      className="px-6 py-2.5 bg-[#182032] hover:bg-[#1e293b] border border-neutral-700 rounded-xl text-xs font-bold text-neutral-300 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
+                      Load Next 15 Items
+                    </button>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -1496,7 +1374,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </h2>
                 <div className="flex items-center gap-2">
                   <button onClick={handleExportBackup} className="p-2.5 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white transition-all border border-neutral-700 cursor-pointer" title="Backup JSON"><Download className="w-4 h-4" /></button>
-                  <button onClick={() => fileInputRef.current?.click()} className="p-2.5 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white transition-all border border-neutral-700 cursor-pointer" title="Import JSON"><Upload className="w-4 h-4" /></button>
+                  <button 
+                    onClick={() => fileInputRef.current?.click()} 
+                    disabled={isImporting}
+                    className="p-2.5 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white transition-all border border-neutral-700 cursor-pointer disabled:opacity-50 flex items-center gap-1.5" 
+                    title="Import JSON"
+                  >
+                    {isImporting ? <Loader2 className="w-4 h-4 animate-spin text-purple-400" /> : <Upload className="w-4 h-4" />}
+                    {isImporting && <span className="text-xs">Importing...</span>}
+                  </button>
                   <button onClick={() => setIsAddModalOpen(true)} className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/20 transition-all flex items-center gap-2 cursor-pointer uppercase tracking-tighter">
                     <Plus className="w-4 h-4" />
                     ADD NEW
@@ -1526,10 +1412,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                   <div className="flex items-center gap-2 justify-end pt-3 sm:pt-0 border-t sm:border-t-0 border-neutral-800/60">
                     <button onClick={() => handleTriggerEdit(anime)} className="px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-[10px] border border-neutral-700 transition-all uppercase">EDIT</button>
-                    <button onClick={() => handleSoftDelete(anime)} className="p-2 rounded-xl bg-red-600/10 hover:bg-red-600/20 text-red-400 border border-red-500/20 transition-all cursor-pointer"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => handlePermanentDeleteLive(anime)} className="p-2 rounded-xl bg-red-600/10 hover:bg-red-600/20 text-red-400 border border-red-500/20 transition-all cursor-pointer" title="Delete Permanently from Firestore"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
               ))}
+              
+              {hasMoreCatalog && lastDocCatalog && (
+                <div className="flex justify-center py-8">
+                  <button
+                    onClick={loadMoreCatalog}
+                    disabled={isLoadingMore}
+                    className="px-8 py-3 bg-primary-theme hover:bg-primary-theme/90 text-white rounded-2xl text-sm font-black shadow-lg shadow-primary-theme/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isLoadingMore ? <Loader2 className="w-5 h-5 animate-spin" /> : <RotateCcw className="w-5 h-5" />}
+                    Show More Anime
+                  </button>
+                </div>
+              )}
+
               {filteredCatalog.length === 0 && <div className="p-12 text-center text-neutral-500 italic text-sm">No results found for your search.</div>}
             </div>
           </div>
@@ -1597,15 +1497,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* RTDB Cloud Queue Tab */}
-        {activeTab === 'queue' && (
-          <div className="animate-in fade-in duration-300">
-            <PendingQueueDashboard onSyncSuccess={() => {
-              checkPendingUploads();
-              fetchRealData(true);
-            }} />
-          </div>
-        )}
       </main>
 
       {/* Delete Confirmation Modal */}

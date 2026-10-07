@@ -37,8 +37,7 @@ import { ToastProvider, useToast } from './components/Toast';
 import { useTheme } from './context/ThemeContext';
 import { useReducedMotion, useIsMobile } from './hooks/useMediaQuery';
 
-const INITIAL_VISIBLE_COUNT = 12;
-
+// 
 function AppContent() {
   const toast = useToast();
   const { 
@@ -218,7 +217,11 @@ function AppContent() {
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [sortBy, setSortBy] = useState<string>('Most Upvoted');
   const [feedView, setFeedView] = useState<'directory' | 'foryou'>('directory');
-  const [visibleCount, setVisibleCount] = useState<number>(INITIAL_VISIBLE_COUNT);
+  
+  // Pagination State
+  const [lastDocApproved, setLastDocApproved] = useState<any>(null);
+  const [hasMoreApproved, setHasMoreApproved] = useState(true);
+
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
@@ -275,31 +278,46 @@ function AppContent() {
     setIsSubmitModalOpen(true);
   };
 
-  // Initial server sync to load fresh approved anime immediately only if stale
+  // Initial server sync to load fresh approved anime with strict pagination limit 20
   useEffect(() => {
-    // Only force refresh if explicitly needed (e.g. first time or very old)
-    // databaseService.constructor already handles conditional sync
-    // We just need to make sure the state is updated if it DOES sync
-    const checkAndSync = async () => {
-      // If we have no data, we MUST sync
-      const current = dbService.getApprovedAnime();
-      if (current.length === 0) {
-        setIsLoading(true);
-        try {
-          const freshList = await dbService.forceRefresh();
-          setApprovedAnime(freshList);
-        } finally {
-          setIsLoading(false);
-        }
+    const initialFetch = async () => {
+      setIsLoading(true);
+      try {
+        const res = await dbService.getApprovedAnimePaginated(null, 20);
+        setApprovedAnime(res.items);
+        setLastDocApproved(res.lastDoc);
+        setHasMoreApproved(res.items.length === 20);
+      } finally {
+        setIsLoading(false);
       }
     };
-    checkAndSync();
+    initialFetch();
   }, []);
+
+  const loadMoreApproved = async () => {
+    if (!lastDocApproved || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const res = await dbService.getApprovedAnimePaginated(lastDocApproved, 20);
+      setApprovedAnime(prev => {
+        const merged = [...prev];
+        res.items.forEach(item => {
+          if (!merged.some(m => m.id === item.id)) merged.push(item);
+        });
+        return merged;
+      });
+      setLastDocApproved(res.lastDoc);
+      setHasMoreApproved(res.items.length === 20);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   // Subscribe to DB & Auth changes
   useEffect(() => {
     const unsubDb = dbService.subscribe(() => {
-      setApprovedAnime(dbService.getApprovedAnime());
+      // Overwrite check removed to save Read Quota & respect pagination
+      // setApprovedAnime(dbService.getApprovedAnime());
       setAllAnimeRecords(dbService.getAllAnimeRecords());
       if (currentUser) {
         setDbWatchlist(dbService.getUserWatchlist(currentUser.uid));
@@ -406,7 +424,6 @@ function AppContent() {
       setFeedView('directory');
     }
     window.location.hash = tab;
-    setVisibleCount(INITIAL_VISIBLE_COUNT);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -520,11 +537,25 @@ function AppContent() {
     [dbWatchlist]
   );
 
-  // Find currently viewed anime
+  // Find currently viewed anime (checks active list and local DB cache)
   const currentViewingAnime = useMemo(() => {
     if (!viewingAnimeId) return null;
-    return approvedAnime.find((a) => a.id === viewingAnimeId) || null;
+    return approvedAnime.find((a) => a.id === viewingAnimeId) || dbService.getAnimeById(viewingAnimeId) || null;
   }, [viewingAnimeId, approvedAnime]);
+
+  // Load single doc if opened via direct link and not yet in cache
+  useEffect(() => {
+    if (viewingAnimeId && !currentViewingAnime) {
+      dbService.fetchAnimeDetail(viewingAnimeId).then((anime) => {
+        if (anime) {
+          setApprovedAnime((prev) => {
+            if (!prev.some((p) => p.id === anime.id)) return [...prev, anime];
+            return prev;
+          });
+        }
+      });
+    }
+  }, [viewingAnimeId, currentViewingAnime]);
 
   // ==========================================================================
   // 1. Advanced Multi-Filtering Engine: Search AND Language AND Genre AND Status
@@ -641,43 +672,9 @@ function AppContent() {
     return sortedApprovedAnime;
   }, [feedView, forYouData.recommendedAnime, sortedApprovedAnime]);
 
-  // ==========================================================================
-  // Infinite Scroll Pagination Engine (IntersectionObserver)
-  // ==========================================================================
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-
-  // Automatically load next batch as sentinel enters viewport
-  useEffect(() => {
-    if (!sentinelRef.current) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (entry && entry.isIntersecting) {
-          setVisibleCount((prev) => {
-            if (prev < activeSortedAnime.length) {
-              return prev + 12;
-            }
-            return prev;
-          });
-        }
-      },
-      {
-        rootMargin: '300px',
-        threshold: 0.05,
-      }
-    );
-
-    observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
-  }, [activeSortedAnime.length]);
-
-  const visibleAnime = useMemo(() => {
-    return activeSortedAnime.slice(0, visibleCount);
-  }, [activeSortedAnime, visibleCount]);
-
+  // Search query state used for filtering current loaded batch
   const handleLanguageFilter = (lang: string) => {
     setSelectedLanguage(lang);
-    setVisibleCount(INITIAL_VISIBLE_COUNT);
   };
 
   const handleResetFilters = () => {
@@ -688,7 +685,6 @@ function AppContent() {
     setSelectedType('All Types');
     setSelectedStatus('All');
     setSortBy('Most Upvoted');
-    setVisibleCount(INITIAL_VISIBLE_COUNT);
   };
 
   return (
@@ -837,34 +833,28 @@ function AppContent() {
                     searchQuery={searchQuery}
                     setSearchQuery={(q) => {
                       setSearchQuery(q);
-                      setVisibleCount(INITIAL_VISIBLE_COUNT);
                     }}
                     selectedLanguage={selectedLanguage}
                     setSelectedLanguage={handleLanguageFilter}
                     selectedGenre={selectedGenre}
                     setSelectedGenre={(g) => {
                       setSelectedGenre(g);
-                      setVisibleCount(INITIAL_VISIBLE_COUNT);
                     }}
                     selectedPlatform={selectedPlatform}
                     setSelectedPlatform={(p) => {
                       setSelectedPlatform(p);
-                      setVisibleCount(INITIAL_VISIBLE_COUNT);
                     }}
                     selectedType={selectedType}
                     setSelectedType={(t) => {
                       setSelectedType(t);
-                      setVisibleCount(INITIAL_VISIBLE_COUNT);
                     }}
                     selectedStatus={selectedStatus}
                     setSelectedStatus={(s) => {
                       setSelectedStatus(s);
-                      setVisibleCount(INITIAL_VISIBLE_COUNT);
                     }}
                     sortBy={sortBy}
                     setSortBy={(s) => {
                       setSortBy(s);
-                      setVisibleCount(INITIAL_VISIBLE_COUNT);
                     }}
                     totalFiltered={activeSortedAnime.length}
                     totalAvailable={approvedAnime.length}
@@ -875,7 +865,6 @@ function AppContent() {
                     feedView={feedView}
                     setFeedView={(view) => {
                       setFeedView(view);
-                      setVisibleCount(INITIAL_VISIBLE_COUNT);
                     }}
                     allAnime={approvedAnime}
                   />
@@ -917,18 +906,37 @@ function AppContent() {
                       {isLoading ? (
                         <SkeletonGrid count={8} />
                       ) : approvedAnime.length > 0 ? (
-                        <AnimeGridWithInfiniteScroll
-                          animeList={activeSortedAnime}
-                          visibleCount={visibleCount}
-                          trendingAnimeIds={trendingAnimeIds}
-                          localWatchlistIds={localWatchlistIds}
-                          onToggleWatchlist={handleToggleWatchlist}
-                          onOpenAnimeDetail={handleOpenAnimeDetail}
-                          onReport={(anime) => setReportingAnime(anime)}
-                          sentinelRef={sentinelRef}
-                          uiLanguage={uiLanguage}
-                          isLoading={isLoading}
-                        />
+                        <>
+                          <AnimeGridWithInfiniteScroll
+                            animeList={activeSortedAnime}
+                            visibleCount={activeSortedAnime.length}
+                            trendingAnimeIds={trendingAnimeIds}
+                            localWatchlistIds={localWatchlistIds}
+                            onToggleWatchlist={handleToggleWatchlist}
+                            onOpenAnimeDetail={handleOpenAnimeDetail}
+                            onReport={(anime) => setReportingAnime(anime)}
+                            sentinelRef={null}
+                            uiLanguage={uiLanguage}
+                            isLoading={isLoading}
+                          />
+
+                          {hasMoreApproved && lastDocApproved && (
+                            <div className="flex justify-center py-12">
+                              <button
+                                onClick={loadMoreApproved}
+                                disabled={isLoadingMore}
+                                className="px-10 py-4 bg-primary-theme hover:bg-primary-theme/90 text-white rounded-2xl text-sm font-black shadow-xl shadow-primary-theme/25 transition-all flex items-center gap-3 cursor-pointer disabled:opacity-50 active:scale-95 group"
+                              >
+                                {isLoadingMore ? (
+                                  <RefreshCw className="w-5 h-5 animate-spin" />
+                                ) : (
+                                  <ChevronDown className="w-5 h-5 group-hover:translate-y-1 transition-transform" />
+                                )}
+                                <span>Load More Titles</span>
+                              </button>
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <div className="text-center py-16 bg-[#131926]/50 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto shadow-xl">
                           <div className="w-14 h-14 rounded-2xl bg-primary-theme/10 border border-primary-theme/20 flex items-center justify-center mx-auto mb-4 text-primary-theme">

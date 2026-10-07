@@ -1,46 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
-  Sparkles, 
   Send, 
   Search, 
   Loader2, 
   CheckCircle2, 
   ShieldAlert, 
-  Film, 
   Tv, 
-  ExternalLink,
+  Film,
+  Sparkles,
   Upload,
   Plus,
   Trash2,
   Star
 } from 'lucide-react';
-import { searchJikanAnime, formatJikanToAnime } from '../services/jikanApi';
-import { JikanAnimeResult, AnimeRecord } from '../types/database';
+import { AnimeRecord } from '../types/database';
 import { DubLanguage, StreamingPlatform, AnimeType, ReleaseDay } from '../types/anime';
-import { dbService, isQuotaError, USER_PENDING_SUBMISSIONS_KEY } from '../services/databaseService';
+import { dbService, isQuotaError, USER_PENDING_SUBMISSIONS_KEY, cleanFirestoreData } from '../services/databaseService';
 import { syncManager } from '../services/syncManager';
 import { authService } from '../services/authService';
 import { useToast } from './Toast';
-import { db } from '../lib/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-
-// Helper to remove any undefined fields before saving to Firestore to prevent crashes
-function cleanFirestoreData(obj: any): any {
-  if (obj === null || obj === undefined) return null;
-  if (Array.isArray(obj)) return obj.map(cleanFirestoreData);
-  if (typeof obj === 'object' && !(obj instanceof Date)) {
-    const res: Record<string, any> = {};
-    for (const key of Object.keys(obj)) {
-      const val = obj[key];
-      if (val !== undefined) {
-        res[key] = cleanFirestoreData(val);
-      }
-    }
-    return res;
-  }
-  return obj;
-}
+import { supabase } from '../lib/supabase';
 
 interface SubmitDubModalProps {
   isOpen: boolean;
@@ -130,46 +110,14 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [duplicateAnime, setDuplicateAnime] = useState<AnimeRecord | null>(null);
   const [localEditAnime, setLocalEditAnime] = useState<AnimeRecord | null>(null);
 
-  // Jikan Search State
-  const [jikanResults, setJikanResults] = useState<JikanAnimeResult[]>([]);
-  const [isSearchingJikan, setIsSearchingJikan] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [autoFilled, setAutoFilled] = useState(false);
-
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Derived state & Admin security check
   const isAdmin = authService.isAdmin();
   const isEditMode = isAdmin && (!!editAnime || !!localEditAnime);
   const activeAnime = isEditMode ? (editAnime || localEditAnime) : (editAnime || localEditAnime);
-
-  // Debounced Jikan API search
-  useEffect(() => {
-    if (!title || title.trim().length < 2 || autoFilled) {
-      setJikanResults([]);
-      setShowDropdown(false);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      setIsSearchingJikan(true);
-      try {
-        const results = await searchJikanAnime(title);
-        setJikanResults(results);
-        setShowDropdown(results.length > 0);
-      } catch (e) {
-        console.error('[Jikan Search Error]', e);
-        toast.error('Search Failed', 'Could not fetch anime data from MyAnimeList.');
-      } finally {
-        setIsSearchingJikan(false);
-      }
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [title, autoFilled]);
 
   // Pre-fill if editing
   useEffect(() => {
@@ -227,7 +175,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           languages: p.languages || activeAnime.dubs || ['Tamil']
         })));
       }
-      setAutoFilled(true); // Treat as auto-filled so Jikan search doesn't trigger immediately
     } else if (isOpen && !activeAnime) {
       // Clear for new submission
       setTitle('');
@@ -246,7 +193,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       setStreamingPartners([{ name: 'Crunchyroll', url: '', languages: ['Tamil'] }]);
       setAiringStatus('Ongoing');
       setReleaseDay('Saturday');
-      setAutoFilled(false);
     }
     
     if (!isOpen) {
@@ -258,7 +204,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
   // Real-time Duplicate Check Logic
   useEffect(() => {
-    if (isEditMode || !title || title.trim().length < 3 || autoFilled) {
+    if (isEditMode || !title || title.trim().length < 3) {
       setDuplicateAnime(null);
       return;
     }
@@ -281,7 +227,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     }, 500);
 
     return () => clearTimeout(debounceTimer);
-  }, [title, isEditMode, autoFilled]);
+  }, [title, isEditMode]);
 
   const handleEditDuplicate = () => {
     if (!authService.isAdmin()) {
@@ -383,45 +329,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     updateEntryField(entryIdx, 'languages', updatedLangs);
   };
 
-  // Click outside listener for Jikan dropdown
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   if (!isOpen) return null;
-
-  // Handle auto-filling details from Jikan API
-  const handleSelectJikan = (item: JikanAnimeResult) => {
-    const formatted = formatJikanToAnime(item);
-    setTitle(formatted.title);
-    setRomajiTitle(formatted.romajiTitle);
-    setPoster(formatted.poster);
-    setSynopsis(formatted.synopsis);
-    setReleaseYear(formatted.releaseYear);
-    setEpisodes(formatted.episodes);
-    setType(formatted.type);
-    setStudio(formatted.studio);
-    setGenres(formatted.genres);
-    setRating(formatted.rating || '');
-    if (item.airing !== undefined) {
-      setAiringStatus(item.airing ? 'Ongoing' : 'Completed');
-    }
-    if (item.broadcast?.day) {
-      const bDay = item.broadcast.day.replace(/s$/i, '').trim();
-      const matched = ALL_DAYS.find((d) => d.toLowerCase() === bDay.toLowerCase());
-      if (matched) {
-        setReleaseDay(matched);
-      }
-    }
-    setAutoFilled(true);
-    setShowDropdown(false);
-  };
 
   const toggleGenre = (genre: string) => {
     if (genres.includes(genre)) {
@@ -470,16 +378,19 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         notes: `Verified ${lang} dub available on ${finalPlatforms.map(p => p.name).join(', ')}`,
       }));
 
+      const parsedRating = (rating !== '' && rating !== undefined) ? Number(rating) : 0;
+      const parsedYear = releaseYear ? Number(releaseYear) : 0;
+
       const payload = {
         title: title.trim(),
-        romajiTitle: romajiTitle.trim() || title.trim(),
+        romajiTitle: romajiTitle.trim() || "",
         poster: defaultCover,
         imageUrl: defaultCover,
-        synopsis: synopsis.trim() || `Regional Indian dubbed release for ${title.trim()} available on AniDub India.`,
-        releaseYear: releaseYear ? Number(releaseYear) : new Date().getFullYear(),
-        originalReleaseDate: `${releaseYear || new Date().getFullYear()}`,
-        rating: (rating !== '' && rating !== undefined) ? Number(rating) : undefined,
-        episodes: totalEpisodes || 12,
+        synopsis: synopsis.trim() || "",
+        releaseYear: parsedYear,
+        originalReleaseDate: parsedYear > 0 ? String(parsedYear) : "",
+        rating: parsedRating,
+        episodes: totalEpisodes || 0,
         seasons: seasonDetails.filter(s => s.type === 'Season').length || 1,
         totalSeasons: seasonDetails.filter(s => s.type === 'Season').length || 1,
         seasonDetails: seasonDetails.map(s => ({
@@ -488,15 +399,14 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           episodeCount: Number(s.episodeCount) || 0,
           languages: s.languages && s.languages.length > 0 ? s.languages : derivedGlobalDubs
         })),
-        currentSeason: airingStatus === 'Ongoing' && currentSeason !== '' ? Number(currentSeason) : undefined,
-        currentlyAiringEpisode: airingStatus === 'Ongoing' && currentlyAiringEpisode !== '' ? Number(currentlyAiringEpisode) : undefined,
+        currentSeason: airingStatus === 'Ongoing' && currentSeason !== '' ? Number(currentSeason) : 0,
+        currentlyAiringEpisode: airingStatus === 'Ongoing' && currentlyAiringEpisode !== '' ? Number(currentlyAiringEpisode) : 0,
         type: type || 'TV Series',
-        studio: studio.trim() || 'Animation Studio',
-        status: airingStatus || 'Ongoing',
+        studio: studio.trim() || "",
         airingStatus: airingStatus || 'Ongoing',
-        releaseDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
-        airingDay: airingStatus === 'Ongoing' ? releaseDay : undefined,
-        genres: genres.length > 0 ? genres : ['Action'],
+        releaseDay: airingStatus === 'Ongoing' ? (releaseDay || 'Saturday') : undefined,
+        airingDay: airingStatus === 'Ongoing' ? (releaseDay || 'Saturday') : undefined,
+        genres: Array.isArray(genres) ? genres : [],
         dubs: derivedGlobalDubs,
         dubDetails,
         platforms: finalPlatforms,
@@ -527,12 +437,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           });
 
           try {
-            await setDoc(doc(db, 'submissions', proposalId), editProposalData);
+            const { error } = await supabase.from('pending_animes').insert([editProposalData]);
+            if (error) console.error('[Supabase Edit Proposal Error]', error);
           } catch (err) {
-            console.error('[Firestore Edit Proposal Error]', err);
-            if (isQuotaError(err)) {
-              throw err; // Re-throw to be caught by main catch block
-            }
+            console.error('[Supabase Edit Proposal Catch]', err);
           }
 
           // Notify Telegram of pending edit proposal
@@ -557,23 +465,22 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           return;
         }
 
-        // 1. Authenticated Admin Direct write to live Firebase Firestore database
+        // 1. Authenticated Admin Direct write to Supabase anime_list table
         try {
           const sanitizedEditPayload = cleanFirestoreData({
             ...payload,
             updatedAt: new Date().toISOString(),
           });
 
-          await setDoc(doc(db, 'animes', activeAnime.id), sanitizedEditPayload, { merge: true });
-          try {
-            await setDoc(doc(db, 'anime', activeAnime.id), sanitizedEditPayload, { merge: true });
-          } catch {}
-          try {
-            await setDoc(doc(db, 'submissions', activeAnime.id), sanitizedEditPayload, { merge: true });
-          } catch {}
+          const { error } = await supabase
+            .from('anime_list')
+            .upsert({ id: activeAnime.id, ...sanitizedEditPayload });
+
+          if (error) {
+            console.error('[Supabase Direct Edit Error]', error);
+          }
         } catch (fsEditErr) {
-          console.error('[Firestore Direct Edit Error]', fsEditErr);
-          if (isQuotaError(fsEditErr)) throw fsEditErr;
+          console.error('[Supabase Direct Edit Catch]', fsEditErr);
         }
 
         // 2. Also update local cache via databaseService
@@ -615,9 +522,12 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         return;
       }
 
-      // Creating new record ID is now handled by dbService.submitDubInfo
+      // 1. STRICT RTDB ROUTING FOR NEW SUBMISSIONS:
+      // All submissions MUST be pushed ONLY to RTDB under `pending_animes`.
+      // It MUST NOT write to Firestore, avoiding quota limits for new submissions.
       const newRecord = await dbService.submitDubInfo({
         ...payload,
+        status: 'pending',
         themes: ['Super Power', 'Indian Dub'],
         characters: [
           {
@@ -642,7 +552,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
       const newId = newRecord.id;
 
-      // 3. Dispatch Telegram admin notification
+      // 2. Dispatch optional Telegram admin notification (non-blocking)
       try {
         const telegramAlertMsg = `🔔 New Anime Submitted: ${title.trim()}`;
         await fetch('/api/telegram', {
@@ -669,7 +579,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       }
 
       setIsSuccess(true);
-      toast.success('Anime Submitted Successfully!', `"${title.trim()}" is now pending stealth admin approval.`);
+      toast.success('Anime Submitted Successfully!', `"${title.trim()}" is now pending admin approval in RTDB.`);
 
       setTimeout(() => {
         setIsSuccess(false);
@@ -685,18 +595,22 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         setCurrentSeason('');
         setCurrentlyAiringEpisode('');
         setRating('');
-        setAutoFilled(false);
         onClose();
         onSuccess?.();
       }, 2400);
     } catch (err: any) {
       console.error('[Submission error]:', err);
       const isQuota = isQuotaError(err);
+      const errorMsg = err?.message || String(err);
+      
+      // Explicitly show error with window.alert as required
+      window.alert("Submission Error: " + errorMsg);
+      
       toast.error(
         isQuota ? 'Database limit reached' : 'Submission Failed',
         isQuota 
           ? 'Database limit reached. Please try again later.' 
-          : 'An unexpected error occurred. Please check your connection and try again.'
+          : `Submission failed: ${errorMsg}`
       );
     } finally {
       setIsSubmitting(false);
@@ -758,43 +672,21 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           ) : (
             <form id="anime-edit-form" onSubmit={handleSubmit} className="space-y-4 text-xs">
               
-              {/* Title & Jikan Auto-fill Search */}
-              <div className="relative" ref={dropdownRef}>
+              {/* Anime Title */}
+              <div>
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                  <span>Anime Title (Type to Auto-Fill via MyAnimeList) <span className="text-purple-400">*</span></span>
-                  {isSearchingJikan && (
-                    <span className="text-[10px] text-accent-theme flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Searching MAL...
-                    </span>
-                  )}
+                  <span>Anime Title <span className="text-purple-400">*</span></span>
                 </label>
-                <div className="relative flex gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      required
-                      value={title}
-                      onChange={(e) => {
-                        setTitle(e.target.value);
-                        setAutoFilled(false);
-                      }}
-                      placeholder="e.g. Solo Leveling, Demon Slayer, Jujutsu Kaisen..."
-                      className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-white placeholder-neutral-500 outline-none transition-all"
-                    />
-                    <Search className="w-4 h-4 text-neutral-500 absolute right-3 top-3 pointer-events-none" />
-                  </div>
-                  {isEditMode && (
-                    <button
-                      type="button"
-                      onClick={() => setAutoFilled(false)}
-                      className="px-3 rounded-xl bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-white hover:bg-neutral-700 transition-all font-bold text-[10px] uppercase flex items-center gap-1.5 shrink-0"
-                      title="Trigger MAL Search"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-accent-theme" />
-                      <span>Search MAL</span>
-                    </button>
-                  )}
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="e.g. Solo Leveling, Demon Slayer, Jujutsu Kaisen..."
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-white placeholder-neutral-500 outline-none transition-all"
+                  />
+                  <Search className="w-4 h-4 text-neutral-500 absolute right-3 top-3 pointer-events-none" />
                 </div>
 
                 {/* Duplicate Warning Alert */}
@@ -827,42 +719,12 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                     )}
                   </div>
                 )}
-
-                {/* Auto-fill Dropdown Results from Jikan */}
-                {showDropdown && jikanResults.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-[#141b29] border border-primary-theme/40 rounded-2xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-neutral-800">
-                    <div className="p-2 text-[10px] font-bold text-accent-theme bg-[var(--primary-badge)]/40 flex items-center gap-1.5">
-                      <Sparkles className="w-3 h-3" />
-                      <span>Select anime to 1-click auto-fill poster, synopsis, studio & year:</span>
-                    </div>
-                    {jikanResults.map((item) => (
-                      <div
-                        key={item.mal_id}
-                        onClick={() => handleSelectJikan(item)}
-                        className="p-2.5 flex items-center gap-3 hover:bg-[var(--primary-badge)]/30 cursor-pointer transition-colors"
-                      >
-                        <img
-                          src={item.images.jpg.image_url || undefined}
-                          alt={item.title}
-                          className="w-9 h-12 object-cover rounded-lg shrink-0 border border-neutral-700"
-                        />
-                        <div className="min-w-0">
-                          <p className="font-bold text-white text-xs truncate">{item.title}</p>
-                          <p className="text-[10px] text-neutral-400">
-                            {item.year || item.type || 'Anime'} • {item.episodes ? `${item.episodes} eps` : 'Ongoing'}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* Poster Image File Upload */}
               <div>
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
                   <span>Anime Poster (Upload File)</span>
-                  {autoFilled && <span className="text-[10px] text-emerald-400 font-semibold">✓ Auto-filled from MAL</span>}
                 </label>
                 <div className="flex gap-3 items-center">
                   <div 
@@ -1182,7 +1044,9 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               {/* Explicit Genre Selector (Action, Comedy, Shonen, etc.) */}
               <div>
                 <label className="block font-bold text-neutral-300 mb-1.5 flex items-center justify-between">
-                  <span>Genres (Action, Comedy, Shonen, etc.)</span>
+                  <span>
+                    Genres (Action, Comedy, Shonen, etc.) <span className="text-[10px] text-neutral-500 font-normal">(Optional)</span>
+                  </span>
                   <span className="text-[10px] text-purple-400 font-semibold">{genres.length} selected</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5 p-3 rounded-2xl bg-[#141b29] border border-neutral-700/80 max-h-36 overflow-y-auto no-scrollbar">
@@ -1213,7 +1077,9 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               {/* Optional Studio, Year & Rating info (auto-filled if selected) */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-bold text-neutral-400 mb-1">Animation Studio</label>
+                  <label className="block font-bold text-neutral-400 mb-1">
+                    Animation Studio <span className="text-[10px] text-neutral-500 font-normal">(Optional)</span>
+                  </label>
                   <input
                     type="text"
                     value={studio}
@@ -1223,24 +1089,27 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-neutral-400 mb-1">Release Year</label>
+                  <label className="block font-bold text-neutral-400 mb-1">
+                    Release Year <span className="text-[10px] text-neutral-500 font-normal">(Optional)</span>
+                  </label>
                   <input
                     type="number"
                     value={releaseYear}
-                    onChange={(e) => setReleaseYear(e.target.value === '' ? '' : parseInt(e.target.value) || 2024)}
+                    onChange={(e) => setReleaseYear(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                     placeholder="e.g. 2024"
                     className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-1.5 text-white placeholder-neutral-500 text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-neutral-400 mb-1 text-[10px] uppercase tracking-wider">Global Rating (0-10)</label>
+                  <label className="block font-bold text-neutral-400 mb-1 text-[10px] uppercase tracking-wider">
+                    Global Rating (0-10) <span className="text-neutral-500 font-normal normal-case">(Optional)</span>
+                  </label>
                   <div className="relative">
                     <input
                       type="number"
                       step="0.1"
                       min="0"
                       max="10"
-                      required
                       value={rating}
                       onChange={(e) => {
                         const val = e.target.value === '' ? '' : parseFloat(e.target.value);

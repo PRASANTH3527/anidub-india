@@ -4,6 +4,22 @@ import { useEffect } from 'react';
 
 export default function SWRegister() {
   useEffect(() => {
+    // Suppress benign ResizeObserver notifications loop error
+    if (typeof window !== 'undefined') {
+      const originalError = console.error;
+      console.error = (...args) => {
+        if (typeof args[0] === 'string' && args[0].includes('ResizeObserver loop completed with undelivered notifications')) {
+          return;
+        }
+        originalError.apply(console, args);
+      };
+      window.addEventListener('error', e => {
+        if (e.message && e.message.includes('ResizeObserver loop completed')) {
+          e.stopImmediatePropagation();
+        }
+      });
+    }
+
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       const registerSW = async () => {
         try {

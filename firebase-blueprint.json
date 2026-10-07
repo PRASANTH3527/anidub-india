@@ -14,12 +14,7 @@
           "description": "Title of the anime series or movie",
           "maxLength": 200
         },
-        "englishTitle": {
-          "type": "string",
-          "description": "English localized title",
-          "maxLength": 200
-        },
-        "japaneseTitle": {
+        "romajiTitle": {
           "type": "string",
           "description": "Romaji or Japanese title",
           "maxLength": 200
@@ -34,24 +29,53 @@
           "description": "Poster image URL",
           "maxLength": 1000
         },
-        "rating": {
+        "type": {
           "type": "string",
-          "description": "Rating score",
-          "maxLength": 10
+          "description": "Format (TV, Movie, etc.)"
+        },
+        "releaseYear": {
+          "type": "number",
+          "description": "Year of release"
+        },
+        "rating": {
+          "type": "number",
+          "description": "Rating score"
         },
         "genres": {
-          "type": "string",
-          "description": "Comma separated genres or categories",
-          "maxLength": 500
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of genres"
+        },
+        "dubs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Available dub languages"
         },
         "status": {
           "type": "string",
-          "description": "Moderation and publishing status",
+          "description": "Moderation status (approved, pending, rejected)",
           "enum": ["approved", "pending", "rejected"]
+        },
+        "airingStatus": {
+          "type": "string",
+          "description": "Current airing state (Ongoing, Completed)"
+        },
+        "rejectionReason": {
+          "type": "string",
+          "description": "Reason provided by moderator for rejection",
+          "maxLength": 1000
         },
         "likes": {
           "type": "number",
           "description": "Community upvote count"
+        },
+        "submittedBy": {
+          "type": "object",
+          "properties": {
+            "userId": { "type": "string" },
+            "userName": { "type": "string" },
+            "userEmail": { "type": "string" }
+          }
         },
         "submittedAt": {
           "type": "string",
@@ -64,7 +88,7 @@
           "description": "ISO timestamp when last updated"
         }
       },
-      "required": ["id", "title"]
+      "required": ["id", "title", "status"]
     },
     "Watchlist": {
       "title": "Watchlist",
@@ -103,41 +127,6 @@
         }
       },
       "required": ["id", "animeId"]
-    },
-    "Submission": {
-      "title": "Submission",
-      "description": "Community contributed anime dub details submitted for review",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Submission ID"
-        },
-        "title": {
-          "type": "string",
-          "description": "Title submitted",
-          "maxLength": 200
-        },
-        "poster": {
-          "type": "string",
-          "description": "Poster URL"
-        },
-        "status": {
-          "type": "string",
-          "description": "Review status",
-          "enum": ["pending", "approved", "rejected"]
-        },
-        "submittedBy": {
-          "type": "string",
-          "description": "Submitter name or email"
-        },
-        "submittedAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Submission timestamp"
-        }
-      },
-      "required": ["id", "title"]
     },
     "Feedback": {
       "title": "Feedback",
@@ -231,17 +220,13 @@
     }
   },
   "firestore": {
-    "/animes/{animeId}": {
+    "/anime_list/{animeId}": {
       "schema": "Anime",
       "description": "Collection of all published and pending anime dub records"
     },
     "/watchlists/{watchlistId}": {
       "schema": "Watchlist",
       "description": "Collection of user-saved watchlists"
-    },
-    "/submissions/{submissionId}": {
-      "schema": "Submission",
-      "description": "Collection of user submissions for admin moderation"
     },
     "/feedback/{feedbackId}": {
       "schema": "Feedback",

@@ -5,7 +5,7 @@ import {
   collection, 
   doc, 
   getDocs,
-  onSnapshot, 
+  getDoc,
   query, 
   orderBy, 
   limit,
@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { AnimeRecord, StreamingPlatform } from '../types/database';
+import { dbService } from '../services/databaseService';
 
 export interface WatchlistStat {
   id: string;
@@ -175,50 +176,23 @@ export function useFirebaseAnalytics() {
 
   const refreshRealData = useCallback(async () => {
     try {
-      // 1. Fetch anime records strictly from real Firebase database
-      const firestoreAnimeMap = new Map<string, AnimeRecord>();
+      // 1. Fetch anime records primarily from local cached database service (zero read cost)
+      let allAnime = dbService.getAllAnimeRecords();
 
-      try {
-        const snap = await getDocs(collection(db, 'animes'));
-        snap.forEach(d => {
-          const rec = normalizeRecord(d.id, d.data());
-          if (rec && rec.id && rec.title) firestoreAnimeMap.set(rec.id, rec);
-        });
-      } catch (err: any) {
-        const msg = String(err?.message || '').toLowerCase();
-        const code = String(err?.code || '').toLowerCase();
-        const isSilent = code === 'unavailable' || code.includes('quota') || msg.includes('offline');
-        if (!isSilent) {
-          console.warn('[Analytics] Firestore animes read notice:', err);
-        }
-      }
-
-      try {
-        const snap = await getDocs(collection(db, 'submissions'));
-        snap.forEach(d => {
-          if (!firestoreAnimeMap.has(d.id)) {
+      // If local cache is not yet ready, fallback to a small one-time read
+      if (!allAnime || allAnime.length === 0) {
+        const firestoreAnimeMap = new Map<string, AnimeRecord>();
+        try {
+          const snap = await getDocs(query(collection(db, 'anime_list'), limit(50)));
+          snap.forEach(d => {
             const rec = normalizeRecord(d.id, d.data());
             if (rec && rec.id && rec.title) firestoreAnimeMap.set(rec.id, rec);
-          }
-        });
-      } catch (err: any) {
-        const msg = String(err?.message || '').toLowerCase();
-        const code = String(err?.code || '').toLowerCase();
-        const isSilent = code === 'unavailable' || code.includes('quota') || msg.includes('offline');
-        if (!isSilent) {
-          console.warn('[Analytics] Firestore submissions read notice:', err);
+          });
+        } catch (err: any) {
+          // Silent catch
         }
+        allAnime = Array.from(firestoreAnimeMap.values());
       }
-
-      // Filter out any dummy anime strictly
-      const allAnime = Array.from(firestoreAnimeMap.values()).filter(item => {
-        if (!item || !item.id || !item.title) return false;
-        const titleLower = item.title.trim().toLowerCase();
-        const idLower = item.id.trim().toLowerCase();
-        if (titleLower.startsWith('dummy') || titleLower.startsWith('test anime') || titleLower.startsWith('anime submission #')) return false;
-        if (idLower.startsWith('sub_test') || idLower.startsWith('sub_refactor') || idLower === 'sub-test-1' || idLower === 'test-jujutsu') return false;
-        return true;
-      });
 
       // 2. Fetch real user feedbacks
       let feedbackList: any[] = [];
@@ -367,51 +341,24 @@ export function useFirebaseAnalytics() {
   }, []);
 
   useEffect(() => {
-    // Initial fetch
+    // Initial one-time fetch
     refreshRealData();
 
-    // Direct real-time listeners on Firestore collections
-    let unsubAnimes: (() => void) | null = null;
-    let unsubSubs: (() => void) | null = null;
-
-    try {
-      unsubAnimes = onSnapshot(collection(db, 'animes'), () => {
-        refreshRealData();
-      }, () => {});
-    } catch {}
-
-    try {
-      unsubSubs = onSnapshot(collection(db, 'submissions'), () => {
-        refreshRealData();
-      }, () => {});
-    } catch {}
-
-    // Real-time listener for Firestore if configured
-    let unsubscribeFirestore: (() => void) | null = null;
+    // One-time fetch for realtime analytics doc without expensive continuous onSnapshot
     try {
       const overviewDocRef = doc(db, 'analytics', 'realtime');
-      unsubscribeFirestore = onSnapshot(
-        overviewDocRef,
-        (snap) => {
-          if (snap.exists()) {
-            const raw = snap.data();
-            setData(prev => ({
-              ...prev,
-              liveActiveUsers: raw.liveActiveUsers ?? prev.liveActiveUsers,
-              totalWatchlists: raw.totalWatchlists ?? prev.totalWatchlists,
-              isConnected: true,
-            }));
-          }
-        },
-        () => {}
-      );
+      getDoc(overviewDocRef).then((snap) => {
+        if (snap.exists()) {
+          const raw = snap.data();
+          setData(prev => ({
+            ...prev,
+            liveActiveUsers: raw.liveActiveUsers ?? prev.liveActiveUsers,
+            totalWatchlists: raw.totalWatchlists ?? prev.totalWatchlists,
+            isConnected: true,
+          }));
+        }
+      }).catch(() => {});
     } catch {}
-
-    return () => {
-      if (unsubAnimes) unsubAnimes();
-      if (unsubSubs) unsubSubs();
-      if (unsubscribeFirestore) unsubscribeFirestore();
-    };
   }, [refreshRealData]);
 
   const pushRealtimeUpdate = useCallback(async () => {

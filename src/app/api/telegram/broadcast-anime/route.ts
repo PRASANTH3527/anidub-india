@@ -97,36 +97,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (!anime) {
-      // Fetch latest anime release from Jikan API (MyAnimeList v4)
-      const res = await fetch('https://api.jikan.moe/v4/seasons/now?limit=5', {
-        headers: { 'Accept': 'application/json' },
-        next: { revalidate: 300 }
-      });
-      
-      if (!res.ok) {
-        throw new Error(`Failed to fetch anime releases: ${res.statusText}`);
-      }
-
-      const data = await res.json();
-      const releases = data.data || [];
-      if (releases.length === 0) {
-        return NextResponse.json({ message: 'No new releases found at this moment' });
-      }
-
-      // Pick the top item
-      const item = releases[0];
-      anime = {
-        id: item.mal_id,
-        title: item.title_english || item.title,
-        japaneseTitle: item.title_japanese,
-        poster: item.images?.jpg?.large_image_url || item.images?.jpg?.image_url,
-        synopsis: (item.synopsis || '').slice(0, 220) + '...',
-        genres: (item.genres || []).map((g: any) => g.name).slice(0, 3).join(', '),
-        score: item.score || 'N/A',
-        episodes: item.episodes || 'Ongoing',
-        languages: ['Tamil', 'Telugu', 'Hindi'],
-        watchUrl: `${siteUrl}?anime=${item.mal_id}`
-      };
+      return NextResponse.json(
+        { error: 'Missing anime data', message: 'No anime data provided to broadcast.' },
+        { status: 400 }
+      );
     }
 
     // Format rich HTML Telegram post caption

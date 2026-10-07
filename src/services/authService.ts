@@ -1,19 +1,15 @@
-import { UserAccount, DubLanguage } from '../types/database';
-import { auth, googleProvider, db } from '../lib/firebase';
-import { 
-  signInWithPopup, 
-  signOut as fbSignOut, 
-  onAuthStateChanged, 
-  User as FirebaseUser 
-} from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+// ==============================================================================
+// AniDub India — Supabase Authentication & User Profile Service
+// ==============================================================================
+import { UserAccount } from '../types/database';
+import { supabase } from '../lib/supabase';
 
 const AUTH_USER_KEY = 'anidub_auth_current_user';
 const LOCAL_WATCHLIST_KEY = 'anidub_local_watchlist';
 
 export const DEMO_USERS: Record<string, UserAccount> = {
   user: {
-    uid: 'google-user-1049281',
+    uid: 'demo-user-1049281',
     email: 'prasanth01236@gmail.com',
     displayName: 'Prasanth K.',
     photoURL: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=150&auto=format&fit=crop&q=80',
@@ -22,7 +18,7 @@ export const DEMO_USERS: Record<string, UserAccount> = {
     createdAt: '2026-08-10T10:00:00Z',
   },
   admin: {
-    uid: 'google-admin-9018273',
+    uid: 'demo-admin-9018273',
     email: 'admin@anidub.in',
     displayName: 'AniDub Senior Admin',
     photoURL: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=150&auto=format&fit=crop&q=80',
@@ -48,27 +44,29 @@ class AuthService {
         this.currentUser = null;
       }
 
-      // Listen to Firebase Auth state
+      // Supabase Auth listener
       try {
-        onAuthStateChanged(auth, async (fbUser: FirebaseUser | null) => {
-          if (fbUser) {
+        supabase.auth.onAuthStateChange(async (event, session) => {
+          if (session?.user) {
+            const sbUser = session.user;
+            const meta = sbUser.user_metadata || {};
             const user: UserAccount = {
-              uid: fbUser.uid,
-              email: fbUser.email || '',
-              displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'Anime Fan',
-              photoURL: fbUser.photoURL || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=150&auto=format&fit=crop&q=80',
-              role: (fbUser.email === 'admin@anidub.in' || fbUser.email === 'prasanth01236@gmail.com') ? 'admin' : 'user',
+              uid: sbUser.id,
+              email: sbUser.email || '',
+              displayName: meta.full_name || meta.name || sbUser.email?.split('@')[0] || 'Anime Fan',
+              photoURL: meta.avatar_url || meta.picture || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=150&auto=format&fit=crop&q=80',
+              role: (sbUser.email === 'admin@anidub.in' || sbUser.email === 'prasanth01236@gmail.com') ? 'admin' : 'user',
               favoriteLanguage: 'Tamil',
-              createdAt: fbUser.metadata.creationTime || new Date().toISOString(),
+              createdAt: sbUser.created_at || new Date().toISOString(),
             };
             this.currentUser = user;
             localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
             
-            // Automatic Sync: Synchronize guest's local watchlist to Firestore user doc
-            await this.syncLocalWatchlistToFirestore(fbUser.uid);
+            // Automatic Sync: Synchronize guest's local watchlist to Supabase user row
+            await this.syncLocalWatchlistToSupabase(sbUser.id);
           } else {
-            // Only clear if we were not using an explicit mock user
-            if (this.currentUser && !this.currentUser.uid.startsWith('mock-')) {
+            // Only clear if not using a demo user
+            if (this.currentUser && !this.currentUser.uid.startsWith('demo-')) {
               this.currentUser = null;
               localStorage.removeItem(AUTH_USER_KEY);
             }
@@ -77,17 +75,17 @@ class AuthService {
           this.notify();
         });
       } catch (err) {
-        console.warn('[AuthService] Firebase Auth listener initialization warning:', err);
+        console.warn('[AuthService] Supabase Auth listener initialization warning:', err);
       }
     }
   }
 
   /**
-   * Syncs existing guest local watchlist to Firestore user document
+   * Syncs existing guest local watchlist to Supabase user table
    * and merges any cloud items into local state.
    */
-  public async syncLocalWatchlistToFirestore(uid: string): Promise<string[]> {
-    if (typeof window === 'undefined' || !uid) return [];
+  public async syncLocalWatchlistToSupabase(uid: string): Promise<string[]> {
+    if (typeof window !== 'undefined' && !uid) return [];
     try {
       // 1. Read local watchlist
       let localIds: string[] = [];
@@ -99,16 +97,17 @@ class AuthService {
         } catch {}
       }
 
-      // 2. Fetch existing cloud user document from Firestore
-      const userDocRef = doc(db, 'users', uid);
+      // 2. Fetch existing cloud user document from Supabase
       let cloudIds: string[] = [];
       try {
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
-          if (Array.isArray(data?.watchlist)) {
-            cloudIds = data.watchlist;
-          }
+        const { data, error } = await supabase
+          .from('users')
+          .select('watchlist')
+          .eq('id', uid)
+          .maybeSingle();
+
+        if (data && Array.isArray(data.watchlist)) {
+          cloudIds = data.watchlist;
         }
       } catch (e) {
         console.warn('[AuthService] Could not fetch remote user doc for watchlist sync:', e);
@@ -121,17 +120,17 @@ class AuthService {
       // 4. Write back to local storage
       localStorage.setItem(LOCAL_WATCHLIST_KEY, JSON.stringify(mergedList));
 
-      // 5. Update Firestore user document
+      // 5. Update Supabase user row
       try {
-        await setDoc(userDocRef, {
-          uid,
+        await supabase.from('users').upsert({
+          id: uid,
           email: this.currentUser?.email || '',
-          displayName: this.currentUser?.displayName || '',
-          photoURL: this.currentUser?.photoURL || '',
+          display_name: this.currentUser?.displayName || '',
+          photo_url: this.currentUser?.photoURL || '',
           watchlist: mergedList,
-          updatedAt: new Date().toISOString(),
-        }, { merge: true });
-        console.log(`[AuthService] Watchlist synchronized with Cloud: ${mergedList.length} items`);
+          updated_at: new Date().toISOString(),
+        });
+        console.log(`[AuthService] Watchlist synchronized with Supabase: ${mergedList.length} items`);
       } catch (writeErr) {
         console.warn('[AuthService] Cloud watchlist update warning:', writeErr);
       }
@@ -182,38 +181,55 @@ class AuthService {
   }
 
   /**
-   * Optional Google Sign-In via Firebase Auth.
-   * If popup is closed or blocked, falls back gracefully without interrupting guest use.
+   * Supabase Google Sign-In with graceful fallback for iframe / preview sandbox
    */
   public async loginWithGoogle(asAdmin = false): Promise<UserAccount> {
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const fbUser = result.user;
-      const user: UserAccount = {
-        uid: fbUser.uid,
-        email: fbUser.email || '',
-        displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'Anime Fan',
-        photoURL: fbUser.photoURL || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=150&auto=format&fit=crop&q=80',
-        role: asAdmin || fbUser.email === 'admin@anidub.in' || fbUser.email === 'prasanth01236@gmail.com' ? 'admin' : 'user',
-        favoriteLanguage: 'Tamil',
-        createdAt: fbUser.metadata.creationTime || new Date().toISOString(),
-      };
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+        },
+      });
 
-      this.currentUser = user;
-      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+      if (error) throw error;
 
-      // Sync guest watchlist to Firestore user doc
-      await this.syncLocalWatchlistToFirestore(user.uid);
+      // Check current session
+      const { data: sessionData } = await supabase.auth.getSession();
+      const sbUser = sessionData?.session?.user;
 
-      this.notify();
-      return user;
-    } catch (error: any) {
-      console.warn('[AuthService] Firebase popup signIn warning (falling back to demo):', error?.code || error?.message);
-      // Seamless guest/demo fallback if popup is blocked in preview iFrame
+      if (sbUser) {
+        const meta = sbUser.user_metadata || {};
+        const user: UserAccount = {
+          uid: sbUser.id,
+          email: sbUser.email || '',
+          displayName: meta.full_name || meta.name || sbUser.email?.split('@')[0] || 'Anime Fan',
+          photoURL: meta.avatar_url || meta.picture || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=150&auto=format&fit=crop&q=80',
+          role: asAdmin || sbUser.email === 'admin@anidub.in' || sbUser.email === 'prasanth01236@gmail.com' ? 'admin' : 'user',
+          favoriteLanguage: 'Tamil',
+          createdAt: sbUser.created_at || new Date().toISOString(),
+        };
+
+        this.currentUser = user;
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+        await this.syncLocalWatchlistToSupabase(user.uid);
+        this.notify();
+        return user;
+      }
+
+      // If redirected or pending, fallback to demo user in iframe
       const fallbackUser = asAdmin ? DEMO_USERS.admin : DEMO_USERS.user;
       this.currentUser = fallbackUser;
       localStorage.setItem(AUTH_USER_KEY, JSON.stringify(fallbackUser));
-      await this.syncLocalWatchlistToFirestore(fallbackUser.uid);
+      await this.syncLocalWatchlistToSupabase(fallbackUser.uid);
+      this.notify();
+      return fallbackUser;
+    } catch (error: any) {
+      console.warn('[AuthService] Supabase OAuth notice (falling back to demo):', error?.message || error);
+      const fallbackUser = asAdmin ? DEMO_USERS.admin : DEMO_USERS.user;
+      this.currentUser = fallbackUser;
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(fallbackUser));
+      await this.syncLocalWatchlistToSupabase(fallbackUser.uid);
       this.notify();
       return fallbackUser;
     }
@@ -221,7 +237,7 @@ class AuthService {
 
   public async logout(): Promise<void> {
     try {
-      await fbSignOut(auth);
+      await supabase.auth.signOut();
     } catch {}
     this.currentUser = null;
     localStorage.removeItem(AUTH_USER_KEY);
@@ -241,3 +257,4 @@ class AuthService {
 }
 
 export const authService = new AuthService();
+export default authService;

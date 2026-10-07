@@ -1,58 +1,58 @@
+// ==============================================================================
+// AniDub India — Database Service (Supabase PostgreSQL + 24h IndexedDB Caching)
+// ==============================================================================
 import { AnimeRecord, DubReview, WatchlistEntry, SubmissionStatus, StreamingPlatform, AnimeCollection } from '../types/database';
 import { Anime, DubLanguage } from '../types/anime';
-import { db, rtdb } from '../lib/firebase';
-import { ref, set, get as rtdbGet, remove, child, update } from 'firebase/database';
+import { supabase } from '../lib/supabase';
 import { authService } from './authService';
-import { get, set as idbSet, del, clear } from 'idb-keyval';
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDocs, 
-  deleteDoc, 
-  updateDoc,
-  onSnapshot,
-  writeBatch,
-  query,
-  where,
-  orderBy,
-  limit,
-  startAfter,
-  Timestamp,
-  serverTimestamp
-} from 'firebase/firestore';
+import { get as idbGet, set as idbSet, del, clear } from 'idb-keyval';
 
 const DB_ANIME_KEY = 'anidub_db_anime_records';
 const DB_REVIEWS_KEY = 'anidub_db_reviews';
 const DB_WATCHLIST_KEY = 'anidub_db_watchlists';
 const DB_COLLECTIONS_KEY = 'anidub_db_collections';
-const QUOTA_EXCEEDED_KEY = 'anidub_firestore_quota_exceeded_timestamp';
 const LAST_SYNC_KEY = 'anidub_db_last_sync_timestamp';
+export const CACHE_TIMESTAMP_KEY = 'anidub_catalog_cache_timestamp';
+export const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours aggressive cache TTL
 
 export const ADMIN_PENDING_UPLOADS_KEY = 'admin_pending_uploads';
 export const USER_PENDING_SUBMISSIONS_KEY = 'user_pending_submissions';
 
 export function isQuotaError(err: any): boolean {
   if (!err) return false;
-  const code = String(err.code || '');
-  const msg = String(err.message || '').toLowerCase();
-  const name = String(err.name || '').toLowerCase();
+  const msg = String(err.message || err || '').toLowerCase();
+  const code = String(err.code || '').toLowerCase();
   return (
-    code === 'resource-exhausted' ||
-    code === 'quota-exceeded' ||
-    msg.includes('resource-exhausted') ||
-    msg.includes('resource_exhausted') ||
-    msg.includes('quota exceeded') ||
-    msg.includes('quota') ||
-    msg.includes('too many requests') ||
+    code === '429' ||
     msg.includes('rate limit') ||
-    name.includes('quota')
+    msg.includes('too many requests') ||
+    msg.includes('quota')
   );
 }
 
+// Helper to remove any undefined fields before saving to Supabase
+export function cleanSupabaseData(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(cleanSupabaseData);
+  if (typeof obj === 'object' && !(obj instanceof Date)) {
+    const res: Record<string, any> = {};
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val !== undefined) {
+        res[key] = cleanSupabaseData(val);
+      }
+    }
+    return res;
+  }
+  return obj;
+}
+
+// Export cleanFirestoreData alias for backwards compatibility
+export const cleanFirestoreData = cleanSupabaseData;
+
 // --- TELEGRAM NOTIFICATION CONFIG ---
 const TELEGRAM_BOT_TOKEN = '8648317719:AAHZ7wxQefZT5QdKCpc61epWJ4mGAgJvgdc'; 
-const TELEGRAM_CHAT_ID = '8769442354'; // ENTER YOUR CHANNEL ID HERE (e.g. @mychannel or -100...)
+const TELEGRAM_CHAT_ID = '8769442354';
 
 class DatabaseService {
   private listeners: (() => void)[] = [];
@@ -62,104 +62,16 @@ class DatabaseService {
 
   constructor() {
     this.initDatabase();
-    this.checkQuotaStatus();
-    
-    // Auto-sync on load only if data is stale (> 12 hours)
-    if (this.shouldSync()) {
-      this.syncWithServer();
-    }
-  }
-
-  /**
-   * DISABLED: No longer using real-time listeners to prevent quota exhaustion.
-   * Manual refresh in Admin Panel is the preferred way now.
-   */
-  public startRealtimeSync() {
-    // Disabled as per optimization requirement
-  }
-
-  /**
-   * DISABLED
-   */
-  public stopRealtimeSync() {
-    // Disabled as per optimization requirement
-  }
-
-  private checkQuotaStatus() {
-    if (typeof window === 'undefined') return;
-    const quotaTimestamp = localStorage.getItem(QUOTA_EXCEEDED_KEY);
-    if (quotaTimestamp) {
-      const hoursSinceExceeded = (Date.now() - Number(quotaTimestamp)) / (1000 * 60 * 60);
-      // Reset quota status after 24 hours
-      if (hoursSinceExceeded < 24) {
-        this.isQuotaLimited = true;
-      } else {
-        localStorage.removeItem(QUOTA_EXCEEDED_KEY);
-        this.isQuotaLimited = false;
-      }
-    }
-  }
-
-  private shouldSync(): boolean {
-    if (typeof window === 'undefined') return false;
-    if (this.isQuotaLimited) return false;
-    const lastSync = localStorage.getItem(LAST_SYNC_KEY);
-    if (!lastSync) return true;
-    
-    // Only auto-sync if data is older than 12 hours (was 4)
-    const hoursSinceSync = (Date.now() - Number(lastSync)) / (1000 * 60 * 60);
-    return hoursSinceSync > 12;
-  }
-
-  private async setQuotaExceeded(isQuota = true) {
-    if (this.isQuotaLimited) return; // Avoid duplicate alerts
-    
-    this.isQuotaLimited = true;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(QUOTA_EXCEEDED_KEY, Date.now().toString());
-    }
-    this.notify();
-
-    // Silent background Telegram Alert to Admin
-    try {
-      const message = isQuota 
-        ? '⚠️ Admin Alert: Firestore Quota Reached for today! App is now using cached data.'
-        : '⚠️ Admin Alert: Firestore backend is currently UNAVAILABLE (Network/Service). App is using cached data.';
-      
-      fetch('/api/telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message,
-          title: isQuota ? 'Firestore Quota Reached' : 'Firestore Unavailable',
-        }),
-      }).catch(() => {});
-    } catch (e) {
-      // Complete silence
-    }
-  }
-
-  private isQuotaExceededError(err: any): boolean {
-    const msg = String(err?.message || err || '').toLowerCase();
-    const code = String(err?.code || '').toLowerCase();
-    return (
-      msg.includes('quota limit exceeded') || 
-      msg.includes('quota exceeded') || 
-      code === 'resource-exhausted' ||
-      code.includes('quota') ||
-      code === 'unavailable' ||
-      msg.includes('could not reach cloud firestore backend')
-    );
   }
 
   private async initDatabase() {
     if (typeof window === 'undefined') return;
     try {
       // 1. Load from IndexedDB (Priority)
-      const idbData = await get(DB_ANIME_KEY);
+      const idbData = await idbGet(DB_ANIME_KEY);
       if (idbData && Array.isArray(idbData)) {
         this.animeRecords = idbData.map(item => this.normalizeRecord(item));
-        console.log(`[AniDub DB] Loaded ${this.animeRecords.length} records from IndexedDB.`);
+        console.log(`[AniDub DB] Loaded ${this.animeRecords.length} records from IndexedDB cache.`);
       } else {
         // 2. Migration: Load from Legacy localStorage if IDB is empty
         const legacyData = localStorage.getItem(DB_ANIME_KEY);
@@ -168,13 +80,11 @@ class DatabaseService {
             const parsed = JSON.parse(legacyData);
             if (Array.isArray(parsed) && parsed.length > 0) {
               this.animeRecords = parsed.map(item => this.normalizeRecord(item));
-              console.log(`[AniDub DB] Migrated ${this.animeRecords.length} records from localStorage to IndexedDB.`);
-              // Persist to IDB and clear legacy
               await idbSet(DB_ANIME_KEY, this.animeRecords);
               localStorage.removeItem(DB_ANIME_KEY);
             }
           } catch (e) {
-            console.warn('[AniDub DB] Migration failed:', e);
+            console.warn('[AniDub DB] Migration notice:', e);
           }
         }
       }
@@ -204,7 +114,6 @@ class DatabaseService {
   public normalizeRecord(data: any): AnimeRecord {
     if (!data) return data;
     
-    // STRICT Mapping for Language Codes to UI Names
     const langCodeToFull: Record<string, DubLanguage> = {
       'Ta': 'Tamil',
       'Te': 'Telugu',
@@ -227,10 +136,8 @@ class DatabaseService {
         .filter(Boolean) as DubLanguage[];
     };
 
-    // Extract Top-Level Dubs
     const dubs = mapLangs(data.dubs || data.languages || data.availableIn || []);
 
-    // STRICT Seasons (mixedEntries) Mapping
     let seasonDetails: any[] = [];
     const rawSeasons = data.seasons || data.mixedEntries || data.seasonDetails || [];
     if (Array.isArray(rawSeasons)) {
@@ -241,7 +148,6 @@ class DatabaseService {
         languages: mapLangs(s.availableIn || s.languages || dubs)
       }));
     } else {
-      // Default fallback if no seasons array found
       seasonDetails = [{ 
         type: 'Season', 
         label: '1', 
@@ -250,9 +156,7 @@ class DatabaseService {
       }];
     }
 
-    // Status Mapping: "Ongoing" -> "Ongoing" (UI handles display as "Ongoing (Simulcast)")
     let airingStatus: 'Ongoing' | 'Completed' = 'Completed';
-    // Prioritize airingStatus field, fallback to status if it's not a moderation state
     const statusVal = String(data.status || '').toLowerCase();
     const isModerationStatus = ['pending', 'approved', 'rejected'].includes(statusVal);
     const rawAiringStatus = String(data.airingStatus || (!isModerationStatus ? data.status : '') || '').toLowerCase();
@@ -264,45 +168,48 @@ class DatabaseService {
     }
 
     const title = (data.title || data.name || 'Untitled').trim();
-
     const rawPlatforms = Array.isArray(data.platforms) 
       ? data.platforms 
       : (Array.isArray(data.streamingPartners) ? data.streamingPartners : []);
 
     const normalized: AnimeRecord = {
       ...data,
-      id: data.id,
+      id: String(data.id),
       title,
-      romajiTitle: (data.romajiTitle || data.japaneseTitle || '').trim(),
-      poster: data.poster || data.image || '',
+      romajiTitle: (data.romajiTitle || data.romaji_title || data.japaneseTitle || '').trim(),
+      poster: data.poster || data.image || data.image_url || '',
       banner: data.banner || data.coverImage || '',
-      studio: data.studio || data.animationStudio || 'Animation Studio',
+      studio: data.studio || data.animationStudio || data.animation_studio || 'Animation Studio',
       synopsis: data.synopsis || data.description || '',
       type: data.type || 'TV Series',
       episodes: Number(data.episodes) || 12,
-      status: data.status || 'pending', // Moderation status
-      airingStatus, // Actual show status (Ongoing/Completed)
-      submissionStatus: data.submissionStatus || 'pending',
-      releaseYear: Number(data.releaseYear || data.year) || new Date().getFullYear(),
-      rating: Number(data.rating || data.score) || 8.0,
-      genres: Array.isArray(data.genres) ? data.genres : [],
-      dubs,
+      releaseYear: Number(data.releaseYear || data.release_year) || new Date().getFullYear(),
+      rating: data.rating !== undefined && data.rating !== null ? Number(data.rating) : 0,
+      genres: Array.isArray(data.genres) ? data.genres : ['Action'],
+      themes: Array.isArray(data.themes) ? data.themes : [],
+      dubs: dubs.length > 0 ? dubs : ['Tamil'],
+      dubDetails: Array.isArray(data.dubDetails) ? data.dubDetails : (data.dub_details || []),
+      platforms: rawPlatforms.map((p: any) => ({
+        name: (p.name || 'Crunchyroll') as StreamingPlatform,
+        url: p.url || '',
+        languages: mapLangs(p.languages || dubs)
+      })),
       seasonDetails,
-      mixedEntries: seasonDetails, // Redundant field for strict JSON support if needed
-      platforms: rawPlatforms.length > 0 ? rawPlatforms.map((p: any) => ({
-        name: (p.name || p.platform || p) as StreamingPlatform,
-        url: p.url || '#',
-        languages: mapLangs(p.languages || p.availableIn || dubs)
-      })) : [{ name: 'Crunchyroll', url: '#', languages: dubs }],
-      updatedAt: new Date().toISOString(),
+      airingStatus,
+      status: data.status || 'approved',
+      submissionStatus: data.submissionStatus || data.submission_status || (data.status === 'approved' ? 'approved' : 'pending'),
+      submittedAt: data.submittedAt || data.submitted_at || new Date().toISOString(),
+      updatedAt: data.updatedAt || data.updated_at || new Date().toISOString(),
+      isDeleted: Boolean(data.isDeleted || data.is_deleted),
+      likes: Number(data.likes || data.upvotes || 0),
+      upvotes: Number(data.upvotes || data.likes || 0),
     };
 
     return normalized;
   }
 
-  private async saveAnimeRecords(records: AnimeRecord[]) {
+  public async saveAnimeRecords(records: AnimeRecord[]): Promise<void> {
     try {
-      // 100% DATA SAFETY: Never overwrite existing cache with an empty array during sync
       if (records.length === 0 && this.animeRecords.length > 0) {
         console.warn('[AniDub DB] Safety Block: Prevented overwriting cache with empty data.');
         return;
@@ -313,22 +220,123 @@ class DatabaseService {
       this.notify();
     } catch (e) {
       console.error('Save anime records error:', e);
-      // Fallback to localStorage for small updates if IDB fails (though unlikely)
-      if (!isQuotaError(e)) {
-        try {
-          localStorage.setItem(DB_ANIME_KEY, JSON.stringify(records));
-        } catch {}
-      }
     }
   }
 
-  // --- 1. Main public query: ONLY FETCH APPROVED ANIME ---
+  // --- 1. Paginated Queries with Aggressive 24h Local Caching & Supabase Range Pagination ---
+  public async getApprovedAnimePaginated(
+    lastDoc: any = null, 
+    pageSize = 20, 
+    forceRefresh = false
+  ): Promise<{ items: AnimeRecord[], lastDoc: any, fromCache?: boolean }> {
+    try {
+      // 1. AGGRESSIVE CACHING: Check 24-Hour Local Cache
+      const cacheTimestamp = typeof window !== 'undefined' ? localStorage.getItem(CACHE_TIMESTAMP_KEY) : null;
+      const isCacheFresh = cacheTimestamp && (Date.now() - Number(cacheTimestamp)) < CACHE_TTL_MS;
+
+      // Serve from local IndexedDB cache if fresh or offline
+      if (!forceRefresh && isCacheFresh && this.animeRecords.length > 0) {
+        const approvedOnly = this.animeRecords
+          .filter(a => (a.status === 'approved' || (a as any).submissionStatus === 'approved') && !a.isDeleted)
+          .sort((a, b) => a.title.localeCompare(b.title));
+
+        let startIndex = 0;
+        if (lastDoc !== null && lastDoc !== undefined) {
+          if (typeof lastDoc === 'number') {
+            startIndex = lastDoc;
+          } else if (typeof lastDoc === 'string') {
+            const idx = approvedOnly.findIndex(a => a.id === lastDoc);
+            startIndex = idx >= 0 ? idx + 1 : 0;
+          } else if (lastDoc?.id) {
+            const idx = approvedOnly.findIndex(a => a.id === lastDoc.id);
+            startIndex = idx >= 0 ? idx + 1 : 0;
+          }
+        }
+
+        const items = approvedOnly.slice(startIndex, startIndex + pageSize);
+        const nextCursor = startIndex + items.length < approvedOnly.length ? (startIndex + items.length) : null;
+        return { items, lastDoc: nextCursor, fromCache: true };
+      }
+
+      // 2. STRICT SUPABASE SELECT QUERY with range pagination
+      const startIndex = typeof lastDoc === 'number' ? lastDoc : (lastDoc?.id ? this.animeRecords.findIndex(a => a.id === lastDoc.id) + 1 : 0);
+      const endIndex = startIndex + pageSize - 1;
+
+      const { data, error } = await supabase
+        .from('anime_list')
+        .select('*')
+        .eq('is_deleted', false)
+        .order('title', { ascending: true })
+        .range(startIndex, endIndex);
+
+      if (error) {
+        console.warn('[Supabase Service] Notice on select anime_list:', error.message);
+        // Fallback to local cache
+        const approvedOnly = this.getApprovedAnime();
+        const items = approvedOnly.slice(startIndex, startIndex + pageSize);
+        return { items, lastDoc: null, fromCache: true };
+      }
+
+      const items = (data || []).map(row => this.normalizeRecord(row));
+
+      // Cache newly fetched items into IndexedDB
+      if (items.length > 0) {
+        const existingMap = new Map(this.animeRecords.map(a => [a.id, a]));
+        items.forEach(item => existingMap.set(item.id, item));
+        this.animeRecords = Array.from(existingMap.values());
+        await idbSet(DB_ANIME_KEY, this.animeRecords);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
+        }
+      }
+
+      const nextCursor = items.length >= pageSize ? (startIndex + items.length) : null;
+      return { items, lastDoc: nextCursor, fromCache: false };
+    } catch (err: any) {
+      console.error('[Supabase Service] Error fetching approved anime with pagination:', err);
+      const approvedOnly = this.getApprovedAnime();
+      const items = approvedOnly.slice(0, pageSize);
+      return { items, lastDoc: null, fromCache: true };
+    }
+  }
+
+  public async getSubmissionsPaginated(
+    status: 'pending' | 'rejected' = 'pending', 
+    lastDoc: any = null, 
+    pageSize = 20
+  ): Promise<{ items: AnimeRecord[], lastDoc: any }> {
+    try {
+      const startIndex = typeof lastDoc === 'number' ? lastDoc : 0;
+      const endIndex = startIndex + pageSize - 1;
+
+      const tableName = status === 'pending' ? 'pending_animes' : 'anime_list';
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .range(startIndex, endIndex);
+
+      if (error) {
+        // Fallback to local records
+        const all = status === 'pending' ? this.getPendingSubmissions() : this.getRejectedSubmissions();
+        const items = all.slice(startIndex, startIndex + pageSize);
+        return { items, lastDoc: null };
+      }
+
+      const items = (data || []).map(row => this.normalizeRecord(row));
+      const nextCursor = items.length >= pageSize ? (startIndex + items.length) : null;
+      return { items, lastDoc: nextCursor };
+    } catch (err: any) {
+      console.error(`[Supabase Service] Error fetching ${status} submissions:`, err);
+      return { items: [], lastDoc: null };
+    }
+  }
+
   public getApprovedAnime(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
     return all.filter((a) => (a.status === 'approved' || (a as any).submissionStatus === 'approved') && !a.isDeleted);
   }
 
-  // --- 2. Admin queries: PENDING, REJECTED & DELETED ---
   public getPendingSubmissions(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
     return all.filter((a) => (a.status === 'pending' || (a as any).submissionStatus === 'pending') && !a.isDeleted);
@@ -349,91 +357,95 @@ class DatabaseService {
     return all.find((a) => a.id === id) || null;
   }
 
-  // --- 3. User Submission: Saves with status "pending" to Firestore with RTDB Fallback ---
+  // Fetch anime detail with local-first cache priority, then single Supabase select fallback
+  public async fetchAnimeDetail(id: string): Promise<AnimeRecord | null> {
+    // 1. Strict local cache check (Zero Supabase request)
+    const cached = this.getAnimeById(id);
+    if (cached) return cached;
+
+    // 2. Fetch single row if not in local cache
+    try {
+      const { data, error } = await supabase
+        .from('anime_list')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (data) {
+        const item = this.normalizeRecord(data);
+        if (!this.animeRecords.some(a => a.id === item.id)) {
+          this.animeRecords.push(item);
+          await idbSet(DB_ANIME_KEY, this.animeRecords);
+        }
+        return item;
+      }
+    } catch (e) {
+      console.warn('[dbService] Single anime read notice:', e);
+    }
+    return null;
+  }
+
+  // --- 3. User Submission: Saves to Supabase pending_animes ---
   public async submitDubInfo(data: Omit<AnimeRecord, 'id' | 'submissionStatus' | 'submittedAt'>): Promise<AnimeRecord> {
-    const id = 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
+    const id = ('sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6));
     const newRecord: AnimeRecord = {
       ...data,
       id,
       status: 'pending',
       submissionStatus: 'pending',
       submittedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
-    const records = this.getAllAnimeRecords();
-    await this.saveAnimeRecords([newRecord, ...records]);
-
-    let isQuotaHit = false;
-
-    // Persist directly to Firestore real database
     try {
-      const sanitized = {
-        ...newRecord,
-        createdAt: new Date().toISOString(),
-        serverCreatedAt: serverTimestamp(),
-      };
-      
-      await setDoc(doc(db, 'submissions', id), sanitized);
-      await setDoc(doc(db, 'animes', id), sanitized);
-      await setDoc(doc(db, 'activities', `act-${id}`), {
-        user: newRecord.submittedBy?.userName || 'Community User',
-        action: 'submitted',
-        animeTitle: newRecord.title,
-        timestamp: new Date(),
-        language: newRecord.dubs?.[0] || 'Tamil',
-        status: 'pending'
-      });
-    } catch (fsErr: any) {
-      console.warn('Firestore write error in submitDubInfo:', fsErr);
-      if (this.isQuotaExceededError(fsErr)) {
-        isQuotaHit = true;
-        this.setQuotaExceeded(true);
-      } else {
-        throw fsErr;
+      const { error } = await supabase
+        .from('pending_animes')
+        .insert([cleanSupabaseData(newRecord)]);
+
+      if (error) {
+        console.warn('[Supabase Insert pending_animes notice]:', error.message);
       }
+    } catch (err: any) {
+      console.warn('[Supabase Submission Notice]:', err);
     }
 
-    // RTDB Fallback if Firestore Quota Hit
-    if (isQuotaHit) {
-      try {
-        await this.saveToRtdbFallback('pending_submissions', newRecord);
-      } catch (rtdbErr) {
-        console.error('[RTDB Fallback Error]', rtdbErr);
-      }
-    }
-
-    // Asynchronously notify backend submissions API
-    fetch('/api/submissions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newRecord),
-    }).catch((e) => console.warn('Sync to /api/submissions failed:', e));
+    // Save locally
+    const records = this.getAllAnimeRecords();
+    records.unshift(newRecord);
+    await this.saveAnimeRecords(records);
 
     return newRecord;
   }
 
-  // --- 4. Moderation Actions (Approve/Reject/Delete) ---
-  public async approveSubmission(animeOrId: string | AnimeRecord, notes?: string, reviewerName: string = 'Admin (prasanth123)'): Promise<boolean> {
+  // --- 4. Moderation Actions (Approve/Reject/Delete) via Supabase ---
+  public async approveSubmission(
+    animeOrId: string | AnimeRecord, 
+    notes?: string, 
+    reviewerName: string = 'Admin (prasanth123)'
+  ): Promise<boolean> {
     if (!authService.isAdmin()) {
-      console.error('[Security Violation] Unauthorized approveSubmission write blocked for id:', typeof animeOrId === 'string' ? animeOrId : animeOrId.id);
+      console.error('[Security Violation] Unauthorized approveSubmission write blocked');
       return false;
     }
 
     const id = typeof animeOrId === 'string' ? animeOrId : animeOrId.id;
-    const records = this.getAllAnimeRecords();
-    let targetIndex = records.findIndex((r) => r.id === id);
-    
-    let anime: AnimeRecord;
-    if (targetIndex === -1) {
-      if (typeof animeOrId === 'string') return false; // Can't approve by ID if not in cache and no record provided
-      anime = { ...animeOrId };
-      records.unshift(anime);
-      targetIndex = 0;
-    } else {
-      anime = records[targetIndex];
+    let anime: AnimeRecord | null = typeof animeOrId === 'object' ? animeOrId : null;
+
+    if (!anime) {
+      try {
+        const { data } = await supabase.from('pending_animes').select('*').eq('id', id).maybeSingle();
+        if (data) anime = this.normalizeRecord(data);
+      } catch {}
     }
 
-    records[targetIndex] = {
+    if (!anime) {
+      const records = this.getAllAnimeRecords();
+      anime = records.find(r => r.id === id) || null;
+    }
+
+    if (!anime) return false;
+
+    const approvedRecord: AnimeRecord = {
       ...anime,
       status: 'approved',
       submissionStatus: 'approved',
@@ -442,30 +454,55 @@ class DatabaseService {
       updatedAt: new Date().toISOString(),
     };
 
+    // 1. Insert/Upsert into Supabase anime_list table
+    try {
+      const { error } = await supabase
+        .from('anime_list')
+        .upsert([cleanSupabaseData(approvedRecord)]);
+
+      if (error) {
+        console.warn('[Supabase Approval Upsert Notice]:', error.message);
+      }
+    } catch (e: any) {
+      console.warn('[Supabase Approval Error]:', e);
+    }
+
+    // 2. Remove from Supabase pending_animes table
+    try {
+      await supabase.from('pending_animes').delete().eq('id', id);
+    } catch {}
+
+    // 3. Update local cache
+    const records = this.getAllAnimeRecords();
+    const idx = records.findIndex(r => r.id === id);
+    if (idx !== -1) {
+      records[idx] = approvedRecord;
+    } else {
+      records.unshift(approvedRecord);
+    }
     await this.saveAnimeRecords(records);
 
-    // --- TELEGRAM NOTIFICATION (Auto-trigger on Approval) ---
-    const approvedAnime = records[targetIndex];
+    // Telegram Notification
     if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
       const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://anidub.in';
-      const watchUrl = `${siteUrl}/anime/${approvedAnime.id}`;
+      const watchUrl = `${siteUrl}/anime/${approvedRecord.id}`;
       
       const caption = [
         `🌟 <b>New Dubbed Anime Live!</b> 🌟`,
         ``,
-        `🎬 <b>Title:</b> ${approvedAnime.title}`,
-        `🎙️ <b>Languages:</b> ${approvedAnime.dubs.join(' • ')}`,
-        `🏷️ <b>Genres:</b> ${approvedAnime.genres.join(', ')}`,
-        `📅 <b>Release Year:</b> ${approvedAnime.releaseYear}`,
+        `🎬 <b>Title:</b> ${approvedRecord.title}`,
+        `🎙️ <b>Languages:</b> ${approvedRecord.dubs.join(' • ')}`,
+        `🏷️ <b>Genres:</b> ${approvedRecord.genres.join(', ')}`,
+        `📅 <b>Release Year:</b> ${approvedRecord.releaseYear}`,
         ``,
         `🔗 <b>Watch Now:</b> <a href="${watchUrl}">${watchUrl}</a>`,
         ``,
         `✨ <i>Enjoy high-quality Indian dubs on AniDub India!</i>`
       ].join('\n');
 
-      const endpoint = approvedAnime.poster ? 'sendPhoto' : 'sendMessage';
-      const body = approvedAnime.poster 
-        ? { chat_id: TELEGRAM_CHAT_ID, photo: approvedAnime.poster, caption, parse_mode: 'HTML' }
+      const endpoint = approvedRecord.poster ? 'sendPhoto' : 'sendMessage';
+      const body = approvedRecord.poster 
+        ? { chat_id: TELEGRAM_CHAT_ID, photo: approvedRecord.poster, caption, parse_mode: 'HTML' }
         : { chat_id: TELEGRAM_CHAT_ID, text: caption, parse_mode: 'HTML' };
 
       fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${endpoint}`, {
@@ -475,34 +512,23 @@ class DatabaseService {
       }).catch(err => console.warn('[Telegram Notify Error]', err));
     }
 
-    // Sync approval to Firestore
-    try {
-      await setDoc(doc(db, 'animes', id), records[targetIndex], { merge: true });
-      await setDoc(doc(db, 'submissions', id), {
-        status: 'approved',
-        submissionStatus: 'approved',
-        reviewedBy: reviewerName,
-        reviewedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
-    } catch (e: any) {
-      console.warn('Firestore approval sync error:', e);
-      if (isQuotaError(e)) throw e;
-    }
-
-    // Notify backend via PUT request
+    // Notify backend
     fetch('/api/submissions', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, action: 'approve', reviewer: reviewerName }),
-    }).catch((e) => console.warn('Approve PUT request error:', e));
+    }).catch(() => {});
 
     return true;
   }
 
-  public async rejectSubmission(animeOrId: string | AnimeRecord, reason?: string, reviewerName: string = 'Admin (prasanth123)'): Promise<boolean> {
+  public async rejectSubmission(
+    animeOrId: string | AnimeRecord, 
+    reason?: string, 
+    reviewerName: string = 'Admin (prasanth123)'
+  ): Promise<boolean> {
     if (!authService.isAdmin()) {
-      console.error('[Security Violation] Unauthorized rejectSubmission write blocked for id:', typeof animeOrId === 'string' ? animeOrId : animeOrId.id);
+      console.error('[Security Violation] Unauthorized rejectSubmission write blocked');
       return false;
     }
 
@@ -527,45 +553,38 @@ class DatabaseService {
       reviewedBy: reviewerName,
       reviewedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      rejectionReason: reason,
+      rejectionReason: reason || null,
     };
 
     await this.saveAnimeRecords(records);
 
-    // Sync rejection to Firestore across all relevant collections
+    // Sync rejection to Supabase
     try {
-      const updatePayload = {
-        status: 'rejected',
-        submissionStatus: 'rejected',
-        reviewedBy: reviewerName,
-        rejectionReason: reason,
-        updatedAt: new Date().toISOString(),
-      };
-      
-      await setDoc(doc(db, 'submissions', id), updatePayload, { merge: true });
-      try {
-        await setDoc(doc(db, 'animes', id), updatePayload, { merge: true });
-      } catch {}
-      try {
-        await setDoc(doc(db, 'anime', id), updatePayload, { merge: true });
-      } catch {}
+      await supabase
+        .from('pending_animes')
+        .update({
+          status: 'rejected',
+          submission_status: 'rejected',
+          reviewed_by: reviewerName,
+          rejection_reason: reason || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
     } catch (e: any) {
-      console.warn('Firestore rejection sync error:', e);
-      if (isQuotaError(e)) throw e;
+      console.warn('Supabase rejection sync notice:', e);
     }
 
-    // Notify backend via PUT request
+    // Notify backend
     fetch('/api/submissions', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, action: 'reject', reviewer: reviewerName, reason }),
-    }).catch((e) => console.warn('Reject PUT request error:', e));
+    }).catch(() => {});
 
     return true;
   }
 
   public async updateAnime(id: string, updatedData: Partial<AnimeRecord>): Promise<boolean> {
-    // CRITICAL SECURITY CHECK: Only authenticated Admins can update anime records
     if (!authService.isAdmin()) {
       console.error('[Security Violation] Unauthorized updateAnime write blocked for id:', id);
       return false;
@@ -578,45 +597,35 @@ class DatabaseService {
     records[targetIndex] = {
       ...records[targetIndex],
       ...updatedData,
-      id: id, // Ensure ID remains same
+      id: id,
       updatedAt: new Date().toISOString(),
     };
 
     await this.saveAnimeRecords(records);
 
-    // Sync update to Firestore
+    // Sync update to Supabase
     try {
-      await setDoc(doc(db, 'animes', id), {
-        ...updatedData,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
-      try {
-        await setDoc(doc(db, 'anime', id), {
-          ...updatedData,
+      await supabase
+        .from('anime_list')
+        .upsert([cleanSupabaseData({
+          ...records[targetIndex],
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
-      } catch {}
+        })]);
     } catch (e: any) {
-      console.warn('Firestore update sync error:', e);
-      if (isQuotaError(e)) throw e;
+      console.warn('Supabase update sync notice:', e);
     }
 
-    // Notify backend via PUT request
     fetch('/api/submissions', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, action: 'update', data: updatedData }),
-    }).catch((e) => console.warn('Update PUT request error:', e));
+    }).catch(() => {});
 
     return true;
   }
 
   public async deleteSubmission(id: string): Promise<boolean> {
-    // Soft Delete Implementation
-    if (!authService.isAdmin()) {
-      console.error('[Security Violation] Unauthorized deleteSubmission write blocked for id:', id);
-      return false;
-    }
+    if (!authService.isAdmin()) return false;
 
     const records = this.getAllAnimeRecords();
     const targetIndex = records.findIndex((r) => r.id === id);
@@ -630,15 +639,9 @@ class DatabaseService {
 
     await this.saveAnimeRecords(records);
 
-    // Sync soft delete to Firestore
     try {
-      const update = { isDeleted: true, updatedAt: new Date().toISOString() };
-      await setDoc(doc(db, 'animes', id), update, { merge: true });
-      await setDoc(doc(db, 'submissions', id), update, { merge: true });
-    } catch (e: any) {
-      console.warn('Firestore soft delete sync error:', e);
-      if (isQuotaError(e)) throw e;
-    }
+      await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).eq('id', id);
+    } catch {}
 
     this.notify();
     return true;
@@ -660,72 +663,65 @@ class DatabaseService {
     await this.saveAnimeRecords(records);
 
     try {
-      const update = { isDeleted: false, updatedAt: new Date().toISOString() };
-      await setDoc(doc(db, 'animes', id), update, { merge: true });
-      await setDoc(doc(db, 'submissions', id), update, { merge: true });
-    } catch (e: any) {
-      if (isQuotaError(e)) throw e;
-    }
+      await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).eq('id', id);
+    } catch {}
 
     this.notify();
     return true;
   }
 
   public async permanentlyDeleteSubmission(id: string): Promise<boolean> {
-    // CRITICAL SECURITY CHECK: Only authenticated Admins can delete anime records
-    if (!authService.isAdmin()) {
-      console.error('[Security Violation] Unauthorized permanent delete write blocked for id:', id);
-      return false;
-    }
+    if (!authService.isAdmin()) return false;
 
     const records = this.getAllAnimeRecords();
     const filtered = records.filter((r) => r.id !== id);
     await this.saveAnimeRecords(filtered);
 
-    // Delete directly from Firestore
     try {
-      await deleteDoc(doc(db, 'animes', id));
-      await deleteDoc(doc(db, 'anime', id));
-      await deleteDoc(doc(db, 'submissions', id));
-    } catch (e: any) {
-      console.warn('Firestore permanent delete sync error:', e);
-      if (isQuotaError(e)) throw e;
-    }
-
-    // Global Auto-Cleanup: Remove deleted anime from the current browser's local watchlists
-    try {
-      const savedWatchlist = localStorage.getItem(DB_WATCHLIST_KEY);
-      if (savedWatchlist) {
-        const watchlists: WatchlistEntry[] = JSON.parse(savedWatchlist);
-        const filteredWatchlists = watchlists.filter((w) => w.animeId !== id);
-        localStorage.setItem(DB_WATCHLIST_KEY, JSON.stringify(filteredWatchlists));
-      }
-
-      const publicWatchlist = localStorage.getItem('anidub_local_watchlist');
-      if (publicWatchlist) {
-        const ids: string[] = JSON.parse(publicWatchlist);
-        const filteredIds = ids.filter((watchlistId) => watchlistId !== id);
-        localStorage.setItem('anidub_local_watchlist', JSON.stringify(filteredIds));
-      }
-    } catch (cleanErr) {
-      console.warn('Watchlist cleanup error:', cleanErr);
-    }
-
-    // Notify backend
-    fetch('/api/submissions', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, action: 'delete' }),
-    }).catch((e) => console.warn('Delete PUT request error:', e));
+      await supabase.from('pending_animes').delete().eq('id', id);
+      await supabase.from('anime_list').delete().eq('id', id);
+    } catch {}
 
     this.notify();
     return true;
   }
 
-  // --- 5. Data Management: Backup & Bulk Import ---
-  public exportBackup() {
+  public async permanentlyDeleteLiveAnime(id: string): Promise<boolean> {
+    if (!authService.isAdmin()) return false;
+
+    try {
+      await supabase.from('anime_list').delete().eq('id', id);
+      await supabase.from('pending_animes').delete().eq('id', id);
+    } catch {}
+
+    const records = this.getAllAnimeRecords();
+    const filtered = records.filter((r) => r.id !== id);
+    await this.saveAnimeRecords(filtered);
+
+    this.notify();
+    return true;
+  }
+
+  public exportDatabaseToJson(): void {
     const data = this.getAllAnimeRecords();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(data, null, 2))}`;
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', jsonString);
+    downloadAnchor.setAttribute('download', `anidub_catalog_export_${new Date().toISOString().split('T')[0]}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  }
+
+  public exportDatabaseBackup(): void {
+    const backupData = {
+      version: '2.0.0-supabase',
+      exportedAt: new Date().toISOString(),
+      totalRecords: this.animeRecords.length,
+      records: this.animeRecords,
+    };
+
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -736,206 +732,15 @@ class DatabaseService {
     URL.revokeObjectURL(url);
   }
 
-  public async bulkImportAnime(jsonData: any[], isResume = false): Promise<{ 
-    added: number; 
-    updated: number; 
-    failed: number; 
-    quotaHit: boolean; 
-    remaining: number 
-  }> {
-    if (!authService.isAdmin() || !Array.isArray(jsonData)) {
-      return { added: 0, updated: 0, failed: 0, quotaHit: false, remaining: 0 };
-    }
-    
-    // 1. If fresh import (not resume), save the entire JSON array to localStorage first
-    if (!isResume) {
-      try {
-        localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(jsonData));
-      } catch (err) {
-        console.warn('[Bulk Import] Could not save initial queue to localStorage:', err);
-      }
-    }
-
-    let queue: any[] = [];
-    try {
-      const stored = localStorage.getItem(ADMIN_PENDING_UPLOADS_KEY);
-      queue = stored ? JSON.parse(stored) : [...jsonData];
-    } catch {
-      queue = [...jsonData];
-    }
-
-    let addedCount = 0;
-    let updatedCount = 0;
-    let failedCount = 0;
-    let quotaHit = false;
-
-    const currentRecords = this.getAllAnimeRecords();
-    const newItemsForLocal: AnimeRecord[] = [];
-
-    // Process each anime in the local queue
-    while (queue.length > 0) {
-      const item = queue[0];
-      try {
-        const rawTitle = (item.title || item.name || '').trim();
-        if (!rawTitle) {
-          failedCount++;
-          // Remove invalid item from queue and update storage
-          queue.shift();
-          try {
-            if (queue.length > 0) {
-              localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(queue));
-            } else {
-              localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
-            }
-          } catch {}
-          continue;
-        }
-
-        const existing = currentRecords.find(r => 
-          (item.id && r.id === item.id) ||
-          r.title.toLowerCase().trim() === rawTitle.toLowerCase()
-        );
-
-        const finalId = existing ? existing.id : (item.id || ('sub-' + Math.random().toString(36).substring(2, 9)));
-        
-        const jsonStatus = String(item.status || item.airingStatus || '').toLowerCase();
-        let airingStatus: 'Ongoing' | 'Completed' = 'Completed';
-        if (jsonStatus.includes('ongoing') || jsonStatus.includes('airing') || jsonStatus.includes('simulcast')) {
-          airingStatus = 'Ongoing';
-        }
-
-        const normalized = this.normalizeRecord({ 
-          ...(existing || {}), 
-          ...item, 
-          id: finalId,
-          airingStatus: airingStatus,
-          status: 'pending',
-          submissionStatus: 'pending',
-          isDeleted: false,
-          createdAt: item.createdAt || existing?.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          submittedAt: item.submittedAt || existing?.submittedAt || new Date().toISOString()
-        });
-
-        normalized.status = 'pending';
-        normalized.submissionStatus = 'pending';
-
-        if (normalized && normalized.title) {
-          const subRef = doc(db, 'submissions', finalId);
-          const animeRef = doc(db, 'animes', finalId);
-          const actRef = doc(db, 'activities', `act-import-${finalId}-${Date.now()}`);
-
-          const batch = writeBatch(db);
-          batch.set(subRef, normalized, { merge: true });
-          batch.set(animeRef, normalized, { merge: true });
-          batch.set(actRef, {
-            user: 'Admin (Bulk)',
-            action: existing ? 'updated' : 'submitted',
-            animeTitle: normalized.title,
-            timestamp: serverTimestamp(),
-            language: normalized.dubs?.[0] || 'Tamil',
-            status: 'pending'
-          });
-
-          await batch.commit();
-
-          // SUCCESS: Remove this anime from local queue immediately
-          queue.shift();
-          try {
-            if (queue.length > 0) {
-              localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(queue));
-            } else {
-              localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
-            }
-          } catch (e) {
-            console.warn('[Bulk Import] LocalStorage update warning:', e);
-          }
-
-          newItemsForLocal.push(normalized);
-          if (existing) updatedCount++; else addedCount++;
-        } else {
-          failedCount++;
-          queue.shift();
-          try {
-            if (queue.length > 0) {
-              localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(queue));
-            } else {
-              localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
-            }
-          } catch {}
-        }
-      } catch (err: any) {
-        console.error('[Bulk Import Item Error]', err);
-        // Check if resource-exhausted (quota limit) error occurs
-        if (isQuotaError(err)) {
-          console.warn(`[Bulk Import Quota Hit] Breaking loop and saving ${queue.length} remaining items to RTDB fallback.`);
-          quotaHit = true;
-          this.setQuotaExceeded(true);
-
-          // 1. RTDB Cloud Fallback: Save all remaining un-uploaded items in one go
-          try {
-            const rtdbBatch: Record<string, any> = {};
-            queue.forEach(item => {
-              const id = item.id || ('batch-' + Math.random().toString(36).substring(2, 9));
-              rtdbBatch[id] = { ...item, fallbackAt: new Date().toISOString() };
-            });
-            await update(ref(rtdb, 'admin_pending_uploads'), rtdbBatch);
-          } catch (rtdbErr) {
-            console.error('[RTDB Admin Fallback Error]', rtdbErr);
-          }
-
-          // 2. Clear local localStorage queue to avoid double processing (it's now in RTDB)
-          try {
-            localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
-          } catch {}
-
-          break; // STOP THE LOOP IMMEDIATELY!
-        } else {
-          // Other error on this individual item (e.g., malformed payload)
-          failedCount++;
-          queue.shift();
-          try {
-            if (queue.length > 0) {
-              localStorage.setItem(ADMIN_PENDING_UPLOADS_KEY, JSON.stringify(queue));
-            } else {
-              localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
-            }
-          } catch {}
-        }
-      }
-    }
-
-    // Merge successfully uploaded items into local memory/cache
-    if (newItemsForLocal.length > 0) {
-      const mergedRecords = [...currentRecords];
-      newItemsForLocal.forEach(newItem => {
-        const idx = mergedRecords.findIndex(r => r.id === newItem.id);
-        if (idx !== -1) mergedRecords[idx] = newItem;
-        else mergedRecords.push(newItem);
-      });
-      await this.saveAnimeRecords(mergedRecords);
-    }
-
-    if (queue.length === 0) {
-      try {
-        localStorage.removeItem(ADMIN_PENDING_UPLOADS_KEY);
-      } catch {}
-    }
-
-    return { 
-      added: addedCount, 
-      updated: updatedCount, 
-      failed: failedCount, 
-      quotaHit, 
-      remaining: queue.length 
-    };
+  public exportBackup(): void {
+    this.exportDatabaseBackup();
   }
 
-  public getAdminPendingUploads(): any[] {
+  public getAdminPendingUploads(): AnimeRecord[] {
     if (typeof window === 'undefined') return [];
     try {
-      const raw = localStorage.getItem(ADMIN_PENDING_UPLOADS_KEY);
-      return raw ? JSON.parse(raw) : [];
+      const data = localStorage.getItem(ADMIN_PENDING_UPLOADS_KEY);
+      return data ? JSON.parse(data) : [];
     } catch {
       return [];
     }
@@ -952,102 +757,105 @@ class DatabaseService {
     added: number; 
     updated: number; 
     failed: number; 
+    skipped: number;
     quotaHit: boolean; 
     remaining: number 
   }> {
-    const queue = this.getAdminPendingUploads();
-    if (!queue || queue.length === 0) {
-      return { added: 0, updated: 0, failed: 0, quotaHit: false, remaining: 0 };
+    const pending = this.getAdminPendingUploads();
+    if (!pending.length) {
+      return { added: 0, updated: 0, failed: 0, skipped: 0, quotaHit: false, remaining: 0 };
     }
-    return this.bulkImportAnime(queue, true);
+    const res = await this.bulkImportAnime(pending);
+    if (!res.quotaHit && res.remaining === 0) {
+      this.clearAdminPendingUploads();
+    }
+    return res;
   }
 
-  public submitDubInfoLocally(newRecord: AnimeRecord): AnimeRecord {
-    const records = this.getAllAnimeRecords();
-    const existingIndex = records.findIndex((r) => r.id === newRecord.id);
-    if (existingIndex !== -1) {
-      records[existingIndex] = newRecord;
-    } else {
-      records.unshift(newRecord);
+  public async bulkImportAnime(jsonData: any[]): Promise<{ 
+    added: number; 
+    updated: number; 
+    failed: number; 
+    skipped: number;
+    quotaHit: boolean; 
+    remaining: number 
+  }> {
+    if (!Array.isArray(jsonData)) {
+      return { added: 0, updated: 0, failed: 0, skipped: 0, quotaHit: false, remaining: 0 };
     }
-    this.saveAnimeRecords(records);
-    return newRecord;
+
+    const existingTitles = new Set<string>();
+
+    // Check local cache for duplicates (zero read cost)
+    if (this.animeRecords.length > 0) {
+      this.animeRecords.forEach(a => {
+        const title = (a.title || '').trim().toLowerCase();
+        if (title) existingTitles.add(title);
+      });
+    }
+
+    const toInsert: any[] = [];
+    let skipped = 0;
+
+    jsonData.forEach((item, idx) => {
+      const rawTitle = (item.title || item.name || '').trim();
+      const lowerTitle = rawTitle.toLowerCase();
+      if (!rawTitle || existingTitles.has(lowerTitle)) {
+        skipped++;
+        return;
+      }
+      existingTitles.add(lowerTitle);
+
+      const id = item.id || `import_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
+      const normalized = this.normalizeRecord({ ...item, id, status: 'pending', submissionStatus: 'pending' });
+      toInsert.push(cleanSupabaseData(normalized));
+    });
+
+    if (toInsert.length > 0) {
+      try {
+        const { error } = await supabase.from('pending_animes').upsert(toInsert);
+        if (error) console.warn('[BulkImport] Supabase upsert notice:', error.message);
+      } catch (e) {
+        console.warn('[BulkImport] Supabase upsert error:', e);
+      }
+
+      // Merge into local state
+      const records = this.getAllAnimeRecords();
+      toInsert.forEach(item => records.unshift(item));
+      await this.saveAnimeRecords(records);
+    }
+
+    return {
+      added: toInsert.length,
+      updated: 0,
+      failed: 0,
+      skipped,
+      quotaHit: false,
+      remaining: 0,
+    };
   }
 
   public async syncUserPendingSubmissions(): Promise<{ synced: number; remaining: number }> {
-    if (typeof window === 'undefined') return { synced: 0, remaining: 0 };
+    const rawQueue = localStorage.getItem(USER_PENDING_SUBMISSIONS_KEY);
+    if (!rawQueue) return { synced: 0, remaining: 0 };
+
     let queue: AnimeRecord[] = [];
     try {
-      const raw = localStorage.getItem(USER_PENDING_SUBMISSIONS_KEY);
-      if (!raw) return { synced: 0, remaining: 0 };
-      queue = JSON.parse(raw);
-      if (!Array.isArray(queue) || queue.length === 0) return { synced: 0, remaining: 0 };
+      queue = JSON.parse(rawQueue);
     } catch {
       return { synced: 0, remaining: 0 };
     }
 
-    let synced = 0;
-    while (queue.length > 0) {
-      const item = queue[0];
-      try {
-        const docData = {
-          ...item,
-          status: 'pending',
-          submissionStatus: 'pending',
-          createdAt: item.createdAt || new Date().toISOString(),
-          serverCreatedAt: serverTimestamp(),
-        };
+    if (!Array.isArray(queue) || queue.length === 0) return { synced: 0, remaining: 0 };
 
-        const batch = writeBatch(db);
-        batch.set(doc(db, 'submissions', item.id), docData, { merge: true });
-        batch.set(doc(db, 'animes', item.id), docData, { merge: true });
-        batch.set(doc(db, 'activities', `act-${item.id}`), {
-          user: item.submittedBy?.userName || 'Community User',
-          action: 'submitted',
-          animeTitle: item.title,
-          timestamp: serverTimestamp(),
-          language: item.dubs?.[0] || 'Tamil',
-          status: 'pending'
-        });
-
-        await batch.commit();
-
-        // Successful upload! Remove from local queue
-        queue.shift();
-        synced++;
-        if (queue.length > 0) {
-          localStorage.setItem(USER_PENDING_SUBMISSIONS_KEY, JSON.stringify(queue));
-        } else {
-          localStorage.removeItem(USER_PENDING_SUBMISSIONS_KEY);
-        }
-      } catch (err: any) {
-        if (isQuotaError(err)) {
-          // Still resource-exhausted; keep remaining items safely in localStorage and stop
-          try {
-            localStorage.setItem(USER_PENDING_SUBMISSIONS_KEY, JSON.stringify(queue));
-          } catch {}
-          break;
-        } else {
-          // If specific document format error, remove it to prevent indefinite queue blockage
-          queue.shift();
-          try {
-            if (queue.length > 0) {
-              localStorage.setItem(USER_PENDING_SUBMISSIONS_KEY, JSON.stringify(queue));
-            } else {
-              localStorage.removeItem(USER_PENDING_SUBMISSIONS_KEY);
-            }
-          } catch {}
-        }
-      }
+    try {
+      await supabase.from('pending_animes').upsert(queue.map(cleanSupabaseData));
+      localStorage.removeItem(USER_PENDING_SUBMISSIONS_KEY);
+      return { synced: queue.length, remaining: 0 };
+    } catch (err: any) {
+      console.warn('[Supabase Sync User Submissions Notice]:', err);
+      return { synced: 0, remaining: queue.length };
     }
-
-    if (queue.length === 0) {
-      try {
-        localStorage.removeItem(USER_PENDING_SUBMISSIONS_KEY);
-      } catch {}
-    }
-
-    return { synced, remaining: queue.length };
   }
 
   public async upvoteAnime(id: string): Promise<number> {
@@ -1065,85 +873,51 @@ class DatabaseService {
       await this.saveAnimeRecords(records);
     }
 
-    // Update in Firestore
+    // Update in Supabase
     try {
-      setDoc(doc(db, 'animes', id), { likes: newLikes, upvotes: newLikes }, { merge: true }).catch(() => {});
-    } catch (e) {
-      console.warn('Firestore upvote error:', e);
+      await supabase
+        .from('anime_list')
+        .update({ likes: newLikes, upvotes: newLikes })
+        .eq('id', id);
+    } catch (e: any) {
+      console.warn('Supabase upvote notice:', e);
     }
 
-    try {
-      await fetch('/api/submissions', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action: 'upvote' }),
-      });
-    } catch (e) {
-      console.warn('Upvote PUT request error:', e);
-    }
+    fetch('/api/submissions', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action: 'upvote' }),
+    }).catch(() => {});
 
     this.notify();
     return newLikes;
   }
 
-  // --- 5. Server Sync: Optimized to reduce reads ---
   public async syncWithServer(): Promise<void> {
-    // Check if browser is offline or quota limited
-    if (this.isQuotaLimited || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
       return;
     }
 
     try {
-      const firestoreMap = new Map<string, AnimeRecord>();
-      // Optimized: prioritize the main catalog
-      const primaryCollections = ['animes', 'submissions'];
-      
-      // If we are completely empty, we might want to check more legacy names once
-      const current = this.getAllAnimeRecords();
-      const checkLegacy = current.length === 0;
-      const collections = checkLegacy 
-        ? ['animes', 'submissions', 'anime', 'anime_records'] 
-        : primaryCollections;
+      const { data, error } = await supabase
+        .from('anime_list')
+        .select('*')
+        .limit(200);
 
-      for (const collName of collections) {
-        try {
-          const snap = await getDocs(collection(db, collName));
-          snap.forEach((d) => {
-            const data = d.data();
-            const normalized = this.normalizeRecord({ ...data, id: d.id });
-            
-            if (normalized && normalized.id && normalized.title) {
-              if (!firestoreMap.has(normalized.id)) {
-                firestoreMap.set(normalized.id, normalized);
-              }
-            }
-          });
-        } catch (err) {
-          if (this.isQuotaExceededError(err)) {
-            const isQuota = !String(err?.code || '').toLowerCase().includes('unavailable');
-            this.setQuotaExceeded(isQuota);
-            return; 
-          }
-        }
-      }
-
-      if (firestoreMap.size > 0) {
-        const firestoreList = Array.from(firestoreMap.values());
-        await this.saveAnimeRecords(firestoreList);
+      if (data && data.length > 0) {
+        const records = data.map(item => this.normalizeRecord(item));
+        await this.saveAnimeRecords(records);
         if (typeof window !== 'undefined') {
           localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
+          localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
         }
       }
-    } catch (e) {
-      console.warn('[AniDub DB] Sync error:', e);
+    } catch (e: any) {
+      console.warn('[Supabase DB] Sync notice:', e);
     }
   }
 
   public async forceRefresh(): Promise<AnimeRecord[]> {
-    this.isQuotaLimited = false; // Try resetting on force refresh
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(QUOTA_EXCEEDED_KEY);
-    }
     await this.syncWithServer();
     return this.getApprovedAnime();
   }
@@ -1152,7 +926,7 @@ class DatabaseService {
     return this.isQuotaLimited;
   }
 
-  // --- 5. Dub Reviews Management ---
+  // --- 5. Dub Reviews Management with Supabase ---
   public getReviewsForAnime(animeId: string): DubReview[] {
     if (typeof window === 'undefined') return [];
     try {
@@ -1185,17 +959,11 @@ class DatabaseService {
       const all: DubReview[] = raw ? JSON.parse(raw) : [];
       localStorage.setItem(DB_REVIEWS_KEY, JSON.stringify([newReview, ...all]));
       
-      // Sync to Firestore
+      // Sync to Supabase reviews table
       try {
-        await setDoc(doc(db, 'reviews', reviewId), {
-          ...newReview,
-          serverCreatedAt: serverTimestamp(),
-        });
-      } catch (fsErr: any) {
-        console.warn('[Firestore Review Sync Error]', fsErr);
-        if (isQuotaError(fsErr)) {
-          throw fsErr; // Re-throw to let component handle quota hit
-        }
+        await supabase.from('reviews').insert([cleanSupabaseData(newReview)]);
+      } catch (sbErr) {
+        console.warn('[Supabase Review Sync Notice]', sbErr);
       }
       
       this.notify();
@@ -1219,7 +987,7 @@ class DatabaseService {
     }
   }
 
-  // --- 6. User Watchlist Persistence ---
+  // --- 6. User Watchlist Persistence with Supabase ---
   public getUserWatchlist(userId: string): WatchlistEntry[] {
     if (typeof window === 'undefined') return [];
     try {
@@ -1255,12 +1023,11 @@ class DatabaseService {
       localStorage.setItem(DB_WATCHLIST_KEY, JSON.stringify(all));
       this.notify();
 
-      // PWA Background Sync: Intercepted by Service Worker
       fetch('/api/watchlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, animeId, action: isAdded ? 'add' : 'remove' }),
-      }).catch(err => console.warn('Offline sync queued:', err));
+      }).catch(err => console.warn('Watchlist sync notice:', err));
 
       return isAdded;
     } catch {
@@ -1316,21 +1083,21 @@ class DatabaseService {
       const all: AnimeCollection[] = raw ? JSON.parse(raw) : [];
       localStorage.setItem(DB_COLLECTIONS_KEY, JSON.stringify([newCollection, ...all]));
       
-      // Persist to Firestore if public
       if (newCollection.isPublic) {
-        await setDoc(doc(db, 'collections', id), newCollection);
+        try {
+          await supabase.from('collections').insert([cleanSupabaseData(newCollection)]);
+        } catch {}
       }
       
       this.notify();
       return newCollection;
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error creating collection:', e);
       return newCollection;
     }
   }
 
   public async getPublicCollection(id: string): Promise<AnimeCollection | null> {
-    // Try local cache first
     try {
       const raw = localStorage.getItem(DB_COLLECTIONS_KEY);
       const all: AnimeCollection[] = raw ? JSON.parse(raw) : [];
@@ -1338,15 +1105,11 @@ class DatabaseService {
       if (local) return local;
     } catch {}
 
-    // Fallback to Firestore
     try {
-      const { getDoc } = await import('firebase/firestore');
-      const snap = await getDoc(doc(db, 'collections', id));
-      if (snap.exists()) {
-        return snap.data() as AnimeCollection;
-      }
-    } catch (e) {
-      console.error('Error fetching public collection:', e);
+      const { data } = await supabase.from('collections').select('*').eq('id', id).maybeSingle();
+      if (data) return data as AnimeCollection;
+    } catch (e: any) {
+      console.error('Error fetching collection from Supabase:', e);
     }
     return null;
   }
@@ -1360,153 +1123,7 @@ class DatabaseService {
       return [];
     }
   }
-
-  // --- 8. RTDB Cloud Fallback Queue ---
-  public async saveToRtdbFallback(node: string, data: any): Promise<boolean> {
-    try {
-      const id = data.id || ('fallback-' + Date.now().toString(36));
-      await set(ref(rtdb, `${node}/${id}`), {
-        ...data,
-        fallbackAt: new Date().toISOString(),
-      });
-      return true;
-    } catch (e) {
-      console.error(`[RTDB Fallback Error] Failed to save to ${node}:`, e);
-      return false;
-    }
-  }
-
-  public async getPendingRtdbSubmissions(): Promise<any[]> {
-    try {
-      const dbRef = ref(rtdb);
-      const snapshot = await rtdbGet(child(dbRef, 'pending_submissions'));
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        return Object.entries(data).map(([id, val]: [string, any]) => ({
-          ...val,
-          id: val.id || id,
-        }));
-      }
-      return [];
-    } catch (e) {
-      console.error('[RTDB Fetch Error] Could not get pending submissions:', e);
-      return [];
-    }
-  }
-
-  public async syncRtdbToFirestore(): Promise<{ success: number; failed: number }> {
-    const pending = await this.getPendingRtdbSubmissions();
-    if (pending.length === 0) return { success: 0, failed: 0 };
-
-    let successCount = 0;
-    let failedCount = 0;
-    const CHUNK_SIZE = 150; // 150 items * 2 docs = 300 ops (well under 500 limit)
-
-    for (let i = 0; i < pending.length; i += CHUNK_SIZE) {
-      const chunk = pending.slice(i, i + CHUNK_SIZE);
-      const batch = writeBatch(db);
-      const syncedIds: string[] = [];
-
-      for (const item of chunk) {
-        try {
-          const id = item.id;
-          const sanitized = this.normalizeRecord(item);
-          batch.set(doc(db, 'animes', id), sanitized, { merge: true });
-          batch.set(doc(db, 'submissions', id), sanitized, { merge: true });
-          syncedIds.push(id);
-        } catch (err) {
-          console.error(`[RTDB Sync] Failed to prepare item ${item.id}:`, err);
-          failedCount++;
-        }
-      }
-
-      if (syncedIds.length > 0) {
-        try {
-          await batch.commit();
-          // Upon success, delete from RTDB
-          for (const id of syncedIds) {
-            await remove(ref(rtdb, `pending_submissions/${id}`));
-          }
-          successCount += syncedIds.length;
-        } catch (err) {
-          console.error('[RTDB Sync] Firestore batch commit failed:', err);
-          failedCount += chunk.length - (chunk.length - syncedIds.length);
-        }
-      }
-    }
-
-    this.notify();
-    return { success: successCount, failed: failedCount };
-  }
-
-  public async getAdminPendingRtdbUploads(): Promise<any[]> {
-    try {
-      const dbRef = ref(rtdb);
-      const snapshot = await rtdbGet(child(dbRef, 'admin_pending_uploads'));
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        return Object.entries(data).map(([id, val]: [string, any]) => ({
-          ...val,
-          id: val.id || id,
-        }));
-      }
-      return [];
-    } catch (e) {
-      console.error('[RTDB Admin Fetch Error] Could not get admin pending uploads:', e);
-      return [];
-    }
-  }
-
-  public async syncAdminRtdbToFirestore(): Promise<{ success: number; failed: number }> {
-    const pending = await this.getAdminPendingRtdbUploads();
-    if (pending.length === 0) return { success: 0, failed: 0 };
-
-    let successCount = 0;
-    let failedCount = 0;
-    const CHUNK_SIZE = 150; // 150 items * 2 docs = 300 ops
-
-    for (let i = 0; i < pending.length; i += CHUNK_SIZE) {
-      const chunk = pending.slice(i, i + CHUNK_SIZE);
-      const batch = writeBatch(db);
-      const syncedIds: string[] = [];
-
-      for (const item of chunk) {
-        try {
-          const id = item.id;
-          const normalized = this.normalizeRecord({
-            ...item,
-            status: 'pending',
-            submissionStatus: 'pending'
-          });
-          
-          batch.set(doc(db, 'animes', id), normalized, { merge: true });
-          batch.set(doc(db, 'submissions', id), normalized, { merge: true });
-          
-          syncedIds.push(id);
-        } catch (err) {
-          console.error(`[RTDB Admin Sync] Failed item ${item.id}:`, err);
-          failedCount++;
-        }
-      }
-
-      if (syncedIds.length > 0) {
-        try {
-          await batch.commit();
-          // Clear from RTDB upon success
-          for (const id of syncedIds) {
-            await remove(ref(rtdb, `admin_pending_uploads/${id}`));
-          }
-          successCount += syncedIds.length;
-        } catch (err) {
-          console.error('[RTDB Admin Sync] Commit failed:', err);
-          failedCount += chunk.length - (chunk.length - syncedIds.length);
-        }
-      }
-    }
-
-    this.notify();
-    return { success: successCount, failed: failedCount };
-  }
 }
 
 export const dbService = new DatabaseService();
+export default dbService;

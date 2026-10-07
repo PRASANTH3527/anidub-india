@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Send, CheckCircle2, Film, Plus, Loader2 } from 'lucide-react';
 import { DubLanguage } from '../types/anime';
+import { dbService, cleanFirestoreData } from '../services/databaseService';
 
 interface SuggestDubModalProps {
   isOpen: boolean;
@@ -24,54 +25,35 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
 
     setIsSubmitting(true);
     try {
-      const submissionId = 'sub-' + Date.now().toString(36);
-      const submission = {
-        id: submissionId,
+      // STRICT RTDB ROUTING: Route all user suggestions strictly to RTDB pending_animes
+      await dbService.submitDubInfo({
         title: animeName.trim(),
-        dubs: [language],
-        platforms: [{ name: platform, url: sourceLink || '#' }],
-        synopsis: notes.trim() || 'No additional notes provided.',
+        romajiTitle: "",
+        poster: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
+        imageUrl: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
+        type: 'TV Series',
+        releaseYear: 0,
+        originalReleaseDate: "",
+        rating: 0,
+        episodes: 0,
+        seasons: 1,
+        totalSeasons: 1,
         status: 'pending',
-        submissionStatus: 'pending',
-        submittedAt: new Date().toISOString(),
-        isSuggestion: true
-      };
-
-      let isQuotaHit = false;
-      
-      // Try Firestore first
-      try {
-        const { db } = await import('../lib/firebase');
-        const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
-        
-        const sanitized = {
-          ...submission,
-          createdAt: new Date().toISOString(),
-          serverCreatedAt: serverTimestamp()
-        };
-        
-        await setDoc(doc(db, 'submissions', submissionId), sanitized);
-        await setDoc(doc(db, 'activities', `act-${submissionId}`), {
-          user: 'Community Member',
-          action: 'suggested',
-          animeTitle: submission.title,
-          timestamp: new Date(),
-          language: language,
-          status: 'pending'
-        });
-      } catch (fsErr: any) {
-        const { isQuotaError } = await import('../services/databaseService');
-        if (isQuotaError(fsErr)) {
-          isQuotaHit = true;
-        } else {
-          throw fsErr;
-        }
-      }
-
-      if (isQuotaHit) {
-        const { dbService } = await import('../services/databaseService');
-        await dbService.saveToRtdbFallback('pending_submissions', submission);
-      }
+        airingStatus: 'Ongoing',
+        genres: [],
+        themes: ['Community Suggestion'],
+        studio: "",
+        synopsis: notes.trim() || 'No additional notes provided.',
+        characters: [],
+        dubs: [language],
+        dubDetails: [{
+          language,
+          available: true,
+          platform: [platform as any],
+          notes: `Suggested on ${platform} (${sourceLink || 'No link'})`
+        }],
+        platforms: [{ name: platform as any, url: sourceLink || 'https://www.crunchyroll.com', languages: [language] }],
+      } as any);
 
       setSubmitted(true);
       setTimeout(() => {
@@ -81,18 +63,9 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
         setSourceLink('');
         setNotes('');
       }, 2200);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Submission error:', err);
-      // Fallback to local storage if all else fails
-      const list = JSON.parse(localStorage.getItem('anidub_submissions') || '[]');
-      localStorage.setItem('anidub_submissions', JSON.stringify([{
-        animeName,
-        language,
-        platform,
-        sourceLink,
-        notes,
-        date: new Date().toISOString(),
-      }, ...list]));
+      window.alert("Suggestion Error: " + (err?.message || String(err)));
     } finally {
       setIsSubmitting(false);
     }
