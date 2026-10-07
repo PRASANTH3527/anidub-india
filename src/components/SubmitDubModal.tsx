@@ -138,7 +138,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           type: s.type || 'Season',
           label: s.label || '1',
           episodeCount: s.episodeCount || 0,
-          languages: s.languages || (activeAnime.dubs || ['Tamil'])
+          languages: s.languages && s.languages.length > 0 ? s.languages : (activeAnime.dubs || ['Tamil'])
         })));
       } else if (activeAnime.totalSeasons || activeAnime.episodesPerSeason) {
         // Fallback for older records
@@ -146,6 +146,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           type: 'Season', 
           label: '1', 
           episodeCount: activeAnime.episodesPerSeason || 12,
+          languages: activeAnime.dubs || ['Tamil']
+        }]);
+      } else {
+        setSeasonDetails([{ 
+          type: 'Season', 
+          label: '1', 
+          episodeCount: 12,
           languages: activeAnime.dubs || ['Tamil']
         }]);
       }
@@ -172,8 +179,14 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         setStreamingPartners(activeAnime.platforms.map(p => ({
           name: p.name as StreamingPlatform,
           url: p.url,
-          languages: p.languages || activeAnime.dubs || ['Tamil']
+          languages: p.languages && p.languages.length > 0 ? p.languages : (activeAnime.dubs || ['Tamil'])
         })));
+      } else {
+        setStreamingPartners([{
+          name: 'Crunchyroll',
+          url: '',
+          languages: activeAnime.dubs || ['Tamil']
+        }]);
       }
     } else if (isOpen && !activeAnime) {
       // Clear for new submission
@@ -256,7 +269,12 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   };
 
   const addStreamingPartner = () => {
-    setStreamingPartners([...streamingPartners, { name: 'Crunchyroll', url: '', languages: ['Tamil'] }]);
+    const lastPartner = streamingPartners[streamingPartners.length - 1];
+    setStreamingPartners([...streamingPartners, { 
+      name: 'Crunchyroll', 
+      url: '', 
+      languages: lastPartner?.languages || activeAnime?.dubs || ['Tamil'] 
+    }]);
   };
 
   const removeStreamingPartner = (index: number) => {

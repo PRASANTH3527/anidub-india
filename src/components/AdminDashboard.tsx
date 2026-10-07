@@ -731,6 +731,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 const genresRaw = row.genres || row.Genres || row.genre || 'Action';
                 const dubsRaw = row.dubs || row.Dubs || row.languages || row.Languages || 'Tamil';
                 const platformsRaw = row.platforms || row.Platforms || row.platform || row.streamingPartners || 'Crunchyroll';
+                const ratingRaw = row.rating || row.Rating || row.score || row.Score || '';
+                
+                const rating = ratingRaw !== '' && !isNaN(Number(ratingRaw)) ? Number(ratingRaw) : 0;
                 
                 const genres = typeof genresRaw === 'string' 
                   ? genresRaw.split(',').map((s: string) => s.trim()).filter(Boolean) 
@@ -739,6 +742,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 const dubs = typeof dubsRaw === 'string'
                   ? dubsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
                   : (Array.isArray(dubsRaw) ? dubsRaw : ['Tamil']);
+
+                const seasonDetails = [{
+                  type: 'Season' as const,
+                  label: '1',
+                  episodeCount: row.episodes || row.Episodes || 12,
+                  languages: dubs
+                }];
 
                 const platformsList = typeof platformsRaw === 'string'
                   ? platformsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
@@ -767,9 +777,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   poster: row.poster || row.Poster || row.image || '',
                   synopsis: row.synopsis || row.Synopsis || row.description || '',
                   releaseYear: row.releaseYear ? Number(row.releaseYear) : (row.year ? Number(row.year) : new Date().getFullYear()),
+                  rating,
                   genres,
                   dubs,
                   platforms,
+                  seasonDetails,
                   studio: row.studio || row.Studio || '',
                   type: row.type || row.Type || 'TV Series',
                   status: 'pending',
