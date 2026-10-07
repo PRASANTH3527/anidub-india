@@ -84,7 +84,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
               className="bg-[#131926] border border-neutral-800 hover:border-primary-theme/50 rounded-xl p-3.5 flex gap-3.5 cursor-pointer group transition-all"
             >
               <img
-                src={anime.imageUrl || anime.poster}
+                src={anime.imageUrl || anime.poster || undefined}
                 alt={anime.title}
                 loading="lazy"
                 decoding="async"

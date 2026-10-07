@@ -77,7 +77,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
         {/* Header Banner / Backdrop */}
         <div className="relative h-44 sm:h-56 w-full overflow-hidden bg-gradient-to-r from-primary-theme/40 to-neutral-900 shrink-0">
           <img
-            src={anime.poster}
+            src={anime.poster || undefined}
             alt={anime.title}
             className="w-full h-full object-cover blur-md opacity-30 scale-110"
           />
@@ -114,7 +114,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
           {/* Poster and Title Placement */}
           <div className="absolute bottom-4 left-4 sm:left-6 flex items-end gap-4 z-10">
             <img
-              src={anime.poster}
+              src={anime.poster || undefined}
               alt={anime.title}
               className="w-24 sm:w-28 aspect-[3/4.2] object-cover rounded-lg shadow-2xl border-2 border-neutral-700/80 shrink-0"
             />

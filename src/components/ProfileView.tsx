@@ -117,7 +117,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           {/* Avatar */}
           <div className="relative group">
             <img
-              src={globalAvatar}
+              src={globalAvatar || undefined}
               alt={globalNickname}
               className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2 shadow-xl"
               style={{
@@ -323,7 +323,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     className="relative w-20 aspect-[3/4.2] rounded-xl overflow-hidden shrink-0 cursor-pointer shadow-md group-hover:scale-102 transition-transform"
                   >
                     <img
-                      src={anime.poster}
+                      src={anime.poster || undefined}
                       alt={anime.title}
                       className="w-full h-full object-cover"
                     />
@@ -497,7 +497,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <div className="bg-[#131926] border border-neutral-800 rounded-3xl p-5 space-y-4 hover:border-primary-theme/50 transition-colors group cursor-pointer">
                  <div className="aspect-[2/1] bg-neutral-900 rounded-2xl overflow-hidden flex gap-0.5">
                     {combinedList.slice(0, 3).map((l, i) => (
-                      <img key={i} src={l.anime.poster} className="w-1/3 h-full object-cover opacity-60" />
+                      <img key={i} src={l.anime.poster || undefined} className="w-1/3 h-full object-cover opacity-60" />
                     ))}
                     {combinedList.length === 0 && <div className="w-full h-full flex items-center justify-center text-neutral-800 font-black text-2xl italic">EMPTY</div>}
                  </div>
@@ -507,7 +507,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                  </div>
                  <div className="flex items-center justify-between pt-2 border-t border-neutral-800/50">
                     <div className="flex items-center gap-2">
-                       <img src={globalAvatar} className="w-5 h-5 rounded-full border border-primary-theme/30" />
+                       <img src={globalAvatar || undefined} className="w-5 h-5 rounded-full border border-primary-theme/30" />
                        <span className="text-[10px] font-bold text-neutral-400">{globalNickname}</span>
                     </div>
                     <Share2 className="w-3.5 h-3.5 text-neutral-500 group-hover:text-white transition-colors" />

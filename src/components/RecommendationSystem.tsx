@@ -322,7 +322,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     }`}
                   >
                     <img
-                      src={anime.poster}
+                      src={anime.poster || undefined}
                       alt={anime.title}
                       className="w-8 h-10 object-cover rounded shrink-0"
                     />
@@ -451,7 +451,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     className="relative w-28 aspect-[3/4.2] rounded-xl overflow-hidden shrink-0 cursor-pointer shadow-lg"
                   >
                     <img
-                      src={anime.poster}
+                      src={anime.poster || undefined}
                       alt={anime.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />

@@ -842,7 +842,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                         className="p-2.5 flex items-center gap-3 hover:bg-[var(--primary-badge)]/30 cursor-pointer transition-colors"
                       >
                         <img
-                          src={item.images.jpg.image_url}
+                          src={item.images.jpg.image_url || undefined}
                           alt={item.title}
                           className="w-9 h-12 object-cover rounded-lg shrink-0 border border-neutral-700"
                         />
@@ -884,7 +884,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                   {poster && (
                     <div className="relative shrink-0">
                       <img
-                        src={poster}
+                        src={poster || undefined}
                         alt="Preview"
                         className="w-14 h-20 object-cover rounded-xl border border-primary-theme/50 shadow-xl"
                       />

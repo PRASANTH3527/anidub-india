@@ -413,18 +413,28 @@ class DatabaseService {
   }
 
   // --- 4. Moderation Actions (Approve/Reject/Delete) ---
-  public async approveSubmission(id: string, notes?: string, reviewerName: string = 'Admin (prasanth123)'): Promise<boolean> {
+  public async approveSubmission(animeOrId: string | AnimeRecord, notes?: string, reviewerName: string = 'Admin (prasanth123)'): Promise<boolean> {
     if (!authService.isAdmin()) {
-      console.error('[Security Violation] Unauthorized approveSubmission write blocked for id:', id);
+      console.error('[Security Violation] Unauthorized approveSubmission write blocked for id:', typeof animeOrId === 'string' ? animeOrId : animeOrId.id);
       return false;
     }
 
+    const id = typeof animeOrId === 'string' ? animeOrId : animeOrId.id;
     const records = this.getAllAnimeRecords();
-    const targetIndex = records.findIndex((r) => r.id === id);
-    if (targetIndex === -1) return false;
+    let targetIndex = records.findIndex((r) => r.id === id);
+    
+    let anime: AnimeRecord;
+    if (targetIndex === -1) {
+      if (typeof animeOrId === 'string') return false; // Can't approve by ID if not in cache and no record provided
+      anime = { ...animeOrId };
+      records.unshift(anime);
+      targetIndex = 0;
+    } else {
+      anime = records[targetIndex];
+    }
 
     records[targetIndex] = {
-      ...records[targetIndex],
+      ...anime,
       status: 'approved',
       submissionStatus: 'approved',
       reviewedBy: reviewerName,
@@ -435,27 +445,27 @@ class DatabaseService {
     await this.saveAnimeRecords(records);
 
     // --- TELEGRAM NOTIFICATION (Auto-trigger on Approval) ---
-    const anime = records[targetIndex];
+    const approvedAnime = records[targetIndex];
     if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
       const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://anidub.in';
-      const watchUrl = `${siteUrl}/anime/${anime.id}`;
+      const watchUrl = `${siteUrl}/anime/${approvedAnime.id}`;
       
       const caption = [
         `🌟 <b>New Dubbed Anime Live!</b> 🌟`,
         ``,
-        `🎬 <b>Title:</b> ${anime.title}`,
-        `🎙️ <b>Languages:</b> ${anime.dubs.join(' • ')}`,
-        `🏷️ <b>Genres:</b> ${anime.genres.join(', ')}`,
-        `📅 <b>Release Year:</b> ${anime.releaseYear}`,
+        `🎬 <b>Title:</b> ${approvedAnime.title}`,
+        `🎙️ <b>Languages:</b> ${approvedAnime.dubs.join(' • ')}`,
+        `🏷️ <b>Genres:</b> ${approvedAnime.genres.join(', ')}`,
+        `📅 <b>Release Year:</b> ${approvedAnime.releaseYear}`,
         ``,
         `🔗 <b>Watch Now:</b> <a href="${watchUrl}">${watchUrl}</a>`,
         ``,
         `✨ <i>Enjoy high-quality Indian dubs on AniDub India!</i>`
       ].join('\n');
 
-      const endpoint = anime.poster ? 'sendPhoto' : 'sendMessage';
-      const body = anime.poster 
-        ? { chat_id: TELEGRAM_CHAT_ID, photo: anime.poster, caption, parse_mode: 'HTML' }
+      const endpoint = approvedAnime.poster ? 'sendPhoto' : 'sendMessage';
+      const body = approvedAnime.poster 
+        ? { chat_id: TELEGRAM_CHAT_ID, photo: approvedAnime.poster, caption, parse_mode: 'HTML' }
         : { chat_id: TELEGRAM_CHAT_ID, text: caption, parse_mode: 'HTML' };
 
       fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${endpoint}`, {
@@ -490,18 +500,28 @@ class DatabaseService {
     return true;
   }
 
-  public async rejectSubmission(id: string, reason?: string, reviewerName: string = 'Admin (prasanth123)'): Promise<boolean> {
+  public async rejectSubmission(animeOrId: string | AnimeRecord, reason?: string, reviewerName: string = 'Admin (prasanth123)'): Promise<boolean> {
     if (!authService.isAdmin()) {
-      console.error('[Security Violation] Unauthorized rejectSubmission write blocked for id:', id);
+      console.error('[Security Violation] Unauthorized rejectSubmission write blocked for id:', typeof animeOrId === 'string' ? animeOrId : animeOrId.id);
       return false;
     }
 
+    const id = typeof animeOrId === 'string' ? animeOrId : animeOrId.id;
     const records = this.getAllAnimeRecords();
-    const targetIndex = records.findIndex((r) => r.id === id);
-    if (targetIndex === -1) return false;
+    let targetIndex = records.findIndex((r) => r.id === id);
+
+    let anime: AnimeRecord;
+    if (targetIndex === -1) {
+      if (typeof animeOrId === 'string') return false;
+      anime = { ...animeOrId };
+      records.unshift(anime);
+      targetIndex = 0;
+    } else {
+      anime = records[targetIndex];
+    }
 
     records[targetIndex] = {
-      ...records[targetIndex],
+      ...anime,
       status: 'rejected',
       submissionStatus: 'rejected',
       reviewedBy: reviewerName,

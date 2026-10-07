@@ -585,7 +585,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
 
       console.log('Step 3: Calling dbService.approveSubmission...');
-      const success = await dbService.approveSubmission(anime.id, undefined, 'Admin');
+      const success = await dbService.approveSubmission(anime, undefined, 'Admin');
       
       if (success) {
         console.log('Step 4: Firestore success.');
@@ -622,7 +622,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
 
       console.log('Step 3: Calling dbService.rejectSubmission...');
-      const success = await dbService.rejectSubmission(anime.id, undefined, 'Admin');
+      const success = await dbService.rejectSubmission(anime, undefined, 'Admin');
       
       if (success) {
         console.log('Step 4: Firestore success.');
@@ -1458,7 +1458,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {pendingList.map(anime => (
                   <div key={anime.id} className="p-4 rounded-3xl bg-[#131926] border border-amber-500/30 shadow-xl space-y-4 flex flex-col">
                     <div className="flex gap-4">
-                      <img src={anime.poster} className="w-20 h-28 object-cover rounded-2xl bg-neutral-800 shadow-2xl border border-neutral-700/50" alt="" />
+                      <img src={anime.poster || undefined} className="w-20 h-28 object-cover rounded-2xl bg-neutral-800 shadow-2xl border border-neutral-700/50" alt="" />
                       <div className="min-w-0 flex-1 space-y-1">
                         <h3 className="font-black text-lg truncate leading-tight">{anime.title}</h3>
                         <p className="text-[10px] text-neutral-500 font-mono">#{anime.id}</p>
@@ -1514,7 +1514,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {filteredCatalog.map(anime => (
                 <div key={anime.id} className="p-4 rounded-3xl bg-[#131926]/60 border border-neutral-800 hover:bg-[#131926] transition-all group flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4 min-w-0 flex-1">
-                    <img src={anime.poster} className="w-14 h-20 object-cover rounded-xl bg-neutral-800 shadow-lg border border-neutral-700/50" alt="" />
+                    <img src={anime.poster || undefined} className="w-14 h-20 object-cover rounded-xl bg-neutral-800 shadow-lg border border-neutral-700/50" alt="" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${anime.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>{anime.status}</span>
@@ -1550,7 +1550,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {deletedList.map(anime => (
                   <div key={anime.id} className="p-4 rounded-3xl bg-red-950/5 border border-red-900/20 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-4 min-w-0 opacity-60">
-                      <img src={anime.poster} className="w-12 h-16 object-cover rounded-xl grayscale" alt="" />
+                      <img src={anime.poster || undefined} className="w-12 h-16 object-cover rounded-xl grayscale" alt="" />
                       <div className="min-w-0">
                         <h3 className="font-black truncate">{anime.title}</h3>
                         <p className="text-[10px] text-neutral-500">Deleted {formatRelativeTime(anime.updatedAt)}</p>

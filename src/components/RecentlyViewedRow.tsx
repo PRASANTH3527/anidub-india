@@ -132,7 +132,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
               {/* Poster Image Container */}
               <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-900">
                 <img
-                  src={poster}
+                  src={poster || undefined}
                   alt={anime.title}
                   loading="lazy"
                   decoding="async"

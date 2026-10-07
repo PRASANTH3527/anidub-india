@@ -527,7 +527,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     className="bg-[#182032] border border-neutral-800 rounded-2xl p-3 flex gap-3 items-center"
                   >
                     <img
-                      src={char.characterImage}
+                      src={char.characterImage || null}
                       alt={char.characterName}
                       loading="lazy"
                       decoding="async"
@@ -718,7 +718,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <img
-                          src={rev.userAvatar}
+                          src={rev.userAvatar || null}
                           alt={rev.userName}
                           loading="lazy"
                           decoding="async"
