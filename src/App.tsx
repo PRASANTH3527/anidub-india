@@ -436,29 +436,36 @@ function AppContent() {
   const handleToggleWatchlist = useCallback((anime: Anime) => {
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
+    let wasRemoved = false;
     setLocalWatchlistIds((prev) => {
       let updated: string[];
       if (prev.includes(anime.id)) {
         updated = prev.filter((id) => id !== anime.id);
-        toast.info('Removed from Watchlist', `"${anime.title}" was removed.`);
+        wasRemoved = true;
       } else {
         updated = [...prev, anime.id];
-        if (isOffline) {
-          toast.info(
-            'Saved Offline - Will sync when connected',
-            `"${anime.title}" was saved locally. It will automatically sync once your connection is restored.`
-          );
-        } else {
-          toast.success('Saved to Watchlist!', `"${anime.title}" saved to your personal local favorites.`);
-        }
+        wasRemoved = false;
       }
       localStorage.setItem('anidub_local_watchlist', JSON.stringify(updated));
       return updated;
     });
 
+    if (wasRemoved) {
+      toast.info('Removed from Watchlist', `"${anime.title}" was removed.`);
+    } else {
+      if (isOffline) {
+        toast.info(
+          'Saved Offline - Will sync when connected',
+          `"${anime.title}" was saved locally. It will automatically sync once your connection is restored.`
+        );
+      } else {
+        toast.success('Saved to Watchlist!', `"${anime.title}" saved to your personal local favorites.`);
+      }
+    }
+
     const uid = currentUser?.uid || 'guest';
     dbService.toggleWatchlist(uid, anime.id);
-  }, [currentUser]);
+  }, [currentUser, toast]);
 
   // PWA Background Sync event listener
   useEffect(() => {

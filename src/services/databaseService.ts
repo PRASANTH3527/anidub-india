@@ -635,8 +635,9 @@ class DatabaseService {
   public async deleteSubmission(id: string): Promise<boolean> {
     if (!authService.isAdmin()) return false;
 
+    const strId = String(id);
     const records = this.getAllAnimeRecords();
-    const targetIndex = records.findIndex((r) => r.id === id);
+    const targetIndex = records.findIndex((r) => String(r.id) === strId);
     if (targetIndex === -1) return false;
 
     records[targetIndex] = {
@@ -648,9 +649,9 @@ class DatabaseService {
     await this.saveAnimeRecords(records);
 
     try {
-      const { error } = await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).match({ id });
+      const { error } = await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).eq('id', strId);
       if (error) {
-        await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).eq('id', id);
+        await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).match({ id: strId });
       }
     } catch (err) {
       console.error('[Supabase Soft Delete Exception]:', err);
@@ -663,8 +664,9 @@ class DatabaseService {
   public async restoreSubmission(id: string): Promise<boolean> {
     if (!authService.isAdmin()) return false;
 
+    const strId = String(id);
     const records = this.getAllAnimeRecords();
-    const targetIndex = records.findIndex((r) => r.id === id);
+    const targetIndex = records.findIndex((r) => String(r.id) === strId);
     if (targetIndex === -1) return false;
 
     records[targetIndex] = {
@@ -676,9 +678,9 @@ class DatabaseService {
     await this.saveAnimeRecords(records);
 
     try {
-      const { error } = await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).match({ id });
+      const { error } = await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).eq('id', strId);
       if (error) {
-        await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).eq('id', id);
+        await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).match({ id: strId });
       }
     } catch (err) {
       console.error('[Supabase Restore Exception]:', err);
@@ -691,15 +693,21 @@ class DatabaseService {
   public async permanentlyDeleteSubmission(id: string): Promise<boolean> {
     if (!authService.isAdmin()) return false;
 
+    const strId = String(id);
     const records = this.getAllAnimeRecords();
-    const filtered = records.filter((r) => r.id !== id);
+    const filtered = records.filter((r) => String(r.id) !== strId);
     await this.saveAnimeRecords(filtered);
 
     try {
-      await supabase.from('pending_animes').delete().match({ id });
-      await supabase.from('anime_list').delete().match({ id });
+      await supabase.from('pending_animes').delete().eq('id', strId);
+      await supabase.from('anime_list').delete().eq('id', strId);
     } catch (err) {
-      console.error('[Supabase Permanent Delete Exception]:', err);
+      try {
+        await supabase.from('pending_animes').delete().match({ id: strId });
+        await supabase.from('anime_list').delete().match({ id: strId });
+      } catch (innerErr) {
+        console.error('[Supabase Permanent Delete Exception]:', innerErr);
+      }
     }
 
     this.notify();
@@ -709,15 +717,21 @@ class DatabaseService {
   public async permanentlyDeleteLiveAnime(id: string): Promise<boolean> {
     if (!authService.isAdmin()) return false;
 
+    const strId = String(id);
     try {
-      await supabase.from('anime_list').delete().match({ id });
-      await supabase.from('pending_animes').delete().match({ id });
+      await supabase.from('anime_list').delete().eq('id', strId);
+      await supabase.from('pending_animes').delete().eq('id', strId);
     } catch (err) {
-      console.error('[Supabase Live Delete Exception]:', err);
+      try {
+        await supabase.from('anime_list').delete().match({ id: strId });
+        await supabase.from('pending_animes').delete().match({ id: strId });
+      } catch (innerErr) {
+        console.error('[Supabase Live Delete Exception]:', innerErr);
+      }
     }
 
     const records = this.getAllAnimeRecords();
-    const filtered = records.filter((r) => r.id !== id);
+    const filtered = records.filter((r) => String(r.id) !== strId);
     await this.saveAnimeRecords(filtered);
 
     this.notify();

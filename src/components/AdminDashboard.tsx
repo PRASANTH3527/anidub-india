@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import Papa from 'papaparse';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -688,48 +689,126 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleDownloadCsvTemplate = () => {
+    const csvContent = "title,genres,dubs,platforms,releaseYear,synopsis,poster,studio,type\n" +
+      "Attack on Titan,\"Action, Dark Fantasy\",\"Tamil, Hindi\",\"Crunchyroll, Netflix\",2013,\"Post-apocalyptic dark fantasy anime series.\",https://picsum.photos/600/900,WIT Studio,TV Series\n" +
+      "Demon Slayer,\"Action, Supernatural\",\"Tamil, Telugu, Hindi\",\"Crunchyroll, JioCinema\",2019,\"A young boy fights demons to save his sister.\",https://picsum.photos/600/900,ufotable,TV Series";
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'anidub_import_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Template Downloaded', 'anidub_import_template.csv has been downloaded.');
+  };
+
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsImporting(true);
-    toast.info('Processing JSON...', 'Reading uploaded file contents...');
+    toast.info('Processing CSV...', 'Reading uploaded file contents...');
 
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      console.log('Step 1: handleImport - File loaded');
+      console.log('Step 1: handleImport - CSV file loaded');
       try {
         const textContent = ev.target?.result as string;
         if (!textContent) {
           throw new Error('Uploaded file is empty.');
         }
 
-        let json: any;
-        try {
-          json = JSON.parse(textContent);
-        } catch (parseErr: any) {
-          throw new Error('Invalid JSON format: ' + (parseErr.message || 'Could not parse JSON structure.'));
-        }
+        Papa.parse(textContent, {
+          header: true,
+          skipEmptyLines: true,
+          complete: async (results) => {
+            try {
+              const rows = results.data as any[];
+              if (!Array.isArray(rows) || rows.length === 0) {
+                throw new Error('CSV file contains no valid rows or is improperly formatted.');
+              }
 
-        if (!Array.isArray(json)) {
-          throw new Error('JSON file must contain an array of anime objects.');
-        }
+              const formattedItems = rows.map((row, idx) => {
+                const title = (row.title || row.Title || row.name || '').trim();
+                const genresRaw = row.genres || row.Genres || row.genre || 'Action';
+                const dubsRaw = row.dubs || row.Dubs || row.languages || row.Languages || 'Tamil';
+                const platformsRaw = row.platforms || row.Platforms || row.platform || row.streamingPartners || 'Crunchyroll';
+                
+                const genres = typeof genresRaw === 'string' 
+                  ? genresRaw.split(',').map((s: string) => s.trim()).filter(Boolean) 
+                  : (Array.isArray(genresRaw) ? genresRaw : ['Action']);
+                
+                const dubs = typeof dubsRaw === 'string'
+                  ? dubsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
+                  : (Array.isArray(dubsRaw) ? dubsRaw : ['Tamil']);
 
-        console.log(`Step 2: Starting Supabase bulk import for ${json.length} items to pending_animes`);
+                const platformsList = typeof platformsRaw === 'string'
+                  ? platformsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
+                  : (Array.isArray(platformsRaw) ? platformsRaw : ['Crunchyroll']);
 
-        const result = await dbService.bulkImportAnime(json);
-        console.log('Step 3: Supabase bulk import complete:', result);
+                const platforms = platformsList.map((pName: string) => {
+                  const lower = pName.toLowerCase();
+                  let url = 'https://www.crunchyroll.com';
+                  if (lower.includes('netflix')) url = 'https://www.netflix.com';
+                  else if (lower.includes('jiocinema') || lower.includes('jio')) url = 'https://www.jiocinema.com';
+                  else if (lower.includes('prime') || lower.includes('amazon')) url = 'https://www.primevideo.com';
+                  else if (lower.includes('crunchyroll')) url = 'https://www.crunchyroll.com';
+                  else if (lower.includes('disney') || lower.includes('hotstar')) url = 'https://www.hotstar.com';
+                  else if (lower.includes('youtube')) url = 'https://www.youtube.com';
+                  else if (lower.includes('bilibili')) url = 'https://www.bilibili.tv';
+                  return {
+                    name: pName as any,
+                    url,
+                    languages: dubs
+                  };
+                });
 
-        toast.success('Successfully uploaded items into Supabase', `Success: Added ${result.added} new items, Updated ${result.updated} items.`);
-        await fetchRealData(true);
+                return {
+                  id: row.id || row.ID || `csv_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+                  title: title || 'Untitled Anime',
+                  poster: row.poster || row.Poster || row.image || '',
+                  synopsis: row.synopsis || row.Synopsis || row.description || '',
+                  releaseYear: row.releaseYear ? Number(row.releaseYear) : (row.year ? Number(row.year) : new Date().getFullYear()),
+                  genres,
+                  dubs,
+                  platforms,
+                  studio: row.studio || row.Studio || '',
+                  type: row.type || row.Type || 'TV Series',
+                  status: 'pending',
+                  submissionStatus: 'pending',
+                };
+              });
+
+              console.log(`Step 2: Starting Supabase bulk import for ${formattedItems.length} CSV items to pending_animes`);
+
+              const result = await dbService.bulkImportAnime(formattedItems);
+              console.log('Step 3: Supabase bulk import complete:', result);
+
+              toast.success('Successfully uploaded CSV into Supabase', `Success: Added ${result.added} new items, Updated ${result.updated} items.`);
+              await fetchRealData(true);
+            } catch (innerErr: any) {
+              console.error('Step X: CSV parsing/import error:', innerErr);
+              toast.error('Import Failed', innerErr?.message || 'Could not process CSV rows.');
+            } finally {
+              setIsImporting(false);
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            }
+          },
+          error: (err: any) => {
+            console.error('Papa.parse error:', err);
+            toast.error('CSV Parse Error', err.message || 'Failed to parse CSV file.');
+            setIsImporting(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }
+        });
       } catch (err: any) { 
         console.error('Step X: Import fatal error:', err);
         toast.error('Import Failed', err?.message || 'An unexpected error occurred during import.'); 
-      }
-      finally { 
-        console.log('Step Finally: Resetting isImporting state');
-        setIsImporting(false); 
-        if (fileInputRef.current) fileInputRef.current.value = ''; 
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     };
 
@@ -1374,20 +1453,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </h2>
                 <div className="flex items-center gap-2">
                   <button onClick={handleExportBackup} className="p-2.5 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white transition-all border border-neutral-700 cursor-pointer" title="Backup JSON"><Download className="w-4 h-4" /></button>
+                  <button onClick={handleDownloadCsvTemplate} className="px-3 py-2 rounded-xl bg-neutral-800 text-neutral-300 hover:text-white transition-all border border-neutral-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer" title="Download CSV Template">
+                    <Download className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>CSV Template</span>
+                  </button>
                   <button 
                     onClick={() => fileInputRef.current?.click()} 
                     disabled={isImporting}
-                    className="p-2.5 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white transition-all border border-neutral-700 cursor-pointer disabled:opacity-50 flex items-center gap-1.5" 
-                    title="Import JSON"
+                    className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all border border-purple-500/30 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-lg shadow-purple-600/20" 
+                    title="Upload CSV"
                   >
-                    {isImporting ? <Loader2 className="w-4 h-4 animate-spin text-purple-400" /> : <Upload className="w-4 h-4" />}
-                    {isImporting && <span className="text-xs">Importing...</span>}
+                    {isImporting ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Upload className="w-4 h-4" />}
+                    <span>{isImporting ? 'Importing...' : 'Upload CSV'}</span>
                   </button>
                   <button onClick={() => setIsAddModalOpen(true)} className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/20 transition-all flex items-center gap-2 cursor-pointer uppercase tracking-tighter">
                     <Plus className="w-4 h-4" />
                     ADD NEW
                   </button>
-                  <input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden" />
+                  <input type="file" ref={fileInputRef} onChange={handleImport} accept=".csv, .txt, .tsv" className="hidden" />
                 </div>
               </div>
               <div className="relative">
