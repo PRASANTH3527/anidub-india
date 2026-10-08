@@ -513,9 +513,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleTriggerEdit = (anime: AnimeRecord) => {
     setEditingAnime(anime);
-    if (onEditAnime) {
-      try { onEditAnime(anime); } catch {}
-    }
   };
 
   const csvFileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -1064,7 +1061,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 { label: 'Catalog Size', value: catalogTitles.length, unit: 'Titles', icon: Tv, color: 'text-purple-400', bg: 'bg-purple-500/10' },
                 { label: 'Platform Links', value: platformStats.totalLinks, unit: 'Active Links', icon: Link2, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
                 { label: 'Total Saves', value: totalWatchlists, unit: 'Upvotes', icon: Bookmark, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-                { label: 'Pending Review', value: pendingSubmissions, unit: 'Awaiting', icon: Inbox, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+                { label: 'Pending Review', value: (pendingList.length > 0 ? pendingList.length : pendingSubmissions), unit: 'Awaiting', icon: Inbox, color: 'text-amber-400', bg: 'bg-amber-500/10' },
               ].map(stat => (
                 <div key={stat.label} className="p-5 rounded-3xl bg-[#131926] border border-neutral-800 shadow-xl space-y-2">
                   <div className="flex items-center justify-between text-neutral-500">
@@ -1291,7 +1288,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <Inbox className="w-5 h-5 text-amber-500" />
                 <span>Moderation Queue</span>
               </h2>
-              <span className="text-[10px] font-black bg-amber-500/20 text-amber-500 px-3 py-1 rounded-full border border-amber-500/20 uppercase tracking-widest">{pendingSubmissions} Waiting</span>
+              <span className="text-[10px] font-black bg-amber-500/20 text-amber-500 px-3 py-1 rounded-full border border-amber-500/20 uppercase tracking-widest">{(pendingList.length > 0 ? pendingList.length : pendingSubmissions)} Waiting</span>
             </div>
 
             {pendingList.length === 0 ? (
@@ -1533,13 +1530,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onSuccess={(updatedAnime) => {
             const updated = updatedAnime || editingAnime;
             if (updated) {
-              // Map through previous state to update just that specific item while keeping the rest intact
-              setPendingList(prev => prev.map(item => 
-                String(item.id) === String(updated.id) ? { ...item, ...updated } : item
-              ));
-              setCatalogTitles(prev => prev.map(item => 
-                String(item.id) === String(updated.id) ? { ...item, ...updated } : item
-              ));
+              const updatedId = String(updated.id);
+              // Map through previous state to update just that specific item while keeping all other pending items intact
+              setPendingList(prev => {
+                if (!Array.isArray(prev) || prev.length === 0) return [updated];
+                const exists = prev.some(item => String(item.id) === updatedId);
+                if (!exists) return prev;
+                return prev.map(item => 
+                  String(item.id) === updatedId ? { ...item, ...updated } : item
+                );
+              });
+              setCatalogTitles(prev => {
+                if (!Array.isArray(prev) || prev.length === 0) return [updated];
+                const exists = prev.some(item => String(item.id) === updatedId);
+                if (!exists) return prev;
+                return prev.map(item => 
+                  String(item.id) === updatedId ? { ...item, ...updated } : item
+                );
+              });
+              setPendingSubmissions(prev => Math.max(prev, 1));
             }
             setEditingAnime(null);
           }}

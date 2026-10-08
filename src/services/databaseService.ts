@@ -914,43 +914,54 @@ class DatabaseService {
       return false;
     }
 
+    const strId = String(id);
     const records = this.getAllAnimeRecords();
-    const targetIndex = records.findIndex((r) => r.id === id);
-    if (targetIndex === -1) return false;
+    const targetIndex = records.findIndex((r) => String(r.id) === strId);
+    let updatedRecord: AnimeRecord;
 
-    records[targetIndex] = {
-      ...records[targetIndex],
-      ...updatedData,
-      id: id,
-      updatedAt: new Date().toISOString(),
-    };
+    if (targetIndex === -1) {
+      updatedRecord = this.normalizeRecord({
+        ...updatedData,
+        id: strId,
+        updatedAt: new Date().toISOString(),
+      });
+      records.unshift(updatedRecord);
+    } else {
+      records[targetIndex] = {
+        ...records[targetIndex],
+        ...updatedData,
+        id: strId,
+        updatedAt: new Date().toISOString(),
+      };
+      updatedRecord = records[targetIndex];
+    }
 
     await this.saveAnimeRecords(records);
 
-    // Sync update to Supabase animes and anime_list
-    const row = formatAnimeForSupabase(records[targetIndex]);
+    // Sync update to Supabase animes table
+    const row = formatAnimeForSupabase(updatedRecord);
     try {
-      await supabase
+      const { error } = await supabase
         .from('animes')
         .upsert([row], { onConflict: 'id' });
+      if (error) {
+        console.warn('[Supabase updateAnime notice]:', error.message);
+      }
     } catch (e: any) {
       console.warn('Supabase animes update sync notice:', e);
     }
 
-    try {
-      await supabase
-        .from('anime_list')
-        .upsert([row], { onConflict: 'id' });
-    } catch (e: any) {
-      console.warn('Supabase anime_list update sync notice:', e);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(CACHE_TIMESTAMP_KEY);
     }
 
     fetch('/api/submissions', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, action: 'update', data: updatedData }),
+      body: JSON.stringify({ id: strId, action: 'update', data: updatedData }),
     }).catch(() => {});
 
+    this.notify();
     return true;
   }
 

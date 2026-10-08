@@ -14,8 +14,8 @@ import {
   Trash2,
   Star
 } from 'lucide-react';
-import { AnimeRecord } from '../types/database';
-import { DubLanguage, StreamingPlatform, AnimeType, ReleaseDay } from '../types/anime';
+import { AnimeRecord, SubmissionStatus } from '../types/database';
+import { DubLanguage, StreamingPlatform, AnimeType, AnimeStatus, ReleaseDay } from '../types/anime';
 import { dbService, isQuotaError, USER_PENDING_SUBMISSIONS_KEY, cleanFirestoreData, formatAnimeForSupabase } from '../services/databaseService';
 import { syncManager } from '../services/syncManager';
 import { authService } from '../services/authService';
@@ -116,8 +116,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
   // Derived state & Admin security check
   const isAdmin = authService.isAdmin();
-  const isEditMode = isAdmin && (!!editAnime || !!localEditAnime);
-  const activeAnime = isEditMode ? (editAnime || localEditAnime) : (editAnime || localEditAnime);
+  const isEditMode = Boolean(editAnime || localEditAnime);
+  const activeAnime = editAnime || localEditAnime;
 
   // Pre-fill if editing
   useEffect(() => {
@@ -256,16 +256,71 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const rawResult = event.target?.result as string;
+        if (!rawResult) {
+          resolve('');
+          return;
+        }
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 600;
+          const MAX_HEIGHT = 850;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height = Math.round((height * MAX_WIDTH) / width);
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width = Math.round((width * MAX_HEIGHT) / height);
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(rawResult);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.82);
+          resolve(compressed);
+        };
+        img.onerror = () => resolve(rawResult);
+        img.src = rawResult;
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      setPoster(base64String);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedDataUrl = await compressImage(file);
+      if (compressedDataUrl) {
+        setPoster(compressedDataUrl);
+      }
+    } catch {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setPoster(base64String);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const addStreamingPartner = () => {
@@ -483,74 +538,81 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           return;
         }
 
-        // 1. Authenticated Admin Direct write to Supabase animes and anime_list tables
-        try {
-          const formattedRow = formatAnimeForSupabase({
-            ...payload,
-            id: activeAnime.id,
-            status: activeAnime.status || 'approved',
-            submissionStatus: activeAnime.submissionStatus || 'approved',
-          });
+      const isPending = activeAnime.status === 'pending' || 
+                        activeAnime.submissionStatus === 'pending' || 
+                        (activeAnime as any).submission_status === 'pending';
+      const isRejected = activeAnime.status === 'rejected' || 
+                         activeAnime.submissionStatus === 'rejected' || 
+                         (activeAnime as any).submission_status === 'rejected';
 
-          try {
-            await supabase
-              .from('animes')
-              .upsert([formattedRow], { onConflict: 'id' });
-          } catch {}
+      const finalSubmissionStatus: SubmissionStatus = isPending 
+        ? 'pending' 
+        : (isRejected ? 'rejected' : 'approved');
 
-          try {
-            await supabase
-              .from('anime_list')
-              .upsert([formattedRow], { onConflict: 'id' });
-          } catch {}
-        } catch (fsEditErr: any) {
-          console.warn('[Supabase Direct Edit Catch]', fsEditErr);
+      const finalStatus: AnimeStatus = isPending 
+        ? 'pending' 
+        : (isRejected ? 'rejected' : (activeAnime.status || 'approved'));
+
+      // 1. Authenticated Admin Direct write to Supabase animes table
+      const updatedRecord: AnimeRecord = {
+        ...activeAnime,
+        ...payload,
+        id: String(activeAnime.id),
+        status: finalStatus,
+        submissionStatus: finalSubmissionStatus,
+        isDeleted: activeAnime.isDeleted || false,
+        updatedAt: new Date().toISOString(),
+      };
+
+      try {
+        const formattedRow = formatAnimeForSupabase(updatedRecord);
+        const { error: upsertErr } = await supabase
+          .from('animes')
+          .upsert([formattedRow], { onConflict: 'id' });
+        if (upsertErr) {
+          console.warn('[Supabase Direct Edit Warning]:', upsertErr.message);
         }
+      } catch (fsEditErr: any) {
+        console.warn('[Supabase Direct Edit Catch]:', fsEditErr);
+      }
 
-        // 2. Also update local cache via databaseService
-        const success = dbService.updateAnime(activeAnime.id, payload);
-        
-        if (success) {
-          const updatedRecord: AnimeRecord = {
-            ...activeAnime,
-            ...payload,
-            id: activeAnime.id,
-            updatedAt: new Date().toISOString(),
-          };
+      // 2. Also update local cache and databaseService
+      try {
+        await dbService.updateAnime(activeAnime.id, updatedRecord);
+      } catch (dbErr) {
+        console.warn('[DatabaseService updateAnime notice]:', dbErr);
+      }
 
-          // Dispatch Telegram admin notification
-          try {
-            const telegramMessage = `🔔 Anime Updated: ${title.trim()}`;
-            await fetch('/api/telegram', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                message: telegramMessage,
-                text: telegramMessage,
-                title: title.trim(),
-                anime: {
-                  id: activeAnime.id,
-                  title: title.trim(),
-                  poster: poster || defaultCover,
-                  synopsis: synopsis.trim(),
-                  genres: genres.join(', '),
-                  languages: derivedGlobalDubs,
-                  episodes: airingStatus === 'Ongoing' ? (currentlyAiringEpisode || 'Ongoing') : (seasonDetails[0]?.episodeCount || 'Completed'),
-                  score: rating || 'N/A',
-                },
-              }),
-            });
-          } catch (err) {
-            console.warn('Telegram notification error:', err);
-          }
+      // Dispatch Telegram admin notification (non-blocking)
+      try {
+        const telegramMessage = `🔔 Anime Updated: ${title.trim()}`;
+        fetch('/api/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: telegramMessage,
+            text: telegramMessage,
+            title: title.trim(),
+            anime: {
+              id: activeAnime.id,
+              title: title.trim(),
+              poster: poster || defaultCover,
+              synopsis: synopsis.trim(),
+              genres: genres.join(', '),
+              languages: derivedGlobalDubs,
+              episodes: airingStatus === 'Ongoing' ? (currentlyAiringEpisode || 'Ongoing') : (seasonDetails[0]?.episodeCount || 'Completed'),
+              score: rating || 'N/A',
+            },
+          }),
+        }).catch(() => {});
+      } catch (err) {
+        console.warn('Telegram notification error:', err);
+      }
 
-          toast.success('Anime Updated!', `"${title.trim()}" has been successfully updated.`);
-          onClose();
-          onSuccess?.(updatedRecord);
-        } else {
-          toast.error('Update Failed', 'Could not update the record.');
-        }
-        return;
+      toast.success('Anime Updated!', `"${title.trim()}" has been successfully updated.`);
+      onClose();
+      onSuccess?.(updatedRecord);
+      return;
       }
 
       // 1. SUPABASE ROUTING FOR NEW SUBMISSIONS:
@@ -632,9 +694,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       console.error('[Submission error]:', err);
       const isQuota = isQuotaError(err);
       const errorMsg = err?.message || String(err);
-      
-      // Explicitly show error with window.alert as required
-      window.alert("Submission Error: " + errorMsg);
       
       toast.error(
         isQuota ? 'Database limit reached' : 'Submission Failed',
@@ -751,47 +810,56 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 )}
               </div>
 
-              {/* Poster Image File Upload */}
+              {/* Poster Image File Upload or URL */}
               <div>
                 <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                  <span>Anime Poster (Upload File)</span>
+                  <span>Anime Poster (Upload File or Enter URL)</span>
                 </label>
-                <div className="flex gap-3 items-center">
-                  <div 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 h-20 border-2 border-dashed border-neutral-700 hover:border-primary-theme rounded-2xl bg-[#171e2e] flex flex-col items-center justify-center cursor-pointer transition-all group"
-                  >
-                    <Upload className="w-5 h-5 text-neutral-500 group-hover:text-accent-theme mb-1" />
-                    <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider group-hover:text-neutral-200">
-                      {poster ? 'Change Photo' : 'Select Photo'}
-                    </span>
-                    <input 
-                      type="file" 
-                      ref={fileInputRef}
-                      onChange={handleImageUpload}
-                      accept="image/*"
-                      className="hidden" 
-                    />
-                  </div>
-                  {poster && (
-                    <div className="relative shrink-0">
-                      <img
-                        src={poster || undefined}
-                        alt="Preview"
-                        className="w-14 h-20 object-cover rounded-xl border border-primary-theme/50 shadow-xl"
+                <div className="space-y-2">
+                  <div className="flex gap-3 items-center">
+                    <div 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex-1 h-16 border-2 border-dashed border-neutral-700 hover:border-primary-theme rounded-2xl bg-[#171e2e] flex flex-col items-center justify-center cursor-pointer transition-all group"
+                    >
+                      <Upload className="w-4 h-4 text-neutral-500 group-hover:text-accent-theme mb-0.5" />
+                      <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider group-hover:text-neutral-200">
+                        {poster ? 'Change Uploaded Photo' : 'Upload Image File'}
+                      </span>
+                      <input 
+                        type="file" 
+                        ref={fileInputRef}
+                        onChange={handleImageUpload}
+                        accept="image/*"
+                        className="hidden" 
                       />
-                      <button 
-                        type="button"
-                        onClick={() => setPoster('')}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center text-white border border-black shadow-lg hover:bg-purple-500 transition-colors"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
                     </div>
-                  )}
+                    {poster && (
+                      <div className="relative shrink-0">
+                        <img
+                          src={poster || undefined}
+                          alt="Preview"
+                          className="w-12 h-16 object-cover rounded-xl border border-primary-theme/50 shadow-xl"
+                        />
+                        <button 
+                          type="button"
+                          onClick={() => setPoster('')}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center text-white border border-black shadow-lg hover:bg-purple-500 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={poster.startsWith('data:') ? '' : poster}
+                    onChange={(e) => setPoster(e.target.value)}
+                    placeholder="Or paste poster image URL (https://...)"
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2 px-3 text-xs text-white placeholder-neutral-500 outline-none transition-all"
+                  />
                 </div>
                 <p className="text-[9px] text-neutral-500 mt-1 uppercase font-bold tracking-tighter">
-                  Supported: JPG, PNG, WEBP (Max 2MB).
+                  Supported: Direct Image URL or File Upload (JPG, PNG, WEBP).
                 </p>
               </div>
 
@@ -1181,13 +1249,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
             <button
               type="submit"
               form="anime-edit-form"
-              onClick={(e) => {
-                e.stopPropagation();
-                const form = document.getElementById('anime-edit-form') as HTMLFormElement;
-                if (form) {
-                  form.requestSubmit();
-                }
-              }}
               disabled={isSubmitting || !title.trim()}
               className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-purple-600 hover:from-orange-500 hover:via-amber-500 hover:to-purple-500 text-white font-black text-sm flex items-center justify-center gap-3 cursor-pointer shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed group"
             >
