@@ -143,8 +143,11 @@ class DatabaseService {
   public getAllAnimeRecords(): AnimeRecord[] {
     const uniqueMap = new Map<string, AnimeRecord>();
     for (const record of this.animeRecords) {
-      if (record && record.id) {
-        uniqueMap.set(String(record.id), this.normalizeRecord(record));
+      if (record && record.title) {
+        const titleKey = record.title.trim().toLowerCase();
+        if (!uniqueMap.has(titleKey)) {
+          uniqueMap.set(titleKey, this.normalizeRecord(record));
+        }
       }
     }
     return Array.from(uniqueMap.values());
@@ -406,6 +409,17 @@ class DatabaseService {
         .map(row => this.normalizeRecord(row))
         .filter(a => a.status === 'approved' && !a.isDeleted);
 
+      const uniqueItemsMap = new Map<string, AnimeRecord>();
+      for (const item of items) {
+        if (item && item.title) {
+          const tKey = item.title.trim().toLowerCase();
+          if (!uniqueItemsMap.has(tKey)) {
+            uniqueItemsMap.set(tKey, item);
+          }
+        }
+      }
+      items = Array.from(uniqueItemsMap.values());
+
       // Cache live database state into IndexedDB
       if (items.length > 0) {
         const existingMap = new Map(this.animeRecords.map(a => [a.id, a]));
@@ -497,7 +511,7 @@ class DatabaseService {
           (data || [])
             .map(row => this.normalizeRecord(row))
             .filter(a => a.status === 'approved' && !a.isDeleted)
-            .map(item => [String(item.id), item])
+            .map(item => [item.title ? item.title.trim().toLowerCase() : String(item.id), item])
         ).values()
       );
 
@@ -601,8 +615,11 @@ class DatabaseService {
     const approved = all.filter((a) => a.status === 'approved' && !a.isDeleted);
     const uniqueMap = new Map<string, AnimeRecord>();
     for (const item of approved) {
-      if (item && item.id) {
-        uniqueMap.set(String(item.id), item);
+      if (item && item.title) {
+        const titleKey = item.title.trim().toLowerCase();
+        if (!uniqueMap.has(titleKey)) {
+          uniqueMap.set(titleKey, item);
+        }
       }
     }
     return Array.from(uniqueMap.values());
@@ -613,8 +630,11 @@ class DatabaseService {
     const pending = all.filter((a) => a.status === 'pending' && !a.isDeleted);
     const uniqueMap = new Map<string, AnimeRecord>();
     for (const item of pending) {
-      if (item && item.id) {
-        uniqueMap.set(String(item.id), item);
+      if (item && item.title) {
+        const titleKey = item.title.trim().toLowerCase();
+        if (!uniqueMap.has(titleKey)) {
+          uniqueMap.set(titleKey, item);
+        }
       }
     }
     return Array.from(uniqueMap.values());
@@ -625,8 +645,11 @@ class DatabaseService {
     const rejected = all.filter((a) => a.status === 'rejected' && !a.isDeleted);
     const uniqueMap = new Map<string, AnimeRecord>();
     for (const item of rejected) {
-      if (item && item.id) {
-        uniqueMap.set(String(item.id), item);
+      if (item && item.title) {
+        const titleKey = item.title.trim().toLowerCase();
+        if (!uniqueMap.has(titleKey)) {
+          uniqueMap.set(titleKey, item);
+        }
       }
     }
     return Array.from(uniqueMap.values());
