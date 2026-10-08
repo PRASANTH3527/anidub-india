@@ -401,10 +401,10 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
         <div>
           {/* Dub Badges */}
           <div className="flex flex-wrap gap-1 mb-2">
-            {(anime.dubs || []).map((lang) => {
+            {(anime.dubs || []).map((lang, idx) => {
               const style = DUB_BADGE_STYLES[lang] || { bg: 'bg-neutral-700', text: 'text-neutral-100', label: lang.substring(0, 3) };
               return (
-                <span key={lang} className={`${style.bg} ${style.text} text-[7px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm border border-white/5`}>
+                <span key={`${lang}-${idx}`} className={`${style.bg} ${style.text} text-[7px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm border border-white/5`}>
                   {style.label}
                 </span>
               );
@@ -429,8 +429,8 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="flex items-center gap-1 min-w-0">
-            {(anime.platforms || []).slice(0, 2).map((p) => (
-              <span key={p.name} className="text-[9px] font-semibold bg-[#1a2133] text-neutral-400 px-1.5 py-0.5 rounded truncate">
+            {(anime.platforms || []).slice(0, 2).map((p, idx) => (
+              <span key={`${p.name}-${idx}`} className="text-[9px] font-semibold bg-[#1a2133] text-neutral-400 px-1.5 py-0.5 rounded truncate">
                 {p.name.replace('YouTube (', '').replace(')', '')}
               </span>
             ))}

@@ -58,7 +58,9 @@ function useResponsiveColumns(containerRef: React.RefObject<HTMLDivElement | nul
     }
 
     const observer = new ResizeObserver(() => {
-      calculateColumns();
+      window.requestAnimationFrame(() => {
+        calculateColumns();
+      });
     });
 
     observer.observe(containerRef.current);
