@@ -486,9 +486,14 @@ class DatabaseService {
         // Non-blocking
       }
 
-      let items = (data || [])
-        .map(row => this.normalizeRecord(row))
-        .filter(a => a.status === 'approved' && !a.isDeleted);
+      let items = Array.from(
+        new Map(
+          (data || [])
+            .map(row => this.normalizeRecord(row))
+            .filter(a => a.status === 'approved' && !a.isDeleted)
+            .map(item => [String(item.id), item])
+        ).values()
+      );
 
       // Filter by platform in JavaScript to safely handle JSONB objects
       if (selectedPlatform && selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
@@ -587,7 +592,8 @@ class DatabaseService {
 
   public getApprovedAnime(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => a.status === 'approved' && !a.isDeleted);
+    const approved = all.filter((a) => a.status === 'approved' && !a.isDeleted);
+    return Array.from(new Map(approved.map(item => [String(item.id), item])).values());
   }
 
   public getPendingSubmissions(): AnimeRecord[] {

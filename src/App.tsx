@@ -290,42 +290,18 @@ function AppContent() {
           selectedLanguage,
           selectedPlatform,
           null,
-          20
+          200
         );
-        setApprovedAnime(res.items);
-        setLastDocApproved(res.lastDoc);
-        setHasMoreApproved(res.items.length === 20);
+        const uniqueItems = Array.from(new Map(res.items.map(item => [String(item.id), item])).values());
+        setApprovedAnime(uniqueItems);
+        setLastDocApproved(null);
+        setHasMoreApproved(false);
       } finally {
         setIsLoading(false);
       }
     };
     fetchFiltered();
   }, [searchQuery, selectedLanguage, selectedPlatform]);
-
-  const loadMoreApproved = async () => {
-    if (!lastDocApproved || isLoadingMore) return;
-    setIsLoadingMore(true);
-    try {
-      const res = await dbService.searchApprovedAnime(
-        searchQuery,
-        selectedLanguage,
-        selectedPlatform,
-        lastDocApproved,
-        20
-      );
-      setApprovedAnime(prev => {
-        const merged = [...prev];
-        res.items.forEach(item => {
-          if (!merged.some(m => m.id === item.id)) merged.push(item);
-        });
-        return merged;
-      });
-      setLastDocApproved(res.lastDoc);
-      setHasMoreApproved(res.items.length === 20);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  };
 
   // Subscribe to DB & Auth changes
   useEffect(() => {
@@ -941,23 +917,6 @@ function AppContent() {
                             uiLanguage={uiLanguage}
                             isLoading={isLoading}
                           />
-
-                          {hasMoreApproved && lastDocApproved && (
-                            <div className="flex justify-center py-12">
-                              <button
-                                onClick={loadMoreApproved}
-                                disabled={isLoadingMore}
-                                className="px-10 py-4 bg-primary-theme hover:bg-primary-theme/90 text-white rounded-2xl text-sm font-black shadow-xl shadow-primary-theme/25 transition-all flex items-center gap-3 cursor-pointer disabled:opacity-50 active:scale-95 group"
-                              >
-                                {isLoadingMore ? (
-                                  <RefreshCw className="w-5 h-5 animate-spin" />
-                                ) : (
-                                  <ChevronDown className="w-5 h-5 group-hover:translate-y-1 transition-transform" />
-                                )}
-                                <span>Load More Titles</span>
-                              </button>
-                            </div>
-                          )}
                         </>
                       ) : (
                         <div className="text-center py-16 bg-[#131926]/50 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto shadow-xl">
