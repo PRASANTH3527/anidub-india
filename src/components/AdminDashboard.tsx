@@ -1444,8 +1444,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </AnimatePresence>
 
       {/* Modals */}
-      {editingAnime && <SubmitDubModal isOpen={true} editAnime={editingAnime} onClose={() => setEditingAnime(null)} onSuccess={() => { setEditingAnime(null); fetchRealData(); }} />}
-      {isAddModalOpen && <SubmitDubModal isOpen={true} onClose={() => setIsAddModalOpen(false)} onSuccess={() => { setIsAddModalOpen(false); fetchRealData(); }} />}
+      {editingAnime && <SubmitDubModal isOpen={true} editAnime={editingAnime} onClose={() => setEditingAnime(null)} onSuccess={() => { setEditingAnime(null); fetchRealData(true); }} />}
+      {isAddModalOpen && <SubmitDubModal isOpen={true} onClose={() => setIsAddModalOpen(false)} onSuccess={() => { setIsAddModalOpen(false); fetchRealData(true); }} />}
     </div>
   );
 };

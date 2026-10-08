@@ -1190,8 +1190,8 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : isEditMode ? (
                 <div className="relative flex items-center gap-2">
-                  <Plus className="w-5 h-5" />
-                  <span>Update Anime Details</span>
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span>Save Changes</span>
                 </div>
               ) : (
                 <div className="relative flex items-center gap-3">
