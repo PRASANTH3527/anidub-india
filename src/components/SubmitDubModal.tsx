@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { AnimeRecord } from '../types/database';
 import { DubLanguage, StreamingPlatform, AnimeType, ReleaseDay } from '../types/anime';
-import { dbService, isQuotaError, USER_PENDING_SUBMISSIONS_KEY, cleanFirestoreData } from '../services/databaseService';
+import { dbService, isQuotaError, USER_PENDING_SUBMISSIONS_KEY, cleanFirestoreData, formatAnimeForSupabase } from '../services/databaseService';
 import { syncManager } from '../services/syncManager';
 import { authService } from '../services/authService';
 import { useToast } from './Toast';
@@ -483,30 +483,28 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           return;
         }
 
-        // 1. Authenticated Admin Direct write to Supabase anime_list table
+        // 1. Authenticated Admin Direct write to Supabase animes and anime_list tables
         try {
-          const sanitizedEditPayload = cleanFirestoreData({
+          const formattedRow = formatAnimeForSupabase({
             ...payload,
-            updatedAt: new Date().toISOString(),
+            id: activeAnime.id,
+            status: activeAnime.status || 'approved',
+            submissionStatus: activeAnime.submissionStatus || 'approved',
           });
 
-          const { error } = await supabase
-            .from('anime_list')
-            .upsert({ id: activeAnime.id, ...sanitizedEditPayload });
+          try {
+            await supabase
+              .from('animes')
+              .upsert([formattedRow], { onConflict: 'id' });
+          } catch {}
 
-          if (error) {
-            if (error.code === 'PGRST205') {
-              console.info('[Supabase Info] Table anime_list not created yet in Supabase. Using local IndexedDB cache.');
-            } else {
-              console.error('[Supabase Direct Edit Error]', error);
-            }
-          }
+          try {
+            await supabase
+              .from('anime_list')
+              .upsert([formattedRow], { onConflict: 'id' });
+          } catch {}
         } catch (fsEditErr: any) {
-          if (fsEditErr?.code === 'PGRST205' || String(fsEditErr?.message || '').includes('PGRST205')) {
-            console.info('[Supabase Info] Table not created yet.');
-          } else {
-            console.error('[Supabase Direct Edit Catch]', fsEditErr);
-          }
+          console.warn('[Supabase Direct Edit Catch]', fsEditErr);
         }
 
         // 2. Also update local cache via databaseService
@@ -549,10 +547,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       }
 
       // 1. SUPABASE ROUTING FOR NEW SUBMISSIONS:
-      // Inserts directly into Supabase 'animes' table as an approved record for immediate public visibility.
+      // Inserts into Supabase as 'pending' review so admins can review and approve it.
       const newRecord = await dbService.submitDubInfo({
         ...payload,
-        status: 'approved',
+        status: 'pending',
         themes: ['Super Power', 'Indian Dub'],
         characters: [
           {
@@ -579,7 +577,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
       // 2. Dispatch optional Telegram admin notification (non-blocking)
       try {
-        const telegramAlertMsg = `🔔 New Public Anime Added: ${title.trim()}`;
+        const telegramAlertMsg = `🔔 New Submission (Pending Review): ${title.trim()}`;
         await fetch('/api/telegram', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -604,7 +602,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       }
 
       setIsSuccess(true);
-      toast.success('Anime Published!', `"${title.trim()}" has been added to Supabase and is now live for all public users!`);
+      toast.success('Anime Submitted for Review!', `"${title.trim()}" is now in the Pending queue awaiting Admin approval.`);
 
       setTimeout(() => {
         setIsSuccess(false);

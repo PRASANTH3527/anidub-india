@@ -1103,7 +1103,6 @@ function AppContent() {
         onSuccess={async () => {
           const fresh = await dbService.forceRefresh();
           setApprovedAnime(fresh);
-          toast.success('Catalog Updated', 'New anime successfully published and fetched from Supabase!');
         }}
       />
 

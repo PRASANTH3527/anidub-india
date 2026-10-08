@@ -50,6 +50,48 @@ export function cleanSupabaseData(obj: any): any {
 // Export cleanFirestoreData alias for backwards compatibility
 export const cleanFirestoreData = cleanSupabaseData;
 
+// Helper to format AnimeRecord into exact Supabase 'animes' table columns
+export function formatAnimeForSupabase(record: Partial<AnimeRecord>): Record<string, any> {
+  const defaultCover = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
+  const poster = (record.poster || (record as any).imageUrl || (record as any).image || '').trim() || defaultCover;
+  const dubs = Array.isArray(record.dubs) && record.dubs.length > 0 ? record.dubs : ['Tamil'];
+  const platforms = Array.isArray(record.platforms) && record.platforms.length > 0
+    ? record.platforms
+    : [{ name: 'Crunchyroll', url: 'https://www.crunchyroll.com', languages: dubs }];
+
+  const rawStatus = String(record.status || (record as any).submissionStatus || (record as any).submission_status || 'pending').toLowerCase().trim();
+  const modStatus = (rawStatus === 'approved' || rawStatus === 'rejected') ? rawStatus : 'pending';
+
+  const row: Record<string, any> = {
+    id: String(record.id),
+    title: (record.title || 'Untitled').trim(),
+    romaji_title: record.romajiTitle || (record as any).romaji_title || '',
+    poster: poster,
+    banner: (record.banner || '').trim() || poster,
+    studio: record.studio || (record as any).animationStudio || 'Animation Studio',
+    synopsis: record.synopsis || '',
+    type: record.type || 'TV Series',
+    episodes: Number(record.episodes) || 12,
+    release_year: Number(record.releaseYear || (record as any).release_year) || new Date().getFullYear(),
+    rating: Number(record.rating) || 0,
+    genres: Array.isArray(record.genres) && record.genres.length > 0 ? record.genres : ['Action'],
+    themes: Array.isArray(record.themes) ? record.themes : [],
+    dubs: dubs,
+    dub_details: record.dubDetails || (record as any).dub_details || [],
+    platforms: platforms,
+    season_details: record.seasonDetails || (record as any).season_details || [],
+    airing_status: record.airingStatus || (record as any).airing_status || 'Completed',
+    status: modStatus,
+    submission_status: modStatus,
+    submitted_at: record.submittedAt || (record as any).submitted_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    is_deleted: Boolean(record.isDeleted || (record as any).is_deleted),
+    likes: Number(record.likes || (record as any).upvotes || 0),
+    views: Number((record as any).views || 0),
+  };
+  return cleanSupabaseData(row);
+}
+
 // --- TELEGRAM NOTIFICATION CONFIG ---
 const TELEGRAM_BOT_TOKEN = '8648317719:AAHZ7wxQefZT5QdKCpc61epWJ4mGAgJvgdc'; 
 const TELEGRAM_CHAT_ID = '8769442354';
@@ -91,6 +133,8 @@ class DatabaseService {
 
       this.isInitialized = true;
       this.notify();
+      this.syncWithServer();
+      this.syncLocalApprovedToSupabase();
     } catch (e) {
       console.error('Database initialization error:', e);
     }
@@ -172,32 +216,55 @@ class DatabaseService {
       ? data.platforms 
       : (Array.isArray(data.streamingPartners) ? data.streamingPartners : []);
 
+    const defaultCover = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
+    const poster = (data.poster || data.image || data.image_url || data.imageUrl || '').trim() || defaultCover;
+    const banner = (data.banner || data.coverImage || '').trim() || poster;
+
+    const platforms = rawPlatforms.length > 0
+      ? rawPlatforms.map((p: any) => ({
+          name: (p?.name || 'Crunchyroll') as StreamingPlatform,
+          url: p?.url || 'https://www.crunchyroll.com',
+          languages: mapLangs(p?.languages || dubs)
+        }))
+      : [{
+          name: 'Crunchyroll' as StreamingPlatform,
+          url: 'https://www.crunchyroll.com',
+          languages: dubs.length > 0 ? dubs : ['Tamil']
+        }];
+
+    // Strict moderation status check
+    const rawStatus = String(data.submission_status || data.submissionStatus || data.status || '').toLowerCase().trim();
+    let modStatus: 'pending' | 'approved' | 'rejected' = 'approved';
+    if (rawStatus === 'pending') {
+      modStatus = 'pending';
+    } else if (rawStatus === 'rejected') {
+      modStatus = 'rejected';
+    } else {
+      modStatus = 'approved';
+    }
+
     const normalized: AnimeRecord = {
       ...data,
       id: String(data.id),
       title,
       romajiTitle: (data.romajiTitle || data.romaji_title || data.japaneseTitle || '').trim(),
-      poster: data.poster || data.image || data.image_url || '',
-      banner: data.banner || data.coverImage || '',
+      poster,
+      banner,
       studio: data.studio || data.animationStudio || data.animation_studio || 'Animation Studio',
       synopsis: data.synopsis || data.description || '',
       type: data.type || 'TV Series',
       episodes: Number(data.episodes) || 12,
       releaseYear: Number(data.releaseYear || data.release_year) || new Date().getFullYear(),
       rating: data.rating !== undefined && data.rating !== null ? Number(data.rating) : 0,
-      genres: Array.isArray(data.genres) ? data.genres : ['Action'],
+      genres: Array.isArray(data.genres) && data.genres.length > 0 ? data.genres : ['Action'],
       themes: Array.isArray(data.themes) ? data.themes : [],
       dubs: dubs.length > 0 ? dubs : ['Tamil'],
       dubDetails: Array.isArray(data.dubDetails) ? data.dubDetails : (data.dub_details || []),
-      platforms: rawPlatforms.map((p: any) => ({
-        name: (p.name || 'Crunchyroll') as StreamingPlatform,
-        url: p.url || '',
-        languages: mapLangs(p.languages || dubs)
-      })),
+      platforms,
       seasonDetails,
       airingStatus,
-      status: data.status || 'approved',
-      submissionStatus: data.submissionStatus || data.submission_status || (data.status === 'approved' ? 'approved' : 'pending'),
+      status: modStatus,
+      submissionStatus: modStatus,
       submittedAt: data.submittedAt || data.submitted_at || new Date().toISOString(),
       updatedAt: data.updatedAt || data.updated_at || new Date().toISOString(),
       isDeleted: Boolean(data.isDeleted || data.is_deleted),
@@ -223,6 +290,35 @@ class DatabaseService {
     }
   }
 
+  // --- 0. Sync Locally Approved Anime to Supabase ---
+  public async syncLocalApprovedToSupabase(): Promise<void> {
+    try {
+      const approved = this.getApprovedAnime();
+      if (!approved || approved.length === 0) return;
+
+      for (const anime of approved) {
+        const row = formatAnimeForSupabase(anime);
+        row.status = 'approved';
+        row.submission_status = 'approved';
+        row.is_deleted = false;
+        
+        try {
+          await supabase
+            .from('animes')
+            .upsert([row], { onConflict: 'id' });
+        } catch {}
+
+        try {
+          await supabase
+            .from('anime_list')
+            .upsert([row], { onConflict: 'id' });
+        } catch {}
+      }
+    } catch (e) {
+      // Non-blocking sync
+    }
+  }
+
   // --- 1. Paginated Queries with Aggressive 24h Local Caching & Supabase Range Pagination ---
   public async getApprovedAnimePaginated(
     lastDoc: any = null, 
@@ -230,67 +326,98 @@ class DatabaseService {
     forceRefresh = false
   ): Promise<{ items: AnimeRecord[], lastDoc: any, fromCache?: boolean }> {
     try {
-      // 1. AGGRESSIVE CACHING: Check 24-Hour Local Cache
+      // 1. Check Local Cache (Only if fresh and not forceRefresh)
       const cacheTimestamp = typeof window !== 'undefined' ? localStorage.getItem(CACHE_TIMESTAMP_KEY) : null;
       const isCacheFresh = cacheTimestamp && (Date.now() - Number(cacheTimestamp)) < CACHE_TTL_MS;
 
-      // Serve from local IndexedDB cache if fresh or offline
       if (!forceRefresh && isCacheFresh && this.animeRecords.length > 0) {
         const approvedOnly = this.animeRecords
-          .filter(a => (a.status === 'approved' || (a as any).submissionStatus === 'approved') && !a.isDeleted)
+          .filter(a => a.status === 'approved' && !a.isDeleted)
           .sort((a, b) => a.title.localeCompare(b.title));
 
-        let startIndex = 0;
-        if (lastDoc !== null && lastDoc !== undefined) {
-          if (typeof lastDoc === 'number') {
-            startIndex = lastDoc;
-          } else if (typeof lastDoc === 'string') {
-            const idx = approvedOnly.findIndex(a => a.id === lastDoc);
-            startIndex = idx >= 0 ? idx + 1 : 0;
-          } else if (lastDoc?.id) {
-            const idx = approvedOnly.findIndex(a => a.id === lastDoc.id);
-            startIndex = idx >= 0 ? idx + 1 : 0;
+        if (approvedOnly.length > 0) {
+          let startIndex = 0;
+          if (lastDoc !== null && lastDoc !== undefined) {
+            if (typeof lastDoc === 'number') {
+              startIndex = lastDoc;
+            } else if (typeof lastDoc === 'string') {
+              const idx = approvedOnly.findIndex(a => a.id === lastDoc);
+              startIndex = idx >= 0 ? idx + 1 : 0;
+            } else if (lastDoc?.id) {
+              const idx = approvedOnly.findIndex(a => a.id === lastDoc.id);
+              startIndex = idx >= 0 ? idx + 1 : 0;
+            }
           }
-        }
 
-        const items = approvedOnly.slice(startIndex, startIndex + pageSize);
-        const nextCursor = startIndex + items.length < approvedOnly.length ? (startIndex + items.length) : null;
-        return { items, lastDoc: nextCursor, fromCache: true };
+          const items = approvedOnly.slice(startIndex, startIndex + pageSize);
+          const nextCursor = startIndex + items.length < approvedOnly.length ? (startIndex + items.length) : null;
+          return { items, lastDoc: nextCursor, fromCache: true };
+        }
       }
 
-      // 2. STRICT SUPABASE SELECT QUERY with range pagination (querying 'animes' table first)
+      // 2. Query Supabase animes table
       const startIndex = typeof lastDoc === 'number' ? lastDoc : (lastDoc?.id ? this.animeRecords.findIndex(a => a.id === lastDoc.id) + 1 : 0);
       const endIndex = startIndex + pageSize - 1;
 
       let { data, error } = await supabase
         .from('animes')
         .select('*')
-        .eq('is_deleted', false)
+        .or('is_deleted.eq.false,is_deleted.is.null')
+        .or('status.ilike.approved,submission_status.ilike.approved,status.is.null')
         .order('title', { ascending: true })
         .range(startIndex, endIndex);
 
-      if (error || !data || data.length === 0) {
+      // Always check anime_list to merge any additional approved records
+      try {
         const fallbackRes = await supabase
           .from('anime_list')
           .select('*')
-          .eq('is_deleted', false)
-          .order('title', { ascending: true })
-          .range(startIndex, endIndex);
-        data = fallbackRes.data;
-        error = fallbackRes.error;
+          .or('is_deleted.eq.false,is_deleted.is.null')
+          .or('status.ilike.approved,submission_status.ilike.approved,status.is.null')
+          .limit(100);
+
+        if (fallbackRes.data && fallbackRes.data.length > 0) {
+          if (!data || data.length === 0) {
+            data = fallbackRes.data;
+            error = null;
+          } else {
+            const currentIds = new Set(data.map((r: any) => String(r.id)));
+            for (const row of fallbackRes.data) {
+              if (!currentIds.has(String(row.id))) {
+                data.push(row);
+                currentIds.add(String(row.id));
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Non-blocking
       }
 
-      if (error) {
+      if (error && (!data || data.length === 0)) {
         console.warn('[Supabase Service] Notice on select animes:', error.message);
-        // Fallback to local cache
         const approvedOnly = this.getApprovedAnime();
         const items = approvedOnly.slice(startIndex, startIndex + pageSize);
         return { items, lastDoc: null, fromCache: true };
       }
 
-      const items = (data || []).map(row => this.normalizeRecord(row));
+      let items = (data || [])
+        .map(row => this.normalizeRecord(row))
+        .filter(a => a.status === 'approved' && !a.isDeleted);
 
-      // Cache newly fetched items into IndexedDB
+      // Merge with locally approved records
+      const localApproved = this.getApprovedAnime();
+      if (localApproved.length > 0) {
+        const idSet = new Set(items.map(i => i.id));
+        localApproved.forEach(la => {
+          if (!idSet.has(la.id)) {
+            items.push(la);
+            idSet.add(la.id);
+          }
+        });
+      }
+
+      // Cache into IndexedDB
       if (items.length > 0) {
         const existingMap = new Map(this.animeRecords.map(a => [a.id, a]));
         items.forEach(item => existingMap.set(item.id, item));
@@ -304,11 +431,7 @@ class DatabaseService {
       const nextCursor = items.length >= pageSize ? (startIndex + items.length) : null;
       return { items, lastDoc: nextCursor, fromCache: false };
     } catch (err: any) {
-      if (err?.code === 'PGRST205' || String(err?.message || '').includes('PGRST205')) {
-        console.info('[Supabase Info] Tables not created yet. Using IndexedDB local cache.');
-      } else {
-        console.error('[Supabase Service] Error fetching approved anime with pagination:', err);
-      }
+      console.error('[Supabase Service] Error fetching approved anime with pagination:', err);
       const approvedOnly = this.getApprovedAnime();
       const items = approvedOnly.slice(0, pageSize);
       return { items, lastDoc: null, fromCache: true };
@@ -320,16 +443,20 @@ class DatabaseService {
     selectedLang: string = 'All',
     selectedPlatform: string = 'All Platforms',
     lastDoc: any = null,
-    pageSize = 20
+    pageSize = 30
   ): Promise<{ items: AnimeRecord[], lastDoc: any }> {
     try {
       const startIndex = typeof lastDoc === 'number' ? lastDoc : 0;
       const endIndex = startIndex + pageSize - 1;
 
+      // Automatically sync any local approved records to live Supabase animes table
+      this.syncLocalApprovedToSupabase().catch(() => {});
+
       let query = supabase
         .from('animes')
         .select('*')
-        .eq('is_deleted', false);
+        .or('is_deleted.eq.false,is_deleted.is.null')
+        .or('status.ilike.approved,submission_status.ilike.approved,status.is.null');
 
       if (searchQuery && searchQuery.trim() !== '') {
         query = query.ilike('title', `%${searchQuery.trim()}%`);
@@ -339,19 +466,17 @@ class DatabaseService {
         query = query.contains('dubs', [selectedLang]);
       }
 
-      if (selectedPlatform && selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
-        query = query.contains('platforms', [selectedPlatform]);
-      }
-
       let { data, error } = await query
         .order('title', { ascending: true })
         .range(startIndex, endIndex);
 
-      if (error || !data || data.length === 0) {
+      // Also merge any approved titles from anime_list that might not be in animes
+      try {
         let fallbackQuery = supabase
           .from('anime_list')
           .select('*')
-          .eq('is_deleted', false);
+          .or('is_deleted.eq.false,is_deleted.is.null')
+          .or('status.ilike.approved,submission_status.ilike.approved,status.is.null');
 
         if (searchQuery && searchQuery.trim() !== '') {
           fallbackQuery = fallbackQuery.ilike('title', `%${searchQuery.trim()}%`);
@@ -359,40 +484,67 @@ class DatabaseService {
         if (selectedLang && selectedLang !== 'All') {
           fallbackQuery = fallbackQuery.contains('dubs', [selectedLang]);
         }
-        if (selectedPlatform && selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
-          fallbackQuery = fallbackQuery.contains('platforms', [selectedPlatform]);
-        }
 
         const fallbackRes = await fallbackQuery
           .order('title', { ascending: true })
-          .range(startIndex, endIndex);
-        data = fallbackRes.data;
-        error = fallbackRes.error;
+          .limit(100);
+
+        if (fallbackRes.data && fallbackRes.data.length > 0) {
+          if (!data || data.length === 0) {
+            data = fallbackRes.data;
+          } else {
+            const currentIds = new Set(data.map((r: any) => String(r.id)));
+            for (const row of fallbackRes.data) {
+              if (!currentIds.has(String(row.id))) {
+                data.push(row);
+                currentIds.add(String(row.id));
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Non-blocking
       }
 
-      if (error) {
-        console.warn('[Supabase Search] Notice:', error.message);
-        let approvedOnly = this.getApprovedAnime();
-        if (searchQuery && searchQuery.trim() !== '') {
-          const q = searchQuery.toLowerCase().trim();
-          approvedOnly = approvedOnly.filter(a => a.title.toLowerCase().includes(q) || a.romajiTitle?.toLowerCase().includes(q));
-        }
-        if (selectedLang && selectedLang !== 'All') {
-          approvedOnly = approvedOnly.filter(a => a.dubs?.includes(selectedLang as any));
-        }
-        if (selectedPlatform && selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
-          const target = selectedPlatform.toLowerCase();
-          approvedOnly = approvedOnly.filter(a => a.platforms?.some(p => {
-            const pName = typeof p === 'string' ? p : p?.name;
-            return pName?.toLowerCase().includes(target);
-          }));
-        }
-        const items = approvedOnly.slice(startIndex, startIndex + pageSize);
-        const nextCursor = startIndex + items.length < approvedOnly.length ? (startIndex + items.length) : null;
-        return { items, lastDoc: nextCursor };
+      let items = (data || [])
+        .map(row => this.normalizeRecord(row))
+        .filter(a => a.status === 'approved' && !a.isDeleted);
+
+      // Filter by platform in JavaScript to safely handle JSONB objects
+      if (selectedPlatform && selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
+        const target = selectedPlatform.toLowerCase();
+        items = items.filter(a => a.platforms?.some(p => {
+          const pName = typeof p === 'string' ? p : p?.name;
+          return pName && pName.toLowerCase().includes(target);
+        }));
       }
 
-      const items = (data || []).map(row => this.normalizeRecord(row));
+      // Merge with any locally approved records
+      const localApproved = this.getApprovedAnime();
+      if (localApproved.length > 0) {
+        const idSet = new Set(items.map(i => i.id));
+        localApproved.forEach(la => {
+          if (!idSet.has(la.id)) {
+            let match = true;
+            if (searchQuery && searchQuery.trim() !== '') {
+              const q = searchQuery.toLowerCase().trim();
+              if (!la.title.toLowerCase().includes(q) && !la.romajiTitle?.toLowerCase().includes(q)) match = false;
+            }
+            if (selectedLang && selectedLang !== 'All') {
+              if (!la.dubs?.includes(selectedLang as any)) match = false;
+            }
+            if (selectedPlatform && selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
+              const target = selectedPlatform.toLowerCase();
+              if (!la.platforms?.some(p => (typeof p === 'string' ? p : p?.name)?.toLowerCase().includes(target))) match = false;
+            }
+            if (match) {
+              items.push(la);
+              idSet.add(la.id);
+            }
+          }
+        });
+      }
+
       const nextCursor = items.length >= pageSize ? (startIndex + items.length) : null;
       return { items, lastDoc: nextCursor };
     } catch (err) {
@@ -422,46 +574,70 @@ class DatabaseService {
       const startIndex = typeof lastDoc === 'number' ? lastDoc : 0;
       const endIndex = startIndex + pageSize - 1;
 
-      const tableName = status === 'pending' ? 'pending_animes' : 'anime_list';
-      const { data, error } = await supabase
-        .from(tableName)
+      // 1. Query animes table for status = status or submission_status = status (case-insensitive)
+      let { data, error } = await supabase
+        .from('animes')
         .select('*')
+        .or(`status.ilike.${status},submission_status.ilike.${status}`)
         .order('updated_at', { ascending: false })
         .range(startIndex, endIndex);
 
-      if (error) {
-        // Fallback to local records
+      // 2. Also check pending_animes if status is pending
+      if (status === 'pending') {
+        try {
+          const pendingRes = await supabase
+            .from('pending_animes')
+            .select('*')
+            .order('updated_at', { ascending: false })
+            .limit(50);
+          if (pendingRes.data && pendingRes.data.length > 0) {
+            if (!data || data.length === 0) {
+              data = pendingRes.data;
+              error = null;
+            } else {
+              const currentIds = new Set(data.map((r: any) => String(r.id)));
+              for (const row of pendingRes.data) {
+                if (!currentIds.has(String(row.id))) {
+                  data.push(row);
+                  currentIds.add(String(row.id));
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+
+      if (error || !data || data.length === 0) {
         const all = status === 'pending' ? this.getPendingSubmissions() : this.getRejectedSubmissions();
         const items = all.slice(startIndex, startIndex + pageSize);
         return { items, lastDoc: null };
       }
 
-      const items = (data || []).map(row => this.normalizeRecord(row));
+      const items = (data || [])
+        .map(row => this.normalizeRecord(row))
+        .filter(a => a.status === status && !a.isDeleted);
       const nextCursor = items.length >= pageSize ? (startIndex + items.length) : null;
       return { items, lastDoc: nextCursor };
     } catch (err: any) {
-      if (err?.code === 'PGRST205' || String(err?.message || '').includes('PGRST205')) {
-        console.info('[Supabase Info] Tables not created yet.');
-      } else {
-        console.error(`[Supabase Service] Error fetching ${status} submissions:`, err);
-      }
-      return { items: [], lastDoc: null };
+      const all = status === 'pending' ? this.getPendingSubmissions() : this.getRejectedSubmissions();
+      const items = all.slice(0, pageSize);
+      return { items, lastDoc: null };
     }
   }
 
   public getApprovedAnime(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => (a.status === 'approved' || (a as any).submissionStatus === 'approved') && !a.isDeleted);
+    return all.filter((a) => a.status === 'approved' && !a.isDeleted);
   }
 
   public getPendingSubmissions(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => (a.status === 'pending' || (a as any).submissionStatus === 'pending') && !a.isDeleted);
+    return all.filter((a) => a.status === 'pending' && !a.isDeleted);
   }
 
   public getRejectedSubmissions(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => (a.status === 'rejected' || (a as any).submissionStatus === 'rejected') && !a.isDeleted);
+    return all.filter((a) => a.status === 'rejected' && !a.isDeleted);
   }
 
   public getDeletedSubmissions(): AnimeRecord[] {
@@ -502,28 +678,39 @@ class DatabaseService {
     return null;
   }
 
-  // --- 3. User Submission: Saves directly to Supabase animes and anime_list for immediate public visibility ---
+  // --- 3. User Submission: Saves directly to Supabase animes as 'pending' for Admin review ---
   public async submitDubInfo(data: Omit<AnimeRecord, 'id' | 'submissionStatus' | 'submittedAt'>): Promise<AnimeRecord> {
     const id = ('anime-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6));
     const newRecord: AnimeRecord = {
       ...data,
       id,
-      status: 'approved',
-      submissionStatus: 'approved',
+      status: 'pending',
+      submissionStatus: 'pending',
       submittedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
+    const dbRow = formatAnimeForSupabase(newRecord);
+    dbRow.status = 'pending';
+    dbRow.submission_status = 'pending';
+
+    try {
+      const { error } = await supabase
+        .from('animes')
+        .insert([dbRow]);
+      if (error) {
+        console.warn('[Supabase Insert animes Notice]:', error.message);
+      }
+    } catch (err: any) {
+      console.warn('[Supabase Insert animes Exception]:', err);
+    }
+
     try {
       await supabase
-        .from('animes')
-        .insert([cleanSupabaseData(newRecord)]);
-
-      await supabase
-        .from('anime_list')
-        .insert([cleanSupabaseData(newRecord)]);
+        .from('pending_animes')
+        .insert([dbRow]);
     } catch (err: any) {
-      console.warn('[Supabase Public Insert Notice]:', err);
+      // Non-blocking fallback
     }
 
     // Save locally
@@ -550,6 +737,13 @@ class DatabaseService {
 
     if (!anime) {
       try {
+        const { data } = await supabase.from('animes').select('*').eq('id', id).maybeSingle();
+        if (data) anime = this.normalizeRecord(data);
+      } catch {}
+    }
+
+    if (!anime) {
+      try {
         const { data } = await supabase.from('pending_animes').select('*').eq('id', id).maybeSingle();
         if (data) anime = this.normalizeRecord(data);
       } catch {}
@@ -571,25 +765,48 @@ class DatabaseService {
       updatedAt: new Date().toISOString(),
     };
 
-    // 1. Insert/Upsert into Supabase anime_list table
-    try {
-      const { error } = await supabase
-        .from('anime_list')
-        .upsert([cleanSupabaseData(approvedRecord)]);
+    const dbRow = formatAnimeForSupabase(approvedRecord);
+    dbRow.status = 'approved';
+    dbRow.submission_status = 'approved';
+    dbRow.is_deleted = false;
 
-      if (error) {
-        console.warn('[Supabase Approval Upsert Notice]:', error.message);
+    // 1. Update/Upsert into Supabase animes table
+    try {
+      const { error: animesErr } = await supabase
+        .from('animes')
+        .upsert([dbRow], { onConflict: 'id' });
+
+      if (animesErr) {
+        console.warn('[Supabase Approval upsert animes notice]:', animesErr.message);
+        await supabase
+          .from('animes')
+          .update({
+            status: 'approved',
+            submission_status: 'approved',
+            is_deleted: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id);
       }
     } catch (e: any) {
-      console.warn('[Supabase Approval Error]:', e);
+      console.warn('[Supabase animes approval error]:', e);
     }
 
-    // 2. Remove from Supabase pending_animes table
+    // 2. Also upsert into anime_list table for backwards compatibility
+    try {
+      await supabase
+        .from('anime_list')
+        .upsert([dbRow], { onConflict: 'id' });
+    } catch (e: any) {
+      console.warn('[Supabase anime_list approval error]:', e);
+    }
+
+    // 3. Remove from Supabase pending_animes table
     try {
       await supabase.from('pending_animes').delete().eq('id', id);
     } catch {}
 
-    // 3. Update local cache
+    // 4. Update local cache
     const records = this.getAllAnimeRecords();
     const idx = records.findIndex(r => r.id === id);
     if (idx !== -1) {
@@ -675,7 +892,20 @@ class DatabaseService {
 
     await this.saveAnimeRecords(records);
 
-    // Sync rejection to Supabase
+    // Sync rejection to Supabase animes and pending_animes
+    try {
+      await supabase
+        .from('animes')
+        .update({
+          status: 'rejected',
+          submission_status: 'rejected',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+    } catch (e: any) {
+      console.warn('Supabase animes rejection notice:', e);
+    }
+
     try {
       await supabase
         .from('pending_animes')
@@ -720,16 +950,22 @@ class DatabaseService {
 
     await this.saveAnimeRecords(records);
 
-    // Sync update to Supabase
+    // Sync update to Supabase animes and anime_list
+    const row = formatAnimeForSupabase(records[targetIndex]);
+    try {
+      await supabase
+        .from('animes')
+        .upsert([row], { onConflict: 'id' });
+    } catch (e: any) {
+      console.warn('Supabase animes update sync notice:', e);
+    }
+
     try {
       await supabase
         .from('anime_list')
-        .upsert([cleanSupabaseData({
-          ...records[targetIndex],
-          updatedAt: new Date().toISOString(),
-        })]);
+        .upsert([row], { onConflict: 'id' });
     } catch (e: any) {
-      console.warn('Supabase update sync notice:', e);
+      console.warn('Supabase anime_list update sync notice:', e);
     }
 
     fetch('/api/submissions', {
@@ -758,10 +994,8 @@ class DatabaseService {
     await this.saveAnimeRecords(records);
 
     try {
-      const { error } = await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).eq('id', strId);
-      if (error) {
-        await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).match({ id: strId });
-      }
+      await supabase.from('animes').update({ is_deleted: true }).eq('id', strId);
+      await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).eq('id', strId);
     } catch (err) {
       console.error('[Supabase Soft Delete Exception]:', err);
     }
@@ -787,10 +1021,8 @@ class DatabaseService {
     await this.saveAnimeRecords(records);
 
     try {
-      const { error } = await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).eq('id', strId);
-      if (error) {
-        await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).match({ id: strId });
-      }
+      await supabase.from('animes').update({ is_deleted: false }).eq('id', strId);
+      await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).eq('id', strId);
     } catch (err) {
       console.error('[Supabase Restore Exception]:', err);
     }
@@ -808,15 +1040,11 @@ class DatabaseService {
     await this.saveAnimeRecords(filtered);
 
     try {
+      await supabase.from('animes').delete().eq('id', strId);
       await supabase.from('pending_animes').delete().eq('id', strId);
       await supabase.from('anime_list').delete().eq('id', strId);
     } catch (err) {
-      try {
-        await supabase.from('pending_animes').delete().match({ id: strId });
-        await supabase.from('anime_list').delete().match({ id: strId });
-      } catch (innerErr) {
-        console.error('[Supabase Permanent Delete Exception]:', innerErr);
-      }
+      console.error('[Supabase Permanent Delete Exception]:', err);
     }
 
     this.notify();
@@ -828,15 +1056,11 @@ class DatabaseService {
 
     const strId = String(id);
     try {
+      await supabase.from('animes').delete().eq('id', strId);
       await supabase.from('anime_list').delete().eq('id', strId);
       await supabase.from('pending_animes').delete().eq('id', strId);
     } catch (err) {
-      try {
-        await supabase.from('anime_list').delete().match({ id: strId });
-        await supabase.from('pending_animes').delete().match({ id: strId });
-      } catch (innerErr) {
-        console.error('[Supabase Live Delete Exception]:', innerErr);
-      }
+      console.error('[Supabase Live Delete Exception]:', err);
     }
 
     const records = this.getAllAnimeRecords();
@@ -1216,10 +1440,34 @@ class DatabaseService {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('anime_list')
+      // 1. Fetch from live animes table
+      let { data, error } = await supabase
+        .from('animes')
         .select('*')
         .limit(200);
+
+      // 2. Also check anime_list to merge any additional records
+      try {
+        const fallbackRes = await supabase
+          .from('anime_list')
+          .select('*')
+          .limit(200);
+        if (fallbackRes.data && fallbackRes.data.length > 0) {
+          if (!data || data.length === 0) {
+            data = fallbackRes.data;
+          } else {
+            const currentIds = new Set(data.map((r: any) => String(r.id)));
+            for (const row of fallbackRes.data) {
+              if (!currentIds.has(String(row.id))) {
+                data.push(row);
+                currentIds.add(String(row.id));
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Non-blocking
+      }
 
       if (data && data.length > 0) {
         const records = data.map(item => this.normalizeRecord(item));
