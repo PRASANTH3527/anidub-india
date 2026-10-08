@@ -1100,10 +1100,10 @@ function AppContent() {
           setIsSubmitModalOpen(false);
           setAnimeToEdit(null);
         }}
-        onSuccess={() => {
-          dbService.syncWithServer().then(() => {
-            setApprovedAnime(dbService.getApprovedAnime());
-          });
+        onSuccess={async () => {
+          const fresh = await dbService.forceRefresh();
+          setApprovedAnime(fresh);
+          toast.success('Catalog Updated', 'New anime successfully published and fetched from Supabase!');
         }}
       />
 

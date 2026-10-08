@@ -258,19 +258,30 @@ class DatabaseService {
         return { items, lastDoc: nextCursor, fromCache: true };
       }
 
-      // 2. STRICT SUPABASE SELECT QUERY with range pagination
+      // 2. STRICT SUPABASE SELECT QUERY with range pagination (querying 'animes' table first)
       const startIndex = typeof lastDoc === 'number' ? lastDoc : (lastDoc?.id ? this.animeRecords.findIndex(a => a.id === lastDoc.id) + 1 : 0);
       const endIndex = startIndex + pageSize - 1;
 
-      const { data, error } = await supabase
-        .from('anime_list')
+      let { data, error } = await supabase
+        .from('animes')
         .select('*')
         .eq('is_deleted', false)
         .order('title', { ascending: true })
         .range(startIndex, endIndex);
 
+      if (error || !data || data.length === 0) {
+        const fallbackRes = await supabase
+          .from('anime_list')
+          .select('*')
+          .eq('is_deleted', false)
+          .order('title', { ascending: true })
+          .range(startIndex, endIndex);
+        data = fallbackRes.data;
+        error = fallbackRes.error;
+      }
+
       if (error) {
-        console.warn('[Supabase Service] Notice on select anime_list:', error.message);
+        console.warn('[Supabase Service] Notice on select animes:', error.message);
         // Fallback to local cache
         const approvedOnly = this.getApprovedAnime();
         const items = approvedOnly.slice(startIndex, startIndex + pageSize);
@@ -316,7 +327,7 @@ class DatabaseService {
       const endIndex = startIndex + pageSize - 1;
 
       let query = supabase
-        .from('anime_list')
+        .from('animes')
         .select('*')
         .eq('is_deleted', false);
 
@@ -332,9 +343,32 @@ class DatabaseService {
         query = query.contains('platforms', [selectedPlatform]);
       }
 
-      const { data, error } = await query
+      let { data, error } = await query
         .order('title', { ascending: true })
         .range(startIndex, endIndex);
+
+      if (error || !data || data.length === 0) {
+        let fallbackQuery = supabase
+          .from('anime_list')
+          .select('*')
+          .eq('is_deleted', false);
+
+        if (searchQuery && searchQuery.trim() !== '') {
+          fallbackQuery = fallbackQuery.ilike('title', `%${searchQuery.trim()}%`);
+        }
+        if (selectedLang && selectedLang !== 'All') {
+          fallbackQuery = fallbackQuery.contains('dubs', [selectedLang]);
+        }
+        if (selectedPlatform && selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
+          fallbackQuery = fallbackQuery.contains('platforms', [selectedPlatform]);
+        }
+
+        const fallbackRes = await fallbackQuery
+          .order('title', { ascending: true })
+          .range(startIndex, endIndex);
+        data = fallbackRes.data;
+        error = fallbackRes.error;
+      }
 
       if (error) {
         console.warn('[Supabase Search] Notice:', error.message);
@@ -468,28 +502,28 @@ class DatabaseService {
     return null;
   }
 
-  // --- 3. User Submission: Saves to Supabase pending_animes ---
+  // --- 3. User Submission: Saves directly to Supabase animes and anime_list for immediate public visibility ---
   public async submitDubInfo(data: Omit<AnimeRecord, 'id' | 'submissionStatus' | 'submittedAt'>): Promise<AnimeRecord> {
-    const id = ('sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6));
+    const id = ('anime-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6));
     const newRecord: AnimeRecord = {
       ...data,
       id,
-      status: 'pending',
-      submissionStatus: 'pending',
+      status: 'approved',
+      submissionStatus: 'approved',
       submittedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     try {
-      const { error } = await supabase
-        .from('pending_animes')
+      await supabase
+        .from('animes')
         .insert([cleanSupabaseData(newRecord)]);
 
-      if (error) {
-        console.warn('[Supabase Insert pending_animes notice]:', error.message);
-      }
+      await supabase
+        .from('anime_list')
+        .insert([cleanSupabaseData(newRecord)]);
     } catch (err: any) {
-      console.warn('[Supabase Submission Notice]:', err);
+      console.warn('[Supabase Public Insert Notice]:', err);
     }
 
     // Save locally

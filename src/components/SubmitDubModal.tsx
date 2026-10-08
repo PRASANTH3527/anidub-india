@@ -549,10 +549,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       }
 
       // 1. SUPABASE ROUTING FOR NEW SUBMISSIONS:
-      // All submissions MUST be pushed ONLY to Supabase under `pending_animes`.
+      // Inserts directly into Supabase 'animes' table as an approved record for immediate public visibility.
       const newRecord = await dbService.submitDubInfo({
         ...payload,
-        status: 'pending',
+        status: 'approved',
         themes: ['Super Power', 'Indian Dub'],
         characters: [
           {
@@ -579,7 +579,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
       // 2. Dispatch optional Telegram admin notification (non-blocking)
       try {
-        const telegramAlertMsg = `🔔 New Anime Submitted: ${title.trim()}`;
+        const telegramAlertMsg = `🔔 New Public Anime Added: ${title.trim()}`;
         await fetch('/api/telegram', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -604,7 +604,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       }
 
       setIsSuccess(true);
-      toast.success('Anime Submitted Successfully!', `"${title.trim()}" is now pending admin approval in Supabase.`);
+      toast.success('Anime Published!', `"${title.trim()}" has been added to Supabase and is now live for all public users!`);
 
       setTimeout(() => {
         setIsSuccess(false);
