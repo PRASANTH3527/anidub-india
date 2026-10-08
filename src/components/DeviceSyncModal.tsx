@@ -28,10 +28,22 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
   const generateSyncCode = async () => {
     setIsLoading(true);
     try {
-      const favorites = JSON.parse(localStorage.getItem('anidub_local_watchlist') || '[]');
-      const recentlyViewed = JSON.parse(localStorage.getItem('anidub_recently_viewed') || '[]');
-      const upvotes = JSON.parse(localStorage.getItem('anidub_upvoted_anime_ids') || '[]');
-      const profile = JSON.parse(localStorage.getItem('anidub_user_profile') || '{}');
+      let favorites = [];
+      let recentlyViewed = [];
+      let upvotes = [];
+      let profile = {};
+      try {
+        favorites = JSON.parse(localStorage.getItem('anidub_local_watchlist') || '[]');
+      } catch {}
+      try {
+        recentlyViewed = JSON.parse(localStorage.getItem('anidub_recently_viewed') || '[]');
+      } catch {}
+      try {
+        upvotes = JSON.parse(localStorage.getItem('anidub_upvoted_anime_ids') || '[]');
+      } catch {}
+      try {
+        profile = JSON.parse(localStorage.getItem('anidub_user_profile') || '{}');
+      } catch {}
 
       const payload = {
         favorites,

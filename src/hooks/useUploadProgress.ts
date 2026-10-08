@@ -120,7 +120,7 @@ export function useUploadProgress() {
         throw new Error(errMsg);
       }
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       return data;
     } catch (err: any) {
       setProgress(prev => ({ ...prev, status: 'failed', error: err?.message || 'Failed to start upload' }));

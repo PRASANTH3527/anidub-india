@@ -70,8 +70,14 @@ class CloudSyncService {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        return { success: false, error: err.error || 'Backup failed' };
+        let errMessage = 'Backup failed';
+        try {
+          const err = await res.json();
+          errMessage = err.error || errMessage;
+        } catch {
+          errMessage = `Server error (${res.status})`;
+        }
+        return { success: false, error: errMessage };
       }
 
       return { success: true };
@@ -92,13 +98,26 @@ class CloudSyncService {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        return { success: false, error: err.error || 'Restore failed' };
+        let errMessage = 'Restore failed';
+        try {
+          const err = await res.json();
+          errMessage = err.error || errMessage;
+        } catch {
+          errMessage = `Server error (${res.status})`;
+        }
+        return { success: false, error: errMessage };
       }
 
-      const { data } = await res.json();
-      this.applyState(data);
-      return { success: true };
+      try {
+        const json = await res.json();
+        if (json?.data) {
+          this.applyState(json.data);
+          return { success: true };
+        }
+        return { success: false, error: 'No data returned from backup' };
+      } catch {
+        return { success: false, error: 'Malformed cloud backup response' };
+      }
     } catch (err: any) {
       return { success: false, error: err.message };
     }
