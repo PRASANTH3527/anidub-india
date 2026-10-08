@@ -338,10 +338,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setPendingSubmissions(pendingRes.items.length); // Rough count for badge
 
       // 2. Fetch Paginated APPROVED (Catalog)
-      const catalogRes = await dbService.getApprovedAnimePaginated(null, 20);
+      const catalogRes = await dbService.getApprovedAnimePaginated(null, 20, force);
       setCatalogTitles(catalogRes.items);
       setLastDocCatalog(catalogRes.lastDoc);
       setHasMoreCatalog(catalogRes.items.length === 20);
+
+      // 3. Fetch Trash / Deleted list from Supabase
+      try {
+        const deletedRes = await dbService.getDeletedSubmissionsFromDb();
+        setDeletedList(deletedRes);
+      } catch (delErr) {
+        console.warn('[Admin] Deleted fetch notice:', delErr);
+      }
 
       // Aggregates for Metrics (Still need a way to get total count cheaply or just use visible list)
       const totalWatchlistsCount = catalogRes.items.reduce((acc, curr) => acc + (curr.likes || 0), 0);
@@ -543,8 +551,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const filteredCatalog = useMemo(() => {
     return catalogTitles.filter(a => 
-      a.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      a.id.toLowerCase().includes(searchQuery.toLowerCase())
+      !a.isDeleted && 
+      (a as any).is_deleted !== true && 
+      (
+        a.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        a.id.toLowerCase().includes(searchQuery.toLowerCase())
+      )
     );
   }, [catalogTitles, searchQuery]);
 
@@ -647,18 +659,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       console.log('Step 2: Calling dbService.deleteSubmission...');
       await dbService.deleteSubmission(anime.id);
-      console.log('Step 3: Firestore success. Updating local state...');
+      console.log('Step 3: Database operation verified. Updating local state...');
       toast.success('Moved to Trash', `"${anime.title}" can be restored later.`);
       // Immediately update local state for responsive UI
-      setCatalogTitles(prev => prev.filter(a => a.id !== anime.id));
-      setPendingList(prev => prev.filter(p => p.id !== anime.id));
+      setCatalogTitles(prev => prev.filter(a => String(a.id) !== String(anime.id)));
+      setPendingList(prev => prev.filter(p => String(p.id) !== String(anime.id)));
       setPendingSubmissions(prev => Math.max(0, prev - 1));
       const deletedItem = dbService.normalizeRecord({ ...anime, isDeleted: true });
-      setDeletedList(prev => [deletedItem, ...prev]);
-      console.log('Step 4: Local state updated. Skipping immediate refresh.');
+      setDeletedList(prev => [deletedItem, ...prev.filter(a => String(a.id) !== String(anime.id))]);
+      console.log('Step 4: Local state updated.');
     } catch (err: any) {
       console.error('Step 2b: Soft delete error:', err);
-      toast.error('Delete Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
+      const errMsg = err?.message || 'Failed to move anime to trash in Supabase.';
+      toast.error('Delete Failed', isQuotaError(err) ? 'Database limit reached.' : errMsg);
     }
   };
 
@@ -672,16 +685,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       console.log('Step 2: Calling dbService.restoreSubmission...');
       await dbService.restoreSubmission(anime.id);
-      console.log('Step 3: Firestore success. Updating local state...');
+      console.log('Step 3: Database operation verified. Updating local state...');
       toast.success('Restored', `"${anime.title}" is back in catalog.`);
       // Immediately update local state
-      setDeletedList(prev => prev.filter(a => a.id !== anime.id));
+      setDeletedList(prev => prev.filter(a => String(a.id) !== String(anime.id)));
       const restoredItem = dbService.normalizeRecord({ ...anime, isDeleted: false });
-      setCatalogTitles(prev => [restoredItem, ...prev]);
+      setCatalogTitles(prev => [restoredItem, ...prev.filter(a => String(a.id) !== String(anime.id))]);
       console.log('Step 4: Local state updated.');
     } catch (err: any) {
       console.error('Step 2b: Restore error:', err);
-      toast.error('Restore Failed', isQuotaError(err) ? 'Database limit reached.' : 'An error occurred.');
+      const errMsg = err?.message || 'Failed to restore anime in Supabase.';
+      toast.error('Restore Failed', isQuotaError(err) ? 'Database limit reached.' : errMsg);
     } finally {
       setIsRestoring(false);
     }
@@ -694,17 +708,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       console.log('Step 2: Calling dbService.permanentlyDeleteLiveAnime...');
       await dbService.permanentlyDeleteLiveAnime(animeToDelete.id);
-      console.log('Step 3: Firestore success. Updating local state...');
-      toast.success('Deleted Permanently', `"${animeToDelete.title}" has been permanently removed.`);
+      console.log('Step 3: Database operation verified. Updating local state...');
+
+      // ONLY show success toast if operation genuinely succeeded
+      toast.success('Deleted Permanently', `"${animeToDelete.title}" has been removed from the database.`);
+
       // Immediately update local state across all lists
-      setCatalogTitles(prev => prev.filter(a => a.id !== animeToDelete.id));
-      setDeletedList(prev => prev.filter(a => a.id !== animeToDelete.id));
-      setPendingList(prev => prev.filter(p => p.id !== animeToDelete.id));
+      setCatalogTitles(prev => prev.filter(a => String(a.id) !== String(animeToDelete.id)));
+      setDeletedList(prev => prev.filter(a => String(a.id) !== String(animeToDelete.id)));
+      setPendingList(prev => prev.filter(p => String(p.id) !== String(animeToDelete.id)));
       setAnimeToDelete(null);
       console.log('Step 4: Local state updated.');
     } catch (err: any) {
-      console.error('Step 2b: Permanent delete error:', err);
-      toast.error('Failed to Delete', isQuotaError(err) ? 'Database limit reached.' : (err?.message || 'An error occurred.'));
+      console.error('Step 2b: Permanent delete error caught:', err);
+      // Catch Supabase error (like RLS or foreign key constraints) and show ACTUAL error message in toast
+      const errorMsg = err?.message || 'Database deletion failed in Supabase.';
+      toast.error('Failed to Delete', isQuotaError(err) ? 'Database limit reached.' : errorMsg);
     } finally {
       setIsDeleting(false);
     }

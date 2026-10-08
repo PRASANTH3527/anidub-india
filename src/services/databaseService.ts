@@ -267,7 +267,7 @@ class DatabaseService {
       submissionStatus: modStatus,
       submittedAt: data.submittedAt || data.submitted_at || new Date().toISOString(),
       updatedAt: data.updatedAt || data.updated_at || new Date().toISOString(),
-      isDeleted: Boolean(data.isDeleted || data.is_deleted),
+      isDeleted: data.is_deleted === true || data.is_deleted === 'true' || data.isDeleted === true || data.isDeleted === 'true',
       likes: Number(data.likes || data.upvotes || 0),
       upvotes: Number(data.upvotes || data.likes || 0),
     };
@@ -297,6 +297,7 @@ class DatabaseService {
       if (!approved || approved.length === 0) return;
 
       for (const anime of approved) {
+        if (anime.isDeleted || (anime as any).is_deleted === true) continue;
         const row = formatAnimeForSupabase(anime);
         row.status = 'approved';
         row.submission_status = 'approved';
@@ -305,12 +306,6 @@ class DatabaseService {
         try {
           await supabase
             .from('animes')
-            .upsert([row], { onConflict: 'id' });
-        } catch {}
-
-        try {
-          await supabase
-            .from('anime_list')
             .upsert([row], { onConflict: 'id' });
         } catch {}
       }
@@ -405,23 +400,11 @@ class DatabaseService {
         .map(row => this.normalizeRecord(row))
         .filter(a => a.status === 'approved' && !a.isDeleted);
 
-      // Merge with locally approved records
-      const localApproved = this.getApprovedAnime();
-      if (localApproved.length > 0) {
-        const idSet = new Set(items.map(i => i.id));
-        localApproved.forEach(la => {
-          if (!idSet.has(la.id)) {
-            items.push(la);
-            idSet.add(la.id);
-          }
-        });
-      }
-
-      // Cache into IndexedDB
+      // Cache live database state into IndexedDB
       if (items.length > 0) {
         const existingMap = new Map(this.animeRecords.map(a => [a.id, a]));
         items.forEach(item => existingMap.set(item.id, item));
-        this.animeRecords = Array.from(existingMap.values());
+        this.animeRecords = Array.from(existingMap.values()).filter(a => !a.isDeleted);
         await idbSet(DB_ANIME_KEY, this.animeRecords);
         if (typeof window !== 'undefined') {
           localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
@@ -448,9 +431,6 @@ class DatabaseService {
     try {
       const startIndex = typeof lastDoc === 'number' ? lastDoc : 0;
       const endIndex = startIndex + pageSize - 1;
-
-      // Automatically sync any local approved records to live Supabase animes table
-      this.syncLocalApprovedToSupabase().catch(() => {});
 
       let query = supabase
         .from('animes')
@@ -519,32 +499,6 @@ class DatabaseService {
         }));
       }
 
-      // Merge with any locally approved records
-      const localApproved = this.getApprovedAnime();
-      if (localApproved.length > 0) {
-        const idSet = new Set(items.map(i => i.id));
-        localApproved.forEach(la => {
-          if (!idSet.has(la.id)) {
-            let match = true;
-            if (searchQuery && searchQuery.trim() !== '') {
-              const q = searchQuery.toLowerCase().trim();
-              if (!la.title.toLowerCase().includes(q) && !la.romajiTitle?.toLowerCase().includes(q)) match = false;
-            }
-            if (selectedLang && selectedLang !== 'All') {
-              if (!la.dubs?.includes(selectedLang as any)) match = false;
-            }
-            if (selectedPlatform && selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
-              const target = selectedPlatform.toLowerCase();
-              if (!la.platforms?.some(p => (typeof p === 'string' ? p : p?.name)?.toLowerCase().includes(target))) match = false;
-            }
-            if (match) {
-              items.push(la);
-              idSet.add(la.id);
-            }
-          }
-        });
-      }
-
       const nextCursor = items.length >= pageSize ? (startIndex + items.length) : null;
       return { items, lastDoc: nextCursor };
     } catch (err) {
@@ -579,6 +533,7 @@ class DatabaseService {
         .from('animes')
         .select('*')
         .or(`status.ilike.${status},submission_status.ilike.${status}`)
+        .or('is_deleted.eq.false,is_deleted.is.null')
         .order('updated_at', { ascending: false })
         .range(startIndex, endIndex);
 
@@ -643,6 +598,23 @@ class DatabaseService {
   public getDeletedSubmissions(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
     return all.filter((a) => a.isDeleted === true);
+  }
+
+  public async getDeletedSubmissionsFromDb(): Promise<AnimeRecord[]> {
+    try {
+      const { data, error } = await supabase
+        .from('animes')
+        .select('*')
+        .eq('is_deleted', true)
+        .order('updated_at', { ascending: false });
+
+      if (data && data.length > 0) {
+        return data.map(r => this.normalizeRecord(r));
+      }
+      return this.getDeletedSubmissions();
+    } catch {
+      return this.getDeletedSubmissions();
+    }
   }
 
   public getAnimeById(id: string): AnimeRecord | null {
@@ -978,26 +950,53 @@ class DatabaseService {
   }
 
   public async deleteSubmission(id: string): Promise<boolean> {
-    if (!authService.isAdmin()) return false;
+    if (!authService.isAdmin()) {
+      throw new Error('Unauthorized: Admin privileges required to soft-delete anime.');
+    }
 
     const strId = String(id);
-    const records = this.getAllAnimeRecords();
-    const targetIndex = records.findIndex((r) => String(r.id) === strId);
-    if (targetIndex === -1) return false;
+    let updateSuccess = false;
+    let lastError: any = null;
 
-    records[targetIndex] = {
-      ...records[targetIndex],
-      isDeleted: true,
-      updatedAt: new Date().toISOString(),
-    };
+    let { data, error } = await supabase
+      .from('animes')
+      .update({ is_deleted: true, updated_at: new Date().toISOString() })
+      .eq('id', strId)
+      .select('id, is_deleted');
 
-    await this.saveAnimeRecords(records);
+    if (!error && data && data.length > 0) {
+      updateSuccess = true;
+    } else {
+      lastError = error;
+      if (!isNaN(Number(strId))) {
+        const numRes = await supabase
+          .from('animes')
+          .update({ is_deleted: true, updated_at: new Date().toISOString() })
+          .eq('id', Number(strId))
+          .select('id, is_deleted');
+        if (!numRes.error && numRes.data && numRes.data.length > 0) {
+          updateSuccess = true;
+          error = null;
+          lastError = null;
+        } else if (numRes.error) {
+          lastError = numRes.error;
+        }
+      }
+    }
 
-    try {
-      await supabase.from('animes').update({ is_deleted: true }).eq('id', strId);
-      await supabase.from('anime_list').update({ is_deleted: true, isDeleted: true }).eq('id', strId);
-    } catch (err) {
-      console.error('[Supabase Soft Delete Exception]:', err);
+    if (!updateSuccess) {
+      const errMsg = lastError?.message || lastError?.details || 'Record not found in Supabase or soft-delete blocked by database permissions.';
+      console.error('[Supabase Soft Delete Error]:', errMsg, lastError);
+      throw new Error(errMsg);
+    }
+
+    // Update local cache
+    this.animeRecords = this.animeRecords.map((r) =>
+      String(r.id) === strId ? { ...r, isDeleted: true, updatedAt: new Date().toISOString() } : r
+    );
+    await idbSet(DB_ANIME_KEY, this.animeRecords);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(CACHE_TIMESTAMP_KEY);
     }
 
     this.notify();
@@ -1005,26 +1004,52 @@ class DatabaseService {
   }
 
   public async restoreSubmission(id: string): Promise<boolean> {
-    if (!authService.isAdmin()) return false;
+    if (!authService.isAdmin()) {
+      throw new Error('Unauthorized: Admin privileges required to restore anime.');
+    }
 
     const strId = String(id);
-    const records = this.getAllAnimeRecords();
-    const targetIndex = records.findIndex((r) => String(r.id) === strId);
-    if (targetIndex === -1) return false;
+    let updateSuccess = false;
+    let lastError: any = null;
 
-    records[targetIndex] = {
-      ...records[targetIndex],
-      isDeleted: false,
-      updatedAt: new Date().toISOString(),
-    };
+    let { data, error } = await supabase
+      .from('animes')
+      .update({ is_deleted: false, updated_at: new Date().toISOString() })
+      .eq('id', strId)
+      .select('id, is_deleted');
 
-    await this.saveAnimeRecords(records);
+    if (!error && data && data.length > 0) {
+      updateSuccess = true;
+    } else {
+      lastError = error;
+      if (!isNaN(Number(strId))) {
+        const numRes = await supabase
+          .from('animes')
+          .update({ is_deleted: false, updated_at: new Date().toISOString() })
+          .eq('id', Number(strId))
+          .select('id, is_deleted');
+        if (!numRes.error && numRes.data && numRes.data.length > 0) {
+          updateSuccess = true;
+          error = null;
+          lastError = null;
+        } else if (numRes.error) {
+          lastError = numRes.error;
+        }
+      }
+    }
 
-    try {
-      await supabase.from('animes').update({ is_deleted: false }).eq('id', strId);
-      await supabase.from('anime_list').update({ is_deleted: false, isDeleted: false }).eq('id', strId);
-    } catch (err) {
-      console.error('[Supabase Restore Exception]:', err);
+    if (!updateSuccess) {
+      const errMsg = lastError?.message || lastError?.details || 'Record not found in Supabase or restore blocked by database permissions.';
+      console.error('[Supabase Restore Error]:', errMsg, lastError);
+      throw new Error(errMsg);
+    }
+
+    this.animeRecords = this.animeRecords.map((r) =>
+      String(r.id) === strId ? { ...r, isDeleted: false, updatedAt: new Date().toISOString() } : r
+    );
+    await idbSet(DB_ANIME_KEY, this.animeRecords);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(CACHE_TIMESTAMP_KEY);
     }
 
     this.notify();
@@ -1032,40 +1057,109 @@ class DatabaseService {
   }
 
   public async permanentlyDeleteSubmission(id: string): Promise<boolean> {
-    if (!authService.isAdmin()) return false;
-
-    const strId = String(id);
-    const records = this.getAllAnimeRecords();
-    const filtered = records.filter((r) => String(r.id) !== strId);
-    await this.saveAnimeRecords(filtered);
-
-    try {
-      await supabase.from('animes').delete().eq('id', strId);
-      await supabase.from('pending_animes').delete().eq('id', strId);
-      await supabase.from('anime_list').delete().eq('id', strId);
-    } catch (err) {
-      console.error('[Supabase Permanent Delete Exception]:', err);
-    }
-
-    this.notify();
-    return true;
+    return this.permanentlyDeleteLiveAnime(id);
   }
 
   public async permanentlyDeleteLiveAnime(id: string): Promise<boolean> {
-    if (!authService.isAdmin()) return false;
-
-    const strId = String(id);
-    try {
-      await supabase.from('animes').delete().eq('id', strId);
-      await supabase.from('anime_list').delete().eq('id', strId);
-      await supabase.from('pending_animes').delete().eq('id', strId);
-    } catch (err) {
-      console.error('[Supabase Live Delete Exception]:', err);
+    if (!authService.isAdmin()) {
+      throw new Error('Unauthorized: Admin privileges required to delete anime.');
     }
 
-    const records = this.getAllAnimeRecords();
-    const filtered = records.filter((r) => String(r.id) !== strId);
-    await this.saveAnimeRecords(filtered);
+    const strId = String(id);
+    let supabaseSuccess = false;
+    let lastError: any = null;
+
+    // Optional cleanup of child relations (non-blocking if tables do not exist)
+    try {
+      await supabase.from('dub_reviews').delete().eq('anime_id', strId);
+    } catch {}
+    try {
+      await supabase.from('reviews').delete().eq('anime_id', strId);
+    } catch {}
+    try {
+      await supabase.from('watchlists').delete().eq('anime_id', strId);
+    } catch {}
+
+    // 1. Attempt Hard Delete with .select('id') to verify rows actually deleted
+    let { data: hardData, error: hardErr } = await supabase
+      .from('animes')
+      .delete()
+      .eq('id', strId)
+      .select('id');
+
+    // If string ID didn't match and ID is numeric, also try numeric ID
+    if (!hardErr && (!hardData || hardData.length === 0) && !isNaN(Number(strId))) {
+      const numHard = await supabase
+        .from('animes')
+        .delete()
+        .eq('id', Number(strId))
+        .select('id');
+      if (!numHard.error && numHard.data && numHard.data.length > 0) {
+        hardData = numHard.data;
+        hardErr = null;
+      }
+    }
+
+    if (!hardErr && hardData && hardData.length > 0) {
+      // Hard delete genuinely succeeded and removed the row!
+      supabaseSuccess = true;
+    } else {
+      // Hard delete was either blocked by RLS (0 rows returned or error) or foreign key constraint
+      lastError = hardErr;
+      console.warn('[Supabase Hard Delete Notice]:', hardErr?.message || '0 rows deleted with hard delete, attempting soft delete fallback...');
+
+      // 2. Fallback to Soft Delete: set is_deleted = true in Supabase 'animes'
+      let { data: softData, error: softErr } = await supabase
+        .from('animes')
+        .update({
+          is_deleted: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', strId)
+        .select('id, is_deleted');
+
+      if (!softErr && (!softData || softData.length === 0) && !isNaN(Number(strId))) {
+        const numSoft = await supabase
+          .from('animes')
+          .update({
+            is_deleted: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', Number(strId))
+          .select('id, is_deleted');
+        if (!numSoft.error && numSoft.data && numSoft.data.length > 0) {
+          softData = numSoft.data;
+          softErr = null;
+        } else if (numSoft.error) {
+          softErr = numSoft.error;
+        }
+      }
+
+      if (!softErr && softData && softData.length > 0) {
+        supabaseSuccess = true;
+        lastError = null;
+      } else {
+        lastError = softErr || hardErr;
+      }
+    }
+
+    // 3. Strictly verify success: if Supabase rejected both hard and soft delete, throw the exact error
+    if (!supabaseSuccess) {
+      const errMsg =
+        lastError?.message ||
+        lastError?.details ||
+        lastError?.hint ||
+        'Database deletion failed in Supabase. Check table permissions (RLS) or foreign key constraints.';
+      console.error('[Supabase Delete Fatal Error]:', errMsg, lastError);
+      throw new Error(errMsg);
+    }
+
+    // 4. Update local cache ONLY AFTER Supabase genuinely succeeds
+    this.animeRecords = this.animeRecords.filter((r) => String(r.id) !== strId);
+    await idbSet(DB_ANIME_KEY, this.animeRecords);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(CACHE_TIMESTAMP_KEY);
+    }
 
     this.notify();
     return true;
