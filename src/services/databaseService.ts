@@ -141,7 +141,13 @@ class DatabaseService {
   }
 
   public getAllAnimeRecords(): AnimeRecord[] {
-    return this.animeRecords;
+    const uniqueMap = new Map<string, AnimeRecord>();
+    for (const record of this.animeRecords) {
+      if (record && record.id) {
+        uniqueMap.set(String(record.id), this.normalizeRecord(record));
+      }
+    }
+    return Array.from(uniqueMap.values());
   }
 
   public subscribe(listener: () => void): () => void {
@@ -593,17 +599,37 @@ class DatabaseService {
   public getApprovedAnime(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
     const approved = all.filter((a) => a.status === 'approved' && !a.isDeleted);
-    return Array.from(new Map(approved.map(item => [String(item.id), item])).values());
+    const uniqueMap = new Map<string, AnimeRecord>();
+    for (const item of approved) {
+      if (item && item.id) {
+        uniqueMap.set(String(item.id), item);
+      }
+    }
+    return Array.from(uniqueMap.values());
   }
 
   public getPendingSubmissions(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => a.status === 'pending' && !a.isDeleted);
+    const pending = all.filter((a) => a.status === 'pending' && !a.isDeleted);
+    const uniqueMap = new Map<string, AnimeRecord>();
+    for (const item of pending) {
+      if (item && item.id) {
+        uniqueMap.set(String(item.id), item);
+      }
+    }
+    return Array.from(uniqueMap.values());
   }
 
   public getRejectedSubmissions(): AnimeRecord[] {
     const all = this.getAllAnimeRecords();
-    return all.filter((a) => a.status === 'rejected' && !a.isDeleted);
+    const rejected = all.filter((a) => a.status === 'rejected' && !a.isDeleted);
+    const uniqueMap = new Map<string, AnimeRecord>();
+    for (const item of rejected) {
+      if (item && item.id) {
+        uniqueMap.set(String(item.id), item);
+      }
+    }
+    return Array.from(uniqueMap.values());
   }
 
   public getDeletedSubmissions(): AnimeRecord[] {
