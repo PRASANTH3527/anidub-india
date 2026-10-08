@@ -512,8 +512,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleTriggerEdit = (anime: AnimeRecord) => {
-    if (onEditAnime) onEditAnime(anime);
-    else setEditingAnime(anime);
+    setEditingAnime(anime);
+    if (onEditAnime) {
+      try { onEditAnime(anime); } catch {}
+    }
   };
 
   const csvFileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -1523,7 +1525,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </AnimatePresence>
 
       {/* Modals */}
-      {editingAnime && <SubmitDubModal isOpen={true} editAnime={editingAnime} onClose={() => setEditingAnime(null)} onSuccess={() => { setEditingAnime(null); fetchRealData(true); }} />}
+      {editingAnime && (
+        <SubmitDubModal
+          isOpen={true}
+          editAnime={editingAnime}
+          onClose={() => setEditingAnime(null)}
+          onSuccess={(updatedAnime) => {
+            const updated = updatedAnime || editingAnime;
+            if (updated) {
+              // Map through previous state to update just that specific item while keeping the rest intact
+              setPendingList(prev => prev.map(item => 
+                String(item.id) === String(updated.id) ? { ...item, ...updated } : item
+              ));
+              setCatalogTitles(prev => prev.map(item => 
+                String(item.id) === String(updated.id) ? { ...item, ...updated } : item
+              ));
+            }
+            setEditingAnime(null);
+          }}
+        />
+      )}
       {isAddModalOpen && <SubmitDubModal isOpen={true} onClose={() => setIsAddModalOpen(false)} onSuccess={() => { setIsAddModalOpen(false); fetchRealData(true); }} />}
     </div>
   );

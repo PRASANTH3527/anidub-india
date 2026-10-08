@@ -25,7 +25,7 @@ import { supabase } from '../lib/supabase';
 interface SubmitDubModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (updatedAnime?: AnimeRecord) => void;
   editAnime?: AnimeRecord | null;
 }
 
@@ -511,6 +511,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         const success = dbService.updateAnime(activeAnime.id, payload);
         
         if (success) {
+          const updatedRecord: AnimeRecord = {
+            ...activeAnime,
+            ...payload,
+            id: activeAnime.id,
+            updatedAt: new Date().toISOString(),
+          };
+
           // Dispatch Telegram admin notification
           try {
             const telegramMessage = `🔔 Anime Updated: ${title.trim()}`;
@@ -539,7 +546,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
           toast.success('Anime Updated!', `"${title.trim()}" has been successfully updated.`);
           onClose();
-          onSuccess?.();
+          onSuccess?.(updatedRecord);
         } else {
           toast.error('Update Failed', 'Could not update the record.');
         }

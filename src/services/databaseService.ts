@@ -562,16 +562,21 @@ class DatabaseService {
         } catch {}
       }
 
-      if (error || !data || data.length === 0) {
-        const all = status === 'pending' ? this.getPendingSubmissions() : this.getRejectedSubmissions();
-        const items = all.slice(startIndex, startIndex + pageSize);
-        return { items, lastDoc: null };
-      }
-
-      const items = (data || [])
+      const localSubmissions = status === 'pending' ? this.getPendingSubmissions() : this.getRejectedSubmissions();
+      const dbItems = (data || [])
         .map(row => this.normalizeRecord(row))
         .filter(a => a.status === status && !a.isDeleted);
-      const nextCursor = items.length >= pageSize ? (startIndex + items.length) : null;
+
+      // Merge database items and local submissions, deduplicated by ID
+      const mergedMap = new Map<string, AnimeRecord>();
+      // First populate with local submissions so all pending items are preserved
+      localSubmissions.forEach(item => mergedMap.set(String(item.id), item));
+      // Then overlay/update with fresh database items
+      dbItems.forEach(item => mergedMap.set(String(item.id), item));
+
+      const mergedList = Array.from(mergedMap.values()).filter(a => a.status === status && !a.isDeleted);
+      const items = mergedList.slice(startIndex, startIndex + pageSize);
+      const nextCursor = (startIndex + items.length < mergedList.length) ? (startIndex + items.length) : null;
       return { items, lastDoc: nextCursor };
     } catch (err: any) {
       const all = status === 'pending' ? this.getPendingSubmissions() : this.getRejectedSubmissions();
@@ -1565,7 +1570,9 @@ class DatabaseService {
 
       if (data && data.length > 0) {
         const records = data.map(item => this.normalizeRecord(item));
-        await this.saveAnimeRecords(records);
+        const mergedMap = new Map(this.animeRecords.map(a => [String(a.id), a]));
+        records.forEach(item => mergedMap.set(String(item.id), item));
+        await this.saveAnimeRecords(Array.from(mergedMap.values()));
         if (typeof window !== 'undefined') {
           localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
           localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());

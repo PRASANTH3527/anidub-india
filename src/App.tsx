@@ -1100,9 +1100,14 @@ function AppContent() {
           setIsSubmitModalOpen(false);
           setAnimeToEdit(null);
         }}
-        onSuccess={async () => {
-          const fresh = await dbService.forceRefresh();
-          setApprovedAnime(fresh);
+        onSuccess={async (updatedAnime) => {
+          if (updatedAnime) {
+            setApprovedAnime(prev => prev.map(a => String(a.id) === String(updatedAnime.id) ? { ...a, ...updatedAnime } : a));
+            setAllAnimeRecords(prev => prev.map(a => String(a.id) === String(updatedAnime.id) ? { ...a, ...updatedAnime } : a));
+          } else {
+            const fresh = await dbService.forceRefresh();
+            setApprovedAnime(fresh);
+          }
         }}
       />
 
