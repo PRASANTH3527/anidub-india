@@ -508,9 +508,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     else setEditingAnime(anime);
   };
 
+  const csvFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
   const handleExportBackup = () => {
     dbService.exportBackup();
     toast.success('Backup Ready', 'Anime data has been downloaded as JSON.');
+  };
+
+  const handleExportCsv = () => {
+    dbService.exportCsvCatalog();
+    toast.success('CSV Exported', 'Anime catalog downloaded as CSV.');
+  };
+
+  const handleDownloadCsvTemplate = () => {
+    dbService.downloadCsvTemplate();
+    toast.success('Template Downloaded', 'CSV import template ready.');
+  };
+
+  const handleCsvFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsImporting(true);
+    try {
+      const res = await dbService.importCsvFile(file);
+      toast.success('CSV Import Complete', `Added: ${res.added}, Updated: ${res.updated}, Failed: ${res.failed}`);
+      fetchRealData(true);
+    } catch (err: any) {
+      toast.error('CSV Import Failed', err?.message || 'Could not parse CSV file.');
+    } finally {
+      setIsImporting(false);
+      if (csvFileInputRef.current) csvFileInputRef.current.value = '';
+    }
   };
 
   const filteredCatalog = useMemo(() => {
@@ -1306,7 +1334,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Database className="w-5 h-5 text-purple-400" />
                   <span>Anime Catalog</span>
                 </h2>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    ref={csvFileInputRef}
+                    onChange={handleCsvFileUpload}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => csvFileInputRef.current?.click()}
+                    disabled={isImporting}
+                    className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold transition-all border border-neutral-700 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Import CSV"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Import CSV</span>
+                  </button>
+                  <button
+                    onClick={handleExportCsv}
+                    className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold transition-all border border-neutral-700 flex items-center gap-1.5 cursor-pointer"
+                    title="Export CSV"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export CSV</span>
+                  </button>
+                  <button
+                    onClick={handleDownloadCsvTemplate}
+                    className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold transition-all border border-neutral-700 flex items-center gap-1.5 cursor-pointer"
+                    title="Download CSV Template"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Template</span>
+                  </button>
                   <button onClick={handleExportBackup} className="p-2.5 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white transition-all border border-neutral-700 cursor-pointer" title="Backup JSON"><Download className="w-4 h-4" /></button>
                   <button onClick={() => setIsAddModalOpen(true)} className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/20 transition-all flex items-center gap-2 cursor-pointer uppercase tracking-tighter">
                     <Plus className="w-4 h-4" />

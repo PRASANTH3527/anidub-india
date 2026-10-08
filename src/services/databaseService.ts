@@ -772,6 +772,147 @@ class DatabaseService {
     this.exportDatabaseBackup();
   }
 
+  public exportCsvCatalog(): void {
+    const records = this.getAllAnimeRecords();
+    const headers = ['id', 'title', 'rating', 'dubs', 'genres', 'episodes', 'releaseYear', 'synopsis', 'poster'];
+    const rows = records.map(r => {
+      const dubsStr = Array.isArray(r.dubs) ? r.dubs.join(', ') : (r.dubs || '');
+      const genresStr = Array.isArray(r.genres) ? r.genres.join(', ') : (r.genres || '');
+      const row = [
+        r.id || '',
+        r.title || '',
+        r.rating ?? 0,
+        dubsStr,
+        genresStr,
+        r.episodes ?? 12,
+        r.releaseYear ?? 2024,
+        r.synopsis || '',
+        r.poster || ''
+      ];
+      return row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `anidub_catalog_export_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  public downloadCsvTemplate(): void {
+    const headers = ['title', 'rating', 'dubs', 'genres', 'episodes', 'releaseYear', 'synopsis', 'poster'];
+    const sampleRows = [
+      ['Attack on Titan', '9.0', 'Hindi, Tamil, Telugu, English', 'Action, Drama, Fantasy', '25', '2013', 'After his hometown is destroyed and his mother is killed, young Eren Jaeger vows to cleanse the earth of the giant humanoid Titans.', 'https://picsum.photos/seed/aot/600/900'],
+      ['Demon Slayer', '8.7', 'Hindi, Tamil, Malayalam', 'Action, Supernatural, Shonen', '26', '2019', 'A family is attacked by demons and only two members survive - Tanjiro and his sister Nezuko, who is turning into a demon.', 'https://picsum.photos/seed/demonslayer/600/900']
+    ];
+    const rows = [headers.join(','), ...sampleRows.map(r => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))];
+    const csvContent = rows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `anidub_anime_import_template.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  public parseCsvText(csvText: string): any[] {
+    const lines: string[][] = [];
+    let currentRow: string[] = [];
+    let currentField = '';
+    let insideQuotes = false;
+
+    for (let i = 0; i < csvText.length; i++) {
+      const char = csvText[i];
+      const nextChar = csvText[i + 1];
+
+      if (char === '"') {
+        if (insideQuotes && nextChar === '"') {
+          currentField += '"';
+          i++;
+        } else {
+          insideQuotes = !insideQuotes;
+        }
+      } else if (char === ',' && !insideQuotes) {
+        currentRow.push(currentField.trim());
+        currentField = '';
+      } else if ((char === '\r' || char === '\n') && !insideQuotes) {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+        currentRow.push(currentField.trim());
+        if (currentRow.some(f => f.length > 0)) {
+          lines.push(currentRow);
+        }
+        currentRow = [];
+        currentField = '';
+      } else {
+        currentField += char;
+      }
+    }
+    if (currentField || currentRow.length > 0) {
+      currentRow.push(currentField.trim());
+      if (currentRow.some(f => f.length > 0)) {
+        lines.push(currentRow);
+      }
+    }
+
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    const results: any[] = [];
+
+    for (let r = 1; r < lines.length; r++) {
+      const row = lines[r];
+      const item: Record<string, any> = {};
+      for (let c = 0; c < headers.length; c++) {
+        const header = headers[c];
+        const val = row[c] || '';
+
+        if (['title', 'name', 'animetitle'].includes(header)) {
+          item.title = val;
+        } else if (['rating', 'score', 'globalrating', 'starrating'].includes(header)) {
+          item.rating = parseFloat(val) || 0;
+        } else if (['dubs', 'languages', 'dubbedin', 'audio'].includes(header)) {
+          item.dubs = val ? val.split(',').map((s: string) => s.trim()).filter(Boolean) : ['Hindi'];
+        } else if (['genres', 'genre', 'categories'].includes(header)) {
+          item.genres = val ? val.split(',').map((s: string) => s.trim()).filter(Boolean) : ['Action'];
+        } else if (['episodes', 'totalepisodes', 'eps'].includes(header)) {
+          item.episodes = parseInt(val, 10) || 12;
+        } else if (['releaseyear', 'year', 'season'].includes(header)) {
+          item.releaseYear = parseInt(val, 10) || 2024;
+        } else if (['description', 'synopsis', 'summary', 'overview'].includes(header)) {
+          item.synopsis = val;
+        } else if (['poster', 'posterurl', 'image', 'img', 'banner'].includes(header)) {
+          item.poster = val;
+        } else {
+          item[headers[c]] = val;
+        }
+      }
+      if (item.title) {
+        results.push(item);
+      }
+    }
+
+    return results;
+  }
+
+  public async importCsvFile(file: File): Promise<{ added: number; updated: number; failed: number; skipped: number; quotaHit: boolean; remaining: number }> {
+    const text = await file.text();
+    const parsedData = this.parseCsvText(text);
+    if (!parsedData.length) {
+      return { added: 0, updated: 0, failed: 1, skipped: 0, quotaHit: false, remaining: 0 };
+    }
+    return this.bulkImportAnime(parsedData);
+  }
+
   public getAdminPendingUploads(): AnimeRecord[] {
     if (typeof window === 'undefined') return [];
     try {
