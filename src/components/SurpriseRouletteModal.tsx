@@ -204,11 +204,11 @@ export const SurpriseRouletteModal: React.FC<SurpriseRouletteModalProps> = ({
                 <span className="text-[10px] uppercase font-bold text-neutral-400 mr-1">
                   Dubbed in:
                 </span>
-                {(currentAnime.dubs || []).map((dub) => {
+                {(currentAnime.dubs || []).map((dub, idx) => {
                   const badge = DUB_BADGE_STYLES[dub];
                   return (
                     <span
-                      key={dub}
+                      key={`${currentAnime.id}-${dub}-${idx}`}
                       className={`${badge?.bg || 'bg-neutral-800'} ${badge?.text || 'text-white'} text-[10px] font-extrabold px-2 py-0.5 rounded shadow-sm`}
                     >
                       {dub}

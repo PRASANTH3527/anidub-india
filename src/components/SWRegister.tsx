@@ -8,16 +8,29 @@ export default function SWRegister() {
     if (typeof window !== 'undefined') {
       const originalError = console.error;
       console.error = (...args) => {
-        if (typeof args[0] === 'string' && args[0].includes('ResizeObserver loop completed with undelivered notifications')) {
+        if (typeof args[0] === 'string' && (args[0].includes('ResizeObserver') || args[0].includes('ResizeObserver loop completed'))) {
           return;
         }
         originalError.apply(console, args);
       };
-      window.addEventListener('error', e => {
-        if (e.message && e.message.includes('ResizeObserver loop completed')) {
-          e.stopImmediatePropagation();
+
+      const originalOnError = window.onerror;
+      window.onerror = (message, source, lineno, colno, error) => {
+        if (typeof message === 'string' && message.includes('ResizeObserver')) {
+          return true;
         }
-      });
+        if (originalOnError) {
+          return originalOnError(message, source, lineno, colno, error);
+        }
+        return false;
+      };
+
+      window.addEventListener('error', e => {
+        if (e.message && e.message.includes('ResizeObserver')) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+        }
+      }, true);
     }
 
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {

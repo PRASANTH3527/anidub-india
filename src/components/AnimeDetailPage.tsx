@@ -350,9 +350,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 className="w-full h-full object-cover"
               />
               <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1 max-w-[80%]">
-                {(anime.dubs || []).map((dub) => (
+                {(anime.dubs || []).map((dub, idx) => (
                   <span
-                    key={dub}
+                    key={`${anime.id}-${dub}-${idx}`}
                     className="bg-black/80 backdrop-blur-md text-amber-300 font-extrabold text-[10px] px-1.5 py-0.5 rounded shadow border border-white/10"
                   >
                     {dub.slice(0, 3)}
@@ -487,9 +487,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   Genre Tags
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {(anime.genres || []).map((genre) => (
+                  {(anime.genres || []).map((genre, idx) => (
                     <span
-                      key={genre}
+                      key={`${genre}-${idx}`}
                       className="text-xs font-semibold bg-[#182032] text-accent-theme border border-neutral-700/80 px-3 py-1 rounded-full"
                     >
                       {genre}
@@ -504,9 +504,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     Themes & Tropes
                   </span>
                   <div className="flex flex-wrap gap-1.5">
-                    {(anime.themes || []).map((theme) => (
+                    {(anime.themes || []).map((theme, idx) => (
                       <span
-                        key={theme}
+                        key={`${theme}-${idx}`}
                         className="text-xs font-semibold bg-[#182032] text-neutral-300 border border-neutral-700/80 px-3 py-1 rounded-full"
                       >
                         {theme}
@@ -817,7 +817,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </div>
 
             <div className="space-y-2.5">
-              {(anime.dubDetails || []).map((dub) => {
+              {(anime.dubDetails || []).map((dub, idx) => {
                 const badge = DUB_LANGUAGE_BADGES[dub.language] || {
                   bg: 'bg-neutral-800',
                   text: 'text-neutral-200',
@@ -825,7 +825,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 };
                 return (
                   <div
-                    key={dub.language}
+                    key={`${dub.language}-${idx}`}
                     className={`p-3 rounded-xl border ${badge.bg} ${badge.border} flex flex-col gap-1.5`}
                   >
                     <div className="flex items-center justify-between">
@@ -838,9 +838,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     </div>
 
                     <div className="flex flex-wrap gap-1">
-                      {(Array.isArray(dub.platform) ? dub.platform : [dub.platform]).filter(Boolean).map((p) => (
+                      {(Array.isArray(dub.platform) ? dub.platform : [dub.platform]).filter(Boolean).map((p, pIdx) => (
                         <span
-                          key={p}
+                          key={`${p}-${pIdx}`}
                           className="text-[9px] bg-black/40 text-neutral-300 px-1.5 py-0.5 rounded border border-white/10 font-medium"
                         >
                           {p}
@@ -869,9 +869,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </p>
 
             <div className="space-y-2 pt-1">
-              {(anime.platforms || []).map((p) => (
+              {(anime.platforms || []).map((p, pIdx) => (
                 <SmartWatchButton
-                  key={p.name}
+                  key={`${p.name}-${pIdx}`}
                   platformName={p.name}
                   webUrl={p.url}
                   languages={p.languages}
@@ -904,8 +904,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                             <span className="text-[10px] font-black text-white">{s.label}</span>
                             {s.languages && s.languages.length > 0 && (
                               <div className="flex gap-0.5">
-                                {s.languages.map(l => (
-                                  <span key={l} className="text-[7px] font-bold px-1 py-0.2 rounded badge-primary-theme">
+                                {s.languages.map((l, lIdx) => (
+                                  <span key={`${l}-${lIdx}`} className="text-[7px] font-bold px-1 py-0.2 rounded badge-primary-theme">
                                     {l.substring(0, 2)}
                                   </span>
                                 ))}

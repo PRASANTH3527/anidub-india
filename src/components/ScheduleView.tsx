@@ -106,9 +106,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
 
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap gap-1">
-                    {(anime.dubs || []).map((dub) => (
+                    {(anime.dubs || []).map((dub, idx) => (
                       <span
-                        key={dub}
+                        key={`${anime.id}-${dub}-${idx}`}
                         className="text-[9px] font-bold px-1.5 py-0.5 rounded badge-primary-theme"
                       >
                         {dub} Dub

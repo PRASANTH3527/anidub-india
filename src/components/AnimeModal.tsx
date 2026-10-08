@@ -158,7 +158,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {(anime.dubDetails || []).map((dub) => {
+              {(anime.dubDetails || []).map((dub, idx) => {
                 const colors = DUB_LANGUAGE_COLORS[dub.language] || {
                   bg: 'bg-neutral-800',
                   text: 'text-neutral-200',
@@ -166,7 +166,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
                 };
                 return (
                   <div
-                    key={dub.language}
+                    key={`${dub.language}-${idx}`}
                     className={`flex items-start justify-between p-2.5 rounded-lg border ${colors.bg} ${colors.border}`}
                   >
                     <div className="flex items-center gap-2">
@@ -183,9 +183,9 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      {(Array.isArray(dub.platform) ? dub.platform : [dub.platform]).filter(Boolean).map((p) => (
+                      {(Array.isArray(dub.platform) ? dub.platform : [dub.platform]).filter(Boolean).map((p, pIdx) => (
                         <span
-                          key={p}
+                          key={`${p}-${pIdx}`}
                           className="text-[9px] bg-black/40 text-neutral-200 px-1.5 py-0.5 rounded font-medium border border-white/10"
                         >
                           {p}
@@ -205,9 +205,9 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
               <span className="text-[10px] text-neutral-500 font-normal">(Official Licensed Streams)</span>
             </h4>
             <div className="flex flex-wrap gap-2.5">
-              {(anime.platforms || []).map((platform) => (
+              {(anime.platforms || []).map((platform, pIdx) => (
                 <a
-                  key={platform.name}
+                  key={`${platform.name}-${pIdx}`}
                   href={platform.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -256,9 +256,9 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
 
           {/* Genres Tags */}
           <div className="flex flex-wrap gap-1.5 pt-2">
-            {anime.genres.map((genre) => (
+            {anime.genres.map((genre, gIdx) => (
               <span
-                key={genre}
+                key={`${genre}-${gIdx}`}
                 className="text-[11px] font-medium bg-[#171e2e] text-neutral-300 border border-neutral-800 px-2.5 py-1 rounded-full"
               >
                 {genre}

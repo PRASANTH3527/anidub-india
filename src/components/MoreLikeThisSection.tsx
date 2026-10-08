@@ -176,11 +176,11 @@ export const MoreLikeThisSection: React.FC<MoreLikeThisSectionProps> = ({
 
                   {/* Shared Regional Dub Languages */}
                   <div className="flex flex-wrap gap-1 pt-1">
-                    {(anime.dubs || []).slice(0, 3).map((dub) => {
+                    {(anime.dubs || []).slice(0, 3).map((dub, idx) => {
                       const isShared = (currentAnime.dubs || []).includes(dub);
                       return (
                         <span
-                          key={dub}
+                          key={`${anime.id}-${dub}-${idx}`}
                           className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded transition-colors ${
                             isShared
                               ? 'bg-primary-theme/25 text-primary-light border border-primary-theme/40'

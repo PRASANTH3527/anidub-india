@@ -290,8 +290,8 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
                             </div>
                           </div>
                           <div className="flex gap-1 mt-1">
-                            {anime.dubs?.slice(0, 2).map(d => (
-                              <span key={d} className="text-[8px] px-1 py-0.2 bg-neutral-800 text-neutral-400 rounded border border-neutral-700">{d}</span>
+                            {anime.dubs?.slice(0, 2).map((d, idx) => (
+                              <span key={`${d}-${idx}`} className="text-[8px] px-1 py-0.2 bg-neutral-800 text-neutral-400 rounded border border-neutral-700">{d}</span>
                             ))}
                           </div>
                         </div>
@@ -392,13 +392,13 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
 
         {/* Scrollable Language Row */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar select-none">
-          {ALL_LANGUAGES.map((langItem) => {
+          {ALL_LANGUAGES.map((langItem, idx) => {
             const isSelected = selectedLanguage === langItem.name;
             const count = langItem.name === 'All' ? totalAvailable : languageCounts[langItem.name];
 
             return (
               <button
-                key={langItem.name}
+                key={`${langItem.name}-${idx}`}
                 onClick={() => setSelectedLanguage(langItem.name)}
                 className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 shrink-0 cursor-pointer flex items-center gap-2 active:scale-95 ${
                   isSelected

@@ -426,9 +426,9 @@ export default function ShareHandler() {
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute top-2 left-2 flex flex-wrap gap-1">
-                    {(matchedAnime.dubs || []).map((dub) => (
+                    {(matchedAnime.dubs || []).map((dub, idx) => (
                       <span
-                        key={dub}
+                        key={`${dub}-${idx}`}
                         className="bg-black/80 text-amber-300 font-extrabold text-[9px] px-1.5 py-0.5 rounded border border-white/10"
                       >
                         {dub.slice(0, 3)}
@@ -451,9 +451,9 @@ export default function ShareHandler() {
                     Available Indian Regional Dubs:
                   </div>
                   <div className="flex flex-wrap gap-1.5 justify-center sm:justify-start">
-                    {(matchedAnime.dubs || []).map((dub) => (
+                    {(matchedAnime.dubs || []).map((dub, idx) => (
                       <span
-                        key={dub}
+                        key={`${dub}-badge-${idx}`}
                         className="bg-purple-900/60 border border-purple-600/40 text-purple-200 text-xs font-semibold px-2.5 py-0.5 rounded-full"
                       >
                         {dub} Dub
