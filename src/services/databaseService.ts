@@ -304,6 +304,81 @@ class DatabaseService {
     }
   }
 
+  public async searchApprovedAnime(
+    searchQuery: string = '',
+    selectedLang: string = 'All',
+    selectedPlatform: string = 'All Platforms',
+    lastDoc: any = null,
+    pageSize = 20
+  ): Promise<{ items: AnimeRecord[], lastDoc: any }> {
+    try {
+      const startIndex = typeof lastDoc === 'number' ? lastDoc : 0;
+      const endIndex = startIndex + pageSize - 1;
+
+      let query = supabase
+        .from('anime_list')
+        .select('*')
+        .eq('is_deleted', false);
+
+      if (searchQuery && searchQuery.trim() !== '') {
+        query = query.ilike('title', `%${searchQuery.trim()}%`);
+      }
+
+      if (selectedLang && selectedLang !== 'All') {
+        query = query.contains('dubs', [selectedLang]);
+      }
+
+      if (selectedPlatform && selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
+        query = query.contains('platforms', [selectedPlatform]);
+      }
+
+      const { data, error } = await query
+        .order('title', { ascending: true })
+        .range(startIndex, endIndex);
+
+      if (error) {
+        console.warn('[Supabase Search] Notice:', error.message);
+        let approvedOnly = this.getApprovedAnime();
+        if (searchQuery && searchQuery.trim() !== '') {
+          const q = searchQuery.toLowerCase().trim();
+          approvedOnly = approvedOnly.filter(a => a.title.toLowerCase().includes(q) || a.romajiTitle?.toLowerCase().includes(q));
+        }
+        if (selectedLang && selectedLang !== 'All') {
+          approvedOnly = approvedOnly.filter(a => a.dubs?.includes(selectedLang as any));
+        }
+        if (selectedPlatform && selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
+          const target = selectedPlatform.toLowerCase();
+          approvedOnly = approvedOnly.filter(a => a.platforms?.some(p => {
+            const pName = typeof p === 'string' ? p : p?.name;
+            return pName?.toLowerCase().includes(target);
+          }));
+        }
+        const items = approvedOnly.slice(startIndex, startIndex + pageSize);
+        const nextCursor = startIndex + items.length < approvedOnly.length ? (startIndex + items.length) : null;
+        return { items, lastDoc: nextCursor };
+      }
+
+      const items = (data || []).map(row => this.normalizeRecord(row));
+      const nextCursor = items.length >= pageSize ? (startIndex + items.length) : null;
+      return { items, lastDoc: nextCursor };
+    } catch (err) {
+      console.warn('[Supabase Search Error]:', err);
+      let approvedOnly = this.getApprovedAnime();
+      if (searchQuery && searchQuery.trim() !== '') {
+        const q = searchQuery.toLowerCase().trim();
+        approvedOnly = approvedOnly.filter(a => a.title.toLowerCase().includes(q));
+      }
+      if (selectedLang && selectedLang !== 'All') {
+        approvedOnly = approvedOnly.filter(a => a.dubs?.includes(selectedLang as any));
+      }
+      if (selectedPlatform && selectedPlatform !== 'All' && selectedPlatform !== 'All Platforms') {
+        approvedOnly = approvedOnly.filter(a => a.platforms?.some(p => (typeof p === 'string' ? p : p?.name)?.toLowerCase().includes(selectedPlatform.toLowerCase())));
+      }
+      const items = approvedOnly.slice(0, pageSize);
+      return { items, lastDoc: null };
+    }
+  }
+
   public async getSubmissionsPaginated(
     status: 'pending' | 'rejected' = 'pending', 
     lastDoc: any = null, 

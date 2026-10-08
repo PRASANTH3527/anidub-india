@@ -14,7 +14,8 @@ import {
   Languages,
   Search,
   BarChart3,
-  Trophy
+  Trophy,
+  Cloud
 } from 'lucide-react';
 import { authService } from '../services/authService';
 import { LocalUserProfile, ANIME_AVATAR_PRESETS } from './LocalProfileModal';
@@ -37,6 +38,7 @@ interface NavbarProps {
   uiLanguage?: SupportedLanguage;
   onToggleLanguage?: () => void;
   isAdmin?: boolean;
+  onOpenDeviceSync?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -57,6 +59,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   uiLanguage = 'en',
   onToggleLanguage,
   isAdmin = false,
+  onOpenDeviceSync,
 }) => {
   const { avatar: globalAvatar, theme: currentTheme } = useTheme();
   const currentUser = authService.getCurrentUser();
@@ -233,6 +236,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Global Controls (Theme & Lang) */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {/* Anonymous Sync Button */}
+          {onOpenDeviceSync && (
+            <button
+              onClick={onOpenDeviceSync}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl btn-primary-theme text-white text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-md"
+              title="Anonymous Device Sync via 6-digit code"
+            >
+              <Cloud className="w-4 h-4 text-white" />
+              <span className="hidden lg:inline">Sync Data</span>
+            </button>
+          )}
+
           {/* Theme Toggle */}
           <button
             onClick={onToggleTheme}

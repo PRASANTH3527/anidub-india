@@ -33,6 +33,7 @@ import { FastAverageColor } from 'fast-average-color';
 import { MoreLikeThisSection } from './MoreLikeThisSection';
 import { SmartWatchButton } from './SmartWatchButton';
 import { useToast } from './Toast';
+import { supabase } from '../lib/supabase';
 
 interface AnimeDetailPageProps {
   anime: Anime;
@@ -153,6 +154,16 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   useEffect(() => {
     updateSeoTags(buildAnimeSeo(anime));
   }, [anime]);
+
+  // Trigger anonymous view tracking
+  useEffect(() => {
+    if (!anime?.id) return;
+    supabase.rpc('increment_view', { row_id: anime.id }).then(({ error }) => {
+      if (error) {
+        console.warn('Error incrementing view count:', error);
+      }
+    });
+  }, [anime?.id]);
 
   // Load reviews from database
   const loadReviews = () => {

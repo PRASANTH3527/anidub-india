@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { 
   BarChart, 
   Bar, 
@@ -87,6 +88,37 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
         votes: Number(anime.likes || anime.upvotes || 0)
       }));
   }, [allAnime]);
+
+  const [topViewedAnime, setTopViewedAnime] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchTopViewed = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('anime_list')
+          .select('*')
+          .order('views', { ascending: false })
+          .limit(10);
+        if (data && data.length > 0) {
+          setTopViewedAnime(data);
+        } else {
+          const sorted = [...allAnime].sort((a, b) => Number(b.views || 0) - Number(a.views || 0)).slice(0, 10);
+          setTopViewedAnime(sorted);
+        }
+      } catch (e) {
+        const sorted = [...allAnime].sort((a, b) => Number(b.views || 0) - Number(a.views || 0)).slice(0, 10);
+        setTopViewedAnime(sorted);
+      }
+    };
+    fetchTopViewed();
+  }, [allAnime]);
+
+  const topViewedChartData = useMemo(() => {
+    return topViewedAnime.map(anime => ({
+      name: anime.title.length > 14 ? anime.title.substring(0, 12) + '..' : anime.title,
+      views: Number(anime.views || 0)
+    }));
+  }, [topViewedAnime]);
 
   const languageDistributionData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -378,7 +410,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
         </div>
 
         {/* Bottom Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
           
           {/* Top Trending Anime Bar Chart */}
           <motion.div 
@@ -456,6 +488,81 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
           </motion.div>
 
         </div>
+
+        {/* Top 10 Most Viewed Anime Section */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="p-6 rounded-3xl bg-[#131926]/40 border border-white/5 backdrop-blur-xl shadow-2xl pb-12"
+        >
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-black tracking-tight">Top 10 Most Viewed Anime</h3>
+              <p className="text-xs text-neutral-500">Analytics ranking by anonymous view counts</p>
+            </div>
+            <Eye className="w-5 h-5 text-accent-theme" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+            {/* Bar Chart */}
+            <div className="h-[280px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topViewedChartData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#ffffff05" />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#9ca3af', fontSize: 10, fontWeight: 700}}
+                    width={90}
+                  />
+                  <Tooltip 
+                    cursor={{fill: 'rgba(255,255,255,0.03)'}}
+                    contentStyle={{ backgroundColor: '#131926', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', fontSize: '11px' }}
+                  />
+                  <Bar 
+                    dataKey="views" 
+                    fill="#38bdf8" 
+                    radius={[0, 8, 8, 0]} 
+                    barSize={16}
+                  >
+                    {topViewedChartData.map((entry, index) => (
+                      <Cell key={`cell-v-${index}`} fill={index === 0 ? '#38bdf8' : '#6366f1'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Clean List View */}
+            <div className="space-y-2.5 max-h-[280px] overflow-y-auto custom-scrollbar pr-2">
+              {topViewedAnime.length === 0 ? (
+                <div className="text-center py-8 text-neutral-500 text-xs">No view analytics recorded yet.</div>
+              ) : (
+                topViewedAnime.map((anime, idx) => (
+                  <div key={anime.id || idx} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-all">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${idx === 0 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-neutral-800 text-neutral-400'}`}>
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <h4 className="text-xs font-bold text-white line-clamp-1">{anime.title}</h4>
+                        <p className="text-[10px] text-neutral-400">{anime.type || 'TV'} • {anime.releaseYear || '2024'}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20 text-xs font-black">
+                      <Eye className="w-3.5 h-3.5" />
+                      {Number(anime.views || 0).toLocaleString()} views
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </motion.div>
 
       </div>
       )}

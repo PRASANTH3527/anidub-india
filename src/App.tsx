@@ -21,6 +21,7 @@ import { AuthModal } from './components/AuthModal';
 import { ReportModal } from './components/ReportModal';
 import { SurpriseRouletteModal } from './components/SurpriseRouletteModal';
 import { LocalProfileModal, LocalUserProfile, ANIME_AVATAR_PRESETS } from './components/LocalProfileModal';
+import { DeviceSyncModal } from './components/DeviceSyncModal';
 import { RecentlyViewedRow } from './components/RecentlyViewedRow';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminAnalyticsDashboard } from './components/AdminAnalyticsDashboard';
@@ -128,6 +129,7 @@ function AppContent() {
 
   // Local User Profile State (persisted in localStorage)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isDeviceSyncModalOpen, setIsDeviceSyncModalOpen] = useState(false);
 
   // 'Surprise Me' Roulette Modal State
   const [isSurpriseModalOpen, setIsSurpriseModalOpen] = useState(false);
@@ -278,12 +280,18 @@ function AppContent() {
     setIsSubmitModalOpen(true);
   };
 
-  // Initial server sync to load fresh approved anime with strict pagination limit 20
+  // Fetch filtered and searched anime dynamically from Supabase without full page reloads
   useEffect(() => {
-    const initialFetch = async () => {
+    const fetchFiltered = async () => {
       setIsLoading(true);
       try {
-        const res = await dbService.getApprovedAnimePaginated(null, 20);
+        const res = await dbService.searchApprovedAnime(
+          searchQuery,
+          selectedLanguage,
+          selectedPlatform,
+          null,
+          20
+        );
         setApprovedAnime(res.items);
         setLastDocApproved(res.lastDoc);
         setHasMoreApproved(res.items.length === 20);
@@ -291,14 +299,20 @@ function AppContent() {
         setIsLoading(false);
       }
     };
-    initialFetch();
-  }, []);
+    fetchFiltered();
+  }, [searchQuery, selectedLanguage, selectedPlatform]);
 
   const loadMoreApproved = async () => {
     if (!lastDocApproved || isLoadingMore) return;
     setIsLoadingMore(true);
     try {
-      const res = await dbService.getApprovedAnimePaginated(lastDocApproved, 20);
+      const res = await dbService.searchApprovedAnime(
+        searchQuery,
+        selectedLanguage,
+        selectedPlatform,
+        lastDocApproved,
+        20
+      );
       setApprovedAnime(prev => {
         const merged = [...prev];
         res.items.forEach(item => {
@@ -769,6 +783,7 @@ function AppContent() {
             uiLanguage={uiLanguage}
             onToggleLanguage={handleToggleLanguage}
             isAdmin={isAdmin}
+            onOpenDeviceSync={() => setIsDeviceSyncModalOpen(true)}
           />
         </>
       )}
@@ -1130,6 +1145,13 @@ function AppContent() {
         onLanguageChange={(lang) => {
           setUiLanguage(lang);
         }}
+        onRestoreSuccess={handleRestoreSuccess}
+      />
+
+      {/* Anonymous Device Sync Modal */}
+      <DeviceSyncModal
+        isOpen={isDeviceSyncModalOpen}
+        onClose={() => setIsDeviceSyncModalOpen(false)}
         onRestoreSuccess={handleRestoreSuccess}
       />
     </div>
