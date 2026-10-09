@@ -1462,11 +1462,23 @@ class DatabaseService {
     const existingById = new Map<string, AnimeRecord>();
     const existingByTitle = new Map<string, AnimeRecord>();
 
+    // Fetch existing records from Supabase anime_list table to ensure accurate title-based duplicate checking
+    try {
+      const { data: dbList } = await supabase.from('anime_list').select('*');
+      if (dbList && Array.isArray(dbList)) {
+        dbList.forEach(a => {
+          if (a.id) existingById.set(String(a.id), a);
+          const t = (a.title || '').trim().toLowerCase();
+          if (t) existingByTitle.set(t, a);
+        });
+      }
+    } catch {}
+
     if (this.animeRecords.length > 0) {
       this.animeRecords.forEach(a => {
         if (a.id) existingById.set(String(a.id), a);
         const title = (a.title || '').trim().toLowerCase();
-        if (title) existingByTitle.set(title, a);
+        if (title && !existingByTitle.has(title)) existingByTitle.set(title, a);
       });
     }
 
@@ -1484,7 +1496,7 @@ class DatabaseService {
         }
         const lowerTitle = rawTitle.toLowerCase();
 
-        // Match existing record by ID or by Title for upsert
+        // Match existing record by ID or by Title for upsert based on anime title
         const existingMatch = (item.id && existingById.get(String(item.id))) || existingByTitle.get(lowerTitle);
         
         const id = existingMatch ? existingMatch.id : (item.id || `import_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`);
@@ -1498,8 +1510,9 @@ class DatabaseService {
         const normalized = this.normalizeRecord({
           ...item,
           id,
-          status: item.status || 'pending',
-          submissionStatus: item.submissionStatus || 'pending',
+          title: rawTitle,
+          status: item.status || 'approved',
+          submissionStatus: item.submissionStatus || 'approved',
           updatedAt: new Date().toISOString()
         });
 
@@ -1510,18 +1523,24 @@ class DatabaseService {
     });
 
     if (toUpsert.length > 0) {
+      // Upsert into anime_list table based on title/id
       try {
-        const { error } = await supabase.from('pending_animes').upsert(toUpsert);
+        const { error } = await supabase.from('anime_list').upsert(toUpsert, { onConflict: 'id' });
         if (error) {
-          if (error.code === 'PGRST205') {
-            console.info('[Supabase Info] pending_animes table not created yet. Using local IndexedDB cache.');
-          } else {
-            console.warn('[BulkImport] Supabase upsert notice:', error.message);
-          }
+          console.warn('[BulkImport] Supabase anime_list upsert notice:', error.message);
         }
       } catch (e: any) {
-        console.warn('[BulkImport] Supabase upsert error:', e);
+        console.warn('[BulkImport] Supabase anime_list upsert error:', e);
       }
+
+      // Also upsert into animes table and pending_animes for redundancy
+      try {
+        await supabase.from('animes').upsert(toUpsert, { onConflict: 'id' });
+      } catch {}
+
+      try {
+        await supabase.from('pending_animes').upsert(toUpsert, { onConflict: 'id' });
+      } catch {}
 
       // Merge into local state
       const records = this.getAllAnimeRecords();
