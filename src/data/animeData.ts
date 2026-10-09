@@ -43,10 +43,18 @@ export const ALL_PLATFORMS = [
   'Crunchyroll',
   'Netflix',
   'JioCinema',
+  'YouTube',
   'YouTube (Muse India)',
   'YouTube (Ani-One)',
   'Disney+ Hotstar',
   'Prime Video',
+  'Anime Times',
+  'Sony YAY!',
+  'Sony LIV',
+  'Bilibili',
+  'Cartoon Network India',
+  'ETV Bal Bharat',
+  'Zee5',
 ];
 
 export const ALL_LANGUAGES: { name: string; short: string; bg: string; text: string; border: string }[] = [

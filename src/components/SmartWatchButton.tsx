@@ -63,6 +63,55 @@ const BRAND_STYLES: Record<string, { bg: string; hover: string; border: string; 
     text: 'text-red-300',
     ring: 'focus:ring-red-500/30',
   },
+  'Sony LIV': {
+    bg: 'bg-amber-950/30',
+    hover: 'hover:bg-amber-900/40 hover:border-amber-500/70',
+    border: 'border-amber-600/40',
+    text: 'text-amber-400',
+    ring: 'focus:ring-amber-500/30',
+  },
+  Zee5: {
+    bg: 'bg-violet-950/30',
+    hover: 'hover:bg-violet-900/40 hover:border-violet-500/70',
+    border: 'border-violet-600/40',
+    text: 'text-violet-400',
+    ring: 'focus:ring-violet-500/30',
+  },
+  Bilibili: {
+    bg: 'bg-cyan-950/30',
+    hover: 'hover:bg-cyan-900/40 hover:border-cyan-500/70',
+    border: 'border-cyan-600/40',
+    text: 'text-cyan-400',
+    ring: 'focus:ring-cyan-500/30',
+  },
+  'Anime Times': {
+    bg: 'bg-purple-950/30',
+    hover: 'hover:bg-purple-900/40 hover:border-purple-500/70',
+    border: 'border-purple-600/40',
+    text: 'text-purple-400',
+    ring: 'focus:ring-purple-500/30',
+  },
+  'Sony YAY!': {
+    bg: 'bg-yellow-950/30',
+    hover: 'hover:bg-yellow-900/40 hover:border-yellow-500/70',
+    border: 'border-yellow-600/40',
+    text: 'text-yellow-400',
+    ring: 'focus:ring-yellow-500/30',
+  },
+  'Cartoon Network India': {
+    bg: 'bg-indigo-950/30',
+    hover: 'hover:bg-indigo-900/40 hover:border-indigo-500/70',
+    border: 'border-indigo-600/40',
+    text: 'text-indigo-400',
+    ring: 'focus:ring-indigo-500/30',
+  },
+  'ETV Bal Bharat': {
+    bg: 'bg-emerald-950/30',
+    hover: 'hover:bg-emerald-900/40 hover:border-emerald-500/70',
+    border: 'border-emerald-600/40',
+    text: 'text-emerald-400',
+    ring: 'focus:ring-emerald-500/30',
+  },
 };
 
 export const SmartWatchButton: React.FC<SmartWatchButtonProps> = ({

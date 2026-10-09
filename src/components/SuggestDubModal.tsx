@@ -143,15 +143,23 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
               <select
                 value={platform}
                 onChange={(e) => setPlatform(e.target.value)}
-                className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-primary-theme cursor-pointer"
+                className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-primary-theme cursor-pointer max-h-48 overflow-y-auto"
               >
                 <option value="Crunchyroll">Crunchyroll</option>
                 <option value="Netflix">Netflix</option>
                 <option value="JioCinema">JioCinema</option>
+                <option value="YouTube">YouTube</option>
                 <option value="YouTube (Muse India)">YouTube (Muse India)</option>
                 <option value="YouTube (Ani-One)">YouTube (Ani-One)</option>
                 <option value="Disney+ Hotstar">Disney+ Hotstar</option>
-                <option value="TV Channel">Sony YAY / Cartoon Network</option>
+                <option value="Prime Video">Prime Video</option>
+                <option value="Anime Times">Anime Times</option>
+                <option value="Sony YAY!">Sony YAY!</option>
+                <option value="Sony LIV">Sony LIV</option>
+                <option value="Bilibili">Bilibili</option>
+                <option value="Cartoon Network India">Cartoon Network India</option>
+                <option value="ETV Bal Bharat">ETV Bal Bharat</option>
+                <option value="Zee5">Zee5</option>
               </select>
             </div>
           </div>

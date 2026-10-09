@@ -10,10 +10,18 @@ export type StreamingPlatform =
   | 'Crunchyroll'
   | 'Netflix'
   | 'JioCinema'
+  | 'YouTube'
   | 'YouTube (Muse India)'
   | 'YouTube (Ani-One)'
   | 'Prime Video'
-  | 'Disney+ Hotstar';
+  | 'Disney+ Hotstar'
+  | 'Anime Times'
+  | 'Sony YAY!'
+  | 'Sony LIV'
+  | 'Bilibili'
+  | 'Cartoon Network India'
+  | 'ETV Bal Bharat'
+  | 'Zee5';
 
 export interface DubInfo {
   language: DubLanguage;
