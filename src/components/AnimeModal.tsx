@@ -79,6 +79,8 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
           <img
             src={anime.poster || undefined}
             alt={anime.title}
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover blur-md opacity-30 scale-110"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#111724] via-[#111724]/60 to-transparent" />
@@ -116,6 +118,8 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
             <img
               src={anime.poster || undefined}
               alt={anime.title}
+              loading="lazy"
+              decoding="async"
               className="w-24 sm:w-28 aspect-[3/4.2] object-cover rounded-lg shadow-2xl border-2 border-neutral-700/80 shrink-0"
             />
             <div className="mb-1">

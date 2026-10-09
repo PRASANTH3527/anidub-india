@@ -277,7 +277,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
                         className="flex items-center gap-3 p-3 hover:bg-[var(--primary-accent)]/10 cursor-pointer group transition-colors"
                       >
                         <div className="relative w-10 h-14 rounded-lg overflow-hidden border border-neutral-700 shrink-0">
-                          <img src={anime.poster || undefined} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                          <img src={anime.poster || undefined} alt={anime.title} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                           <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
                         </div>
                         <div className="min-w-0 flex-grow">
@@ -322,7 +322,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
                       }}
                       className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer group transition-colors"
                     >
-                      <img src={anime.poster || undefined} className="w-8 h-10 object-cover rounded-lg border border-neutral-700 group-hover:border-primary-theme" />
+                      <img src={anime.poster || undefined} alt={anime.title} loading="lazy" decoding="async" className="w-8 h-10 object-cover rounded-lg border border-neutral-700 group-hover:border-primary-theme" />
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-white truncate group-hover:text-primary-theme transition-colors">{anime.title}</p>
                         <p className="text-[10px] text-neutral-500">{anime.type} • {anime.releaseYear} • ★ {anime.rating || '8.0'}</p>
