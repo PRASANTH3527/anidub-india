@@ -158,11 +158,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   // Trigger anonymous view tracking
   useEffect(() => {
     if (!anime?.id) return;
-    supabase.rpc('increment_view', { row_id: anime.id }).then(({ error }) => {
-      if (error) {
-        console.warn('Error incrementing view count:', error);
-      }
-    });
+    (async () => {
+      try {
+        await supabase.rpc('increment_view', { row_id: anime.id });
+      } catch {}
+    })();
   }, [anime?.id]);
 
   // Load reviews from database

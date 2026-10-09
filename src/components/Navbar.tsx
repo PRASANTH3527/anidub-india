@@ -172,7 +172,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          {/* 5. Viral Tier List Maker */}
+          {/* 5. Airing Schedule */}
+          <button
+            onClick={() => setActiveTab('schedule')}
+            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+              activeTab === 'schedule'
+                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
+                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+            }`}
+            title="Airing Schedule"
+            aria-label="Airing Schedule"
+          >
+            <Calendar className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'schedule' ? 'scale-110' : ''}`} />
+          </button>
+
+          {/* 6. Viral Tier List Maker */}
           <button
             onClick={() => setActiveTab('tierlist')}
             className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
