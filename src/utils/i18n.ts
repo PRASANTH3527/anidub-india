@@ -1,6 +1,6 @@
 // Bilingual UI Localization Engine (English & Tamil)
 
-export type SupportedLanguage = 'en' | 'ta';
+export type SupportedLanguage = 'en' | 'ta' | 'te' | 'hi' | 'ml' | 'kn';
 
 export const TRANSLATIONS = {
   en: {
@@ -213,4 +213,17 @@ export function setSavedUiLanguage(lang: SupportedLanguage): void {
 export function translate(key: TranslationKey, lang: SupportedLanguage): string {
   const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
   return dict[key] || TRANSLATIONS.en[key] || (key as string);
+}
+
+/**
+ * Map favorite dub language to SupportedLanguage code
+ */
+export function mapDubLanguageToUiLang(dubLang: string): SupportedLanguage {
+  const normalized = String(dubLang || '').toLowerCase().trim();
+  if (normalized.includes('telugu') || normalized === 'te') return 'te';
+  if (normalized.includes('hindi') || normalized === 'hi') return 'hi';
+  if (normalized.includes('malayalam') || normalized === 'ml') return 'ml';
+  if (normalized.includes('kannada') || normalized === 'kn') return 'kn';
+  if (normalized.includes('tamil') || normalized === 'ta') return 'ta';
+  return 'en';
 }

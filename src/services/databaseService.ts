@@ -165,30 +165,36 @@ class DatabaseService {
     this.memoryQueryCache.clear();
   }
 
-  private async initDatabase() {
+    private async initDatabase() {
     if (typeof window === 'undefined') return;
     try {
-      // 1. Load from IndexedDB (Priority)
-      const idbData = await idbGet(DB_ANIME_KEY);
-      if (idbData && Array.isArray(idbData)) {
-        this.animeRecords = idbData.map(item => this.normalizeRecord(item));
-        this.invalidateMemoryCache();
-        console.log(`[AniDub DB] Loaded ${this.animeRecords.length} records from IndexedDB cache.`);
-      } else {
-        // 2. Migration: Load from Legacy localStorage if IDB is empty
-        const legacyData = localStorage.getItem(DB_ANIME_KEY);
-        if (legacyData) {
-          try {
-            const parsed = JSON.parse(legacyData);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              this.animeRecords = parsed.map(item => this.normalizeRecord(item));
-              this.invalidateMemoryCache();
-              await idbSet(DB_ANIME_KEY, this.animeRecords);
-              localStorage.removeItem(DB_ANIME_KEY);
-            }
-          } catch (e) {
-            console.warn('[AniDub DB] Migration notice:', e);
+      // 1. Load from localStorage (Primary as requested)
+      const localData = localStorage.getItem(DB_ANIME_KEY);
+      if (localData) {
+        try {
+          const parsed = JSON.parse(localData);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            this.animeRecords = parsed.map(item => this.normalizeRecord(item));
+            this.invalidateMemoryCache();
+            console.log(`[AniDub DB] Loaded ${this.animeRecords.length} records from localStorage.`);
           }
+        } catch (e) {
+          console.warn('[AniDub DB] localStorage parse notice:', e);
+        }
+      }
+
+      // 2. If localStorage is empty, check IndexedDB or fallback to ANIME_DATABASE
+      if (this.animeRecords.length === 0) {
+        const idbData = await idbGet(DB_ANIME_KEY);
+        if (idbData && Array.isArray(idbData) && idbData.length > 0) {
+          this.animeRecords = idbData.map(item => this.normalizeRecord(item));
+          this.invalidateMemoryCache();
+          localStorage.setItem(DB_ANIME_KEY, JSON.stringify(this.animeRecords));
+        } else {
+          this.animeRecords = ANIME_DATABASE.map(item => this.normalizeRecord(item));
+          this.invalidateMemoryCache();
+          localStorage.setItem(DB_ANIME_KEY, JSON.stringify(this.animeRecords));
+          console.log(`[AniDub DB] Initialized from default ANIME_DATABASE (${this.animeRecords.length} records).`);
         }
       }
 
@@ -198,6 +204,10 @@ class DatabaseService {
       this.syncLocalApprovedToSupabase();
     } catch (e) {
       console.error('Database initialization error:', e);
+      this.animeRecords = ANIME_DATABASE.map(item => this.normalizeRecord(item));
+      localStorage.setItem(DB_ANIME_KEY, JSON.stringify(this.animeRecords));
+      this.isInitialized = true;
+      this.notify();
     }
   }
 
@@ -208,7 +218,7 @@ class DatabaseService {
     const uniqueMap = new Map<string, AnimeRecord>();
     const recordsToProcess = this.animeRecords.length > 0 ? this.animeRecords : ANIME_DATABASE;
     for (const record of recordsToProcess) {
-      if (record && record.title) {
+      if (record && record.title && !(record as any).isDeleted && !(record as any).is_deleted) {
         const titleKey = record.title.trim().toLowerCase();
         if (!uniqueMap.has(titleKey)) {
           uniqueMap.set(titleKey, this.normalizeRecord(record));
@@ -1218,7 +1228,7 @@ class DatabaseService {
     this.animeRecords = this.animeRecords.map((r) =>
       String(r.id) === strId ? { ...r, isDeleted: true, updatedAt: new Date().toISOString() } : r
     );
-    await idbSet(DB_ANIME_KEY, this.animeRecords);
+    await this.saveAnimeRecords(this.animeRecords);
     if (typeof window !== 'undefined') {
       localStorage.removeItem(CACHE_TIMESTAMP_KEY);
     }
@@ -1380,7 +1390,7 @@ class DatabaseService {
 
     // 4. Update local cache ONLY AFTER Supabase genuinely succeeds
     this.animeRecords = this.animeRecords.filter((r) => String(r.id) !== strId);
-    await idbSet(DB_ANIME_KEY, this.animeRecords);
+    await this.saveAnimeRecords(this.animeRecords);
     if (typeof window !== 'undefined') {
       localStorage.removeItem(CACHE_TIMESTAMP_KEY);
     }

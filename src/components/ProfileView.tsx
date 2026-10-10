@@ -1,3 +1,4 @@
+import { SupportedLanguage, mapDubLanguageToUiLang, setSavedUiLanguage } from '../utils/i18n';
 import React, { useState, useMemo } from 'react';
 import { 
   User, 
@@ -26,6 +27,8 @@ import { AnimeCollection } from '../types/database';
 import { useToast } from './Toast';
 
 interface ProfileViewProps {
+  uiLanguage?: SupportedLanguage;
+  onLanguageChange?: (lang: SupportedLanguage) => void;
   allAnime: Anime[];
   watchlistItems: WatchlistItem[];
   onToggleWatchedStatus: (animeId: string) => void;
@@ -35,6 +38,8 @@ interface ProfileViewProps {
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
+  uiLanguage,
+  onLanguageChange,
   allAnime,
   watchlistItems,
   onToggleWatchedStatus,
@@ -99,6 +104,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       nickname: editName.trim() || 'Anime Fan',
       favoriteLanguage: editLang,
     });
+    const targetUiLang = mapDubLanguageToUiLang(editLang);
+    setSavedUiLanguage(targetUiLang);
+    onLanguageChange?.(targetUiLang);
     setIsEditingProfile(false);
   };
 

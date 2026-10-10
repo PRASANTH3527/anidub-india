@@ -21,7 +21,7 @@ import {
 import { DubLanguage } from '../types/anime';
 import { useToast } from './Toast';
 import { ANIME_AVATARS_50, AnimeAvatarPreset } from '../data/animeAvatars50';
-import { SupportedLanguage, getSavedUiLanguage, setSavedUiLanguage, translate } from '../utils/i18n';
+import { SupportedLanguage, getSavedUiLanguage, setSavedUiLanguage, translate, mapDubLanguageToUiLang } from '../utils/i18n';
 import { cloudSyncService } from '../services/cloudSyncService';
 import { useTheme, LocalUserProfile } from '../context/ThemeContext';
 
@@ -395,6 +395,9 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
 
     updateUserProfile(updated);
     onSaveProfile(updated);
+    const targetUiLang = mapDubLanguageToUiLang(favLanguage);
+    setSavedUiLanguage(targetUiLang);
+    onLanguageChange?.(targetUiLang);
     toast.success('Profile Saved!', `Welcome, ${cleanNick}! Set to ${currentSelectedPreset.name}.`);
     onClose();
   };

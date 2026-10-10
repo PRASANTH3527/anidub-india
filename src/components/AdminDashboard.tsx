@@ -143,6 +143,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [hasMorePending, setHasMorePending] = useState(true);
   const [hasMoreCatalog, setHasMoreCatalog] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [catalogDisplayLimit, setCatalogDisplayLimit] = useState(20);
   
   // Chart Data
   const [trafficData, setTrafficData] = useState<TrafficPoint[]>([]);
@@ -337,11 +338,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setHasMorePending(pendingRes.items.length === 20);
       setPendingSubmissions(pendingRes.items.length); // Rough count for badge
 
-      // 2. Fetch Paginated APPROVED (Catalog)
-      const catalogRes = await dbService.getApprovedAnimePaginated(null, 20, force);
-      setCatalogTitles(catalogRes.items);
-      setLastDocCatalog(catalogRes.lastDoc);
-      setHasMoreCatalog(catalogRes.items.length === 20);
+      // 2. Fetch All Approved Catalog
+      if (force) {
+        await dbService.forceRefresh();
+      }
+      const allApproved = dbService.getApprovedAnime();
+      setCatalogTitles(allApproved);
 
       // 3. Fetch Trash / Deleted list from Supabase
       try {
@@ -352,12 +354,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       // Aggregates for Metrics (Still need a way to get total count cheaply or just use visible list)
-      const totalWatchlistsCount = catalogRes.items.reduce((acc, curr) => acc + (curr.likes || 0), 0);
+      const totalWatchlistsCount = allApproved.reduce((acc, curr) => acc + (curr.likes || 0), 0);
       setTotalWatchlists(totalWatchlistsCount);
       setActiveUsers(Math.floor(totalWatchlistsCount * 0.4) + 12);
 
       // Popularity Bar Chart
-      const sortedByPopularity = [...catalogRes.items]
+      const sortedByPopularity = [...allApproved]
         .sort((a, b) => (b.likes || 0) - (a.likes || 0))
         .slice(0, 5)
         .map(a => ({ id: a.id, name: a.title, count: a.likes || 0 }));
@@ -366,7 +368,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Dub Breakdown Pie Chart
       const dubCounts: Record<string, number> = {};
       let totalDubs = 0;
-      catalogRes.items.forEach(a => {
+      allApproved.forEach(a => {
         (a.dubs || []).forEach(d => {
           dubCounts[d] = (dubCounts[d] || 0) + 1;
           totalDubs++;
@@ -436,18 +438,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const loadMoreCatalog = async () => {
-    if (!lastDocCatalog || isLoadingMore) return;
-    setIsLoadingMore(true);
-    try {
-      const res = await dbService.getApprovedAnimePaginated(lastDocCatalog, 20);
-      setCatalogTitles(prev => [...prev, ...res.items]);
-      setLastDocCatalog(res.lastDoc);
-      setHasMoreCatalog(res.items.length === 20);
-    } finally {
-      setIsLoadingMore(false);
-    }
+  const loadMoreCatalog = () => {
+    setCatalogDisplayLimit(prev => prev + 20);
   };
+
 
   useEffect(() => {
     if (isAdmin) {
@@ -558,6 +552,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )
     );
   }, [catalogTitles, searchQuery]);
+  const displayedCatalog = useMemo(() => {
+    return filteredCatalog.slice(0, catalogDisplayLimit);
+  }, [filteredCatalog, catalogDisplayLimit]);
+  const hasMoreCatalogDisplay = catalogDisplayLimit < filteredCatalog.length;
 
   // Handlers
   const handleLogin = (e: React.FormEvent) => {
@@ -1399,7 +1397,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <div className="space-y-3">
-              {filteredCatalog.map(anime => (
+              {displayedCatalog.map(anime => (
                 <div key={anime.id} className="p-4 rounded-3xl bg-[#131926]/60 border border-neutral-800 hover:bg-[#131926] transition-all group flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4 min-w-0 flex-1">
                     <img src={anime.poster || undefined} loading="lazy" decoding="async" className="w-14 h-20 object-cover rounded-xl bg-neutral-800 shadow-lg border border-neutral-700/50" alt="" />
@@ -1419,7 +1417,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               ))}
               
-              {hasMoreCatalog && lastDocCatalog && (
+              {hasMoreCatalogDisplay && (
                 <div className="flex justify-center py-8">
                   <button
                     onClick={loadMoreCatalog}

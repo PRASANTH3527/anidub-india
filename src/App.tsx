@@ -1081,6 +1081,8 @@ function AppContent() {
                   onRemoveFromWatchlist={handleRemoveFromWatchlist}
                   onSelectAnime={handleOpenAnimeDetail}
                   onNavigateToTab={(tab) => handleTabChange(tab)}
+                  uiLanguage={uiLanguage}
+                  onLanguageChange={(lang) => setUiLanguage(lang)}
                 />
               )}
 
