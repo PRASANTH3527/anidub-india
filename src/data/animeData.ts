@@ -1,4 +1,4 @@
-import { Anime } from '../types/anime';
+import { Anime } from '@/src/types/anime';
 
 // Initial state completely empty by default for fresh real data entries
 export const ANIME_DATABASE: Anime[] = [];

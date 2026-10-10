@@ -3,6 +3,7 @@
 // ==============================================================================
 import { AnimeRecord, DubReview, WatchlistEntry, SubmissionStatus, StreamingPlatform, AnimeCollection } from '../types/database';
 import { Anime, DubLanguage } from '../types/anime';
+import { ANIME_DATABASE } from '../data/animeData';
 import { supabase } from '../lib/supabase';
 import { authService } from './authService';
 import { searchAnimeFuzzy } from '../utils/animeSearch';
@@ -205,7 +206,8 @@ class DatabaseService {
       return this.cachedAllRecords;
     }
     const uniqueMap = new Map<string, AnimeRecord>();
-    for (const record of this.animeRecords) {
+    const recordsToProcess = this.animeRecords.length > 0 ? this.animeRecords : ANIME_DATABASE;
+    for (const record of recordsToProcess) {
       if (record && record.title) {
         const titleKey = record.title.trim().toLowerCase();
         if (!uniqueMap.has(titleKey)) {
