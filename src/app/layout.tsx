@@ -69,6 +69,9 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://anidub.in',
   },
+  verification: {
+    google: 'GC9I6JD43yIsgwDhpwT3a4SKpDeBExC-Typd_4JTOL8',
+  },
 };
 
 const ROOT_SCHEMA_JSONLD = {
@@ -111,6 +114,7 @@ export default function RootLayout({
       }}
     >
       <head>
+        <meta name="google-site-verification" content="GC9I6JD43yIsgwDhpwT3a4SKpDeBExC-Typd_4JTOL8" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(ROOT_SCHEMA_JSONLD) }}
