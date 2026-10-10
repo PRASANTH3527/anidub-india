@@ -275,8 +275,8 @@ export default function ShareHandler() {
 
     try {
       // Add to local catalogue so it renders in Watchlist tab
-      const existing = dbService.getApprovedAnime();
-      localStorage.setItem('anidub_db_anime_records', JSON.stringify([customRecord, ...existing]));
+      const existing = dbService.getAllAnimeRecords();
+      dbService.saveAnimeRecords([customRecord, ...existing]);
 
       // Add to user's watchlist
       const raw = localStorage.getItem('anidub_local_watchlist');

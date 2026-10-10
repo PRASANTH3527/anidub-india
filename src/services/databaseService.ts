@@ -168,36 +168,18 @@ class DatabaseService {
     private async initDatabase() {
     if (typeof window === 'undefined') return;
     try {
-      // 1. Load from localStorage (Primary as requested)
-      const localData = localStorage.getItem(DB_ANIME_KEY);
-      if (localData) {
-        try {
-          const parsed = JSON.parse(localData);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            this.animeRecords = parsed.map(item => this.normalizeRecord(item));
-            this.invalidateMemoryCache();
-            console.log(`[AniDub DB] Loaded ${this.animeRecords.length} records from localStorage.`);
-          }
-        } catch (e) {
-          console.warn('[AniDub DB] localStorage parse notice:', e);
-        }
+      // 1. Load from IndexedDB (Primary to avoid QuotaExceededError)
+      const idbData = await idbGet(DB_ANIME_KEY);
+      if (idbData && Array.isArray(idbData) && idbData.length > 0) {
+        this.animeRecords = idbData.map(item => this.normalizeRecord(item));
+        this.invalidateMemoryCache();
+        console.log(`[AniDub DB] Loaded ${this.animeRecords.length} records from IndexedDB.`);
+      } else {
+        this.animeRecords = ANIME_DATABASE.map(item => this.normalizeRecord(item));
+        this.invalidateMemoryCache();
+        await idbSet(DB_ANIME_KEY, this.animeRecords);
+        console.log(`[AniDub DB] Initialized from default ANIME_DATABASE (${this.animeRecords.length} records).`);
       }
-
-      // 2. If localStorage is empty, check IndexedDB or fallback to ANIME_DATABASE
-      if (this.animeRecords.length === 0) {
-        const idbData = await idbGet(DB_ANIME_KEY);
-        if (idbData && Array.isArray(idbData) && idbData.length > 0) {
-          this.animeRecords = idbData.map(item => this.normalizeRecord(item));
-          this.invalidateMemoryCache();
-          localStorage.setItem(DB_ANIME_KEY, JSON.stringify(this.animeRecords));
-        } else {
-          this.animeRecords = ANIME_DATABASE.map(item => this.normalizeRecord(item));
-          this.invalidateMemoryCache();
-          localStorage.setItem(DB_ANIME_KEY, JSON.stringify(this.animeRecords));
-          console.log(`[AniDub DB] Initialized from default ANIME_DATABASE (${this.animeRecords.length} records).`);
-        }
-      }
-
       this.isInitialized = true;
       this.notify();
       this.syncWithServer();
@@ -205,7 +187,6 @@ class DatabaseService {
     } catch (e) {
       console.error('Database initialization error:', e);
       this.animeRecords = ANIME_DATABASE.map(item => this.normalizeRecord(item));
-      localStorage.setItem(DB_ANIME_KEY, JSON.stringify(this.animeRecords));
       this.isInitialized = true;
       this.notify();
     }
