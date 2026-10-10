@@ -1,27 +1,26 @@
-import { BrandLogo } from "./BrandLogo";
+'use client';
+
 import React from 'react';
 import { 
   Bookmark, 
   Sparkles, 
-  PlusCircle, 
   Compass, 
   Calendar, 
-  Film, 
   User, 
-  LogIn,
-  Sun,
-  Moon,
-  Heart,
-  Languages,
-  Search,
-  BarChart3,
-  Trophy,
-  Cloud
+  Sun, 
+  Moon, 
+  Languages, 
+  BarChart3, 
+  Trophy, 
+  Cloud 
 } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
+import { PrimarySearchBar } from './PrimarySearchBar';
 import { authService } from '../services/authService';
 import { LocalUserProfile, ANIME_AVATAR_PRESETS } from './LocalProfileModal';
 import { SupportedLanguage, translate } from '../utils/i18n';
 import { useTheme } from '../context/ThemeContext';
+import { AnimeRecord } from '../types/database';
 
 export type NavTab = 'library' | 'foryou' | 'watchlist' | 'schedule' | 'recommendations' | 'profile' | 'analytics' | 'tierlist';
 
@@ -40,6 +39,13 @@ interface NavbarProps {
   onToggleLanguage?: () => void;
   isAdmin?: boolean;
   onOpenDeviceSync?: () => void;
+  // Primary Search & Feed Integration
+  searchQuery?: string;
+  setSearchQuery?: (query: string) => void;
+  allAnime?: AnimeRecord[];
+  onSelectAnime?: (anime: AnimeRecord) => void;
+  feedView?: 'directory' | 'foryou';
+  setFeedView?: (view: 'directory' | 'foryou') => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -61,235 +67,353 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleLanguage,
   isAdmin = false,
   onOpenDeviceSync,
+  searchQuery = '',
+  setSearchQuery = () => {},
+  allAnime = [],
+  onSelectAnime,
+  feedView = 'directory',
+  setFeedView,
 }) => {
-  const { avatar: globalAvatar, theme: currentTheme } = useTheme();
+  const { avatar: globalAvatar } = useTheme();
   const currentUser = authService.getCurrentUser();
   const tapHistoryRef = React.useRef<number[]>([]);
 
   const handleLogoClick = () => {
     const now = Date.now();
-    // Keep taps from the last 2.5 seconds
     tapHistoryRef.current = [...tapHistoryRef.current.filter((t) => now - t < 2500), now];
-    
     if (tapHistoryRef.current.length >= 5) {
       tapHistoryRef.current = [];
       onSecretTrigger();
     }
+    if (setFeedView) setFeedView('directory');
     setActiveTab('library');
+    window.location.hash = 'library';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const activeAvatar = globalAvatar || localProfile?.avatar;
+  const isDirectoryActive = activeTab === 'library' && feedView !== 'foryou';
+  const isForYouActive = activeTab === 'foryou' || (activeTab === 'library' && feedView === 'foryou');
+
+  // Friendly short labels for mobile buttons to ensure zero truncation across all device widths
+  const directoryLabel = uiLanguage === 'ta' ? 'முகப்பு' : 'Directory';
+  const forYouLabel = uiLanguage === 'ta' ? 'தேர்வுகள்' : 'For You';
+  const watchlistLabel = uiLanguage === 'ta' ? 'பட்டியல்' : 'Watchlist';
+  const scheduleLabel = uiLanguage === 'ta' ? 'அட்டவணை' : 'Schedule';
 
   return (
-    <header className="sticky top-0 z-40 w-full max-w-full bg-[#0b0f17]/95 backdrop-blur-md border-b border-neutral-800/80 transition-colors overflow-hidden box-border">
-      <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-1 sm:gap-3 box-border w-full">
+    <header className="sticky top-0 z-40 w-full max-w-full overflow-hidden bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 transition-colors box-border select-none">
+      <div className="w-full max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 py-2 sm:py-3 box-border flex flex-col gap-2 sm:gap-2.5 overflow-hidden">
         
-        {/* Official AniDub India Brand Logo */}
-        <div 
-          onClick={handleLogoClick}
-          className="flex items-center cursor-pointer group select-none shrink-0 active:scale-[0.97] transition-transform"
-          title={translate('stealthHint', uiLanguage)}
-        >
-          <BrandLogo size="sm" variant={theme === "dark" ? "dark" : "light"} className="scale-90 sm:scale-100 origin-left" />
+        {/* ROW 1 (Desktop: Brand + Nav Links + Search + Utilities | Mobile: Brand on Left + Utilities & Profile on Right) */}
+        <div className="flex items-center justify-between gap-1.5 sm:gap-4 w-full box-border min-w-0">
+          
+          {/* Brand Logo & Desktop Nav Links */}
+          <div className="flex items-center gap-2 sm:gap-3 lg:gap-5 shrink-0 min-w-0">
+            {/* Brand Logo with Stealth Admin Easter Egg */}
+            <div 
+              onClick={handleLogoClick}
+              className="flex items-center cursor-pointer group select-none shrink-0 active:scale-[0.97] transition-transform"
+              title={translate('stealthHint', uiLanguage)}
+            >
+              <BrandLogo size="md" variant={theme === 'dark' ? 'dark' : 'light'} />
+            </div>
+
+            {/* Desktop-Only Primary Navigation Tabs */}
+            <nav className="hidden md:flex items-center gap-1.5 shrink-0">
+              {/* 1. Directory Tab */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (setFeedView) setFeedView('directory');
+                  setActiveTab('library');
+                  window.location.hash = 'library';
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  isDirectoryActive
+                    ? 'btn-primary-theme shadow-md text-white'
+                    : 'text-neutral-300 hover:text-white hover:bg-neutral-800/70'
+                }`}
+              >
+                <Compass className="w-4 h-4" />
+                <span>{translate('navDirectory', uiLanguage)}</span>
+              </button>
+
+              {/* 2. For You Tab */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (setFeedView) setFeedView('foryou');
+                  setActiveTab('foryou');
+                  window.location.hash = 'foryou';
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  isForYouActive
+                    ? 'bg-amber-500 text-black shadow-md font-black'
+                    : 'text-neutral-300 hover:text-white hover:bg-neutral-800/70'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>{translate('navForYou', uiLanguage)}</span>
+              </button>
+
+              {/* 3. My Watchlist Tab */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('watchlist');
+                  window.location.hash = 'watchlist';
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  activeTab === 'watchlist'
+                    ? 'btn-primary-theme shadow-md text-white'
+                    : 'text-neutral-300 hover:text-white hover:bg-neutral-800/70'
+                }`}
+              >
+                <Bookmark className={`w-4 h-4 ${activeTab === 'watchlist' ? 'fill-current' : ''}`} />
+                <span>{translate('navWatchlist', uiLanguage)}</span>
+                {watchlistCount > 0 && (
+                  <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-[var(--primary-badge)] text-white border border-primary-theme/40 shadow-sm">
+                    {watchlistCount}
+                  </span>
+                )}
+              </button>
+
+              {/* 4. Schedule Tab */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('schedule');
+                  window.location.hash = 'schedule';
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  activeTab === 'schedule'
+                    ? 'btn-primary-theme shadow-md text-white'
+                    : 'text-neutral-300 hover:text-white hover:bg-neutral-800/70'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Schedule</span>
+              </button>
+
+              {/* 5. Tier List Tab */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('tierlist');
+                  window.location.hash = 'tierlist';
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  activeTab === 'tierlist'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                    : 'text-neutral-300 hover:text-white hover:bg-neutral-800/70'
+                }`}
+              >
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <span>Tier List</span>
+              </button>
+
+              {/* Admin Analytics Tab */}
+              {(isAdmin || currentUser?.email === 'prasanth01236@gmail.com') && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('analytics')}
+                  className={`flex items-center justify-center p-2 rounded-xl transition-all cursor-pointer shrink-0 ${
+                    activeTab === 'analytics'
+                      ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+                  }`}
+                  title="View Platform Analytics"
+                >
+                  <BarChart3 className="w-4 h-4 text-accent-theme" />
+                </button>
+              )}
+            </nav>
+          </div>
+
+          {/* Desktop Search Bar (Centered in Row 1 on md: screens) */}
+          <div className="hidden md:flex flex-grow max-w-sm lg:max-w-md xl:max-w-lg mx-2 lg:mx-4 min-w-0">
+            <PrimarySearchBar
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              allAnime={allAnime}
+              onSelectAnime={onSelectAnime}
+              uiLanguage={uiLanguage}
+            />
+          </div>
+
+          {/* Right Utility Tools (Profile, Sync, Lang, Theme) */}
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            {/* Cloud Sync Button */}
+            {onOpenDeviceSync && (
+              <button
+                type="button"
+                onClick={onOpenDeviceSync}
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl btn-primary-theme text-white text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-md shrink-0"
+                title="Anonymous Device Sync via 6-digit code"
+              >
+                <Cloud className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Sync</span>
+              </button>
+            )}
+
+            {/* Language Switcher */}
+            {onToggleLanguage && (
+              <button
+                type="button"
+                onClick={onToggleLanguage}
+                className="flex items-center gap-1 px-1.5 sm:px-2.5 py-1.5 sm:py-2 rounded-xl bg-neutral-800/70 hover:bg-neutral-700/80 active:scale-95 border border-neutral-700/40 text-[10px] sm:text-xs font-black text-neutral-300 hover:text-white transition-all cursor-pointer shrink-0"
+                title="Switch Language"
+              >
+                <Languages className="w-3.5 h-3.5 text-accent-theme" />
+                <span>{uiLanguage === 'en' ? 'தமிழ்' : 'EN'}</span>
+              </button>
+            )}
+
+            {/* Theme Toggle Button */}
+            <button
+              type="button"
+              onClick={onToggleTheme}
+              className="p-1.5 sm:p-2 rounded-xl bg-neutral-800/70 hover:bg-neutral-700/80 active:scale-90 border border-neutral-700/40 text-neutral-400 hover:text-white transition-all cursor-pointer shadow-sm shrink-0"
+              title="Toggle Theme"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-accent-theme" />
+              )}
+            </button>
+
+            {/* User Profile Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (onOpenProfileModal) {
+                  onOpenProfileModal();
+                } else {
+                  setActiveTab('profile');
+                }
+              }}
+              className={`flex items-center gap-1.5 p-1 sm:p-1.5 pl-1.5 pr-2 sm:pr-3 rounded-xl transition-all cursor-pointer shrink-0 border ${
+                activeTab === 'profile'
+                  ? 'bg-[var(--primary-accent)]/20 text-accent-theme border-primary-theme shadow-sm'
+                  : 'bg-neutral-800/70 border-neutral-700/40 text-neutral-300 hover:text-white hover:bg-neutral-700/80'
+              }`}
+              title={translate('navProfile', uiLanguage)}
+            >
+              {activeAvatar ? (
+                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full overflow-hidden border border-primary-theme/50 shrink-0">
+                  <img src={activeAvatar} alt="Profile" className="w-full h-full object-cover object-top" />
+                </div>
+              ) : (
+                <User className="w-4 h-4" />
+              )}
+              <span className="text-xs font-bold hidden sm:inline max-w-[80px] truncate">
+                {localProfile?.nickname || 'Profile'}
+              </span>
+            </button>
+          </div>
         </div>
 
-        {/* Primary Nav Tabs: Centered between Logo and Theme Toggle (Icon-only, no text labels) */}
-        <nav className="flex items-center gap-1 sm:gap-2 flex-1 mx-1 sm:mx-4 overflow-x-auto no-scrollbar py-1">
+        {/* ROW 2 (Mobile-Only Navigation Tabs: 4-Column Grid, Zero Horizontal Scrolling, Fully Padded Labels) */}
+        <nav 
+          aria-label="Mobile Navigation Tabs"
+          className="grid grid-cols-4 gap-1.5 w-full md:hidden box-border max-w-full overflow-hidden"
+        >
           {/* 1. Directory */}
           <button
-            onClick={() => setActiveTab('library')}
-            className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
-              activeTab === 'library'
-                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
-            }`}
-            title={translate('navDirectory', uiLanguage)}
-            aria-label={translate('navDirectory', uiLanguage)}
-          >
-            <Compass className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'library' ? 'scale-110' : ''}`} />
-          </button>
-
-          {/* 2. Search */}
-          <button
+            type="button"
             onClick={() => {
+              if (setFeedView) setFeedView('directory');
               setActiveTab('library');
-              setTimeout(() => {
-                const input = document.querySelector('input[type="text"]');
-                if (input instanceof HTMLInputElement) {
-                  input.focus();
-                  input.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-              }, 100);
+              window.location.hash = 'library';
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800/60 transition-all active:scale-90 cursor-pointer"
-            title="Search Anime"
-            aria-label="Search Anime"
-          >
-            <Search className="w-5 h-5" />
-          </button>
-
-          {/* 3. For You */}
-          <button
-            onClick={() => setActiveTab('foryou')}
-            className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
-              activeTab === 'foryou'
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+            className={`flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer box-border min-w-0 ${
+              isDirectoryActive
+                ? 'btn-primary-theme shadow-md text-white'
+                : 'text-neutral-300 hover:text-white bg-[#141b2c]/80 hover:bg-neutral-800 border border-neutral-800'
             }`}
-            title={translate('navForYou', uiLanguage)}
-            aria-label={translate('navForYou', uiLanguage)}
           >
-            <Sparkles className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'foryou' ? 'scale-110' : ''}`} />
+            <Compass className="w-3.5 h-3.5 shrink-0" />
+            <span className="leading-tight truncate">{directoryLabel}</span>
           </button>
 
-          {/* 4. Watchlist */}
+          {/* 2. For You */}
           <button
-            onClick={() => setActiveTab('watchlist')}
-            className={`relative w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
+            type="button"
+            onClick={() => {
+              if (setFeedView) setFeedView('foryou');
+              setActiveTab('foryou');
+              window.location.hash = 'foryou';
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer box-border min-w-0 ${
+              isForYouActive
+                ? 'bg-amber-500 text-black shadow-md font-black'
+                : 'text-neutral-300 hover:text-white bg-[#141b2c]/80 hover:bg-neutral-800 border border-neutral-800'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+            <span className="leading-tight truncate">{forYouLabel}</span>
+          </button>
+
+          {/* 3. Watchlist */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('watchlist');
+              window.location.hash = 'watchlist';
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`relative flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer box-border min-w-0 ${
               activeTab === 'watchlist'
-                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+                ? 'btn-primary-theme shadow-md text-white'
+                : 'text-neutral-300 hover:text-white bg-[#141b2c]/80 hover:bg-neutral-800 border border-neutral-800'
             }`}
-            title={translate('navWatchlist', uiLanguage)}
-            aria-label={translate('navWatchlist', uiLanguage)}
           >
-            <Bookmark className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'watchlist' ? 'scale-110 fill-current' : ''}`} />
+            <Bookmark className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'watchlist' ? 'fill-current' : ''}`} />
+            <span className="leading-tight truncate">{watchlistLabel}</span>
             {watchlistCount > 0 && (
-              <span className="absolute -top-1 -right-1 btn-primary-theme text-white text-[9px] font-black rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5 border border-[#0b0f17] shadow-sm">
+              <span className="text-[9px] font-black px-1 py-0.2 rounded-full bg-[var(--primary-badge)] text-white border border-primary-theme/40 leading-none shrink-0">
                 {watchlistCount}
               </span>
             )}
           </button>
 
-          {/* 5. Airing Schedule */}
+          {/* 4. Schedule */}
           <button
-            onClick={() => setActiveTab('schedule')}
-            className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
-              activeTab === 'schedule'
-                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
-            }`}
-            title="Airing Schedule"
-            aria-label="Airing Schedule"
-          >
-            <Calendar className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'schedule' ? 'scale-110' : ''}`} />
-          </button>
-
-          {/* 6. Viral Tier List Maker */}
-          <button
-            onClick={() => setActiveTab('tierlist')}
-            className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
-              activeTab === 'tierlist'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
-            }`}
-            title="Anime Tier List Maker"
-            aria-label="Anime Tier List Maker"
-          >
-            <Trophy className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'tierlist' ? 'scale-110 text-amber-400' : ''}`} />
-          </button>
-
-          {/* Admin Analytics (Hidden for public) */}
-          {(isAdmin || currentUser?.email === 'prasanth01236@gmail.com') && (
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`w-9 h-9 sm:w-10 sm:h-10 hidden md:flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
-                activeTab === 'analytics'
-                  ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
-                  : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
-              }`}
-              title="View Platform Analytics"
-              aria-label="Platform Analytics"
-            >
-              <BarChart3 className="w-5 h-5 text-accent-theme" />
-            </button>
-          )}
-
-          {/* 5. Profile & Avatar */}
-          <button
+            type="button"
             onClick={() => {
-              if (onOpenProfileModal) {
-                onOpenProfileModal();
-              } else {
-                setActiveTab('profile');
-              }
+              setActiveTab('schedule');
+              window.location.hash = 'schedule';
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
-              activeTab === 'profile'
-                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+            className={`flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer box-border min-w-0 ${
+              activeTab === 'schedule'
+                ? 'btn-primary-theme shadow-md text-white'
+                : 'text-neutral-300 hover:text-white bg-[#141b2c]/80 hover:bg-neutral-800 border border-neutral-800'
             }`}
-            title={translate('navProfile', uiLanguage)}
-            aria-label={translate('navProfile', uiLanguage)}
           >
-            {activeAvatar ? (
-              <div 
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden border-2 shadow-sm shrink-0"
-                style={{
-                  borderColor: activeTab === 'profile' ? 'var(--primary-accent)' : 'var(--primary-border)',
-                }}
-              >
-                <img src={activeAvatar || undefined} alt="Profile" className="w-full h-full object-cover object-top" />
-              </div>
-            ) : (
-              <User className={`w-5 h-5 transition-transform duration-200 ${activeTab === 'profile' ? 'scale-110' : ''}`} />
-            )}
+            <Calendar className="w-3.5 h-3.5 shrink-0" />
+            <span className="leading-tight truncate">{scheduleLabel}</span>
           </button>
         </nav>
 
-        {/* Global Controls (Theme & Lang) */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {/* Anonymous Sync Button */}
-          {onOpenDeviceSync && (
-            <button
-              onClick={onOpenDeviceSync}
-              className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-xl btn-primary-theme text-white text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-md shrink-0"
-              title="Anonymous Device Sync via 6-digit code"
-            >
-              <Cloud className="w-4 h-4 text-white" />
-              <span className="hidden lg:inline">Sync Data</span>
-            </button>
-          )}
-
-          {/* Theme Toggle */}
-          <button
-            onClick={onToggleTheme}
-            suppressHydrationWarning
-            className="p-2 sm:p-2.5 rounded-xl bg-neutral-800/60 hover:bg-neutral-700/80 active:scale-90 border border-neutral-700/40 text-neutral-400 hover:text-white transition-all cursor-pointer shadow-sm"
-            title="Toggle Theme"
-          >
-            {theme === 'dark' ? (
-              <Sun className="w-4.5 h-4.5 sm:w-4 sm:h-4 text-amber-400" />
-            ) : (
-              <Moon className="w-4.5 h-4.5 sm:w-4 sm:h-4 text-accent-theme" />
-            )}
-          </button>
-
-          {/* Bilingual Toggle (Hidden on narrow mobile) */}
-          {onToggleLanguage && (
-            <button
-              onClick={onToggleLanguage}
-              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-neutral-800/60 hover:bg-neutral-700/80 active:scale-95 border border-neutral-700/40 text-[10px] font-black text-neutral-300 hover:text-white transition-all cursor-pointer"
-            >
-              <Languages className="w-3.5 h-3.5 text-accent-theme" />
-              <span>{uiLanguage === 'en' ? 'தமிழ்' : 'EN'}</span>
-            </button>
-          )}
-
-          {/* Auth indicator (Always visible if logged in) */}
-          {currentUser && (
-            <div 
-              onClick={onOpenAuthModal}
-              className="p-0.5 rounded-full border border-primary-theme/40 cursor-pointer active:scale-90 transition-transform hidden xs:block"
-              title={`Logged in as ${currentUser.displayName}`}
-            >
-              <img
-                src={currentUser.photoURL || undefined}
-                alt={currentUser.displayName}
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover"
-              />
-            </div>
-          )}
+        {/* ROW 3 (Mobile-Only Primary Search Bar: Spans Full-Width of Header, Completely Stable) */}
+        <div className="w-full md:hidden box-border max-w-full overflow-hidden min-w-0">
+          <PrimarySearchBar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            allAnime={allAnime}
+            onSelectAnime={onSelectAnime}
+            uiLanguage={uiLanguage}
+          />
         </div>
 
       </div>

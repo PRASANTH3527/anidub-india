@@ -9,7 +9,7 @@ import {
   Star, 
   Bookmark, 
   Play,
-  Film
+  X
 } from 'lucide-react';
 import { Anime, DubLanguage } from '../types/anime';
 import { AnimeRecord } from '../types/database';
@@ -20,6 +20,8 @@ interface RecentlyViewedRowProps {
   allAnime: AnimeRecord[];
   onSelectAnime: (anime: Anime) => void;
   onToggleWatchlist: (anime: Anime) => void;
+  onRemoveRecentlyViewed?: (animeId: string) => void;
+  onClearAllRecentlyViewed?: () => void;
   watchlistIds: string[];
   uiLanguage?: SupportedLanguage;
 }
@@ -38,6 +40,8 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
   allAnime,
   onSelectAnime,
   onToggleWatchlist,
+  onRemoveRecentlyViewed,
+  onClearAllRecentlyViewed,
   watchlistIds,
   uiLanguage = 'en',
 }) => {
@@ -67,29 +71,42 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
 
   return (
     <section className="w-full max-w-6xl mx-auto px-3 sm:px-4 mb-8 overflow-hidden box-border">
-      {/* Header with Title, Count, Clear Button and Scroll Arrows */}
-      <div className="flex items-center justify-between mb-3.5">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-purple-950/70 border border-purple-600/40 flex items-center justify-center text-purple-400 shadow-sm">
+      {/* Header with Title, Count, Clear All Button and Scroll Arrows */}
+      <div className="flex items-center justify-between mb-3.5 gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-purple-950/70 border border-purple-600/40 flex items-center justify-center text-purple-400 shadow-sm shrink-0">
             <Clock className="w-4 h-4" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="font-heading font-black text-white text-base sm:text-lg tracking-tight">
+              <h3 className="font-heading font-black text-white text-base sm:text-lg tracking-tight truncate">
                 {translate('recentlyViewedTitle', lang)}
               </h3>
-              <span className="text-[11px] font-bold px-2 py-0.2 rounded-full bg-[#182033] border border-neutral-700/80 text-purple-300">
+              <span className="text-[11px] font-bold px-2 py-0.2 rounded-full bg-[#182033] border border-neutral-700/80 text-purple-300 shrink-0">
                 {recentAnimeList.length}
               </span>
             </div>
-            <p className="text-[11px] text-neutral-400 hidden sm:block">
+            <p className="text-[11px] text-neutral-400 hidden sm:block truncate">
               Jump back into the titles you explored recently
             </p>
           </div>
         </div>
 
-        {/* Action Controls: Scroll Arrows */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Action Controls: Clear All Button & Scroll Arrows */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {onClearAllRecentlyViewed && (
+            <button
+              type="button"
+              onClick={onClearAllRecentlyViewed}
+              className="text-[11px] font-bold text-neutral-400 hover:text-rose-400 flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#141b2c] hover:bg-rose-950/40 border border-neutral-800 hover:border-rose-900/50 transition-all cursor-pointer active:scale-95 shadow-sm"
+              title="Clear all recently viewed history"
+              aria-label="Clear all recently viewed anime"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Clear All</span>
+            </button>
+          )}
+
           {recentAnimeList.length > 3 && (
             <div className="flex items-center gap-1">
               <button
@@ -140,30 +157,52 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
                 />
 
                 {/* Dark Vignette Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#121829] via-[#121829]/20 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#121829] via-[#121829]/20 to-transparent pointer-events-none" />
 
                 {/* Rating Pill */}
-                <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/75 backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-full text-[10px] font-bold text-amber-300 shadow">
+                <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/75 backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-full text-[10px] font-bold text-amber-300 shadow pointer-events-none">
                   <Star className="w-3 h-3 fill-current text-amber-400" />
                   <span>{anime.rating ? `${anime.rating.toFixed(1)}/10` : '8.5/10'}</span>
                 </div>
 
-                {/* Bookmark Toggle Button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleWatchlist(anime);
-                  }}
-                  className={`absolute top-2 right-2 p-1.5 rounded-full backdrop-blur-md border transition-all cursor-pointer ${
-                    isSaved
-                      ? 'bg-purple-600 border-purple-400 text-white shadow-md'
-                      : 'bg-black/60 border-white/15 text-neutral-300 hover:text-white hover:bg-black/80'
-                  }`}
-                  title={isSaved ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                {/* Top-Right Action Buttons: Bookmark & Individual 'X' Remove Icon */}
+                <div 
+                  className="absolute top-2 right-2 flex items-center gap-1 z-20 pointer-events-auto"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <Bookmark className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} />
-                </button>
+                  {/* Bookmark Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleWatchlist(anime);
+                    }}
+                    className={`p-1.5 rounded-full backdrop-blur-md border transition-all cursor-pointer ${
+                      isSaved
+                        ? 'bg-purple-600 border-purple-400 text-white shadow-md'
+                        : 'bg-black/60 border-white/15 text-neutral-300 hover:text-white hover:bg-black/80'
+                    }`}
+                    title={isSaved ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                  >
+                    <Bookmark className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} />
+                  </button>
+
+                  {/* Individual Delete 'X' Button */}
+                  {onRemoveRecentlyViewed && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveRecentlyViewed(anime.id);
+                      }}
+                      className="p-1.5 rounded-full bg-black/70 hover:bg-rose-600 text-neutral-300 hover:text-white backdrop-blur-md border border-white/15 active:scale-90 transition-all cursor-pointer shadow-md group/remove"
+                      title="Remove from recently viewed"
+                      aria-label={`Remove ${anime.title} from recently viewed history`}
+                    >
+                      <X className="w-3.5 h-3.5 group-hover/remove:rotate-90 transition-transform duration-200" />
+                    </button>
+                  )}
+                </div>
 
                 {/* Quick Play Hover Indicator */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
@@ -173,7 +212,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
                 </div>
 
                 {/* Dub Badges (Clamped) */}
-                <div className="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1">
+                <div className="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1 pointer-events-none">
                   {(anime.dubs || []).slice(0, 3).map((dub) => {
                     const badge = DUB_BADGE_STYLES[dub];
                     return (

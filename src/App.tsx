@@ -3,7 +3,6 @@
 import React, { useState, useMemo, useEffect, useRef, Suspense, lazy, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Navbar, NavTab } from './components/Navbar';
-import { BottomNav } from './components/BottomNav';
 import { Hero } from './components/Hero';
 import { AnimatedStats } from './components/AnimatedStats';
 import { FilterBar } from './components/FilterBar';
@@ -182,6 +181,25 @@ function AppContent() {
       return updated;
     });
   };
+
+  const handleRemoveRecentlyViewed = useCallback((animeId: string) => {
+    setRecentlyViewedIds((prev) => {
+      const updated = prev.filter((id) => id !== animeId);
+      try {
+        localStorage.setItem('anidub_recently_viewed', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    toast.info('Removed from History', 'Anime removed from recently viewed history.');
+  }, [toast]);
+
+  const handleClearAllRecentlyViewed = useCallback(() => {
+    setRecentlyViewedIds([]);
+    try {
+      localStorage.removeItem('anidub_recently_viewed');
+    } catch {}
+    toast.info('History Cleared', 'All recently viewed history has been cleared.');
+  }, [toast]);
 
   // Report Modal state
   const [reportingAnime, setReportingAnime] = useState<{ id: string; title: string; poster?: string } | null>(null);
@@ -787,12 +805,18 @@ function AppContent() {
             onToggleLanguage={handleToggleLanguage}
             isAdmin={isAdmin}
             onOpenDeviceSync={() => setIsDeviceSyncModalOpen(true)}
+            searchQuery={searchQuery}
+            setSearchQuery={(q) => setSearchQuery(q)}
+            allAnime={approvedAnime}
+            onSelectAnime={handleOpenAnimeDetail}
+            feedView={feedView}
+            setFeedView={(view) => setFeedView(view)}
           />
         </>
       )}
 
       {/* 2. Main Content Feed */}
-      <main className="flex-grow w-full max-w-full overflow-x-hidden pt-4 sm:pt-6 pb-24 md:pb-14 transition-all duration-500 box-border">
+      <main className="flex-grow w-full max-w-full overflow-x-hidden pt-4 sm:pt-6 pb-12 sm:pb-16 transition-all duration-500 box-border">
         {/* Stealth Admin Dashboard Integration */}
         {isAdmin && activeTab === 'library' && (
           <div className="mb-6">
@@ -861,6 +885,8 @@ function AppContent() {
                     allAnime={approvedAnime}
                     onSelectAnime={handleOpenAnimeDetail}
                     onToggleWatchlist={handleToggleWatchlist}
+                    onRemoveRecentlyViewed={handleRemoveRecentlyViewed}
+                    onClearAllRecentlyViewed={handleClearAllRecentlyViewed}
                     watchlistIds={localWatchlistIds}
                     uiLanguage={uiLanguage}
                   />
@@ -898,12 +924,6 @@ function AppContent() {
                     isLoading={isLoading}
                     onReset={handleResetFilters}
                     uiLanguage={uiLanguage}
-                    feedView={feedView}
-                    setFeedView={(view) => {
-                      setFeedView(view);
-                    }}
-                    allAnime={approvedAnime}
-                    onSelectAnime={handleOpenAnimeDetail}
                   />
 
                   {/* For You Logic Metadata (Subtle Info) */}
@@ -1102,21 +1122,7 @@ function AppContent() {
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
       />
-      {/* Mobile Bottom Navigation Bar: Directory, For You, Search, Watchlist, Schedule, Profile */}
-      <BottomNav
-        activeTab={activeTab === 'library' && feedView === 'foryou' ? 'foryou' : activeTab}
-        setActiveTab={handleTabChange}
-        feedView={feedView}
-        setFeedView={(view) => {
-          setFeedView(view);
-          if (activeTab !== 'library') {
-            setActiveTab('library');
-          }
-        }}
-        watchlistCount={filteredWatchlistIds.length}
-        avatar={localProfile?.avatar}
-        uiLanguage={uiLanguage}
-      />
+
 
       {/* Submit Dub Info Modal */}
       <SubmitDubModal
