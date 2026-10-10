@@ -3,26 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AniDub India — Tamil, Telugu &amp; Hindi Dubbed Anime Directory</title>
-    <meta name="description" content="Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them legally on Crunchyroll, Netflix, and JioCinema." />
+    <title>Anidub India Official Website — Premier Anime Streaming &amp; Dubbing in India</title>
+    <meta name="description" content="Welcome to the Anidub India Official Website, the premier destination for anime streaming and dubbing in India. Discover and stream anime dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada." />
     
     <!-- Open Graph for WhatsApp, Telegram, Facebook & Discord Previews -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="AniDub India" />
-    <meta property="og:title" content="AniDub India — Tamil, Telugu &amp; Hindi Dubbed Anime Directory" />
-    <meta property="og:description" content="Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them legally on Crunchyroll, Netflix, and JioCinema." />
-    <meta property="og:image" content="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&amp;h=630&amp;fit=crop&amp;q=85" />
-    <meta property="og:image:secure_url" content="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&amp;h=630&amp;fit=crop&amp;q=85" />
-    <meta property="og:image:type" content="image/jpeg" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="AniDub India — Regional Anime Dub Directory" />
+    <meta property="og:site_name" content="Anidub India" />
+    <meta property="og:title" content="Anidub India Official Website — Premier Anime Streaming &amp; Dubbing in India" />
+    <meta property="og:description" content="Welcome to the Anidub India Official Website, the premier destination for anime streaming and dubbing in India. Discover and stream anime dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada." />
+    <meta property="og:image" content="https://anidub.in/41533.png" />
+    <meta property="og:image:secure_url" content="https://anidub.in/41533.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1000" />
+    <meta property="og:image:height" content="580" />
+    <meta property="og:image:alt" content="Anidub India Official Website — Premier Anime Streaming &amp; Dubbing in India" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="AniDub India — Tamil, Telugu &amp; Hindi Dubbed Anime Directory" />
-    <meta name="twitter:description" content="Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them legally." />
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&amp;h=630&amp;fit=crop&amp;q=85" />
+    <meta name="twitter:title" content="Anidub India Official Website — Premier Anime Streaming &amp; Dubbing in India" />
+    <meta name="twitter:description" content="Welcome to the Anidub India Official Website, the premier destination for anime streaming and dubbing in India." />
+    <meta name="twitter:image" content="https://anidub.in/41533.png" />
 
     <!-- Progressive Web App Setup -->
     <link rel="manifest" href="/manifest.json" />
@@ -31,7 +31,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="AniDub India" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -42,13 +44,38 @@
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "WebApplication",
-      "name": "AniDub India",
-      "url": "https://anidub.in",
-      "description": "Discover which anime are dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada — and where to stream them legally.",
-      "applicationCategory": "EntertainmentApplication",
-      "operatingSystem": "All",
-      "inLanguage": ["en", "ta", "te", "hi", "ml", "kn"]
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://anidub.in/#organization",
+          "name": "Anidub India",
+          "alternateName": ["AniDub India", "AniDub", "Anidub India Official Website"],
+          "url": "https://anidub.in",
+          "logo": {
+            "@type": "ImageObject",
+            "@id": "https://anidub.in/#logo",
+            "url": "https://anidub.in/41533.png",
+            "contentUrl": "https://anidub.in/41533.png",
+            "caption": "Anidub India Official Brand Logo",
+            "width": 1000,
+            "height": 580
+          },
+          "image": "https://anidub.in/41533.png",
+          "description": "Anidub India is the official premier destination for anime streaming and dubbing in India, documenting anime dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada."
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://anidub.in/#website",
+          "url": "https://anidub.in",
+          "name": "Anidub India Official Website",
+          "alternateName": "Anidub India",
+          "publisher": {
+            "@id": "https://anidub.in/#organization"
+          },
+          "inLanguage": ["en-IN", "ta", "te", "hi", "ml", "kn"],
+          "description": "Anidub India Official Website — The premier destination for anime streaming and dubbing in India."
+        }
+      ]
     }
     </script>
   </head>

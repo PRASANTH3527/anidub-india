@@ -1,3 +1,4 @@
+import { BrandLogo } from "./BrandLogo";
 import React from 'react';
 import { 
   Bookmark, 
@@ -80,36 +81,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   const activeAvatar = globalAvatar || localProfile?.avatar;
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#0b0f17]/90 backdrop-blur-md border-b border-neutral-800/80 transition-colors">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
+    <header className="sticky top-0 z-40 w-full max-w-full bg-[#0b0f17]/95 backdrop-blur-md border-b border-neutral-800/80 transition-colors overflow-hidden box-border">
+      <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-1 sm:gap-3 box-border w-full">
         
-        {/* Brand Logo (Compact on mobile) */}
+        {/* Official AniDub India Brand Logo */}
         <div 
           onClick={handleLogoClick}
-          className="flex items-center gap-1.5 sm:gap-2.5 cursor-pointer group select-none shrink-0 active:scale-[0.97] transition-transform"
+          className="flex items-center cursor-pointer group select-none shrink-0 active:scale-[0.97] transition-transform"
           title={translate('stealthHint', uiLanguage)}
         >
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl btn-primary-theme flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-200">
-            <Film className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-          </div>
-          <div className="flex flex-col hidden xs:flex">
-            <div className="flex items-center gap-1">
-              <span className="font-heading font-black text-lg sm:text-xl tracking-tight text-white group-hover:text-primary-theme transition-colors">
-                Ani<span className="text-accent-theme">Dub</span>
-              </span>
-              <span className="bg-gradient-to-r from-orange-500 via-white to-green-500 bg-clip-text text-transparent font-bold text-[8px] sm:text-[10px] tracking-wider uppercase border border-neutral-700/60 rounded px-1">
-                IN
-              </span>
-            </div>
-          </div>
+          <BrandLogo size="sm" variant={theme === "dark" ? "dark" : "light"} className="scale-90 sm:scale-100 origin-left" />
         </div>
 
         {/* Primary Nav Tabs: Centered between Logo and Theme Toggle (Icon-only, no text labels) */}
-        <nav className="flex items-center justify-center gap-1 sm:gap-2 flex-1 mx-1 sm:mx-4">
+        <nav className="flex items-center gap-1 sm:gap-2 flex-1 mx-1 sm:mx-4 overflow-x-auto no-scrollbar py-1">
           {/* 1. Directory */}
           <button
             onClick={() => setActiveTab('library')}
-            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
               activeTab === 'library'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -142,7 +131,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* 3. For You */}
           <button
             onClick={() => setActiveTab('foryou')}
-            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
               activeTab === 'foryou'
                 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -156,7 +145,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* 4. Watchlist */}
           <button
             onClick={() => setActiveTab('watchlist')}
-            className={`relative w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`relative w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
               activeTab === 'watchlist'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -175,7 +164,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* 5. Airing Schedule */}
           <button
             onClick={() => setActiveTab('schedule')}
-            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
               activeTab === 'schedule'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -189,7 +178,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* 6. Viral Tier List Maker */}
           <button
             onClick={() => setActiveTab('tierlist')}
-            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
               activeTab === 'tierlist'
                 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -225,7 +214,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setActiveTab('profile');
               }
             }}
-            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all duration-200 active:scale-90 cursor-pointer shrink-0 ${
               activeTab === 'profile'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-primary-theme'
                 : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -254,7 +243,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {onOpenDeviceSync && (
             <button
               onClick={onOpenDeviceSync}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl btn-primary-theme text-white text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-md"
+              className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-xl btn-primary-theme text-white text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-md shrink-0"
               title="Anonymous Device Sync via 6-digit code"
             >
               <Cloud className="w-4 h-4 text-white" />

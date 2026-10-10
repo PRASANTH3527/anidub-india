@@ -267,7 +267,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
         {!imageError ? (
           <img
             src={displayImage}
-            alt={anime.title}
+            alt={`${anime.title} Official Poster ${(anime.dubs || ["Tamil"]).join(", ")} Dub`}
             loading="lazy"
             decoding="async"
             onError={() => setImageError(true)}
@@ -312,7 +312,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
             onClick={handleToggleCachePoster}
             onMouseDown={(e) => e.stopPropagation()}
             title={isCached ? 'Poster cached for offline viewing' : 'Download poster for offline use'}
-            className={`p-1.5 rounded-full backdrop-blur-md border transition-all active:scale-90 cursor-pointer pointer-events-auto ${
+            className={`hidden sm:flex p-1.5 rounded-full backdrop-blur-md border transition-all active:scale-90 cursor-pointer pointer-events-auto ${
               isCached 
                 ? 'bg-emerald-950/80 text-emerald-400 border-emerald-500/40' 
                 : 'bg-black/60 text-neutral-300 hover:text-white border-white/10'
@@ -327,7 +327,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
               onClick={(e) => { e.stopPropagation(); onReport(anime); }}
               onMouseDown={(e) => e.stopPropagation()}
               title="Report issue"
-              className="p-1.5 rounded-full bg-black/60 backdrop-blur-md text-neutral-400 hover:text-primary-theme border border-white/10 active:scale-90 transition-all cursor-pointer pointer-events-auto"
+              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md text-neutral-400 hover:text-primary-theme border border-white/10 active:scale-90 transition-all cursor-pointer pointer-events-auto"
             >
               <Flag className="w-3.5 h-3.5" />
             </button>
@@ -338,7 +338,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
             onClick={handleShare}
             onMouseDown={(e) => e.stopPropagation()}
             title="Share anime"
-            className="p-1.5 rounded-full bg-black/60 backdrop-blur-md text-neutral-300 hover:text-white border border-white/10 active:scale-90 transition-all cursor-pointer pointer-events-auto"
+            className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md text-neutral-300 hover:text-white border border-white/10 active:scale-90 transition-all cursor-pointer pointer-events-auto"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
           </button>
@@ -398,7 +398,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
       </div>
 
       {/* Info Section */}
-      <div className="p-3.5 flex flex-col justify-between flex-grow">
+      <div className="p-3 sm:p-3.5 flex flex-col justify-between flex-grow min-w-0">
         <div>
           {/* Dub Badges */}
           <div className="flex flex-wrap gap-1 mb-2">

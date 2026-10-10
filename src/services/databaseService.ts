@@ -5,6 +5,7 @@ import { AnimeRecord, DubReview, WatchlistEntry, SubmissionStatus, StreamingPlat
 import { Anime, DubLanguage } from '../types/anime';
 import { supabase } from '../lib/supabase';
 import { authService } from './authService';
+import { searchAnimeFuzzy } from '../utils/animeSearch';
 import { get as idbGet, set as idbSet, del, clear } from 'idb-keyval';
 
 const DB_ANIME_KEY = 'anidub_db_anime_records';
@@ -601,7 +602,8 @@ class DatabaseService {
         .or('status.ilike.approved,submission_status.ilike.approved,status.is.null');
 
       if (searchQuery && searchQuery.trim() !== '') {
-        query = query.ilike('title', `%${searchQuery.trim()}%`);
+        const term = searchQuery.trim();
+        query = query.or(`title.ilike.%${term}%,romaji_title.ilike.%${term}%`);
       }
 
       if (selectedLang && selectedLang !== 'All') {
@@ -621,7 +623,8 @@ class DatabaseService {
           .or('status.ilike.approved,submission_status.ilike.approved,status.is.null');
 
         if (searchQuery && searchQuery.trim() !== '') {
-          fallbackQuery = fallbackQuery.ilike('title', `%${searchQuery.trim()}%`);
+          const term = searchQuery.trim();
+          fallbackQuery = fallbackQuery.or(`title.ilike.%${term}%,romaji_title.ilike.%${term}%`);
         }
         if (selectedLang && selectedLang !== 'All') {
           fallbackQuery = fallbackQuery.contains('dubs', [selectedLang]);
@@ -674,8 +677,7 @@ class DatabaseService {
       console.warn('[Supabase Search Error]:', err);
       let approvedOnly = this.getApprovedAnime();
       if (searchQuery && searchQuery.trim() !== '') {
-        const q = searchQuery.toLowerCase().trim();
-        approvedOnly = approvedOnly.filter(a => a.title.toLowerCase().includes(q));
+        approvedOnly = searchAnimeFuzzy(approvedOnly, searchQuery);
       }
       if (selectedLang && selectedLang !== 'All') {
         approvedOnly = approvedOnly.filter(a => a.dubs?.includes(selectedLang as any));

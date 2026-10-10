@@ -1,82 +1,63 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Tv, Flame, Languages, CheckCircle2, TrendingUp } from 'lucide-react';
-import { SupportedLanguage, translate } from '../utils/i18n';
-import { useReducedMotion, useIsMobile } from '../hooks/useMediaQuery';
-import { supabase } from '../lib/supabase';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Tv, Flame, Languages, TrendingUp, CheckCircle2 } from 'lucide-react';
 import { useToast } from './Toast';
+import { SupportedLanguage, translate } from '../utils/i18n';
+import { supabase } from '../lib/supabase';
 
 interface AnimatedStatsProps {
   totalAnime: number;
-  totalUpvotes?: number;
-  languagesCount?: number;
+  totalUpvotes: number;
+  languagesCount: number;
   uiLanguage?: SupportedLanguage;
 }
 
-function useCountUp(target: number, duration: number = 1000): number {
-  const [count, setCount] = useState(target);
-  const isReducedMotion = useReducedMotion();
-  const isMobile = useIsMobile();
-  const skipAnimation = isReducedMotion || isMobile;
-  const prevTargetRef = useRef(target);
+function useCountUp(end: number, duration: number = 1000): number {
+  const [count, setCount] = useState(0);
 
   useEffect(() => {
-    if (skipAnimation) {
-      setCount(target);
+    let start = 0;
+    const finalEnd = Math.max(0, end);
+    if (finalEnd === 0) {
+      setCount(0);
       return;
     }
+    const stepTime = 16;
+    const totalSteps = duration / stepTime;
+    const increment = finalEnd / totalSteps;
 
-    const startVal = prevTargetRef.current !== target ? count : 0;
-    prevTargetRef.current = target;
-    const diff = target - startVal;
-    if (diff === 0) {
-      setCount(target);
-      return;
-    }
-
-    let startTimestamp: number | null = null;
-    let frameId: number;
-
-    const step = (timestamp: number) => {
-      if (!startTimestamp) startTimestamp = timestamp;
-      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-      // Ease out cubic
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      setCount(Math.floor(startVal + diff * easeOut));
-
-      if (progress < 1) {
-        frameId = requestAnimationFrame(step);
+    const timer = setInterval(() => {
+      start += increment;
+      if (start >= finalEnd) {
+        setCount(finalEnd);
+        clearInterval(timer);
       } else {
-        setCount(target);
+        setCount(Math.floor(start));
       }
-    };
+    }, stepTime);
 
-    frameId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frameId);
-  }, [target, duration, skipAnimation]);
+    return () => clearInterval(timer);
+  }, [end, duration]);
 
   return count;
 }
 
 export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
   totalAnime,
-  totalUpvotes = 587,
-  languagesCount = 5,
+  totalUpvotes,
+  languagesCount,
   uiLanguage = 'en',
 }) => {
   const lang = uiLanguage || 'en';
   const toast = useToast();
+  const [votes, setVotes] = useState(totalUpvotes);
+  const [isVoting, setIsVoting] = useState(false);
+  const [hasVotedRecently, setHasVotedRecently] = useState(false);
 
-  // Real-time Community Votes State from site_stats (row id: 1)
-  const [votes, setVotes] = useState<number>(totalUpvotes || 587);
-  const [isVoting, setIsVoting] = useState<boolean>(false);
-  const [hasVotedRecently, setHasVotedRecently] = useState<boolean>(false);
-
-  // 1. Fetch initial total_votes from Supabase site_stats table (row id: 1)
+  // 1. Fetch initial vote count from Supabase
   useEffect(() => {
     let isMounted = true;
-
     async function fetchSiteVotes() {
       try {
         const { data, error } = await supabase
@@ -129,16 +110,14 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
   // 3. Handle Vote Click (Optimistic update + Supabase update / upsert)
   const handleVoteClick = useCallback(async () => {
     if (isVoting) return;
-
     setIsVoting(true);
     setHasVotedRecently(true);
-
     const nextVotes = votes + 1;
+
     // Optimistic UI increment
     setVotes(nextVotes);
 
     try {
-      // First try updating row id: 1
       const { data, error } = await supabase
         .from('site_stats')
         .update({
@@ -150,7 +129,6 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
         .maybeSingle();
 
       if (error || !data) {
-        // If row id: 1 does not exist yet, attempt upsert
         const { error: upsertErr } = await supabase
           .from('site_stats')
           .upsert([
@@ -160,12 +138,10 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
               updated_at: new Date().toISOString(),
             },
           ]);
-
         if (upsertErr) {
           console.warn('[Vote upsert fallback notice]:', upsertErr.message);
         }
       }
-
       toast.success('Vote Counted! 🔥', `Thank you! Total community votes: ${nextVotes.toLocaleString()}`);
     } catch (err: any) {
       console.warn('[Vote handler catch]:', err);
@@ -181,37 +157,40 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
   const animatedLangCount = useCountUp(languagesCount, 800);
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 mb-6">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-        
+    <div className="w-full max-w-5xl mx-auto px-2.5 sm:px-4 mb-6 sm:mb-8 box-border">
+      {/* Responsive Side-by-Side 3-Card Grid for Mobile, Tablet and Desktop */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3.5 md:gap-4 w-full box-border">
         {/* 1. Total Anime */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-primary-theme/30 rounded-2xl p-4 sm:p-5 shadow-xl hover:border-primary-theme/50 transition-all duration-300 group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-primary-theme/10 rounded-full blur-2xl pointer-events-none group-hover:bg-primary-theme/20 transition-all" />
-          
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+        <div className="relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-primary-theme/30 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 md:p-5 shadow-lg hover:border-primary-theme/50 transition-all duration-300 group flex flex-col justify-between min-w-0 box-border">
+          <div className="absolute top-0 right-0 w-16 sm:w-24 h-16 sm:h-24 bg-primary-theme/10 rounded-full blur-xl pointer-events-none group-hover:bg-primary-theme/20 transition-all" />
+
+          {/* Card Header */}
+          <div className="flex items-center justify-between gap-1 mb-1.5 sm:mb-2">
+            <span className="text-[9px] xs:text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-400 truncate">
               {translate('statsAnime', lang)}
             </span>
-            <div className="w-8 h-8 rounded-xl bg-primary-theme/20 border border-primary-theme/30 flex items-center justify-center text-primary-theme">
-              <Tv className="w-4 h-4" />
+            <div className="w-5 h-5 xs:w-6 xs:h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-primary-theme/20 border border-primary-theme/30 flex items-center justify-center text-primary-theme shrink-0">
+              <Tv className="w-3 h-3 sm:w-4 sm:h-4" />
             </div>
           </div>
 
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-heading font-black text-2xl sm:text-3xl lg:text-4xl text-white tracking-tight">
+          {/* Metric Value */}
+          <div className="flex items-baseline gap-0.5 sm:gap-1.5 my-0.5">
+            <span className="font-heading font-black text-base xs:text-lg sm:text-2xl md:text-3xl lg:text-4xl text-white tracking-tight leading-none">
               {animatedAnimeCount}
             </span>
-            <span className="text-primary-theme font-bold text-xs">+</span>
+            <span className="text-primary-theme font-extrabold text-[10px] sm:text-xs">+</span>
           </div>
 
-          <p className="text-[11px] text-neutral-400 mt-1 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-            <span>Verified official dubs</span>
+          {/* Subtitle Footnote */}
+          <p className="text-[8px] xs:text-[9px] sm:text-[11px] text-neutral-400 mt-1 flex items-center gap-1 truncate">
+            <CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-400 shrink-0" />
+            <span className="truncate">Verified dubs</span>
           </p>
         </div>
 
         {/* 2. Total Upvotes (Interactive Real-Time Supabase Vote Card) */}
-        <div 
+        <div
           role="button"
           tabIndex={0}
           onClick={handleVoteClick}
@@ -222,62 +201,69 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
             }
           }}
           title="Click to vote for AniDub India community!"
-          className="relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-orange-500/30 rounded-2xl p-4 sm:p-5 shadow-xl hover:border-orange-500/60 hover:shadow-orange-500/10 hover:shadow-2xl transition-all duration-300 group cursor-pointer select-none active:scale-[0.98]"
+          className="relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-orange-500/30 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 md:p-5 shadow-lg hover:border-orange-500/60 hover:shadow-orange-500/10 hover:shadow-xl transition-all duration-300 group cursor-pointer select-none active:scale-[0.97] flex flex-col justify-between min-w-0 box-border"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-orange-600/10 rounded-full blur-2xl pointer-events-none group-hover:bg-orange-600/25 transition-all" />
-          
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 group-hover:text-orange-300 transition-colors">
+          <div className="absolute top-0 right-0 w-16 sm:w-24 h-16 sm:h-24 bg-orange-600/10 rounded-full blur-xl pointer-events-none group-hover:bg-orange-600/25 transition-all" />
+
+          {/* Card Header */}
+          <div className="flex items-center justify-between gap-1 mb-1.5 sm:mb-2">
+            <span className="text-[9px] xs:text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-400 group-hover:text-orange-300 transition-colors truncate">
               {translate('statsUpvotes', lang)}
             </span>
-            <div className={`w-8 h-8 rounded-xl bg-orange-600/20 border border-orange-500/30 flex items-center justify-center text-orange-400 group-hover:scale-110 group-hover:bg-orange-500/30 transition-all ${hasVotedRecently ? 'scale-125 text-orange-300' : ''}`}>
-              <Flame className={`w-4 h-4 fill-current ${hasVotedRecently ? 'animate-bounce' : ''}`} />
+            <div className={`w-5 h-5 xs:w-6 xs:h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-orange-600/20 border border-orange-500/30 flex items-center justify-center text-orange-400 group-hover:scale-110 group-hover:bg-orange-500/30 transition-all shrink-0 ${hasVotedRecently ? 'scale-125 text-orange-300' : ''}`}>
+              <Flame className={`w-3 h-3 sm:w-4 sm:h-4 fill-current ${hasVotedRecently ? 'animate-bounce' : ''}`} />
             </div>
           </div>
 
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-heading font-black text-2xl sm:text-3xl lg:text-4xl text-white tracking-tight group-hover:text-orange-100 transition-colors">
+          {/* Metric Value */}
+          <div className="flex items-baseline gap-0.5 sm:gap-1.5 my-0.5">
+            <span className="font-heading font-black text-base xs:text-lg sm:text-2xl md:text-3xl lg:text-4xl text-white tracking-tight group-hover:text-orange-100 transition-colors leading-none truncate">
               {animatedUpvotesCount.toLocaleString()}
             </span>
-            <span className={`text-orange-400 font-bold text-xs transition-transform ${hasVotedRecently ? 'scale-150' : 'group-hover:scale-125'}`}>🔥</span>
+            <span className={`text-orange-400 font-bold text-[10px] sm:text-xs transition-transform ${hasVotedRecently ? 'scale-150' : 'group-hover:scale-125'}`}>
+              🔥
+            </span>
           </div>
 
-          <div className="mt-1 flex items-center justify-between text-[11px]">
-            <p className="text-neutral-400 flex items-center gap-1 group-hover:text-neutral-300 transition-colors">
-              <TrendingUp className="w-3 h-3 text-orange-400 shrink-0" />
-              <span>Global community likes</span>
+          {/* Subtitle Footnote */}
+          <div className="mt-1 flex items-center justify-between text-[8px] xs:text-[9px] sm:text-[11px] gap-1">
+            <p className="text-neutral-400 flex items-center gap-1 group-hover:text-neutral-300 transition-colors truncate">
+              <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-orange-400 shrink-0" />
+              <span className="hidden xs:inline truncate">Community</span>
             </p>
-            <span className="text-[10px] font-bold text-orange-400/80 group-hover:text-orange-300 transition-colors bg-orange-500/10 px-2 py-0.5 rounded-full border border-orange-500/20">
-              {isVoting ? 'Voting...' : '+1 Vote'}
+            <span className="font-extrabold text-orange-400 text-[8px] xs:text-[9px] sm:text-[10px] bg-orange-500/10 px-1.5 py-0.2 sm:px-2 sm:py-0.5 rounded-full border border-orange-500/20 shrink-0">
+              {isVoting ? '...' : '+1 Vote'}
             </span>
           </div>
         </div>
 
         {/* 3. Languages Supported */}
-        <div className="col-span-2 md:col-span-1 relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-sky-500/30 rounded-2xl p-4 sm:p-5 shadow-xl hover:border-sky-500/50 transition-all duration-300 group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-sky-600/10 rounded-full blur-2xl pointer-events-none group-hover:bg-sky-600/20 transition-all" />
-          
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+        <div className="relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-sky-500/30 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 md:p-5 shadow-lg hover:border-sky-500/50 transition-all duration-300 group flex flex-col justify-between min-w-0 box-border">
+          <div className="absolute top-0 right-0 w-16 sm:w-24 h-16 sm:h-24 bg-sky-600/10 rounded-full blur-xl pointer-events-none group-hover:bg-sky-600/20 transition-all" />
+
+          {/* Card Header */}
+          <div className="flex items-center justify-between gap-1 mb-1.5 sm:mb-2">
+            <span className="text-[9px] xs:text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-400 truncate">
               {translate('statsLanguages', lang)}
             </span>
-            <div className="w-8 h-8 rounded-xl bg-sky-600/20 border border-sky-500/30 flex items-center justify-center text-sky-400">
-              <Languages className="w-4 h-4" />
+            <div className="w-5 h-5 xs:w-6 xs:h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-sky-600/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+              <Languages className="w-3 h-3 sm:w-4 sm:h-4" />
             </div>
           </div>
 
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-heading font-black text-2xl sm:text-3xl lg:text-4xl text-white tracking-tight">
+          {/* Metric Value */}
+          <div className="flex items-baseline gap-0.5 sm:gap-1.5 my-0.5">
+            <span className="font-heading font-black text-base xs:text-lg sm:text-2xl md:text-3xl lg:text-4xl text-white tracking-tight leading-none">
               {animatedLangCount}
             </span>
-            <span className="text-sky-400 font-bold text-xs">Regions</span>
+            <span className="text-sky-400 font-bold text-[9px] sm:text-xs truncate">Regions</span>
           </div>
 
-          <p className="text-[11px] text-neutral-400 mt-1 truncate">
-            Tamil • Telugu • Hindi • Mal • Kan
+          {/* Subtitle Footnote */}
+          <p className="text-[8px] xs:text-[9px] sm:text-[11px] text-neutral-400 mt-1 truncate">
+            Tamil • Telugu • Hindi
           </p>
         </div>
-
       </div>
     </div>
   );

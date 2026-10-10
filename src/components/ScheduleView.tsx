@@ -297,7 +297,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ onSelectAnime }) => 
               >
                 <img
                   src={anime.imageUrl || anime.poster || undefined}
-                  alt={anime.title}
+                  alt={`${anime.title} Airing Schedule Poster ${(anime.dubs || []).join(", ")} Dub`}
                   loading="lazy"
                   decoding="async"
                   className="w-20 aspect-[3/4.2] object-cover rounded-lg shrink-0 shadow-md sm:group-hover:scale-102 transition-transform"

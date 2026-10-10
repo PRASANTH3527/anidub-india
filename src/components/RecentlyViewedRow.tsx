@@ -66,7 +66,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
   };
 
   return (
-    <section className="max-w-6xl mx-auto px-4 mb-8">
+    <section className="w-full max-w-6xl mx-auto px-3 sm:px-4 mb-8 overflow-hidden box-border">
       {/* Header with Title, Count, Clear Button and Scroll Arrows */}
       <div className="flex items-center justify-between mb-3.5">
         <div className="flex items-center gap-2.5">
@@ -114,7 +114,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
       {/* Horizontal Scrollable Row (Scrollbar hidden via no-scrollbar) */}
       <div
         ref={scrollContainerRef}
-        className="flex items-stretch gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1 -mx-1 px-1 select-none"
+        className="flex items-stretch gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1.5 px-0.5 select-none w-full max-w-full"
       >
         {recentAnimeList.map((anime) => {
           const isSaved = watchlistIds.includes(anime.id);

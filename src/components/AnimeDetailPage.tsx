@@ -26,7 +26,7 @@ import { Anime, WatchlistItem, DubLanguage } from '../types/anime';
 import { DubReview } from '../types/database';
 import { dbService, isQuotaError } from '../services/databaseService';
 import { authService } from '../services/authService';
-import { updateSeoTags, buildAnimeSeo } from '../utils/seo';
+import { updateSeoTags, buildAnimeSeo, generateAnimeFaqs } from '../utils/seo';
 import DynamicAmbientGlow from './DynamicAmbientGlow';
 import { useReducedMotion, useIsMobile } from '../hooks/useMediaQuery';
 import { FastAverageColor } from 'fast-average-color';
@@ -45,6 +45,7 @@ interface AnimeDetailPageProps {
   onOpenAuthModal?: () => void;
   onReport?: (anime: Anime) => void;
   allAnime?: Anime[];
+  onFilterCategory?: (type: 'language' | 'platform', value: string) => void;
 }
 
 const DUB_LANGUAGE_BADGES: Record<DubLanguage, { bg: string; text: string; border: string }> = {
@@ -76,6 +77,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   onOpenAuthModal,
   onReport,
   allAnime = [],
+  onFilterCategory,
 }) => {
   const currentUser = authService.getCurrentUser();
   const toast = useToast();
@@ -311,7 +313,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         initial={shouldReduceAnimation ? { opacity: 1, y: 0 } : { opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: "easeOut" }}
-        className="relative rounded-3xl overflow-hidden bg-[#131926] border border-neutral-800 shadow-2xl"
+        className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#131926] border border-neutral-800 shadow-2xl w-full max-w-full box-border"
       >
         {/* Blurred Backdrop Banner with dynamic dominant color gradient & dark overlay */}
         <div 
@@ -322,7 +324,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         >
           <img
             src={heroImage}
-            alt={anime.title}
+            alt={`${anime.title} Official Backdrop - ${(anime.dubs || []).join(", ")} Dub`}
             loading="lazy"
             decoding="async"
             crossOrigin="anonymous"
@@ -332,7 +334,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </div>
 
         {/* Content overlapping banner */}
-        <div className="relative px-6 sm:px-10 pb-8 -mt-36 sm:-mt-48 flex flex-col md:flex-row gap-6 md:gap-8 items-start">
+        <div className="relative px-4 sm:px-10 pb-8 -mt-28 sm:-mt-48 flex flex-col md:flex-row gap-6 md:gap-8 items-start w-full max-w-full box-border">
           
           {/* Main Poster with Spotify/Apple TV Cinematic Dynamic Ambient Glow */}
           <DynamicAmbientGlow imageUrl={heroImage} className="shrink-0 mx-auto md:mx-0 group">
@@ -345,7 +347,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               <motion.img
                 layoutId={shouldReduceAnimation ? undefined : `anime-poster-img-${anime.id}`}
                 src={heroImage}
-                alt={anime.title}
+                alt={`${anime.title} Official Poster ${(anime.dubs || ["Tamil"]).join(", ")} Dub`}
                 loading="lazy"
                 decoding="async"
                 className="w-full h-full object-cover"
@@ -540,7 +542,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   >
                     <img
                       src={char.characterImage || null}
-                      alt={char.characterName}
+                      alt={`${char.characterName} - ${anime.title} Character Illustration`}
                       loading="lazy"
                       decoding="async"
                       className="w-14 h-14 rounded-xl object-cover shrink-0 border border-neutral-700"
@@ -731,7 +733,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                       <div className="flex items-center gap-2.5">
                         <img
                           src={rev.userAvatar || null}
-                          alt={rev.userName}
+                          alt={`${rev.userName} Community Reviewer Avatar`}
                           loading="lazy"
                           decoding="async"
                           className="w-8 h-8 rounded-full object-cover border border-primary-theme/40"
@@ -1004,7 +1006,105 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       </div>
 
       {/* Smart 'More Like This' Recommendation Section */}
-      <MoreLikeThisSection
+            {/* Dynamic Keyword-Rich Technical SEO & FAQ Section for Long-Tail Indian Queries */}
+      <div className="bg-[#131926]/80 border border-neutral-800 rounded-2xl sm:rounded-3xl p-4 sm:p-8 space-y-6 mt-8 w-full max-w-full box-border">
+        <div className="border-b border-neutral-800/80 pb-4">
+          <div className="flex items-center gap-2 text-accent-theme text-xs font-black uppercase tracking-wider mb-1">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Streaming & Audio Guide (India)</span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black text-white">
+            Watch {anime.title} Dubbed in India legally
+          </h2>
+        </div>
+
+        {/* Keyword-Rich SEO Paragraphs */}
+        <div className="space-y-3.5 text-xs sm:text-sm text-neutral-300 leading-relaxed">
+          <p>
+            Stream <strong>{anime.title}</strong> legally dubbed in Indian regional languages including{" "}
+            <span className="text-amber-400 font-semibold">{(anime.dubs || []).join(", ") || "Tamil, Telugu, Hindi"}</span>{" "}
+            in India on licensed streaming platforms including{" "}
+            <span className="text-purple-400 font-semibold">
+              {(anime.platforms || []).map((p: any) => typeof p === "string" ? p : p?.name).join(", ") || "Crunchyroll and Netflix"}
+            </span>
+            . AniDub India provides up-to-date regional dub directories, verified episode lists, official voice cast credits, and legal streaming links.
+          </p>
+          <p>
+            Originally animated by <strong>{anime.studio || "Official Animation Studio"}</strong> and premiered in{" "}
+            <strong>{anime.originalReleaseDate || anime.releaseYear || "2024"}</strong>, this {anime.type || "TV Series"} spans{" "}
+            <strong>{anime.episodes || 12} episodes</strong> with official multi-language audio tracks and English subtitles. Stream {anime.title} today in high definition on official Indian OTT partners.
+          </p>
+        </div>
+
+        {/* Dynamic FAQ Accordion */}
+        <div className="pt-4 border-t border-neutral-800/80 space-y-4">
+          <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <span>Frequently Asked Questions</span>
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {generateAnimeFaqs(anime).map((faq, fIdx) => (
+              <div
+                key={fIdx}
+                className="bg-[#0e1422] border border-neutral-800/90 rounded-2xl p-4 space-y-1.5 hover:border-neutral-700 transition-colors"
+              >
+                <h4 className="text-xs sm:text-sm font-bold text-purple-300">
+                  {faq.question}
+                </h4>
+                <p className="text-xs text-neutral-400 leading-relaxed">
+                  {faq.answer}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* SEO Category & Platform Internal Linking */}
+        <div className="pt-4 border-t border-neutral-800/80">
+          <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider block mb-2.5">
+            Explore More Indian Dub Categories
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {(anime.dubs || []).map((lang) => (
+              <button
+                key={lang}
+                type="button"
+                onClick={() => {
+                  if (onFilterCategory) {
+                    onFilterCategory("language", lang);
+                  } else {
+                    window.location.hash = "library";
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl bg-neutral-800/80 hover:bg-neutral-700/80 border border-neutral-700/60 text-xs font-semibold text-neutral-200 transition-all cursor-pointer hover:border-purple-500/50"
+              >
+                {lang} Dubbed Anime
+              </button>
+            ))}
+            {(anime.platforms || []).map((p: any) => {
+              const pName = typeof p === "string" ? p : p?.name;
+              if (!pName) return null;
+              return (
+                <button
+                  key={pName}
+                  type="button"
+                  onClick={() => {
+                    if (onFilterCategory) {
+                      onFilterCategory("platform", pName);
+                    } else {
+                      window.location.hash = "library";
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-neutral-800/80 hover:bg-neutral-700/80 border border-neutral-700/60 text-xs font-semibold text-neutral-300 transition-all cursor-pointer hover:border-purple-500/50"
+                >
+                  Anime on {pName}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+<MoreLikeThisSection
         currentAnime={anime}
         allAnime={allAnime}
         onSelectAnime={(selected) => onSelectSimilarAnime?.(selected)}

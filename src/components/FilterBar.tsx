@@ -1,10 +1,27 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, X, SlidersHorizontal, RotateCcw, Sparkles, Flame, Filter, Mic, MicOff, Star, PlayCircle } from 'lucide-react';
+import { 
+  Search, 
+  X, 
+  SlidersHorizontal, 
+  RotateCcw, 
+  Sparkles, 
+  Flame, 
+  Filter, 
+  Mic, 
+  MicOff, 
+  Star, 
+  PlayCircle,
+  Loader2,
+  ArrowRight,
+  Compass,
+  Film
+} from 'lucide-react';
 import { ALL_GENRES, ALL_TYPES, ALL_STATUSES, ALL_LANGUAGES, ALL_PLATFORMS } from '../data/animeData';
 import { useToast } from './Toast';
 import { SupportedLanguage, translate } from '../utils/i18n';
 import { AnimeRecord } from '../types/database';
 import { useDebounce } from '../hooks/useDebounce';
+import { searchAnimeFuzzy } from '../utils/animeSearch';
 
 interface FilterBarProps {
   searchQuery: string;
@@ -30,6 +47,7 @@ interface FilterBarProps {
   feedView?: 'directory' | 'foryou';
   setFeedView?: (view: 'directory' | 'foryou') => void;
   allAnime?: AnimeRecord[];
+  onSelectAnime?: (anime: AnimeRecord) => void;
 }
 
 export const FilterBar: React.FC<FilterBarProps> = React.memo(({
@@ -56,13 +74,15 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
   feedView = 'directory',
   setFeedView,
   allAnime = [],
+  onSelectAnime,
 }) => {
   const toast = useToast();
   const lang = uiLanguage || 'en';
   const [isListening, setIsListening] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [localSearch, setLocalSearch] = useState(searchQuery);
-  const debouncedSearch = useDebounce(localSearch, 650);
+  const debouncedSearch = useDebounce(localSearch, 220);
+  const isTyping = localSearch.trim() !== debouncedSearch.trim();
 
   const recognitionRef = useRef<any>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -77,15 +97,12 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
     setSearchQuery(debouncedSearch);
   }, [debouncedSearch]);
 
-  // Live Results for Dropdown (Netflix-level: Fetch results based on debounced search to prevent excessive "API" calls)
+  // Live Auto-Suggest Results powered by multi-field Fuzzy Search
   const liveResults = useMemo(() => {
-    if (!debouncedSearch.trim() || debouncedSearch.length < 2) return [];
-    const query = debouncedSearch.toLowerCase().trim();
-    return allAnime.filter(anime => 
-      anime.title.toLowerCase().includes(query) || 
-      anime.romajiTitle?.toLowerCase().includes(query)
-    ).slice(0, 6);
-  }, [debouncedSearch, allAnime]);
+    const trimmed = localSearch.trim();
+    if (!trimmed || trimmed.length < 2) return [];
+    return searchAnimeFuzzy(allAnime, trimmed, 8);
+  }, [localSearch, allAnime]);
 
   // Trending Suggestions logic
   const trendingSuggestions = useMemo(() => {
@@ -191,7 +208,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
   const hasActiveFilters = activeFiltersCount > 0 || (sortBy !== 'Most Upvoted' && sortBy !== 'Newest');
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 mb-6 space-y-4">
+    <div className="w-full max-w-5xl mx-auto px-3 sm:px-4 mb-8 space-y-5 box-border min-w-0">
       {/* Homepage Feed Selector: All Dubs Directory vs Smart 'For You' */}
       {setFeedView && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-neutral-800/60">
@@ -231,7 +248,11 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
       {/* Search Bar Container */}
       <div className="relative group" ref={dropdownRef}>
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-neutral-400 group-focus-within:text-accent-theme transition-colors">
-          <Search className="w-4 h-4 sm:w-5 sm:h-5" />
+          {isTyping || isLoading ? (
+            <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-accent-theme" />
+          ) : (
+            <Search className="w-4 h-4 sm:w-5 sm:h-5" />
+          )}
         </div>
         <input
           type="text"
@@ -246,89 +267,232 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
               ? translate('searchListening', lang)
               : translate('searchPlaceholder', lang)
           }
-          className={`w-full bg-[#121829]/95 border rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-12 pr-24 text-sm text-neutral-100 placeholder-neutral-500 outline-none transition-all duration-200 shadow-xl backdrop-blur-md ${
+          className={`w-full bg-[#121829]/95 border rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-12 pr-28 text-sm text-neutral-100 placeholder-neutral-500 outline-none transition-all duration-200 shadow-xl backdrop-blur-md ${
             isListening
               ? 'border-primary-theme ring-4 ring-primary-theme/25 bg-[var(--primary-badge)]/20'
               : 'border-neutral-700/80 group-hover:border-neutral-600 focus:border-accent-theme focus:ring-2 focus:ring-[var(--primary-ring)]'
           }`}
         />
 
-        {/* Live Search & Trending Dropdown */}
+        {/* Live Search & Trending Auto-Suggest Dropdown */}
         {showDropdown && (
-          <div className="absolute left-0 right-0 top-full mt-2 bg-[#121829]/98 border border-neutral-700/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 backdrop-blur-xl">
+          <div className="absolute left-0 right-0 top-full mt-2 bg-[#121829]/98 border border-neutral-700/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 backdrop-blur-xl divide-y divide-neutral-800/80">
             {localSearch.trim().length >= 2 ? (
               <>
-                <div className="p-3 bg-[var(--primary-badge)]/30 border-b border-neutral-800 flex items-center justify-between">
+                {/* Search Header with Live Loading & Match Count */}
+                <div className="p-3 bg-[var(--primary-badge)]/25 border-b border-neutral-800 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Search className="w-3.5 h-3.5 text-accent-theme" />
-                    <span className="text-[10px] font-black uppercase tracking-wider text-primary-theme">Matching Titles</span>
+                    {isTyping || isLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 text-accent-theme animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 text-accent-theme" />
+                    )}
+                    <span className="text-[11px] font-black uppercase tracking-wider text-primary-theme">
+                      {isTyping ? 'Searching...' : `Live Results for "${localSearch}"`}
+                    </span>
                   </div>
-                  <span className="text-[9px] text-neutral-500 font-bold uppercase">{liveResults.length} Results</span>
+                  <span className="text-[10px] text-neutral-400 font-bold bg-neutral-800/90 px-2.5 py-0.5 rounded-full border border-neutral-700/70">
+                    {liveResults.length} {liveResults.length === 1 ? 'match' : 'matches'}
+                  </span>
                 </div>
-                <div className="max-h-80 overflow-y-auto divide-y divide-neutral-800/50">
+
+                {/* Instant Results List with Thumbnails & Metadata */}
+                <div className="max-h-96 overflow-y-auto divide-y divide-neutral-800/50">
                   {liveResults.length > 0 ? (
-                    liveResults.map((anime) => (
-                      <div
-                        key={anime.id}
-                        onClick={() => {
-                          setLocalSearch(anime.title);
-                          setShowDropdown(false);
-                        }}
-                        className="flex items-center gap-3 p-3 hover:bg-[var(--primary-accent)]/10 cursor-pointer group transition-colors"
-                      >
-                        <div className="relative w-10 h-14 rounded-lg overflow-hidden border border-neutral-700 shrink-0">
-                          <img src={anime.poster || undefined} alt={anime.title} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                          <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
-                        </div>
-                        <div className="min-w-0 flex-grow">
-                          <p className="text-xs font-bold text-white truncate group-hover:text-primary-theme transition-colors">{anime.title}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] text-neutral-400">{anime.type} • {anime.releaseYear}</span>
-                            <div className="flex items-center gap-0.5 text-orange-500 font-black text-[9px]">
-                              <Star className="w-2.5 h-2.5 fill-current" />
-                              {anime.rating || '8.0'}
+                    liveResults.map((anime) => {
+                      const displayImg = anime.poster || anime.imageUrl;
+                      const platforms = Array.isArray(anime.platforms)
+                        ? anime.platforms.map((p: any) => (typeof p === 'string' ? p : p?.name)).filter(Boolean)
+                        : [];
+
+                      return (
+                        <div
+                          key={anime.id}
+                          onClick={() => {
+                            if (onSelectAnime) {
+                              onSelectAnime(anime);
+                            }
+                            setLocalSearch(anime.title);
+                            setSearchQuery(anime.title);
+                            setShowDropdown(false);
+                          }}
+                          className="flex items-center gap-3.5 p-3 sm:p-3.5 hover:bg-[var(--primary-accent)]/15 cursor-pointer group transition-colors"
+                        >
+                          {/* Small Anime Thumbnail Image */}
+                          <div className="relative w-11 h-15 rounded-lg overflow-hidden border border-neutral-700/80 bg-neutral-900 shrink-0 shadow-md">
+                            {displayImg ? (
+                              <img
+                                src={displayImg}
+                                alt={anime.title}
+                                loading="lazy"
+                                decoding="async"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-neutral-800 text-neutral-500">
+                                <Film className="w-4 h-4" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors" />
+                          </div>
+
+                          {/* Anime Information */}
+                          <div className="min-w-0 flex-grow">
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-primary-theme transition-colors">
+                                {anime.title}
+                              </p>
+                              {anime.type && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-neutral-800 text-neutral-300 border border-neutral-700 shrink-0">
+                                  {anime.type}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Romaji Title if distinct from primary title */}
+                            {anime.romajiTitle && anime.romajiTitle.toLowerCase() !== anime.title.toLowerCase() && (
+                              <p className="text-[10px] text-neutral-400 truncate italic">
+                                {anime.romajiTitle}
+                              </p>
+                            )}
+
+                            {/* Meta, Year & Rating */}
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              {anime.releaseYear && (
+                                <span className="text-[10px] text-neutral-400 font-medium">
+                                  {anime.releaseYear}
+                                </span>
+                              )}
+                              {anime.rating && (
+                                <div className="flex items-center gap-0.5 text-amber-400 font-black text-[10px]">
+                                  <Star className="w-2.5 h-2.5 fill-current" />
+                                  <span>{anime.rating}</span>
+                                </div>
+                              )}
+                              {anime.studio && (
+                                <span className="text-[10px] text-neutral-500 truncate hidden sm:inline">
+                                  • {anime.studio}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Dub Language Badges & Platforms */}
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                              {anime.dubs?.slice(0, 3).map((d, idx) => (
+                                <span
+                                  key={`${d}-${idx}`}
+                                  className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-primary-theme/15 text-primary-light border border-primary-theme/30"
+                                >
+                                  {d} Dub
+                                </span>
+                              ))}
+                              {platforms.slice(0, 2).map((p, idx) => (
+                                <span
+                                  key={`${p}-${idx}`}
+                                  className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-neutral-800/90 text-neutral-300 border border-neutral-700"
+                                >
+                                  {p}
+                                </span>
+                              ))}
                             </div>
                           </div>
-                          <div className="flex gap-1 mt-1">
-                            {anime.dubs?.slice(0, 2).map((d, idx) => (
-                              <span key={`${d}-${idx}`} className="text-[8px] px-1 py-0.2 bg-neutral-800 text-neutral-400 rounded border border-neutral-700">{d}</span>
-                            ))}
+
+                          {/* Quick selection arrow */}
+                          <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-neutral-800/80 text-neutral-400 group-hover:bg-primary-theme group-hover:text-white transition-all shadow-sm">
+                            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                           </div>
                         </div>
-                        <PlayCircle className="w-5 h-5 text-neutral-600 group-hover:text-accent-theme transition-colors opacity-0 group-hover:opacity-100" />
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
-                    <div className="p-8 text-center">
-                      <Search className="w-8 h-8 text-neutral-700 mx-auto mb-2 opacity-20" />
-                      <p className="text-xs text-neutral-500 font-medium">No matches found for "{localSearch}"</p>
+                    /* Clear No Results Placeholder */
+                    <div className="p-8 text-center space-y-4">
+                      <div className="w-12 h-12 rounded-2xl bg-neutral-800/80 border border-neutral-700 flex items-center justify-center mx-auto text-neutral-400 shadow-inner">
+                        <Search className="w-6 h-6 text-neutral-400 opacity-60" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-white">
+                          No results found for &ldquo;{localSearch}&rdquo;
+                        </p>
+                        <p className="text-xs text-neutral-400 max-w-sm mx-auto leading-relaxed">
+                          We searched English titles, Japanese Romaji, short acronyms, dubs, and platforms.
+                        </p>
+                      </div>
+
+                      {/* Helpful Search Tips */}
+                      <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-3.5 text-left max-w-md mx-auto text-[11px] text-neutral-400 space-y-1.5">
+                        <p className="font-bold text-neutral-300 flex items-center gap-1.5">
+                          <Compass className="w-3.5 h-3.5 text-accent-theme" />
+                          <span>Search Tips:</span>
+                        </p>
+                        <ul className="list-disc pl-4 space-y-1 text-neutral-400">
+                          <li>Check for spelling errors (e.g. &ldquo;Demon Slear&rdquo; → Demon Slayer)</li>
+                          <li>Search with acronyms: <strong>AOT</strong>, <strong>JJK</strong>, <strong>KNY</strong>, <strong>SL</strong>, <strong>MHA</strong></li>
+                          <li>Search by language: &ldquo;Tamil&rdquo;, &ldquo;Telugu&rdquo;, &ldquo;Hindi&rdquo;</li>
+                          <li>Search by platform: &ldquo;Crunchyroll&rdquo;, &ldquo;Netflix&rdquo;, &ldquo;JioCinema&rdquo;</li>
+                        </ul>
+                      </div>
+
+                      {/* Quick recovery chips */}
+                      <div className="pt-2">
+                        <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider mb-2">Try Popular Searches</p>
+                        <div className="flex flex-wrap items-center justify-center gap-1.5">
+                          {['Demon Slayer', 'Solo Leveling', 'Jujutsu Kaisen', 'Attack on Titan', 'Tamil Dub', 'Crunchyroll'].map((chip) => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => {
+                                setLocalSearch(chip);
+                                setSearchQuery(chip);
+                              }}
+                              className="text-[11px] px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 transition-colors cursor-pointer"
+                            >
+                              {chip}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
               </>
             ) : trendingSuggestions.length > 0 && (
               <>
-                <div className="p-3 bg-[var(--primary-badge)]/30 border-b border-neutral-800 flex items-center gap-2">
-                  <Flame className="w-4 h-4 text-orange-400" />
-                  <span className="text-[11px] font-black uppercase tracking-wider text-primary-theme">Trending Right Now</span>
+                <div className="p-3 bg-[var(--primary-badge)]/30 border-b border-neutral-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-4 h-4 text-orange-400" />
+                    <span className="text-[11px] font-black uppercase tracking-wider text-primary-theme">Trending Right Now</span>
+                  </div>
+                  <span className="text-[10px] text-neutral-500">Popular Dubs</span>
                 </div>
-                <div className="max-h-60 overflow-y-auto divide-y divide-neutral-800/50">
+                <div className="max-h-64 overflow-y-auto divide-y divide-neutral-800/50">
                   {trendingSuggestions.map((anime: AnimeRecord) => (
                     <div
                       key={anime.id}
                       onClick={() => {
+                        if (onSelectAnime) {
+                          onSelectAnime(anime);
+                        }
                         setLocalSearch(anime.title);
+                        setSearchQuery(anime.title);
                         setShowDropdown(false);
                       }}
                       className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer group transition-colors"
                     >
-                      <img src={anime.poster || undefined} alt={anime.title} loading="lazy" decoding="async" className="w-8 h-10 object-cover rounded-lg border border-neutral-700 group-hover:border-primary-theme" />
-                      <div className="min-w-0">
+                      <img src={anime.poster || undefined} alt={anime.title} loading="lazy" decoding="async" className="w-9 h-12 object-cover rounded-lg border border-neutral-700 group-hover:border-primary-theme shrink-0" />
+                      <div className="min-w-0 flex-grow">
                         <p className="text-xs font-bold text-white truncate group-hover:text-primary-theme transition-colors">{anime.title}</p>
-                        <p className="text-[10px] text-neutral-500">{anime.type} • {anime.releaseYear} • ★ {anime.rating || '8.0'}</p>
+                        <p className="text-[10px] text-neutral-400">{anime.type} • {anime.releaseYear} • ★ {anime.rating || '8.0'}</p>
+                        <div className="flex gap-1 mt-1">
+                          {anime.dubs?.slice(0, 2).map((d, idx) => (
+                            <span key={`${d}-${idx}`} className="text-[8px] px-1.5 py-0.2 rounded bg-neutral-800 text-neutral-300 border border-neutral-700">
+                              {d}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                      <div className="ml-auto text-[10px] font-black text-orange-500 flex items-center gap-1">
-                        <Flame className="w-3 h-3" />
+                      <div className="ml-auto text-[10px] font-black text-orange-500 flex items-center gap-1 shrink-0">
+                        <Flame className="w-3.5 h-3.5" />
                         {anime.likes || anime.upvotes || 0}
                       </div>
                     </div>
@@ -340,10 +504,20 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
         )}
 
         {/* Right Search Bar Action Controls */}
-        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+          {/* Active Search Loading Spinner */}
+          {(isTyping || isLoading) && (
+            <div className="p-1 text-accent-theme" title="Searching anime catalog...">
+              <Loader2 className="w-4 h-4 animate-spin" />
+            </div>
+          )}
+
           {localSearch && (
             <button
-              onClick={() => setLocalSearch('')}
+              onClick={() => {
+                setLocalSearch('');
+                setSearchQuery('');
+              }}
               className="text-neutral-400 hover:text-white p-1.5 rounded-xl hover:bg-neutral-800/80 active:scale-90 transition-all cursor-pointer"
               title="Clear search query"
             >
@@ -423,7 +597,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
       {/* Advanced Multi-Filtering Row: Genre AND Platform AND Type AND Status AND Sort Simultaneously */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-1">
         {/* Genre Filter */}
-        <div className={`flex items-center gap-2 bg-[#121829] border rounded-xl px-3 py-2 text-xs transition-colors ${
+        <div className={`flex items-center gap-1.5 sm:gap-2 bg-[#121829] border rounded-xl px-2.5 py-2 sm:px-3 sm:py-2 text-xs transition-colors min-w-0 overflow-hidden ${
           selectedGenre !== 'All Genres' ? 'border-primary-theme bg-[var(--primary-badge)]/20' : 'border-neutral-800 hover:border-neutral-700'
         }`}>
           <span className="text-neutral-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-wider shrink-0">
@@ -443,7 +617,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
         </div>
 
         {/* Platform Filter */}
-        <div className={`flex items-center gap-2 bg-[#121829] border rounded-xl px-3 py-2 text-xs transition-colors ${
+        <div className={`flex items-center gap-1.5 sm:gap-2 bg-[#121829] border rounded-xl px-2.5 py-2 sm:px-3 sm:py-2 text-xs transition-colors min-w-0 overflow-hidden ${
           selectedPlatform !== 'All Platforms' ? 'border-primary-theme bg-[var(--primary-badge)]/20' : 'border-neutral-800 hover:border-neutral-700'
         }`}>
           <span className="text-neutral-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-wider shrink-0">
@@ -463,7 +637,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
         </div>
 
         {/* Type Filter */}
-        <div className={`flex items-center gap-2 bg-[#121829] border rounded-xl px-3 py-2 text-xs transition-colors ${
+        <div className={`flex items-center gap-1.5 sm:gap-2 bg-[#121829] border rounded-xl px-2.5 py-2 sm:px-3 sm:py-2 text-xs transition-colors min-w-0 overflow-hidden ${
           selectedType !== 'All Types' ? 'border-primary-theme bg-[var(--primary-badge)]/20' : 'border-neutral-800 hover:border-neutral-700'
         }`}>
           <span className="text-neutral-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-wider shrink-0">
@@ -472,7 +646,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
           <select
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
-            className="w-full bg-transparent text-neutral-200 font-semibold focus:outline-none cursor-pointer"
+            className="w-full min-w-0 bg-transparent text-neutral-200 font-semibold focus:outline-none cursor-pointer truncate"
           >
             {ALL_TYPES.map((t) => (
               <option key={t} value={t} className="bg-[#121829] text-neutral-200">
@@ -483,7 +657,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
         </div>
 
         {/* Airing Status Filter */}
-        <div className={`flex items-center gap-2 bg-[#121829] border rounded-xl px-3 py-2 text-xs transition-colors ${
+        <div className={`flex items-center gap-1.5 sm:gap-2 bg-[#121829] border rounded-xl px-2.5 py-2 sm:px-3 sm:py-2 text-xs transition-colors min-w-0 overflow-hidden ${
           selectedStatus !== 'All' ? 'border-primary-theme bg-[var(--primary-badge)]/20' : 'border-neutral-800 hover:border-neutral-700'
         }`}>
           <span className="text-neutral-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-wider shrink-0">
@@ -492,7 +666,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="w-full bg-transparent text-neutral-200 font-semibold focus:outline-none cursor-pointer"
+            className="w-full min-w-0 bg-transparent text-neutral-200 font-semibold focus:outline-none cursor-pointer truncate"
           >
             {ALL_STATUSES.map((s) => (
               <option key={s} value={s} className="bg-[#121829] text-neutral-200">
@@ -503,7 +677,7 @@ export const FilterBar: React.FC<FilterBarProps> = React.memo(({
         </div>
 
         {/* Sort Order: Most Upvoted, Newest, Oldest, Highest Rated, Title A-Z */}
-        <div className="flex items-center gap-2 bg-[#121829] border border-neutral-800 hover:border-neutral-700 rounded-xl px-3 py-2 text-xs transition-colors">
+        <div className="flex items-center gap-1.5 sm:gap-2 bg-[#121829] border border-neutral-800 hover:border-neutral-700 rounded-xl px-2.5 py-2 sm:px-3 sm:py-2 text-xs transition-colors min-w-0 overflow-hidden">
           <span className="text-neutral-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-wider shrink-0 flex items-center gap-1">
             Sort
           </span>

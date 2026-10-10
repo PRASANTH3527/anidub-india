@@ -4,6 +4,9 @@ import { ANIME_DATABASE } from '../data/animeData';
 
 export const revalidate = 3600; // revalidate dynamic sitemap hourly
 
+const INDIAN_DUB_LANGUAGES = ['Tamil', 'Telugu', 'Hindi', 'Malayalam', 'Kannada', 'Bengali'];
+const STREAMING_PLATFORMS = ['Crunchyroll', 'Netflix', 'JioHotstar', 'JioCinema', 'Prime Video', 'Disney+ Hotstar'];
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://anidub.in';
 
@@ -23,7 +26,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  // 2. Aggregate all unique anime entries from both static catalog and Supabase
+  // 2. Category routes for language and platform landing endpoints
+  const languageCategoryRoutes: MetadataRoute.Sitemap = INDIAN_DUB_LANGUAGES.map((lang) => ({
+    url: `${baseUrl}/?dub=${encodeURIComponent(lang)}`,
+    lastModified: new Date(),
+    changeFrequency: 'daily',
+    priority: 0.9,
+  }));
+
+  const platformCategoryRoutes: MetadataRoute.Sitemap = STREAMING_PLATFORMS.map((platform) => ({
+    url: `${baseUrl}/?platform=${encodeURIComponent(platform)}`,
+    lastModified: new Date(),
+    changeFrequency: 'daily',
+    priority: 0.85,
+  }));
+
+  // 3. Aggregate all unique anime entries from both static catalog and Supabase
   const animeMap = new Map<string, { id: string; updatedAt?: string }>();
 
   // Add static anime catalog items
@@ -79,7 +97,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.warn('[Sitemap] anime_list query notice:', err);
   }
 
-  // 3. Map dynamic anime detail entries
+  // 4. Map dynamic anime detail entries
   const dynamicRoutes: MetadataRoute.Sitemap = Array.from(animeMap.values()).map((entry) => ({
     url: `${baseUrl}/anime/${entry.id}`,
     lastModified: entry.updatedAt ? new Date(entry.updatedAt) : new Date(),
@@ -87,5 +105,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
-  return [...staticRoutes, ...dynamicRoutes];
+  return [
+    ...staticRoutes,
+    ...languageCategoryRoutes,
+    ...platformCategoryRoutes,
+    ...dynamicRoutes,
+  ];
 }

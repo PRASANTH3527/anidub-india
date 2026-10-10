@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 580" width="1000" height="580">
   <defs>
     <linearGradient id="orangeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#ff7a1a" />
@@ -9,33 +9,36 @@
     </filter>
   </defs>
 
-  <g transform="translate(0, 10)">
-    <!-- Left Headband Arc (Navy) -->
+  <!-- HEADPHONE & A EMBLEM (Centered at x=500, y=180) -->
+  <g transform="translate(245, 0) scale(1.0)">
     <path d="M 195 240 C 190 140, 290 85, 360 95 C 310 90, 230 135, 235 235 Z" fill="#0f172a" />
-    
-    <!-- Outer Headband Main Arch -->
     <path d="M 198 230 C 190 120, 310 65, 415 130 C 430 140, 395 120, 350 95 C 270 75, 195 130, 202 230 Z" fill="#0f172a" />
-
-    <!-- Right Headband Arch (Vibrant Orange) -->
     <path d="M 330 90 C 400 100, 440 170, 430 250 C 420 180, 380 125, 315 95 Z" fill="url(#orangeGrad)" />
     <path d="M 285 95 C 375 105, 420 175, 400 245 C 390 175, 345 125, 275 105 Z" fill="#ff6b00" opacity="0.95" />
 
-    <!-- Acoustic soundwaves inside right earcup -->
     <path d="M 390 185 C 410 205, 410 230, 395 250" stroke="#ff5722" stroke-width="11" stroke-linecap="round" fill="none" />
     <path d="M 368 196 C 383 210, 383 225, 373 240" stroke="#ff5722" stroke-width="8.5" stroke-linecap="round" fill="none" />
 
-    <!-- Left Earcup (Dark Navy Oval) -->
     <rect x="168" y="195" width="50" height="85" rx="25" fill="#0f172a" />
-
-    <!-- Right Earcup (Vibrant Orange Oval) -->
     <rect x="394" y="195" width="50" height="85" rx="25" fill="url(#orangeGrad)" />
 
-    <!-- Letter A Right Swoop (Dark Navy with Orange inner highlight) -->
     <path d="M 270 155 C 310 175, 350 250, 405 345 C 380 345, 355 330, 325 270 C 300 220, 270 180, 255 170 Z" fill="#0f172a" />
     <path d="M 275 155 C 315 180, 350 260, 390 340 C 375 340, 345 285, 320 235 C 295 185, 275 165, 265 160 Z" fill="url(#orangeGrad)" />
 
-    <!-- Central Play Button (Orange Triangle with White Cutout) -->
     <path d="M 220 195 C 220 182, 235 174, 246 182 L 340 248 C 352 256, 352 272, 340 280 L 246 346 C 235 354, 220 346, 220 333 Z" fill="url(#orangeGrad)" filter="url(#markGlow)" />
     <path d="M 252 230 C 252 224, 260 220, 265 224 L 305 258 C 311 262, 311 268, 305 272 L 265 306 C 260 310, 252 306, 252 300 Z" fill="#ffffff" />
+  </g>
+
+  <!-- TYPOGRAPHY: anidub -->
+  <text x="500" y="440" text-anchor="middle" font-family="system-ui, -apple-system, 'Montserrat', 'Nunito', 'Arial Black', sans-serif" font-weight="900" font-size="118" letter-spacing="-2" fill="#ff5722">anidub</text>
+
+  <!-- TYPOGRAPHY: INDIA (Crisp white for dark backgrounds) -->
+  <text x="500" y="515" text-anchor="middle" font-family="system-ui, -apple-system, 'Montserrat', 'Inter', 'Arial Black', sans-serif" font-weight="900" font-size="44" letter-spacing="14" fill="#0f172a">INDIA</text>
+
+  <!-- TRICOLOR BAR UNDER INDIA -->
+  <g transform="translate(458, 535)">
+    <rect x="0" y="0" width="26" height="7" rx="3.5" fill="#ff9933" />
+    <rect x="30" y="0" width="26" height="7" rx="3.5" fill="#ffffff" />
+    <rect x="60" y="0" width="26" height="7" rx="3.5" fill="#138808" />
   </g>
 </svg>

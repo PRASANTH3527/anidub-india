@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect, useRef, Suspense, lazy, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Navbar, NavTab } from './components/Navbar';
+import { BottomNav } from './components/BottomNav';
 import { Hero } from './components/Hero';
 import { AnimatedStats } from './components/AnimatedStats';
 import { FilterBar } from './components/FilterBar';
@@ -15,6 +16,7 @@ import { ProfileView } from './components/ProfileView';
 import { ScheduleView } from './components/ScheduleView';
 import { RecentUpdates } from './components/RecentUpdates';
 import { WatchlistView } from './components/WatchlistView';
+import { Footer } from './components/Footer';
 import { FeedbackSection } from './components/FeedbackSection';
 import { SubmitDubModal } from './components/SubmitDubModal';
 import { AuthModal } from './components/AuthModal';
@@ -32,6 +34,7 @@ import { AnimeRecord, WatchlistEntry } from './types/database';
 import { Anime, WatchlistItem, DubLanguage } from './types/anime';
 import { updateSeoTags } from './utils/seo';
 import { computeForYouRecommendations, ForYouAnalysis } from './utils/recommendations';
+import { searchAnimeFuzzy } from './utils/animeSearch';
 import { getSavedUiLanguage, setSavedUiLanguage, translate, SupportedLanguage } from './utils/i18n';
 import { ChevronDown, Frown, Sparkles, PlusCircle, ShieldCheck, X, WifiOff, Dices, Languages, Zap, Activity, RefreshCw, Database } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
@@ -342,7 +345,20 @@ function AppContent() {
   // Dynamic Routing & SEO Hash Sync
   useEffect(() => {
     const handleLocationChange = () => {
-      const hash = window.location.hash.replace('#', '');
+      const hash = window.location.hash.replace("#", "");
+      
+      // Parse query params for direct SEO category landing links (e.g., /?dub=Tamil or /?platform=Crunchyroll)
+      if (typeof window !== "undefined") {
+        const urlParams = new URLSearchParams(window.location.search);
+        const dubParam = urlParams.get("dub");
+        const platformParam = urlParams.get("platform");
+        if (dubParam) {
+          setSelectedLanguage(dubParam);
+        }
+        if (platformParam) {
+          setSelectedPlatform(platformParam);
+        }
+      }
       
       if (hash.startsWith('anime/')) {
         const id = hash.replace('anime/', '');
@@ -376,6 +392,13 @@ function AppContent() {
         updateSeoTags({
           title: 'My Profile & Watchlist — AniDub India',
           description: 'Manage your saved Indian dubbed anime, track watched episodes, and review dub quality.',
+        });
+      } else if (hash === 'foryou') {
+        setActiveTab('library');
+        setFeedView('foryou');
+        updateSeoTags({
+          title: 'For You — Personalized Dubbed Anime Recommendations',
+          description: 'Personalized anime dubbed in Indian regional languages based on your watchlist and viewing history.',
         });
       } else if (hash === 'admin/dashboard' || hash === 'analytics') {
         setActiveTab('analytics');
@@ -567,23 +590,15 @@ function AppContent() {
   }, [viewingAnimeId, currentViewingAnime]);
 
   // ==========================================================================
-  // 1. Advanced Multi-Filtering Engine: Search AND Language AND Genre AND Status
+  // 1. Advanced Multi-Filtering Engine: Fuzzy Search AND Language AND Genre AND Status
   // ==========================================================================
   const filteredApprovedAnime = useMemo(() => {
-    return approvedAnime.filter((anime) => {
-      // Search filter
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        const matchesTitle = anime.title.toLowerCase().includes(query);
-        const matchesRomaji = anime.romajiTitle?.toLowerCase().includes(query);
-        const matchesStudio = anime.studio.toLowerCase().includes(query);
-        const matchesGenre = anime.genres.some((g) => g.toLowerCase().includes(query));
-        const matchesTheme = anime.themes?.some((t) => t.toLowerCase().includes(query));
-        if (!matchesTitle && !matchesRomaji && !matchesStudio && !matchesGenre && !matchesTheme) {
-          return false;
-        }
-      }
+    let baseList = approvedAnime;
+    if (searchQuery.trim()) {
+      baseList = searchAnimeFuzzy(approvedAnime, searchQuery);
+    }
 
+    return baseList.filter((anime) => {
       // Language filter
       if (selectedLanguage !== 'All') {
         if (!anime.dubs.includes(selectedLanguage as DubLanguage)) {
@@ -697,7 +712,7 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-primary-theme selection:text-white transition-colors duration-300">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-primary-theme selection:text-white transition-colors duration-300 box-border">
       {/* Secret Password Modal */}
       {showSecretLogin && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
@@ -777,7 +792,7 @@ function AppContent() {
       )}
 
       {/* 2. Main Content Feed */}
-      <main className="flex-grow pt-4 sm:pt-6 pb-12 transition-all duration-500">
+      <main className="flex-grow w-full max-w-full overflow-x-hidden pt-4 sm:pt-6 pb-24 md:pb-14 transition-all duration-500 box-border">
         {/* Stealth Admin Dashboard Integration */}
         {isAdmin && activeTab === 'library' && (
           <div className="mb-6">
@@ -803,6 +818,17 @@ function AppContent() {
                 onOpenAuthModal={() => setIsAuthModalOpen(true)}
                 onReport={(anime) => setReportingAnime(anime)}
                 allAnime={approvedAnime}
+                onFilterCategory={(type, value) => {
+                  setViewingAnimeId(null);
+                  setActiveTab("library");
+                  window.location.hash = "library";
+                  if (type === "language") {
+                    setSelectedLanguage(value);
+                  } else if (type === "platform") {
+                    setSelectedPlatform(value);
+                  }
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
               />
             ) : (
               <motion.div
@@ -813,7 +839,7 @@ function AppContent() {
                 transition={shouldReduceAnimation ? { duration: 0 } : { duration: 0.25 }}
               >
               {/* 2. Main Dub Library (ONLY FETCHES APPROVED ANIME) */}
-              {activeTab === 'library' && (
+              {(activeTab === 'library' || activeTab === 'foryou') && (
                 <>
                   <Hero 
                     totalCount={approvedAnime.length} 
@@ -877,6 +903,7 @@ function AppContent() {
                       setFeedView(view);
                     }}
                     allAnime={approvedAnime}
+                    onSelectAnime={handleOpenAnimeDetail}
                   />
 
                   {/* For You Logic Metadata (Subtle Info) */}
@@ -1061,6 +1088,34 @@ function AppContent() {
       {/* Footer & Feedback */}
       <FeedbackSection 
         onOpenSuggestModal={handleOpenSubmitModal}
+      />
+      <Footer 
+        onSelectCategory={(type, value) => {
+          setViewingAnimeId(null);
+          setActiveTab("library");
+          window.location.hash = "library";
+          if (type === "language") {
+            setSelectedLanguage(value);
+          } else if (type === "platform") {
+            setSelectedPlatform(value);
+          }
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+      />
+      {/* Mobile Bottom Navigation Bar: Directory, For You, Search, Watchlist, Schedule, Profile */}
+      <BottomNav
+        activeTab={activeTab === 'library' && feedView === 'foryou' ? 'foryou' : activeTab}
+        setActiveTab={handleTabChange}
+        feedView={feedView}
+        setFeedView={(view) => {
+          setFeedView(view);
+          if (activeTab !== 'library') {
+            setActiveTab('library');
+          }
+        }}
+        watchlistCount={filteredWatchlistIds.length}
+        avatar={localProfile?.avatar}
+        uiLanguage={uiLanguage}
       />
 
       {/* Submit Dub Info Modal */}

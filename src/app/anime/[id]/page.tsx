@@ -3,12 +3,13 @@ import { redirect } from 'next/navigation';
 import { ANIME_DATABASE } from '../../../data/animeData';
 import { supabase } from '../../../lib/supabase';
 import { Anime } from '../../../types/anime';
+import { generateAnimeFaqs, buildFaqSchemaOrg } from '../../../utils/seo';
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-const DEFAULT_BANNER = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&h=630&fit=crop&q=85';
+const DEFAULT_BANNER = 'https://anidub.in/og-default.png';
 
 /**
  * Helper to fetch anime from static database or live Supabase tables
@@ -137,7 +138,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   // Standard SEO Title & Description matching requirement 1
   const title = `${anime.title} Dubbed Streaming in India - AniDub India`;
   const description = `Stream ${anime.title} legally dubbed in ${dubList} in India on ${platforms}. Episode guides, voice cast, and official streaming links on AniDub India.`;
-
   const posterUrl = anime.imageUrl || anime.poster || DEFAULT_BANNER;
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://anidub.in';
 
@@ -150,6 +150,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   ogUrl.searchParams.set('rating', String(anime.rating || '8.5'));
   ogUrl.searchParams.set('type', anime.type || 'TV Series');
 
+  const pageCanonical = `${baseUrl}/anime/${anime.id}`;
+
   return {
     title,
     description,
@@ -159,15 +161,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       `${anime.title} Telugu dub`,
       `${anime.title} Hindi dub`,
       `${anime.title} Malayalam dub`,
+      `${anime.title} Kannada dub`,
       `${anime.title} streaming in India`,
       `${anime.title} Crunchyroll India`,
       `${anime.title} Netflix India`,
+      `${anime.title} JioHotstar`,
       'Indian anime dub directory',
     ],
     openGraph: {
       title,
       description,
-      url: `${baseUrl}/anime/${anime.id}`,
+      url: pageCanonical,
       siteName: 'AniDub India',
       locale: 'en_IN',
       type: (anime.type || '').toLowerCase().includes('movie') ? 'video.movie' : 'video.tv_show',
@@ -176,14 +180,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
           url: ogUrl.toString(),
           width: 1200,
           height: 630,
-          alt: `${anime.title} Dubbed Streaming in India`,
+          alt: `${anime.title} Official Poster ${dubList} Dub`,
           type: 'image/png',
         },
         ...(posterUrl ? [{
           url: posterUrl,
           width: 600,
           height: 800,
-          alt: `${anime.title} Poster`,
+          alt: `${anime.title} Official Poster ${dubList} Dub`,
         }] : []),
       ],
     },
@@ -194,7 +198,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       images: [ogUrl.toString()],
     },
     alternates: {
-      canonical: `${baseUrl}/anime/${anime.id}`,
+      canonical: pageCanonical,
     },
   };
 }
@@ -214,7 +218,7 @@ export default async function AnimeDynamicRoute({ params }: PageProps) {
     : ['Crunchyroll'];
 
   // Schema.org Structured Data (TVSeries / Movie) for Google Rich Snippets
-  const jsonLd: Record<string, any> = {
+  const seriesJsonLd: Record<string, any> = {
     '@context': 'https://schema.org',
     '@type': isMovie ? 'Movie' : 'TVSeries',
     name: anime.title,
@@ -246,28 +250,121 @@ export default async function AnimeDynamicRoute({ params }: PageProps) {
   };
 
   if (anime.releaseYear) {
-    jsonLd.datePublished = `${anime.releaseYear}-01-01`;
+    seriesJsonLd.datePublished = `${anime.releaseYear}-01-01`;
+  }
+  if (!isMovie) {
+    seriesJsonLd.numberOfEpisodes = Number(anime.episodes || 12);
+    seriesJsonLd.numberOfSeasons = 1;
   }
 
-  if (!isMovie) {
-    jsonLd.numberOfEpisodes = Number(anime.episodes || 12);
-    jsonLd.numberOfSeasons = 1;
-  }
+  // Schema.org FAQPage JSON-LD for rich snippets and long-tail Indian queries
+  const faqJsonLd = buildFaqSchemaOrg(anime);
+  const faqs = generateAnimeFaqs(anime);
 
   return (
     <>
       {/* Schema.org TVSeries / Movie JSON-LD structured data */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(seriesJsonLd) }}
+      />
+      {/* Schema.org FAQPage JSON-LD structured data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
 
-      {/* Client-side immediate navigation to single-page modal and experience */}
-      <div className="min-h-screen bg-[#0b0f17] flex items-center justify-center">
-        <div className="animate-pulse text-neutral-400 font-bold text-sm">
-          Loading {anime.title} on AniDub India...
-        </div>
+      {/* Crawlable Semantic SEO Content for Search Engine Bots */}
+      <div className="min-h-screen bg-[#0b0f17] text-neutral-200">
+        <header className="max-w-4xl mx-auto px-4 pt-12 pb-6 border-b border-neutral-800">
+          <nav className="text-xs text-purple-400 mb-4 flex items-center gap-2">
+            <a href="/" className="hover:underline">Home</a>
+            <span>/</span>
+            <a href={`/?dub=${encodeURIComponent(dubList[0] || 'Tamil')}`} className="hover:underline">
+              {dubList[0] || 'Tamil'} Dubbed Anime
+            </a>
+            <span>/</span>
+            <span className="text-neutral-400">{anime.title}</span>
+          </nav>
+          <h1 className="text-3xl font-extrabold text-white mb-2">
+            {anime.title} Dubbed Streaming in India
+          </h1>
+          <p className="text-sm text-neutral-400">
+            Official Indian Dub Availability: {dubList.join(', ')} • Streaming on {platforms.join(', ')}
+          </p>
+        </header>
+
+        <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+          {/* Synopsis & Key Metadata */}
+          <section className="bg-[#131926] border border-neutral-800 rounded-2xl p-6">
+            <h2 className="text-xl font-bold text-white mb-3">About {anime.title}</h2>
+            <p className="text-sm leading-relaxed text-neutral-300">
+              {anime.synopsis || `Stream ${anime.title} legally dubbed in Indian regional languages.`}
+            </p>
+          </section>
+
+          {/* Dynamic Keyword-Rich SEO Paragraphs */}
+          <section className="bg-[#131926] border border-neutral-800 rounded-2xl p-6 space-y-4">
+            <h2 className="text-xl font-bold text-white">
+              Watch {anime.title} Online in India
+            </h2>
+            <p className="text-sm text-neutral-300 leading-relaxed">
+              Looking to watch <strong>{anime.title}</strong> with official Indian regional dubs? You can stream <em>{anime.title}</em> legally in India on <strong>{platforms.join(', ')}</strong>. Available audio tracks include <strong>{dubList.join(', ')}</strong> dubs with full subtitle support.
+            </p>
+            <p className="text-sm text-neutral-300 leading-relaxed">
+              Produced by <strong>{anime.studio || 'Official Animation Studio'}</strong> and originally premiering in <strong>{anime.releaseYear || '2024'}</strong>, this {anime.type || 'TV Series'} currently features <strong>{anime.episodes || 12} episodes</strong>. Stream {anime.title} now in crisp 1080p Full HD on licensed Indian anime streaming services.
+            </p>
+          </section>
+
+          {/* FAQ Accordion Section for SEO and Google Discover */}
+          <section className="bg-[#131926] border border-neutral-800 rounded-2xl p-6">
+            <h2 className="text-xl font-bold text-white mb-4">
+              Frequently Asked Questions (FAQ)
+            </h2>
+            <div className="space-y-4">
+              {faqs.map((faq, index) => (
+                <div key={index} className="border-b border-neutral-800 pb-3 last:border-b-0">
+                  <h3 className="text-sm font-semibold text-purple-300 mb-1">
+                    {faq.question}
+                  </h3>
+                  <p className="text-xs text-neutral-400 leading-relaxed">
+                    {faq.answer}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Browse More Categories / Internal Linking */}
+          <section className="border-t border-neutral-800 pt-6">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-3">
+              Explore More Dubbed Anime
+            </h3>
+            <div className="flex flex-wrap gap-2 text-xs">
+              {dubList.map((lang) => (
+                <a
+                  key={lang}
+                  href={`/?dub=${encodeURIComponent(lang)}`}
+                  className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition"
+                >
+                  {lang} Dubbed Anime
+                </a>
+              ))}
+              {platforms.map((platform) => (
+                <a
+                  key={platform}
+                  href={`/?platform=${encodeURIComponent(platform)}`}
+                  className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition"
+                >
+                  Anime on {platform}
+                </a>
+              ))}
+            </div>
+          </section>
+        </main>
       </div>
+
+      {/* Interactive client single-page redirect */}
       <script dangerouslySetInnerHTML={{ __html: `window.location.replace('/#anime/${id}');` }} />
     </>
   );

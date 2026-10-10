@@ -1,3 +1,4 @@
+import { BrandLogo } from "./BrandLogo";
 'use client';
 
 import React, { useState } from 'react';
@@ -87,25 +88,13 @@ export const Header: React.FC<HeaderProps> = ({
       <header className="sticky top-0 z-40 w-full bg-[#0b0f17]/90 backdrop-blur-md border-b border-neutral-800/80 transition-colors">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
           
-          {/* 1. Brand Logo (Left flex item) */}
+          {/* 1. Official AniDub India Brand Logo */}
           <div 
             onClick={handleLogoClick}
-            className="flex items-center gap-1.5 sm:gap-2.5 cursor-pointer group select-none shrink-0 active:scale-[0.97] transition-transform"
+            className="flex items-center cursor-pointer group select-none shrink-0 active:scale-[0.97] transition-transform"
             title="AniDub India — Click to go to Library"
           >
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl btn-primary-theme flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-200">
-              <Film className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-            </div>
-            <div className="flex flex-col hidden xs:flex">
-              <div className="flex items-center gap-1">
-                <span className="font-heading font-black text-lg sm:text-xl tracking-tight text-white group-hover:text-primary-theme transition-colors">
-                  Ani<span className="text-accent-theme">Dub</span>
-                </span>
-                <span className="bg-gradient-to-r from-orange-500 via-white to-green-500 bg-clip-text text-transparent font-bold text-[8px] sm:text-[10px] tracking-wider uppercase border border-neutral-700/60 rounded px-1">
-                  IN
-                </span>
-              </div>
-            </div>
+            <BrandLogo size="md" variant={theme === "dark" ? "dark" : "light"} />
           </div>
 
           {/* 2. Top Navigation Tabs: Centered Flexbox with Navigation Icons (Zero Bottom Nav) */}

@@ -64,7 +64,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   };
 
   return (
-    <footer className="w-full border-t border-neutral-800/80 bg-[#0c101a] py-16 px-4 mt-16 pb-16 md:pb-20">
+    <section className="w-full max-w-full overflow-hidden border-t border-neutral-800/80 bg-[#0c101a] py-12 sm:py-16 px-4 mt-12 sm:mt-16 box-border">
       <div className="max-w-xl mx-auto space-y-10">
         
         {/* Major Call-to-Action: Submit Anime */}
@@ -182,6 +182,6 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
           © {new Date().getFullYear()} AniDub India. All anime media belongs to their respective production committees and licensors.
         </div>
       </div>
-    </footer>
+    </section>
   );
 };

@@ -104,7 +104,7 @@ export const MoreLikeThisSection: React.FC<MoreLikeThisSectionProps> = ({
               <div className="relative aspect-[16/10] w-full overflow-hidden bg-neutral-900">
                 <img
                   src={poster}
-                  alt={anime.title}
+                  alt={`${anime.title} Recommended Anime ${(anime.dubs || []).join(", ")} Dub`}
                   loading="lazy"
                   decoding="async"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
