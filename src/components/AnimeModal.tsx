@@ -206,7 +206,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-2.5 flex items-center gap-1.5">
               <span>Where to Stream</span>
-              <span className="text-[10px] text-neutral-500 font-normal">(Official Licensed Streams)</span>
+              <span className="text-[10px] text-neutral-500 font-normal">(Official Partner Streams)</span>
             </h4>
             <div className="flex flex-wrap gap-2.5">
               {(anime.platforms || []).map((platform, pIdx) => (

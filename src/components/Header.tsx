@@ -11,7 +11,6 @@ import {
   Sun, 
   Moon, 
   Film, 
-  Languages,
   BarChart3,
   Cloud
 } from 'lucide-react';
@@ -239,18 +238,7 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Bilingual Toggle (EN / தமிழ்) */}
-            {onToggleLanguage && (
-              <button
-                type="button"
-                onClick={onToggleLanguage}
-                className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-neutral-800/60 hover:bg-neutral-700/80 active:scale-95 border border-neutral-700/40 text-[10px] font-black text-neutral-300 hover:text-white transition-all cursor-pointer"
-                title="Switch Language"
-              >
-                <Languages className="w-3.5 h-3.5 text-accent-theme" />
-                <span>{uiLanguage === 'en' ? 'தமிழ்' : 'EN'}</span>
-              </button>
-            )}
+
 
             {/* Login / Auth trigger if available */}
             {onOpenAuthModal && (

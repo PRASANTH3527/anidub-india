@@ -25,11 +25,11 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory }) => {
           <div className="md:col-span-2 space-y-4">
             <BrandLogo size="lg" variant="dark" />
             <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed max-w-md">
-              Anidub India is the premier open directory documenting anime officially dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada. We verify legitimate OTT streaming links to support official anime creators and local Indian voice artists.
+              Anidub India is a premier streaming catalog and metadata directory indexing anime officially dubbed in Tamil, Telugu, Hindi, Malayalam, and Kannada. We provide comprehensive verification guides and direct viewers to authorized OTT streaming platforms like Crunchyroll and Netflix.
             </p>
             <div className="flex items-center gap-2 text-xs text-neutral-400 font-medium">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>100% Legal &amp; Licensed Indian Streaming Directory</span>
+              <span>India&apos;s Premier Anime Streaming Catalog</span>
             </div>
           </div>
 
@@ -82,16 +82,16 @@ export const Footer: React.FC<FooterProps> = ({ onSelectCategory }) => {
         >
           <div className="flex items-center gap-2 text-white font-bold text-sm">
             <Sparkles className="w-4 h-4 text-[#ff5722]" />
-            <h3>About Anidub India — The Premier Destination for Anime Streaming &amp; Dubbing in India</h3>
+            <h3>About Anidub India — India&apos;s Premier Anime Streaming Catalog &amp; Verification Guide</h3>
           </div>
           <p>
-            <strong className="text-neutral-200">Anidub India</strong> (<strong className="text-neutral-200">Anidub India Official Website</strong>) is India&apos;s authoritative guide, catalog, and premier destination for anime streaming and dubbing in India. Founded to empower anime enthusiasts across the subcontinent, Anidub India tracks officially licensed Japanese anime releases dubbed into Indian regional languages—including <em>Tamil, Telugu, Hindi, Malayalam, Kannada, and Bengali</em>.
+            <strong className="text-neutral-200">Anidub India</strong> (<strong className="text-neutral-200">Anidub India Official Portal</strong>) is India&apos;s authoritative metadata catalog, verification guide, and directory for anime streaming in Indian regional languages. Designed for discerning enthusiasts across the subcontinent, Anidub India systematically indexes officially dubbed Japanese anime releases in <em>Tamil, Telugu, Hindi, Malayalam, Kannada, and Bengali</em>. This catalog does not host video content, but provides verified metadata, episode indexes, and direct redirection to authorized streaming partners including Crunchyroll, Netflix, JioHotstar, JioCinema, and Prime Video.
           </p>
           <p>
-            As Japanese animation explodes in popularity across India, premier streaming platforms like <strong>Crunchyroll India, Netflix India, JioHotstar, JioCinema, and Prime Video</strong> are actively investing in authentic regional audio tracks, localized voice casts, and culturally rich dubbing scripts. Anidub India bridges the gap for viewers by maintaining a verified directory of legal watch options, episode counts, release years, animation studios, and community ratings—eliminating piracy and supporting official creators and local dubbing artists.
+            As Japanese animation expands rapidly across India, premier streaming platforms like <strong>Crunchyroll India, Netflix India, JioHotstar, JioCinema, and Prime Video</strong> continue to invest in authentic regional audio tracks, localized voice casts, and culturally adapted dubbing scripts. Anidub India bridges the gap for viewers by maintaining a verified directory of watch options, episode counts, release years, animation studios, and authenticated metadata—helping users discover official streaming portals.
           </p>
           <p className="text-[11px] text-neutral-500">
-            Whether you are searching for popular shonen hits like <em>Jujutsu Kaisen, Demon Slayer, Solo Leveling, Attack on Titan</em>, or timeless anime movies dubbed in your native mother tongue, the <strong>Anidub India Official Website</strong> delivers lightning-fast live search, comprehensive schedule updates, and community-verified streaming availability for anime streaming and dubbing in India.
+            Whether you are searching for popular shonen hits like <em>Jujutsu Kaisen, Demon Slayer, Solo Leveling, Attack on Titan</em>, or timeless anime movies dubbed in your native mother tongue, the <strong>Anidub India Catalog</strong> delivers lightning-fast live search, comprehensive schedule updates, and authenticated links to official streaming platforms.
           </p>
         </section>
 

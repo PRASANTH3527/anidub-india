@@ -32,11 +32,11 @@ export function generateAnimeFaqs(anime: Anime): SeoFaqItem[] {
   return [
     {
       question: `Where can I watch ${title} dubbed in India legally?`,
-      answer: `${title} is legally licensed and available for streaming in India on ${platforms}. You can stream official high-definition releases with verified Indian regional audio dubs and English subtitles on these platforms.`,
+      answer: `${title} is available for legal streaming in India on ${platforms}. You can stream official high-definition releases with verified Indian regional audio dubs and English subtitles on these platforms.`,
     },
     {
       question: `What Indian languages is ${title} dubbed in?`,
-      answer: `${title} is officially available with dub tracks in ${dubs}. Additional regional dub releases are tracked continuously by the AniDub India community directory.`,
+      answer: `${title} is officially available with dub tracks in ${dubs}. Additional regional dub releases are tracked continuously by the AniDub India streaming catalog.`,
     },
     {
       question: `Is ${title} available with ${primaryDub} dub?`,

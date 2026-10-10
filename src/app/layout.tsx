@@ -4,6 +4,7 @@ import './globals.css';
 import SWRegister from '../components/SWRegister';
 import { UserPendingSync } from '../components/UserPendingSync';
 import { ThemeWrapper } from '../components/ThemeWrapper';
+import { GoogleAnalytics } from '@next/third-parties/google';
 
 const DEFAULT_BANNER = 'https://anidub.in/41533.png';
 
@@ -193,6 +194,7 @@ export default function RootLayout({
         <ThemeWrapper>
           {children}
         </ThemeWrapper>
+        <GoogleAnalytics gaId="G-ANIDUBIN01" />
       </body>
     </html>
   );

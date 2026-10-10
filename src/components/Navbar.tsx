@@ -10,7 +10,6 @@ import {
   User, 
   Sun, 
   Moon, 
-  Languages, 
   BarChart3, 
   Trophy, 
   Cloud,
@@ -320,18 +319,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Bilingual Switcher (EN / தமிழ்) */}
-          {onToggleLanguage && (
-            <button
-              type="button"
-              onClick={onToggleLanguage}
-              className="flex items-center gap-1 px-1.5 sm:px-2 py-1.5 rounded-xl bg-neutral-800/70 hover:bg-neutral-700/80 active:scale-95 border border-neutral-700/40 text-[10px] sm:text-xs font-black text-neutral-300 hover:text-white transition-all cursor-pointer shrink-0"
-              title="Switch Language"
-            >
-              <Languages className="w-3.5 h-3.5 text-accent-theme" />
-              <span>{uiLanguage === 'en' ? 'தமிழ்' : 'EN'}</span>
-            </button>
-          )}
+
 
           {/* Theme Toggle Button */}
           <button

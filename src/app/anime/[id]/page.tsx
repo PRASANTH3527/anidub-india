@@ -312,7 +312,7 @@ export default async function AnimeDynamicRoute({ params }: PageProps) {
               Looking to watch <strong>{anime.title}</strong> with official Indian regional dubs? You can stream <em>{anime.title}</em> legally in India on <strong>{platforms.join(', ')}</strong>. Available audio tracks include <strong>{dubList.join(', ')}</strong> dubs with full subtitle support.
             </p>
             <p className="text-sm text-neutral-300 leading-relaxed">
-              Produced by <strong>{anime.studio || 'Official Animation Studio'}</strong> and originally premiering in <strong>{anime.releaseYear || '2024'}</strong>, this {anime.type || 'TV Series'} currently features <strong>{anime.episodes || 12} episodes</strong>. Stream {anime.title} now in crisp 1080p Full HD on licensed Indian anime streaming services.
+              Produced by <strong>{anime.studio || 'Official Animation Studio'}</strong> and originally premiering in <strong>{anime.releaseYear || '2024'}</strong>, this {anime.type || 'TV Series'} currently features <strong>{anime.episodes || 12} episodes</strong>. Stream {anime.title} now in crisp 1080p Full HD on official Indian anime streaming platforms.
             </p>
           </section>
 

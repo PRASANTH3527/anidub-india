@@ -862,7 +862,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </div>
           </div>
 
-          {/* Official Licensed Streaming Links */}
+          {/* Official Partner Streaming Links */}
           <div className="bg-[#131926] border border-neutral-800 rounded-3xl p-6 shadow-xl space-y-3">
             <h3 className="font-heading font-black text-base text-white">
               Official Streaming Links
@@ -1023,11 +1023,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <p>
             Stream <strong>{anime.title}</strong> legally dubbed in Indian regional languages including{" "}
             <span className="text-amber-400 font-semibold">{(anime.dubs || []).join(", ") || "Tamil, Telugu, Hindi"}</span>{" "}
-            in India on licensed streaming platforms including{" "}
+            in India on official streaming platforms including{" "}
             <span className="text-purple-400 font-semibold">
               {(anime.platforms || []).map((p: any) => typeof p === "string" ? p : p?.name).join(", ") || "Crunchyroll and Netflix"}
             </span>
-            . AniDub India provides up-to-date regional dub directories, verified episode lists, official voice cast credits, and legal streaming links.
+            . AniDub India is India&apos;s premier streaming catalog providing regional dub directories, verified episode lists, and links to authorized streaming platforms.
           </p>
           <p>
             Originally animated by <strong>{anime.studio || "Official Animation Studio"}</strong> and premiered in{" "}
