@@ -256,11 +256,12 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
   };
 
   return (
-    <ParallaxCard className="h-full">
-      <div 
-        onClick={() => onSelect(anime)}
-        className="group relative flex flex-col h-full bg-[#131926] transition-all duration-300 cursor-pointer select-none"
-      >
+    <div style={{ contentVisibility: 'auto', containIntrinsicSize: '280px 420px' }} className="h-full">
+      <ParallaxCard className="h-full">
+        <div 
+          onClick={() => onSelect(anime)}
+          className="group relative flex flex-col h-full bg-[#131926] transition-all duration-300 cursor-pointer select-none"
+        >
         {/* Poster Section (Lightweight, No 3D Perspective) */}
         <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
         {!imageError ? (
@@ -475,7 +476,8 @@ export const AnimeCard: React.FC<AnimeCardProps> = React.memo(({
       </div>
     </div>
   </ParallaxCard>
-);
+    </div>
+  );
 });
 
 export default AnimeCard;

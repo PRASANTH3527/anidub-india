@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { dbService } from '../services/databaseService';
 import { 
   BarChart, 
   Bar, 
@@ -62,12 +63,19 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
   useEffect(() => {
     const fetchRealtimeAnalytics = async () => {
       try {
-        const { data, error } = await supabase
-          .from('anime_list')
-          .select('*');
+        const cacheKey = 'admin_analytics_records';
+        let records = dbService.getFromMemoryCache<any[]>(cacheKey);
+        if (!records) {
+          const { data, error } = await supabase
+            .from('anime_list')
+            .select('*');
 
-        if (error) throw error;
-        const records = data || [];
+          if (error) throw error;
+          records = data || [];
+          if (records.length > 0) {
+            dbService.setMemoryCache(cacheKey, records);
+          }
+        }
         setFetchedRecords(records);
 
         // 1. Fetch total counts for Catalog Size and Pending Review

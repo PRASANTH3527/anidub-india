@@ -43,6 +43,7 @@ export const ALL_PLATFORMS = [
   'Crunchyroll',
   'Netflix',
   'JioCinema',
+  'JioHotstar',
   'YouTube',
   'YouTube (Muse India)',
   'YouTube (Ani-One)',

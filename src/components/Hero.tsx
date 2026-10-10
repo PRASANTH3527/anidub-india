@@ -15,7 +15,7 @@ export const Hero: React.FC<HeroProps> = ({ totalCount, onOpenSurpriseMe, uiLang
     <section className="relative pt-10 pb-6 sm:pt-14 sm:pb-8 text-center px-4 max-w-4xl mx-auto overflow-hidden">
       {/* Subtle radial background glow */}
       <div 
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full blur-3xl pointer-events-none -z-10 opacity-30" 
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full blur-xl pointer-events-none -z-10 opacity-20 will-change-transform" 
         style={{ background: 'var(--primary-glow)' }}
       />
 

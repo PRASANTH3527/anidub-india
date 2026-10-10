@@ -60,7 +60,38 @@ export function formatAnimeForSupabase(record: Partial<AnimeRecord>): Record<str
     : [{ name: 'Crunchyroll', url: 'https://www.crunchyroll.com', languages: dubs }];
 
   const rawStatus = String(record.status || (record as any).submissionStatus || (record as any).submission_status || 'pending').toLowerCase().trim();
-  const modStatus = (rawStatus === 'approved' || rawStatus === 'rejected') ? rawStatus : 'pending';
+  const modStatus = (rawStatus === 'approved' || rawStatus === 'rejected') 
+    ? rawStatus 
+    : (rawStatus.includes('ongoing') || rawStatus.includes('simulcast') || rawStatus.includes('airing') ? 'Ongoing' : 'pending');
+
+  const rawAiring = String(record.airingStatus || (record as any).airing_status || record.status || '').toLowerCase().trim();
+  const airingStatus = (rawAiring.includes('ongoing') || rawAiring.includes('simulcast') || rawAiring.includes('airing'))
+    ? 'Ongoing'
+    : 'Completed';
+
+  // Extract release day & live episode number
+  const relDay = record.releaseDay || (record as any).release_day || record.airingDay || (record as any).airing_day;
+  const liveEpNum = (record as any).live_episode_number !== undefined 
+    ? (record as any).live_episode_number 
+    : record.currentlyAiringEpisode;
+
+  let seasonDetails = record.seasonDetails || (record as any).season_details || [];
+  if (Array.isArray(seasonDetails) && seasonDetails.length > 0) {
+    seasonDetails = seasonDetails.map((s: any) => ({
+      ...s,
+      release_day: s.release_day || s.releaseDay || relDay,
+      live_episode_number: s.live_episode_number !== undefined ? s.live_episode_number : liveEpNum
+    }));
+  } else if (relDay || airingStatus === 'Ongoing') {
+    seasonDetails = [{
+      type: 'Season',
+      label: '1',
+      episodeCount: Number(record.episodes) || 12,
+      release_day: relDay,
+      live_episode_number: liveEpNum,
+      languages: dubs
+    }];
+  }
 
   const row: Record<string, any> = {
     id: String(record.id),
@@ -79,10 +110,10 @@ export function formatAnimeForSupabase(record: Partial<AnimeRecord>): Record<str
     dubs: dubs,
     dub_details: record.dubDetails || (record as any).dub_details || [],
     platforms: platforms,
-    season_details: record.seasonDetails || (record as any).season_details || [],
-    airing_status: record.airingStatus || (record as any).airing_status || 'Completed',
+    season_details: seasonDetails,
+    airing_status: airingStatus,
     status: modStatus,
-    submission_status: modStatus,
+    submission_status: modStatus === 'Ongoing' ? 'approved' : modStatus,
     submitted_at: record.submittedAt || (record as any).submitted_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
     is_deleted: Boolean(record.isDeleted || (record as any).is_deleted),
@@ -102,8 +133,34 @@ class DatabaseService {
   private animeRecords: AnimeRecord[] = [];
   private isInitialized = false;
 
+  // Aggressive In-Memory Cache for Supabase queries & memoized record maps
+  private cachedAllRecords: AnimeRecord[] | null = null;
+  private cachedApprovedRecords: AnimeRecord[] | null = null;
+  private memoryQueryCache = new Map<string, { data: any; timestamp: number }>();
+  private readonly MEMORY_CACHE_TTL = 10 * 60 * 1000; // 10 minutes memory freshness window
+
   constructor() {
     this.initDatabase();
+  }
+
+  public getFromMemoryCache<T>(key: string): T | null {
+    const entry = this.memoryQueryCache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp > this.MEMORY_CACHE_TTL) {
+      this.memoryQueryCache.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  public setMemoryCache<T>(key: string, data: T): void {
+    this.memoryQueryCache.set(key, { data, timestamp: Date.now() });
+  }
+
+  public invalidateMemoryCache(): void {
+    this.cachedAllRecords = null;
+    this.cachedApprovedRecords = null;
+    this.memoryQueryCache.clear();
   }
 
   private async initDatabase() {
@@ -113,6 +170,7 @@ class DatabaseService {
       const idbData = await idbGet(DB_ANIME_KEY);
       if (idbData && Array.isArray(idbData)) {
         this.animeRecords = idbData.map(item => this.normalizeRecord(item));
+        this.invalidateMemoryCache();
         console.log(`[AniDub DB] Loaded ${this.animeRecords.length} records from IndexedDB cache.`);
       } else {
         // 2. Migration: Load from Legacy localStorage if IDB is empty
@@ -122,6 +180,7 @@ class DatabaseService {
             const parsed = JSON.parse(legacyData);
             if (Array.isArray(parsed) && parsed.length > 0) {
               this.animeRecords = parsed.map(item => this.normalizeRecord(item));
+              this.invalidateMemoryCache();
               await idbSet(DB_ANIME_KEY, this.animeRecords);
               localStorage.removeItem(DB_ANIME_KEY);
             }
@@ -141,6 +200,9 @@ class DatabaseService {
   }
 
   public getAllAnimeRecords(): AnimeRecord[] {
+    if (this.cachedAllRecords) {
+      return this.cachedAllRecords;
+    }
     const uniqueMap = new Map<string, AnimeRecord>();
     for (const record of this.animeRecords) {
       if (record && record.title) {
@@ -150,7 +212,9 @@ class DatabaseService {
         }
       }
     }
-    return Array.from(uniqueMap.values());
+    const result = Array.from(uniqueMap.values());
+    this.cachedAllRecords = result;
+    return result;
   }
 
   public subscribe(listener: () => void): () => void {
@@ -192,33 +256,90 @@ class DatabaseService {
     const dubs = mapLangs(data.dubs || data.languages || data.availableIn || []);
 
     let seasonDetails: any[] = [];
-    const rawSeasons = data.seasons || data.mixedEntries || data.seasonDetails || [];
+    const rawSeasons = data.seasons || data.mixedEntries || data.seasonDetails || data.season_details || [];
     if (Array.isArray(rawSeasons)) {
       seasonDetails = rawSeasons.map((s: any) => ({
         type: s.type || 'Season',
         label: String(s.seasonNumber || s.number || s.label || '1'),
         episodeCount: Number(s.episodes || s.episodeCount || 12),
-        languages: mapLangs(s.availableIn || s.languages || dubs)
+        languages: mapLangs(s.availableIn || s.languages || dubs),
+        release_day: s.release_day || s.releaseDay || data.release_day || data.releaseDay,
+        live_episode_number: s.live_episode_number !== undefined ? Number(s.live_episode_number) : (s.currentlyAiringEpisode !== undefined ? Number(s.currentlyAiringEpisode) : undefined)
       }));
     } else {
       seasonDetails = [{ 
         type: 'Season', 
         label: '1', 
         episodeCount: Number(data.episodes) || 12, 
-        languages: dubs.length > 0 ? dubs : ['Tamil'] 
+        languages: dubs.length > 0 ? dubs : ['Tamil'],
+        release_day: data.release_day || data.releaseDay,
+        live_episode_number: data.live_episode_number !== undefined ? Number(data.live_episode_number) : (data.currentlyAiringEpisode !== undefined ? Number(data.currentlyAiringEpisode) : undefined)
       }];
     }
 
-    let airingStatus: 'Ongoing' | 'Completed' = 'Completed';
-    const statusVal = String(data.status || '').toLowerCase();
-    const isModerationStatus = ['pending', 'approved', 'rejected'].includes(statusVal);
-    const rawAiringStatus = String(data.airingStatus || (!isModerationStatus ? data.status : '') || '').toLowerCase();
+    const rawAiringStatus = String(
+      data.airing_status || 
+      data.airingStatus || 
+      (data.status && !['pending', 'approved', 'rejected'].includes(String(data.status).toLowerCase()) ? data.status : '') || 
+      ''
+    ).toLowerCase().trim();
 
+    let airingStatus: 'Ongoing' | 'Completed' = 'Completed';
     if (rawAiringStatus.includes('ongoing') || rawAiringStatus.includes('airing') || rawAiringStatus.includes('simulcast')) {
       airingStatus = 'Ongoing';
     } else if (rawAiringStatus.includes('completed') || rawAiringStatus.includes('finished')) {
       airingStatus = 'Completed';
     }
+
+    // Extract episode counts for Automatic Completion Logic:
+    const liveEp = data.live_episode_number !== undefined && data.live_episode_number !== null && data.live_episode_number !== ''
+      ? Number(data.live_episode_number)
+      : (data.currentlyAiringEpisode !== undefined && data.currentlyAiringEpisode !== null && data.currentlyAiringEpisode !== ''
+          ? Number(data.currentlyAiringEpisode)
+          : (data.currently_airing_episode !== undefined && data.currently_airing_episode !== null && data.currently_airing_episode !== ''
+              ? Number(data.currently_airing_episode)
+              : (seasonDetails[0]?.live_episode_number !== undefined
+                  ? Number(seasonDetails[0].live_episode_number)
+                  : undefined)));
+
+    const totalEp = data.total_episodes !== undefined && data.total_episodes !== null && data.total_episodes !== ''
+      ? Number(data.total_episodes)
+      : (data.episodes !== undefined && data.episodes !== null && data.episodes !== ''
+          ? Number(data.episodes)
+          : (seasonDetails[0]?.episodeCount !== undefined
+              ? Number(seasonDetails[0].episodeCount)
+              : undefined));
+
+    // Automatic Completion Logic:
+    // If live_episode_number >= total_episodes (or if all episodes of that season have aired),
+    // automatically treat that entry as "Completed"
+    if (liveEp !== undefined && totalEp !== undefined && totalEp > 0 && liveEp >= totalEp) {
+      airingStatus = 'Completed';
+    }
+
+    // Extract release day with case-insensitive mapping
+    const rawReleaseDay = String(
+      data.release_day ||
+      data.releaseDay ||
+      data.airing_day ||
+      data.airingDay ||
+      data.day ||
+      data.broadcast_day ||
+      seasonDetails[0]?.release_day ||
+      seasonDetails[0]?.releaseDay ||
+      ''
+    ).trim();
+
+    const dayMap: Record<string, 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday'> = {
+      'monday': 'Monday',
+      'tuesday': 'Tuesday',
+      'wednesday': 'Wednesday',
+      'thursday': 'Thursday',
+      'friday': 'Friday',
+      'saturday': 'Saturday',
+      'sunday': 'Sunday'
+    };
+    const mappedDay = dayMap[rawReleaseDay.toLowerCase()] || (rawReleaseDay ? (rawReleaseDay.charAt(0).toUpperCase() + rawReleaseDay.slice(1).toLowerCase()) as any : undefined);
 
     const title = (data.title || data.name || 'Untitled').trim();
     const rawPlatforms = Array.isArray(data.platforms) 
@@ -243,11 +364,13 @@ class DatabaseService {
 
     // Strict moderation status check
     const rawStatus = String(data.submission_status || data.submissionStatus || data.status || '').toLowerCase().trim();
-    let modStatus: 'pending' | 'approved' | 'rejected' = 'approved';
+    let modStatus: 'pending' | 'approved' | 'rejected' | 'Ongoing' = 'approved';
     if (rawStatus === 'pending') {
       modStatus = 'pending';
     } else if (rawStatus === 'rejected') {
       modStatus = 'rejected';
+    } else if (rawStatus.includes('ongoing') || rawStatus.includes('simulcast') || rawStatus.includes('airing')) {
+      modStatus = 'Ongoing';
     } else {
       modStatus = 'approved';
     }
@@ -262,7 +385,7 @@ class DatabaseService {
       studio: data.studio || data.animationStudio || data.animation_studio || 'Animation Studio',
       synopsis: data.synopsis || data.description || '',
       type: data.type || 'TV Series',
-      episodes: Number(data.episodes) || 12,
+      episodes: totalEp || Number(data.episodes) || 12,
       releaseYear: Number(data.releaseYear || data.release_year) || new Date().getFullYear(),
       rating: data.rating !== undefined && data.rating !== null ? Number(data.rating) : 0,
       genres: Array.isArray(data.genres) && data.genres.length > 0 ? data.genres : ['Action'],
@@ -272,8 +395,15 @@ class DatabaseService {
       platforms,
       seasonDetails,
       airingStatus,
-      status: modStatus,
-      submissionStatus: modStatus,
+      status: modStatus === 'Ongoing' ? (airingStatus === 'Completed' ? 'approved' : 'Ongoing') : modStatus,
+      submissionStatus: modStatus === 'Ongoing' ? 'approved' : modStatus,
+      releaseDay: mappedDay,
+      airingDay: mappedDay,
+      release_day: mappedDay,
+      airing_day: mappedDay,
+      live_episode_number: liveEp,
+      currentlyAiringEpisode: liveEp,
+      total_episodes: totalEp,
       submittedAt: data.submittedAt || data.submitted_at || new Date().toISOString(),
       updatedAt: data.updatedAt || data.updated_at || new Date().toISOString(),
       isDeleted: data.is_deleted === true || data.is_deleted === 'true' || data.isDeleted === true || data.isDeleted === 'true',
@@ -292,6 +422,7 @@ class DatabaseService {
       }
       
       this.animeRecords = records;
+      this.invalidateMemoryCache();
       await idbSet(DB_ANIME_KEY, records);
       this.notify();
     } catch (e) {
@@ -308,7 +439,12 @@ class DatabaseService {
       for (const anime of approved) {
         if (anime.isDeleted || (anime as any).is_deleted === true) continue;
         const row = formatAnimeForSupabase(anime);
-        row.status = 'approved';
+        if (anime.status === 'Ongoing' || anime.status === 'Simulcast' || anime.airingStatus === 'Ongoing') {
+          row.status = 'Ongoing';
+          row.airing_status = 'Ongoing';
+        } else {
+          row.status = 'approved';
+        }
         row.submission_status = 'approved';
         row.is_deleted = false;
         
@@ -448,6 +584,12 @@ class DatabaseService {
     lastDoc: any = null,
     pageSize = 30
   ): Promise<{ items: AnimeRecord[], lastDoc: any }> {
+    const cacheKey = `search_${(searchQuery || '').trim().toLowerCase()}_${selectedLang}_${selectedPlatform}_${lastDoc ?? 0}_${pageSize}`;
+    const cached = this.getFromMemoryCache<{ items: AnimeRecord[], lastDoc: any }>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     try {
       const startIndex = typeof lastDoc === 'number' ? lastDoc : 0;
       const endIndex = startIndex + pageSize - 1;
@@ -525,7 +667,9 @@ class DatabaseService {
       }
 
       const nextCursor = items.length >= pageSize ? (startIndex + items.length) : null;
-      return { items, lastDoc: nextCursor };
+      const result = { items, lastDoc: nextCursor };
+      this.setMemoryCache(cacheKey, result);
+      return result;
     } catch (err) {
       console.warn('[Supabase Search Error]:', err);
       let approvedOnly = this.getApprovedAnime();
@@ -611,6 +755,9 @@ class DatabaseService {
   }
 
   public getApprovedAnime(): AnimeRecord[] {
+    if (this.cachedApprovedRecords) {
+      return this.cachedApprovedRecords;
+    }
     const all = this.getAllAnimeRecords();
     const approved = all.filter((a) => a.status === 'approved' && !a.isDeleted);
     const uniqueMap = new Map<string, AnimeRecord>();
@@ -622,7 +769,9 @@ class DatabaseService {
         }
       }
     }
-    return Array.from(uniqueMap.values());
+    const result = Array.from(uniqueMap.values());
+    this.cachedApprovedRecords = result;
+    return result;
   }
 
   public getPendingSubmissions(): AnimeRecord[] {

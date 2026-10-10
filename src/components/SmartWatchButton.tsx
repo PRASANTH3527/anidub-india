@@ -42,6 +42,13 @@ const BRAND_STYLES: Record<string, { bg: string; hover: string; border: string; 
     text: 'text-pink-400',
     ring: 'focus:ring-pink-500/30',
   },
+  JioHotstar: {
+    bg: 'bg-gradient-to-r from-blue-950/40 to-pink-950/40',
+    hover: 'hover:from-blue-900/50 hover:to-pink-900/50 hover:border-blue-400/70',
+    border: 'border-blue-500/40',
+    text: 'text-blue-300',
+    ring: 'focus:ring-blue-500/30',
+  },
   'Prime Video': {
     bg: 'bg-sky-950/30',
     hover: 'hover:bg-sky-900/40 hover:border-sky-500/70',

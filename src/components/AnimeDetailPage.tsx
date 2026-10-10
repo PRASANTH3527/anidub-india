@@ -61,6 +61,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   Netflix: 'hover:bg-indigo-600/20 hover:border-indigo-500/50 text-indigo-400',
   'Prime Video': 'hover:bg-sky-600/20 hover:border-sky-500/50 text-sky-400',
   'Disney+ Hotstar': 'hover:bg-blue-600/20 hover:border-blue-500/50 text-blue-400',
+  JioHotstar: 'hover:bg-blue-600/20 hover:border-blue-500/50 text-blue-400',
   JioCinema: 'hover:bg-purple-600/20 hover:border-purple-500/50 text-purple-400',
   YouTube: 'hover:bg-violet-600/20 hover:border-violet-500/50 text-violet-400',
 };
@@ -152,7 +153,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
   // Auto-inject SEO tags on mount and update when anime changes
   useEffect(() => {
-    updateSeoTags(buildAnimeSeo(anime));
+    updateSeoTags(buildAnimeSeo(anime), anime);
   }, [anime]);
 
   // Trigger anonymous view tracking

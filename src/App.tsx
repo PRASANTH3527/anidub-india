@@ -282,8 +282,12 @@ function AppContent() {
 
   // Fetch filtered and searched anime dynamically from Supabase without full page reloads
   useEffect(() => {
+    let isCancelled = false;
     const fetchFiltered = async () => {
-      setIsLoading(true);
+      const isDefaultFilter = !searchQuery.trim() && selectedLanguage === 'All' && (selectedPlatform === 'All' || selectedPlatform === 'All Platforms');
+      if (!isDefaultFilter || approvedAnime.length === 0) {
+        setIsLoading(true);
+      }
       try {
         const res = await dbService.searchApprovedAnime(
           searchQuery,
@@ -292,15 +296,23 @@ function AppContent() {
           null,
           200
         );
+        if (isCancelled) return;
         const uniqueItems = Array.from(new Map(res.items.map(item => [String(item.id), item])).values());
-        setApprovedAnime(uniqueItems);
+        if (uniqueItems.length > 0 || !isDefaultFilter) {
+          setApprovedAnime(uniqueItems);
+        }
         setLastDocApproved(null);
         setHasMoreApproved(false);
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     };
     fetchFiltered();
+    return () => {
+      isCancelled = true;
+    };
   }, [searchQuery, selectedLanguage, selectedPlatform]);
 
   // Subscribe to DB & Auth changes

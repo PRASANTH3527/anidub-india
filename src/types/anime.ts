@@ -2,7 +2,7 @@ export type DubLanguage = 'Tamil' | 'Telugu' | 'Hindi' | 'Malayalam' | 'Kannada'
 
 export type AnimeType = 'TV Series' | 'Movie' | 'Special' | 'OVA' | 'ONA';
 
-export type AnimeStatus = 'Ongoing' | 'Completed' | 'Airing' | 'Upcoming' | 'pending' | 'approved' | 'rejected';
+export type AnimeStatus = 'Ongoing' | 'Completed' | 'Airing' | 'Upcoming' | 'pending' | 'approved' | 'rejected' | 'Simulcast';
 
 export type ReleaseDay = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
 
@@ -10,6 +10,7 @@ export type StreamingPlatform =
   | 'Crunchyroll'
   | 'Netflix'
   | 'JioCinema'
+  | 'JioHotstar'
   | 'YouTube'
   | 'YouTube (Muse India)'
   | 'YouTube (Ani-One)'

@@ -890,6 +890,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                             <option value="Crunchyroll">Crunchyroll</option>
                             <option value="Netflix">Netflix</option>
                             <option value="JioCinema">JioCinema</option>
+                            <option value="JioHotstar">JioHotstar</option>
                             <option value="YouTube">YouTube</option>
                             <option value="YouTube (Muse India)">YouTube (Muse India)</option>
                             <option value="YouTube (Ani-One)">YouTube (Ani-One)</option>
