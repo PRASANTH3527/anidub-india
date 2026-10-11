@@ -1651,12 +1651,15 @@ class DatabaseService {
           added++;
         }
 
+        const isExisting = Boolean(existingMatch);
+        const defaultStatus = isExisting ? (existingMatch?.status || 'approved') : 'pending';
+
         const normalized = this.normalizeRecord({
           ...item,
           id,
           title: rawTitle,
-          status: item.status || 'approved',
-          submissionStatus: item.submissionStatus || 'approved',
+          status: item.status || defaultStatus,
+          submissionStatus: item.submissionStatus || defaultStatus,
           updatedAt: new Date().toISOString()
         });
 
