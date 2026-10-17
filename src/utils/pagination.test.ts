@@ -34,6 +34,25 @@ test('calculatePagination handles empty or zero total items', () => {
   assert.equal(empty.hasPrevPage, false);
 });
 
+test('filterAndSortCatalog filters by regional dub language (Tamil, Telugu, Hindi)', () => {
+  const items = [
+    { title: 'Cyberpunk Neon', synopsis: 'In 2077', genres: 'Action,Sci-Fi', status: 'Airing', rating: 9.2, popularity: 500, year: 2026, languages: 'HIN,TAM' },
+    { title: 'Starlight Romance', synopsis: 'Love in stars', genres: 'Romance,Drama', status: 'Completed', rating: 8.5, popularity: 300, year: 2024, languages: 'HIN,TEL' },
+    { title: 'Blade Warrior', synopsis: 'Sword fights', genres: 'Action,Fantasy', status: 'Airing', rating: 9.5, popularity: 900, year: 2025, languages: 'TAM,TEL' }
+  ];
+
+  const tamilTitles = filterAndSortCatalog(items, { language: 'Tamil' });
+  assert.equal(tamilTitles.length, 2);
+  assert.equal(tamilTitles[0].title, 'Blade Warrior');
+  assert.equal(tamilTitles[1].title, 'Cyberpunk Neon');
+
+  const teluguTitles = filterAndSortCatalog(items, { language: 'TEL' });
+  assert.equal(teluguTitles.length, 2);
+
+  const hindiTitles = filterAndSortCatalog(items, { language: 'Hindi' });
+  assert.equal(hindiTitles.length, 2);
+});
+
 test('filterAndSortCatalog filters by genre and search query correctly', () => {
   const items = [
     { title: 'Cyberpunk Neon', synopsis: 'In 2077', genres: 'Action,Sci-Fi', status: 'Airing', rating: 9.2, popularity: 500, year: 2026 },

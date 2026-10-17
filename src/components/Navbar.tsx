@@ -7,9 +7,6 @@ interface NavbarProps {
   watchlistCount: number;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
-  userAvatar?: string;
-  userName?: string;
-  onOpenProfile: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -17,10 +14,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   watchlistCount,
   searchQuery,
-  setSearchQuery,
-  userAvatar = 'https://i.ibb.co/vzS8G90/default-avatar.png',
-  userName = 'Kaito',
-  onOpenProfile
+  setSearchQuery
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80">
@@ -120,26 +114,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             />
           </div>
 
-          {/* User Profile Avatar (ImgBB powered) */}
-          <button
-            onClick={onOpenProfile}
-            className="flex items-center space-x-2 p-1.5 pr-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 transition-colors group"
-            title="Edit Profile & ImgBB Avatar"
-          >
-            <div className="w-7 h-7 rounded-lg overflow-hidden bg-slate-800 border border-orange-500/40">
-              <img
-                src={userAvatar}
-                alt={userName}
-                onError={(e) => {
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
-                }}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-              />
-            </div>
-            <span className="hidden sm:inline text-xs font-semibold text-slate-200 group-hover:text-orange-400 transition-colors">
-              {userName}
-            </span>
-          </button>
+          {/* Regional Anime Directory Badge */}
+          <div className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] font-semibold text-orange-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Indian Anime Directory</span>
+          </div>
 
           {/* Mobile Tab Toggles */}
           <div className="flex md:hidden space-x-1">

@@ -1,39 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { X, Play, Star, Calendar, Tv, Bookmark, MessageSquare, Send, Loader2, CloudLightning } from 'lucide-react';
+import { X, Star, Calendar, Tv, Bookmark, Loader2, CloudLightning, Languages, Film, ExternalLink } from 'lucide-react';
 
 interface AnimeDetailModalProps {
   animeId: number;
   onClose: () => void;
-  onPlayEpisode: (anime: any, episode: any) => void;
   watchlist: number[];
   onToggleWatchlist: (animeId: number) => void;
-  currentUser?: { username: string; avatar_url: string };
 }
 
 export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   animeId,
   onClose,
-  onPlayEpisode,
   watchlist,
-  onToggleWatchlist,
-  currentUser
+  onToggleWatchlist
 }) => {
   const [details, setDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [userName, setUserName] = useState(currentUser?.username || 'Kaito_Cloud');
-  const [rating, setRating] = useState('10');
-  const [comment, setComment] = useState('');
-  const [submittingReview, setSubmittingReview] = useState(false);
 
   useEffect(() => {
     fetchDetails();
   }, [animeId]);
-
-  useEffect(() => {
-    if (currentUser?.username) {
-      setUserName(currentUser.username);
-    }
-  }, [currentUser]);
 
   const fetchDetails = async () => {
     setLoading(true);
@@ -42,33 +28,9 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
       const data = await res.json();
       setDetails(data);
     } catch (err) {
-      console.error('Failed to fetch anime details:', err);
+      console.error('Failed to fetch anime directory details:', err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleAddReview = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userName || !comment) return;
-    setSubmittingReview(true);
-    try {
-      await fetch(`/api/anime/${animeId}/reviews`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_name: userName,
-          user_avatar: currentUser?.avatar_url || 'https://i.ibb.co/vzS8G90/default-avatar.png',
-          rating: parseInt(rating),
-          comment
-        })
-      });
-      setComment('');
-      fetchDetails();
-    } catch (err) {
-      console.error('Failed to add review:', err);
-    } finally {
-      setSubmittingReview(false);
     }
   };
 
@@ -84,6 +46,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
 
   const isWatchlisted = watchlist.includes(details.id);
   const genresList = details.genres ? details.genres.split(',') : [];
+  const langList = (details.languages || 'HIN,TAM,TEL').split(',');
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
@@ -98,22 +61,25 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
         </button>
 
         {/* Banner header */}
-        <div className="relative h-64 sm:h-80 w-full overflow-hidden">
+        <div className="relative h-64 sm:h-80 w-full overflow-hidden bg-slate-950">
           <img
             src={details.banner_image || details.cover_image}
             alt={details.title}
+            onError={(e) => {
+              e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1600&auto=format&fit=crop&q=80';
+            }}
             className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/50 to-transparent" />
           
-          <div className="absolute top-4 left-4 flex items-center space-x-2 bg-slate-950/70 backdrop-blur-md px-3 py-1 rounded-full border border-orange-500/30 text-xs font-medium text-orange-400">
+          <div className="absolute top-4 left-4 flex items-center space-x-2 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-orange-500/30 text-xs font-semibold text-orange-400">
             <CloudLightning className="w-3.5 h-3.5" />
-            <span>Cloudflare D1 & ImgBB CDN</span>
+            <span>Cloudflare D1 & ImgBB Verified Directory</span>
           </div>
 
           <div className="absolute bottom-6 left-6 right-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
-              <div className="flex flex-wrap items-center gap-2 mb-2">
+              <div className="flex flex-wrap items-center gap-1.5 mb-2">
                 {genresList.map((g: string, i: number) => (
                   <span key={i} className="px-2.5 py-0.5 rounded-md bg-orange-500/20 text-orange-300 text-xs font-semibold border border-orange-500/30">
                     {g.trim()}
@@ -130,23 +96,13 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                 onClick={() => onToggleWatchlist(details.id)}
                 className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-semibold text-xs transition-colors border ${
                   isWatchlisted
-                    ? 'bg-orange-600 border-orange-500 text-white'
+                    ? 'bg-orange-600 border-orange-500 text-white shadow-lg shadow-orange-600/30'
                     : 'bg-slate-950 border-slate-700 text-slate-200 hover:bg-slate-800'
                 }`}
               >
                 <Bookmark className={`w-4 h-4 ${isWatchlisted ? 'fill-white' : ''}`} />
                 <span>{isWatchlisted ? 'In Watchlist' : 'Add to Watchlist'}</span>
               </button>
-
-              {details.episodes && details.episodes.length > 0 && (
-                <button
-                  onClick={() => onPlayEpisode(details, details.episodes[0])}
-                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs shadow-lg shadow-orange-600/30 transition-all"
-                >
-                  <Play className="w-4 h-4 fill-white" />
-                  <span>Play Ep 1</span>
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -187,6 +143,37 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
             </div>
           </div>
 
+          {/* Regional Audio Dubbing & Streaming Directory Info */}
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-orange-500/10 via-amber-500/5 to-transparent border border-orange-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center space-x-2 text-xs font-bold text-orange-400 uppercase tracking-wider">
+                <Languages className="w-4 h-4" />
+                <span>Available Regional Indian Dubs</span>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                {langList.map((lang: string) => (
+                  <span
+                    key={lang}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold ${
+                      lang === 'HIN' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                      lang === 'TAM' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' :
+                      'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                    }`}
+                  >
+                    {lang === 'HIN' ? 'Hindi Audio Dub' : lang === 'TAM' ? 'Tamil Audio Dub' : 'Telugu Audio Dub'}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="text-right sm:border-l sm:border-slate-800 sm:pl-6">
+              <span className="text-[11px] text-slate-400 uppercase block font-medium">Licensed Platform</span>
+              <span className="text-sm font-bold text-white mt-0.5 inline-block">
+                {details.platform || 'Crunchyroll & Netflix India'}
+              </span>
+            </div>
+          </div>
+
           {/* Synopsis */}
           <div>
             <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-2">Synopsis</h3>
@@ -195,116 +182,44 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
             </p>
           </div>
 
-          {/* Episodes Playlist */}
-          <div>
-            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center justify-between">
-              <span>Episodes List</span>
-              <span className="text-xs text-orange-400 font-normal">{details.episodes?.length || 0} available</span>
-            </h3>
+          {/* Episode Directory Catalog */}
+          {details.episodes && details.episodes.length > 0 && (
+            <div>
+              <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center justify-between">
+                <span>Episode Directory</span>
+                <span className="text-xs text-orange-400 font-normal">{details.episodes.length} Episodes Cataloged</span>
+              </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin">
-              {details.episodes?.map((ep: any) => (
-                <div
-                  key={ep.id}
-                  onClick={() => onPlayEpisode(details, ep)}
-                  className="group flex items-center space-x-3 p-3 bg-slate-950/80 hover:bg-slate-800/80 border border-slate-800 hover:border-orange-500/40 rounded-xl cursor-pointer transition-all"
-                >
-                  <div className="relative w-16 h-12 rounded-lg overflow-hidden bg-slate-900 flex-shrink-0">
-                    <img src={ep.thumbnail_url || details.cover_image} alt={ep.title} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-slate-950/40 group-hover:bg-transparent transition-colors flex items-center justify-center">
-                      <Play className="w-4 h-4 text-white fill-white" />
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-bold text-white truncate group-hover:text-orange-400 transition-colors">
-                      Episode {ep.episode_number}: {ep.title}
-                    </div>
-                    <div className="text-[11px] text-slate-400">{ep.duration} • Cloudflare HLS Stream</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Reviews Section with ImgBB Avatars */}
-          <div className="border-t border-slate-800 pt-6">
-            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center space-x-2">
-              <MessageSquare className="w-4 h-4 text-orange-400" />
-              <span>Community Reviews ({details.reviews?.length || 0})</span>
-            </h3>
-
-            {/* Reviews List */}
-            <div className="space-y-3 mb-6 max-h-48 overflow-y-auto pr-2">
-              {details.reviews?.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">No reviews yet. Be the first to share your review!</p>
-              ) : (
-                details.reviews?.map((rev: any) => (
-                  <div key={rev.id} className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 flex items-start space-x-3">
-                    <div className="w-8 h-8 rounded-lg overflow-hidden bg-slate-800 border border-slate-700 flex-shrink-0 mt-0.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin">
+                {details.episodes.map((ep: any) => (
+                  <div
+                    key={ep.id}
+                    className="flex items-center space-x-3 p-3 bg-slate-950/80 border border-slate-800 rounded-xl"
+                  >
+                    <div className="w-16 h-12 rounded-lg overflow-hidden bg-slate-900 flex-shrink-0">
                       <img
-                        src={rev.user_avatar || 'https://i.ibb.co/vzS8G90/default-avatar.png'}
-                        alt={rev.user_name}
+                        src={ep.thumbnail_url || details.cover_image}
+                        alt={ep.title}
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=200&auto=format&fit=crop&q=80';
+                        }}
                         className="w-full h-full object-cover"
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-xs text-slate-200">{rev.user_name}</span>
-                        <div className="flex items-center space-x-1 text-amber-400 text-xs">
-                          <Star className="w-3 h-3 fill-amber-400" />
-                          <span>{rev.rating}/10</span>
-                        </div>
+                      <div className="text-xs font-bold text-white truncate">
+                        Ep {ep.episode_number}: {ep.title}
                       </div>
-                      <p className="text-xs text-slate-300 leading-relaxed">{rev.comment}</p>
+                      <div className="text-[11px] text-slate-400">{ep.duration} • Hindi / Tamil / Telugu Dubbed</div>
                     </div>
                   </div>
-                ))
-              )}
+                ))}
+              </div>
             </div>
-
-            {/* Add Review Form */}
-            <form onSubmit={handleAddReview} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="Your Name (e.g. AnimeFanX)"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  required
-                  className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500"
-                />
-                <select
-                  value={rating}
-                  onChange={(e) => setRating(e.target.value)}
-                  className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-orange-500"
-                >
-                  {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(num => (
-                    <option key={num} value={num}>{num} / 10 Stars</option>
-                  ))}
-                </select>
-              </div>
-              <textarea
-                placeholder="Write your review about the animation, storyline, and Cloudflare D1 streaming performance..."
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                required
-                rows={2}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 resize-none"
-              />
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={submittingReview}
-                  className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs transition-colors shadow-md shadow-orange-600/30 disabled:opacity-50"
-                >
-                  {submittingReview ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  <span>Submit Review</span>
-                </button>
-              </div>
-            </form>
-          </div>
+          )}
 
         </div>
+
       </div>
     </div>
   );

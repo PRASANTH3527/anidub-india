@@ -39,21 +39,60 @@ export function calculatePagination(total: number, page: number, limit: number):
 export interface CatalogFilterOptions {
   genre?: string;
   status?: string;
+  language?: string; // 'All', 'Tamil', 'Telugu', 'Hindi', 'HIN', 'TAM', 'TEL'
+  platform?: string;
+  type?: string;
   search?: string;
   sort?: 'popularity' | 'rating' | 'newest' | 'title' | string;
 }
 
-export function filterAndSortCatalog<T extends { title: string; synopsis?: string; genres: string; status: string; rating: number; popularity: number; year: number }>(
+export function filterAndSortCatalog<T extends {
+  title: string;
+  synopsis?: string;
+  genres: string;
+  status: string;
+  rating: number;
+  popularity: number;
+  year: number;
+  languages?: string;
+  platform?: string;
+  type?: string;
+}>(
   items: T[],
   options: CatalogFilterOptions
 ): T[] {
   let filtered = [...items];
+
+  // Regional Dub Language Filter
+  if (options.language && options.language !== 'All') {
+    const langKey = options.language.toUpperCase().substring(0, 3); // 'HIN', 'TAM', 'TEL'
+    filtered = filtered.filter(item => {
+      const langs = (item.languages || 'HIN,TAM,TEL').toUpperCase();
+      return langs.includes(langKey) || langs.includes(options.language!.toUpperCase());
+    });
+  }
 
   // Genre filter
   if (options.genre && options.genre !== 'All') {
     const targetGenre = options.genre.toLowerCase();
     filtered = filtered.filter(item => 
       item.genres.toLowerCase().includes(targetGenre)
+    );
+  }
+
+  // Platform filter
+  if (options.platform && options.platform !== 'All') {
+    const targetPlatform = options.platform.toLowerCase();
+    filtered = filtered.filter(item => 
+      (item.platform || 'Crunchyroll').toLowerCase().includes(targetPlatform)
+    );
+  }
+
+  // Type filter
+  if (options.type && options.type !== 'All') {
+    const targetType = options.type.toLowerCase();
+    filtered = filtered.filter(item => 
+      (item.type || 'TV Series').toLowerCase().includes(targetType)
     );
   }
 

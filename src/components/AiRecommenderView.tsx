@@ -3,7 +3,6 @@ import { Sparkles, Send, Loader2, Star, Play, Tv } from 'lucide-react';
 
 interface AiRecommenderViewProps {
   onSelectAnime: (anime: any) => void;
-  onPlayAnime: (anime: any) => void;
 }
 
 const MOOD_SUGGESTIONS = [
@@ -13,7 +12,7 @@ const MOOD_SUGGESTIONS = [
   "Emotional musical romance across dimensions"
 ];
 
-export const AiRecommenderView: React.FC<AiRecommenderViewProps> = ({ onSelectAnime, onPlayAnime }) => {
+export const AiRecommenderView: React.FC<AiRecommenderViewProps> = ({ onSelectAnime }) => {
   const [mood, setMood] = useState('');
   const [loading, setLoading] = useState(false);
   const [recommendations, setRecommendations] = useState<any[]>([]);
@@ -159,19 +158,12 @@ export const AiRecommenderView: React.FC<AiRecommenderViewProps> = ({ onSelectAn
                     </p>
                   </div>
 
-                  <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+                  <div className="pt-4 border-t border-slate-800 flex items-center justify-end">
                     <button
                       onClick={() => onSelectAnime(anime)}
-                      className="text-xs font-semibold text-slate-300 hover:text-white"
+                      className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs transition-colors shadow-md shadow-orange-600/30"
                     >
                       View Details
-                    </button>
-                    <button
-                      onClick={() => onPlayAnime(anime)}
-                      className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs transition-colors shadow-md shadow-orange-600/30"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-white" />
-                      <span>Watch Now</span>
                     </button>
                   </div>
                 </div>

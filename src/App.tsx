@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { CatalogView } from './components/CatalogView';
 import { AnimeDetailModal } from './components/AnimeDetailModal';
-import { WatchPlayerModal } from './components/WatchPlayerModal';
 import { CloudflareConsoleView } from './components/CloudflareConsoleView';
 import { AiRecommenderView } from './components/AiRecommenderView';
 import { AdminPanelView } from './components/AdminPanelView';
-import { UserProfileModal } from './components/UserProfileModal';
-import { Film, Bookmark, Cloud, Sparkles, ShieldCheck, Play, Star, Tv, Trash2, Image as ImageIcon } from 'lucide-react';
+import { RouletteModal } from './components/RouletteModal';
+import { CreateCollectionModal } from './components/CreateCollectionModal';
+import { FALLBACK_SEED_ANIME } from './components/CatalogView';
+import { Bookmark, Cloud, Tv, Star } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('catalog');
@@ -21,32 +22,27 @@ export default function App() {
     }
   });
 
-  const [currentUser, setCurrentUser] = useState<{ username: string; avatar_url: string }>({
-    username: 'Kaito_Cloud',
-    avatar_url: 'https://i.ibb.co/vzS8G90/default-avatar.png'
-  });
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-
   const [selectedAnimeId, setSelectedAnimeId] = useState<number | null>(null);
-  const [playingData, setPlayingData] = useState<{ anime: any; episode: any } | null>(null);
   const [watchlistAnimeList, setWatchlistAnimeList] = useState<any[]>([]);
+  const [isRouletteOpen, setIsRouletteOpen] = useState(false);
+  const [isCollectionOpen, setIsCollectionOpen] = useState(false);
+  const [catalogList, setCatalogList] = useState<any[]>(FALLBACK_SEED_ANIME);
 
   useEffect(() => {
-    fetchUserProfile();
+    fetchCatalogList();
   }, []);
 
-  const fetchUserProfile = async () => {
+  const fetchCatalogList = async () => {
     try {
-      const res = await fetch('/api/user/profile');
+      const res = await fetch('/api/anime?limit=50');
       if (res.ok) {
         const data = await res.json();
-        setCurrentUser({
-          username: data.username || 'Kaito_Cloud',
-          avatar_url: data.avatar_url || 'https://i.ibb.co/vzS8G90/default-avatar.png'
-        });
+        if (data.data && data.data.length > 0) {
+          setCatalogList(data.data);
+        }
       }
     } catch (err) {
-      console.error('Failed to fetch user profile:', err);
+      console.warn('Connected to fallback catalog for roulette/collections:', err);
     }
   };
 
@@ -90,56 +86,16 @@ export default function App() {
     }
   };
 
-  const handlePlayAnime = async (anime: any) => {
-    try {
-      const res = await fetch(`/api/anime/${anime.id}`);
-      const data = await res.json();
-      const firstEp = data.episodes?.[0] || {
-        id: 1,
-        anime_id: anime.id,
-        episode_number: 1,
-        title: 'Episode 1: Premiere',
-        duration: '24m',
-        thumbnail_url: anime.cover_image,
-        video_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        synopsis: 'The epic beginning of the journey.'
-      };
-      setPlayingData({ anime: data, episode: firstEp });
-    } catch {
-      setPlayingData({
-        anime,
-        episode: {
-          id: 1,
-          anime_id: anime.id,
-          episode_number: 1,
-          title: 'Episode 1: Premiere',
-          duration: '24m',
-          thumbnail_url: anime.cover_image,
-          video_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-          synopsis: 'The epic beginning of the journey.'
-        }
-      });
-    }
-  };
-
-  const handlePlaySpecificEpisode = (anime: any, episode: any) => {
-    setPlayingData({ anime, episode });
-    setSelectedAnimeId(null);
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Outfit',sans-serif]">
       
-      {/* Navbar with ImgBB avatar and user profile click */}
+      {/* Lightweight Anime Directory Navbar (Zero Login/Auth) */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         watchlistCount={watchlist.length}
         searchQuery={searchQuery}
         setSearchQuery={(q) => { setSearchQuery(q); if (activeTab !== 'catalog') setActiveTab('catalog'); }}
-        userAvatar={currentUser.avatar_url}
-        userName={currentUser.username}
-        onOpenProfile={() => setIsProfileOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -147,10 +103,11 @@ export default function App() {
         {activeTab === 'catalog' && (
           <CatalogView
             onSelectAnime={(anime) => setSelectedAnimeId(anime.id)}
-            onPlayAnime={handlePlayAnime}
             searchQuery={searchQuery}
             watchlist={watchlist}
             onToggleWatchlist={handleToggleWatchlist}
+            onOpenRoulette={() => setIsRouletteOpen(true)}
+            onOpenCollection={() => setIsCollectionOpen(true)}
           />
         )}
 
@@ -160,10 +117,10 @@ export default function App() {
               <div>
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-white font-['Space_Grotesk',sans-serif] flex items-center space-x-3">
                   <Bookmark className="w-7 h-7 text-orange-500 fill-orange-500" />
-                  <span>My Cloudflare Watchlist</span>
+                  <span>My Saved Anime Directory</span>
                 </h1>
                 <p className="text-xs text-slate-400 mt-1">
-                  Saved anime synchronized instantly across your devices via Cloudflare D1 with ImgBB CDN posters.
+                  Saved regional anime synchronized instantly across your devices via Cloudflare D1 with ImgBB CDN posters.
                 </p>
               </div>
               <span className="px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-bold text-orange-400">
@@ -174,7 +131,7 @@ export default function App() {
             {watchlistAnimeList.length === 0 ? (
               <div className="text-center py-24 bg-slate-900/50 rounded-3xl border border-slate-800">
                 <Bookmark className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                <h3 className="text-base font-bold text-slate-300">Your watchlist is empty</h3>
+                <h3 className="text-base font-bold text-slate-300">Your directory watchlist is empty</h3>
                 <p className="text-xs text-slate-500 mt-1">Browse the catalog and click the bookmark icon to save titles.</p>
                 <button
                   onClick={() => setActiveTab('catalog')}
@@ -190,12 +147,22 @@ export default function App() {
                     key={anime.id}
                     className="group bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 hover:border-orange-500/50 transition-all flex flex-col shadow-lg"
                   >
-                    <div className="relative aspect-[3/4] overflow-hidden bg-slate-950">
-                      <img src={anime.cover_image} alt={anime.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <div 
+                      onClick={() => setSelectedAnimeId(anime.id)}
+                      className="relative aspect-[3/4] overflow-hidden bg-slate-950 cursor-pointer"
+                    >
+                      <img 
+                        src={anime.cover_image} 
+                        alt={anime.title} 
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+                        }}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                      />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
                       
                       <button
-                        onClick={() => handleToggleWatchlist(anime.id)}
+                        onClick={(e) => { e.stopPropagation(); handleToggleWatchlist(anime.id); }}
                         className="absolute top-3 right-3 p-2 rounded-xl bg-orange-600 text-white shadow-lg"
                         title="Remove from Watchlist"
                       >
@@ -221,19 +188,12 @@ export default function App() {
                         </p>
                       </div>
 
-                      <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
+                      <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-end">
                         <button
                           onClick={() => setSelectedAnimeId(anime.id)}
-                          className="text-xs font-semibold text-orange-400 hover:text-orange-300"
+                          className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold shadow-md shadow-orange-600/30 transition-all hover:scale-105"
                         >
                           View Details
-                        </button>
-                        <button
-                          onClick={() => handlePlayAnime(anime)}
-                          className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold shadow"
-                        >
-                          <Play className="w-3.5 h-3.5 fill-white" />
-                          <span>Watch</span>
                         </button>
                       </div>
                     </div>
@@ -248,13 +208,12 @@ export default function App() {
         {activeTab === 'recommender' && (
           <AiRecommenderView
             onSelectAnime={(anime) => setSelectedAnimeId(anime.id)}
-            onPlayAnime={handlePlayAnime}
           />
         )}
         {activeTab === 'admin' && (
           <AdminPanelView
             onAnimeCreated={() => {
-              // Anime list updated in D1
+              fetchCatalogList();
             }}
           />
         )}
@@ -267,10 +226,10 @@ export default function App() {
             <div className="w-6 h-6 rounded-lg bg-orange-600 flex items-center justify-center text-white">
               <Cloud className="w-3.5 h-3.5" />
             </div>
-            <span className="font-bold text-slate-300">Cloudflare Pages & D1 Anime Ecosystem</span>
+            <span className="font-bold text-slate-300">Cloudflare Pages & D1 Anime Directory</span>
           </div>
           <div>
-            Powered by Cloudflare Pages, D1 Relational SQL, ImgBB Cloud CDN (Zero Card), and Workers API Functions.
+            Powered by Cloudflare Pages, D1 Relational SQL, ImgBB Cloud CDN, and Workers API Functions.
           </div>
           <div className="text-slate-600">
             © 2026 Cloudflare + ImgBB. All rights reserved.
@@ -278,41 +237,33 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Anime Detail Modal */}
+      {/* Anime Detail Directory Modal (Zero Video Player) */}
       {selectedAnimeId !== null && (
         <AnimeDetailModal
           animeId={selectedAnimeId}
           onClose={() => setSelectedAnimeId(null)}
-          onPlayEpisode={handlePlaySpecificEpisode}
           watchlist={watchlist}
           onToggleWatchlist={handleToggleWatchlist}
-          currentUser={currentUser}
         />
       )}
 
-      {/* Watch Player Modal */}
-      {playingData !== null && (
-        <WatchPlayerModal
-          anime={playingData.anime}
-          episode={playingData.episode}
-          onClose={() => setPlayingData(null)}
-          onSelectEpisode={(ep) => setPlayingData(prev => prev ? { ...prev, episode: ep } : null)}
+      {/* Surprise Me Roulette Modal */}
+      {isRouletteOpen && (
+        <RouletteModal
+          animeList={catalogList}
+          onClose={() => setIsRouletteOpen(false)}
+          onSelectAnime={(anime) => setSelectedAnimeId(anime.id)}
         />
       )}
 
-      {/* User Profile & ImgBB Avatar Modal */}
-      {isProfileOpen && (
-        <UserProfileModal
-          onClose={() => setIsProfileOpen(false)}
-          onProfileUpdated={(updated) => {
-            setCurrentUser({
-              username: updated.username,
-              avatar_url: updated.avatar_url
-            });
-          }}
+      {/* Shareable Custom Collection Modal */}
+      {isCollectionOpen && (
+        <CreateCollectionModal
+          animeList={catalogList}
+          onClose={() => setIsCollectionOpen(false)}
         />
       )}
 
     </div>
   );
-};
+}
