@@ -1,0 +1,6 @@
+{
+  "name": "Cloudflare Anime Hub",
+  "description": "Anime streaming platform powered entirely by Cloudflare Ecosystem (Pages, D1 SQL, R2 Storage, Workers API) with pagination, AI recommendations, and admin moderation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
