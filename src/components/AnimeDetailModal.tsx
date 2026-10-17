@@ -72,9 +72,8 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
           />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/50 to-transparent" />
           
-          <div className="absolute top-4 left-4 flex items-center space-x-2 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-orange-500/30 text-xs font-semibold text-orange-400">
-            <CloudLightning className="w-3.5 h-3.5" />
-            <span>Cloudflare D1 & ImgBB Verified Directory</span>
+          <div className="absolute top-4 left-4 flex items-center space-x-2 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-purple-500/30 text-xs font-semibold text-purple-300">
+            <span>✨ Official Indian Dubbed Directory</span>
           </div>
 
           <div className="absolute bottom-6 left-6 right-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">

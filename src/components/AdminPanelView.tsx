@@ -74,19 +74,19 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
         });
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to upload to ImgBB');
+        if (!res.ok) throw new Error(data.error || 'Failed to upload image');
 
         if (isCover) {
           setCoverImage(data.url);
-          setSuccessMsg(`Cover poster uploaded to ImgBB CDN: ${data.url}`);
+          setSuccessMsg(`Cover poster uploaded successfully: ${data.url}`);
         } else {
           setBannerImage(data.url);
-          setSuccessMsg(`Banner uploaded to ImgBB CDN: ${data.url}`);
+          setSuccessMsg(`Banner uploaded successfully: ${data.url}`);
         }
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
-      setUploadError(err.message || 'Error uploading file to ImgBB');
+      setUploadError(err.message || 'Error uploading file');
     } finally {
       if (isCover) setUploadingPoster(false);
       else setUploadingBanner(false);
@@ -107,7 +107,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
       if (!res.ok) throw new Error(data.error);
       setCoverImage(data.url);
       setBannerImage(data.url);
-      setSuccessMsg(`AI Poster generated and stored in ImgBB CDN: ${data.url}`);
+      setSuccessMsg(`AI Poster generated and saved to catalog: ${data.url}`);
     } catch (err: any) {
       setUploadError(err.message || 'Failed to generate poster');
     } finally {
@@ -141,7 +141,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      setSuccessMsg(`Anime "${title}" published and stored in Cloudflare D1 with ImgBB poster URLs!`);
+      setSuccessMsg(`Anime "${title}" published and added to catalog!`);
       setTitle('');
       setSynopsis('');
       fetchAnime();
@@ -154,7 +154,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
   };
 
   const handleDeleteAnime = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this anime from Cloudflare D1?')) return;
+    if (!confirm('Are you sure you want to delete this anime from the directory?')) return;
     try {
       await fetch(`/api/anime/${id}`, { method: 'DELETE' });
       fetchAnime();
@@ -172,19 +172,19 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
         <div>
           <div className="flex items-center space-x-2 text-emerald-400 font-semibold text-xs mb-2">
             <ShieldCheck className="w-4 h-4" />
-            <span>Admin Moderation & ImgBB Asset Manager</span>
+            <span>Admin Moderation & Media Manager</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white font-['Space_Grotesk',sans-serif]">
-            Cloudflare Pages Admin Dashboard
+            Anidub India Admin Dashboard
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Publish new anime titles, upload posters directly to ImgBB CDN (no card required), and manage D1 relational records.
+            Publish new anime titles, upload posters, and manage verified catalog entries.
           </p>
         </div>
 
         <div className="flex items-center space-x-2 bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 text-xs text-slate-300">
           <ImageIcon className="w-4 h-4 text-orange-400" />
-          <span>ImgBB Image API: <strong className="text-orange-400">Zero-Card Free Storage</strong></span>
+          <span>Catalog Media: <strong className="text-orange-400">Active & Accelerated</strong></span>
         </div>
       </div>
 
@@ -208,7 +208,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
         <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl">
           <h2 className="text-lg font-bold text-white font-['Space_Grotesk',sans-serif] mb-6 flex items-center space-x-2">
             <Plus className="w-5 h-5 text-orange-400" />
-            <span>Publish New Anime Title (with ImgBB Posters)</span>
+            <span>Publish New Anime Title</span>
           </h2>
 
           <form onSubmit={handleCreateAnime} className="space-y-4">
@@ -294,14 +294,14 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
               </div>
             </div>
 
-            {/* Poster & Banner Upload with ImgBB */}
+            {/* Poster & Banner Upload */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-300">Cover Poster (ImgBB)</label>
+                  <label className="text-xs font-semibold text-slate-300">Cover Poster</label>
                   <label className="cursor-pointer inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold transition-colors">
                     <Upload className="w-3 h-3" />
-                    <span>Upload to ImgBB</span>
+                    <span>Upload Image</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -313,7 +313,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
                 {uploadingPoster && (
                   <div className="flex items-center space-x-2 text-xs text-orange-400 py-1">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Uploading poster to ImgBB API backend...</span>
+                    <span>Uploading poster to storage backend...</span>
                   </div>
                 )}
                 <input
@@ -322,16 +322,16 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
                   onChange={(e) => setCoverImage(e.target.value)}
                   required
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-orange-500"
-                  placeholder="https://i.ibb.co/..."
+                  placeholder="https://..."
                 />
               </div>
 
               <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-300">Banner Image (ImgBB)</label>
+                  <label className="text-xs font-semibold text-slate-300">Banner Image</label>
                   <label className="cursor-pointer inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold transition-colors">
                     <Upload className="w-3 h-3" />
-                    <span>Upload to ImgBB</span>
+                    <span>Upload Image</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -343,7 +343,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
                 {uploadingBanner && (
                   <div className="flex items-center space-x-2 text-xs text-orange-400 py-1">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Uploading banner to ImgBB API backend...</span>
+                    <span>Uploading banner to storage backend...</span>
                   </div>
                 )}
                 <input
@@ -352,7 +352,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
                   onChange={(e) => setBannerImage(e.target.value)}
                   required
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-orange-500"
-                  placeholder="https://i.ibb.co/..."
+                  placeholder="https://..."
                 />
               </div>
             </div>
@@ -364,13 +364,13 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
                 className="flex items-center space-x-2 px-6 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs shadow-lg shadow-orange-600/30 transition-all disabled:opacity-50"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                <span>Publish to Cloudflare D1</span>
+                <span>Publish to Directory</span>
               </button>
             </div>
           </form>
         </div>
 
-        {/* AI Poster Generator with ImgBB (1 Col) */}
+        {/* AI Poster Generator (1 Col) */}
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl flex flex-col justify-between">
           <div>
             <h2 className="text-lg font-bold text-white font-['Space_Grotesk',sans-serif] mb-2 flex items-center space-x-2">
@@ -378,7 +378,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
               <span>AI Poster Generator</span>
             </h2>
             <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-              Generate anime posters using Gemini AI and pipe them directly into ImgBB CDN via the Cloudflare backend.
+              Generate anime posters using AI and pipe them directly into the verified directory.
             </p>
 
             <div className="space-y-4">
@@ -397,7 +397,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
                 <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-md">
                   <img src={coverImage} alt="Generated Poster" className="w-full h-full object-cover" />
                   <div className="absolute bottom-2 left-2 right-2 px-2.5 py-1 rounded-lg bg-slate-950/80 backdrop-blur-md text-[10px] text-orange-400 text-center font-medium truncate">
-                    ImgBB: {coverImage}
+                    Poster: {coverImage}
                   </div>
                 </div>
               )}
@@ -412,7 +412,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
               className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold text-xs shadow-lg shadow-orange-600/30 transition-all disabled:opacity-50"
             >
               {generatingPoster ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              <span>Generate & Upload to ImgBB</span>
+              <span>Generate & Save Poster</span>
             </button>
           </div>
         </div>
@@ -422,7 +422,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
       {/* Anime Management Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl">
         <h2 className="text-lg font-bold text-white font-['Space_Grotesk',sans-serif] mb-6">
-          Cloudflare D1 Anime Catalog ({animeList.length} items)
+          Verified Anime Catalog ({animeList.length} items)
         </h2>
 
         {loading ? (
@@ -436,7 +436,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
                 <tr className="border-b border-slate-800 bg-slate-900/80 text-slate-300">
                   <th className="p-3 font-semibold">Poster</th>
                   <th className="p-3 font-semibold">Title</th>
-                  <th className="p-3 font-semibold">ImgBB URL</th>
+                  <th className="p-3 font-semibold">Media URL</th>
                   <th className="p-3 font-semibold">Genres</th>
                   <th className="p-3 font-semibold">Rating</th>
                   <th className="p-3 font-semibold">Status</th>
@@ -466,7 +466,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated }
                       <button
                         onClick={() => handleDeleteAnime(anime.id)}
                         className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
-                        title="Delete from D1"
+                        title="Delete Anime"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

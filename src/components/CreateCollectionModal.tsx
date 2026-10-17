@@ -12,7 +12,7 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
   onClose
 }) => {
   const [collectionName, setCollectionName] = useState('Top Regional Dubs India');
-  const [description, setDescription] = useState('Curated Hindi, Tamil, and Telugu dubbed anime on Cloudflare D1');
+  const [description, setDescription] = useState('Curated Hindi, Tamil, and Telugu dubbed anime directory');
   const [selectedIds, setSelectedIds] = useState<number[]>([1, 2, 3]);
   const [copied, setCopied] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
@@ -55,7 +55,7 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
           Create & Share Anime Collection
         </h2>
         <p className="text-xs text-slate-400 mb-6">
-          Build a shareable playlist of Hindi, Tamil & Telugu dubbed anime powered by Cloudflare D1.
+          Build a shareable playlist of Hindi, Tamil & Telugu dubbed anime.
         </p>
 
         <form onSubmit={handleGenerateLink} className="space-y-5">

@@ -67,7 +67,7 @@ export const AiRecommenderView: React.FC<AiRecommenderViewProps> = ({ onSelectAn
           What kind of anime world are you craving today?
         </h1>
         <p className="text-sm text-slate-300 leading-relaxed">
-          Describe your mood, vibe, or preferred storyline, and Gemini AI will curate the perfect matches from our Cloudflare D1 catalog.
+          Describe your mood, vibe, or preferred storyline, and Gemini AI will curate the perfect matches from our Anidub India catalog.
         </p>
       </div>
 

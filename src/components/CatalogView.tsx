@@ -1,5 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { Star, Tv, Filter, ChevronLeft, ChevronRight, Play, Bookmark, ArrowUpDown, Loader2, Dices, FolderPlus, Languages, Flame, Film, Sparkles, Check } from 'lucide-react';
+import { 
+  Star, 
+  Tv, 
+  Filter, 
+  ChevronLeft, 
+  ChevronRight, 
+  Bookmark, 
+  ArrowUpDown, 
+  Loader2, 
+  Dices, 
+  FolderPlus, 
+  Languages, 
+  Flame, 
+  Sparkles, 
+  CheckCircle2, 
+  TrendingUp, 
+  Heart,
+  Cloud,
+  Flag,
+  Share2,
+  Check
+} from 'lucide-react';
 import { filterAndSortCatalog } from '../utils/pagination';
 
 export interface Anime {
@@ -185,10 +206,12 @@ export const FALLBACK_SEED_ANIME: Anime[] = [
 ];
 
 const REGIONAL_LANGUAGES = [
-  { label: 'All', value: 'All' },
-  { label: 'Tamil', value: 'Tamil', tag: 'TAM' },
-  { label: 'Telugu', value: 'Telugu', tag: 'TEL' },
-  { label: 'Hindi', value: 'Hindi', tag: 'HIN' }
+  { label: 'All', value: 'All', count: 258 },
+  { label: 'Tamil', value: 'Tamil', count: 152 },
+  { label: 'Telugu', value: 'Telugu', count: 150 },
+  { label: 'Hindi', value: 'Hindi', count: 255 },
+  { label: 'Malayalam', value: 'Malayalam', count: 110 },
+  { label: 'Kannada', value: 'Kannada', count: 95 }
 ];
 
 const GENRES = ['All', 'Action', 'Fantasy', 'Sci-Fi', 'Romance', 'Adventure', 'Thriller', 'Supernatural', 'Comedy', 'Slice of Life', 'Mecha'];
@@ -196,7 +219,7 @@ const PLATFORMS = ['All Platforms', 'Crunchyroll', 'Netflix', 'JioCinema', 'Muse
 const TYPES = ['All Types', 'TV Series', 'Movie', 'OVA', 'Special'];
 const STATUSES = ['All', 'Airing', 'Completed', 'Upcoming'];
 const SORTS = [
-  { label: 'Most Popular', value: 'popularity' },
+  { label: 'Most Upvoted', value: 'popularity' },
   { label: 'Highest Rated', value: 'rating' },
   { label: 'Newest Release', value: 'newest' },
   { label: 'Title (A-Z)', value: 'title' }
@@ -211,7 +234,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   onOpenCollection
 }) => {
   const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(FALLBACK_SEED_ANIME);
-  const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 6, total: 8, totalPages: 2 });
+  const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 8, total: 8, totalPages: 1 });
   
   // Filter States
   const [selectedLanguage, setSelectedLanguage] = useState('All');
@@ -233,7 +256,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
       if (res.ok) {
         const data = await res.json();
         if (data.data && data.data.length > 0) {
-          // Normalize with language tags if not set
           const normalized = data.data.map((item: any, idx: number) => ({
             ...item,
             languages: item.languages || (idx % 3 === 0 ? 'HIN,TAM,TEL' : idx % 2 === 0 ? 'HIN,TAM' : 'HIN,TEL'),
@@ -244,13 +266,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         }
       }
     } catch (err) {
-      console.warn('Connected to fallback D1 catalog:', err);
+      console.warn('Connected to local catalog directory:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Filter & Sort purely on client for instantaneous snappy UI responsiveness
+  // Filter & Sort purely on client for snappy UI responsiveness
   const filteredList = filterAndSortCatalog(rawAnimeList, {
     language: selectedLanguage,
     genre: selectedGenre,
@@ -261,8 +283,8 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     sort: selectedSort
   });
 
-  // Calculate paginated slice
-  const itemsPerPage = 6;
+  // Calculate paginated slice (8 items per page for balanced grid)
+  const itemsPerPage = 8;
   const totalPages = Math.max(1, Math.ceil(filteredList.length / itemsPerPage));
   const currentPage = Math.min(pagination.page, totalPages);
   const offset = (currentPage - 1) * itemsPerPage;
@@ -271,145 +293,176 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
       
-      {/* 1. Main Hero Section */}
-      <div className="relative rounded-3xl bg-gradient-to-b from-slate-900/90 via-slate-900/60 to-slate-950 border border-slate-800/80 p-8 sm:p-12 md:p-16 text-center overflow-hidden shadow-2xl">
-        <div className="absolute inset-0 bg-radial from-orange-500/10 via-transparent to-transparent opacity-50 pointer-events-none" />
+      {/* 2. Hero Section (Sitting directly on background, no container box) */}
+      <div className="text-center py-4 sm:py-8 max-w-4xl mx-auto space-y-4 sm:space-y-5">
+        
+        {/* Badge: Purple glowing pill with sparkle icon */}
+        <div className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full bg-purple-950/40 border border-purple-500/30 text-purple-300 text-xs font-semibold shadow-[0_0_15px_rgba(168,85,247,0.15)]">
+          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+          <span>Official Indian Dubbed Anime Directory</span>
+        </div>
 
-        <div className="relative z-10 max-w-4xl mx-auto space-y-6">
-          <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-bold uppercase tracking-wider shadow-sm">
-            <Sparkles className="w-4 h-4 text-orange-400" />
-            <span>Cloudflare D1 & ImgBB Accelerated</span>
-          </div>
+        {/* Orange Sub-Heading Label */}
+        <div className="text-xs sm:text-sm font-extrabold text-orange-500 tracking-wider uppercase font-['Space_Grotesk',sans-serif]">
+          ANIDUB INDIA OFFICIAL WEBSITE
+        </div>
 
-          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight font-['Space_Grotesk',sans-serif] leading-tight">
-            <span className="bg-gradient-to-r from-orange-400 via-amber-300 to-orange-500 bg-clip-text text-transparent">
-              The Premier Destination for Anime Streaming & Dubbing in India
+        {/* Main Title: Exact colors requested */}
+        <h1 className="text-2xl sm:text-4xl md:text-5xl font-black font-['Space_Grotesk',sans-serif] tracking-tight leading-tight">
+          <span className="text-white block">The Premier Destination for</span>
+          <span className="bg-gradient-to-r from-purple-400 via-indigo-400 to-purple-500 bg-clip-text text-transparent block mt-1">
+            Anime Streaming & Dubbing in India
+          </span>
+        </h1>
+
+        {/* Subtitle / Description */}
+        <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto font-normal leading-relaxed">
+          Discover officially dubbed anime in Tamil, Telugu, Hindi, Malayalam, and Kannada — streaming legally on Crunchyroll, Netflix, JioHotstar, and JioCinema.
+        </p>
+
+        {/* Action Buttons: Smooth Pill-Shaped (rounded-full) */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          {/* Button 1: Surprise Me Roulette (Soft orange-to-purple gradient with gentle glow) */}
+          <button
+            onClick={onOpenRoulette}
+            className="flex items-center justify-between pl-5 pr-2 py-2 rounded-full bg-gradient-to-r from-orange-500 via-amber-500 to-purple-600 hover:from-orange-600 hover:to-purple-700 text-white font-bold text-xs sm:text-sm shadow-[0_0_25px_rgba(249,115,22,0.35)] transition-all duration-300 ease-in-out hover:shadow-lg hover:shadow-orange-500/25 hover:scale-105 active:scale-95 group cursor-pointer"
+          >
+            <div className="flex items-center space-x-2">
+              <Dices className="w-4 h-4 text-white" />
+              <span>Surprise Me Roulette</span>
+            </div>
+            <span className="ml-3 px-3 py-1 rounded-full bg-purple-950/60 backdrop-blur-sm text-[10px] sm:text-[11px] font-black text-white flex items-center space-x-1 border border-white/20">
+              <span>🎲 RANDOM PICK</span>
             </span>
-          </h1>
+          </button>
 
-          <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto font-normal leading-relaxed">
-            Experience hundreds of top-rated anime series and movies with authentic regional Indian dubbing in Hindi, Tamil, and Telugu. Streamed globally via Cloudflare Pages and high-resolution ImgBB poster CDN.
-          </p>
-
-          {/* Action Buttons: Surprise Me Roulette & Create Collection */}
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-            <button
-              onClick={onOpenRoulette}
-              className="flex items-center space-x-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold text-sm shadow-xl shadow-orange-600/30 transition-all hover:scale-105 active:scale-95"
-            >
-              <Dices className="w-5 h-5 text-white" />
-              <span>Surprise Me Roulette (Random Pick)</span>
-            </button>
-
-            <button
-              onClick={onOpenCollection}
-              className="flex items-center space-x-2.5 px-6 py-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 hover:text-white font-bold text-sm border border-slate-700/80 shadow-lg transition-all hover:scale-105"
-            >
-              <FolderPlus className="w-5 h-5 text-orange-400" />
-              <span>Create Collection (Shareable)</span>
-            </button>
-          </div>
+          {/* Button 2: Create Collection (Dark with purple outline) */}
+          <button
+            onClick={onOpenCollection}
+            className="flex items-center justify-between pl-5 pr-2 py-2 rounded-full bg-slate-900/90 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm border border-slate-700/80 hover:border-purple-500/50 shadow-lg shadow-black/40 transition-all hover:scale-105 active:scale-95 group cursor-pointer"
+          >
+            <div className="flex items-center space-x-2">
+              <FolderPlus className="w-4 h-4 text-purple-400" />
+              <span>Create Collection</span>
+            </div>
+            <span className="ml-3 px-3 py-1 rounded-full bg-purple-950/80 border border-purple-500/40 text-purple-300 text-[10px] font-extrabold tracking-wider">
+              SHAREABLE
+            </span>
+          </button>
         </div>
       </div>
 
-      {/* 2. Three Main Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* 3. Analytics / Stat Cards (3-Grid Layout) */}
+      <div className="grid grid-cols-3 gap-3 sm:gap-4 py-2">
         
-        {/* Stat Card 1: DUBBED TITLES */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 relative overflow-hidden shadow-xl hover:border-orange-500/40 transition-colors group">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-['Space_Grotesk',sans-serif]">
+        {/* Card 1: DUBBED TITLES (TV icon) + Dynamic Count + Verified dubs (Green check icon) */}
+        <div className="bg-[#1a1b26] hover:bg-white/[0.04] border border-white/10 hover:border-orange-500/50 rounded-xl p-3 sm:p-4 relative overflow-hidden shadow-xl transition-all duration-300 ease-in-out group">
+          <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-orange-500/80 to-transparent" />
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider font-['Space_Grotesk',sans-serif] truncate">
               DUBBED TITLES
             </span>
-            <div className="w-10 h-10 rounded-2xl bg-orange-500/10 text-orange-400 flex items-center justify-center border border-orange-500/20 group-hover:scale-110 transition-transform">
-              <Film className="w-5 h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-orange-500/10 text-orange-400 flex items-center justify-center border border-orange-500/20 group-hover:scale-110 transition-transform shrink-0">
+              <Tv className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-white font-['Space_Grotesk',sans-serif] tracking-tight">
-            1,240+
+          <div className="text-xl sm:text-2xl font-extrabold text-white font-['Space_Grotesk',sans-serif] tracking-tight">
+            258+
           </div>
-          <p className="text-xs text-orange-400/90 mt-1 font-medium">
-            Available in Full High Definition
+          <p className="text-[10px] sm:text-xs text-emerald-400 mt-1 font-medium flex items-center space-x-1">
+            <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+            <span className="truncate">Verified dubs</span>
           </p>
         </div>
 
-        {/* Stat Card 2: COMMUNITY VOTES */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 relative overflow-hidden shadow-xl hover:border-amber-500/40 transition-colors group">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-['Space_Grotesk',sans-serif]">
+        {/* Card 2: COMMUNITY VOTES (Fire icon) + Dynamic Count + Community upvotes (Trending up icon) */}
+        <div className="bg-[#1a1b26] hover:bg-white/[0.04] border border-white/10 hover:border-amber-500/50 rounded-xl p-3 sm:p-4 relative overflow-hidden shadow-xl transition-all duration-300 ease-in-out group">
+          <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-amber-500/80 to-transparent" />
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider font-['Space_Grotesk',sans-serif] truncate">
               COMMUNITY VOTES
             </span>
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform">
-              <Flame className="w-5 h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform shrink-0">
+              <Flame className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-white font-['Space_Grotesk',sans-serif] tracking-tight">
-            85.4K+
+          <div className="text-xl sm:text-2xl font-extrabold text-white font-['Space_Grotesk',sans-serif] tracking-tight flex items-center space-x-1">
+            <span>0</span>
+            <span className="text-amber-500 text-sm">🔥</span>
           </div>
-          <p className="text-xs text-amber-400/90 mt-1 font-medium">
-            Verified Indian Otakus & Fans
+          <p className="text-[10px] sm:text-xs text-amber-400 mt-1 font-medium flex items-center space-x-1">
+            <TrendingUp className="w-3 h-3 text-amber-400 shrink-0" />
+            <span className="truncate">Community upvotes</span>
           </p>
         </div>
 
-        {/* Stat Card 3: INDIAN LANGUAGES */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 relative overflow-hidden shadow-xl hover:border-orange-500/40 transition-colors group">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-['Space_Grotesk',sans-serif]">
+        {/* Card 3: INDIAN LANGUAGES (Translate icon) + 5 Regions + Tamil • Telugu • Hindi */}
+        <div className="bg-[#1a1b26] hover:bg-white/[0.04] border border-white/10 hover:border-purple-500/50 rounded-xl p-3 sm:p-4 relative overflow-hidden shadow-xl transition-all duration-300 ease-in-out group">
+          <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500/80 to-transparent" />
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider font-['Space_Grotesk',sans-serif] truncate">
               INDIAN LANGUAGES
             </span>
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20 group-hover:scale-110 transition-transform">
-              <Languages className="w-5 h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20 group-hover:scale-110 transition-transform shrink-0">
+              <Languages className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-white font-['Space_Grotesk',sans-serif] tracking-tight">
-            3 Regional Dubs
+          <div className="text-xl sm:text-2xl font-extrabold text-white font-['Space_Grotesk',sans-serif] tracking-tight">
+            5 Regions
           </div>
-          <p className="text-xs text-emerald-400/90 mt-1 font-medium">
-            Hindi • Tamil • Telugu Audio
+          <p className="text-[10px] sm:text-xs text-purple-400 mt-1 font-medium flex items-center space-x-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0"></span>
+            <span className="truncate">Tamil • Telugu • Hindi</span>
           </p>
         </div>
 
       </div>
 
-      {/* 3. Regional Dub Audio Pill Filters */}
-      <div className="space-y-3">
-        <div className="flex items-center space-x-2 text-xs font-bold text-slate-300 uppercase tracking-wider">
-          <Languages className="w-4 h-4 text-orange-400" />
-          <span>REGIONAL DUB AUDIO</span>
-        </div>
+      {/* 4. Granular Filtering System */}
+      <div className="space-y-4">
+        
+        {/* Audio Filters: Title ✨ REGIONAL DUB AUDIO */}
+        <div className="space-y-3">
+          <div className="flex items-center space-x-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+            <span>✨ REGIONAL DUB AUDIO</span>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {REGIONAL_LANGUAGES.map((lang) => {
-            const active = selectedLanguage === lang.value;
-            return (
-              <button
-                key={lang.value}
-                onClick={() => { setSelectedLanguage(lang.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className={`flex items-center space-x-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all ${
-                  active
-                    ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/30 scale-105'
-                    : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
-                }`}
-              >
-                <span>{lang.label}</span>
-                {lang.tag && (
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                    lang.tag === 'HIN' ? 'bg-amber-500/30 text-amber-200' :
-                    lang.tag === 'TAM' ? 'bg-purple-500/30 text-purple-200' :
-                    'bg-teal-500/30 text-teal-200'
+          <div className="flex flex-wrap items-center gap-3">
+            {REGIONAL_LANGUAGES.map((lang) => {
+              const active = selectedLanguage === lang.value;
+              const getActiveStyle = () => {
+                if (lang.value === 'All') return 'bg-gradient-to-r from-orange-600 to-amber-600 text-white border-orange-500 shadow-orange-600/30';
+                if (lang.value === 'Tamil') return 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-500 shadow-purple-600/30';
+                if (lang.value === 'Telugu') return 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white border-teal-500 shadow-teal-600/30';
+                return 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white border-amber-500 shadow-amber-600/30';
+              };
+
+              return (
+                <button
+                  key={lang.value}
+                  onClick={() => { setSelectedLanguage(lang.value); setPagination(prev => ({ ...prev, page: 1 })); }}
+                  className={`flex items-center space-x-2.5 px-5 py-2.5 rounded-full text-xs font-bold transition-all shadow-md ${
+                    active
+                      ? `${getActiveStyle()} border scale-105`
+                      : 'bg-slate-900/90 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <span>{lang.label}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                    active 
+                      ? 'bg-black/30 text-white' 
+                      : 'bg-slate-800 text-slate-400'
                   }`}>
-                    {lang.tag}
+                    {lang.count}
                   </span>
-                )}
-              </button>
-            );
-          })}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
 
-      {/* 4. Five Dropdown Filters */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 shadow-xl">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
+        {/* Dropdown Grid matching reference screenshot layout */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           
           {/* Dropdown 1: Genre */}
           <div className="space-y-1">
@@ -418,9 +471,9 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               <select
                 value={selectedGenre}
                 onChange={(e) => { setSelectedGenre(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer appearance-none"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer appearance-none shadow-sm"
               >
-                {GENRES.map(g => <option key={g} value={g} className="bg-slate-950">{g}</option>)}
+                {GENRES.map(g => <option key={g} value={g} className="bg-slate-950">{g === 'All' ? 'All Genres' : g}</option>)}
               </select>
               <Filter className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-3 pointer-events-none" />
             </div>
@@ -433,7 +486,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               <select
                 value={selectedPlatform}
                 onChange={(e) => { setSelectedPlatform(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer appearance-none"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer appearance-none shadow-sm"
               >
                 {PLATFORMS.map(p => <option key={p} value={p} className="bg-slate-950">{p}</option>)}
               </select>
@@ -448,7 +501,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               <select
                 value={selectedType}
                 onChange={(e) => { setSelectedType(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer appearance-none"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer appearance-none shadow-sm"
               >
                 {TYPES.map(t => <option key={t} value={t} className="bg-slate-950">{t}</option>)}
               </select>
@@ -463,33 +516,34 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               <select
                 value={selectedStatus}
                 onChange={(e) => { setSelectedStatus(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer appearance-none"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer appearance-none shadow-sm"
               >
-                {STATUSES.map(s => <option key={s} value={s} className="bg-slate-950">{s}</option>)}
+                {STATUSES.map(s => <option key={s} value={s} className="bg-slate-950">{s === 'All' ? 'All Status' : s}</option>)}
               </select>
               <Filter className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-3 pointer-events-none" />
             </div>
           </div>
 
           {/* Dropdown 5: Sort */}
-          <div className="space-y-1">
+          <div className="space-y-1 sm:col-span-2">
             <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sort</label>
             <div className="relative">
               <select
                 value={selectedSort}
                 onChange={(e) => { setSelectedSort(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer appearance-none"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer appearance-none shadow-sm"
               >
-                {SORTS.map(s => <option key={s.value} value={s.value} className="bg-slate-950">{s.label}</option>)}
+                {SORTS.map(s => <option key={s.value} value={s.value} className="bg-slate-950">🔥 {s.label}</option>)}
               </select>
               <ArrowUpDown className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-3 pointer-events-none" />
             </div>
           </div>
 
         </div>
+
       </div>
 
-      {/* 5. Two-Column Anime Card Grid */}
+      {/* 5. Anime Catalog Grid (The Core): 2-column on mobile, expanding natively on desktop */}
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-white font-['Space_Grotesk',sans-serif] flex items-center space-x-2">
@@ -516,14 +570,14 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 setSelectedType('All Types');
                 setSelectedStatus('All');
               }}
-              className="mt-4 px-4 py-2 rounded-xl bg-orange-600 text-white text-xs font-semibold"
+              className="mt-4 px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold shadow-lg shadow-orange-600/30 transition-all"
             >
               Reset All Filters
             </button>
           </div>
         ) : (
-          /* 2-COLUMN GRID AS REQUESTED */
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          /* Responsive Grid: 2-column on mobile, 3-column on tablet, 4-column on desktop */
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
             {paginatedAnime.map((anime) => {
               const isWatchlisted = watchlist.includes(anime.id);
               const langs = (anime.languages || 'HIN,TAM,TEL').split(',');
@@ -531,13 +585,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               return (
                 <div
                   key={anime.id}
-                  className="group bg-slate-900 border border-slate-800/80 hover:border-orange-500/50 rounded-3xl overflow-hidden shadow-xl hover:shadow-orange-500/10 transition-all duration-300 flex flex-col sm:flex-row"
+                  onClick={() => onSelectAnime(anime)}
+                  className="group bg-slate-900/90 border border-slate-800/80 hover:border-purple-500/30 rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.5)] transition-all duration-300 ease-in-out flex flex-col cursor-pointer"
                 >
-                  {/* Poster Image Container */}
-                  <div 
-                    onClick={() => onSelectAnime(anime)}
-                    className="relative w-full sm:w-48 aspect-[3/4] sm:aspect-auto flex-shrink-0 overflow-hidden bg-slate-950 cursor-pointer"
-                  >
+                  {/* Vertical cover image container (rendered securely from ImgBB URLs) */}
+                  <div className="relative aspect-[3/4] w-full overflow-hidden bg-slate-950">
                     <img
                       src={anime.cover_image}
                       alt={anime.title}
@@ -546,80 +598,116 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                       }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-black/30" />
 
-                    {/* Rating Badge */}
-                    <div className="absolute top-3 left-3 flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-slate-950/85 backdrop-blur-md text-amber-400 text-xs font-bold border border-amber-500/30 shadow-md">
-                      <Star className="w-3.5 h-3.5 fill-amber-400 mr-0.5" />
-                      <span>{anime.rating}</span>
+                    {/* Top-Left Overlays: TRENDING & Offline Ready */}
+                    <div className="absolute top-2.5 left-2.5 flex flex-col items-start space-y-1 z-10">
+                      <div className="px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[9px] sm:text-[10px] font-extrabold flex items-center space-x-1 shadow-md">
+                        <Flame className="w-3 h-3 text-amber-300" />
+                        <span>TRENDING</span>
+                      </div>
+                      <div className="px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/50 text-emerald-400 text-[9px] sm:text-[10px] font-extrabold flex items-center space-x-1 shadow-md">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span>Offline Ready</span>
+                      </div>
                     </div>
 
-                    {/* Watchlist/Bookmark Toggle */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onToggleWatchlist(anime.id); }}
-                      className={`absolute top-3 right-3 p-2 rounded-xl backdrop-blur-md transition-colors shadow-md ${
-                        isWatchlisted ? 'bg-orange-600 text-white' : 'bg-slate-950/80 text-slate-300 hover:text-white'
-                      }`}
-                      title={isWatchlisted ? "Remove from Watchlist" : "Add to Watchlist"}
-                    >
-                      <Bookmark className={`w-4 h-4 ${isWatchlisted ? 'fill-white' : ''}`} />
-                    </button>
+                    {/* Top-Right Overlays: Circular icon buttons (Cloud, Flag, Share, Heart, Bookmark) */}
+                    <div className="absolute top-2.5 right-2.5 flex items-center space-x-1 z-10">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); }} 
+                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 hover:border-white/40 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
+                        title="Cloud / Download"
+                      >
+                        <Cloud className="w-3 h-3" />
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); }} 
+                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 hover:border-white/40 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
+                        title="Report / Flag"
+                      >
+                        <Flag className="w-3 h-3" />
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); }} 
+                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 hover:border-white/40 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
+                        title="Share"
+                      >
+                        <Share2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onToggleWatchlist(anime.id); }}
+                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 hover:border-white/40 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md group/heart"
+                        title={isWatchlisted ? "Remove from Favorites" : "Add to Favorites"}
+                      >
+                        <Heart className={`w-3.5 h-3.5 transition-colors ${
+                          isWatchlisted ? 'text-rose-400 fill-rose-500/45' : 'text-slate-300 group-hover/heart:text-white'
+                        }`} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onToggleWatchlist(anime.id); }}
+                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 hover:border-white/40 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
+                        title="Bookmark"
+                      >
+                        <Bookmark className={`w-3.5 h-3.5 ${isWatchlisted ? 'text-orange-400 fill-orange-500/45' : 'text-slate-300'}`} />
+                      </button>
+                    </div>
 
-                    <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-[11px] text-slate-300 font-medium sm:hidden">
-                      <span>{anime.episodes_count} Eps</span>
-                      <span className="text-orange-400">{anime.status}</span>
+                    {/* Bottom-Left overlay (on image): Dark pill with star icon and rating */}
+                    <div className="absolute bottom-2.5 left-2.5 flex items-center space-x-1 px-2.5 py-1 rounded-full bg-slate-950/85 backdrop-blur-md text-amber-400 text-[10px] sm:text-xs font-bold border border-amber-500/30 shadow-md">
+                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                      <span>⭐ RATING {anime.rating}/10</span>
                     </div>
                   </div>
 
-                  {/* Card Content (Right Side in 2-Column layout) */}
-                  <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                  {/* Below Image Content */}
+                  <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between space-y-2.5">
                     <div>
-                      {/* Language Tags: HIN, TAM, TEL */}
+                      {/* Below Image: Language small pills (HIN, TAM, TEL in distinct colors: Green, Orange, Blue) */}
                       <div className="flex flex-wrap items-center gap-1.5 mb-2">
                         {langs.map((l) => (
                           <span
                             key={l}
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-black tracking-wide ${
-                              l === 'HIN'
-                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                : l === 'TAM'
-                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                                : 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-black tracking-wide ${
+                              l.trim() === 'HIN' || l.trim() === 'Hindi'
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                : l.trim() === 'TAM' || l.trim() === 'Tamil'
+                                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
+                                : l.trim() === 'TEL' || l.trim() === 'Telugu'
+                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                                : 'bg-purple-500/20 text-purple-400 border border-purple-500/40'
                             }`}
                           >
-                            {l}
+                            {l.trim()}
                           </span>
                         ))}
-                        <span className="text-[11px] text-slate-400 ml-1.5">{anime.year}</span>
-                        <span className="text-slate-600">•</span>
-                        <span className="text-[11px] text-orange-400 font-medium">{anime.status}</span>
                       </div>
 
-                      <h3
-                        onClick={() => onSelectAnime(anime)}
-                        className="text-lg font-bold text-white font-['Space_Grotesk',sans-serif] hover:text-orange-400 cursor-pointer transition-colors line-clamp-1"
-                      >
+                      {/* Title: Bold, truncated to 2 lines */}
+                      <h3 className="font-bold text-white text-sm sm:text-base font-['Space_Grotesk',sans-serif] line-clamp-2 group-hover:text-orange-400 transition-colors leading-snug">
                         {anime.title}
                       </h3>
 
-                      <p className="text-xs text-slate-400 line-clamp-3 mt-2 leading-relaxed">
-                        {anime.synopsis}
+                      {/* Subtitle: Type & Year */}
+                      <p className="text-[11px] text-slate-400 mt-1 font-medium">
+                        {anime.type || 'TV Series'} • {anime.year || '2024'}
                       </p>
                     </div>
 
-                    <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-                      <div className="flex items-center space-x-1 text-xs text-slate-400">
-                        <Tv className="w-3.5 h-3.5 text-orange-400 mr-1" />
-                        <span>{anime.episodes_count} Episodes</span>
-                      </div>
-
-                      <div>
-                        <button
-                          onClick={() => onSelectAnime(anime)}
-                          className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold shadow-md shadow-orange-600/20 transition-all hover:scale-105"
-                        >
-                          View Details
-                        </button>
+                    {/* Footer Row: Platform pill & stat counter pills */}
+                    <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                      <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 text-[10px] font-semibold text-slate-300 truncate max-w-[90px]">
+                        {anime.platform || 'Crunchyroll'}
+                      </span>
+                      <div className="flex items-center space-x-2 text-[11px]">
+                        <span className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                          <Heart className="w-3 h-3 text-rose-400 fill-rose-500/20" />
+                          <span>{Math.round((anime.rating || 7) * 20)}</span>
+                        </span>
+                        <span className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                          <Flame className="w-3 h-3 text-orange-400" />
+                          <span>{Math.round((anime.rating || 7) * 20)}</span>
+                        </span>
                       </div>
                     </div>
                   </div>

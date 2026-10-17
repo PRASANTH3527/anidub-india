@@ -2,13 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { CatalogView } from './components/CatalogView';
 import { AnimeDetailModal } from './components/AnimeDetailModal';
-import { CloudflareConsoleView } from './components/CloudflareConsoleView';
 import { AiRecommenderView } from './components/AiRecommenderView';
 import { AdminPanelView } from './components/AdminPanelView';
 import { RouletteModal } from './components/RouletteModal';
 import { CreateCollectionModal } from './components/CreateCollectionModal';
 import { FALLBACK_SEED_ANIME } from './components/CatalogView';
-import { Bookmark, Cloud, Tv, Star } from 'lucide-react';
+import { Bookmark, Tv, Star, Heart } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('catalog');
@@ -86,8 +85,12 @@ export default function App() {
     }
   };
 
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [adminPasswordError, setAdminPasswordError] = useState(false);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Outfit',sans-serif]">
+    <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col font-['Outfit',sans-serif]">
       
       {/* Lightweight Anime Directory Navbar (Zero Login/Auth) */}
       <Navbar
@@ -96,6 +99,11 @@ export default function App() {
         watchlistCount={watchlist.length}
         searchQuery={searchQuery}
         setSearchQuery={(q) => { setSearchQuery(q); if (activeTab !== 'catalog') setActiveTab('catalog'); }}
+        onUnlockAdmin={() => {
+          setIsPasswordModalOpen(true);
+          setAdminPasswordInput('');
+          setAdminPasswordError(false);
+        }}
       />
 
       {/* Main Content Area */}
@@ -120,7 +128,7 @@ export default function App() {
                   <span>My Saved Anime Directory</span>
                 </h1>
                 <p className="text-xs text-slate-400 mt-1">
-                  Saved regional anime synchronized instantly across your devices via Cloudflare D1 with ImgBB CDN posters.
+                  Saved regional anime titles bookmarked in your personal collection.
                 </p>
               </div>
               <span className="px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-bold text-orange-400">
@@ -141,70 +149,89 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {watchlistAnimeList.map((anime) => (
-                  <div
-                    key={anime.id}
-                    className="group bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 hover:border-orange-500/50 transition-all flex flex-col shadow-lg"
-                  >
-                    <div 
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                {watchlistAnimeList.map((anime) => {
+                  const langs = (anime.languages || 'HIN,TAM,TEL').split(',');
+                  return (
+                    <div
+                      key={anime.id}
                       onClick={() => setSelectedAnimeId(anime.id)}
-                      className="relative aspect-[3/4] overflow-hidden bg-slate-950 cursor-pointer"
+                      className="group bg-slate-900/90 rounded-2xl sm:rounded-3xl overflow-hidden border border-slate-800/80 hover:border-orange-500/50 transition-all duration-300 flex flex-col shadow-xl hover:shadow-[0_0_20px_rgba(249,115,22,0.15)] cursor-pointer"
                     >
-                      <img 
-                        src={anime.cover_image} 
-                        alt={anime.title} 
-                        onError={(e) => {
-                          e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
-                        }}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
-                      
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleToggleWatchlist(anime.id); }}
-                        className="absolute top-3 right-3 p-2 rounded-xl bg-orange-600 text-white shadow-lg"
-                        title="Remove from Watchlist"
-                      >
-                        <Bookmark className="w-3.5 h-3.5 fill-white" />
-                      </button>
-
-                      <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] text-slate-300 font-medium">
-                        <span className="flex items-center"><Tv className="w-3.5 h-3.5 mr-1 text-orange-400" /> {anime.episodes_count} Eps</span>
-                        <span className="flex items-center text-amber-400 font-bold"><Star className="w-3.5 h-3.5 fill-amber-400 mr-0.5" /> {anime.rating}</span>
-                      </div>
-                    </div>
-
-                    <div className="p-4 flex-1 flex flex-col justify-between">
-                      <div>
-                        <h3
-                          onClick={() => setSelectedAnimeId(anime.id)}
-                          className="font-bold text-slate-100 text-base font-['Space_Grotesk',sans-serif] hover:text-orange-400 cursor-pointer transition-colors line-clamp-1"
-                        >
-                          {anime.title}
-                        </h3>
-                        <p className="text-xs text-slate-400 line-clamp-2 mt-1">
-                          {anime.synopsis}
-                        </p>
-                      </div>
-
-                      <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-end">
+                      <div className="relative aspect-[3/4] w-full overflow-hidden bg-slate-950">
+                        <img 
+                          src={anime.cover_image} 
+                          alt={anime.title} 
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+                          }}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/20" />
+                        
                         <button
-                          onClick={() => setSelectedAnimeId(anime.id)}
-                          className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold shadow-md shadow-orange-600/30 transition-all hover:scale-105"
+                          onClick={(e) => { e.stopPropagation(); handleToggleWatchlist(anime.id); }}
+                          className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-rose-600 text-white backdrop-blur-md flex items-center justify-center transition-all shadow-md shadow-rose-600/40 hover:scale-105"
+                          title="Remove from Favorites"
                         >
-                          View Details
+                          <Heart className="w-4 h-4 fill-white text-white" />
                         </button>
+
+                        <div className="absolute bottom-2.5 left-2.5 flex items-center space-x-1 px-2.5 py-1 rounded-full bg-slate-950/85 backdrop-blur-md text-amber-400 text-[10px] sm:text-xs font-bold border border-amber-500/30 shadow-md">
+                          <Star className="w-3 h-3 fill-amber-400 mr-0.5" />
+                          <span>⭐ RATING {anime.rating}/10</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between space-y-2.5">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                            {langs.map((l: string) => (
+                              <span
+                                key={l}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-black tracking-wide ${
+                                  l === 'HIN'
+                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                    : l === 'TAM'
+                                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
+                                    : 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                                }`}
+                              >
+                                {l}
+                              </span>
+                            ))}
+                            {anime.year && (
+                              <span className="text-[10px] text-slate-400 font-medium ml-auto">
+                                {anime.year}
+                              </span>
+                            )}
+                          </div>
+
+                          <h3
+                            className="font-bold text-white text-sm sm:text-base font-['Space_Grotesk',sans-serif] hover:text-orange-400 cursor-pointer transition-colors line-clamp-2 leading-snug"
+                          >
+                            {anime.title}
+                          </h3>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                          <span className="flex items-center text-[11px]">
+                            <Tv className="w-3 h-3 text-orange-400 mr-1" />
+                            {anime.episodes_count} Eps
+                          </span>
+                          <span className="text-orange-400 font-semibold text-[11px] group-hover:underline">
+                            Details →
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         )}
 
-        {activeTab === 'cloudflare' && <CloudflareConsoleView />}
         {activeTab === 'recommender' && (
           <AiRecommenderView
             onSelectAnime={(anime) => setSelectedAnimeId(anime.id)}
@@ -223,16 +250,11 @@ export default function App() {
       <footer className="border-t border-slate-900 bg-slate-950 py-8 px-4 sm:px-6 lg:px-8 mt-16 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 rounded-lg bg-orange-600 flex items-center justify-center text-white">
-              <Cloud className="w-3.5 h-3.5" />
-            </div>
-            <span className="font-bold text-slate-300">Cloudflare Pages & D1 Anime Directory</span>
+            <span className="font-black text-sm text-white tracking-tight font-['Space_Grotesk',sans-serif] lowercase">anidub</span>
+            <span className="text-orange-500 font-black text-sm font-['Space_Grotesk',sans-serif]">INDIA</span>
           </div>
-          <div>
-            Powered by Cloudflare Pages, D1 Relational SQL, ImgBB Cloud CDN, and Workers API Functions.
-          </div>
-          <div className="text-slate-600">
-            © 2026 Cloudflare + ImgBB. All rights reserved.
+          <div className="text-slate-500">
+            © 2026 Anidub India. All rights reserved.
           </div>
         </div>
       </footer>
@@ -262,6 +284,71 @@ export default function App() {
           animeList={catalogList}
           onClose={() => setIsCollectionOpen(false)}
         />
+      )}
+
+      {/* Admin Password Prompt Modal (5-click Easter Egg) */}
+      {isPasswordModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#121622] border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 rounded-full bg-orange-500/10 border border-orange-500/30 flex items-center justify-center mx-auto mb-3 text-orange-400">
+                🔐
+              </div>
+              <h3 className="text-lg font-bold text-white font-['Space_Grotesk',sans-serif]">Admin Access Required</h3>
+              <p className="text-xs text-slate-400 mt-1">Enter secure passphrase to unlock Anidub Dashboard</p>
+            </div>
+
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (adminPasswordInput === 'prasanth123') {
+                  setActiveTab('admin');
+                  setIsPasswordModalOpen(false);
+                  setAdminPasswordInput('');
+                  setAdminPasswordError(false);
+                } else {
+                  setAdminPasswordError(true);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <input
+                  type="password"
+                  autoFocus
+                  placeholder="Enter password..."
+                  value={adminPasswordInput}
+                  onChange={(e) => {
+                    setAdminPasswordInput(e.target.value);
+                    if (adminPasswordError) setAdminPasswordError(false);
+                  }}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition-colors"
+                />
+                {adminPasswordError && (
+                  <p className="text-[11px] text-red-400 mt-1.5 font-medium animate-shake">
+                    Access Denied. Incorrect password.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPasswordModalOpen(false)}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold transition-colors border border-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-bold transition-all shadow-lg shadow-orange-500/20"
+                >
+                  Unlock Admin
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
     </div>

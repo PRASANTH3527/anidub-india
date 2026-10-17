@@ -56,7 +56,7 @@ export const RouletteModal: React.FC<RouletteModalProps> = ({
           {spinning ? 'Spinning the Wheel...' : "Here's Your Destined Anime!"}
         </h2>
         <p className="text-xs text-slate-400 mb-6">
-          Randomly picked from our Cloudflare D1 Indian Dubbed Catalog with Hindi, Tamil & Telugu audio tracks.
+          Randomly picked from our Indian Dubbed Anime Catalog with Hindi, Tamil & Telugu audio tracks.
         </p>
 
         {selectedAnime && (
