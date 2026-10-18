@@ -60,6 +60,68 @@ function persistD1() {
   fs.writeFileSync(dbFilePath, buffer);
 }
 
+async function sendTelegramNotification(anime: {
+  title: string;
+  synopsis: string;
+  cover_image: string;
+  rating: number;
+  episodes_count: number;
+  season: string;
+  year: number;
+  genres: string;
+  languages?: string;
+}) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (!token || !chatId) {
+    console.log('Telegram Bot notification skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured.');
+    return;
+  }
+
+  const langs = anime.languages || 'Tamil, Telugu, Hindi';
+  const caption = `🔥 *NEW ANIME ADDED TO DIRECTORY!* 🔥\n\n` +
+    `📌 *Title:* ${anime.title}\n` +
+    `⭐ *Rating:* ${anime.rating}/10\n` +
+    `📺 *Episodes:* ${anime.episodes_count}\n` +
+    `🎙 *Available Languages:* ${langs}\n` +
+    `🏷 *Genres:* ${anime.genres}\n` +
+    `📅 *Season:* ${anime.season} ${anime.year}\n\n` +
+    `💬 _"${anime.synopsis?.slice(0, 150)}..."_\n\n` +
+    `👉 Stream now legally on Anidub India!`;
+
+  try {
+    if (anime.cover_image && anime.cover_image.startsWith('http')) {
+      const photoUrl = `https://api.telegram.org/bot${token}/sendPhoto`;
+      const res = await fetch(photoUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: anime.cover_image,
+          caption: caption,
+          parse_mode: 'Markdown'
+        })
+      });
+      if (res.ok) return;
+    }
+
+    const msgUrl = `https://api.telegram.org/bot${token}/sendMessage`;
+    await fetch(msgUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: caption,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (err) {
+    console.error('Failed to send Telegram notification:', err);
+  }
+}
+
+
 function logCloudflareEvent(service: string, eventType: string, status: number, latency: number, details: string) {
   try {
     if (!db) return;
@@ -679,6 +741,19 @@ app.post('/api/anime', requireAdminAuth, (req, res) => {
 
     persistD1();
     logCloudflareEvent('D1', 'POST /api/anime', 201, Date.now() - start, `Created anime: ${title} (ID: ${animeId}, Poster: ImgBB)`);
+
+    // Trigger Telegram channel notification
+    sendTelegramNotification({
+      title,
+      synopsis: synopsis || 'An exciting new anime streaming exclusively on Cloudflare Pages.',
+      cover_image: cover_image || 'https://i.ibb.co/vzS8G90/default-poster.jpg',
+      rating: parseFloat(rating) || 8.5,
+      episodes_count: parseInt(episodes_count) || 12,
+      season: season || 'Spring',
+      year: parseInt(year) || 2026,
+      genres: genres || 'Action,Fantasy',
+      languages: req.body.languages || 'Tamil, Telugu, Hindi'
+    }).catch(e => console.error('Telegram notification error:', e));
 
     res.status(201).json({ success: true, animeId, slug });
   } catch (err: any) {

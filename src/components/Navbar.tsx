@@ -55,47 +55,30 @@ export const Navbar: React.FC<NavbarProps> = ({
       clickTimeoutRef.current = setTimeout(() => {
         setLogoClicks(0);
       }, 3000);
-      setActiveTab('catalog');
+      setActiveTab('home');
     }
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-[#0a0a10]/90 backdrop-blur-md border-b border-[#1c1c26] h-16">
-      <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
+    <header className="sticky top-0 z-50 bg-[#0a0c14]/95 backdrop-blur-md border-b border-[#1c1c26] h-[66px] font-['Inter',sans-serif]">
+      <div className="w-full max-w-[510px] mx-auto px-3.5 h-full flex items-center justify-between">
         
-        {/* Left: Logo mark + stacked wordmark */}
+        {/* Left: anidub INDIA Logo */}
         <div 
           onClick={handleLogoClick}
-          className="flex items-center space-x-2.5 cursor-pointer group select-none"
+          className="flex items-center cursor-pointer select-none py-1 group shrink-0"
           title="anidub INDIA"
         >
-          {/* Logo Mark: Orange gradient play-triangle with headphone/sound arcs */}
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-sm shrink-0">
-            <svg className="w-3.5 h-3.5 text-white fill-white" viewBox="0 0 24 24">
-              <path d="M5 3l14 9-14 9V3z" />
-            </svg>
-          </div>
-          {/* Stacked Wordmark */}
-          <div className="flex flex-col">
-            <span className="font-bold text-[20px] text-[#ff6a00] font-['Space_Grotesk',sans-serif] tracking-tight leading-none lowercase">
-              anidub
-            </span>
-            <div className="flex items-center space-x-1.5 mt-0.5">
-              <span className="font-bold text-[10px] text-slate-400 font-['Space_Grotesk',sans-serif] tracking-[0.2em] uppercase leading-none">
-                INDIA
-              </span>
-              <div className="flex items-center space-x-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#ff9933]"></span>
-                <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
-                <span className="w-1.5 h-1.5 rounded-full bg-[#138808]"></span>
-              </div>
-            </div>
-          </div>
+          <img 
+            src="/anidub-logo.svg" 
+            alt="anidub INDIA" 
+            className="h-8 sm:h-9 w-auto object-contain transition-transform group-hover:scale-[1.02] active:scale-[0.98]"
+          />
         </div>
 
         {/* Search Overlay */}
         {showSearchInput && (
-          <div className="absolute inset-x-0 top-0 h-16 bg-[#0a0a10] px-4 flex items-center z-50 border-b border-[#1c1c26]">
+          <div className="absolute inset-x-0 top-0 h-[66px] bg-[#0a0a10] px-4 flex items-center z-50 border-b border-[#1c1c26]">
             <Search className="w-4 h-4 text-slate-400 mr-2" />
             <input
               type="text"
@@ -114,93 +97,81 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         )}
 
-        {/* Right: Exact order 34px buttons, 4px gap, 20px icons */}
+        {/* Right: Exact order & styling */}
         <div className="flex items-center space-x-1 sm:space-x-1.5">
           
-          {/* 1. Compass */}
+          {/* 1. Compass (has box & border) */}
           <button
             onClick={() => setActiveTab('catalog')}
             title="Explore Catalog"
-            className={`w-[34px] h-[34px] rounded-xl flex items-center justify-center transition-all ${
-              activeTab === 'catalog' 
-                ? 'bg-purple-950/60 text-purple-300 border border-purple-500/50 shadow-sm' 
-                : 'bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-purple-300'
-            }`}
+            className="w-[36px] h-[36px] rounded-xl bg-[rgba(139,92,246,0.2)] border border-[#7c3aed] text-[#a78bfa] flex items-center justify-center transition-all shadow-sm"
           >
             <Compass className="w-5 h-5" />
           </button>
 
-          {/* 2. Search */}
+          {/* 2. Search (plain icon in tap target) */}
           <button
             onClick={() => setShowSearchInput(!showSearchInput)}
             title="Search"
-            className="w-[34px] h-[34px] rounded-xl bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+            className="w-[38px] h-[38px] bg-transparent border-0 hover:bg-white/5 rounded-xl text-[#cbd5e1] flex items-center justify-center transition-colors"
           >
             <Search className="w-5 h-5" />
           </button>
 
-          {/* 3. Sparkles */}
+          {/* 3. Sparkles (plain icon) */}
           <button
             onClick={() => setActiveTab('recommender')}
             title="AI Recommender"
-            className={`w-[34px] h-[34px] rounded-xl flex items-center justify-center transition-all ${
-              activeTab === 'recommender'
-                ? 'bg-purple-950/60 text-purple-300 border border-purple-500/50 shadow-sm'
-                : 'bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-amber-400'
-            }`}
+            className="w-[38px] h-[38px] bg-transparent border-0 hover:bg-white/5 rounded-xl text-[#cbd5e1] flex items-center justify-center transition-colors"
           >
             <Sparkles className="w-5 h-5" />
           </button>
 
-          {/* 4. Bookmark (Badge ONLY when count > 0) */}
+          {/* 4. Bookmark (plain icon, badge ONLY when count > 0) */}
           <button
             onClick={() => setActiveTab('watchlist')}
             title="Saved Watchlist"
-            className={`w-[34px] h-[34px] rounded-xl flex items-center justify-center relative transition-all ${
-              activeTab === 'watchlist'
-                ? 'bg-purple-950/60 text-purple-300 border border-purple-500/50 shadow-sm'
-                : 'bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-orange-400'
-            }`}
+            className="w-[38px] h-[38px] bg-transparent border-0 hover:bg-white/5 rounded-xl text-[#cbd5e1] flex items-center justify-center relative transition-colors"
           >
             <Bookmark className="w-5 h-5" />
             {watchlistCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+              <span className="absolute top-1 right-1 bg-orange-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow">
                 {watchlistCount}
               </span>
             )}
           </button>
 
-          {/* 5. Calendar */}
+          {/* 5. Calendar (plain icon) */}
           <button
             onClick={() => setActiveTab('catalog')}
             title="Schedule & Releases"
-            className="w-[34px] h-[34px] rounded-xl bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+            className="w-[38px] h-[38px] bg-transparent border-0 hover:bg-white/5 rounded-xl text-[#cbd5e1] flex items-center justify-center transition-colors"
           >
             <Calendar className="w-5 h-5" />
           </button>
 
-          {/* 6. Avatar (28px circle, Naruto anime character avatar, thin light ring) */}
-          <div className="w-[28px] h-[28px] rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center overflow-hidden border border-white/25 shadow-sm cursor-pointer shrink-0" title="User Profile">
+          {/* 6. Avatar (30px circle Naruto avatar with 2px ring) */}
+          <div className="w-[30px] h-[30px] rounded-full bg-slate-800 flex items-center justify-center overflow-hidden border-2 border-white/35 shadow-sm cursor-pointer shrink-0" title="User Profile">
             <span className="text-xs">🍥</span>
           </div>
 
-          {/* 7. Layers (my collections) */}
+          {/* 7. Layers (plain icon) */}
           <button
             onClick={() => setActiveTab('catalog')}
             title="Collections"
-            className="w-[34px] h-[34px] rounded-xl bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+            className="w-[38px] h-[38px] bg-transparent border-0 hover:bg-white/5 rounded-xl text-[#cbd5e1] flex items-center justify-center transition-colors"
           >
             <Layers className="w-5 h-5" />
           </button>
 
-          {/* 8. Language pill (purple globe + chevron-down, rounded-full, ~60x34, purple-tinted border) */}
+          {/* 8. Language pill (~59x33, rounded-full, dark bg, purple-tinted border) */}
           <div className="relative">
             <button
               onClick={() => setIsLangOpen(!isLangOpen)}
-              className="h-[34px] px-3 rounded-full bg-[#0f1328] border border-purple-500/40 text-purple-300 hover:text-white flex items-center space-x-1.5 text-xs font-semibold transition-colors"
+              className="w-[59px] h-[33px] px-2.5 rounded-full bg-[#0f1328] border border-purple-500/40 text-purple-300 hover:text-white flex items-center justify-between text-xs font-semibold transition-colors shadow-sm"
             >
-              <Globe className="w-4 h-4" />
-              {isLangOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              <Globe className="w-4 h-4 shrink-0" />
+              {isLangOpen ? <ChevronUp className="w-3 h-3 shrink-0" /> : <ChevronDown className="w-3 h-3 shrink-0" />}
             </button>
 
             {isLangOpen && (
@@ -242,12 +213,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
-          {/* 9. Theme toggle (amber sun in 34px rounded-xl dark button with 1px border) */}
+          {/* 9. Theme toggle (34px, rounded-xl, bg #1a1a1f, 1px #2d2d34 border, amber #fbbf24 sun) */}
           <button
             title="Theme Toggle"
-            className="w-[34px] h-[34px] rounded-xl bg-[#0f1328] border border-[#1d2542] text-amber-400 hover:bg-amber-500/10 flex items-center justify-center transition-colors"
+            className="w-[34px] h-[34px] rounded-xl bg-[#1a1a1f] border border-[#2d2d34] text-[#fbbf24] hover:bg-amber-500/10 flex items-center justify-center transition-colors shrink-0 shadow-sm"
           >
-            <Sun className="w-5 h-5" />
+            <Sun className="w-4 h-4" />
           </button>
 
         </div>

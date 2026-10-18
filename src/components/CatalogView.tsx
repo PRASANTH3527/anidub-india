@@ -10,7 +10,7 @@ import {
   ArrowUpDown, 
   Loader2, 
   Dices, 
-  FolderPlus, 
+  Layers, 
   Languages, 
   Flame, 
   Sparkles, 
@@ -162,42 +162,6 @@ export const FALLBACK_SEED_ANIME: Anime[] = [
     status: "Completed",
     season: "Summer",
     year: 2025,
-    genres: "Slice of Life,Sci-Fi,Cozy",
-    popularity: 44000,
-    languages: "HIN,TEL",
-    platform: "Ani-One",
-    type: "TV Series"
-  },
-  {
-    id: 7,
-    title: "Titanium Mecha Vanguard",
-    slug: "titanium-mecha-vanguard",
-    synopsis: "Humanity's last bastion stands inside colossal bipedal armored mechs defending Earth's orbital elevators from colossal alien behemoths.",
-    cover_image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.7,
-    episodes_count: 24,
-    status: "Airing",
-    season: "Spring",
-    year: 2026,
-    genres: "Mecha,Action,Sci-Fi",
-    popularity: 68900,
-    languages: "HIN,TAM,TEL",
-    platform: "Netflix",
-    type: "TV Series"
-  },
-  {
-    id: 8,
-    title: "Chronos Detective Agency",
-    slug: "chronos-detective-agency",
-    synopsis: "Private investigators who solve cold cases by jumping back and forth across 24-hour temporal loops in Neo-Tokyo.",
-    cover_image: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.9,
-    episodes_count: 12,
-    status: "Completed",
-    season: "Fall",
-    year: 2025,
     genres: "Mystery,Sci-Fi,Detective",
     popularity: 58000,
     languages: "HIN,TAM",
@@ -207,12 +171,12 @@ export const FALLBACK_SEED_ANIME: Anime[] = [
 ];
 
 const REGIONAL_LANGUAGES = [
-  { label: 'All', value: 'All', count: 258 },
-  { label: 'Tamil', value: 'Tamil', count: 152 },
-  { label: 'Telugu', value: 'Telugu', count: 150 },
-  { label: 'Hindi', value: 'Hindi', count: 255 },
-  { label: 'Malayalam', value: 'Malayalam', count: 110 },
-  { label: 'Kannada', value: 'Kannada', count: 95 }
+  { label: 'All', value: 'All', count: 124 },
+  { label: 'Tamil', value: 'Tamil', count: 62 },
+  { label: 'Telugu', value: 'Telugu', count: 59 },
+  { label: 'Hindi', value: 'Hindi', count: 121 },
+  { label: 'Malayalam', value: 'Malayalam', count: 45 },
+  { label: 'Kannada', value: 'Kannada', count: 38 }
 ];
 
 const GENRES = ['All', 'Action', 'Fantasy', 'Sci-Fi', 'Romance', 'Adventure', 'Thriller', 'Supernatural', 'Comedy', 'Slice of Life', 'Mecha'];
@@ -273,7 +237,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     }
   };
 
-  // Filter & Sort purely on client for snappy UI responsiveness
   const filteredList = filterAndSortCatalog(rawAnimeList, {
     language: selectedLanguage,
     genre: selectedGenre,
@@ -284,7 +247,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     sort: selectedSort
   });
 
-  // Calculate paginated slice (8 items per page for balanced grid)
   const itemsPerPage = 8;
   const totalPages = Math.max(1, Math.ceil(filteredList.length / itemsPerPage));
   const currentPage = Math.min(pagination.page, totalPages);
@@ -292,24 +254,24 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   const paginatedAnime = filteredList.slice(offset, offset + itemsPerPage);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+    <div className="w-full max-w-[510px] mx-auto px-3.5 py-6 space-y-6 overflow-x-hidden font-['Inter',sans-serif] text-slate-100">
       
       {/* 2. Hero Section */}
-      <div className="text-center pt-8 pb-4 max-w-2xl mx-auto space-y-4">
+      <div className="text-center pt-4 pb-2 max-w-2xl mx-auto space-y-3">
         
         {/* Badge pill */}
-        <div className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-full bg-[#3b1d7a]/70 border border-[#6d28d9] text-[#c4b5fd] text-xs font-medium shadow-sm">
-          <Sparkles className="w-3.5 h-3.5 text-[#c4b5fd]" />
+        <div className="inline-flex items-center space-x-1.5 px-4 h-[36px] rounded-full bg-[rgba(76,29,149,0.8)] border border-[rgba(124,58,237,0.6)] text-[#c4b5fd] text-xs font-medium shadow-sm">
+          <Sparkles className="w-4 h-4 text-[#c4b5fd]" />
           <span>Official Indian Dubbed Anime Directory</span>
         </div>
 
         {/* Sub-Heading Label */}
-        <div className="text-[14px] font-bold text-[#ff5a1f] tracking-[0.15em] uppercase font-['Space_Grotesk',sans-serif]">
+        <div className="text-[18px] font-bold text-[#ff5a1f] tracking-[0.1em] uppercase">
           ANIDUB INDIA OFFICIAL WEBSITE
         </div>
 
         {/* H1 Title */}
-        <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold font-['Space_Grotesk',sans-serif] tracking-tight leading-[1.15]">
+        <h1 className="text-[25px] font-extrabold tracking-tight leading-[1.15]">
           <span className="text-white block">The Premier Destination for</span>
           <span className="bg-gradient-to-r from-[#9333ea] to-[#6366f1] bg-clip-text text-transparent block mt-1">
             Anime Streaming & Dubbing in India
@@ -317,21 +279,19 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         </h1>
 
         {/* Paragraph */}
-        <p className="text-[13px] text-[#cbd5e1] max-w-md mx-auto font-normal leading-[1.6] text-center">
-          Discover officially dubbed anime in Tamil, Telugu, Hindi, Malayalam,<br />
-          and Kannada — streaming legally on Crunchyroll, Netflix, JioHotstar,<br />
-          and JioCinema.
+        <p className="text-[13px] text-[#cbd5e1] max-w-[448px] mx-auto font-normal leading-[1.6] text-center">
+          Discover officially dubbed anime in Tamil, Telugu, Hindi, Malayalam, and Kannada — streaming legally on Crunchyroll, Netflix, JioHotstar, and JioCinema.
         </p>
 
         {/* Action Buttons */}
-        <div className="flex flex-col space-y-4 pt-2 max-w-md mx-auto">
+        <div className="flex flex-col items-center space-y-4 pt-2">
           {/* Button 1 */}
           <button
             onClick={onOpenRoulette}
-            className="w-full h-12 px-6 rounded-full bg-gradient-to-r from-[#ff8a00] via-[#ff6a00] to-[#9333ea] hover:opacity-95 text-white font-semibold text-sm shadow-[0_0_25px_rgba(255,106,0,0.35)] transition-all flex items-center justify-between cursor-pointer"
+            className="inline-flex items-center justify-between h-[48px] px-[22px] rounded-full bg-gradient-to-r from-[#ff8a00] via-[#ff6a00] to-[#9333ea] hover:opacity-95 text-white font-semibold text-[13px] shadow-[0_0_25px_rgba(255,106,0,0.35)] transition-all cursor-pointer space-x-2.5"
           >
-            <div className="flex items-center space-x-2.5">
-              <Dices className="w-5 h-5 text-white" />
+            <div className="flex items-center space-x-2">
+              <Dices className="w-5 h-5 text-white shrink-0" />
               <span>Surprise Me Roulette</span>
             </div>
             <span className="px-3 py-1 rounded-full bg-purple-950/60 border border-white/20 text-[#fde68a] text-[11px] font-bold uppercase tracking-wider">
@@ -342,10 +302,10 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           {/* Button 2 */}
           <button
             onClick={onOpenCollection}
-            className="w-full h-12 px-6 rounded-full bg-[#141418] hover:bg-[#1a1a20] text-white font-medium text-sm border border-[#2a2a33] transition-all flex items-center justify-between cursor-pointer"
+            className="inline-flex items-center justify-between h-[48px] px-6 rounded-full bg-[#141418] hover:bg-[#1a1a20] text-white font-medium text-[13px] border border-[#2a2a33] transition-all cursor-pointer space-x-2.5"
           >
-            <div className="flex items-center space-x-2.5">
-              <FolderPlus className="w-5 h-5 text-white" />
+            <div className="flex items-center space-x-2">
+              <Layers className="w-5 h-5 text-white shrink-0" />
               <span>Create Collection</span>
             </div>
             <span className="px-3 py-1 rounded-full bg-transparent border border-[#8b5cf6] text-[#a78bfa] text-[11px] font-bold uppercase tracking-wider">
@@ -355,25 +315,25 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Stat Cards */}
-      <div className="grid grid-cols-3 gap-3 max-w-3xl mx-auto">
+      {/* 3. Stat Cards (3 equal columns, gap 2.5, min-h-[111px], p-3) */}
+      <div className="grid grid-cols-3 gap-2.5 w-full mt-8">
         
         {/* Card 1 */}
-        <div className="bg-[#0d0d16] border-2 border-purple-200/30 rounded-2xl p-3 min-h-[112px] flex flex-col justify-between shadow-lg">
+        <div className="bg-[#0d0d16] border-2 border-[#e9e5ff]/50 rounded-2xl p-3 min-h-[111px] flex flex-col justify-between shadow-lg">
           <div className="flex items-start justify-between">
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider font-['Space_Grotesk',sans-serif] leading-tight">
+            <span className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-[0.1em] leading-tight">
               DUBBED TITLES
             </span>
-            <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0">
-              <Tv className="w-4 h-4" />
+            <div className="w-[26px] h-[26px] rounded-lg bg-purple-500/15 border border-purple-500/50 text-purple-400 flex items-center justify-center shrink-0">
+              <Tv className="w-3.5 h-3.5" />
             </div>
           </div>
           <div>
-            <div className="text-xl sm:text-2xl font-extrabold text-white font-['Space_Grotesk',sans-serif] tracking-tight flex items-baseline">
-              <span>258</span>
-              <span className="text-purple-400 text-sm font-bold ml-0.5">+</span>
+            <div className="text-[22px] font-extrabold text-white tracking-tight flex items-baseline">
+              <span>124</span>
+              <span className="text-purple-400 text-xs font-bold ml-0.5">+</span>
             </div>
-            <p className="text-[11px] text-emerald-400 mt-0.5 font-medium flex items-center space-x-1">
+            <p className="text-[9.5px] text-[#cbd5e1] mt-0.5 font-medium flex items-center space-x-1 truncate">
               <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
               <span className="truncate">Verified dubs</span>
             </p>
@@ -381,21 +341,21 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         </div>
 
         {/* Card 2 */}
-        <div className="bg-[#0d0d16] border border-orange-500/30 rounded-2xl p-3 min-h-[112px] flex flex-col justify-between shadow-lg">
+        <div className="bg-[#0d0d16] border border-orange-500/45 rounded-2xl p-3 min-h-[111px] flex flex-col justify-between shadow-lg">
           <div className="flex items-start justify-between">
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider font-['Space_Grotesk',sans-serif] leading-tight">
+            <span className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-[0.1em] leading-tight">
               COMMUNITY<br />VOTES
             </span>
-            <div className="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-400 flex items-center justify-center shrink-0">
-              <Flame className="w-4 h-4" />
+            <div className="w-[26px] h-[26px] rounded-lg bg-orange-500/15 border border-orange-500/50 text-orange-400 flex items-center justify-center shrink-0">
+              <Flame className="w-3.5 h-3.5" />
             </div>
           </div>
           <div>
-            <div className="text-xl sm:text-2xl font-extrabold text-white font-['Space_Grotesk',sans-serif] tracking-tight flex items-center space-x-1">
+            <div className="text-[22px] font-extrabold text-white tracking-tight flex items-center space-x-1">
               <span>0</span>
-              <span className="text-orange-500 text-sm">🔥</span>
+              <span className="text-orange-500 text-xs">🔥</span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5 font-medium flex items-center space-x-1">
+            <p className="text-[9.5px] text-[#cbd5e1] mt-0.5 font-medium flex items-center space-x-1 truncate">
               <TrendingUp className="w-3 h-3 text-orange-400 shrink-0" />
               <span className="truncate">Community upvotes</span>
             </p>
@@ -403,21 +363,21 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         </div>
 
         {/* Card 3 */}
-        <div className="bg-[#0d0d16] border border-cyan-500/30 rounded-2xl p-3 min-h-[112px] flex flex-col justify-between shadow-lg">
+        <div className="bg-[#0d0d16] border border-cyan-500/45 rounded-2xl p-3 min-h-[111px] flex flex-col justify-between shadow-lg">
           <div className="flex items-start justify-between">
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider font-['Space_Grotesk',sans-serif] leading-tight">
+            <span className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-[0.1em] leading-tight">
               INDIAN<br />LANGUAGES
             </span>
-            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0">
-              <Languages className="w-4 h-4" />
+            <div className="w-[26px] h-[26px] rounded-lg bg-cyan-500/15 border border-cyan-500/50 text-cyan-400 flex items-center justify-center shrink-0">
+              <Languages className="w-3.5 h-3.5" />
             </div>
           </div>
           <div>
-            <div className="text-xl sm:text-2xl font-extrabold text-white font-['Space_Grotesk',sans-serif] tracking-tight flex items-baseline space-x-1">
+            <div className="text-[22px] font-extrabold text-white tracking-tight flex items-baseline space-x-1">
               <span>5</span>
-              <span className="text-cyan-400 text-sm font-semibold">Regions</span>
+              <span className="text-cyan-400 text-[13px] font-semibold">Regions</span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5 font-medium truncate">
+            <p className="text-[9.5px] text-[#cbd5e1] mt-0.5 font-medium truncate">
               Tamil • Telugu • Hindi
             </p>
           </div>
@@ -425,14 +385,14 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
 
       </div>
 
-      {/* 4. Section Title */}
-      <div className="max-w-3xl mx-auto space-y-3">
-        <div className="flex items-center space-x-2 text-[14px] font-bold text-white uppercase tracking-[0.05em]">
+      {/* 4. Section Title (30px below cards) */}
+      <div className="w-full mt-[30px] mb-3 space-y-3">
+        <div className="flex items-center space-x-2 text-[12px] font-bold text-[#e5e7eb] uppercase tracking-[0.05em]">
           <Sparkles className="w-4 h-4 text-purple-400" />
           <span>REGIONAL DUB AUDIO</span>
         </div>
 
-        {/* 5. Language Chips (horizontal scroll row, compact dainty font) */}
+        {/* 5. Language Chips (h39, 14px semibold, radius 14px) */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none whitespace-nowrap">
           {REGIONAL_LANGUAGES.map((lang) => {
             const active = selectedLanguage === lang.value;
@@ -440,7 +400,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               <button
                 key={lang.value}
                 onClick={() => { setSelectedLanguage(lang.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className={`h-9 px-4 rounded-[12px] text-xs font-semibold transition-all shadow-sm flex items-center justify-center shrink-0 ${
+                className={`h-[39px] px-4 rounded-[14px] text-[14px] font-semibold transition-all shadow-sm flex items-center justify-center shrink-0 ${
                   active
                     ? 'bg-gradient-to-r from-[#6d4aff] to-[#7c3aed] text-white shadow-[0_0_15px_rgba(109,74,255,0.4)]'
                     : 'bg-[#12182f] border border-[#232b4a] text-[#e2e8f0] hover:bg-[#1a2240]'
@@ -452,17 +412,17 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           })}
         </div>
 
-        {/* 6. Filters (2-column grid, compact dainty font) */}
-        <div className="grid grid-cols-2 gap-2.5 pt-1">
+        {/* 6. Filters (h40, 13px medium, label 10px; SORT half-width) */}
+        <div className="grid grid-cols-2 gap-2 pt-1">
           
           {/* Genre */}
-          <div className="h-9 px-3 rounded-[12px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
+          <div className="h-[40px] px-3 rounded-[12px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
             <div className="flex items-center space-x-1.5 w-full overflow-hidden">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0">GENRE</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">GENRE</span>
               <select
                 value={selectedGenre}
                 onChange={(e) => { setSelectedGenre(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="bg-transparent text-xs font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
+                className="bg-transparent text-[13px] font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
               >
                 {GENRES.map(g => <option key={g} value={g} className="bg-slate-950 text-white">{g === 'All' ? 'All Genres' : g}</option>)}
               </select>
@@ -471,13 +431,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           </div>
 
           {/* Platform */}
-          <div className="h-9 px-3 rounded-[12px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
+          <div className="h-[40px] px-3 rounded-[12px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
             <div className="flex items-center space-x-1.5 w-full overflow-hidden">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0">PLATFORM</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">PLATFORM</span>
               <select
                 value={selectedPlatform}
                 onChange={(e) => { setSelectedPlatform(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="bg-transparent text-xs font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
+                className="bg-transparent text-[13px] font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
               >
                 {PLATFORMS.map(p => <option key={p} value={p} className="bg-slate-950 text-white">{p}</option>)}
               </select>
@@ -486,13 +446,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           </div>
 
           {/* Type */}
-          <div className="h-9 px-3 rounded-[12px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
+          <div className="h-[40px] px-3 rounded-[12px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
             <div className="flex items-center space-x-1.5 w-full overflow-hidden">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0">TYPE</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">TYPE</span>
               <select
                 value={selectedType}
                 onChange={(e) => { setSelectedType(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="bg-transparent text-xs font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
+                className="bg-transparent text-[13px] font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
               >
                 {TYPES.map(t => <option key={t} value={t} className="bg-slate-950 text-white">{t}</option>)}
               </select>
@@ -501,13 +461,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           </div>
 
           {/* Status */}
-          <div className="h-9 px-3 rounded-[12px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
+          <div className="h-[40px] px-3 rounded-[12px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
             <div className="flex items-center space-x-1.5 w-full overflow-hidden">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0">STATUS</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">STATUS</span>
               <select
                 value={selectedStatus}
                 onChange={(e) => { setSelectedStatus(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="bg-transparent text-xs font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
+                className="bg-transparent text-[13px] font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
               >
                 {STATUSES.map(s => <option key={s} value={s} className="bg-slate-950 text-white">{s === 'All' ? 'All Status' : s}</option>)}
               </select>
@@ -515,39 +475,32 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-400 pointer-events-none shrink-0 ml-1" />
           </div>
 
-          {/* Sort (alone in left column, half width) */}
-          <div className="h-9 px-3 rounded-[12px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group col-span-1">
+          {/* Sort (half-width) */}
+          <div className="h-[40px] px-3 rounded-[12px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group col-span-1">
             <div className="flex items-center space-x-1.5 w-full overflow-hidden">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0">SORT</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">SORT</span>
               <select
                 value={selectedSort}
                 onChange={(e) => { setSelectedSort(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="bg-transparent text-xs font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
+                className="bg-transparent text-[13px] font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
               >
-                {SORTS.map(s => <option key={s.value} value={s.value} className="bg-slate-950 text-white">🔥 {s.label}</option>)}
+                {SORTS.map(s => <option key={s.value} value={s.value} className="bg-slate-950 text-white">{s.label}</option>)}
               </select>
             </div>
-            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-400 pointer-events-none shrink-0 ml-1" />
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-400 pointer-events-none shrink-0 ml-1" />
           </div>
 
         </div>
-
       </div>
 
-      {/* 5. Anime Catalog Grid (The Core): 2-column on mobile, expanding natively on desktop */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white font-['Space_Grotesk',sans-serif] flex items-center space-x-2">
-            <span>Anime Catalog</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-orange-400 font-bold">
-              {filteredList.length} Titles Found
-            </span>
-          </h2>
-          {searchQuery && (
-            <span className="text-xs text-slate-400">
-              Filtering for &ldquo;<span className="text-orange-400 font-semibold">{searchQuery}</span>&rdquo;
-            </span>
-          )}
+      {/* 7. Catalog List Grid */}
+      <div className="pt-2">
+        <div className="flex items-center justify-between mb-4 text-xs text-slate-400">
+          <span className="flex items-center space-x-1">
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span>Showing <strong className="text-white">{filteredList.length}</strong> Titles</span>
+          </span>
+          <span>2 Columns • Smooth 60fps</span>
         </div>
 
         {paginatedAnime.length === 0 ? (
@@ -567,8 +520,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             </button>
           </div>
         ) : (
-          /* Responsive Grid: 2-column on mobile, 3-column on tablet, 4-column on desktop */
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 gap-3.5">
             {paginatedAnime.map((anime) => {
               const isWatchlisted = watchlist.includes(anime.id);
               const langs = (anime.languages || 'HIN,TAM,TEL').split(',');
@@ -577,9 +529,9 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 <div
                   key={anime.id}
                   onClick={() => onSelectAnime(anime)}
-                  className="group bg-slate-900/90 border border-slate-800/80 hover:border-purple-500/30 rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.5)] transition-all duration-300 ease-in-out flex flex-col cursor-pointer"
+                  className="group bg-[#0e1222] border border-[#1e2338] hover:border-purple-500/50 rounded-[20px] overflow-hidden shadow-xl transition-all duration-300 flex flex-col justify-between cursor-pointer"
                 >
-                  {/* Vertical cover image container (rendered securely from ImgBB URLs) */}
+                  {/* Vertical cover image */}
                   <div className="relative aspect-[3/4] w-full overflow-hidden bg-slate-950">
                     <img
                       src={anime.cover_image}
@@ -589,73 +541,57 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                       }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-black/30" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0e1222] via-transparent to-black/30" />
 
-                    {/* Top-Left Overlays: TRENDING & Offline Ready */}
+                    {/* Top-Left Overlays */}
                     <div className="absolute top-2.5 left-2.5 flex flex-col items-start space-y-1 z-10">
-                      <div className="px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[9px] sm:text-[10px] font-extrabold flex items-center space-x-1 shadow-md">
+                      <div className="px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[9px] font-extrabold flex items-center space-x-1 shadow-md">
                         <Flame className="w-3 h-3 text-amber-300" />
                         <span>TRENDING</span>
                       </div>
-                      <div className="px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/50 text-emerald-400 text-[9px] sm:text-[10px] font-extrabold flex items-center space-x-1 shadow-md">
+                      <div className="px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/50 text-emerald-400 text-[9px] font-extrabold flex items-center space-x-1 shadow-md">
                         <Check className="w-3 h-3 text-emerald-400" />
                         <span>Offline Ready</span>
                       </div>
                     </div>
 
-                    {/* Top-Right Overlays: Circular icon buttons (Cloud, Flag, Share, Heart, Bookmark) */}
+                    {/* Top-Right Overlays */}
                     <div className="absolute top-2.5 right-2.5 flex items-center space-x-1 z-10">
                       <button 
                         onClick={(e) => { e.stopPropagation(); }} 
-                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 hover:border-white/40 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
+                        className="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
                         title="Cloud / Download"
                       >
                         <Cloud className="w-3 h-3" />
                       </button>
                       <button 
                         onClick={(e) => { e.stopPropagation(); }} 
-                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 hover:border-white/40 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
+                        className="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
                         title="Report / Flag"
                       >
                         <Flag className="w-3 h-3" />
                       </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); }} 
-                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 hover:border-white/40 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
-                        title="Share"
-                      >
-                        <Share2 className="w-3 h-3" />
-                      </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); onToggleWatchlist(anime.id); }}
-                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 hover:border-white/40 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md group/heart"
-                        title={isWatchlisted ? "Remove from Favorites" : "Add to Favorites"}
-                      >
-                        <Heart className={`w-3.5 h-3.5 transition-colors ${
-                          isWatchlisted ? 'text-rose-400 fill-rose-500/45' : 'text-slate-300 group-hover/heart:text-white'
-                        }`} />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onToggleWatchlist(anime.id); }}
-                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 hover:border-white/40 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
+                        className="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
                         title="Bookmark"
                       >
-                        <Bookmark className={`w-3.5 h-3.5 ${isWatchlisted ? 'text-orange-400 fill-orange-500/45' : 'text-slate-300'}`} />
+                        <Bookmark className={`w-3 h-3 ${isWatchlisted ? 'text-orange-400 fill-orange-500/45' : 'text-slate-300'}`} />
                       </button>
                     </div>
 
-                    {/* Bottom-Left overlay (on image): Dark pill with star icon and rating */}
-                    <div className="absolute bottom-2.5 left-2.5 flex items-center space-x-1 px-2.5 py-1 rounded-full bg-slate-950/85 backdrop-blur-md text-amber-400 text-[10px] sm:text-xs font-bold border border-amber-500/30 shadow-md">
+                    {/* Bottom-Left Rating */}
+                    <div className="absolute bottom-2.5 left-2.5 flex items-center space-x-1 px-2.5 py-1 rounded-full bg-slate-950/85 backdrop-blur-md text-amber-400 text-[10px] font-bold border border-amber-500/30 shadow-md">
                       <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                      <span>⭐ RATING {anime.rating}/10</span>
+                      <span>{anime.rating}/10</span>
                     </div>
                   </div>
 
                   {/* Below Image Content */}
-                  <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between space-y-2.5">
+                  <div className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
                     <div>
-                      {/* Below Image: Language small pills (HIN, TAM, TEL in distinct colors: Green, Orange, Blue) */}
-                      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                      {/* Language small pills */}
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
                         {langs.map((l) => (
                           <span
                             key={l}
@@ -674,32 +610,20 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                         ))}
                       </div>
 
-                      {/* Title: Bold, truncated to 2 lines */}
-                      <h3 className="font-bold text-white text-sm sm:text-base font-['Space_Grotesk',sans-serif] line-clamp-2 group-hover:text-orange-400 transition-colors leading-snug">
+                      {/* Title */}
+                      <h3 className="font-bold text-white text-xs sm:text-sm line-clamp-2 group-hover:text-orange-400 transition-colors leading-snug">
                         {anime.title}
                       </h3>
-
-                      {/* Subtitle: Type & Year */}
-                      <p className="text-[11px] text-slate-400 mt-1 font-medium">
-                        {anime.type || 'TV Series'} • {anime.year || '2024'}
-                      </p>
                     </div>
 
-                    {/* Footer Row: Platform pill & stat counter pills */}
-                    <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-                      <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 text-[10px] font-semibold text-slate-300 truncate max-w-[90px]">
+                    {/* Footer Row */}
+                    <div className="pt-2 border-t border-[#1c2236] flex items-center justify-between text-[11px] text-slate-400">
+                      <span className="px-2 py-0.5 rounded bg-slate-800/80 text-[10px] font-semibold text-slate-300">
                         {anime.platform || 'Crunchyroll'}
                       </span>
-                      <div className="flex items-center space-x-2 text-[11px]">
-                        <span className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
-                          <Heart className="w-3 h-3 text-rose-400 fill-rose-500/20" />
-                          <span>{Math.round((anime.rating || 7) * 20)}</span>
-                        </span>
-                        <span className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
-                          <Flame className="w-3 h-3 text-orange-400" />
-                          <span>{Math.round((anime.rating || 7) * 20)}</span>
-                        </span>
-                      </div>
+                      <span className="text-purple-400 font-semibold group-hover:underline">
+                        Details →
+                      </span>
                     </div>
                   </div>
                 </div>

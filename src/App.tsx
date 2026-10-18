@@ -4,13 +4,14 @@ import { CatalogView } from './components/CatalogView';
 import { AnimeDetailModal } from './components/AnimeDetailModal';
 import { AiRecommenderView } from './components/AiRecommenderView';
 import { AdminPanelView } from './components/AdminPanelView';
+import { PublicHomeView } from './components/PublicHomeView';
 import { RouletteModal } from './components/RouletteModal';
 import { CreateCollectionModal } from './components/CreateCollectionModal';
 import { FALLBACK_SEED_ANIME } from './components/CatalogView';
 import { Bookmark, Tv, Star, Heart } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('catalog');
+  const [activeTab, setActiveTab] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
   const [watchlist, setWatchlist] = useState<number[]>(() => {
     try {
@@ -104,7 +105,7 @@ export default function App() {
         } else {
           localStorage.removeItem('cf_admin_token');
           setIsAdminAuthenticated(false);
-          if (activeTab === 'admin') setActiveTab('catalog');
+          if (activeTab === 'admin') setActiveTab('home');
         }
       }).catch(() => {
         // Fallback for offline mode
@@ -161,11 +162,11 @@ export default function App() {
     } catch {}
     localStorage.removeItem('cf_admin_token');
     setIsAdminAuthenticated(false);
-    setActiveTab('catalog');
+    setActiveTab('home');
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col font-['Outfit',sans-serif]">
+    <div className="min-h-screen bg-[#0a0c14] text-slate-100 flex flex-col font-['Inter',sans-serif] overflow-x-hidden">
       
       {/* Lightweight Anime Directory Navbar (Zero Login/Auth) */}
       <Navbar
@@ -187,7 +188,8 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1">
-        {activeTab === 'catalog' && (
+        {/* PUBLIC HOME / CATALOG VIEW (Default Root / matching user screenshot) */}
+        {(activeTab === 'home' || activeTab === 'catalog') && (
           <CatalogView
             onSelectAnime={(anime) => setSelectedAnimeId(anime.id)}
             searchQuery={searchQuery}
@@ -316,45 +318,26 @@ export default function App() {
             onSelectAnime={(anime) => setSelectedAnimeId(anime.id)}
           />
         )}
-        {activeTab === 'admin' && (
-          isAdminAuthenticated ? (
-            <AdminPanelView
-              onAnimeCreated={() => {
-                fetchCatalogList();
-              }}
-              onLogout={handleAdminLogout}
-              onNavigateHome={() => setActiveTab('catalog')}
-            />
-          ) : (
-            <div className="max-w-md mx-auto my-20 p-8 rounded-3xl bg-[#0e1325] border border-[#1f2640] shadow-2xl text-center">
-              <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center mx-auto mb-4 text-purple-400">
-                🔒
-              </div>
-              <h2 className="text-xl font-bold text-white font-['Space_Grotesk',sans-serif] mb-2">Admin Dashboard Locked</h2>
-              <p className="text-xs text-[#8b92a5] mb-6">Authentication is required to access the admin moderation console.</p>
-              <button
-                onClick={() => {
-                  setIsPasswordModalOpen(true);
-                  setAdminPasswordInput('');
-                  setAdminPasswordError(false);
-                }}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-[#9333ea] to-[#7c3aed] text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-purple-500/20 hover:scale-[1.02] transition-transform"
-              >
-                Enter Admin Password
-              </button>
-            </div>
-          )
+        {activeTab === 'admin' && isAdminAuthenticated && (
+          <AdminPanelView
+            onAnimeCreated={() => {
+              fetchCatalogList();
+            }}
+            onLogout={handleAdminLogout}
+            onNavigateHome={() => setActiveTab('home')}
+          />
         )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-8 px-4 sm:px-6 lg:px-8 mt-16 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center space-x-2">
-            <span className="font-black text-sm text-white tracking-tight font-['Space_Grotesk',sans-serif] lowercase">anidub</span>
-            <span className="text-orange-500 font-black text-sm font-['Space_Grotesk',sans-serif]">INDIA</span>
-          </div>
-          <div className="text-slate-500">
+      <footer className="border-t border-[#1c2236] bg-[#0a0c14] py-8 px-4 mt-12 text-center text-xs text-slate-500 font-['Inter',sans-serif]">
+        <div className="max-w-[510px] mx-auto flex flex-col items-center justify-center gap-2.5">
+          <img 
+            src="/anidub-logo.svg" 
+            alt="anidub INDIA" 
+            className="h-8 w-auto object-contain"
+          />
+          <div className="text-slate-500 text-[11px]">
             © 2026 Anidub India. All rights reserved.
           </div>
         </div>
