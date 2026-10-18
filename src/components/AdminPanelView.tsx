@@ -81,33 +81,95 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated, 
     }
   };
 
-  const handleSimulateImport = async () => {
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const parseCSV = (text: string): any[] => {
+    const lines = text.split(/\r\n|\n/);
+    if (lines.length === 0) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+    const results: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const row: string[] = [];
+      let insideQuote = false;
+      let currentVal = '';
+      for (let char of line) {
+        if (char === '"') {
+          insideQuote = !insideQuote;
+        } else if (char === ',' && !insideQuote) {
+          row.push(currentVal.trim().replace(/^"|"$/g, ''));
+          currentVal = '';
+        } else {
+          currentVal += char;
+        }
+      }
+      row.push(currentVal.trim().replace(/^"|"$/g, ''));
+
+      const obj: any = {};
+      headers.forEach((h, idx) => {
+        obj[h] = row[idx] || '';
+      });
+      results.push(obj);
+    }
+    return results;
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     setIsImporting(true);
     setUploadError('');
-    try {
-      const token = localStorage.getItem('cf_admin_token');
-      const res = await fetch('/api/admin/import-csv', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ simulate: true })
-      });
-      if (res.status === 401) {
-        setUploadError('Session expired or unauthorized. Please re-login.');
-        if (onLogout) onLogout();
-        return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsedAnimeList = parseCSV(text);
+
+        if (parsedAnimeList.length === 0) {
+          setUploadError('No valid rows found in CSV file.');
+          setIsImporting(false);
+          return;
+        }
+
+        const token = localStorage.getItem('cf_admin_token');
+        const res = await fetch('/api/anime/bulk', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({ animeList: parsedAnimeList })
+        });
+
+        if (res.status === 401) {
+          setUploadError('Session expired or unauthorized. Please re-login.');
+          if (onLogout) onLogout();
+          return;
+        }
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setImportedCount(data.count || parsedAnimeList.length);
+          setShowImportToast(true);
+          setTimeout(() => setShowImportToast(false), 5000);
+          fetchAnime();
+        } else {
+          setUploadError(data.error || 'Failed to import CSV entries.');
+        }
+      } catch (err: any) {
+        setUploadError(err.message || 'Failed to parse or upload CSV');
+      } finally {
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
-      const data = await res.json();
-      setImportedCount(data.count || 159);
-      setShowImportToast(true);
-      setTimeout(() => setShowImportToast(false), 5000);
-    } catch (err: any) {
-      setUploadError(err.message || 'Failed to import CSV');
-    } finally {
-      setIsImporting(false);
-    }
+    };
+    reader.readAsText(file);
   };
 
   const handleExportCsv = async () => {
@@ -542,13 +604,20 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated, 
 
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <button
-                onClick={handleSimulateImport}
+                onClick={() => fileInputRef.current?.click()}
                 disabled={isImporting}
                 className={`h-10 px-3.5 rounded-[16px] bg-[#1d1d21] border border-[#3a3a40] text-[#e5e7eb] text-[12.5px] font-semibold flex items-center space-x-1.5 hover:bg-[#25252b] transition-colors cursor-pointer ${isImporting ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {isImporting ? <Loader2 className="w-4 h-4 animate-spin text-purple-400" /> : <Upload className="w-4 h-4 text-slate-300" />}
                 <span>{isImporting ? 'Importing...' : 'Import CSV'}</span>
               </button>
+              <input 
+                type="file" 
+                accept=".csv" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                style={{ display: 'none' }} 
+              />
 
               <button
                 onClick={handleExportCsv}

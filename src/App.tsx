@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { CatalogView } from './components/CatalogView';
 import { AnimeDetailModal } from './components/AnimeDetailModal';
-import { AiRecommenderView } from './components/AiRecommenderView';
 import { AdminPanelView } from './components/AdminPanelView';
 import { PublicHomeView } from './components/PublicHomeView';
 import { RouletteModal } from './components/RouletteModal';
@@ -313,11 +312,7 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'recommender' && (
-          <AiRecommenderView
-            onSelectAnime={(anime) => setSelectedAnimeId(anime.id)}
-          />
-        )}
+
         {activeTab === 'admin' && isAdminAuthenticated && (
           <AdminPanelView
             onAnimeCreated={() => {

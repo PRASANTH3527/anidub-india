@@ -165,6 +165,10 @@ function runMigrations() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
+    try { db.run("ALTER TABLE anime ADD COLUMN languages TEXT DEFAULT 'HIN,TAM,TEL'"); } catch {}
+    try { db.run("ALTER TABLE anime ADD COLUMN platform TEXT DEFAULT 'Crunchyroll'"); } catch {}
+    try { db.run("ALTER TABLE anime ADD COLUMN type TEXT DEFAULT 'TV Series'"); } catch {}
+
     CREATE TABLE IF NOT EXISTS episodes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       anime_id INTEGER NOT NULL,
@@ -756,6 +760,65 @@ app.post('/api/anime', requireAdminAuth, (req, res) => {
     }).catch(e => console.error('Telegram notification error:', e));
 
     res.status(201).json({ success: true, animeId, slug });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/anime/bulk (Admin: Bulk insert anime from CSV import - Protected)
+app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
+  const start = Date.now();
+  try {
+    const { animeList } = req.body;
+    if (!Array.isArray(animeList) || animeList.length === 0) {
+      return res.status(400).json({ error: "Invalid or empty anime list provided for bulk import." });
+    }
+
+    let insertedCount = 0;
+    for (const item of animeList) {
+      const title = item.title || item.name || item.title_en;
+      if (!title) continue;
+
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const synopsis = item.synopsis || item.description || 'Imported via CSV bulk upload.';
+      const cover_image = item.cover_image || item.poster_url || item.image || 'https://i.ibb.co/vzS8G90/default-poster.jpg';
+      const banner_image = item.banner_image || cover_image;
+      const rating = parseFloat(item.rating || item.score) || 8.5;
+      const episodes_count = parseInt(item.episodes_count || item.episodes) || 12;
+      const status = item.status || 'pending'; // Default approval status set to 'pending'
+      const season = item.season || 'Spring';
+      const year = parseInt(item.year) || 2026;
+      const genres = item.genres || item.genre || 'Action,Fantasy';
+      const languages = item.languages || item.dub || 'HIN,TAM,TEL';
+      const platform = item.platform || 'Crunchyroll';
+      const type = item.type || 'TV Series';
+
+      db.run(
+        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, popularity, languages, platform, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          title,
+          slug,
+          synopsis,
+          cover_image,
+          banner_image,
+          rating,
+          episodes_count,
+          status,
+          season,
+          year,
+          genres,
+          Math.floor(Math.random() * 50000) + 20000,
+          languages,
+          platform,
+          type
+        ]
+      );
+      insertedCount++;
+    }
+
+    persistD1();
+    logCloudflareEvent('D1', 'POST /api/anime/bulk', 201, Date.now() - start, `Bulk imported ${insertedCount} anime entries as pending`);
+    res.json({ success: true, count: insertedCount });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
