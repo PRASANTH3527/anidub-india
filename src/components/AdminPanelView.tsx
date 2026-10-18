@@ -207,9 +207,25 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onAnimeCreated, 
     }, 2000);
   };
 
-  const handleApprovePending = (id: string) => {
-    setPendingItems(pendingItems.filter(p => p.id !== id));
-    setSuccessMsg('Anime entry approved and published to catalog!');
+  const handleApprovePending = async (id: string | number) => {
+    try {
+      const token = localStorage.getItem('cf_admin_token');
+      const res = await fetch(`/api/admin/approve/${id}`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
+      if (res.ok) {
+        setPendingItems(pendingItems.filter(p => p.id !== id));
+        setSuccessMsg('Anime entry approved and published to catalog!');
+        fetchAnime();
+      } else {
+        alert('Failed to approve anime entry');
+      }
+    } catch (err) {
+      console.error('Approval failed:', err);
+    }
   };
 
   const handleRejectPending = (id: string) => {

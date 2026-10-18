@@ -60,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-[#0a0a10] border-b border-[#1c1c26] h-[56px] pl-[12px] font-['Inter',sans-serif]">
+    <header className="sticky top-0 z-50 bg-[#0a0a10]/90 backdrop-blur-md border-b border-purple-500/20 h-[56px] pl-[12px] font-['Inter',sans-serif]">
       <div className="w-full max-w-[420px] mx-auto h-full flex items-center justify-between">
         
         {/* Logo (~84px wide block) */}
@@ -116,13 +116,17 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
 
         {/* Right Icons & Controls (flex-shrink 0, no overflow) */}
-        <div className="flex items-center shrink-0 pr-[6px]">
+        <div className="flex items-center shrink-0 space-x-1 pr-[6px]">
           
           {/* Compass */}
           <button
             onClick={() => setActiveTab('catalog')}
             title="Explore Catalog"
-            className="w-[32px] h-[32px] rounded-[10px] bg-[rgba(139,92,246,0.2)] border border-[rgba(139,92,246,0.6)] text-[#a78bfa] flex items-center justify-center shrink-0 shadow-sm mr-1"
+            className={`w-[32px] h-[32px] rounded-[10px] flex items-center justify-center shrink-0 shadow-sm transition-colors ${
+              activeTab === 'catalog' || activeTab === 'home'
+                ? 'bg-[#2e1065] border border-[#7e22ce] text-[#c084fc]'
+                : 'bg-transparent border-0 text-[#cbd5e1] hover:text-white'
+            }`}
           >
             <Compass className="w-4 h-4" />
           </button>
@@ -131,22 +135,33 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={() => setShowSearchInput(!showSearchInput)}
             title="Search"
-            className="w-[34px] h-[34px] bg-transparent border-0 text-[#cbd5e1] hover:text-white flex items-center justify-center shrink-0"
+            className="w-[30px] h-[30px] bg-transparent border-0 text-[#cbd5e1] hover:text-white flex items-center justify-center shrink-0"
           >
-            <Search className="w-[18px] h-[18px]" />
+            <Search className="w-[17px] h-[17px]" />
           </button>
 
-
+          {/* Sparkles */}
+          <button
+            onClick={() => setActiveTab('catalog')}
+            title="Recommendations"
+            className="w-[30px] h-[30px] bg-transparent border-0 text-[#cbd5e1] hover:text-white flex items-center justify-center shrink-0"
+          >
+            <Sparkles className="w-[17px] h-[17px]" />
+          </button>
 
           {/* Bookmark */}
           <button
             onClick={() => setActiveTab('watchlist')}
             title="Saved Watchlist"
-            className="w-[34px] h-[34px] bg-transparent border-0 text-[#cbd5e1] hover:text-white flex items-center justify-center shrink-0 relative"
+            className={`w-[30px] h-[30px] rounded-[10px] flex items-center justify-center shrink-0 relative transition-colors ${
+              activeTab === 'watchlist'
+                ? 'bg-[#1f122b] border border-[#f43f5e]/60 text-[#fb7185]'
+                : 'bg-transparent border-0 text-[#cbd5e1] hover:text-white'
+            }`}
           >
-            <Bookmark className="w-[18px] h-[18px]" />
+            <Bookmark className="w-[17px] h-[17px]" />
             {watchlistCount > 0 && (
-              <span className="absolute top-1 right-1 bg-orange-500 text-white text-[8px] font-bold w-[14px] h-[14px] rounded-full flex items-center justify-center shadow">
+              <span className="absolute -top-1 -right-1 bg-[#ef4444] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow">
                 {watchlistCount}
               </span>
             )}
@@ -154,35 +169,40 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Calendar */}
           <button
-            onClick={() => setActiveTab('catalog')}
+            onClick={() => setActiveTab('schedule')}
             title="Schedule & Releases"
-            className="w-[34px] h-[34px] bg-transparent border-0 text-[#cbd5e1] hover:text-white flex items-center justify-center shrink-0"
+            className={`w-[30px] h-[30px] rounded-[10px] flex items-center justify-center shrink-0 transition-colors ${
+              activeTab === 'schedule'
+                ? 'bg-[#2e1065] border border-[#7e22ce] text-[#c084fc] shadow-sm'
+                : 'bg-transparent border-0 text-[#cbd5e1] hover:text-white'
+            }`}
           >
-            <Calendar className="w-[18px] h-[18px]" />
+            <Calendar className="w-[17px] h-[17px]" />
           </button>
 
-          {/* Avatar (24px circle, 1.5px ring) */}
-          <div className="w-[24px] h-[24px] rounded-full bg-slate-800 flex items-center justify-center overflow-hidden border-[1.5px] border-[rgba(255,255,255,0.3)] shadow-sm cursor-pointer shrink-0 mx-0.5" title="User Profile">
-            <span className="text-[11px]">🍥</span>
+          {/* Avatar (Zoro green-haired anime avatar) */}
+          <div 
+            className="w-[26px] h-[26px] rounded-full bg-slate-800 flex items-center justify-center overflow-hidden border border-purple-500/40 shadow-sm cursor-pointer shrink-0" 
+            title="User Profile"
+          >
+            <img 
+              src="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=100&auto=format&fit=crop&q=80" 
+              alt="Avatar" 
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.src = 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=100&auto=format&fit=crop&q=80';
+              }}
+            />
           </div>
 
-          {/* Layers */}
-          <button
-            onClick={() => setActiveTab('catalog')}
-            title="Collections"
-            className="w-[34px] h-[34px] bg-transparent border-0 text-[#cbd5e1] hover:text-white flex items-center justify-center shrink-0"
-          >
-            <Layers className="w-[18px] h-[18px]" />
-          </button>
-
-          {/* Language pill (49x27, rounded-full, bg #14142a, 1px border rgba(139,92,246,.45)) */}
-          <div className="relative mx-0.5">
+          {/* Language pill: 文A தமிழ் */}
+          <div className="relative">
             <button
               onClick={() => setIsLangOpen(!isLangOpen)}
-              className="w-[49px] h-[27px] px-2 rounded-full bg-[#14142a] border border-[rgba(139,92,246,0.45)] text-purple-300 hover:text-white flex items-center justify-between text-xs transition-colors shadow-sm"
+              className="h-[26px] px-2.5 rounded-full bg-[#2e1065] border border-[#7e22ce] text-[#d8b4fe] hover:text-white flex items-center gap-1 text-[11px] font-semibold transition-colors shadow-sm"
             >
-              <Globe className="w-[14px] h-[14px] shrink-0" />
-              {isLangOpen ? <ChevronUp className="w-[10px] h-[10px] shrink-0" /> : <ChevronDown className="w-[10px] h-[10px] shrink-0" />}
+              <span>文A</span>
+              <span>தமிழ்</span>
             </button>
 
             {isLangOpen && (
@@ -224,12 +244,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
-          {/* Theme toggle (28x28, radius 9px, bg #17171c, 1px #2b2b33 border, 14px amber #fbbf24 sun) */}
+          {/* Theme toggle: circular with amber Sun */}
           <button
             title="Theme Toggle"
-            className="w-[28px] h-[28px] rounded-[9px] bg-[#17171c] border border-[#2b2b33] text-[#fbbf24] hover:bg-amber-500/10 flex items-center justify-center shrink-0 ml-1 shadow-sm"
+            className="w-[26px] h-[26px] rounded-full bg-[#111726] border border-[#1e263d] text-amber-400 hover:bg-amber-500/10 flex items-center justify-center shrink-0 shadow-sm"
           >
-            <Sun className="w-[14px] h-[14px]" />
+            <Sun className="w-[13px] h-[13px]" />
           </button>
 
         </div>

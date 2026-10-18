@@ -164,11 +164,13 @@ function runMigrations() {
       popularity INTEGER DEFAULT 1000,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
+  `);
 
-    try { db.run("ALTER TABLE anime ADD COLUMN languages TEXT DEFAULT 'HIN,TAM,TEL'"); } catch {}
-    try { db.run("ALTER TABLE anime ADD COLUMN platform TEXT DEFAULT 'Crunchyroll'"); } catch {}
-    try { db.run("ALTER TABLE anime ADD COLUMN type TEXT DEFAULT 'TV Series'"); } catch {}
+  try { db.run("ALTER TABLE anime ADD COLUMN languages TEXT DEFAULT 'HIN,TAM,TEL';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN platform TEXT DEFAULT 'Crunchyroll';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN type TEXT DEFAULT 'TV Series';"); } catch (e) {}
 
+  db.run(`
     CREATE TABLE IF NOT EXISTS episodes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       anime_id INTEGER NOT NULL,
@@ -819,6 +821,69 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
     persistD1();
     logCloudflareEvent('D1', 'POST /api/anime/bulk', 201, Date.now() - start, `Bulk imported ${insertedCount} anime entries as pending`);
     res.json({ success: true, count: insertedCount });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/anime/:id/vote (Community Upvote)
+app.post('/api/anime/:id/vote', (req, res) => {
+  try {
+    const animeId = req.params.id;
+    db.run("UPDATE anime SET popularity = popularity + 1 WHERE id = ?", [animeId]);
+    persistD1();
+    
+    const stmt = db.prepare("SELECT popularity FROM anime WHERE id = ?");
+    stmt.bind([animeId]);
+    let newPopularity = 1000;
+    if (stmt.step()) {
+      const row: any = stmt.getAsObject();
+      newPopularity = row.popularity;
+    }
+    stmt.free();
+
+    res.json({ success: true, popularity: newPopularity });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/anime/:id/rate (User Rating 1-10)
+app.post('/api/anime/:id/rate', (req, res) => {
+  try {
+    const animeId = req.params.id;
+    const { rating } = req.body;
+    const userRating = parseFloat(rating);
+    if (isNaN(userRating) || userRating < 1 || userRating > 10) {
+      return res.status(400).json({ error: "Rating must be between 1 and 10." });
+    }
+
+    const stmt = db.prepare("SELECT rating FROM anime WHERE id = ?");
+    stmt.bind([animeId]);
+    let currentRating = 8.5;
+    if (stmt.step()) {
+      const row: any = stmt.getAsObject();
+      currentRating = row.rating || 8.5;
+    }
+    stmt.free();
+
+    const newRating = Number(((currentRating + userRating) / 2).toFixed(1));
+    db.run("UPDATE anime SET rating = ? WHERE id = ?", [newRating, animeId]);
+    persistD1();
+
+    res.json({ success: true, rating: newRating });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/approve/:id (Admin: Approve pending anime - Protected)
+app.post('/api/admin/approve/:id', requireAdminAuth, (req, res) => {
+  try {
+    const animeId = req.params.id;
+    db.run("UPDATE anime SET status = 'Airing' WHERE id = ?", [animeId]);
+    persistD1();
+    res.json({ success: true, id: animeId, status: 'Airing' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

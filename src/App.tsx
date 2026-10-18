@@ -6,6 +6,9 @@ import { AdminPanelView } from './components/AdminPanelView';
 import { PublicHomeView } from './components/PublicHomeView';
 import { RouletteModal } from './components/RouletteModal';
 import { CreateCollectionModal } from './components/CreateCollectionModal';
+import { WeeklyScheduleView } from './components/WeeklyScheduleView';
+import { DubInfoModal } from './components/DubInfoModal';
+import { WatchlistView } from './components/WatchlistView';
 import { FALLBACK_SEED_ANIME } from './components/CatalogView';
 import { Bookmark, Tv, Star, Heart } from 'lucide-react';
 
@@ -89,6 +92,7 @@ export default function App() {
     return Boolean(localStorage.getItem('cf_admin_token'));
   });
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isDubModalOpen, setIsDubModalOpen] = useState(false);
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [adminPasswordError, setAdminPasswordError] = useState(false);
   const [adminPasswordLoading, setAdminPasswordLoading] = useState(false);
@@ -313,6 +317,24 @@ export default function App() {
         )}
 
 
+        {activeTab === 'schedule' && (
+          <WeeklyScheduleView
+            onSelectAnime={(anime) => setSelectedAnimeId(anime.id)}
+            watchlist={watchlist}
+            onToggleWatchlist={handleToggleWatchlist}
+            onOpenSubmitDubModal={() => setIsDubModalOpen(true)}
+          />
+        )}
+
+        {activeTab === 'watchlist' && (
+          <WatchlistView
+            watchlist={catalogList.filter(anime => watchlist.includes(anime.id))}
+            onSelectAnime={(anime) => setSelectedAnimeId(anime.id)}
+            onToggleWatchlist={handleToggleWatchlist}
+            onNavigateToCatalog={() => setActiveTab('home')}
+          />
+        )}
+
         {activeTab === 'admin' && isAdminAuthenticated && (
           <AdminPanelView
             onAnimeCreated={() => {
@@ -362,6 +384,18 @@ export default function App() {
         <CreateCollectionModal
           animeList={catalogList}
           onClose={() => setIsCollectionOpen(false)}
+        />
+      )}
+
+      {/* Submit Dub Info Modal */}
+      {isDubModalOpen && (
+        <DubInfoModal
+          isOpen={isDubModalOpen}
+          onClose={() => setIsDubModalOpen(false)}
+          onSubmit={(data) => {
+            console.log('Submitted dub info:', data);
+            setIsDubModalOpen(false);
+          }}
         />
       )}
 

@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   Star, 
   Tv, 
-  ChevronLeft, 
-  ChevronRight, 
   ChevronDown,
   Bookmark, 
   Dices, 
@@ -13,9 +11,8 @@ import {
   Sparkles, 
   CheckCircle2, 
   TrendingUp, 
-  Cloud,
-  Flag,
-  Check
+  Heart,
+  Loader2
 } from 'lucide-react';
 import { filterAndSortCatalog } from '../utils/pagination';
 
@@ -36,13 +33,6 @@ export interface Anime {
   languages?: string;
   platform?: string;
   type?: string;
-}
-
-interface PaginationData {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
 }
 
 interface CatalogViewProps {
@@ -194,7 +184,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   onOpenCollection
 }) => {
   const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(FALLBACK_SEED_ANIME);
-  const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 8, total: 8, totalPages: 1 });
   
   // Filter States
   const [selectedLanguage, setSelectedLanguage] = useState('All');
@@ -204,6 +193,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [selectedSort, setSelectedSort] = useState('popularity');
   const [loading, setLoading] = useState(false);
+
+  // Infinite Scroll States
+  const [visibleCount, setVisibleCount] = useState(8);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     fetchCatalogFromBackend();
@@ -242,260 +236,197 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     sort: selectedSort
   });
 
-  const itemsPerPage = 8;
-  const totalPages = Math.max(1, Math.ceil(filteredList.length / itemsPerPage));
-  const currentPage = Math.min(pagination.page, totalPages);
-  const offset = (currentPage - 1) * itemsPerPage;
-  const paginatedAnime = filteredList.slice(offset, offset + itemsPerPage);
+  // Reset visibleCount on filter or search change
+  useEffect(() => {
+    setVisibleCount(8);
+  }, [selectedLanguage, selectedGenre, selectedPlatform, selectedType, selectedStatus, selectedSort, searchQuery]);
+
+  // IntersectionObserver for Infinite Scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting && visibleCount < filteredList.length && !isLoadingMore) {
+          setIsLoadingMore(true);
+          setTimeout(() => {
+            setVisibleCount(prev => Math.min(prev + 8, filteredList.length));
+            setIsLoadingMore(false);
+          }, 400);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentSentinel = sentinelRef.current;
+    if (currentSentinel) {
+      observer.observe(currentSentinel);
+    }
+
+    return () => {
+      if (currentSentinel) {
+        observer.unobserve(currentSentinel);
+      }
+    };
+  }, [visibleCount, filteredList.length, isLoadingMore]);
+
+  const displayedAnime = filteredList.slice(0, visibleCount);
 
   return (
     <div className="w-full max-w-[420px] mx-auto px-[11px] overflow-x-hidden font-['Inter',sans-serif] text-slate-100">
       
-      {/* 2. Hero Section (exact margins: header > badge 41px) */}
-      <div className="text-center pt-[41px] max-w-2xl mx-auto">
-        
-        {/* Badge pill (~234px wide, h30, px14) */}
-        <div className="inline-flex items-center space-x-1.5 px-[14px] h-[30px] rounded-full bg-[rgba(76,29,149,0.8)] border border-[rgba(109,40,217,0.7)] text-[#c4b5fd] text-[10px] font-medium shadow-sm">
-          <Sparkles className="w-[13px] h-[13px] text-[#c4b5fd] shrink-0" />
-          <span>Official Indian Dubbed Anime Directory</span>
-        </div>
-
-        {/* Label (badge > label 20px) */}
-        <div className="text-[15px] font-bold text-[#ff5a1f] tracking-[0.08em] uppercase mt-[20px]" style={{ lineHeight: '19px' }}>
-          ANIDUB INDIA OFFICIAL WEBSITE
-        </div>
-
-        {/* H1 Title (label > H1 14px) */}
-        <h1 className="text-[22px] font-extrabold tracking-[-0.04em] px-[10px] mt-[14px]" style={{ lineHeight: '32px' }}>
-          <span className="text-white block">The Premier Destination for</span>
-          <span className="bg-gradient-to-r from-[#9333ea] to-[#6366f1] bg-clip-text text-transparent block whitespace-nowrap">
-            Anime Streaming & Dubbing in India
-          </span>
-        </h1>
-
-        {/* Paragraph (H1 > paragraph 17px, max-w-[372px], 11px, line-height 19.5px) */}
-        <p className="text-[11px] text-[#cbd5e1] max-w-[372px] mx-auto font-normal mt-[17px] text-center" style={{ lineHeight: '19.5px' }}>
+      {/* 1. HERO SUBTITLE & CTA BUTTONS */}
+      <div className="pt-4 px-5 text-center">
+        <p className="text-[13px] text-[#94a3b8] leading-relaxed max-w-md mx-auto">
           Discover officially dubbed anime in Tamil, Telugu, Hindi, Malayalam, and Kannada — streaming legally on Crunchyroll, Netflix, JioHotstar, and JioCinema.
         </p>
-
-        {/* Action Buttons */}
-        <div className="flex flex-col items-center">
-          {/* Button 1 (paragraph > button 1 20px, h40, px21, gap 8px, ~285px wide) */}
-          <button
-            onClick={onOpenRoulette}
-            className="inline-flex items-center justify-center h-[40px] px-[21px] rounded-full bg-gradient-to-r from-[#ff8a00] via-[#ff6a00] to-[#9333ea] hover:opacity-95 text-white font-semibold text-[11px] shadow-[0_0_20px_rgba(255,106,0,0.35)] transition-all cursor-pointer space-x-2 mt-[20px]"
-          >
-            <Dices className="w-[14px] h-[14px] text-white shrink-0" />
-            <span>Surprise Me Roulette</span>
-            <span className="inline-flex items-center space-x-1 h-[18px] px-[8px] rounded-full bg-[rgba(30,10,60,0.45)] border border-[rgba(255,255,255,0.2)] text-[#fde68a] text-[9px] font-bold uppercase tracking-[0.05em] ml-1">
-              <span>🎲</span>
-              <span>RANDOM PICK</span>
-            </span>
-          </button>
-
-          {/* Button 2 (button 1 > button 2 12px, h40, px22, gap 8px, ~239px wide) */}
-          <button
-            onClick={onOpenCollection}
-            className="inline-flex items-center justify-center h-[40px] px-[22px] rounded-full bg-[#141418] hover:bg-[#1a1a20] text-white font-medium text-[11px] border border-[#2a2a33] transition-all cursor-pointer space-x-2 mt-[12px]"
-          >
-            <Layers className="w-[14px] h-[14px] text-white shrink-0" />
-            <span>Create Collection</span>
-            <span className="inline-flex items-center h-[19px] px-[7px] rounded-full bg-transparent border border-[#8b5cf6] text-[#a78bfa] text-[9px] font-bold uppercase ml-1">
-              SHAREABLE
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* 3. Stat Cards (button 2 > stat cards 26px, padding 11px, gap 9px, 3 cards ~127px x 92px) */}
-      <div className="grid grid-cols-3 gap-[9px] w-full mt-[26px]">
         
-        {/* Card 1 */}
-        <div className="bg-[#0d0d16] border-2 border-[#e9e5ff] rounded-[14px] p-[10px] min-h-[92px] flex flex-col justify-between shadow-lg">
-          <div className="flex items-start justify-between">
-            <span className="text-[8px] font-semibold text-[#9ca3af] uppercase tracking-[0.08em]" style={{ lineHeight: 1.25 }}>
-              DUBBED TITLES
-            </span>
-            <div className="w-[20px] h-[20px] rounded-[6px] bg-purple-500/15 border-[1.5px] border-purple-500/50 text-purple-400 flex items-center justify-center shrink-0">
-              <Tv className="w-[11px] h-[11px]" />
-            </div>
-          </div>
-          <div>
-            <div className="text-[20px] font-extrabold text-white tracking-tight flex items-baseline">
-              <span>124</span>
-              <span className="text-purple-400 text-[10px] font-bold ml-0.5">+</span>
-            </div>
-            <p className="text-[8px] text-[#cbd5e1] mt-[6px] font-normal flex items-center space-x-1 truncate">
-              <CheckCircle2 className="w-[9px] h-[9px] text-emerald-400 shrink-0" />
-              <span className="truncate">Verified dubs</span>
-            </p>
-          </div>
-        </div>
+        {/* Surprise Me Roulette */}
+        <button
+          onClick={onOpenRoulette}
+          className="mt-5 w-full flex items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-[#f59e0b] via-[#ea580c] to-[#9333ea] px-5 py-3 shadow-[0_6px_25px_rgba(234,88,12,0.4)]"
+        >
+          <Dices className="w-[18px] h-[18px] text-white" />
+          <span className="text-[14px] font-extrabold text-white">Surprise Me Roulette</span>
+          <span className="bg-black/30 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase text-white inline-flex items-center gap-1">
+            🎲 RANDOM PICK
+          </span>
+        </button>
 
-        {/* Card 2 */}
-        <div className="bg-[#0d0d16] border-[1.5px] border-orange-500/45 rounded-[14px] p-[10px] min-h-[92px] flex flex-col justify-between shadow-lg">
-          <div className="flex items-start justify-between">
-            <span className="text-[8px] font-semibold text-[#9ca3af] uppercase tracking-[0.08em]" style={{ lineHeight: 1.25 }}>
-              COMMUNITY<br />VOTES
-            </span>
-            <div className="w-[20px] h-[20px] rounded-[6px] bg-orange-500/15 border-[1.5px] border-orange-500/50 text-orange-400 flex items-center justify-center shrink-0">
-              <Flame className="w-[11px] h-[11px]" />
-            </div>
-          </div>
-          <div>
-            <div className="text-[20px] font-extrabold text-white tracking-tight flex items-center space-x-1">
-              <span>0</span>
-              <span className="text-orange-500 text-[11px]">🔥</span>
-            </div>
-            <p className="text-[8px] text-[#cbd5e1] mt-[6px] font-normal flex items-center space-x-1 truncate">
-              <TrendingUp className="w-[9px] h-[9px] text-orange-400 shrink-0" />
-              <span className="truncate">Community upvotes</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Card 3 */}
-        <div className="bg-[#0d0d16] border-[1.5px] border-cyan-500/45 rounded-[14px] p-[10px] min-h-[92px] flex flex-col justify-between shadow-lg">
-          <div className="flex items-start justify-between">
-            <span className="text-[8px] font-semibold text-[#9ca3af] uppercase tracking-[0.08em]" style={{ lineHeight: 1.25 }}>
-              INDIAN<br />LANGUAGES
-            </span>
-            <div className="w-[20px] h-[20px] rounded-[6px] bg-cyan-500/15 border-[1.5px] border-cyan-500/50 text-cyan-400 flex items-center justify-center shrink-0">
-              <Languages className="w-[11px] h-[11px]" />
-            </div>
-          </div>
-          <div>
-            <div className="text-[20px] font-extrabold text-white tracking-tight flex items-baseline space-x-1">
-              <span>5</span>
-              <span className="text-[#22d3ee] text-[10px] font-semibold">Regions</span>
-            </div>
-            <p className="text-[8px] text-[#cbd5e1] mt-[6px] font-normal truncate">
-              Tamil • Telugu • Hindi
-            </p>
-          </div>
-        </div>
-
+        {/* Create Collection */}
+        <button
+          onClick={onOpenCollection}
+          className="mt-3 w-full flex items-center justify-center gap-2.5 rounded-full bg-[#111524] border border-[#262d47] px-5 py-2.5"
+        >
+          <Layers className="w-[16px] h-[16px] text-white" />
+          <span className="text-[13px] font-bold text-white">Create Collection</span>
+          <span className="bg-[#1e1436] border border-[#7e22ce] text-[#c084fc] text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full">
+            SHAREABLE
+          </span>
+        </button>
       </div>
 
-      {/* 4. Section Title (22px below cards, side padding 16px, line box 20px) */}
-      <div className="w-full mt-[22px] px-[16px]">
-        <div className="flex items-center h-[20px] space-x-[8px] text-[10px] font-bold text-[#e5e7eb] uppercase tracking-[0.05em]">
-          <Sparkles className="w-[14px] h-[14px] text-purple-400 shrink-0" />
-          <span>REGIONAL DUB AUDIO</span>
+      {/* 2. THREE-COLUMN STATS CARDS ROW */}
+      <div className="grid grid-cols-3 gap-2.5 px-3.5 mt-6">
+        <div className="bg-[#101424] border border-[#cbd5e1]/70 rounded-2xl p-3 flex flex-col justify-between">
+          <div className="flex justify-between items-start gap-1">
+            <span className="text-[9.5px] font-bold uppercase text-[#94a3b8] leading-tight">DUBBED TITLES</span>
+            <div className="w-7 h-7 rounded-full bg-[#24153d] border border-[#6b21a8] flex items-center justify-center shrink-0">
+              <Tv className="w-[13px] h-[13px] text-[#c084fc]" />
+            </div>
+          </div>
+          <div className="mt-2 text-[20px] font-extrabold text-white">99<span className="text-[#a855f7] text-sm font-bold ml-0.5">+</span></div>
+          <div className="mt-2 flex items-center gap-1 text-[10px] text-[#64748b]">
+            <CheckCircle2 className="w-[11px] h-[11px] text-[#10b981]" />
+            Verified dubs
+          </div>
         </div>
 
-        {/* 5. Chips (8px below title, side padding 12px, gap 9px, h32, px15, radius 12px, 11.5px semibold) */}
-        <div className="flex items-center gap-[9px] overflow-x-auto pb-1 pt-[8px] scrollbar-none whitespace-nowrap px-[12px]">
+        <div className="bg-[#14121d] border border-[#f97316]/30 rounded-2xl p-3 flex flex-col justify-between">
+          <div className="flex justify-between items-start gap-1">
+            <span className="text-[9.5px] font-bold uppercase text-[#94a3b8] leading-tight">COMMUNITY VOTES</span>
+            <div className="w-7 h-7 rounded-full bg-[#2a1710] border border-[#ea580c]/40 flex items-center justify-center shrink-0">
+              <Flame className="w-[13px] h-[13px] text-[#f97316]" />
+            </div>
+          </div>
+          <div className="mt-2 text-[20px] font-extrabold text-white">0<span className="text-sm ml-1">🔥</span></div>
+          <div className="mt-2 flex items-center gap-1 text-[10px] text-[#64748b] truncate">
+            <TrendingUp className="w-[11px] h-[11px] text-[#f97316]" />
+            Community upvotes
+          </div>
+        </div>
+
+        <div className="bg-[#0d1726] border border-[#0284c7]/40 rounded-2xl p-3 flex flex-col justify-between">
+          <div className="flex justify-between items-start gap-1">
+            <span className="text-[9.5px] font-bold uppercase text-[#94a3b8] leading-tight">INDIAN LANGUAGES</span>
+            <div className="w-7 h-7 rounded-full bg-[#0c243d] border border-[#0284c7]/50 flex items-center justify-center shrink-0">
+              <Languages className="w-[13px] h-[13px] text-[#38bdf8]" />
+            </div>
+          </div>
+          <div className="mt-2 text-[20px] font-extrabold text-white">5<span className="text-[11px] font-bold text-[#38bdf8] ml-1">Regions</span></div>
+          <div className="mt-2 text-[10px] text-[#64748b] truncate">Tamil • Telugu • Hindi</div>
+        </div>
+      </div>
+
+      {/* 3. REGIONAL DUB AUDIO FILTER PILLS */}
+      <div className="px-3.5 mt-6">
+        <div className="flex items-center gap-1.5 mb-2.5">
+          <Sparkles className="w-[14px] h-[14px] text-[#a855f7]" />
+          <span className="text-[11px] font-bold uppercase text-[#94a3b8] tracking-wider">REGIONAL DUB AUDIO</span>
+        </div>
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
           {REGIONAL_LANGUAGES.map((lang) => {
             const active = selectedLanguage === lang.value;
             return (
               <button
                 key={lang.value}
-                onClick={() => { setSelectedLanguage(lang.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className={`h-[32px] px-[15px] rounded-[12px] text-[11.5px] font-semibold transition-all shadow-sm flex items-center justify-center shrink-0 ${
+                onClick={() => setSelectedLanguage(lang.value)}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-[13px] font-semibold shrink-0 transition-all ${
                   active
-                    ? 'bg-gradient-to-r from-[#6d4aff] to-[#7c3aed] text-white shadow-[0_0_12px_rgba(109,74,255,0.4)]'
-                    : 'bg-[#12182f] border border-[#232b4a] text-[#e2e8f0] hover:bg-[#1a2240]'
+                    ? 'bg-gradient-to-r from-[#9333ea] to-[#6366f1] text-white font-bold shadow-[0_4px_15px_rgba(147,51,234,0.45)]'
+                    : 'bg-[#111626] border border-[#1e263d] text-[#cbd5e1]'
                 }`}
               >
-                <span>{lang.label}</span>
+                {lang.label}
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${active ? 'bg-black/30 text-white' : 'bg-[#0a0d16] text-[#94a3b8]'}`}>
+                  {lang.count}
+                </span>
               </button>
             );
           })}
         </div>
+      </div>
 
-        {/* 6. Filters (25px below chips, side padding 12px, gap 8px, SORT half width. h33, px11, radius 16px, label 8.5px, value 12px) */}
-        <div className="grid grid-cols-2 gap-[8px] px-[12px] pt-[25px]">
-          
-          {/* Genre */}
-          <div className="h-[33px] px-[11px] rounded-[16px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
-            <div className="flex items-center space-x-1.5 w-full overflow-hidden">
-              <span className="text-[8.5px] font-semibold text-[#9ca3af] uppercase tracking-wider shrink-0">GENRE</span>
-              <select
-                value={selectedGenre}
-                onChange={(e) => { setSelectedGenre(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="bg-transparent text-[12px] font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
-              >
-                {GENRES.map(g => <option key={g} value={g} className="bg-slate-950 text-white">{g === 'All' ? 'All Genres' : g}</option>)}
-              </select>
-            </div>
-            <ChevronDown className="w-[14px] h-[14px] text-slate-400 group-hover:text-purple-400 pointer-events-none shrink-0 ml-1" />
+      {/* 4. FILTER & SORT DROPDOWNS GRID */}
+      <div className="px-3.5 mt-3.5 grid grid-cols-2 gap-2.5">
+        
+
+        {/* Render Dropdowns */}
+        {[
+          { label: 'GENRE', val: selectedGenre, set: setSelectedGenre, opts: GENRES },
+          { label: 'PLATFORM', val: selectedPlatform, set: setSelectedPlatform, opts: PLATFORMS },
+          { label: 'TYPE', val: selectedType, set: setSelectedType, opts: TYPES },
+          { label: 'STATUS', val: selectedStatus, set: setSelectedStatus, opts: STATUSES }
+        ].map((item, i) => (
+          <div key={i} className="relative bg-[#111626] border border-[#1e263d] rounded-2xl px-3.5 h-11 flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase text-[#64748b] mr-2 shrink-0">{item.label}</span>
+            <select
+              value={item.val}
+              onChange={(e) => item.set(e.target.value)}
+              className="text-[13px] font-semibold text-[#e2e8f0] bg-transparent appearance-none flex-1 truncate pr-4 focus:outline-none"
+            >
+              {item.opts.map(o => <option key={o} value={o} className="bg-[#111626]">{o}</option>)}
+            </select>
+            <ChevronDown className="w-[14px] h-[14px] text-[#64748b] shrink-0 pointer-events-none" />
           </div>
-
-          {/* Platform */}
-          <div className="h-[33px] px-[11px] rounded-[16px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
-            <div className="flex items-center space-x-1.5 w-full overflow-hidden">
-              <span className="text-[8.5px] font-semibold text-[#9ca3af] uppercase tracking-wider shrink-0">PLATFORM</span>
-              <select
-                value={selectedPlatform}
-                onChange={(e) => { setSelectedPlatform(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="bg-transparent text-[12px] font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
-              >
-                {PLATFORMS.map(p => <option key={p} value={p} className="bg-slate-950 text-white">{p}</option>)}
-              </select>
-            </div>
-            <ChevronDown className="w-[14px] h-[14px] text-slate-400 group-hover:text-purple-400 pointer-events-none shrink-0 ml-1" />
-          </div>
-
-          {/* Type */}
-          <div className="h-[33px] px-[11px] rounded-[16px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
-            <div className="flex items-center space-x-1.5 w-full overflow-hidden">
-              <span className="text-[8.5px] font-semibold text-[#9ca3af] uppercase tracking-wider shrink-0">TYPE</span>
-              <select
-                value={selectedType}
-                onChange={(e) => { setSelectedType(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="bg-transparent text-[12px] font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
-              >
-                {TYPES.map(t => <option key={t} value={t} className="bg-slate-950 text-white">{t}</option>)}
-              </select>
-            </div>
-            <ChevronDown className="w-[14px] h-[14px] text-slate-400 group-hover:text-purple-400 pointer-events-none shrink-0 ml-1" />
-          </div>
-
-          {/* Status */}
-          <div className="h-[33px] px-[11px] rounded-[16px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group">
-            <div className="flex items-center space-x-1.5 w-full overflow-hidden">
-              <span className="text-[8.5px] font-semibold text-[#9ca3af] uppercase tracking-wider shrink-0">STATUS</span>
-              <select
-                value={selectedStatus}
-                onChange={(e) => { setSelectedStatus(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="bg-transparent text-[12px] font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
-              >
-                {STATUSES.map(s => <option key={s} value={s} className="bg-slate-950 text-white">{s === 'All' ? 'All Status' : s}</option>)}
-              </select>
-            </div>
-            <ChevronDown className="w-[14px] h-[14px] text-slate-400 group-hover:text-purple-400 pointer-events-none shrink-0 ml-1" />
-          </div>
-
-          {/* Sort (half width, col-span-1) */}
-          <div className="h-[33px] px-[11px] rounded-[16px] bg-[#0e1327] border border-[#1d2542] flex items-center justify-between cursor-pointer group col-span-1">
-            <div className="flex items-center space-x-1.5 w-full overflow-hidden">
-              <span className="text-[8.5px] font-semibold text-[#9ca3af] uppercase tracking-wider shrink-0">SORT</span>
-              <select
-                value={selectedSort}
-                onChange={(e) => { setSelectedSort(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-                className="bg-transparent text-[12px] font-medium text-white focus:outline-none cursor-pointer appearance-none truncate w-full"
-              >
-                {SORTS.map(s => <option key={s.value} value={s.value} className="bg-slate-950 text-white">{s.label}</option>)}
-              </select>
-            </div>
-            <ChevronDown className="w-[14px] h-[14px] text-slate-400 group-hover:text-purple-400 pointer-events-none shrink-0 ml-1" />
-          </div>
-
+        ))}
+        
+        {/* Sort (span 1) */}
+        <div className="relative bg-[#111626] border border-[#1e263d] rounded-2xl px-3.5 h-11 flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase text-[#64748b] mr-2 shrink-0">SORT</span>
+            <select
+              value={selectedSort}
+              onChange={(e) => setSelectedSort(e.target.value)}
+              className="text-[13px] font-semibold text-[#e2e8f0] bg-transparent appearance-none flex-1 truncate pr-4 focus:outline-none"
+            >
+              {SORTS.map(s => <option key={s.value} value={s.value} className="bg-[#111626]">{s.label}</option>)}
+            </select>
+            <ChevronDown className="w-[14px] h-[14px] text-[#64748b] shrink-0 pointer-events-none" />
         </div>
       </div>
 
-      {/* 7. Catalog List Grid */}
-      <div className="pt-4 px-[12px]">
-        <div className="flex items-center justify-between mb-3 text-[11px] text-slate-400">
-          <span className="flex items-center space-x-1">
-            <Sparkles className="w-3 h-3 text-purple-400" />
-            <span>Showing <strong className="text-white">{filteredList.length}</strong> Titles</span>
-          </span>
-          <span>2 Columns</span>
+      {/* 7. Catalog List Grid with exact matching design */}
+      <div className="pt-4 px-3.5">
+        
+        {/* 1. GRID HEADER ROW */}
+        <div className="flex items-center justify-between mb-3.5 px-0.5">
+          <div className="flex items-center space-x-1.5 text-[12px]">
+            <Sparkles className="w-[14px] h-[14px] text-[#a855f7]" />
+            <span className="text-[#94a3b8]">Showing <strong className="text-white font-bold">{filteredList.length}</strong> Titles</span>
+          </div>
+          <span className="text-[11px] text-[#64748b]">2 Columns • Smooth 60fps Virtualized</span>
         </div>
 
-        {paginatedAnime.length === 0 ? (
+        {displayedAnime.length === 0 ? (
           <div className="text-center py-16 bg-slate-900/50 rounded-2xl border border-slate-800">
             <p className="text-slate-400 text-xs">No anime matches your selected filters.</p>
             <button
@@ -512,19 +443,24 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {paginatedAnime.map((anime) => {
+          /* 2. CARD CONTAINER (grid-cols-2 gap-3.5 px-3.5) */
+          <div className="grid grid-cols-2 gap-3.5">
+            {displayedAnime.map((anime) => {
               const isWatchlisted = watchlist.includes(anime.id);
-              const langs = (anime.languages || 'HIN,TAM,TEL').split(',');
+              const langs = (anime.languages || 'HIN,TAM,TEL').split(',').map(l => l.trim());
+              const typeStr = anime.type || 'TV Series';
+              const yrStr = anime.year || 2026;
+              const plats = anime.platform ? anime.platform.split(',').map(p => p.trim()) : ['Crunchyroll'];
+              const platDisplay = plats.length === 1 ? plats[0] : plats.map(p => p[0].toUpperCase()).join(', ');
 
               return (
                 <div
                   key={anime.id}
                   onClick={() => onSelectAnime(anime)}
-                  className="group bg-[#0e1222] border border-[#1e2338] hover:border-purple-500/50 rounded-[16px] overflow-hidden shadow-lg transition-all duration-300 flex flex-col justify-between cursor-pointer"
+                  className="group bg-[#0e1320] border border-[#1c2235] rounded-2xl overflow-hidden flex flex-col justify-between cursor-pointer hover:border-[#2d3748] transition-all shadow-lg"
                 >
-                  {/* Vertical cover image */}
-                  <div className="relative aspect-[3/4] w-full overflow-hidden bg-slate-950">
+                  {/* 3. POSTER SECTION (2:3 Aspect Ratio) */}
+                  <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-950">
                     <img
                       src={anime.cover_image}
                       alt={anime.title}
@@ -533,78 +469,104 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                       }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0e1222] via-transparent to-black/30" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0e1320] via-transparent to-transparent pointer-events-none" />
 
-                    {/* Top-Left Overlays */}
-                    <div className="absolute top-2 left-2 flex flex-col items-start space-y-1 z-10">
-                      <div className="px-1.5 py-0.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[8px] font-extrabold flex items-center space-x-0.5 shadow-md">
-                        <Flame className="w-2.5 h-2.5 text-amber-300" />
-                        <span>TRENDING</span>
+                    {/* Top-Left Overlay */}
+                    <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5 z-10">
+                      {/* Trending Badge */}
+                      <div className="bg-gradient-to-r from-[#a855f7] to-[#7c3aed] rounded-full px-2.5 py-0.5 flex items-center space-x-1 shadow-md">
+                        <Flame className="w-[11px] h-[11px] text-white fill-white" />
+                        <span className="text-[10px] font-bold text-white uppercase tracking-wider">TRENDING</span>
+                      </div>
+                      {/* Offline Ready Badge */}
+                      <div className="bg-[#062e22]/90 border border-[#10b981]/50 rounded-full px-2.5 py-0.5 flex items-center space-x-1 shadow-md">
+                        <CheckCircle2 className="w-[10px] h-[10px] text-[#34d399]" />
+                        <span className="text-[10px] font-medium text-[#34d399]">Offline Ready</span>
                       </div>
                     </div>
 
-                    {/* Top-Right Overlays */}
-                    <div className="absolute top-2 right-2 flex items-center space-x-1 z-10">
+                    {/* Top-Right Overlay */}
+                    <div className="absolute top-2.5 right-2.5 flex items-center space-x-1.5 z-10">
                       <button 
                         onClick={(e) => { e.stopPropagation(); }} 
-                        className="w-5 h-5 rounded-full bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
-                        title="Cloud"
+                        className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-all shadow-md"
+                        title="Favorite"
                       >
-                        <Cloud className="w-2.5 h-2.5" />
+                        <Heart className="w-[13px] h-[13px]" />
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); onToggleWatchlist(anime.id); }}
-                        className="w-5 h-5 rounded-full bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md"
+                        className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-all shadow-md"
                         title="Bookmark"
                       >
-                        <Bookmark className={`w-2.5 h-2.5 ${isWatchlisted ? 'text-orange-400 fill-orange-500/45' : 'text-slate-300'}`} />
+                        <Bookmark className={`w-[13px] h-[13px] ${isWatchlisted ? 'text-orange-400 fill-orange-400' : 'text-white'}`} />
                       </button>
                     </div>
 
-                    {/* Bottom-Left Rating */}
-                    <div className="absolute bottom-2 left-2 flex items-center space-x-1 px-2 py-0.5 rounded-full bg-slate-950/85 backdrop-blur-md text-amber-400 text-[9.5px] font-bold border border-amber-500/30 shadow-md">
-                      <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                      <span>{anime.rating}/10</span>
+                    {/* Bottom-Left Rating Badge */}
+                    <div className="absolute bottom-2.5 left-2.5 z-10">
+                      <div className="bg-[#090b10]/95 border border-white/10 rounded-lg px-2.5 py-1 inline-flex items-center gap-1.5 shadow-md">
+                        <Star className="w-3 h-3 fill-[#f97316] text-[#f97316]" />
+                        <span className="text-[10px] font-bold text-[#f97316] uppercase tracking-wide">RATING</span>
+                        <span className="text-[11px] font-bold text-white">{anime.rating}/10</span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Below Image Content */}
-                  <div className="p-2.5 space-y-1.5 flex-1 flex flex-col justify-between">
+                  {/* 4. CARD BODY (p-3, bg-[#0e1320]) */}
+                  <div className="p-3 bg-[#0e1320] flex-1 flex flex-col justify-between">
                     <div>
-                      {/* Language small pills */}
-                      <div className="flex flex-wrap items-center gap-1 mb-1">
-                        {langs.map((l) => (
-                          <span
-                            key={l}
-                            className={`px-1 py-0.5 rounded text-[9px] font-black tracking-wide ${
-                              l.trim() === 'HIN' || l.trim() === 'Hindi'
-                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                                : l.trim() === 'TAM' || l.trim() === 'Tamil'
-                                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
-                                : l.trim() === 'TEL' || l.trim() === 'Telugu'
-                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-                                : 'bg-purple-500/20 text-purple-400 border border-purple-500/40'
-                            }`}
-                          >
-                            {l.trim()}
-                          </span>
-                        ))}
+                      {/* Row 1: Solid Language Pills */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {langs.map((l) => {
+                          const upper = l.toUpperCase();
+                          let bgClass = 'bg-[#059669]'; // default HIN
+                          let label = 'HIN';
+                          if (upper.includes('TAM')) { bgClass = 'bg-[#d97706]'; label = 'TAM'; }
+                          else if (upper.includes('TEL')) { bgClass = 'bg-[#0284c7]'; label = 'TEL'; }
+                          else if (upper.includes('MAL')) { bgClass = 'bg-[#9333ea]'; label = 'MAL'; }
+                          else if (upper.includes('HIN')) { bgClass = 'bg-[#059669]'; label = 'HIN'; }
+
+                          return (
+                            <span
+                              key={l}
+                              className={`${bgClass} rounded-md px-2 py-0.5 text-[10px] font-bold uppercase text-white shadow-sm`}
+                            >
+                              {label}
+                            </span>
+                          );
+                        })}
                       </div>
 
-                      {/* Title */}
-                      <h3 className="font-bold text-white text-[11px] line-clamp-2 group-hover:text-orange-400 transition-colors leading-snug">
+                      {/* Row 2: Anime Title */}
+                      <h3 className="font-bold text-white text-[15px] truncate mt-2 leading-snug">
                         {anime.title}
                       </h3>
+
+                      {/* Row 3: Format & Year Subtitle */}
+                      <div className="text-[11px] text-[#8b92a5] mt-0.5">
+                        {typeStr} • {yrStr}
+                      </div>
                     </div>
 
-                    {/* Footer Row */}
-                    <div className="pt-1.5 border-t border-[#1c2236] flex items-center justify-between text-[10px] text-slate-400">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-800/80 text-[9px] font-semibold text-slate-300">
-                        {anime.platform || 'Crunchyroll'}
+                    {/* Row 4: Footer Bar */}
+                    <div className="mt-3 pt-2.5 border-t border-[#1a2035] flex items-center justify-between gap-1 text-[11px]">
+                      {/* Left: Platform */}
+                      <span className="bg-[#151b2d] border border-[#232b42] rounded-md px-2 py-0.5 text-[#94a3b8] font-medium truncate">
+                        {platDisplay}
                       </span>
-                      <span className="text-purple-400 font-semibold group-hover:underline">
-                        Details →
-                      </span>
+
+                      {/* Right: Counters */}
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        <div className="bg-[#151b2d] border border-[#232b42] rounded-full px-2 py-0.5 flex items-center space-x-1">
+                          <Heart className="w-[11px] h-[11px] text-[#94a3b8]" />
+                          <span className="text-[11px] text-[#cbd5e1]">{Math.floor((anime.popularity || 1000) / 100)}</span>
+                        </div>
+                        <div className="bg-[#151b2d] border border-[#232b42] rounded-full px-2 py-0.5 flex items-center space-x-1">
+                          <Flame className="w-[11px] h-[11px] text-[#94a3b8]" />
+                          <span className="text-[11px] text-[#cbd5e1]">{anime.popularity || 1200}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -612,36 +574,20 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             })}
           </div>
         )}
-      </div>
 
-      {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 shadow-xl mt-6">
-          <div className="text-[11px] text-slate-400">
-            Page <span className="font-bold text-slate-200">{currentPage}</span> of <span className="font-bold text-slate-200">{totalPages}</span>
-          </div>
-
-          <div className="flex items-center space-x-1.5">
-            <button
-              onClick={() => setPagination(prev => ({ ...prev, page: Math.max(prev.page - 1, 1) }))}
-              disabled={currentPage === 1}
-              className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span>Prev</span>
-            </button>
-
-            <button
-              onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.page + 1, totalPages) }))}
-              disabled={currentPage === totalPages}
-              className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <span>Next</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+        {/* Intersection Observer Sentinel & Loading Spinner */}
+        <div ref={sentinelRef} className="py-8 flex items-center justify-center">
+          {isLoadingMore && (
+            <div className="flex items-center space-x-2 text-purple-400 text-xs font-semibold">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Loading more anime titles...</span>
+            </div>
+          )}
+          {visibleCount >= filteredList.length && filteredList.length > 0 && (
+            <span className="text-slate-500 text-[11px]">You've reached the end of the catalog 🎉</span>
+          )}
         </div>
-      )}
+      </div>
 
     </div>
   );
