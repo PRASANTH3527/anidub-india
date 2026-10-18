@@ -10,17 +10,41 @@ interface AdminLoginModalProps {
 export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === 'prasanth123') {
-      setError(false);
-      setPassword('');
-      onSuccess();
-    } else {
-      setError(true);
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.token) {
+        localStorage.setItem('cf_admin_token', data.token);
+        setError(false);
+        setPassword('');
+        onSuccess();
+      } else {
+        setError(true);
+      }
+    } catch (err) {
+      // Fallback
+      if (password === 'prasanth123') {
+        localStorage.setItem('cf_admin_token', 'local_admin_session');
+        setError(false);
+        setPassword('');
+        onSuccess();
+      } else {
+        setError(true);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

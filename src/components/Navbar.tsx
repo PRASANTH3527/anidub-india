@@ -42,6 +42,22 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [selectedLang, setSelectedLang] = useState('en');
   const [showSearchInput, setShowSearchInput] = useState(false);
   const [logoClicks, setLogoClicks] = useState(0);
+  const clickTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const handleLogoClick = () => {
+    if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
+    const newCount = logoClicks + 1;
+    if (newCount >= 5) {
+      setLogoClicks(0);
+      onUnlockAdmin();
+    } else {
+      setLogoClicks(newCount);
+      clickTimeoutRef.current = setTimeout(() => {
+        setLogoClicks(0);
+      }, 3000);
+      setActiveTab('catalog');
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-[#0a0a10]/90 backdrop-blur-md border-b border-[#1c1c26] h-16">
@@ -49,16 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         
         {/* Left: Logo mark + stacked wordmark */}
         <div 
-          onClick={() => {
-            const newCount = logoClicks + 1;
-            setLogoClicks(newCount);
-            if (newCount === 5) {
-              setLogoClicks(0);
-              onUnlockAdmin();
-            } else {
-              setActiveTab('catalog');
-            }
-          }} 
+          onClick={handleLogoClick}
           className="flex items-center space-x-2.5 cursor-pointer group select-none"
           title="anidub INDIA"
         >

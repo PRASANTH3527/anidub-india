@@ -85,9 +85,84 @@ export default function App() {
     }
   };
 
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    return Boolean(localStorage.getItem('cf_admin_token'));
+  });
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [adminPasswordError, setAdminPasswordError] = useState(false);
+  const [adminPasswordLoading, setAdminPasswordLoading] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem('cf_admin_token');
+    if (token) {
+      fetch('/api/admin/verify', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(res => {
+        if (res.ok) {
+          setIsAdminAuthenticated(true);
+        } else {
+          localStorage.removeItem('cf_admin_token');
+          setIsAdminAuthenticated(false);
+          if (activeTab === 'admin') setActiveTab('catalog');
+        }
+      }).catch(() => {
+        // Fallback for offline mode
+      });
+    }
+  }, []);
+
+  const handleAdminPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminPasswordLoading(true);
+    setAdminPasswordError(false);
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPasswordInput })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.token) {
+        localStorage.setItem('cf_admin_token', data.token);
+        setIsAdminAuthenticated(true);
+        setActiveTab('admin');
+        setIsPasswordModalOpen(false);
+        setAdminPasswordInput('');
+        setAdminPasswordError(false);
+      } else {
+        setAdminPasswordError(true);
+      }
+    } catch (err) {
+      if (adminPasswordInput === 'prasanth123') {
+        localStorage.setItem('cf_admin_token', 'local_admin_session');
+        setIsAdminAuthenticated(true);
+        setActiveTab('admin');
+        setIsPasswordModalOpen(false);
+        setAdminPasswordInput('');
+        setAdminPasswordError(false);
+      } else {
+        setAdminPasswordError(true);
+      }
+    } finally {
+      setAdminPasswordLoading(false);
+    }
+  };
+
+  const handleAdminLogout = async () => {
+    try {
+      const token = localStorage.getItem('cf_admin_token');
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
+    } catch {}
+    localStorage.removeItem('cf_admin_token');
+    setIsAdminAuthenticated(false);
+    setActiveTab('catalog');
+  };
 
   return (
     <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col font-['Outfit',sans-serif]">
@@ -100,9 +175,13 @@ export default function App() {
         searchQuery={searchQuery}
         setSearchQuery={(q) => { setSearchQuery(q); if (activeTab !== 'catalog') setActiveTab('catalog'); }}
         onUnlockAdmin={() => {
-          setIsPasswordModalOpen(true);
-          setAdminPasswordInput('');
-          setAdminPasswordError(false);
+          if (isAdminAuthenticated) {
+            setActiveTab('admin');
+          } else {
+            setIsPasswordModalOpen(true);
+            setAdminPasswordInput('');
+            setAdminPasswordError(false);
+          }
         }}
       />
 
@@ -238,11 +317,33 @@ export default function App() {
           />
         )}
         {activeTab === 'admin' && (
-          <AdminPanelView
-            onAnimeCreated={() => {
-              fetchCatalogList();
-            }}
-          />
+          isAdminAuthenticated ? (
+            <AdminPanelView
+              onAnimeCreated={() => {
+                fetchCatalogList();
+              }}
+              onLogout={handleAdminLogout}
+              onNavigateHome={() => setActiveTab('catalog')}
+            />
+          ) : (
+            <div className="max-w-md mx-auto my-20 p-8 rounded-3xl bg-[#0e1325] border border-[#1f2640] shadow-2xl text-center">
+              <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center mx-auto mb-4 text-purple-400">
+                🔒
+              </div>
+              <h2 className="text-xl font-bold text-white font-['Space_Grotesk',sans-serif] mb-2">Admin Dashboard Locked</h2>
+              <p className="text-xs text-[#8b92a5] mb-6">Authentication is required to access the admin moderation console.</p>
+              <button
+                onClick={() => {
+                  setIsPasswordModalOpen(true);
+                  setAdminPasswordInput('');
+                  setAdminPasswordError(false);
+                }}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-[#9333ea] to-[#7c3aed] text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-purple-500/20 hover:scale-[1.02] transition-transform"
+              >
+                Enter Admin Password
+              </button>
+            </div>
+          )
         )}
       </main>
 
@@ -299,17 +400,7 @@ export default function App() {
             </div>
 
             <form 
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (adminPasswordInput === 'prasanth123') {
-                  setActiveTab('admin');
-                  setIsPasswordModalOpen(false);
-                  setAdminPasswordInput('');
-                  setAdminPasswordError(false);
-                } else {
-                  setAdminPasswordError(true);
-                }
-              }}
+              onSubmit={handleAdminPasswordSubmit}
               className="space-y-4"
             >
               <div>
@@ -341,9 +432,10 @@ export default function App() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-bold transition-all shadow-lg shadow-orange-500/20"
+                  disabled={adminPasswordLoading}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-bold transition-all shadow-lg shadow-orange-500/20 disabled:opacity-50"
                 >
-                  Unlock Admin
+                  {adminPasswordLoading ? 'Validating...' : 'Unlock Admin'}
                 </button>
               </div>
             </form>
