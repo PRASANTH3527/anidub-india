@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  Volume2, 
   Compass, 
   Search, 
   Sparkles, 
@@ -10,7 +9,7 @@ import {
   Globe, 
   ChevronUp, 
   ChevronDown, 
-  Moon, 
+  Sun,
   Check,
   X
 } from 'lucide-react';
@@ -45,10 +44,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [logoClicks, setLogoClicks] = useState(0);
 
   return (
-    <header className="sticky top-0 z-50 bg-[#0b0f19]/80 backdrop-blur-md border-b border-white/5">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header className="sticky top-0 z-50 bg-[#0a0a10]/90 backdrop-blur-md border-b border-[#1c1c26] h-16">
+      <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
         
-        {/* Brand Clean Text Logo with 5-click Easter Egg for Admin Unlock */}
+        {/* Left: Logo mark + stacked wordmark */}
         <div 
           onClick={() => {
             const newCount = logoClicks + 1;
@@ -60,30 +59,36 @@ export const Navbar: React.FC<NavbarProps> = ({
               setActiveTab('catalog');
             }
           }} 
-          className="flex items-center space-x-2 cursor-pointer group select-none"
+          className="flex items-center space-x-2.5 cursor-pointer group select-none"
           title="anidub INDIA"
         >
-          {/* Small orange audio horn icon from reference screenshot */}
-          <div className="text-orange-500">
-            <Volume2 className="w-5 h-5 fill-orange-500 text-orange-500" />
+          {/* Logo Mark: Orange gradient play-triangle with headphone/sound arcs */}
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-sm shrink-0">
+            <svg className="w-3.5 h-3.5 text-white fill-white" viewBox="0 0 24 24">
+              <path d="M5 3l14 9-14 9V3z" />
+            </svg>
           </div>
+          {/* Stacked Wordmark */}
           <div className="flex flex-col">
-            <div className="flex items-center space-x-1 leading-none">
-              <span className="font-bold text-lg text-white font-['Space_Grotesk',sans-serif] tracking-tight">anidub</span>
-              <span className="font-bold text-lg text-orange-500 font-['Space_Grotesk',sans-serif]">INDIA</span>
-            </div>
-            <div className="flex items-center space-x-1 text-[8px] font-bold text-slate-500 tracking-wider uppercase mt-0.5">
-              <span>INDIA</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-              <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <span className="font-bold text-[20px] text-[#ff6a00] font-['Space_Grotesk',sans-serif] tracking-tight leading-none lowercase">
+              anidub
+            </span>
+            <div className="flex items-center space-x-1.5 mt-0.5">
+              <span className="font-bold text-[10px] text-slate-400 font-['Space_Grotesk',sans-serif] tracking-[0.2em] uppercase leading-none">
+                INDIA
+              </span>
+              <div className="flex items-center space-x-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#ff9933]"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-[#138808]"></span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Search Overlay (if active) */}
+        {/* Search Overlay */}
         {showSearchInput && (
-          <div className="absolute inset-x-0 top-0 h-16 bg-[#0B0F17] px-4 flex items-center z-50 border-b border-slate-800">
+          <div className="absolute inset-x-0 top-0 h-16 bg-[#0a0a10] px-4 flex items-center z-50 border-b border-[#1c1c26]">
             <Search className="w-4 h-4 text-slate-400 mr-2" />
             <input
               type="text"
@@ -102,55 +107,55 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         )}
 
-        {/* Small Horizontal Nav Icons (Pixel-perfect to reference screenshot) */}
-        <div className="flex items-center space-x-2 sm:space-x-3">
+        {/* Right: Exact order 34px buttons, 4px gap, 20px icons */}
+        <div className="flex items-center space-x-1 sm:space-x-1.5">
           
-          {/* 1. Compass / Explore icon in purple circle */}
+          {/* 1. Compass */}
           <button
             onClick={() => setActiveTab('catalog')}
             title="Explore Catalog"
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+            className={`w-[34px] h-[34px] rounded-xl flex items-center justify-center transition-all ${
               activeTab === 'catalog' 
-                ? 'bg-purple-900/60 text-purple-300 border border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.3)]' 
-                : 'text-slate-400 hover:text-purple-300 hover:bg-slate-900'
+                ? 'bg-purple-950/60 text-purple-300 border border-purple-500/50 shadow-sm' 
+                : 'bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-purple-300'
             }`}
           >
-            <Compass className="w-4 h-4" />
+            <Compass className="w-5 h-5" />
           </button>
 
-          {/* 2. Search Icon */}
+          {/* 2. Search */}
           <button
             onClick={() => setShowSearchInput(!showSearchInput)}
             title="Search"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+            className="w-[34px] h-[34px] rounded-xl bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-white flex items-center justify-center transition-colors"
           >
-            <Search className="w-4 h-4" />
+            <Search className="w-5 h-5" />
           </button>
 
-          {/* 3. AI Recommender / Sparkles */}
+          {/* 3. Sparkles */}
           <button
             onClick={() => setActiveTab('recommender')}
             title="AI Recommender"
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+            className={`w-[34px] h-[34px] rounded-xl flex items-center justify-center transition-all ${
               activeTab === 'recommender'
-                ? 'bg-purple-900/60 text-purple-300 border border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.3)]'
-                : 'text-slate-400 hover:text-amber-400 hover:bg-slate-900'
+                ? 'bg-purple-950/60 text-purple-300 border border-purple-500/50 shadow-sm'
+                : 'bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-amber-400'
             }`}
           >
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="w-5 h-5" />
           </button>
 
-          {/* 4. Bookmark / Saved Watchlist */}
+          {/* 4. Bookmark (Badge ONLY when count > 0) */}
           <button
             onClick={() => setActiveTab('watchlist')}
             title="Saved Watchlist"
-            className={`w-8 h-8 rounded-full flex items-center justify-center relative transition-all ${
+            className={`w-[34px] h-[34px] rounded-xl flex items-center justify-center relative transition-all ${
               activeTab === 'watchlist'
-                ? 'bg-purple-900/60 text-purple-300 border border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.3)]'
-                : 'text-slate-400 hover:text-orange-400 hover:bg-slate-900'
+                ? 'bg-purple-950/60 text-purple-300 border border-purple-500/50 shadow-sm'
+                : 'bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-orange-400'
             }`}
           >
-            <Bookmark className="w-4 h-4" />
+            <Bookmark className="w-5 h-5" />
             {watchlistCount > 0 && (
               <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
                 {watchlistCount}
@@ -158,42 +163,39 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          {/* 5. Calendar / Schedule */}
+          {/* 5. Calendar */}
           <button
             onClick={() => setActiveTab('catalog')}
             title="Schedule & Releases"
-            className="w-8 h-8 rounded-full hidden xs:flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+            className="w-[34px] h-[34px] rounded-xl bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-white flex items-center justify-center transition-colors"
           >
-            <Calendar className="w-4 h-4" />
+            <Calendar className="w-5 h-5" />
           </button>
 
-          {/* 6. Naruto Avatar Icon matching reference screenshot */}
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center overflow-hidden border border-amber-400/50 shadow-sm cursor-pointer shrink-0" title="User Profile">
+          {/* 6. Avatar (28px circle, Naruto anime character avatar, thin light ring) */}
+          <div className="w-[28px] h-[28px] rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center overflow-hidden border border-white/25 shadow-sm cursor-pointer shrink-0" title="User Profile">
             <span className="text-xs">🍥</span>
           </div>
 
-
-
-          {/* 7. Layers Icon */}
+          {/* 7. Layers (my collections) */}
           <button
             onClick={() => setActiveTab('catalog')}
             title="Collections"
-            className="w-8 h-8 rounded-full hidden sm:flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+            className="w-[34px] h-[34px] rounded-xl bg-[#0f1328] border border-[#1d2542] text-slate-300 hover:text-white flex items-center justify-center transition-colors"
           >
-            <Layers className="w-4 h-4" />
+            <Layers className="w-5 h-5" />
           </button>
 
-          {/* 8. Language Selector Pill (🌐 ^) with Dropdown */}
+          {/* 8. Language pill (purple globe + chevron-down, rounded-full, ~60x34, purple-tinted border) */}
           <div className="relative">
             <button
               onClick={() => setIsLangOpen(!isLangOpen)}
-              className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-slate-900/90 border border-slate-700/80 text-purple-300 hover:text-white text-xs font-semibold hover:border-purple-500/50 transition-colors"
+              className="h-[34px] px-3 rounded-full bg-[#0f1328] border border-purple-500/40 text-purple-300 hover:text-white flex items-center space-x-1.5 text-xs font-semibold transition-colors"
             >
-              <Globe className="w-3.5 h-3.5" />
+              <Globe className="w-4 h-4" />
               {isLangOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
 
-            {/* Language Dropdown (Exact match to screenshot) */}
             {isLangOpen && (
               <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#0E131F] border border-slate-700/80 shadow-2xl p-2 z-50">
                 <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">
@@ -233,12 +235,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
-          {/* 9. Moon Theme Icon */}
+          {/* 9. Theme toggle (amber sun in 34px rounded-xl dark button with 1px border) */}
           <button
-            title="Dark Theme Active"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-purple-400 hover:bg-slate-900 transition-colors"
+            title="Theme Toggle"
+            className="w-[34px] h-[34px] rounded-xl bg-[#0f1328] border border-[#1d2542] text-amber-400 hover:bg-amber-500/10 flex items-center justify-center transition-colors"
           >
-            <Moon className="w-4 h-4" />
+            <Sun className="w-5 h-5" />
           </button>
 
         </div>
