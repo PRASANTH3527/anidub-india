@@ -165,6 +165,11 @@ function runMigrations() {
       release_year INTEGER,
       genres TEXT NOT NULL,
       popularity INTEGER DEFAULT 1000,
+      languages TEXT DEFAULT 'Hindi, Tamil, Telugu',
+      platform TEXT DEFAULT 'Crunchyroll',
+      type TEXT DEFAULT 'TV Series',
+      studio TEXT DEFAULT 'Unknown Studio',
+      submissionStatus TEXT DEFAULT 'approved',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -172,7 +177,7 @@ function runMigrations() {
   try { db.run("ALTER TABLE anime ADD COLUMN poster_url TEXT;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN release_season TEXT;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN release_year INTEGER;"); } catch (e) {}
-  try { db.run("ALTER TABLE anime ADD COLUMN languages TEXT DEFAULT 'HIN,TAM,TEL';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN languages TEXT DEFAULT 'Hindi, Tamil, Telugu';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN platform TEXT DEFAULT 'Crunchyroll';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN type TEXT DEFAULT 'TV Series';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN studio TEXT DEFAULT 'Unknown Studio';"); } catch (e) {}
@@ -640,7 +645,7 @@ app.post('/api/anime', (req, res) => {
         parseInt(finalYear) || 2026, // release_year
         genres || 'Action,Fantasy',
         finalStatus === 'pending' ? 0 : 1000,
-        languages || 'HIN,TAM,TEL',
+        languages || 'Hindi, Tamil, Telugu',
         platform || 'Crunchyroll',
         type || 'TV Series',
         studio || 'Unknown Studio'
@@ -832,6 +837,8 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
       year, 
       release_year, 
       genres, 
+      languages,
+      platform,
       studio 
     } = req.body;
 
@@ -855,6 +862,8 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         year = COALESCE(?, year),
         release_year = COALESCE(?, release_year),
         genres = COALESCE(?, genres),
+        languages = COALESCE(?, languages),
+        platform = COALESCE(?, platform),
         studio = COALESCE(?, studio)
       WHERE id = ?`,
       [
@@ -872,6 +881,8 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         finalYear !== undefined ? parseInt(finalYear) : null,
         finalYear !== undefined ? parseInt(finalYear) : null,
         genres,
+        languages,
+        platform,
         studio,
         id
       ]

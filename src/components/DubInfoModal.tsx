@@ -60,6 +60,24 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       : ['Action', 'Fantasy']
   );
   
+  const parseLangs = (input: any): DubLanguage[] => {
+    if (Array.isArray(input)) return input as DubLanguage[];
+    if (!input || typeof input !== 'string') return ['Hindi', 'Tamil', 'Telugu'] as DubLanguage[];
+    
+    const raw = input.split(',').map(s => s.trim());
+    return raw.map(lang => {
+      const l = lang.toUpperCase();
+      if (l === 'HIN' || l.includes('HINDI')) return 'Hindi';
+      if (l === 'TAM' || l.includes('TAMIL')) return 'Tamil';
+      if (l === 'TEL' || l.includes('TELUGU')) return 'Telugu';
+      if (l === 'MAL' || l.includes('MALAYALAM')) return 'Malayalam';
+      if (l === 'KAN' || l.includes('KANNADA')) return 'Kannada';
+      if (l === 'ENG' || l.includes('ENGLISH')) return 'English';
+      if (l === 'JAP' || l.includes('JAPANESE')) return 'Japanese';
+      return lang;
+    }).filter(l => ALL_LANGS.includes(l as any)) as DubLanguage[];
+  };
+
   // Advanced Progress Tracking
   const [seasonDetails, setSeasonDetails] = useState<{ 
     type: 'Season' | 'OVA' | 'Movie' | 'Special' | 'ONA'; 
@@ -69,12 +87,10 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   }[]>(
     initialData ? [
       { 
-        type: 'Season', 
+        type: (initDataAny?.type as any) || 'Season', 
         label: initialData.release_season || initDataAny?.season || '1', 
         episodeCount: initialData.episodes_count || 12, 
-        languages: (Array.isArray(initialData.languages) 
-          ? initialData.languages 
-          : (initialData.languages || 'Tamil, Hindi').split(',').map(s => s.trim())) as DubLanguage[]
+        languages: parseLangs(initialData.languages)
       }
     ] : [
       { type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil', 'Hindi'] }
@@ -94,9 +110,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       { 
         name: initialData.platform || 'Crunchyroll', 
         url: '', 
-        languages: (Array.isArray(initialData.languages) 
-          ? initialData.languages 
-          : (initialData.languages || 'Tamil, Hindi').split(',').map(s => s.trim())) as DubLanguage[]
+        languages: parseLangs(initialData.languages)
       }
     ] : [
       { name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] }
