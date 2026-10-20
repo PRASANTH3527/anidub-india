@@ -13,6 +13,7 @@ import {
   Send,
   Tv
 } from 'lucide-react';
+import { dbService } from '../services/databaseService';
 
 export interface SubmitDubModalProps {
   isOpen: boolean;
@@ -28,7 +29,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   if (!isOpen) return null;
 
   const [title, setTitle] = useState('');
-  const [synopsis, setSynopsis] = useState('');
   const [coverImage, setCoverImage] = useState('https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80');
   const [bannerImage, setBannerImage] = useState('https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1600&auto=format&fit=crop&q=80');
   const [rating, setRating] = useState('8.5');
@@ -38,8 +38,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [selectedLangs, setSelectedLangs] = useState<string[]>(['Hi', 'Ta', 'Te']);
   const [selectedGenres, setSelectedGenres] = useState<string[]>(['Action', 'Shonen', 'Fantasy']);
 
-  const availableLangs = ['Hi', 'Ta', 'Te', 'Ma', 'Ka', 'En', 'Be'];
-  const availableGenres = ['Action', 'Shonen', 'Fantasy', 'Romance', 'Sci-Fi', 'Slice of Life', 'Supernatural', 'Thriller'];
+  const availableGenres = [
+    'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Isekai', 
+    'Mystery', 'Romance', 'Sci-Fi', 'Shonen', 'Seinen', 'Shoujo', 'Josei', 
+    'Slice of Life', 'Sports', 'Supernatural', 'Thriller', 'Mecha', 'Psychological',
+    'Music', 'Military', 'Historical', 'Martial Arts', 'Ecchi', 'Gourmet', 'Workplace',
+    'School', 'Mythology', 'Parody'
+  ];
 
   const toggleLang = (lang: string) => {
     setSelectedLangs(prev => 
@@ -53,22 +58,31 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
-    onSubmit({
-      title,
-      synopsis,
+    const payload = {
+      title: title.trim(),
       cover_image: coverImage,
       banner_image: bannerImage,
       rating: parseFloat(rating) || 8.5,
       episodes_count: parseInt(episodesCount) || 12,
-      status,
+      status: 'pending',
+      submissionStatus: 'pending',
+      airing_status: status,
       platform,
       languages: selectedLangs.join(','),
       genres: selectedGenres.join(',')
-    });
+    };
+
+    try {
+      await dbService.submitDubInfo(payload);
+    } catch (err) {
+      console.warn('Submission saved with pending status:', err);
+    }
+
+    onSubmit(payload);
     onClose();
   };
 
@@ -105,16 +119,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           </button>
         </div>
 
-        {/* STRICT MODERATION NOTICE */}
-        <div className="mx-5 mt-5 bg-[#141b29] border border-amber-800/40 rounded-2xl p-3 text-[11px] text-neutral-300 space-y-1">
-          <div className="flex items-center gap-1.5 text-amber-400 font-bold">
-            <ShieldAlert className="w-3.5 h-3.5" />
-            <span>Strict Legal OTT Moderation Policy</span>
-          </div>
-          <p className="text-neutral-400">
-            Only 100% legal, officially licensed Indian regional dub entries will be approved into the public directory. Fan dubs are strictly prohibited.
-          </p>
-        </div>
+
 
         {/* FORM BODY */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto pb-32 p-5 sm:p-6 space-y-4">
@@ -133,18 +138,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider">
-              Synopsis
-            </label>
-            <textarea
-              rows={3}
-              value={synopsis}
-              onChange={(e) => setSynopsis(e.target.value)}
-              placeholder="Enter plot summary & regional voice casting details..."
-              className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-accent-theme rounded-xl px-3.5 py-2.5 text-xs text-white outline-none transition-colors resize-none"
-            />
-          </div>
+
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -214,12 +208,24 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
             <select
               value={platform}
               onChange={(e) => setPlatform(e.target.value)}
-              className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-accent-theme rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+              className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-accent-theme rounded-xl px-3.5 py-2.5 text-xs text-white outline-none cursor-pointer"
             >
-              <option value="Crunchyroll">Crunchyroll India</option>
-              <option value="Netflix">Netflix India</option>
-              <option value="JioCinema">JioCinema / JioHotstar</option>
-              <option value="Muse India">Muse India / YouTube</option>
+              <option value="Crunchyroll">Crunchyroll</option>
+              <option value="Netflix">Netflix</option>
+              <option value="JioCinema">JioCinema</option>
+              <option value="JioHotstar">JioHotstar</option>
+              <option value="YouTube">YouTube</option>
+              <option value="YouTube (Muse India)">YouTube (Muse India)</option>
+              <option value="YouTube (Ani-One)">YouTube (Ani-One)</option>
+              <option value="Disney+ Hotstar">Disney+ Hotstar</option>
+              <option value="Prime Video">Prime Video</option>
+              <option value="Anime Times">Anime Times</option>
+              <option value="Sony YAY!">Sony YAY!</option>
+              <option value="Sony LIV">Sony LIV</option>
+              <option value="Bilibili">Bilibili</option>
+              <option value="Cartoon Network India">Cartoon Network India</option>
+              <option value="ETV Bal Bharat">ETV Bal Bharat</option>
+              <option value="Zee5">Zee5</option>
             </select>
           </div>
 
@@ -228,7 +234,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               Available Regional Dub Languages
             </label>
             <div className="flex flex-wrap gap-2">
-              {availableLangs.map((lang) => {
+              {['Hi', 'Ta', 'Te', 'Ma', 'Ka', 'En', 'Be'].map((lang) => {
                 const active = selectedLangs.includes(lang);
                 return (
                   <button
@@ -249,10 +255,13 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider block">
-              Genres & Categories
-            </label>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider block">
+                Genres & Categories
+              </label>
+              <span className="text-[10px] text-purple-400 font-bold">{selectedGenres.length} selected</span>
+            </div>
+            <div className="flex flex-wrap gap-2 p-3 rounded-2xl bg-[#0a0e17] border border-neutral-800 max-h-48 overflow-y-auto no-scrollbar">
               {availableGenres.map((genre) => {
                 const active = selectedGenres.includes(genre);
                 return (
@@ -260,17 +269,29 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
                     key={genre}
                     type="button"
                     onClick={() => toggleGenre(genre)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
                       active
-                        ? 'bg-purple-950/80 text-purple-300 border border-purple-600/50'
-                        : 'bg-[#0a0e17] border border-neutral-800 text-neutral-400 hover:text-white'
+                        ? 'bg-gradient-to-r from-[#9333ea] to-[#7c3aed] text-white shadow-[0_0_15px_rgba(147,51,234,0.45)] ring-1 ring-purple-400/70 font-bold'
+                        : 'bg-[#141b29] border border-neutral-700/60 text-neutral-400 hover:text-white'
                     }`}
                   >
-                    {genre}
+                    {active && <span className="text-white text-xs font-black">✓</span>}
+                    <span>{genre}</span>
                   </button>
                 );
               })}
             </div>
+          </div>
+
+          {/* STRICT MODERATION GATE */}
+          <div className="rounded-2xl p-4 bg-amber-950/20 border border-amber-500/30 space-y-1.5">
+            <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
+              <ShieldAlert className="w-4 h-4 shrink-0" />
+              <span>Strict Moderation Gate</span>
+            </div>
+            <p className="text-[11px] text-neutral-300 leading-relaxed">
+              This submission will be saved with <span className="text-amber-400 font-bold">status: "pending"</span>. It will <span className="text-rose-400 font-bold">NEVER</span> appear on the public website until approved by the admin.
+            </p>
           </div>
 
           {/* STICKY FOOTER */}

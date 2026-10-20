@@ -11,7 +11,7 @@ import { WatchlistView } from './components/WatchlistView';
 import { ProfileView } from './components/ProfileView';
 import { AnimeTierListMaker } from './components/AnimeTierListMaker';
 import { RecommendationSystem } from './components/RecommendationSystem';
-import { Footer } from './components/Footer';
+import { FeedbackSection } from './components/FeedbackSection';
 import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown } from 'lucide-react';
 
 export default function App() {
@@ -65,7 +65,11 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.data && data.data.length > 0) {
-          setCatalogList(data.data);
+          const approvedOnly = data.data.filter((item: any) => 
+            item.status !== 'pending' && 
+            item.submissionStatus !== 'pending'
+          );
+          setCatalogList(approvedOnly);
         }
       }
     } catch (err) {
@@ -95,6 +99,16 @@ export default function App() {
     try {
       localStorage.removeItem('cf_anime_recently_viewed');
     } catch {}
+  };
+
+  const handleRemoveRecentlyViewedItem = (animeId: number) => {
+    setRecentlyViewed(prev => {
+      const updated = prev.filter(item => item.id !== animeId);
+      try {
+        localStorage.setItem('cf_anime_recently_viewed', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   const handleToggleWatchlist = async (animeId: number) => {
@@ -222,6 +236,8 @@ export default function App() {
         onOpenCollection={() => setIsCollectionOpen(true)}
         feedView={feedView}
         setFeedView={setFeedView}
+        isAdminAuthenticated={isAdminAuthenticated}
+        onLogout={handleAdminLogout}
       />
 
       {/* 2. ADMIN DASHBOARD (When active in admin mode) */}
@@ -265,6 +281,7 @@ export default function App() {
             feedView={feedView}
             recentlyViewed={recentlyViewed}
             onClearRecentlyViewed={handleClearRecentlyViewed}
+            onRemoveRecentlyViewedItem={handleRemoveRecentlyViewedItem}
           />
         )}
 
@@ -339,21 +356,9 @@ export default function App() {
         )}
       </main>
 
-      {/* FOOTER */}
-      <Footer
-        onNavigate={(tab) => {
-          if (tab === 'collection') setIsCollectionOpen(true);
-          else if (tab === 'roulette') setIsRouletteOpen(true);
-          else setActiveTab(tab);
-        }}
-        onFilterLanguage={() => {
-          setActiveTab('home');
-          setFeedView('library');
-        }}
-        onFilterPlatform={() => {
-          setActiveTab('home');
-          setFeedView('library');
-        }}
+      {/* FEEDBACK SECTION / FOOTER */}
+      <FeedbackSection
+        onSubmitDub={() => setIsDubModalOpen(true)}
       />
 
 

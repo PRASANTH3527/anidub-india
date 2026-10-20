@@ -1,598 +1,723 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
-  X, Film, ShieldAlert, Sparkles, Tv, Plus, Trash2, Check, 
-  Send, Globe, Link as LinkIcon, Languages, Star, AlertTriangle
+  X, 
+  Search, 
+  CheckCircle2, 
+  ShieldAlert, 
+  Tv, 
+  Film,
+  Sparkles,
+  Upload,
+  Plus,
+  Trash2,
+  Loader2,
+  Send
 } from 'lucide-react';
+import { AnimeRecord, DubLanguage, dbService } from '../services/databaseService';
 
 interface DubInfoModalProps {
   isOpen: boolean;
   mode?: 'submit' | 'edit';
-  initialData?: any;
+  initialData?: AnimeRecord | null;
   onClose: () => void;
-  onSubmit: (data: any) => void;
+  onSubmit: (updatedAnime?: AnimeRecord) => void;
 }
+
+const ALL_LANGS: DubLanguage[] = ['Tamil', 'Telugu', 'Hindi', 'Malayalam', 'Kannada', 'English', 'Japanese'];
+const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
+const AVAILABLE_GENRES = [
+  'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Isekai', 
+  'Mystery', 'Romance', 'Sci-Fi', 'Shonen', 'Seinen', 'Shoujo', 'Josei', 
+  'Slice of Life', 'Sports', 'Supernatural', 'Thriller', 'Mecha', 'Psychological',
+  'Music', 'Military', 'Historical', 'Martial Arts', 'Ecchi', 'Gourmet', 'Workplace',
+  'School', 'Mythology', 'Parody'
+];
 
 export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   isOpen,
   mode = 'submit',
   initialData,
   onClose,
-  onSubmit
+  onSubmit,
 }) => {
   if (!isOpen) return null;
 
+  const initDataAny = initialData as any;
+
+  // Form Fields
   const [title, setTitle] = useState(initialData?.title || '');
-  const [synopsis, setSynopsis] = useState(initialData?.synopsis || '');
-  const [coverImage, setCoverImage] = useState(initialData?.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80');
-  const [bannerImage, setBannerImage] = useState(initialData?.banner_image || 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1600&auto=format&fit=crop&q=80');
-  const [rating, setRating] = useState(initialData?.rating ? String(initialData.rating) : '7.8');
-  const [episodesCount, setEpisodesCount] = useState(initialData?.episodes_count ? String(initialData.episodes_count) : '12');
-  const [status, setStatus] = useState<'Ongoing' | 'Completed'>(
-    initialData?.status?.toLowerCase() === 'ongoing' || initialData?.status?.toLowerCase() === 'airing' ? 'Ongoing' : 'Completed'
+  const [romajiTitle, setRomajiTitle] = useState(initialData?.japanese_title || '');
+  const [poster, setPoster] = useState(initialData?.poster_url || initDataAny?.cover_image || '');
+  const [releaseYear, setReleaseYear] = useState<number | ''>(initialData?.release_year || new Date().getFullYear());
+  const [rating, setRating] = useState<number | ''>(initialData?.rating !== undefined ? initialData.rating : '');
+  const [type, setType] = useState<string>('TV Series');
+  const [studio, setStudio] = useState(initialData?.studio || '');
+  const [genres, setGenres] = useState<string[]>(
+    initialData?.genres 
+      ? (typeof initialData.genres === 'string' ? initialData.genres.split(',').map((g: string) => g.trim()) : initialData.genres)
+      : ['Action', 'Fantasy']
   );
-  const [ongoingSeason, setOngoingSeason] = useState(initialData?.season || 'Season 1');
-  const [ongoingEpisode, setOngoingEpisode] = useState('Episode 12');
-  const [season, setSeason] = useState(initialData?.season || 'Spring');
-  const [year, setYear] = useState(initialData?.year ? String(initialData.year) : '2025');
-  const [animationStudio, setAnimationStudio] = useState(initialData?.animation_studio || 'Liden Films');
   
-  // Platform links state
-  const [platforms, setPlatforms] = useState<Array<{ name: string; url: string }>>(
-    initialData?.platforms || [
-      { name: 'Crunchyroll', url: 'https://www.crunchyroll.com/series/example' },
-      { name: 'Netflix', url: 'https://www.netflix.com/title/example' }
-    ]
+  // Advanced Progress Tracking
+  const [seasonDetails, setSeasonDetails] = useState<{ 
+    type: 'Season' | 'OVA' | 'Movie' | 'Special' | 'ONA'; 
+    label: string; 
+    episodeCount: number | ''; 
+    languages: DubLanguage[];
+  }[]>([
+    { type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil', 'Hindi'] }
+  ]);
+
+  const [currentSeason, setCurrentSeason] = useState<string>('');
+  const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number | ''>('');
+
+  // Multi-Platform Links
+  const [streamingPartners, setStreamingPartners] = useState<{ 
+    name: string; 
+    url: string;
+    languages: DubLanguage[];
+  }[]>([
+    { name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] }
+  ]);
+
+  const [airingStatus, setAiringStatus] = useState<'Ongoing' | 'Completed'>(
+    initialData?.status?.toLowerCase() === 'airing' || initialData?.status?.toLowerCase() === 'ongoing' ? 'Ongoing' : 'Completed'
   );
+  const [releaseDay, setReleaseDay] = useState<string>('Saturday');
 
-  // Mixed entries state (dynamic rows)
-  const [entries, setEntries] = useState<Array<{ type: string; season: string; episode: string; languages: string[] }>>(
-    initialData?.entries || [
-      { type: 'TV Series', season: 'Season 1', episode: '1-12', languages: ['Hi', 'Ta', 'Te'] },
-      { type: 'Movie', season: 'Movie 1', episode: 'Full Movie', languages: ['Hi', 'Ta'] }
-    ]
-  );
+  // Submission State
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
 
-  // Available Languages short pills
-  const shortLangs = ['Ta', 'Te', 'Hi', 'Ma', 'Ka', 'Be', 'En'];
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Genres state
-  const selectedGenresList = initialData?.genres 
-    ? initialData.genres.split(',').map((g: string) => g.trim()) 
-    : ['Action', 'Fantasy', 'Romance'];
-  const [selectedGenres, setSelectedGenres] = useState<string[]>(selectedGenresList);
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const availableGenres = [
-    'Action', 'Adventure', 'Comedy', 'Drama', 
-    'Fantasy', 'Horror', 'Isekai', 'Mystery', 
-    'Romance', 'Sci-Fi', 'Shonen', 'Seinen', 
-    'Shoujo', 'Josei', 'Slice of Life', 'Sports'
-  ];
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      setPoster(base64String);
+    };
+    reader.readAsDataURL(file);
+  };
 
-  const platformOptions = ['Crunchyroll', 'Netflix', 'JioCinema', 'Disney+ Hotstar', 'Amazon Prime', 'Muse India', 'Ani-One India'];
+  const addStreamingPartner = () => {
+    setStreamingPartners([...streamingPartners, { name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] }]);
+  };
+
+  const removeStreamingPartner = (index: number) => {
+    if (streamingPartners.length > 1) {
+      setStreamingPartners(streamingPartners.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateStreamingPartner = (index: number, field: 'name' | 'url' | 'languages', value: any) => {
+    const updated = [...streamingPartners];
+    updated[index] = { ...updated[index], [field]: value };
+    setStreamingPartners(updated);
+  };
+
+  const addEntry = () => {
+    const lastEntry = seasonDetails[seasonDetails.length - 1];
+    let nextLabel = '1';
+    if (lastEntry && lastEntry.type === 'Season' && !isNaN(parseInt(lastEntry.label))) {
+      nextLabel = (parseInt(lastEntry.label) + 1).toString();
+    } else {
+      nextLabel = (seasonDetails.length + 1).toString();
+    }
+    setSeasonDetails([...seasonDetails, { 
+      type: 'Season', 
+      label: nextLabel, 
+      episodeCount: 12, 
+      languages: lastEntry?.languages || ['Tamil'] 
+    }]);
+  };
+
+  const removeEntry = (index: number) => {
+    if (seasonDetails.length > 1) {
+      setSeasonDetails(seasonDetails.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateEntryField = (index: number, field: 'type' | 'label' | 'episodeCount' | 'languages', value: any) => {
+    const updated = [...seasonDetails];
+    if (field === 'episodeCount') {
+      updated[index] = { ...updated[index], episodeCount: value === '' ? '' : parseInt(value) || 0 };
+    } else if (field === 'languages') {
+      updated[index] = { ...updated[index], languages: value };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
+    setSeasonDetails(updated);
+  };
+
+  const toggleLangForEntry = (entryIdx: number, lang: DubLanguage) => {
+    const currentLangs = seasonDetails[entryIdx].languages || [];
+    let updatedLangs: DubLanguage[];
+    if (currentLangs.includes(lang)) {
+      updatedLangs = currentLangs.filter(l => l !== lang);
+    } else {
+      updatedLangs = [...currentLangs, lang];
+    }
+    updateEntryField(entryIdx, 'languages', updatedLangs);
+  };
 
   const toggleGenre = (genre: string) => {
-    if (selectedGenres.includes(genre)) {
-      setSelectedGenres(selectedGenres.filter(g => g !== genre));
+    if (genres.includes(genre)) {
+      setGenres(genres.filter((g) => g !== genre));
     } else {
-      setSelectedGenres([...selectedGenres, genre]);
+      setGenres([...genres, genre]);
     }
   };
 
-  const handleAddPlatform = () => {
-    setPlatforms([...platforms, { name: 'Crunchyroll', url: '' }]);
-  };
-
-  const handleRemovePlatform = (index: number) => {
-    setPlatforms(platforms.filter((_, i) => i !== index));
-  };
-
-  const handlePlatformChange = (index: number, field: 'name' | 'url', value: string) => {
-    const updated = [...platforms];
-    updated[index][field] = value;
-    setPlatforms(updated);
-  };
-
-  const handleAddEntry = () => {
-    setEntries([...entries, { type: 'TV Series', season: `Season ${entries.length + 1}`, episode: '1-12', languages: ['Hi'] }]);
-  };
-
-  const handleRemoveEntry = (index: number) => {
-    if (entries.length <= 1) return;
-    setEntries(entries.filter((_, i) => i !== index));
-  };
-
-  const handleEntryChange = (index: number, field: 'type' | 'season' | 'episode', value: string) => {
-    const updated = [...entries];
-    updated[index][field] = value;
-    setEntries(updated);
-  };
-
-  const toggleLangForEntry = (entryIdx: number, lang: string) => {
-    const updated = [...entries];
-    const currLangs = updated[entryIdx].languages;
-    if (currLangs.includes(lang)) {
-      updated[entryIdx].languages = currLangs.filter(l => l !== lang);
-    } else {
-      updated[entryIdx].languages = [...currLangs, lang];
-    }
-    setEntries(updated);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
-    // Collect all languages from entries
-    const allLangs = Array.from(new Set(entries.flatMap(e => e.languages)));
+    const rawLanguages = Array.from(new Set(
+      seasonDetails.flatMap(s => s.languages || [])
+    )) as DubLanguage[];
+    const derivedGlobalDubs = rawLanguages.length > 0 ? rawLanguages : (['Tamil', 'Hindi'] as DubLanguage[]);
 
-    onSubmit({
-      title,
-      synopsis,
-      cover_image: coverImage,
-      banner_image: bannerImage,
-      rating: parseFloat(rating) || 7.5,
-      episodes_count: parseInt(episodesCount) || 12,
-      status: status === 'Ongoing' ? 'Ongoing' : 'Completed',
-      season: status === 'Ongoing' ? ongoingSeason : season,
-      year: parseInt(year) || 2025,
-      animation_studio: animationStudio,
-      genres: selectedGenres.join(','),
-      languages: allLangs.join(','),
-      platforms,
-      entries
-    });
+    setIsSubmitting(true);
+
+    try {
+      const defaultCover =
+        poster.trim() ||
+        'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
+
+      const totalEpisodes = seasonDetails.reduce((acc, s) => acc + (Number(s.episodeCount) || 0), 0);
+      
+      const parsedRating = (rating !== '' && rating !== undefined) ? Number(rating) : 7.8;
+      const parsedYear = releaseYear ? Number(releaseYear) : 2025;
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+      const payload = {
+        title: title.trim(),
+        slug,
+        cover_image: defaultCover,
+        banner_image: defaultCover,
+        rating: parsedRating,
+        episodes_count: totalEpisodes || 12,
+        status: 'pending',
+        submissionStatus: 'pending',
+        airing_status: airingStatus === 'Ongoing' ? 'Airing' : 'Completed',
+        languages: derivedGlobalDubs.join(', '),
+        platform: streamingPartners[0]?.name || 'Crunchyroll',
+        type,
+        season: 'Spring',
+        year: parsedYear,
+        genres: Array.isArray(genres) ? genres.join(',') : genres,
+        popularity: 1000
+      };
+
+      const res = await fetch('/api/anime', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error('Failed to submit anime');
+
+      setIsSuccess(true);
+      setTimeout(() => {
+        setIsSuccess(false);
+        onClose();
+        onSubmit();
+      }, 2000);
+    } catch (err: any) {
+      console.error('[Submission error]:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
+  const platformOptions = [
+    'Crunchyroll',
+    'Netflix',
+    'JioCinema',
+    'JioHotstar',
+    'YouTube',
+    'YouTube (Muse India)',
+    'YouTube (Ani-One)',
+    'Disney+ Hotstar',
+    'Prime Video',
+    'Anime Times',
+    'Sony YAY!',
+    'Sony LIV',
+    'Bilibili',
+    'Cartoon Network India',
+    'ETV Bal Bharat',
+    'Zee5'
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-[4px] flex items-center justify-center p-3 sm:p-4">
-      
-      {/* 1) MODAL SHELL */}
-      <div className="relative w-full max-w-[510px] h-[calc(100dvh-40px)] my-[20px] mx-[16px] rounded-[32px] bg-[#0d1225] border border-[#d4d4d8] overflow-hidden flex flex-col shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto font-sans">
+      <div 
+        onClick={onClose}
+        className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity"
+      />
+
+      <div className="relative w-full max-w-xl bg-[#111726]/95 border border-primary-theme/30 rounded-3xl shadow-2xl overflow-hidden z-10 my-auto text-neutral-100 backdrop-blur-xl max-h-[90vh] flex flex-col font-sans">
         
-        {/* 2) HEADER (Fixed) */}
-        <div className="shrink-0 p-[28px] bg-gradient-to-r from-[#2b1760] to-[#121734] border-b border-[#1f2645] flex items-center justify-between gap-4">
-          <div className="flex items-center space-x-4">
-            <div className="w-10 h-10 rounded-[14px] bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] border border-[#8b5cf6] flex items-center justify-center text-[#e9d5ff] shrink-0 shadow-lg">
-              <Film className="w-5 h-5" />
+        {/* HEADER */}
+        <div className="p-5 border-b border-neutral-800 flex items-center justify-between bg-gradient-to-r from-purple-950/40 via-transparent to-transparent shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 shrink-0">
+              <Film className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-[20px] font-bold text-white font-['Space_Grotesk',sans-serif] leading-tight">
+              <h3 className="font-heading font-black text-lg text-white leading-tight">
                 {mode === 'edit' ? 'Edit Anime Info' : 'Submit Dub Info'}
-              </h2>
-              <div className="flex items-center space-x-1.5 mt-1">
-                <ShieldAlert className="w-4 h-4 text-[#fbbf24] shrink-0" />
-                <span className="text-[12px] font-medium text-[#fbbf24]">
-                  Strict Moderation: Requires Admin Approval
-                </span>
-              </div>
+              </h3>
+              <p className="text-[11px] text-amber-400 font-semibold flex items-center gap-1 mt-0.5">
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>Strict Moderation: Requires Admin Approval</span>
+              </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-slate-900/60 hover:bg-slate-800 border border-slate-700/50 flex items-center justify-center text-[#cbd5e1] transition-colors shrink-0 cursor-pointer"
-            title="Close"
+            className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* 3) BODY (Scrolling) */}
-        <div className="flex-1 overflow-y-auto p-[24px] space-y-[28px] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:bg-[#3a3f55] [&::-webkit-scrollbar-thumb]:rounded-full">
-          
-          <form id="dub-info-form" onSubmit={handleSubmit} className="space-y-[28px]">
-            
-            {/* Title Field */}
-            <div className="space-y-[10px]">
-              <div className="flex items-center justify-between">
-                <label className="text-[13px] font-semibold text-white">
-                  Anime Title <span className="text-[#8b92a5] font-normal text-[11px]">(Required)</span>
-                </label>
-                <span className="text-[11px] font-medium text-[#a855f7]">Verified Catalog</span>
-              </div>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Agents of the Four Seasons"
-                required
-                className="w-full h-10 rounded-full px-4 bg-[#121830] border border-[#262d4a] text-white text-[14px] placeholder-[#6b7280] focus:outline-none focus:border-[#a855f7] focus:ring-[3px] focus:ring-[#a855f7]/25 transition-all"
-              />
-            </div>
-
-            {/* Poster & Banner Image URLs */}
-            <div className="space-y-[10px]">
-              <label className="text-[13px] font-semibold text-white block">
-                Poster Image URL <span className="text-[#8b92a5] font-normal text-[11px]">(2:3 aspect)</span>
-              </label>
-              <input
-                type="url"
-                value={coverImage}
-                onChange={(e) => setCoverImage(e.target.value)}
-                placeholder="https://..."
-                required
-                className="w-full h-10 rounded-full px-4 bg-[#121830] border border-[#262d4a] text-white text-[14px] placeholder-[#6b7280] focus:outline-none focus:border-[#a855f7] focus:ring-[3px] focus:ring-[#a855f7]/25 transition-all"
-              />
-            </div>
-
-            <div className="space-y-[10px]">
-              <label className="text-[13px] font-semibold text-white block">
-                Banner Image URL <span className="text-[#8b92a5] font-normal text-[11px]">(16:9 aspect) (Optional)</span>
-              </label>
-              <input
-                type="url"
-                value={bannerImage}
-                onChange={(e) => setBannerImage(e.target.value)}
-                placeholder="https://..."
-                className="w-full h-10 rounded-full px-4 bg-[#121830] border border-[#262d4a] text-white text-[14px] placeholder-[#6b7280] focus:outline-none focus:border-[#a855f7] focus:ring-[3px] focus:ring-[#a855f7]/25 transition-all"
-              />
-            </div>
-
-            {/* Airing Status Selector */}
-            <div className="space-y-[10px]">
-              <div className="flex items-center justify-between">
-                <label className="text-[13px] font-semibold text-white">
-                  Airing Status <span className="text-[#8b92a5] font-normal text-[11px]">(Required)</span>
-                </label>
-                <span className="text-[11px] font-medium text-[#a855f7]">Shows Live Badge if Ongoing</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setStatus('Ongoing')}
-                  className={`h-10 rounded-full text-xs font-semibold flex items-center justify-center space-x-2 transition-all cursor-pointer ${
-                    status === 'Ongoing'
-                      ? 'bg-amber-500/20 border-2 border-amber-500 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.25)]'
-                      : 'bg-[#121830] border border-[#262d4a] text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                  <span>Ongoing (Live Airing)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatus('Completed')}
-                  className={`h-10 rounded-full text-xs font-semibold flex items-center justify-center space-x-2 transition-all cursor-pointer ${
-                    status === 'Completed'
-                      ? 'bg-emerald-500/20 border-2 border-emerald-500 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.25)]'
-                      : 'bg-[#121830] border border-[#262d4a] text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                  <span>Completed</span>
-                </button>
-              </div>
-            </div>
-
-            {/* ONGOING AIRING STATUS CARD (Only if Status=Ongoing) */}
-            {status === 'Ongoing' && (
-              <div className="rounded-[18px] p-[22px] bg-[rgba(245,158,11,0.05)] border-[1.5px] border-[rgba(245,158,11,0.45)] space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 text-amber-400 text-xs font-bold uppercase tracking-wider">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span>ONGOING AIRING STATUS</span>
-                  </div>
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse ring-4 ring-amber-400/20"></span>
+        {/* SCROLLING BODY */}
+        <div className="flex-1 overflow-y-auto pb-32">
+          <div className="p-5 sm:p-6 space-y-4">
+            {isSuccess ? (
+              <div className="py-8 text-center space-y-3">
+                <div className="w-14 h-14 rounded-full bg-amber-950/70 border border-amber-500/50 flex items-center justify-center mx-auto text-amber-400 animate-bounce">
+                  <CheckCircle2 className="w-7 h-7" />
                 </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-semibold text-amber-300 uppercase tracking-wide">
-                      Airing Season
-                    </label>
-                    <input
-                      type="text"
-                      value={ongoingSeason}
-                      onChange={(e) => setOngoingSeason(e.target.value)}
-                      placeholder="e.g. Season 2"
-                      className="w-full h-10 rounded-full px-4 bg-[#0a0c10] border-[1.5px] border-amber-500/60 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-amber-400"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-semibold text-amber-300 uppercase tracking-wide">
-                      Latest Episode
-                    </label>
-                    <input
-                      type="text"
-                      value={ongoingEpisode}
-                      onChange={(e) => setOngoingEpisode(e.target.value)}
-                      placeholder="e.g. Episode 14"
-                      className="w-full h-10 rounded-full px-4 bg-[#0a0c10] border-[1.5px] border-amber-500/60 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-amber-400"
-                    />
-                  </div>
-                </div>
-
-                <p className="text-[11.5px] text-[#fbbf24]/85 leading-relaxed font-normal">
-                  Live Airing Badge: This anime will show the blinking LIVE badge on home and catalog cards until status changes to Completed.
+                <h4 className="font-heading font-black text-xl text-white">
+                  Saved with Status: "Pending"!
+                </h4>
+                <p className="text-xs text-neutral-300 max-w-md mx-auto leading-relaxed">
+                  Your submission is currently locked under <strong className="text-amber-400">Strict Moderation</strong>. 
+                  It has been sent to the Admin Dashboard and will remain hidden from the website until approved.
                 </p>
               </div>
-            )}
-
-            {/* Platform Links Section */}
-            <div className="space-y-[10px]">
-              <div className="flex items-center justify-between">
-                <label className="text-[13px] font-semibold text-white">
-                  Platform Links <span className="text-[#8b92a5] font-normal text-[11px]">(Optional)</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleAddPlatform}
-                  className="text-[#a855f7] text-[11px] font-semibold hover:underline flex items-center space-x-1 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Platform Link</span>
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                {platforms.map((plat, idx) => (
-                  <div 
-                    key={idx}
-                    className="bg-[#151b33] border border-[#232a45] rounded-[18px] p-[14px] space-y-2"
-                  >
-                    <div className="flex items-center gap-[10px]">
-                      <select
-                        value={plat.name}
-                        onChange={(e) => handlePlatformChange(idx, 'name', e.target.value)}
-                        className="w-[130px] h-10 rounded-full px-3 bg-[#0d1225] border border-[#262d4a] text-white text-xs focus:outline-none focus:border-[#a855f7] shrink-0"
-                      >
-                        {platformOptions.map(p => (
-                          <option key={p} value={p} className="bg-[#0d1225] text-white">{p}</option>
-                        ))}
-                      </select>
-
-                      <input
-                        type="url"
-                        value={plat.url}
-                        onChange={(e) => handlePlatformChange(idx, 'url', e.target.value)}
-                        placeholder="https://..."
-                        className="flex-1 min-w-0 h-10 rounded-full px-4 bg-[#0d1225] border border-[#262d4a] text-white text-xs placeholder-[#6b7280] focus:outline-none focus:border-[#a855f7]"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => handleRemovePlatform(idx)}
-                        className="w-9 h-9 rounded-full bg-red-950/40 border border-red-500/30 text-red-400 flex items-center justify-center hover:bg-red-900/60 transition-colors shrink-0 cursor-pointer"
-                        title="Remove link"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Validation Error Tooltip if empty */}
-                    {!plat.url && (
-                      <div className="text-[11px] text-amber-400 flex items-center space-x-1.5 px-2 py-1 bg-amber-500/10 border border-amber-500/25 rounded-lg w-fit">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                        <span>Please enter a URL.</span>
-                      </div>
-                    )}
+            ) : (
+              <form id="dub-info-form" onSubmit={handleSubmit} className="space-y-4 text-xs">
+                
+                {/* Title Field */}
+                <div>
+                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                    <span>Anime Title <span className="text-purple-400">*</span></span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="e.g. Solo Leveling, Demon Slayer, Jujutsu Kaisen..."
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-white placeholder-neutral-500 outline-none transition-all"
+                    />
+                    <Search className="w-4 h-4 text-neutral-500 absolute right-3 top-3 pointer-events-none" />
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Mixed Entries Section */}
-            <div className="space-y-[10px]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2 text-[#a855f7] text-[14px] font-bold">
-                  <Tv className="w-5 h-5 text-[#a855f7]" />
-                  <span>Mixed Entries (Seasons / Movies / OVAs)</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleAddEntry}
-                  className="h-8 px-3 rounded-full bg-purple-600/20 border border-purple-500/40 text-purple-300 text-xs font-semibold hover:bg-purple-600/30 flex items-center space-x-1 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Entry</span>
-                </button>
-              </div>
 
-              <div className="space-y-3">
-                {entries.map((entry, eIdx) => (
-                  <div 
-                    key={eIdx}
-                    className="bg-[#151a30] border border-[#232a45] rounded-[18px] p-[14px] space-y-3"
-                  >
-                    {/* Row 1: Type select, season #, episode # */}
-                    <div className="flex items-center gap-[10px]">
-                      <select
-                        value={entry.type}
-                        onChange={(e) => handleEntryChange(eIdx, 'type', e.target.value)}
-                        className="h-[32px] rounded-full bg-[#0a0c16] border border-[#1c2240] text-xs text-white px-3 focus:outline-none focus:border-[#a855f7]"
+                {/* Poster Upload Area */}
+                <div>
+                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                    <span>Anime Poster (Upload File or Enter URL)</span>
+                  </label>
+                  <div className="space-y-2">
+                    <div className="flex gap-3 items-center">
+                      <div 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex-1 h-16 border-2 border-dashed border-neutral-700 hover:border-primary-theme rounded-2xl bg-[#171e2e] flex flex-col items-center justify-center cursor-pointer transition-all group"
                       >
-                        <option value="TV Series" className="bg-[#0a0c16]">TV Series</option>
-                        <option value="Movie" className="bg-[#0a0c16]">Movie</option>
-                        <option value="OVA" className="bg-[#0a0c16]">OVA</option>
-                        <option value="Special" className="bg-[#0a0c16]">Special</option>
-                      </select>
-
-                      <input
-                        type="text"
-                        value={entry.season}
-                        onChange={(e) => handleEntryChange(eIdx, 'season', e.target.value)}
-                        placeholder="Season 1"
-                        className="h-[32px] w-24 rounded-full bg-[#0a0c16] border border-[#1c2240] text-xs text-white px-3 focus:outline-none focus:border-[#a855f7]"
-                      />
-
-                      <input
-                        type="text"
-                        value={entry.episode}
-                        onChange={(e) => handleEntryChange(eIdx, 'episode', e.target.value)}
-                        placeholder="1-12"
-                        className="h-[32px] w-24 rounded-full bg-[#0a0c16] border border-[#1c2240] text-xs text-white px-3 focus:outline-none focus:border-[#a855f7]"
-                      />
-
-                      {entries.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveEntry(eIdx)}
-                          className="w-[32px] h-[32px] rounded-full bg-red-950/40 border border-red-500/30 text-red-400 flex items-center justify-center hover:bg-red-900/60 transition-colors ml-auto shrink-0 cursor-pointer"
-                          title="Remove entry"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <Upload className="w-4 h-4 text-neutral-500 group-hover:text-accent-theme mb-0.5" />
+                        <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider group-hover:text-neutral-200">
+                          {poster ? 'Change Uploaded Photo' : 'Upload Image File'}
+                        </span>
+                        <input 
+                          type="file" 
+                          ref={fileInputRef}
+                          onChange={handleImageUpload}
+                          accept="image/*"
+                          className="hidden" 
+                        />
+                      </div>
+                      {poster && (
+                        <div className="relative shrink-0">
+                          <img
+                            src={poster || undefined}
+                            alt="Preview"
+                            className="w-12 h-16 object-cover rounded-xl border border-primary-theme/50 shadow-xl"
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => setPoster('')}
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center text-white border border-black shadow-lg hover:bg-purple-500 transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
                       )}
                     </div>
+                    <input
+                      type="url"
+                      value={poster.startsWith('data:') ? '' : poster}
+                      onChange={(e) => setPoster(e.target.value)}
+                      placeholder="Or paste poster image URL (https://...)"
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2 px-3 text-xs text-white placeholder-neutral-500 outline-none transition-all"
+                    />
+                  </div>
+                </div>
 
-                    {/* Row 2: AVAILABLE IN + language pills */}
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#8b92a5] mb-1.5 block">
-                        AVAILABLE IN:
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {shortLangs.map(sl => {
-                          const isSel = entry.languages.includes(sl);
-                          return (
-                            <button
-                              key={sl}
-                              type="button"
-                              onClick={() => toggleLangForEntry(eIdx, sl)}
-                              className={`h-[22px] px-[10px] rounded-full text-[11px] font-semibold transition-all inline-flex items-center justify-center cursor-pointer ${
-                                isSel
-                                  ? 'bg-[rgba(168,85,247,0.18)] border-[1.5px] border-[#a855f7] text-[#e9d5ff] font-bold shadow-sm'
-                                  : 'bg-[#13172b] border border-[#262c47] text-[#9ca3af] hover:text-white'
-                              }`}
+                {/* Streaming Partners */}
+                <div className="space-y-2">
+                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                    <span>Streaming Partners (Multi-Link)</span>
+                    <button 
+                      type="button" 
+                      onClick={addStreamingPartner}
+                      className="text-[10px] text-accent-theme font-bold hover:text-primary-theme flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Platform
+                    </button>
+                  </label>
+                  
+                  <div className="space-y-3">
+                    {streamingPartners.map((partner, idx) => (
+                      <div key={idx} className="bg-[#141b29] border border-neutral-800 rounded-2xl p-3 space-y-2">
+                        <div className="flex gap-2 items-start">
+                          <div className="w-1/3">
+                            <select
+                              value={partner.name}
+                              onChange={(e) => updateStreamingPartner(idx, 'name', e.target.value)}
+                              className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-2.5 py-2 text-[11px] text-white focus:outline-none focus:border-primary-theme cursor-pointer"
                             >
-                              {sl}
+                              <option value="Crunchyroll">Crunchyroll</option>
+                              <option value="Netflix">Netflix</option>
+                              <option value="JioCinema">JioCinema</option>
+                              <option value="JioHotstar">JioHotstar</option>
+                              <option value="YouTube">YouTube</option>
+                              <option value="YouTube (Muse India)">YouTube (Muse India)</option>
+                              <option value="YouTube (Ani-One)">YouTube (Ani-One)</option>
+                              <option value="Disney+ Hotstar">Disney+ Hotstar</option>
+                              <option value="Prime Video">Prime Video</option>
+                              <option value="Anime Times">Anime Times</option>
+                              <option value="Sony YAY!">Sony YAY!</option>
+                              <option value="Sony LIV">Sony LIV</option>
+                              <option value="Bilibili">Bilibili</option>
+                              <option value="Cartoon Network India">Cartoon Network India</option>
+                              <option value="ETV Bal Bharat">ETV Bal Bharat</option>
+                              <option value="Zee5">Zee5</option>
+                            </select>
+                          </div>
+                          <div className="flex-1 relative">
+                            <input
+                              type="url"
+                              value={partner.url}
+                              onChange={(e) => updateStreamingPartner(idx, 'url', e.target.value)}
+                              placeholder="Link (e.g. https://...)"
+                              className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-[11px] text-white placeholder-neutral-600 focus:outline-none focus:border-primary-theme"
+                            />
+                          </div>
+                          {streamingPartners.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeStreamingPartner(idx)}
+                              className="p-2.5 rounded-xl bg-neutral-800/50 text-neutral-500 hover:text-purple-400 hover:bg-purple-950/25 transition-all cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          );
-                        })}
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3-Column Grid (Type, Status, Release Day) */}
+                <div className={`grid grid-cols-1 ${airingStatus === 'Ongoing' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
+                  <div>
+                    <label className="block font-bold text-neutral-300 mb-1">Type</label>
+                    <select
+                      value={type}
+                      onChange={(e) => setType(e.target.value)}
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
+                    >
+                      <option value="TV Series">TV Series</option>
+                      <option value="Movie">Movie</option>
+                      <option value="OVA">OVA</option>
+                      <option value="ONA">ONA</option>
+                      <option value="Special">Special</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-neutral-300 mb-1">Status</label>
+                    <select
+                      value={airingStatus}
+                      onChange={(e) => setAiringStatus(e.target.value as 'Ongoing' | 'Completed')}
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
+                    >
+                      <option value="Ongoing">Ongoing (Simulcast)</option>
+                      <option value="Completed">Completed</option>
+                    </select>
+                  </div>
+
+                  {airingStatus === 'Ongoing' && (
+                    <div>
+                      <label className="block font-bold text-neutral-300 mb-1">Release Day</label>
+                      <select
+                        value={releaseDay}
+                        onChange={(e) => setReleaseDay(e.target.value)}
+                        className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
+                      >
+                        {ALL_DAYS.map((day) => (
+                          <option key={day} value={day}>{day}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Ongoing Airing Status Box */}
+                {airingStatus === 'Ongoing' && (
+                  <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        <span>Currently Airing Details</span>
+                      </div>
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-amber-300/90 mb-1">Current Season</label>
+                        <input
+                          type="text"
+                          value={currentSeason}
+                          onChange={(e) => setCurrentSeason(e.target.value)}
+                          placeholder="e.g. Season 2"
+                          className="w-full bg-[#171e2e] border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-amber-300/90 mb-1">Live Episode</label>
+                        <input
+                          type="number"
+                          value={currentlyAiringEpisode}
+                          onChange={(e) => setCurrentlyAiringEpisode(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
+                          placeholder="e.g. 5"
+                          className="w-full bg-[#171e2e] border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none"
+                        />
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
+                )}
 
-            {/* Genres Section */}
-            <div className="space-y-[10px]">
-              <div className="flex items-center justify-between">
-                <label className="text-[13px] font-semibold text-white">
-                  Genres <span className="text-[#8b92a5] font-normal text-[11px]">(Action, Comedy, Shonen, etc.) (Optional)</span>
-                </label>
-                <span className="text-[11px] font-medium text-[#a855f7]">{selectedGenres.length} selected</span>
-              </div>
+                {/* Mixed Entries Section */}
+                <div className="space-y-3">
+                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Tv className="w-3.5 h-3.5 text-accent-theme" />
+                      <span>Mixed Entries (Seasons, OVAs, Movies)</span>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={addEntry}
+                      className="text-[10px] text-accent-theme font-bold hover:text-primary-theme flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Entry
+                    </button>
+                  </label>
 
-              <div className="bg-[#11162b] border border-[#232a45] rounded-[20px] p-[14px] max-h-[175px] overflow-y-auto [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:bg-[#3a3f55]">
-                <div className="flex flex-wrap gap-[7px]">
-                  {availableGenres.map(genre => {
-                    const isSelected = selectedGenres.includes(genre);
-                    return (
-                      <button
-                        key={genre}
-                        type="button"
-                        onClick={() => toggleGenre(genre)}
-                        className={`h-[34px] px-[16px] rounded-[12px] text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-gradient-to-r from-[#9d1df5] to-[#7c3aed] text-white shadow-[0_0_15px_rgba(157,29,245,0.45)] border border-purple-400 font-bold'
-                            : 'bg-[#151a30] border border-[#2a3050] text-[#9ca3af] hover:text-white'
-                        }`}
-                      >
-                        {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                        <span>{genre}</span>
-                      </button>
-                    );
-                  })}
+                  <div className="space-y-2.5">
+                    {seasonDetails.map((entry, idx) => (
+                      <div key={idx} className="bg-[#171e2e] border border-neutral-700/80 rounded-2xl p-3 space-y-2.5">
+                        <div className="grid grid-cols-12 gap-2">
+                          <div className="col-span-4">
+                            <select
+                              value={entry.type}
+                              onChange={(e) => updateEntryField(idx, 'type', e.target.value)}
+                              className="w-full bg-[#121829] border border-neutral-700 rounded-xl px-2 py-1.5 text-[11px] text-white outline-none cursor-pointer"
+                            >
+                              <option value="Season">Season</option>
+                              <option value="Movie">Movie</option>
+                              <option value="OVA">OVA</option>
+                              <option value="ONA">ONA</option>
+                              <option value="Special">Special</option>
+                            </select>
+                          </div>
+                          <div className="col-span-3">
+                            <input
+                              type="text"
+                              value={entry.label}
+                              onChange={(e) => updateEntryField(idx, 'label', e.target.value)}
+                              placeholder="Label"
+                              className="w-full bg-[#121829] border border-neutral-700 rounded-xl px-2 py-1.5 text-[11px] text-white outline-none"
+                            />
+                          </div>
+                          <div className="col-span-3">
+                            <input
+                              type="number"
+                              value={entry.episodeCount}
+                              onChange={(e) => updateEntryField(idx, 'episodeCount', e.target.value)}
+                              placeholder="Eps"
+                              className="w-full bg-[#121829] border border-neutral-700 rounded-xl px-2 py-1.5 text-[11px] text-white outline-none"
+                            />
+                          </div>
+                          <div className="col-span-2 flex justify-center items-center">
+                            {seasonDetails.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeEntry(idx)}
+                                className="p-1.5 rounded-xl text-neutral-500 hover:text-purple-400 hover:bg-purple-950/20 transition-all cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Language Pill Toggles */}
+                        <div>
+                          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">Available Languages:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {ALL_LANGS.map(sl => {
+                              const isSel = entry.languages.includes(sl);
+                              return (
+                                <button
+                                  key={sl}
+                                  type="button"
+                                  onClick={() => toggleLangForEntry(idx, sl)}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                                    isSel
+                                      ? 'bg-purple-600 text-white font-bold ring-1 ring-purple-400'
+                                      : 'bg-[#121829] text-neutral-400 border border-neutral-700'
+                                  }`}
+                                >
+                                  {sl}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <p className="text-[11px] text-[#8b92a5] leading-relaxed">
-                Click tags to toggle genres. These link directly to the Library Genre filter so users can find this show easily.
-              </p>
-            </div>
 
-            {/* Animation Studio */}
-            <div className="space-y-[10px]">
-              <label className="text-[13px] font-semibold text-white block">
-                Animation Studio <span className="text-[#8b92a5] font-normal text-[11px]">(Optional)</span>
-              </label>
-              <input
-                type="text"
-                value={animationStudio}
-                onChange={(e) => setAnimationStudio(e.target.value)}
-                placeholder="e.g. Liden Films"
-                className="w-full h-10 rounded-full px-4 bg-[#121830] border border-[#262d4a] text-white text-[14px] placeholder-[#6b7280] focus:outline-none focus:border-[#a855f7] focus:ring-[3px] focus:ring-[#a855f7]/25 transition-all"
-              />
-            </div>
+                {/* Genres */}
+                <div>
+                  <label className="block font-bold text-neutral-300 mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span>Genres</span>
+                      <span className="text-[10px] text-neutral-400 font-normal">(Select all that apply)</span>
+                    </span>
+                    <span className="text-[10px] text-purple-400 font-bold">{genres.length} selected</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2 p-3.5 rounded-2xl bg-[#141b29] border border-neutral-700/80 max-h-48 overflow-y-auto no-scrollbar">
+                    {AVAILABLE_GENRES.map((g) => {
+                      const isSelected = genres.includes(g);
+                      return (
+                        <button
+                          type="button"
+                          key={g}
+                          onClick={() => toggleGenre(g)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                            isSelected
+                              ? 'bg-gradient-to-r from-[#9333ea] to-[#7c3aed] text-white shadow-[0_0_15px_rgba(147,51,234,0.45)] ring-1 ring-purple-400/70'
+                              : 'bg-[#1a2235] text-neutral-400 hover:text-neutral-200 border border-neutral-700/60 hover:border-neutral-600'
+                          }`}
+                        >
+                          {isSelected && <span className="text-white text-xs font-black">✓</span>}
+                          <span>{g}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-            {/* Release Year */}
-            <div className="space-y-[10px]">
-              <label className="text-[13px] font-semibold text-white block">
-                Release Year <span className="text-[#8b92a5] font-normal text-[11px]">(Optional)</span>
-              </label>
-              <input
-                type="number"
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
-                placeholder="2025"
-                className="w-full h-10 rounded-full px-4 bg-[#121830] border border-[#262d4a] text-white text-[14px] placeholder-[#6b7280] focus:outline-none focus:border-[#a855f7] focus:ring-[3px] focus:ring-[#a855f7]/25 transition-all"
-              />
-            </div>
+                {/* Studio, Year, Rating */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-neutral-400 mb-1">Studio</label>
+                    <input
+                      type="text"
+                      value={studio}
+                      onChange={(e) => setStudio(e.target.value)}
+                      placeholder="e.g. Ufotable"
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-neutral-400 mb-1">Year</label>
+                    <input
+                      type="number"
+                      value={releaseYear}
+                      onChange={(e) => setReleaseYear(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
+                      placeholder="2025"
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-neutral-400 mb-1">Rating</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="10"
+                      value={rating}
+                      onChange={(e) => setRating(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      placeholder="8.5"
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none"
+                    />
+                  </div>
+                </div>
 
-            {/* Global Rating (0-10) */}
-            <div className="space-y-[10px]">
-              <label className="text-[13px] font-semibold text-white block">
-                GLOBAL RATING (0-10) <span className="text-[#8b92a5] font-normal text-[11px]">(Optional)</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={rating}
-                  onChange={(e) => setRating(e.target.value)}
-                  className="w-full h-10 rounded-full px-4 pr-10 bg-[#121830] border border-[#262d4a] text-white text-[14px] focus:outline-none focus:border-[#a855f7] focus:ring-[3px] focus:ring-[#a855f7]/25 transition-all"
-                />
-                <Star className="absolute right-3.5 top-3 w-4 h-4 text-amber-400 fill-amber-400 pointer-events-none" />
-              </div>
-            </div>
+                {/* Strict Moderation Gate Card */}
+                <div className="rounded-2xl p-4 bg-amber-950/20 border border-amber-500/30 space-y-1.5">
+                  <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
+                    <ShieldAlert className="w-4 h-4 shrink-0" />
+                    <span>Strict Moderation Gate</span>
+                  </div>
+                  <p className="text-[11px] text-neutral-300 leading-relaxed">
+                    This submission will be saved with <span className="text-amber-400 font-bold">status: "pending"</span>. It will <span className="text-rose-400 font-bold">NEVER</span> appear on the public website until approved by the admin.
+                  </p>
+                </div>
 
-            {/* Strict Moderation Gate Card */}
-            <div className="rounded-[18px] p-4 bg-[rgba(245,158,11,0.05)] border-[1.5px] border-[rgba(245,158,11,0.45)] space-y-1.5">
-              <div className="flex items-center space-x-2 text-amber-400 text-xs font-bold">
-                <ShieldAlert className="w-4 h-4 shrink-0" />
-                <span>Strict Moderation Gate</span>
-              </div>
-              <p className="text-[12px] text-[#cbd5e1] leading-relaxed">
-                This submission will be saved with <span className="text-amber-400 font-bold">status: "pending"</span>. It will <span className="text-red-400 font-bold">NEVER</span> appear on the public website (Home, Search, or Airing Now) until approved by the admin.
-              </p>
-            </div>
-
-            {/* Synopsis Field */}
-            <div className="space-y-[10px]">
-              <label className="text-[13px] font-semibold text-white block">
-                Synopsis <span className="text-[#8b92a5] font-normal text-[11px]">(Plot summary)</span>
-              </label>
-              <textarea
-                value={synopsis}
-                onChange={(e) => setSynopsis(e.target.value)}
-                placeholder="Enter plot summary..."
-                rows={3}
-                required
-                className="w-full rounded-2xl p-4 bg-[#121830] border border-[#262d4a] text-white text-[14px] placeholder-[#6b7280] focus:outline-none focus:border-[#a855f7] focus:ring-[3px] focus:ring-[#a855f7]/25 resize-none transition-all"
-              />
-            </div>
-
-          </form>
-
+              </form>
+            )}
+          </div>
         </div>
 
-        {/* 4) FOOTER (Fixed) */}
-        <div className="shrink-0 p-[24px] bg-[#0d1225] border-t border-[rgba(255,255,255,0.06)] relative">
-          <div className="absolute -top-6 left-0 right-0 h-6 bg-gradient-to-t from-[#0d1225] to-transparent pointer-events-none" />
-          
-          <button
-            type="submit"
-            form="dub-info-form"
-            disabled={!title.trim()}
-            className="w-full h-[60px] rounded-[22px] bg-gradient-to-r from-[#ff8a00] via-[#e0521a] to-[#9333ea] text-white text-[15px] font-bold shadow-[0_0_25px_rgba(255,138,0,0.45)] flex items-center justify-center space-x-2.5 hover:opacity-95 transition-all cursor-pointer disabled:opacity-50 disabled:shadow-none"
-          >
-            <Send className="w-5 h-5 text-white" />
-            <span>{mode === 'edit' ? 'Save Anime Changes' : 'Submit Dub Info for Review'}</span>
-          </button>
-        </div>
+        {/* STICKY GLOWING FOOTER BUTTON */}
+        {!isSuccess && (
+          <div className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-[#111726] via-[#111726]/95 to-transparent backdrop-blur-lg border-t border-white/5 z-50">
+            <button
+              type="submit"
+              form="dub-info-form"
+              disabled={isSubmitting || !title.trim()}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-purple-600 hover:from-orange-500 hover:via-amber-500 hover:to-purple-500 text-white font-black text-sm flex items-center justify-center gap-3 cursor-pointer shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <div className="relative flex items-center gap-3">
+                  <div className="absolute -inset-1 bg-white rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity" />
+                  <Send className="w-5 h-5 relative" />
+                  <span>{mode === 'edit' ? 'Save Anime Changes' : 'Submit Dub for Admin Approval'}</span>
+                </div>
+              )}
+            </button>
+          </div>
+        )}
 
       </div>
     </div>

@@ -49,130 +49,40 @@ interface CatalogViewProps {
   feedView?: string;
   recentlyViewed?: any[];
   onClearRecentlyViewed?: () => void;
+  onRemoveRecentlyViewedItem?: (id: number) => void;
 }
 
-export const FALLBACK_SEED_ANIME: Anime[] = [
-  {
-    id: 1,
-    title: "Cyberpunk: Neon Edge",
-    slug: "cyberpunk-neon-edge",
-    synopsis: "In a sprawling megacity governed by rogue AI syndicates, a cybernetically enhanced street runner uncovers a conspiracy that threatens the digital mainframe.",
-    cover_image: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1600&auto=format&fit=crop&q=80",
-    rating: 9.4,
-    episodes_count: 24,
-    status: "Airing",
-    season: "Spring",
-    year: 2026,
-    genres: "Action,Sci-Fi,Cyberpunk",
-    popularity: 98500,
-    languages: "HIN,TAM,TEL",
-    platform: "Crunchyroll",
-    type: "TV Series"
-  },
-  {
-    id: 2,
-    title: "Celestial Blade Chronicles",
-    slug: "celestial-blade-chronicles",
-    synopsis: "Wielding ancestral spiritual steel, young swordsman Renji ascends the celestial pagoda to banish the abyssal lords before the solar eclipse.",
-    cover_image: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1600&auto=format&fit=crop&q=80",
-    rating: 9.1,
-    episodes_count: 12,
-    status: "Completed",
-    season: "Winter",
-    year: 2025,
-    genres: "Action,Fantasy,Shonen",
-    popularity: 84200,
-    languages: "HIN,TAM",
-    platform: "Netflix",
-    type: "TV Series"
-  },
-  {
-    id: 3,
-    title: "Quantum Symphony",
-    slug: "quantum-symphony",
-    synopsis: "Two prodigy violinists across parallel dimensions discover their sheet music synchronizes their heartbeats across the multiverse.",
-    cover_image: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.9,
-    episodes_count: 13,
-    status: "Airing",
-    season: "Spring",
-    year: 2026,
-    genres: "Drama,Romance,Music",
-    popularity: 62000,
-    languages: "HIN,TEL",
-    platform: "JioCinema",
-    type: "TV Series"
-  },
-  {
-    id: 4,
-    title: "Abyssal Alchemist",
-    slug: "abyssal-alchemist",
-    synopsis: "Exiled from the royal academy, a forbidden researcher unlocks the secret of transmuting dark matter into pure starlight energy.",
-    cover_image: "https://images.unsplash.com/photo-1563089145-599997674d42?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.8,
-    episodes_count: 26,
-    status: "Completed",
-    season: "Autumn",
-    year: 2025,
-    genres: "Adventure,Fantasy,Magic",
-    popularity: 51000,
-    languages: "HIN,TAM,TEL",
-    platform: "Muse India",
-    type: "TV Series"
-  },
-  {
-    id: 5,
-    title: "Tokyo Shinobi Squad",
-    slug: "tokyo-shinobi-squad",
-    synopsis: "Modern-day covert ninja units patrol the neon-drenched alleys of Shinjuku against shadow yokai syndicates.",
-    cover_image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=1600&auto=format&fit=crop&q=80",
-    rating: 9.0,
-    episodes_count: 12,
-    status: "Airing",
-    season: "Spring",
-    year: 2026,
-    genres: "Action,Supernatural,Ninja",
-    popularity: 73000,
-    languages: "HIN,TAM",
-    platform: "Crunchyroll",
-    type: "TV Series"
-  },
-  {
-    id: 6,
-    title: "Starlight Barista",
-    slug: "starlight-barista",
-    synopsis: "A cozy interstellar cafe that serves cosmic beverages to weary space travelers drifting between star systems.",
-    cover_image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&auto=format&fit=crop&q=80",
-    rating: 9.2,
-    episodes_count: 12,
-    status: "Completed",
-    season: "Summer",
-    year: 2025,
-    genres: "Mystery,Sci-Fi,Detective",
-    popularity: 58000,
-    languages: "HIN,TAM",
-    platform: "Crunchyroll",
-    type: "Movie"
-  }
-];
+export const FALLBACK_SEED_ANIME: Anime[] = [];
 
-const REGIONAL_LANGUAGES = [
-  { label: 'All', value: 'All', count: 124 },
-  { label: 'Tamil', value: 'Tamil', count: 62 },
-  { label: 'Telugu', value: 'Telugu', count: 59 },
-  { label: 'Hindi', value: 'Hindi', count: 121 },
-  { label: 'Malayalam', value: 'Malayalam', count: 45 },
-  { label: 'Kannada', value: 'Kannada', count: 38 }
-];
 
-const GENRES = ['All', 'Action', 'Fantasy', 'Sci-Fi', 'Romance', 'Adventure', 'Thriller', 'Supernatural', 'Comedy', 'Slice of Life', 'Mecha'];
-const PLATFORMS = ['All Platforms', 'Crunchyroll', 'Netflix', 'JioCinema', 'Muse India', 'Ani-One'];
+
+const GENRES = [
+  'All',
+  'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Isekai', 
+  'Mystery', 'Romance', 'Sci-Fi', 'Shonen', 'Seinen', 'Shoujo', 'Josei', 
+  'Slice of Life', 'Sports', 'Supernatural', 'Thriller', 'Mecha', 'Psychological',
+  'Music', 'Military', 'Historical', 'Martial Arts', 'Ecchi', 'Gourmet', 'Workplace',
+  'School', 'Mythology', 'Parody'
+];
+const PLATFORMS = [
+  'All Platforms',
+  'Crunchyroll',
+  'Netflix',
+  'JioCinema',
+  'JioHotstar',
+  'YouTube',
+  'YouTube (Muse India)',
+  'YouTube (Ani-One)',
+  'Disney+ Hotstar',
+  'Prime Video',
+  'Anime Times',
+  'Sony YAY!',
+  'Sony LIV',
+  'Bilibili',
+  'Cartoon Network India',
+  'ETV Bal Bharat',
+  'Zee5'
+];
 const TYPES = ['All Types', 'TV Series', 'Movie', 'OVA', 'Special'];
 const STATUSES = ['All', 'Airing', 'Completed', 'Upcoming'];
 const SORTS = [
@@ -191,7 +101,8 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   onOpenCollection,
   feedView = 'library',
   recentlyViewed = [],
-  onClearRecentlyViewed
+  onClearRecentlyViewed,
+  onRemoveRecentlyViewedItem
 }) => {
   const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(FALLBACK_SEED_ANIME);
   
@@ -220,7 +131,12 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
       if (res.ok) {
         const data = await res.json();
         if (data.data && data.data.length > 0) {
-          const normalized = data.data.map((item: any, idx: number) => ({
+          // Strictly filter out and hide any anime where status === 'pending' or submissionStatus === 'pending'
+          const approvedOnly = data.data.filter((item: any) => 
+            item.status !== 'pending' && 
+            item.submissionStatus !== 'pending'
+          );
+          const normalized = approvedOnly.map((item: any, idx: number) => ({
             ...item,
             languages: item.languages || (idx % 3 === 0 ? 'HIN,TAM,TEL' : idx % 2 === 0 ? 'HIN,TAM' : 'HIN,TEL'),
             platform: item.platform || (idx % 2 === 0 ? 'Crunchyroll' : 'Netflix'),
@@ -341,9 +257,9 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
       {/* 2. ANIMATED STATS CARDS ROW */}
       <div className="mt-8">
         <AnimatedStats
-          totalAnime={rawAnimeList.length > 0 ? rawAnimeList.length : 99}
-          totalVotes={rawAnimeList.reduce((acc, curr) => acc + (curr.popularity || 0), 0) || 425000}
-          totalLanguages={5}
+          totalAnime={rawAnimeList.length}
+          totalVotes={rawAnimeList.reduce((acc, curr) => acc + (curr.popularity || 0), 0)}
+          totalLanguages={rawAnimeList.length > 0 ? 5 : 0}
         />
       </div>
 
@@ -354,6 +270,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             items={recentlyViewed}
             onSelectAnime={(a) => onSelectAnime(a as any)}
             onClear={onClearRecentlyViewed || (() => {})}
+            onRemoveItem={onRemoveRecentlyViewedItem}
             watchlist={watchlist}
             onToggleWatchlist={onToggleWatchlist}
           />
@@ -362,26 +279,35 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
 
 
       {/* 3. REGIONAL DUB AUDIO FILTER PILLS */}
-      <div className="px-3.5 mt-8">
-        <div className="flex items-center gap-1.5 mb-3">
-          <Sparkles className="w-[14px] h-[14px] text-[#a855f7]" />
-          <span className="text-[12px] font-bold uppercase text-[#94a3b8] tracking-wider">REGIONAL DUB AUDIO</span>
+      <div className="px-3.5 sm:px-4 mt-6">
+        <div className="flex items-center gap-1.5 mb-2.5">
+          <Sparkles className="w-3.5 h-3.5 text-[#a855f7]" />
+          <span className="text-[11px] font-extrabold uppercase text-[#94a3b8] tracking-wider">
+            REGIONAL DUB AUDIO
+          </span>
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-          {REGIONAL_LANGUAGES.map((lang) => {
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1.5 pt-0.5">
+          {[
+            { label: 'All', value: 'All', count: rawAnimeList.length },
+            { label: 'Tamil', value: 'Tamil', count: rawAnimeList.filter(a => a.languages?.toLowerCase().includes('tam')).length },
+            { label: 'Telugu', value: 'Telugu', count: rawAnimeList.filter(a => a.languages?.toLowerCase().includes('tel')).length },
+            { label: 'Hindi', value: 'Hindi', count: rawAnimeList.filter(a => a.languages?.toLowerCase().includes('hin')).length },
+            { label: 'Malayalam', value: 'Malayalam', count: rawAnimeList.filter(a => a.languages?.toLowerCase().includes('mal')).length },
+            { label: 'Kannada', value: 'Kannada', count: rawAnimeList.filter(a => a.languages?.toLowerCase().includes('kan')).length }
+          ].map((lang) => {
             const active = selectedLanguage === lang.value;
             return (
               <button
                 key={lang.value}
                 onClick={() => setSelectedLanguage(lang.value)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-[13px] font-semibold shrink-0 transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[12px] font-bold shrink-0 transition-all cursor-pointer active:scale-95 ${
                   active
-                    ? 'bg-gradient-to-r from-[#9333ea] to-[#6366f1] text-white font-bold shadow-[0_4px_15px_rgba(147,51,234,0.45)]'
-                    : 'bg-[#111626] border border-[#1e263d] text-[#cbd5e1]'
+                    ? 'bg-gradient-to-r from-[#9333ea] to-[#6366f1] text-white shadow-[0_3px_12px_rgba(147,51,234,0.4)] ring-1 ring-purple-400/50'
+                    : 'bg-[#141b29] border border-[#20273c] hover:border-neutral-700 text-[#cbd5e1] hover:text-white'
                 }`}
               >
-                {lang.label}
-                <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${active ? 'bg-black/30 text-white' : 'bg-[#0a0d16] text-[#94a3b8]'}`}>
+                <span>{lang.label}</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${active ? 'bg-black/35 text-white' : 'bg-[#0a0d16] text-[#94a3b8]'}`}>
                   {lang.count}
                 </span>
               </button>
@@ -391,7 +317,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
       </div>
 
       {/* 4. FILTER & SORT DROPDOWNS GRID */}
-      <div className="px-3.5 mt-6 grid grid-cols-2 gap-2.5">
+      <div className="px-3.5 sm:px-4 mt-5 grid grid-cols-2 gap-2.5 sm:gap-3">
         
         {/* Render Dropdowns */}
         {[
@@ -400,30 +326,38 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           { label: 'TYPE', val: selectedType, set: setSelectedType, opts: TYPES },
           { label: 'STATUS', val: selectedStatus, set: setSelectedStatus, opts: STATUSES }
         ].map((item, i) => (
-          <div key={i} className="relative bg-[#111626] border border-[#1e263d] rounded-2xl px-3.5 h-11 flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase text-[#64748b] mr-2 shrink-0">{item.label}</span>
-            <select
-              value={item.val}
-              onChange={(e) => item.set(e.target.value)}
-              className="text-[13px] font-semibold text-[#e2e8f0] bg-transparent appearance-none flex-1 truncate pr-4 focus:outline-none"
-            >
-              {item.opts.map(o => <option key={o} value={o} className="bg-[#111626]">{o}</option>)}
-            </select>
-            <ChevronDown className="w-[14px] h-[14px] text-[#64748b] shrink-0 pointer-events-none" />
+          <div key={i} className="flex flex-col gap-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#94a3b8] px-0.5">
+              {item.label}
+            </span>
+            <div className="relative bg-[#141b29] border border-[#20273c] hover:border-purple-500/50 rounded-xl h-[38px] px-3 flex items-center justify-between transition-all group shadow-sm">
+              <select
+                value={item.val}
+                onChange={(e) => item.set(e.target.value)}
+                className="w-full text-[12px] font-semibold text-white bg-transparent appearance-none truncate pr-5 focus:outline-none cursor-pointer"
+              >
+                {item.opts.map(o => <option key={o} value={o} className="bg-[#111626] text-white">{o}</option>)}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-[#94a3b8] absolute right-2.5 pointer-events-none group-hover:text-purple-400 transition-colors" />
+            </div>
           </div>
         ))}
         
-        {/* Sort (span 1) */}
-        <div className="relative bg-[#111626] border border-[#1e263d] rounded-2xl px-3.5 h-11 flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase text-[#64748b] mr-2 shrink-0">SORT</span>
+        {/* Sort (Spans 2 columns) */}
+        <div className="col-span-2 flex flex-col gap-1 mt-0.5">
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#94a3b8] px-0.5">
+            SORT CATALOG
+          </span>
+          <div className="relative bg-[#141b29] border border-[#20273c] hover:border-purple-500/50 rounded-xl h-[38px] px-3.5 flex items-center justify-between transition-all group shadow-sm">
             <select
               value={selectedSort}
               onChange={(e) => setSelectedSort(e.target.value)}
-              className="text-[13px] font-semibold text-[#e2e8f0] bg-transparent appearance-none flex-1 truncate pr-4 focus:outline-none"
+              className="w-full text-[12px] font-semibold text-white bg-transparent appearance-none truncate pr-5 focus:outline-none cursor-pointer"
             >
-              {SORTS.map(s => <option key={s.value} value={s.value} className="bg-[#111626]">{s.label}</option>)}
+              {SORTS.map(s => <option key={s.value} value={s.value} className="bg-[#111626] text-white">{s.label}</option>)}
             </select>
-            <ChevronDown className="w-[14px] h-[14px] text-[#64748b] shrink-0 pointer-events-none" />
+            <ChevronDown className="w-3.5 h-3.5 text-[#94a3b8] absolute right-3 pointer-events-none group-hover:text-purple-400 transition-colors" />
+          </div>
         </div>
       </div>
 
@@ -499,46 +433,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           {visibleCount >= filteredList.length && filteredList.length > 0 && (
             <span className="text-slate-500 text-[11px]">You've reached the end of the catalog 🎉</span>
           )}
-        </div>
-      </div>
-
-      {/* 9. RECENT UPDATES SECTION */}
-      <div className="px-3.5 mt-4">
-        <div className="bg-[#101424] border border-neutral-800/80 rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-xs font-bold uppercase tracking-wider text-neutral-300">Daily Indian Dub Drops & Licensing</span>
-          </div>
-          <div className="space-y-2 text-xs text-neutral-400">
-            <div className="flex items-center justify-between py-1.5 border-b border-neutral-800/50">
-              <span className="text-neutral-200 font-medium">Jujutsu Kaisen Season 2 (Tamil Dub)</span>
-              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded">Crunchyroll</span>
-            </div>
-            <div className="flex items-center justify-between py-1.5 border-b border-neutral-800/50">
-              <span className="text-neutral-200 font-medium">Demon Slayer: Hashira Training Arc (Telugu Dub)</span>
-              <span className="text-[10px] text-sky-400 font-bold bg-sky-950/80 px-2 py-0.5 rounded">JioHotstar</span>
-            </div>
-            <div className="flex items-center justify-between py-1.5">
-              <span className="text-neutral-200 font-medium">Solo Leveling Season 1 (Hindi Dub)</span>
-              <span className="text-[10px] text-purple-400 font-bold bg-purple-950/80 px-2 py-0.5 rounded">Netflix</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 10. FEEDBACK & DUB REQUEST SECTION */}
-      <div className="px-3.5 mt-6 mb-4">
-        <div className="bg-gradient-to-br from-[#121829] to-[#0c101a] border border-neutral-800/80 rounded-2xl p-4 text-center">
-          <h3 className="text-sm font-extrabold text-white">Can't find your favorite regional dub?</h3>
-          <p className="text-[11px] text-neutral-400 mt-1 max-w-sm mx-auto">
-            Request legal Indian dub track licensing or submit missing voice artist credits to our community database.
-          </p>
-          <button
-            onClick={() => alert('Dub request noted! Our catalog team will verify with Crunchyroll & Netflix India.')}
-            className="mt-3 px-4 py-2 rounded-xl bg-purple-900/40 hover:bg-purple-900/60 border border-purple-500/40 text-purple-200 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-          >
-            Request a Dub Title
-          </button>
         </div>
       </div>
 

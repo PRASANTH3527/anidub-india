@@ -8,9 +8,9 @@ export interface AnimatedStatsProps {
 }
 
 export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
-  totalAnime = 99,
-  totalVotes = 425000,
-  totalLanguages = 5
+  totalAnime = 0,
+  totalVotes = 0,
+  totalLanguages = 0
 }) => {
   const [animeCount, setAnimeCount] = useState(0);
   const [votesCount, setVotesCount] = useState(0);

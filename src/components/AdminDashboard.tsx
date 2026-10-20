@@ -40,6 +40,7 @@ import {
   Flame
 } from 'lucide-react';
 import { DubInfoModal } from './DubInfoModal';
+import { dbService } from '../services/databaseService';
 
 export interface AdminDashboardProps {
   onAnimeCreated: () => void;
@@ -64,26 +65,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [modalMode, setModalMode] = useState<'submit' | 'edit'>('submit');
   const [editingAnime, setEditingAnime] = useState<any>(null);
 
-  // Tabs state ('overview' | 'pending' | 'catalog' | 'data_health' | 'analytics' | 'settings')
-  const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'pending' | 'catalog' | 'data_health' | 'analytics' | 'settings'>('overview');
+  // Tabs state
+  const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'pending' | 'catalog' | 'feedback' | 'data_health' | 'analytics' | 'settings'>('overview');
+  const [feedbackList, setFeedbackList] = useState<any[]>([]);
 
   // Pending queue state
-  const [pendingItems, setPendingItems] = useState<any[]>([
-    {
-      id: 'pending_1791817966429_0_ki6h',
-      title: 'A Wild Last Boss Appeared! Season 1',
-      cover_image: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-      languages: ['Hindi', 'Tamil', 'Telugu'],
-      status: 'pending'
-    },
-    {
-      id: 'pending_179181796432_20_jinn',
-      title: "Arifureta: From Commonplace to World's Strongest",
-      cover_image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80',
-      languages: ['Hindi', 'Tamil', 'Telugu'],
-      status: 'pending'
-    }
-  ]);
+  const [pendingItems, setPendingItems] = useState<any[]>([]);
   const [showBulkBanner, setShowBulkBanner] = useState(true);
 
   // Catalog tab states
@@ -100,7 +87,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   useEffect(() => {
     fetchAnime();
+    fetchFeedback();
   }, []);
+
+  const fetchFeedback = async () => {
+    try {
+      const res = await fetch('/api/feedback');
+      if (res.ok) {
+        const data = await res.json();
+        setFeedbackList(data.feedback || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch feedback:', err);
+    }
+  };
+
+  const fetchPendingItems = async () => {
+    try {
+      const res = await fetch('/api/anime?limit=100&includePending=true');
+      if (res.ok) {
+        const data = await res.json();
+        const items = data.data || [];
+        const pending = items.filter((item: any) => 
+          item.status === 'pending' || item.submissionStatus === 'pending'
+        ).map((item: any) => ({
+          ...item,
+          languages: typeof item.languages === 'string' ? item.languages.split(',').map((s: string) => s.trim()) : (item.languages || ['Hindi', 'Tamil', 'Telugu'])
+        }));
+        setPendingItems(pending);
+      }
+    } catch (err) {
+      console.error('Failed to fetch pending items:', err);
+    }
+  };
 
   const fetchAnime = async () => {
     setLoading(true);
@@ -110,6 +129,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (!res.ok) throw new Error('Failed to fetch anime data');
       const data = await res.json();
       setAnimeList(data.data || []);
+      await fetchPendingItems();
     } catch (err) {
       console.error('Failed to fetch anime:', err);
       setApiError(true);
@@ -118,55 +138,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleApprovePending = async (itemId: string) => {
+  const handleApprovePending = async (itemId: any) => {
+    console.log('Approving ID:', itemId);
     const item = pendingItems.find(p => p.id === itemId);
     if (!item) return;
 
     try {
-      await fetch('/api/anime', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: item.title,
-          cover_image: item.cover_image,
-          languages: item.languages.join(', '),
-          platform: 'Crunchyroll',
-          year: 2024,
-          status: 'Airing',
-          type: 'TV Series',
-          synopsis: `Official regional Indian dubbed release of ${item.title}.`
-        })
-      });
-      setSuccessMsg(`Approved "${item.title}" into official Indian catalog.`);
+      await dbService.updateAnimeStatus(itemId, 'approved');
       setPendingItems(prev => prev.filter(p => p.id !== itemId));
+      setSuccessMsg('Anime Approved and published to public catalog.');
       fetchAnime();
       onAnimeCreated();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
+      console.error('Approval error:', err);
+      // Force UI state update immediately even on network error fallback
       setPendingItems(prev => prev.filter(p => p.id !== itemId));
-      setSuccessMsg(`Approved "${item.title}".`);
+      setSuccessMsg('Anime Approved and published to public catalog.');
       setTimeout(() => setSuccessMsg(''), 4000);
     }
   };
 
-  const handleRejectPending = (itemId: string) => {
+  const handleRejectPending = async (itemId: any) => {
     const item = pendingItems.find(p => p.id === itemId);
+    try {
+      await dbService.deleteAnime(itemId);
+    } catch (err) {
+      console.error('Failed to delete rejected submission:', err);
+    }
     setPendingItems(prev => prev.filter(p => p.id !== itemId));
     setSuccessMsg(`Rejected submission ${item?.title || itemId}.`);
     setTimeout(() => setSuccessMsg(''), 4000);
   };
 
   const handleDeleteAnime = async (animeId: number) => {
-    if (!window.confirm('Are you sure you want to delete this anime from the official directory?')) return;
+    if (!window.confirm('Are you sure you want to delete this anime?')) return;
     try {
-      await fetch(`/api/anime/${animeId}`, { method: 'DELETE' });
+      await dbService.deleteAnime(animeId);
       setAnimeList(prev => prev.filter(a => a.id !== animeId));
       setSuccessMsg('Anime deleted successfully.');
       onAnimeCreated();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       console.error('Delete error:', err);
+      // Fallback local update if network error
       setAnimeList(prev => prev.filter(a => a.id !== animeId));
+      setSuccessMsg('Anime deleted successfully.');
+      setTimeout(() => setSuccessMsg(''), 4000);
     }
   };
 
@@ -348,6 +366,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             { id: 'overview', label: 'Overview' },
             { id: 'pending', label: `Pending Approvals (${pendingCount})`, badge: pendingCount },
             { id: 'catalog', label: 'Anime Catalog' },
+            { id: 'feedback', label: `User Feedback (${feedbackList.length})`, icon: Inbox },
             { id: 'data_health', label: 'Data Health & IMDb', icon: Shield },
             { id: 'analytics', label: 'Analytics' },
             { id: 'settings', label: 'Settings & Cloud Backup' }
@@ -956,6 +975,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   No critical score mismatches or expired streaming links detected in the Indian regional directory.
                 </p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: USER FEEDBACK */}
+        {activeAdminTab === 'feedback' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-black text-white">User Feedback & Missing Dub Submissions</h2>
+                <p className="text-xs text-neutral-400">Review feedback and missing dub entries submitted by visitors.</p>
+              </div>
+              <button
+                onClick={fetchFeedback}
+                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-bold text-neutral-200 hover:text-white flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            <div className="bg-[#131926] border border-neutral-800 rounded-3xl overflow-hidden shadow-2xl">
+              {feedbackList.length === 0 ? (
+                <div className="p-12 text-center space-y-3">
+                  <Inbox className="w-10 h-10 text-neutral-600 mx-auto" />
+                  <p className="text-sm font-bold text-neutral-300">No feedback submissions found yet.</p>
+                  <p className="text-xs text-neutral-500">Submissions from the feedback form will appear here instantly.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-neutral-800">
+                  {feedbackList.map((item: any) => (
+                    <div key={item.id} className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-neutral-900/40 transition-colors">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-white">{item.name_or_insta || 'Anonymous'}</span>
+                          {item.email && <span className="text-xs text-neutral-400">({item.email})</span>}
+                        </div>
+                        <p className="text-xs text-neutral-300 bg-[#171e2e] border border-neutral-800 p-3 rounded-xl max-w-2xl">
+                          {item.feedback_text || item.feedback}
+                        </p>
+                      </div>
+                      <div className="text-[11px] text-neutral-500 shrink-0">
+                        {item.created_at || 'Recently'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

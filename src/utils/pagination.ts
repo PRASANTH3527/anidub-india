@@ -61,7 +61,11 @@ export function filterAndSortCatalog<T extends {
   items: T[],
   options: CatalogFilterOptions
 ): T[] {
-  let filtered = [...items];
+  let filtered = [...items].filter(item => {
+    const s = (item.status || '').toLowerCase();
+    const subS = ((item as any).submissionStatus || '').toLowerCase();
+    return s !== 'pending' && subS !== 'pending';
+  });
 
   // Regional Dub Language Filter
   if (options.language && options.language !== 'All') {

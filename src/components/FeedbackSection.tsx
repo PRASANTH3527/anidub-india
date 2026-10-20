@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Send, CheckCircle2, Sparkles } from 'lucide-react';
+import { Plus, Send, CheckCircle2 } from 'lucide-react';
 
 export interface FeedbackSectionProps {
   onSubmitDub?: () => void;
@@ -38,37 +38,49 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   };
 
   return (
-    <section className="w-full max-w-full overflow-hidden border-t border-neutral-800/80 bg-[#0c101a] py-12 sm:py-16 px-4 mt-12 sm:mt-16 box-border font-sans">
-      <div className="max-w-xl mx-auto space-y-10">
-        
-        {/* TOP CTA BLOCK */}
-        <div className="text-center space-y-5">
-          <h3 className="font-heading font-black text-2xl text-white tracking-tight">
-            Know a missing dub?
-          </h3>
+    <section className="w-full max-w-[420px] mx-auto overflow-hidden bg-[#0c101a] py-8 px-0 box-border font-sans">
+      
+      {/* 1) INTRO (centered) */}
+      <div className="text-center px-[24px]">
+        <h3 className="text-[22px] font-[800] tracking-[-0.03em] text-white">
+          Know a missing dub?
+        </h3>
+        <p className="mt-[12px] text-[13px] leading-[20px] text-[#94a3b8] max-w-full mx-auto">
+          Help us build the ultimate Indian anime directory by contributing new titles or regional audio info.
+        </p>
+      </div>
 
-          <button
-            type="button"
-            onClick={onSubmitDub}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-lg py-4 px-8 rounded-2xl shadow-[0_10px_30px_rgba(168,85,247,0.4)] hover:shadow-[0_15px_40px_rgba(168,85,247,0.5)] transition-all duration-300 active:scale-[0.98] cursor-pointer group"
-          >
-            <span>Submit Missing Dub Entry</span>
-            <div className="bg-white/20 p-1.5 rounded-lg group-hover:rotate-90 transition-transform">
-              <Plus className="w-5 h-5" />
-            </div>
-          </button>
-
-          <div className="flex items-center justify-center gap-4 text-[10px] font-bold uppercase tracking-widest text-neutral-500">
-            <div className="w-8 h-[1px] bg-neutral-800" />
-            <span>or send direct feedback</span>
-            <div className="w-8 h-[1px] bg-neutral-800" />
+      {/* 2) SUBMIT BUTTON (20px below paragraph) */}
+      <div className="mt-[20px] px-[24px]">
+        <button
+          type="button"
+          onClick={onSubmitDub}
+          className="w-full h-[64px] rounded-[24px] bg-gradient-to-r from-[#9d1df5] via-[#c026d3] to-[#e60088] shadow-[0_10px_40px_rgba(147,51,234,.45)] flex items-center justify-center gap-[12px] cursor-pointer active:scale-[0.98] transition-all group"
+        >
+          <div className="w-[32px] h-[32px] rounded-[10px] bg-[rgba(255,255,255,.2)] flex items-center justify-center group-hover:rotate-90 transition-transform">
+            <Plus className="w-[18px] h-[18px] text-white" />
           </div>
-        </div>
+          <span className="text-[16px] font-bold text-white tracking-tight">Submit an Anime or Dub</span>
+        </button>
+      </div>
 
-        {/* FEEDBACK CARD */}
-        <div className="bg-[#131926] border border-neutral-800 rounded-2xl p-6 sm:p-7 shadow-xl">
+      {/* 3) DIVIDER (20px below button) */}
+      <div className="mt-[20px] h-[16px] flex items-center justify-center gap-[16px]">
+        <div className="w-[32px] h-[1px] bg-[#2a2d3a]" />
+        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#9ca3af]">COMMUNITY DRIVEN</span>
+        <div className="w-[32px] h-[1px] bg-[#2a2d3a]" />
+      </div>
+
+      {/* 4) FEEDBACK CARD (40px below divider) */}
+      <div className="mt-[40px] px-[16px]">
+        <div className="rounded-[24px] p-[24px] bg-[#0e1220] border border-[#202638] shadow-2xl text-left">
+          <div className="space-y-[4px]">
+            <h3 className="text-[18px] leading-[28px] font-bold text-white tracking-[-0.02em]">Share your feedback</h3>
+            <p className="text-[12px] leading-[16px] text-[#8b93a7]">Have a suggestion or spotted something? Let us know.</p>
+          </div>
+
           {submitted ? (
-            <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-xl p-4 text-center space-y-2 animate-fadeIn">
+            <div className="mt-[20px] bg-emerald-950/40 border border-emerald-800/50 rounded-[16px] p-4 text-center space-y-2 animate-fadeIn">
               <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
               <h4 className="font-bold text-sm text-white">Thank You for Your Feedback!</h4>
               <p className="text-xs text-neutral-300">
@@ -76,51 +88,68 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
               </p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form onSubmit={handleSubmit} className="mt-[20px] space-y-[16px]">
+              <div>
+                <label className="block text-[12px] font-medium leading-[16px] text-[#d1d5db] mb-[6px]">
+                  Your name or Insta ID (optional)
+                </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Your Name (Optional)"
-                  className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-purple-500 rounded-xl py-2.5 px-3.5 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-purple-500 transition-colors"
+                  placeholder="e.g. @animefan_india"
+                  className="w-full h-[38px] rounded-[16px] px-[16px] bg-[#141929] border border-[#2a3045] text-[12px] text-white placeholder-[#6b7280] focus:border-[#a855f7] focus:ring-3 focus:ring-[rgba(168,85,247,.25)] focus:outline-none transition-all"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-medium leading-[16px] text-[#d1d5db] mb-[6px]">
+                  Email ID (optional)
+                </label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Email Address (Optional)"
-                  className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-purple-500 rounded-xl py-2.5 px-3.5 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-purple-500 transition-colors"
+                  placeholder="e.g. you@gmail.com"
+                  className="w-full h-[38px] rounded-[16px] px-[16px] bg-[#141929] border border-[#2a3045] text-[12px] text-white placeholder-[#6b7280] focus:border-[#a855f7] focus:ring-3 focus:ring-[rgba(168,85,247,.25)] focus:outline-none transition-all"
                 />
               </div>
 
-              <textarea
-                rows={4}
-                required
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Tell us about missing regional audio tracks, incorrect voice artists, or website suggestions..."
-                className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-purple-500 rounded-xl py-2.5 px-3.5 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-purple-500 transition-colors resize-none"
-              />
+              <div>
+                <label className="block text-[12px] font-medium leading-[16px] text-[#d1d5db] mb-[6px]">
+                  Your feedback <span className="text-[#f43f5e]">*</span>
+                </label>
+                <textarea
+                  required
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="What can we improve? Any missing dubs, bugs, or ideas..."
+                  className="w-full h-[69px] py-[10px] px-[16px] rounded-[16px] bg-[#141929] border border-[#2a3045] text-[12px] text-white placeholder-[#6b7280] focus:border-[#a855f7] focus:ring-3 focus:ring-[rgba(168,85,247,.25)] focus:outline-none transition-all resize-none"
+                />
+              </div>
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-purple-600/30 disabled:opacity-50"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{isSubmitting ? 'Sending Feedback...' : 'Send Feedback'}</span>
-              </button>
+              <div className="mt-[24px]">
+                <button
+                  type="submit"
+                  disabled={!message.trim() || isSubmitting}
+                  className="w-full h-[36px] rounded-[14px] bg-gradient-to-r from-[#7e22ce] to-[#9333ea] shadow-[0_6px_16px_rgba(91,33,182,.35)] text-[12px] font-semibold text-white flex items-center justify-center gap-[8px] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <span>{isSubmitting ? 'Submitting feedback...' : 'Submit feedback'}</span>
+                  <Send className="w-[14px] h-[14px]" />
+                </button>
+              </div>
             </form>
           )}
         </div>
-
-        {/* FOOTER NOTE */}
-        <div className="text-center text-[11px] text-neutral-500">
-          Anidub India is a community catalog and does not host copyrighted media files.
-        </div>
-
       </div>
+
+      {/* 5) FOOTER (40px below card) */}
+      <div className="mt-[40px] px-[24px] text-center">
+        <p className="text-[10px] leading-[16px] text-[#6b7280]">
+          © 2026 AniDub India. All anime media belongs to their respective production companies. Licensed under fair-use catalog guidelines.
+        </p>
+      </div>
+
     </section>
   );
 };

@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
   email TEXT NOT NULL UNIQUE,
-  avatar_url TEXT NOT NULL DEFAULT 'https://i.ibb.co/vzS8G90/default-avatar.png', -- ImgBB Hosted Avatar URL
-  role TEXT DEFAULT 'user', -- 'user', 'moderator', 'admin'
+  avatar_url TEXT NOT NULL DEFAULT 'https://i.ibb.co/vzS8G90/default-avatar.png',
+  role TEXT DEFAULT 'user',
   bio TEXT DEFAULT 'Anime enthusiast streaming on Cloudflare Edge',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -20,14 +20,14 @@ CREATE TABLE IF NOT EXISTS anime (
   title TEXT NOT NULL,
   slug TEXT UNIQUE NOT NULL,
   synopsis TEXT,
-  cover_image TEXT NOT NULL, -- ImgBB Hosted Poster URL (e.g. https://i.ibb.co/w04Pq6b/poster.jpg)
-  banner_image TEXT NOT NULL, -- ImgBB Hosted Banner URL (e.g. https://i.ibb.co/98W13PY/banner.jpg)
+  cover_image TEXT NOT NULL,
+  banner_image TEXT NOT NULL,
   rating REAL DEFAULT 0.0,
   episodes_count INTEGER DEFAULT 12,
-  status TEXT DEFAULT 'Airing', -- 'Airing', 'Completed', 'Upcoming'
+  status TEXT DEFAULT 'Airing',
   season TEXT DEFAULT 'Spring',
   year INTEGER DEFAULT 2026,
-  genres TEXT NOT NULL, -- Comma-separated: 'Action,Sci-Fi,Cyberpunk'
+  genres TEXT NOT NULL,
   popularity INTEGER DEFAULT 1000,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS episodes (
   episode_number INTEGER NOT NULL,
   title TEXT NOT NULL,
   duration TEXT DEFAULT '24m',
-  thumbnail_url TEXT, -- ImgBB Hosted Thumbnail URL
+  thumbnail_url TEXT,
   video_url TEXT NOT NULL,
   synopsis TEXT,
   FOREIGN KEY (anime_id) REFERENCES anime(id) ON DELETE CASCADE
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS reviews (
   anime_id INTEGER NOT NULL,
   user_id TEXT DEFAULT 'default_user',
   user_name TEXT NOT NULL,
-  user_avatar TEXT DEFAULT 'https://i.ibb.co/vzS8G90/default-avatar.png', -- ImgBB URL
+  user_avatar TEXT DEFAULT 'https://i.ibb.co/vzS8G90/default-avatar.png',
   rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 10),
   comment TEXT NOT NULL,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -68,11 +68,20 @@ CREATE TABLE IF NOT EXISTS watchlist (
   FOREIGN KEY (anime_id) REFERENCES anime(id) ON DELETE CASCADE
 );
 
--- 6. Cloudflare & ImgBB Execution Logs Table
+-- 6. Feedback Table (User feedback and missing dub submissions)
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name_or_insta TEXT,
+  email TEXT,
+  feedback_text TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7. Cloudflare & ImgBB Execution Logs Table
 CREATE TABLE IF NOT EXISTS cloudflare_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-  service TEXT NOT NULL, -- 'D1', 'Pages', 'Workers', 'ImgBB'
+  service TEXT NOT NULL,
   event_type TEXT NOT NULL,
   status_code INTEGER NOT NULL,
   latency_ms INTEGER NOT NULL,
@@ -87,3 +96,4 @@ CREATE INDEX IF NOT EXISTS idx_anime_status ON anime(status);
 CREATE INDEX IF NOT EXISTS idx_episodes_anime_id ON episodes(anime_id, episode_number);
 CREATE INDEX IF NOT EXISTS idx_reviews_anime_id ON reviews(anime_id);
 CREATE INDEX IF NOT EXISTS idx_watchlist_user ON watchlist(user_id, anime_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);

@@ -27,6 +27,8 @@ interface NavbarProps {
   onOpenCollection?: () => void;
   feedView?: string;
   setFeedView?: (view: string) => void;
+  isAdminAuthenticated?: boolean;
+  onLogout?: () => void;
 }
 
 const LANGUAGES = [
@@ -45,7 +47,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onUnlockAdmin,
   onOpenCollection,
   feedView = 'library',
-  setFeedView
+  setFeedView,
+  isAdminAuthenticated,
+  onLogout
 }) => {
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [selectedLang, setSelectedLang] = useState('en');
@@ -55,6 +59,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleLogoClick = () => {
+    // If already in Admin mode, clicking logo logs them out and returns to public view
+    if (isAdminAuthenticated && activeTab === 'admin') {
+      if (onLogout) onLogout();
+      setLogoClicks(0);
+      return;
+    }
+
     if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
     const newCount = logoClicks + 1;
     if (newCount >= 5) {

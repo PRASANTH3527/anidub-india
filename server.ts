@@ -169,6 +169,7 @@ function runMigrations() {
   try { db.run("ALTER TABLE anime ADD COLUMN languages TEXT DEFAULT 'HIN,TAM,TEL';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN platform TEXT DEFAULT 'Crunchyroll';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN type TEXT DEFAULT 'TV Series';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN submissionStatus TEXT DEFAULT 'approved';"); } catch (e) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS episodes (
@@ -204,6 +205,14 @@ function runMigrations() {
       FOREIGN KEY (anime_id) REFERENCES anime(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS feedback (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name_or_insta TEXT,
+      email TEXT,
+      feedback_text TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS cloudflare_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -231,157 +240,6 @@ function runMigrations() {
     );
   }
 
-  // Seed sample anime data if empty
-  const res = db.exec("SELECT COUNT(*) as count FROM anime");
-  const count = res[0]?.values[0][0] || 0;
-  if (count === 0) {
-    const seedAnime = [
-      {
-        title: "Cyberpunk: Neon Edge",
-        slug: "cyberpunk-neon-edge",
-        synopsis: "In a sprawling megacity governed by rogue AI syndicates, a cybernetically enhanced street runner uncovers a conspiracy that threatens the digital mainframe.",
-        cover_image: "https://i.ibb.co/vzS8G90/cyberpunk-poster.jpg",
-        banner_image: "https://i.ibb.co/xL2y9Bv/cyberpunk-banner.jpg",
-        rating: 9.4,
-        episodes_count: 24,
-        status: "Airing",
-        season: "Spring",
-        year: 2026,
-        genres: "Action,Sci-Fi,Cyberpunk,Thriller",
-        popularity: 98500
-      },
-      {
-        title: "Celestial Blade Chronicles",
-        slug: "celestial-blade-chronicles",
-        synopsis: "Wielding ancestral spiritual steel, young swordsman Renji ascends the celestial pagoda to banish the abyssal lords before the solar eclipse.",
-        cover_image: "https://i.ibb.co/qD3tZ6X/celestial-poster.jpg",
-        banner_image: "https://i.ibb.co/3WqP7nJ/celestial-banner.jpg",
-        rating: 9.1,
-        episodes_count: 12,
-        status: "Completed",
-        season: "Winter",
-        year: 2025,
-        genres: "Action,Fantasy,Martial Arts,Shonen",
-        popularity: 84200
-      },
-      {
-        title: "Quantum Symphony",
-        slug: "quantum-symphony",
-        synopsis: "Two prodigy violinists across parallel dimensions discover their sheet music synchronizes their heartbeats across the multiverse.",
-        cover_image: "https://i.ibb.co/r2gP5nS/symphony-poster.jpg",
-        banner_image: "https://i.ibb.co/p6V18mM/symphony-banner.jpg",
-        rating: 8.9,
-        episodes_count: 13,
-        status: "Airing",
-        season: "Spring",
-        year: 2026,
-        genres: "Drama,Romance,Sci-Fi,Music",
-        popularity: 62000
-      },
-      {
-        title: "Abyssal Alchemist",
-        slug: "abyssal-alchemist",
-        synopsis: "Exiled from the royal academy, a forbidden researcher unlocks the secret of transmuting dark matter into pure starlight energy.",
-        cover_image: "https://i.ibb.co/b3L4X8q/alchemist-poster.jpg",
-        banner_image: "https://i.ibb.co/8b7S2kL/alchemist-banner.jpg",
-        rating: 8.8,
-        episodes_count: 26,
-        status: "Completed",
-        season: "Autumn",
-        year: 2025,
-        genres: "Adventure,Fantasy,Mystery,Magic",
-        popularity: 51000
-      },
-      {
-        title: "Tokyo Shinobi Squad",
-        slug: "tokyo-shinobi-squad",
-        synopsis: "Modern-day covert ninja units patrol the neon-drenched alleys of Shinjuku against shadow yokai syndicates.",
-        cover_image: "https://i.ibb.co/4T7t5Xp/shinobi-poster.jpg",
-        banner_image: "https://i.ibb.co/gW7S4yZ/shinobi-banner.jpg",
-        rating: 9.0,
-        episodes_count: 12,
-        status: "Airing",
-        season: "Spring",
-        year: 2026,
-        genres: "Action,Supernatural,Urban,Ninja",
-        popularity: 73000
-      },
-      {
-        title: "Starlight Barista",
-        slug: "starlight-barista",
-        synopsis: "A cozy interstellar cafe that serves cosmic beverages to weary space travelers drifting between star systems.",
-        cover_image: "https://i.ibb.co/Yp8xR2Z/barista-poster.jpg",
-        banner_image: "https://i.ibb.co/v4K8R7m/barista-banner.jpg",
-        rating: 9.2,
-        episodes_count: 12,
-        status: "Completed",
-        season: "Summer",
-        year: 2025,
-        genres: "Slice of Life,Sci-Fi,Comedy,Cozy",
-        popularity: 44000
-      },
-      {
-        title: "Titanium Mecha Vanguard",
-        slug: "titanium-mecha-vanguard",
-        synopsis: "Humanity's last bastion stands inside colossal bipedal armored mechs defending Earth's orbital elevators from colossal alien behemoths.",
-        cover_image: "https://i.ibb.co/mC9t2Wp/mecha-poster.jpg",
-        banner_image: "https://i.ibb.co/L5hY8qZ/mecha-banner.jpg",
-        rating: 8.7,
-        episodes_count: 24,
-        status: "Airing",
-        season: "Spring",
-        year: 2026,
-        genres: "Mecha,Action,Military,Sci-Fi",
-        popularity: 68900
-      },
-      {
-        title: "Chronos Detective Agency",
-        slug: "chronos-detective-agency",
-        synopsis: "Private investigators who solve cold cases by jumping back and forth across 24-hour temporal loops in Neo-Tokyo.",
-        cover_image: "https://i.ibb.co/7XkP4nW/detective-poster.jpg",
-        banner_image: "https://i.ibb.co/y4L2q9B/detective-banner.jpg",
-        rating: 8.9,
-        episodes_count: 12,
-        status: "Completed",
-        season: "Fall",
-        year: 2025,
-        genres: "Mystery,Sci-Fi,Suspense,Detective",
-        popularity: 58000
-      }
-    ];
-
-    for (const a of seedAnime) {
-      db.run(
-        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, popularity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [a.title, a.slug, a.synopsis, a.cover_image, a.banner_image, a.rating, a.episodes_count, a.status, a.season, a.year, a.genres, a.popularity]
-      );
-      
-      const resId = db.exec("SELECT last_insert_rowid() as id");
-      const animeId = resId[0].values[0][0];
-
-      // Insert sample episodes
-      for (let ep = 1; ep <= Math.min(a.episodes_count, 6); ep++) {
-        db.run(
-          `INSERT INTO episodes (anime_id, episode_number, title, duration, thumbnail_url, video_url, synopsis) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            animeId,
-            ep,
-            `Episode ${ep}: Awakening of the ${ep === 1 ? 'Beginning' : 'Storm'}`,
-            '24m',
-            a.cover_image,
-            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-            `The intense journey continues in Episode ${ep} as allies unite against unforeseen trials.`
-          ]
-        );
-      }
-
-      // Insert sample review with ImgBB avatar
-      db.run(
-        `INSERT INTO reviews (anime_id, user_name, user_avatar, rating, comment) VALUES (?, ?, ?, ?, ?)`,
-        [animeId, 'CloudflareFan99', 'https://i.ibb.co/vzS8G90/default-avatar.png', 10, 'Absolute masterpiece! The animation and D1 database backend sync with ImgBB CDN are butter smooth.']
-      );
-    }
-  }
   persistD1();
 }
 
@@ -588,6 +446,12 @@ app.get('/api/anime', (req, res) => {
     let whereClauses: string[] = [];
     let params: any[] = [];
 
+    // Strictly filter out and hide any anime where status === 'pending' or submissionStatus === 'pending' from public UI
+    const includePending = req.query.includePending === 'true';
+    if (!includePending) {
+      whereClauses.push("(status != 'pending' AND (submissionStatus IS NULL OR submissionStatus != 'pending'))");
+    }
+
     if (genre && genre !== 'All') {
       whereClauses.push("genres LIKE ?");
       params.push(`%${genre}%`);
@@ -699,17 +563,22 @@ app.get('/api/anime/:id', (req, res) => {
   }
 });
 
-// 6. POST /api/anime (Admin: Create Anime with ImgBB Poster & Banner URLs - Protected)
-app.post('/api/anime', requireAdminAuth, (req, res) => {
+// 6. POST /api/anime (Create Anime with ImgBB Poster & Banner URLs)
+app.post('/api/anime', (req, res) => {
   const start = Date.now();
   try {
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres } = req.body;
+    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, languages, platform, type } = req.body;
     if (!title) return res.status(400).json({ error: "Title is required" });
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
+    // Strictly save all user submissions with status: 'pending' and submissionStatus: 'pending'
+    const isAdmin = Boolean(req.headers['x-admin-token']);
+    const finalStatus = isAdmin && status && status !== 'pending' ? status : 'pending';
+    const finalSubmissionStatus = isAdmin && submissionStatus && submissionStatus !== 'pending' ? submissionStatus : 'pending';
+
     db.run(
-      `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, popularity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         title,
         slug,
@@ -718,11 +587,15 @@ app.post('/api/anime', requireAdminAuth, (req, res) => {
         banner_image || cover_image || 'https://i.ibb.co/xL2y9Bv/default-banner.jpg',
         parseFloat(rating) || 8.5,
         parseInt(episodes_count) || 12,
-        status || 'Airing',
+        finalStatus,
+        finalSubmissionStatus,
         season || 'Spring',
         parseInt(year) || 2026,
         genres || 'Action,Fantasy',
-        Math.floor(Math.random() * 50000) + 20000
+        Math.floor(Math.random() * 50000) + 20000,
+        languages || 'HIN,TAM,TEL',
+        platform || 'Crunchyroll',
+        type || 'TV Series'
       ]
     );
 
@@ -746,20 +619,22 @@ app.post('/api/anime', requireAdminAuth, (req, res) => {
     }
 
     persistD1();
-    logCloudflareEvent('D1', 'POST /api/anime', 201, Date.now() - start, `Created anime: ${title} (ID: ${animeId}, Poster: ImgBB)`);
+    logCloudflareEvent('D1', 'POST /api/anime', 201, Date.now() - start, `Created anime: ${title} (ID: ${animeId}, Status: ${finalStatus})`);
 
-    // Trigger Telegram channel notification
-    sendTelegramNotification({
-      title,
-      synopsis: synopsis || 'An exciting new anime streaming exclusively on Cloudflare Pages.',
-      cover_image: cover_image || 'https://i.ibb.co/vzS8G90/default-poster.jpg',
-      rating: parseFloat(rating) || 8.5,
-      episodes_count: parseInt(episodes_count) || 12,
-      season: season || 'Spring',
-      year: parseInt(year) || 2026,
-      genres: genres || 'Action,Fantasy',
-      languages: req.body.languages || 'Tamil, Telugu, Hindi'
-    }).catch(e => console.error('Telegram notification error:', e));
+    // Trigger Telegram channel notification only if approved
+    if (finalStatus !== 'pending') {
+      sendTelegramNotification({
+        title,
+        synopsis: synopsis || 'An exciting new anime streaming exclusively on Cloudflare Pages.',
+        cover_image: cover_image || 'https://i.ibb.co/vzS8G90/default-poster.jpg',
+        rating: parseFloat(rating) || 8.5,
+        episodes_count: parseInt(episodes_count) || 12,
+        season: season || 'Spring',
+        year: parseInt(year) || 2026,
+        genres: genres || 'Action,Fantasy',
+        languages: languages || 'Tamil, Telugu, Hindi'
+      }).catch(e => console.error('Telegram notification error:', e));
+    }
 
     res.status(201).json({ success: true, animeId, slug });
   } catch (err: any) {
@@ -881,9 +756,9 @@ app.post('/api/anime/:id/rate', (req, res) => {
 app.post('/api/admin/approve/:id', requireAdminAuth, (req, res) => {
   try {
     const animeId = req.params.id;
-    db.run("UPDATE anime SET status = 'Airing' WHERE id = ?", [animeId]);
+    db.run("UPDATE anime SET status = 'Airing', submissionStatus = 'approved' WHERE id = ?", [animeId]);
     persistD1();
-    res.json({ success: true, id: animeId, status: 'Airing' });
+    res.json({ success: true, id: animeId, status: 'Airing', submissionStatus: 'approved' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -894,8 +769,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
   const start = Date.now();
   try {
     const id = req.params.id;
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres } = req.body;
-    if (!title) return res.status(400).json({ error: "Title is required" });
+    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres } = req.body;
 
     db.run(
       `UPDATE anime SET 
@@ -906,6 +780,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         rating = COALESCE(?, rating),
         episodes_count = COALESCE(?, episodes_count),
         status = COALESCE(?, status),
+        submissionStatus = COALESCE(?, submissionStatus),
         season = COALESCE(?, season),
         year = COALESCE(?, year),
         genres = COALESCE(?, genres)
@@ -918,6 +793,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         rating !== undefined ? parseFloat(rating) : null,
         episodes_count !== undefined ? parseInt(episodes_count) : null,
         status,
+        submissionStatus,
         season,
         year !== undefined ? parseInt(year) : null,
         genres,
@@ -1172,6 +1048,74 @@ app.post('/api/ai/generate-poster', async (req, res) => {
     logCloudflareEvent('ImgBB', 'AI_POSTER_UPLOAD', 200, 45, `Stored AI poster in ImgBB: ${uploadResult.url}`);
 
     res.json({ success: true, url: uploadResult.url });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/feedback
+app.get('/api/feedback', async (req, res) => {
+  try {
+    const list = [];
+    if (db) {
+      const stmt = db.prepare("SELECT * FROM feedback ORDER BY id DESC");
+      while (stmt.step()) {
+        list.push(stmt.getAsObject());
+      }
+      stmt.free();
+    }
+    res.json({ feedback: list });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 14. POST /api/feedback
+app.post('/api/feedback', async (req, res) => {
+  try {
+    const { name, nameOrInsta, email, message, feedback } = req.body;
+    const author = name || nameOrInsta || 'Anonymous';
+    const content = message || feedback || '';
+    if (db) {
+      db.run("INSERT INTO feedback (name_or_insta, email, feedback_text) VALUES (?, ?, ?)", [author, email || '', content]);
+      persistD1();
+    }
+
+    const tgMsg = `💬 *NEW FEEDBACK / DUB SUBMISSION*\n\n` +
+      `👤 *Name / Insta:* ${author}\n` +
+      `📧 *Email:* ${email || 'N/A'}\n` +
+      `📝 *Feedback:* ${content}\n\n` +
+      `_Received via Anidub India Local Server_`;
+
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+    if (token && chatId) {
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text: tgMsg, parse_mode: 'Markdown' })
+      }).catch(() => {});
+    }
+
+    res.status(201).json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 15. POST /api/admin/reset-db
+app.post('/api/admin/reset-db', async (req, res) => {
+  try {
+    if (db) {
+      db.run("DELETE FROM reviews");
+      db.run("DELETE FROM watchlist");
+      db.run("DELETE FROM episodes");
+      db.run("DELETE FROM feedback");
+      db.run("DELETE FROM anime");
+      db.run("DELETE FROM users");
+      persistD1();
+    }
+    res.json({ success: true, message: "Database cleared successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

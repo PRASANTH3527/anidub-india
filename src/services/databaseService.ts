@@ -77,9 +77,12 @@ class DatabaseService {
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/anime`);
-      if (!res.ok) throw new Error('Failed to fetch anime catalog');
       const json = await res.json();
-      const items = json.data || json || [];
+      const rawItems = json.data || json || [];
+      const items = rawItems.filter((item: any) => 
+        item.status !== 'pending' && 
+        item.submissionStatus !== 'pending'
+      );
       this.cache = items;
       this.cacheTimestamp = now;
       return items;
@@ -240,17 +243,74 @@ class DatabaseService {
   }
 
   public async submitDubInfo(animeData: any): Promise<any> {
+    const payload = {
+      ...animeData,
+      status: 'pending',
+      submissionStatus: 'pending'
+    };
     const res = await fetch(`${API_BASE_URL}/api/anime`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(animeData)
+      body: JSON.stringify(payload)
     });
     if (!res.ok) {
       throw new Error('Failed to submit dub suggestion to database');
     }
     const data = await res.json();
+    return data;
+  }
+
+  public async deleteAnime(animeId: number): Promise<void> {
+    const adminToken = localStorage.getItem('cf_admin_token') || 'admin_secret';
+    const res = await fetch(`${API_BASE_URL}/api/anime/${animeId}`, {
+      method: 'DELETE',
+      headers: {
+        'x-admin-token': adminToken
+      }
+    });
+    if (!res.ok) {
+      throw new Error('Failed to delete anime from database');
+    }
+    this.notifyListeners();
+  }
+
+  public async updateAnimeStatus(animeId: any, status: string = 'approved'): Promise<any> {
+    const adminToken = localStorage.getItem('cf_admin_token') || 'admin_secret';
+    const res = await fetch(`${API_BASE_URL}/api/admin/approve/${animeId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-token': adminToken
+      },
+      body: JSON.stringify({
+        status: 'Airing',
+        submissionStatus: status
+      })
+    });
+    if (!res.ok) {
+      throw new Error('Failed to update anime status in database');
+    }
+    const data = await res.json();
     this.notifyListeners();
     return data;
+  }
+
+  public async clearAllData(): Promise<void> {
+    try {
+      localStorage.removeItem('cf_anime_watchlist');
+      localStorage.removeItem('cf_anime_recently_viewed');
+      localStorage.removeItem('cf_admin_token');
+      this.cache = [];
+      this.cacheTimestamp = 0;
+      
+      await fetch(`${API_BASE_URL}/api/admin/reset-db`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (err) {
+      console.error('clearAllData error:', err);
+    }
+    this.notifyListeners();
   }
 }
 

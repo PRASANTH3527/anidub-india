@@ -7,6 +7,8 @@
 interface Env {
   DB: any; // Cloudflare D1 Database binding
   IMGBB_API_KEY?: string;
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_CHAT_ID?: string;
   ENVIRONMENT?: string;
 }
 
@@ -15,128 +17,26 @@ type PagesFunction<T = any> = (context: { request: Request; env: T; params?: any
 const DEFAULT_IMGBB_KEY = 'Ee6b4e37ae9c228c29b8448483b6591b';
 const D1_DATABASE_ID = '75f053ab-5b44-4d48-abf8-b3a357a89426';
 
-const SEED_ANIME = [
-  {
-    id: 1,
-    title: "Cyberpunk: Neon Edge",
-    slug: "cyberpunk-neon-edge",
-    synopsis: "In a sprawling megacity governed by rogue AI syndicates, a cybernetically enhanced street runner uncovers a conspiracy that threatens the digital mainframe.",
-    cover_image: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1600&auto=format&fit=crop&q=80",
-    rating: 9.4,
-    episodes_count: 24,
-    status: "Airing",
-    season: "Spring",
-    year: 2026,
-    genres: "Action,Sci-Fi,Cyberpunk,Thriller",
-    popularity: 98500
-  },
-  {
-    id: 2,
-    title: "Celestial Blade Chronicles",
-    slug: "celestial-blade-chronicles",
-    synopsis: "Wielding ancestral spiritual steel, young swordsman Renji ascends the celestial pagoda to banish the abyssal lords before the solar eclipse.",
-    cover_image: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1600&auto=format&fit=crop&q=80",
-    rating: 9.1,
-    episodes_count: 12,
-    status: "Completed",
-    season: "Winter",
-    year: 2025,
-    genres: "Action,Fantasy,Martial Arts,Shonen",
-    popularity: 84200
-  },
-  {
-    id: 3,
-    title: "Quantum Symphony",
-    slug: "quantum-symphony",
-    synopsis: "Two prodigy violinists across parallel dimensions discover their sheet music synchronizes their heartbeats across the multiverse.",
-    cover_image: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.9,
-    episodes_count: 13,
-    status: "Airing",
-    season: "Spring",
-    year: 2026,
-    genres: "Drama,Romance,Sci-Fi,Music",
-    popularity: 62000
-  },
-  {
-    id: 4,
-    title: "Abyssal Alchemist",
-    slug: "abyssal-alchemist",
-    synopsis: "Exiled from the royal academy, a forbidden researcher unlocks the secret of transmuting dark matter into pure starlight energy.",
-    cover_image: "https://images.unsplash.com/photo-1563089145-599997674d42?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.8,
-    episodes_count: 26,
-    status: "Completed",
-    season: "Autumn",
-    year: 2025,
-    genres: "Adventure,Fantasy,Mystery,Magic",
-    popularity: 51000
-  },
-  {
-    id: 5,
-    title: "Tokyo Shinobi Squad",
-    slug: "tokyo-shinobi-squad",
-    synopsis: "Modern-day covert ninja units patrol the neon-drenched alleys of Shinjuku against shadow yokai syndicates.",
-    cover_image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=1600&auto=format&fit=crop&q=80",
-    rating: 9.0,
-    episodes_count: 12,
-    status: "Airing",
-    season: "Spring",
-    year: 2026,
-    genres: "Action,Supernatural,Urban,Ninja",
-    popularity: 73000
-  },
-  {
-    id: 6,
-    title: "Starlight Barista",
-    slug: "starlight-barista",
-    synopsis: "A cozy interstellar cafe that serves cosmic beverages to weary space travelers drifting between star systems.",
-    cover_image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&auto=format&fit=crop&q=80",
-    rating: 9.2,
-    episodes_count: 12,
-    status: "Completed",
-    season: "Summer",
-    year: 2025,
-    genres: "Slice of Life,Sci-Fi,Comedy,Cozy",
-    popularity: 44000
-  },
-  {
-    id: 7,
-    title: "Titanium Mecha Vanguard",
-    slug: "titanium-mecha-vanguard",
-    synopsis: "Humanity's last bastion stands inside colossal bipedal armored mechs defending Earth's orbital elevators from colossal alien behemoths.",
-    cover_image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.7,
-    episodes_count: 24,
-    status: "Airing",
-    season: "Spring",
-    year: 2026,
-    genres: "Mecha,Action,Military,Sci-Fi",
-    popularity: 68900
-  },
-  {
-    id: 8,
-    title: "Chronos Detective Agency",
-    slug: "chronos-detective-agency",
-    synopsis: "Private investigators who solve cold cases by jumping back and forth across 24-hour temporal loops in Neo-Tokyo.",
-    cover_image: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.9,
-    episodes_count: 12,
-    status: "Completed",
-    season: "Fall",
-    year: 2025,
-    genres: "Mystery,Sci-Fi,Suspense,Detective",
-    popularity: 58000
+const SEED_ANIME: any[] = [];
+
+async function sendTelegramAlert(env: Env, text: string) {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  const chatId = env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: text,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (err) {
+    console.error('Telegram notification error:', err);
   }
-];
+}
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -272,44 +172,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const countRes = await env.DB.prepare(`SELECT COUNT(*) as total FROM anime ${whereSql}`).bind(...params).first();
         const total = countRes ? Number(countRes.total) : 0;
 
-        if (total > 0) {
-          const queryParams = [...params, limit, offset];
-          const dataRes = await env.DB.prepare(`SELECT * FROM anime ${whereSql} ${orderSql} LIMIT ? OFFSET ?`).bind(...queryParams).all();
-          return jsonResponse({
-            data: dataRes.results || [],
-            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 }
-          });
-        }
+        const queryParams = [...params, limit, offset];
+        const dataRes = await env.DB.prepare(`SELECT * FROM anime ${whereSql} ${orderSql} LIMIT ? OFFSET ?`).bind(...queryParams).all();
+        return jsonResponse({
+          data: dataRes.results || [],
+          pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 }
+        });
       }
-
-      // Default high-fidelity dataset fallback
-      let filtered = [...SEED_ANIME];
-      if (genre && genre !== 'All') {
-        filtered = filtered.filter(a => a.genres.toLowerCase().includes(genre.toLowerCase()));
-      }
-      if (status && status !== 'All') {
-        filtered = filtered.filter(a => a.status.toLowerCase() === status.toLowerCase());
-      }
-      if (search) {
-        const q = search.toLowerCase();
-        filtered = filtered.filter(a => a.title.toLowerCase().includes(q) || a.synopsis.toLowerCase().includes(q) || a.genres.toLowerCase().includes(q));
-      }
-      if (sort === 'rating') filtered.sort((a, b) => b.rating - a.rating);
-      else if (sort === 'newest') filtered.sort((a, b) => b.year - a.year);
-      else if (sort === 'title') filtered.sort((a, b) => a.title.localeCompare(b.title));
-      else filtered.sort((a, b) => b.popularity - a.popularity);
-
-      const total = filtered.length;
-      const paginated = filtered.slice(offset, offset + limit);
 
       return jsonResponse({
-        data: paginated,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit) || 1
-        }
+        data: [],
+        pagination: { page: 1, limit, total: 0, totalPages: 1 }
       });
     } catch (err: any) {
       return jsonResponse({ error: err.message }, 500);
@@ -340,6 +213,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           50000
         ).run();
       }
+
+      const tgMsg = `🔥 *NEW ANIME / DUB SUBMISSION ADDED*\n\n` +
+        `📌 *Title:* ${body.title}\n` +
+        `⭐ *Rating:* ${body.rating || 8.5}/10\n` +
+        `🎙 *Languages:* ${body.languages || 'Tamil, Telugu, Hindi'}\n` +
+        `📺 *Platform:* ${body.platform || 'Crunchyroll'}\n\n` +
+        `💬 _"${body.synopsis?.slice(0, 120) || ''}"_`;
+      await sendTelegramAlert(env, tgMsg);
+
       return jsonResponse({ success: true }, 201);
     } catch (err: any) {
       return jsonResponse({ error: err.message }, 500);
@@ -476,6 +358,66 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       return jsonResponse({ success: true, results: SEED_ANIME.slice(0, 5), latencyMs: 10 });
     } catch (err: any) {
       return jsonResponse({ error: err.message }, 400);
+    }
+  }
+
+  // 10. POST /api/feedback
+  if (path === '/api/feedback' && method === 'POST') {
+    try {
+      const body: any = await request.json();
+      if (env.DB) {
+        await env.DB.prepare(
+          "INSERT INTO feedback (name_or_insta, email, feedback_text) VALUES (?, ?, ?)"
+        ).bind(
+          body.name || body.nameOrInsta || 'Anonymous',
+          body.email || '',
+          body.message || body.feedback || ''
+        ).run();
+      }
+
+      const author = body.name || body.nameOrInsta || 'Anonymous';
+      const email = body.email || 'N/A';
+      const message = body.message || body.feedback || '';
+      const tgMsg = `💬 *NEW FEEDBACK / DUB SUBMISSION*\n\n` +
+        `👤 *Name / Insta:* ${author}\n` +
+        `📧 *Email:* ${email}\n` +
+        `📝 *Feedback:* ${message}\n\n` +
+        `_Received via Anidub India Edge_`;
+      await sendTelegramAlert(env, tgMsg);
+
+      return jsonResponse({ success: true }, 201);
+    } catch (err: any) {
+      return jsonResponse({ error: err.message }, 500);
+    }
+  }
+
+  // 10b. GET /api/feedback
+  if (path === '/api/feedback' && method === 'GET') {
+    try {
+      if (env.DB) {
+        const res = await env.DB.prepare("SELECT * FROM feedback ORDER BY id DESC").all();
+        return jsonResponse({ feedback: res.results || [] });
+      }
+      return jsonResponse({ feedback: [] });
+    } catch (err: any) {
+      return jsonResponse({ error: err.message }, 500);
+    }
+  }
+
+  // 11. POST /api/admin/reset-db
+  if (path === '/api/admin/reset-db' && method === 'POST') {
+    try {
+      if (env.DB) {
+        await env.DB.prepare("DELETE FROM reviews").run();
+        await env.DB.prepare("DELETE FROM watchlist").run();
+        await env.DB.prepare("DELETE FROM episodes").run();
+        await env.DB.prepare("DELETE FROM feedback").run();
+        await env.DB.prepare("DELETE FROM anime").run();
+        await env.DB.prepare("DELETE FROM users").run();
+      }
+      return jsonResponse({ success: true, message: "Database cleared successfully" });
+    } catch (err: any) {
+      return jsonResponse({ error: err.message }, 500);
     }
   }
 
