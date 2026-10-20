@@ -15,6 +15,9 @@ import {
   Loader2
 } from 'lucide-react';
 import { filterAndSortCatalog } from '../utils/pagination';
+import { AnimeCard, AnimeCardData } from './AnimeCard';
+import { RecentlyViewedRow } from './RecentlyViewedRow';
+import { AnimatedStats } from './AnimatedStats';
 
 export interface Anime {
   id: number;
@@ -28,6 +31,7 @@ export interface Anime {
   status: string;
   season: string;
   year: number;
+  releaseYear?: number;
   genres: string;
   popularity: number;
   languages?: string;
@@ -42,6 +46,9 @@ interface CatalogViewProps {
   onToggleWatchlist: (animeId: number) => void;
   onOpenRoulette: () => void;
   onOpenCollection: () => void;
+  feedView?: string;
+  recentlyViewed?: any[];
+  onClearRecentlyViewed?: () => void;
 }
 
 export const FALLBACK_SEED_ANIME: Anime[] = [
@@ -169,10 +176,10 @@ const PLATFORMS = ['All Platforms', 'Crunchyroll', 'Netflix', 'JioCinema', 'Muse
 const TYPES = ['All Types', 'TV Series', 'Movie', 'OVA', 'Special'];
 const STATUSES = ['All', 'Airing', 'Completed', 'Upcoming'];
 const SORTS = [
-  { label: 'Most Upvoted', value: 'popularity' },
-  { label: 'Highest Rated', value: 'rating' },
-  { label: 'Newest Release', value: 'newest' },
-  { label: 'Title (A-Z)', value: 'title' }
+  { label: '🔥 Most Upvoted', value: 'popularity' },
+  { label: '⭐ Highest Rated', value: 'rating' },
+  { label: '📅 Newest Release', value: 'newest' },
+  { label: '🔤 Title (A-Z)', value: 'title' }
 ];
 
 export const CatalogView: React.FC<CatalogViewProps> = ({
@@ -181,7 +188,10 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   watchlist,
   onToggleWatchlist,
   onOpenRoulette,
-  onOpenCollection
+  onOpenCollection,
+  feedView = 'library',
+  recentlyViewed = [],
+  onClearRecentlyViewed
 }) => {
   const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(FALLBACK_SEED_ANIME);
   
@@ -272,86 +282,90 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   const displayedAnime = filteredList.slice(0, visibleCount);
 
   return (
-    <div className="w-full max-w-[420px] mx-auto px-[11px] overflow-x-hidden font-['Inter',sans-serif] text-slate-100">
+    <div className="w-full max-w-[420px] mx-auto px-[11px] overflow-x-hidden font-['Inter',sans-serif] text-slate-100 pb-10">
       
-      {/* 1. HERO SUBTITLE & CTA BUTTONS */}
-      <div className="pt-4 px-5 text-center">
-        <p className="text-[13px] text-[#94a3b8] leading-relaxed max-w-md mx-auto">
+      {/* 1. HERO SECTION */}
+      <div className="text-center pt-8 px-4 max-w-2xl mx-auto">
+        
+        {/* Top Badge Pill */}
+        <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-purple-900/40 border border-purple-500/30 text-purple-200 text-[11px] font-medium shadow-sm mb-6">
+          <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+          <span>Official Indian Dubbed Anime Directory</span>
+        </div>
+
+        {/* Orange Label */}
+        <div className="text-[16px] font-bold text-[#ff5a1f] tracking-[0.1em] uppercase mb-4">
+          ANIDUB INDIA OFFICIAL WEBSITE
+        </div>
+
+        {/* H1 Title */}
+        <h1 className="text-[26px] font-extrabold tracking-tight leading-tight px-2 mb-6">
+          <span className="text-white block">The Premier Destination for</span>
+          <span className="bg-gradient-to-r from-[#9333ea] to-[#6366f1] bg-clip-text text-transparent block">
+            Anime Streaming & Dubbing in India
+          </span>
+        </h1>
+
+        {/* Hero Subtitle */}
+        <p className="text-[13px] text-[#94a3b8] leading-relaxed max-w-[380px] mx-auto mb-8">
           Discover officially dubbed anime in Tamil, Telugu, Hindi, Malayalam, and Kannada — streaming legally on Crunchyroll, Netflix, JioHotstar, and JioCinema.
         </p>
-        
-        {/* Surprise Me Roulette */}
+
+        {/* CTA Button 1: Surprise Me Roulette */}
         <button
           onClick={onOpenRoulette}
-          className="mt-5 w-full flex items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-[#f59e0b] via-[#ea580c] to-[#9333ea] px-5 py-3 shadow-[0_6px_25px_rgba(234,88,12,0.4)]"
+          className="w-full flex items-center justify-center gap-3 rounded-full bg-gradient-to-r from-[#f59e0b] via-[#ea580c] to-[#9333ea] px-5 py-3.5 shadow-[0_6px_25px_rgba(234,88,12,0.4)] transition-transform active:scale-[0.98]"
         >
-          <Dices className="w-[18px] h-[18px] text-white" />
-          <span className="text-[14px] font-extrabold text-white">Surprise Me Roulette</span>
-          <span className="bg-black/30 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase text-white inline-flex items-center gap-1">
+          <Dices className="w-5 h-5 text-white" />
+          <span className="text-[15px] font-extrabold text-white">Surprise Me Roulette</span>
+          <span className="bg-black/30 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase text-white inline-flex items-center gap-1 shrink-0">
             🎲 RANDOM PICK
           </span>
         </button>
 
-        {/* Create Collection */}
+        {/* CTA Button 2: Create Collection */}
         <button
           onClick={onOpenCollection}
-          className="mt-3 w-full flex items-center justify-center gap-2.5 rounded-full bg-[#111524] border border-[#262d47] px-5 py-2.5"
+          className="mt-3 w-full bg-[#111524] border border-[#262d47] hover:border-[#3d4669] rounded-full px-5 py-2.5 inline-flex items-center justify-center gap-2.5 transition-all active:scale-[0.98]"
         >
-          <Layers className="w-[16px] h-[16px] text-white" />
-          <span className="text-[13px] font-bold text-white">Create Collection</span>
-          <span className="bg-[#1e1436] border border-[#7e22ce] text-[#c084fc] text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-white" />
+            <span className="text-[13px] font-bold text-white">Create Collection</span>
+          </div>
+          <span className="bg-[#1e1436] border border-[#7e22ce] text-[#c084fc] text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full tracking-wide">
             SHAREABLE
           </span>
         </button>
       </div>
 
-      {/* 2. THREE-COLUMN STATS CARDS ROW */}
-      <div className="grid grid-cols-3 gap-2.5 px-3.5 mt-6">
-        <div className="bg-[#101424] border border-[#cbd5e1]/70 rounded-2xl p-3 flex flex-col justify-between">
-          <div className="flex justify-between items-start gap-1">
-            <span className="text-[9.5px] font-bold uppercase text-[#94a3b8] leading-tight">DUBBED TITLES</span>
-            <div className="w-7 h-7 rounded-full bg-[#24153d] border border-[#6b21a8] flex items-center justify-center shrink-0">
-              <Tv className="w-[13px] h-[13px] text-[#c084fc]" />
-            </div>
-          </div>
-          <div className="mt-2 text-[20px] font-extrabold text-white">99<span className="text-[#a855f7] text-sm font-bold ml-0.5">+</span></div>
-          <div className="mt-2 flex items-center gap-1 text-[10px] text-[#64748b]">
-            <CheckCircle2 className="w-[11px] h-[11px] text-[#10b981]" />
-            Verified dubs
-          </div>
-        </div>
-
-        <div className="bg-[#14121d] border border-[#f97316]/30 rounded-2xl p-3 flex flex-col justify-between">
-          <div className="flex justify-between items-start gap-1">
-            <span className="text-[9.5px] font-bold uppercase text-[#94a3b8] leading-tight">COMMUNITY VOTES</span>
-            <div className="w-7 h-7 rounded-full bg-[#2a1710] border border-[#ea580c]/40 flex items-center justify-center shrink-0">
-              <Flame className="w-[13px] h-[13px] text-[#f97316]" />
-            </div>
-          </div>
-          <div className="mt-2 text-[20px] font-extrabold text-white">0<span className="text-sm ml-1">🔥</span></div>
-          <div className="mt-2 flex items-center gap-1 text-[10px] text-[#64748b] truncate">
-            <TrendingUp className="w-[11px] h-[11px] text-[#f97316]" />
-            Community upvotes
-          </div>
-        </div>
-
-        <div className="bg-[#0d1726] border border-[#0284c7]/40 rounded-2xl p-3 flex flex-col justify-between">
-          <div className="flex justify-between items-start gap-1">
-            <span className="text-[9.5px] font-bold uppercase text-[#94a3b8] leading-tight">INDIAN LANGUAGES</span>
-            <div className="w-7 h-7 rounded-full bg-[#0c243d] border border-[#0284c7]/50 flex items-center justify-center shrink-0">
-              <Languages className="w-[13px] h-[13px] text-[#38bdf8]" />
-            </div>
-          </div>
-          <div className="mt-2 text-[20px] font-extrabold text-white">5<span className="text-[11px] font-bold text-[#38bdf8] ml-1">Regions</span></div>
-          <div className="mt-2 text-[10px] text-[#64748b] truncate">Tamil • Telugu • Hindi</div>
-        </div>
+      {/* 2. ANIMATED STATS CARDS ROW */}
+      <div className="mt-8">
+        <AnimatedStats
+          totalAnime={rawAnimeList.length > 0 ? rawAnimeList.length : 99}
+          totalVotes={rawAnimeList.reduce((acc, curr) => acc + (curr.popularity || 0), 0) || 425000}
+          totalLanguages={5}
+        />
       </div>
 
+      {/* 2.5 RECENTLY VIEWED ROW */}
+      {recentlyViewed && recentlyViewed.length > 0 && (
+        <div className="mt-2 px-1">
+          <RecentlyViewedRow
+            items={recentlyViewed}
+            onSelectAnime={(a) => onSelectAnime(a as any)}
+            onClear={onClearRecentlyViewed || (() => {})}
+            watchlist={watchlist}
+            onToggleWatchlist={onToggleWatchlist}
+          />
+        </div>
+      )}
+
+
       {/* 3. REGIONAL DUB AUDIO FILTER PILLS */}
-      <div className="px-3.5 mt-6">
-        <div className="flex items-center gap-1.5 mb-2.5">
+      <div className="px-3.5 mt-8">
+        <div className="flex items-center gap-1.5 mb-3">
           <Sparkles className="w-[14px] h-[14px] text-[#a855f7]" />
-          <span className="text-[11px] font-bold uppercase text-[#94a3b8] tracking-wider">REGIONAL DUB AUDIO</span>
+          <span className="text-[12px] font-bold uppercase text-[#94a3b8] tracking-wider">REGIONAL DUB AUDIO</span>
         </div>
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
           {REGIONAL_LANGUAGES.map((lang) => {
@@ -360,7 +374,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               <button
                 key={lang.value}
                 onClick={() => setSelectedLanguage(lang.value)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-[13px] font-semibold shrink-0 transition-all ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-[13px] font-semibold shrink-0 transition-all ${
                   active
                     ? 'bg-gradient-to-r from-[#9333ea] to-[#6366f1] text-white font-bold shadow-[0_4px_15px_rgba(147,51,234,0.45)]'
                     : 'bg-[#111626] border border-[#1e263d] text-[#cbd5e1]'
@@ -377,9 +391,8 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
       </div>
 
       {/* 4. FILTER & SORT DROPDOWNS GRID */}
-      <div className="px-3.5 mt-3.5 grid grid-cols-2 gap-2.5">
+      <div className="px-3.5 mt-6 grid grid-cols-2 gap-2.5">
         
-
         {/* Render Dropdowns */}
         {[
           { label: 'GENRE', val: selectedGenre, set: setSelectedGenre, opts: GENRES },
@@ -414,11 +427,26 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         </div>
       </div>
 
+      {/* 6. FOR YOU METADATA BANNER */}
+      {feedView === 'foryou' && (
+        <div className="px-3.5 mt-6 mb-2">
+          <div className="bg-gradient-to-r from-amber-500/15 via-purple-500/15 to-indigo-500/15 border border-amber-500/30 rounded-2xl p-3.5 flex items-center gap-3">
+            <Sparkles className="w-5 h-5 text-amber-400 shrink-0 animate-pulse" />
+            <div>
+              <div className="text-xs font-bold text-white">Curated For You • Indian Regional Dubs</div>
+              <div className="text-[10px] text-neutral-400 mt-0.5">
+                Handpicked based on your preferences in Tamil, Telugu, Hindi & Malayalam anime dubs.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 7. Catalog List Grid with exact matching design */}
-      <div className="pt-4 px-3.5">
+      <div className="pt-8 px-3.5">
         
         {/* 1. GRID HEADER ROW */}
-        <div className="flex items-center justify-between mb-3.5 px-0.5">
+        <div className="flex items-center justify-between mb-4 px-0.5">
           <div className="flex items-center space-x-1.5 text-[12px]">
             <Sparkles className="w-[14px] h-[14px] text-[#a855f7]" />
             <span className="text-[#94a3b8]">Showing <strong className="text-white font-bold">{filteredList.length}</strong> Titles</span>
@@ -443,133 +471,18 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             </button>
           </div>
         ) : (
-          /* 2. CARD CONTAINER (grid-cols-2 gap-3.5 px-3.5) */
+          /* 2. CARD CONTAINER USING AnimeCard (grid-cols-2 gap-3.5) */
           <div className="grid grid-cols-2 gap-3.5">
             {displayedAnime.map((anime) => {
               const isWatchlisted = watchlist.includes(anime.id);
-              const langs = (anime.languages || 'HIN,TAM,TEL').split(',').map(l => l.trim());
-              const typeStr = anime.type || 'TV Series';
-              const yrStr = anime.year || 2026;
-              const plats = anime.platform ? anime.platform.split(',').map(p => p.trim()) : ['Crunchyroll'];
-              const platDisplay = plats.length === 1 ? plats[0] : plats.map(p => p[0].toUpperCase()).join(', ');
-
               return (
-                <div
+                <AnimeCard
                   key={anime.id}
-                  onClick={() => onSelectAnime(anime)}
-                  className="group bg-[#0e1320] border border-[#1c2235] rounded-2xl overflow-hidden flex flex-col justify-between cursor-pointer hover:border-[#2d3748] transition-all shadow-lg"
-                >
-                  {/* 3. POSTER SECTION (2:3 Aspect Ratio) */}
-                  <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-950">
-                    <img
-                      src={anime.cover_image}
-                      alt={anime.title}
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
-                      }}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0e1320] via-transparent to-transparent pointer-events-none" />
-
-                    {/* Top-Left Overlay */}
-                    <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5 z-10">
-                      {/* Trending Badge */}
-                      <div className="bg-gradient-to-r from-[#a855f7] to-[#7c3aed] rounded-full px-2.5 py-0.5 flex items-center space-x-1 shadow-md">
-                        <Flame className="w-[11px] h-[11px] text-white fill-white" />
-                        <span className="text-[10px] font-bold text-white uppercase tracking-wider">TRENDING</span>
-                      </div>
-                      {/* Offline Ready Badge */}
-                      <div className="bg-[#062e22]/90 border border-[#10b981]/50 rounded-full px-2.5 py-0.5 flex items-center space-x-1 shadow-md">
-                        <CheckCircle2 className="w-[10px] h-[10px] text-[#34d399]" />
-                        <span className="text-[10px] font-medium text-[#34d399]">Offline Ready</span>
-                      </div>
-                    </div>
-
-                    {/* Top-Right Overlay */}
-                    <div className="absolute top-2.5 right-2.5 flex items-center space-x-1.5 z-10">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); }} 
-                        className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-all shadow-md"
-                        title="Favorite"
-                      >
-                        <Heart className="w-[13px] h-[13px]" />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onToggleWatchlist(anime.id); }}
-                        className="w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-all shadow-md"
-                        title="Bookmark"
-                      >
-                        <Bookmark className={`w-[13px] h-[13px] ${isWatchlisted ? 'text-orange-400 fill-orange-400' : 'text-white'}`} />
-                      </button>
-                    </div>
-
-                    {/* Bottom-Left Rating Badge */}
-                    <div className="absolute bottom-2.5 left-2.5 z-10">
-                      <div className="bg-[#090b10]/95 border border-white/10 rounded-lg px-2.5 py-1 inline-flex items-center gap-1.5 shadow-md">
-                        <Star className="w-3 h-3 fill-[#f97316] text-[#f97316]" />
-                        <span className="text-[10px] font-bold text-[#f97316] uppercase tracking-wide">RATING</span>
-                        <span className="text-[11px] font-bold text-white">{anime.rating}/10</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 4. CARD BODY (p-3, bg-[#0e1320]) */}
-                  <div className="p-3 bg-[#0e1320] flex-1 flex flex-col justify-between">
-                    <div>
-                      {/* Row 1: Solid Language Pills */}
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {langs.map((l) => {
-                          const upper = l.toUpperCase();
-                          let bgClass = 'bg-[#059669]'; // default HIN
-                          let label = 'HIN';
-                          if (upper.includes('TAM')) { bgClass = 'bg-[#d97706]'; label = 'TAM'; }
-                          else if (upper.includes('TEL')) { bgClass = 'bg-[#0284c7]'; label = 'TEL'; }
-                          else if (upper.includes('MAL')) { bgClass = 'bg-[#9333ea]'; label = 'MAL'; }
-                          else if (upper.includes('HIN')) { bgClass = 'bg-[#059669]'; label = 'HIN'; }
-
-                          return (
-                            <span
-                              key={l}
-                              className={`${bgClass} rounded-md px-2 py-0.5 text-[10px] font-bold uppercase text-white shadow-sm`}
-                            >
-                              {label}
-                            </span>
-                          );
-                        })}
-                      </div>
-
-                      {/* Row 2: Anime Title */}
-                      <h3 className="font-bold text-white text-[15px] truncate mt-2 leading-snug">
-                        {anime.title}
-                      </h3>
-
-                      {/* Row 3: Format & Year Subtitle */}
-                      <div className="text-[11px] text-[#8b92a5] mt-0.5">
-                        {typeStr} • {yrStr}
-                      </div>
-                    </div>
-
-                    {/* Row 4: Footer Bar */}
-                    <div className="mt-3 pt-2.5 border-t border-[#1a2035] flex items-center justify-between gap-1 text-[11px]">
-                      {/* Left: Platform */}
-                      <span className="bg-[#151b2d] border border-[#232b42] rounded-md px-2 py-0.5 text-[#94a3b8] font-medium truncate">
-                        {platDisplay}
-                      </span>
-
-                      {/* Right: Counters */}
-                      <div className="flex items-center space-x-1.5 shrink-0">
-                        <div className="bg-[#151b2d] border border-[#232b42] rounded-full px-2 py-0.5 flex items-center space-x-1">
-                          <Heart className="w-[11px] h-[11px] text-[#94a3b8]" />
-                          <span className="text-[11px] text-[#cbd5e1]">{Math.floor((anime.popularity || 1000) / 100)}</span>
-                        </div>
-                        <div className="bg-[#151b2d] border border-[#232b42] rounded-full px-2 py-0.5 flex items-center space-x-1">
-                          <Flame className="w-[11px] h-[11px] text-[#94a3b8]" />
-                          <span className="text-[11px] text-[#cbd5e1]">{anime.popularity || 1200}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  anime={anime}
+                  onSelect={(a) => onSelectAnime(a as any)}
+                  isBookmarked={isWatchlisted}
+                  onToggleBookmark={onToggleWatchlist}
+                />
               );
             })}
           </div>
@@ -586,6 +499,46 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           {visibleCount >= filteredList.length && filteredList.length > 0 && (
             <span className="text-slate-500 text-[11px]">You've reached the end of the catalog 🎉</span>
           )}
+        </div>
+      </div>
+
+      {/* 9. RECENT UPDATES SECTION */}
+      <div className="px-3.5 mt-4">
+        <div className="bg-[#101424] border border-neutral-800/80 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span className="text-xs font-bold uppercase tracking-wider text-neutral-300">Daily Indian Dub Drops & Licensing</span>
+          </div>
+          <div className="space-y-2 text-xs text-neutral-400">
+            <div className="flex items-center justify-between py-1.5 border-b border-neutral-800/50">
+              <span className="text-neutral-200 font-medium">Jujutsu Kaisen Season 2 (Tamil Dub)</span>
+              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded">Crunchyroll</span>
+            </div>
+            <div className="flex items-center justify-between py-1.5 border-b border-neutral-800/50">
+              <span className="text-neutral-200 font-medium">Demon Slayer: Hashira Training Arc (Telugu Dub)</span>
+              <span className="text-[10px] text-sky-400 font-bold bg-sky-950/80 px-2 py-0.5 rounded">JioHotstar</span>
+            </div>
+            <div className="flex items-center justify-between py-1.5">
+              <span className="text-neutral-200 font-medium">Solo Leveling Season 1 (Hindi Dub)</span>
+              <span className="text-[10px] text-purple-400 font-bold bg-purple-950/80 px-2 py-0.5 rounded">Netflix</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 10. FEEDBACK & DUB REQUEST SECTION */}
+      <div className="px-3.5 mt-6 mb-4">
+        <div className="bg-gradient-to-br from-[#121829] to-[#0c101a] border border-neutral-800/80 rounded-2xl p-4 text-center">
+          <h3 className="text-sm font-extrabold text-white">Can't find your favorite regional dub?</h3>
+          <p className="text-[11px] text-neutral-400 mt-1 max-w-sm mx-auto">
+            Request legal Indian dub track licensing or submit missing voice artist credits to our community database.
+          </p>
+          <button
+            onClick={() => alert('Dub request noted! Our catalog team will verify with Crunchyroll & Netflix India.')}
+            className="mt-3 px-4 py-2 rounded-xl bg-purple-900/40 hover:bg-purple-900/60 border border-purple-500/40 text-purple-200 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+          >
+            Request a Dub Title
+          </button>
         </div>
       </div>
 
