@@ -221,25 +221,34 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         title: title.trim(),
         slug,
         cover_image: defaultCover,
+        poster_url: defaultCover,
         banner_image: defaultCover,
         rating: parsedRating,
         episodes_count: totalEpisodes || 12,
-        status: 'pending',
-        submissionStatus: 'pending',
+        status: mode === 'edit' ? initialData?.status : 'pending',
+        submissionStatus: mode === 'edit' ? initialData?.submissionStatus : 'pending',
         airing_status: airingStatus === 'Ongoing' ? 'Airing' : 'Completed',
         languages: derivedGlobalDubs.join(', '),
         platform: streamingPartners[0]?.name || 'Crunchyroll',
         type,
-        season: 'Spring',
+        season: currentSeason || '1',
+        release_season: currentSeason || '1',
         year: parsedYear,
+        release_year: parsedYear,
         genres: Array.isArray(genres) ? genres.join(',') : genres,
-        popularity: 1000,
+        popularity: initialData?.popularity || 1000,
         studio: studio || 'Unknown Studio'
       };
 
-      const res = await fetch('/api/anime', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const endpoint = mode === 'edit' ? `/api/anime/${initialData?.id}` : '/api/anime';
+      const method = mode === 'edit' ? 'PUT' : 'POST';
+
+      const res = await fetch(endpoint, {
+        method: method,
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-token': localStorage.getItem('cf_admin_token') || ''
+        },
         body: JSON.stringify(payload)
       });
 

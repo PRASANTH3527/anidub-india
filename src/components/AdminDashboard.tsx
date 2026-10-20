@@ -252,17 +252,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               title: title,
               languages: languages,
               platform: platform,
-              year: releaseYear,
+              release_year: releaseYear, // FIXED: was 'year'
               rating: rating,
               status: 'pending', // Force pending for moderation queue
               submissionStatus: 'pending',
               type: type,
               genres: genres,
-              cover_image: coverImage || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
+              poster_url: coverImage || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80', // FIXED: was 'cover_image'
               synopsis: row.Synopsis || row.synopsis || 'Imported via standardized CSV format.',
               studio: studio,
               episodes_count: episodes,
-              season: seasons.toString(),
+              release_season: seasons.toString(), // FIXED: was 'season'
             };
 
             try {

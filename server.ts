@@ -154,18 +154,24 @@ function runMigrations() {
       slug TEXT UNIQUE NOT NULL,
       synopsis TEXT,
       cover_image TEXT NOT NULL,
+      poster_url TEXT,
       banner_image TEXT NOT NULL,
       rating REAL DEFAULT 0.0,
       episodes_count INTEGER DEFAULT 12,
       status TEXT DEFAULT 'Airing',
       season TEXT DEFAULT 'Spring',
+      release_season TEXT,
       year INTEGER DEFAULT 2026,
+      release_year INTEGER,
       genres TEXT NOT NULL,
       popularity INTEGER DEFAULT 1000,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
+  try { db.run("ALTER TABLE anime ADD COLUMN poster_url TEXT;"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN release_season TEXT;"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN release_year INTEGER;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN languages TEXT DEFAULT 'HIN,TAM,TEL';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN platform TEXT DEFAULT 'Crunchyroll';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN type TEXT DEFAULT 'TV Series';"); } catch (e) {}
@@ -492,7 +498,14 @@ app.get('/api/anime', (req, res) => {
 
     const animeList = [];
     while (dataStmt.step()) {
-      animeList.push(dataStmt.getAsObject());
+      const anime = dataStmt.getAsObject();
+      animeList.push({
+        ...anime,
+        // Return both for compatibility, but ensure release_* fields are populated
+        release_year: anime.release_year || anime.year,
+        release_season: anime.release_season || anime.season,
+        poster_url: anime.poster_url || anime.cover_image,
+      });
     }
     dataStmt.free();
 
@@ -524,7 +537,13 @@ app.get('/api/anime/:id', (req, res) => {
       stmt.free();
       return res.status(404).json({ error: "Anime not found" });
     }
-    const anime = stmt.getAsObject();
+    const row = stmt.getAsObject();
+    const anime = {
+      ...row,
+      release_year: row.release_year || row.year,
+      release_season: row.release_season || row.season,
+      poster_url: row.poster_url || row.cover_image,
+    };
     stmt.free();
 
     // Get episodes
@@ -568,7 +587,27 @@ app.get('/api/anime/:id', (req, res) => {
 app.post('/api/anime', (req, res) => {
   const start = Date.now();
   try {
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, languages, platform, type, studio } = req.body;
+    const { 
+      title, 
+      synopsis, 
+      cover_image, 
+      poster_url, 
+      banner_image, 
+      rating, 
+      episodes_count, 
+      status, 
+      submissionStatus, 
+      season, 
+      release_season, 
+      year, 
+      release_year, 
+      genres, 
+      languages, 
+      platform, 
+      type, 
+      studio 
+    } = req.body;
+    
     if (!title) return res.status(400).json({ error: "Title is required" });
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -578,20 +617,27 @@ app.post('/api/anime', (req, res) => {
     const finalStatus = isAdmin && status && status !== 'pending' ? status : 'pending';
     const finalSubmissionStatus = isAdmin && submissionStatus && submissionStatus !== 'pending' ? submissionStatus : 'pending';
 
+    const finalCoverImage = poster_url || cover_image || 'https://i.ibb.co/vzS8G90/default-poster.jpg';
+    const finalSeason = release_season || season || 'Spring';
+    const finalYear = release_year || year || 2026;
+
     db.run(
-      `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO anime (title, slug, synopsis, cover_image, poster_url, banner_image, rating, episodes_count, status, submissionStatus, season, release_season, year, release_year, genres, popularity, languages, platform, type, studio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         title,
         slug,
         synopsis || 'An exciting new anime streaming exclusively on Cloudflare Pages.',
-        cover_image || 'https://i.ibb.co/vzS8G90/default-poster.jpg',
-        banner_image || cover_image || 'https://i.ibb.co/xL2y9Bv/default-banner.jpg',
+        finalCoverImage,
+        finalCoverImage, // poster_url
+        banner_image || finalCoverImage || 'https://i.ibb.co/xL2y9Bv/default-banner.jpg',
         parseFloat(rating) || 8.5,
         parseInt(episodes_count) || 12,
         finalStatus,
         finalSubmissionStatus,
-        season || 'Spring',
-        parseInt(year) || 2026,
+        finalSeason,
+        finalSeason, // release_season
+        parseInt(finalYear) || 2026,
+        parseInt(finalYear) || 2026, // release_year
         genres || 'Action,Fantasy',
         finalStatus === 'pending' ? 0 : 1000,
         languages || 'HIN,TAM,TEL',
@@ -771,34 +817,60 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
   const start = Date.now();
   try {
     const id = req.params.id;
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, studio } = req.body;
+    const { 
+      title, 
+      synopsis, 
+      cover_image, 
+      poster_url, 
+      banner_image, 
+      rating, 
+      episodes_count, 
+      status, 
+      submissionStatus, 
+      season, 
+      release_season, 
+      year, 
+      release_year, 
+      genres, 
+      studio 
+    } = req.body;
+
+    const finalCoverImage = poster_url || cover_image;
+    const finalSeason = release_season || season;
+    const finalYear = release_year || year;
 
     db.run(
       `UPDATE anime SET 
         title = COALESCE(?, title),
         synopsis = COALESCE(?, synopsis),
         cover_image = COALESCE(?, cover_image),
+        poster_url = COALESCE(?, poster_url),
         banner_image = COALESCE(?, banner_image),
         rating = COALESCE(?, rating),
         episodes_count = COALESCE(?, episodes_count),
         status = COALESCE(?, status),
         submissionStatus = COALESCE(?, submissionStatus),
         season = COALESCE(?, season),
+        release_season = COALESCE(?, release_season),
         year = COALESCE(?, year),
+        release_year = COALESCE(?, release_year),
         genres = COALESCE(?, genres),
         studio = COALESCE(?, studio)
       WHERE id = ?`,
       [
         title,
         synopsis,
-        cover_image,
+        finalCoverImage,
+        finalCoverImage,
         banner_image,
         rating !== undefined ? parseFloat(rating) : null,
         episodes_count !== undefined ? parseInt(episodes_count) : null,
         status,
         submissionStatus,
-        season,
-        year !== undefined ? parseInt(year) : null,
+        finalSeason,
+        finalSeason,
+        finalYear !== undefined ? parseInt(finalYear) : null,
+        finalYear !== undefined ? parseInt(finalYear) : null,
         genres,
         studio,
         id

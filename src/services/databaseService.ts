@@ -17,6 +17,7 @@ export interface AnimeRecord {
   platform?: string;
   studio?: string;
   release_year?: number;
+  submissionStatus?: string;
   created_at?: string;
 }
 
