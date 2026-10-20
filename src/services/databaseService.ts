@@ -260,8 +260,9 @@ class DatabaseService {
     return data;
   }
 
-  public async deleteAnime(animeId: number): Promise<void> {
+  public async deleteAnime(animeId: any): Promise<void> {
     const adminToken = localStorage.getItem('cf_admin_token') || 'admin_secret';
+    console.log('Deleting anime ID:', animeId);
     const res = await fetch(`${API_BASE_URL}/api/anime/${animeId}`, {
       method: 'DELETE',
       headers: {
@@ -271,6 +272,7 @@ class DatabaseService {
     if (!res.ok) {
       throw new Error('Failed to delete anime from database');
     }
+    console.log('Deleted anime ID:', animeId);
     this.notifyListeners();
   }
 

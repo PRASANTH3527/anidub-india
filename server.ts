@@ -169,6 +169,7 @@ function runMigrations() {
   try { db.run("ALTER TABLE anime ADD COLUMN languages TEXT DEFAULT 'HIN,TAM,TEL';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN platform TEXT DEFAULT 'Crunchyroll';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN type TEXT DEFAULT 'TV Series';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN studio TEXT DEFAULT 'Unknown Studio';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN submissionStatus TEXT DEFAULT 'approved';"); } catch (e) {}
 
   db.run(`
@@ -567,7 +568,7 @@ app.get('/api/anime/:id', (req, res) => {
 app.post('/api/anime', (req, res) => {
   const start = Date.now();
   try {
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, languages, platform, type } = req.body;
+    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, languages, platform, type, studio } = req.body;
     if (!title) return res.status(400).json({ error: "Title is required" });
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -578,7 +579,7 @@ app.post('/api/anime', (req, res) => {
     const finalSubmissionStatus = isAdmin && submissionStatus && submissionStatus !== 'pending' ? submissionStatus : 'pending';
 
     db.run(
-      `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         title,
         slug,
@@ -592,10 +593,11 @@ app.post('/api/anime', (req, res) => {
         season || 'Spring',
         parseInt(year) || 2026,
         genres || 'Action,Fantasy',
-        Math.floor(Math.random() * 50000) + 20000,
+        finalStatus === 'pending' ? 0 : 1000,
         languages || 'HIN,TAM,TEL',
         platform || 'Crunchyroll',
-        type || 'TV Series'
+        type || 'TV Series',
+        studio || 'Unknown Studio'
       ]
     );
 
@@ -769,7 +771,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
   const start = Date.now();
   try {
     const id = req.params.id;
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres } = req.body;
+    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, studio } = req.body;
 
     db.run(
       `UPDATE anime SET 
@@ -783,7 +785,8 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         submissionStatus = COALESCE(?, submissionStatus),
         season = COALESCE(?, season),
         year = COALESCE(?, year),
-        genres = COALESCE(?, genres)
+        genres = COALESCE(?, genres),
+        studio = COALESCE(?, studio)
       WHERE id = ?`,
       [
         title,
@@ -797,6 +800,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         season,
         year !== undefined ? parseInt(year) : null,
         genres,
+        studio,
         id
       ]
     );

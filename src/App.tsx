@@ -197,15 +197,17 @@ export default function App() {
   };
 
   const handleAdminLogout = async () => {
+    // Strictly clear all admin related state and storage
     try {
       const token = localStorage.getItem('cf_admin_token');
-      await fetch('/api/admin/logout', {
-        method: 'POST',
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      });
+      if (token) {
+        await fetch('/api/admin/logout', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        }).catch(() => {});
+      }
     } catch {}
+    
     localStorage.removeItem('cf_admin_token');
     setIsAdminAuthenticated(false);
     setActiveTab('home');
@@ -225,12 +227,19 @@ export default function App() {
           if (activeTab !== 'home' && activeTab !== 'catalog') setActiveTab('home'); 
         }}
         onUnlockAdmin={() => {
-          if (isAdminAuthenticated) {
-            setActiveTab('admin');
-          } else {
+          // STRICT: If not authenticated, ALWAYS show password prompt
+          if (!isAdminAuthenticated) {
             setIsPasswordModalOpen(true);
             setAdminPasswordInput('');
             setAdminPasswordError(false);
+          } else {
+            // If already authenticated, navigate to admin tab if not already there
+            if (activeTab !== 'admin') {
+              setActiveTab('admin');
+            } else {
+              // If already on admin tab, 5 clicks simply toggles back to home (safer than confirm in iframe)
+              setActiveTab('home');
+            }
           }
         }}
         onOpenCollection={() => setIsCollectionOpen(true)}

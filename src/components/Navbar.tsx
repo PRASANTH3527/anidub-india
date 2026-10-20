@@ -59,23 +59,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleLogoClick = () => {
-    // If already in Admin mode, clicking logo logs them out and returns to public view
-    if (isAdminAuthenticated && activeTab === 'admin') {
-      if (onLogout) onLogout();
-      setLogoClicks(0);
-      return;
-    }
-
     if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
-    const newCount = logoClicks + 1;
-    if (newCount >= 5) {
-      setLogoClicks(0);
+
+    const nextCount = logoClicks + 1;
+    
+    if (nextCount >= 5) {
+      // Immediate Reset and Trigger
       onUnlockAdmin();
+      setLogoClicks(0);
     } else {
-      setLogoClicks(newCount);
+      setLogoClicks(nextCount);
+      // Time-bound reset: Clear counter if next click doesn't happen within 2 seconds
       clickTimeoutRef.current = setTimeout(() => {
         setLogoClicks(0);
-      }, 3000);
+      }, 2000);
+    }
+
+    // Navigation fallback
+    if (activeTab !== 'home') {
       setActiveTab('home');
       if (setFeedView) setFeedView('library');
     }
