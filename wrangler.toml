@@ -1,0 +1,14 @@
+name = "cloudflare-anime-hub"
+compatibility_date = "2026-04-01"
+pages_build_output_dir = "dist"
+
+# Cloudflare D1 Database Binding
+[[d1_databases]]
+binding = "DB"
+database_name = "anime-hub-db"
+database_id = "75f053ab-5b44-4d48-abf8-b3a357a89426"
+
+# Environment Variables for Cloudflare Pages Functions
+# Note: Set secret IMGBB_API_KEY via `wrangler secret put IMGBB_API_KEY` or in Cloudflare Pages Dashboard -> Settings -> Environment Variables
+[vars]
+ENVIRONMENT = "production"
