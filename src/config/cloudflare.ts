@@ -16,7 +16,7 @@
 // PASTE YOUR ACTUAL CLOUDFLARE WORKER URL HERE:
 export const CLOUDFLARE_API_URL: string = 
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDFLARE_API_URL) || 
-  ''; // <-- e.g. 'https://anidub-api.samayaprasanth0.workers.dev'
+  'https://anidub-apiii.samayaprasanth0.workers.dev';
 
 // Optional: Cloudflare D1 Database binding identifier from wrangler.toml
 export const CLOUDFLARE_D1_DATABASE_NAME = 'anime-hub-db';

@@ -460,7 +460,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity"
       />
 
-      <div className="relative w-full max-w-xl bg-[#111726]/95 border border-primary-theme/30 rounded-3xl shadow-2xl overflow-hidden z-10 my-auto text-neutral-100 backdrop-blur-xl max-h-[90vh] flex flex-col font-sans">
+      <div className="relative w-full max-w-xl bg-[#0b0e18]/95 border border-white/10 hover:border-purple-500/40 rounded-3xl shadow-[0_0_50px_rgba(168,85,247,0.25)] overflow-hidden z-10 my-auto text-neutral-100 backdrop-blur-2xl max-h-[90vh] flex flex-col font-sans transition-all duration-300">
         
         {/* HEADER */}
         <div className="p-5 border-b border-neutral-800 flex items-center justify-between bg-gradient-to-r from-purple-950/40 via-transparent to-transparent shrink-0">
