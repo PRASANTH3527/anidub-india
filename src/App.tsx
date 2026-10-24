@@ -13,6 +13,8 @@ import { AnimeTierListMaker } from './components/AnimeTierListMaker';
 import { RecommendationSystem } from './components/RecommendationSystem';
 import { FeedbackSection } from './components/FeedbackSection';
 import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown } from 'lucide-react';
+import { cloudflareApi } from './services/cloudflareApi';
+import { getCloudflareUrl, CLOUDFLARE_API_URL } from './config/cloudflare';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -55,25 +57,27 @@ export default function App() {
   const [adminPasswordError, setAdminPasswordError] = useState(false);
   const [adminPasswordLoading, setAdminPasswordLoading] = useState(false);
 
+  const [isCatalogLoading, setIsCatalogLoading] = useState(true);
+
   useEffect(() => {
     fetchCatalogList();
   }, []);
 
   const fetchCatalogList = async () => {
+    setIsCatalogLoading(true);
     try {
-      const res = await fetch('/api/anime?limit=50');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.data && data.data.length > 0) {
-          const approvedOnly = data.data.filter((item: any) => 
-            item.status !== 'pending' && 
-            item.submissionStatus !== 'pending'
-          );
-          setCatalogList(approvedOnly);
-        }
+      const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
+      if (data && data.length > 0) {
+        const approvedOnly = data.filter((item: any) => 
+          item.status !== 'pending' && 
+          item.submissionStatus !== 'pending'
+        );
+        setCatalogList(approvedOnly);
       }
     } catch (err) {
-      console.warn('Connected to fallback catalog for roulette/collections:', err);
+      console.warn('Notice fetching catalog from Cloudflare, using fallback seed catalog:', err);
+    } finally {
+      setIsCatalogLoading(false);
     }
   };
 
@@ -113,7 +117,7 @@ export default function App() {
 
   const handleToggleWatchlist = async (animeId: number) => {
     try {
-      const res = await fetch('/api/watchlist', {
+      const res = await fetch(getCloudflareUrl('/api/watchlist'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ anime_id: animeId })
@@ -252,8 +256,28 @@ export default function App() {
       {/* 2. ADMIN DASHBOARD (When active in admin mode) */}
       {activeTab === 'admin' && isAdminAuthenticated && (
         <AdminDashboard
-          onAnimeCreated={() => {
-            fetchCatalogList();
+          catalogList={catalogList}
+          onAnimeCreated={(updatedAnime) => {
+            if (updatedAnime) {
+              const targetId = updatedAnime.id;
+              const newCover = updatedAnime.posterUrl || updatedAnime.image || updatedAnime.cover_image || updatedAnime.poster;
+              setCatalogList(prev => prev.map(a => (a.id === targetId || String(a.id) === String(targetId)) ? {
+                ...a,
+                ...updatedAnime,
+                image: updatedAnime.posterUrl || updatedAnime.image || newCover,
+                cover_image: updatedAnime.posterUrl || updatedAnime.cover_image || newCover,
+                poster: updatedAnime.posterUrl || updatedAnime.poster || newCover,
+                posterUrl: updatedAnime.posterUrl || newCover
+              } : a));
+              setRecentlyViewed(prev => prev.map(a => (a.id === targetId || String(a.id) === String(targetId)) ? {
+                ...a,
+                ...updatedAnime,
+                image: updatedAnime.posterUrl || updatedAnime.image || newCover,
+                cover_image: updatedAnime.posterUrl || updatedAnime.cover_image || newCover,
+                poster: updatedAnime.posterUrl || updatedAnime.poster || newCover,
+                posterUrl: updatedAnime.posterUrl || newCover
+              } : a));
+            }
           }}
           onLogout={handleAdminLogout}
           onNavigateHome={() => setActiveTab('home')}
@@ -278,6 +302,7 @@ export default function App() {
         {/* MAIN CATALOG & FEED VIEW */}
         {(activeTab === 'home' || activeTab === 'catalog') && feedView !== 'foryou' && (
           <CatalogView
+            catalogList={catalogList}
             onSelectAnime={(anime) => {
               setSelectedAnimeId(anime.id);
               addToRecentlyViewed(anime);

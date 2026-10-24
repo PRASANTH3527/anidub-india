@@ -234,7 +234,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               Available Regional Dub Languages
             </label>
             <div className="flex flex-wrap gap-2">
-              {['Hi', 'Ta', 'Te', 'Ma', 'Ka', 'En', 'Be'].map((lang) => {
+              {['Hi', 'Ta', 'Te', 'Ma', 'Ka', 'Be'].map((lang) => {
                 const active = selectedLangs.includes(lang);
                 return (
                   <button

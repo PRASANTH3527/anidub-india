@@ -18,6 +18,7 @@ import { filterAndSortCatalog } from '../utils/pagination';
 import { AnimeCard, AnimeCardData } from './AnimeCard';
 import { RecentlyViewedRow } from './RecentlyViewedRow';
 import { AnimatedStats } from './AnimatedStats';
+import { cloudflareApi } from '../services/cloudflareApi';
 
 export interface Anime {
   id: number;
@@ -40,6 +41,7 @@ export interface Anime {
 }
 
 interface CatalogViewProps {
+  catalogList?: any[];
   onSelectAnime: (anime: Anime) => void;
   searchQuery: string;
   watchlist: number[];
@@ -57,7 +59,7 @@ export const FALLBACK_SEED_ANIME: Anime[] = [];
 
 
 const GENRES = [
-  'All',
+  'All Genres',
   'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Isekai', 
   'Mystery', 'Romance', 'Sci-Fi', 'Shonen', 'Seinen', 'Shoujo', 'Josei', 
   'Slice of Life', 'Sports', 'Supernatural', 'Thriller', 'Mecha', 'Psychological',
@@ -84,7 +86,7 @@ const PLATFORMS = [
   'Zee5'
 ];
 const TYPES = ['All Types', 'TV Series', 'Movie', 'OVA', 'Special'];
-const STATUSES = ['All', 'Airing', 'Completed', 'Upcoming'];
+const STATUSES = ['All Status', 'Airing', 'Completed', 'Upcoming'];
 const SORTS = [
   { label: '🔥 Most Upvoted', value: 'popularity' },
   { label: '⭐ Highest Rated', value: 'rating' },
@@ -93,6 +95,7 @@ const SORTS = [
 ];
 
 export const CatalogView: React.FC<CatalogViewProps> = ({
+  catalogList,
   onSelectAnime,
   searchQuery,
   watchlist,
@@ -106,12 +109,19 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
 }) => {
   const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(FALLBACK_SEED_ANIME);
   
+  // Sync rawAnimeList whenever catalogList prop updates from parent
+  useEffect(() => {
+    if (catalogList && catalogList.length > 0) {
+      setRawAnimeList(catalogList);
+    }
+  }, [catalogList]);
+
   // Filter States
   const [selectedLanguage, setSelectedLanguage] = useState('All');
-  const [selectedGenre, setSelectedGenre] = useState('All');
+  const [selectedGenre, setSelectedGenre] = useState('All Genres');
   const [selectedPlatform, setSelectedPlatform] = useState('All Platforms');
   const [selectedType, setSelectedType] = useState('All Types');
-  const [selectedStatus, setSelectedStatus] = useState('All');
+  const [selectedStatus, setSelectedStatus] = useState('All Status');
   const [selectedSort, setSelectedSort] = useState('popularity');
   const [loading, setLoading] = useState(false);
 
@@ -127,37 +137,36 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   const fetchCatalogFromBackend = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/anime?limit=50');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.data && data.data.length > 0) {
-          // Strictly filter out and hide any anime where status === 'pending' or submissionStatus === 'pending'
-          const approvedOnly = data.data.filter((item: any) => 
-            item.status !== 'pending' && 
-            item.submissionStatus !== 'pending'
-          );
-          const normalized = approvedOnly.map((item: any, idx: number) => ({
-            ...item,
-            languages: item.languages || (idx % 3 === 0 ? 'HIN,TAM,TEL' : idx % 2 === 0 ? 'HIN,TAM' : 'HIN,TEL'),
-            platform: item.platform || (idx % 2 === 0 ? 'Crunchyroll' : 'Netflix'),
-            type: item.type || (idx % 4 === 0 ? 'Movie' : 'TV Series')
-          }));
-          setRawAnimeList(normalized);
-        }
+      const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
+      if (data && data.length > 0) {
+        // Strictly filter out and hide any anime where status === 'pending' or submissionStatus === 'pending'
+        const approvedOnly = data.filter((item: any) => 
+          item.status !== 'pending' && 
+          item.submissionStatus !== 'pending'
+        );
+        const normalized = approvedOnly.map((item: any, idx: number) => ({
+          ...item,
+          languages: item.languages || (idx % 3 === 0 ? 'HIN,TAM,TEL' : idx % 2 === 0 ? 'HIN,TAM' : 'HIN,TEL'),
+          platform: item.platform || (idx % 2 === 0 ? 'Crunchyroll' : 'Netflix'),
+          type: item.type || (idx % 4 === 0 ? 'Movie' : 'TV Series')
+        }));
+        setRawAnimeList(normalized);
       }
     } catch (err) {
-      console.warn('Connected to local catalog directory:', err);
+      console.warn('Connected to local catalog directory from Cloudflare:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredList = filterAndSortCatalog(rawAnimeList, {
+  const currentAnimeList = (catalogList && catalogList.length > 0) ? catalogList : rawAnimeList;
+
+  const filteredList = filterAndSortCatalog(currentAnimeList, {
     language: selectedLanguage,
-    genre: selectedGenre,
+    genre: selectedGenre === 'All Genres' ? 'All' : selectedGenre,
     platform: selectedPlatform === 'All Platforms' ? 'All' : selectedPlatform,
     type: selectedType === 'All Types' ? 'All' : selectedType,
-    status: selectedStatus,
+    status: selectedStatus === 'All Status' ? 'All' : selectedStatus,
     search: searchQuery,
     sort: selectedSort
   });
@@ -209,18 +218,15 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           <span>Official Indian Dubbed Anime Directory</span>
         </div>
 
-        {/* Orange Label */}
-        <div className="text-[16px] font-bold text-[#ff5a1f] tracking-[0.1em] uppercase mb-4">
+        <h1 className="text-xl sm:text-3xl font-extrabold text-[#FF4500] mb-2 tracking-wide uppercase">
           ANIDUB INDIA OFFICIAL WEBSITE
-        </div>
-
-        {/* H1 Title */}
-        <h1 className="text-[26px] font-extrabold tracking-tight leading-tight px-2 mb-6">
-          <span className="text-white block">The Premier Destination for</span>
-          <span className="bg-gradient-to-r from-[#9333ea] to-[#6366f1] bg-clip-text text-transparent block">
+        </h1>
+        <h2 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white mb-4 leading-tight">
+          The Premier Destination for <br className="hidden sm:block" />
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-[#FF4500]">
             Anime Streaming & Dubbing in India
           </span>
-        </h1>
+        </h2>
 
         {/* Hero Subtitle */}
         <p className="text-[13px] text-[#94a3b8] leading-relaxed max-w-[380px] mx-auto mb-8">
@@ -256,11 +262,27 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
 
       {/* 2. ANIMATED STATS CARDS ROW */}
       <div className="mt-8">
-        <AnimatedStats
-          totalAnime={rawAnimeList.length}
-          totalVotes={rawAnimeList.reduce((acc, curr) => acc + (curr.popularity || 0), 0)}
-          totalLanguages={rawAnimeList.length > 0 ? 5 : 0}
-        />
+        {(() => {
+          const uniqueLangs = new Set<string>();
+          rawAnimeList.forEach(anime => {
+            if (anime.languages) {
+              anime.languages.split(/[,|/]/).forEach(l => {
+                const trimmed = l.trim();
+                if (trimmed) uniqueLangs.add(trimmed);
+              });
+            }
+          });
+          const calculatedLangs = uniqueLangs.size > 0 ? uniqueLangs.size : 5;
+          const totalVotes = rawAnimeList.reduce((acc, curr) => acc + (curr.popularity || 0), 0);
+
+          return (
+            <AnimatedStats
+              totalAnime={rawAnimeList.length}
+              totalVotes={totalVotes}
+              totalLanguages={calculatedLangs}
+            />
+          );
+        })()}
       </div>
 
       {/* 2.5 RECENTLY VIEWED ROW */}
@@ -326,37 +348,40 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           { label: 'TYPE', val: selectedType, set: setSelectedType, opts: TYPES },
           { label: 'STATUS', val: selectedStatus, set: setSelectedStatus, opts: STATUSES }
         ].map((item, i) => (
-          <div key={i} className="flex flex-col gap-1">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#94a3b8] px-0.5">
+          <div 
+            key={i} 
+            className="relative flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 rounded-xl px-3 py-1.5 sm:py-2"
+          >
+            <span className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-wider shrink-0 pr-1">
               {item.label}
             </span>
-            <div className="relative bg-[#141b29] border border-[#20273c] hover:border-purple-500/50 rounded-xl h-[38px] px-3 flex items-center justify-between transition-all group shadow-sm">
+            <div className="relative flex items-center min-w-0 flex-1 justify-end">
               <select
                 value={item.val}
                 onChange={(e) => item.set(e.target.value)}
-                className="w-full text-[12px] font-semibold text-white bg-transparent appearance-none truncate pr-5 focus:outline-none cursor-pointer"
+                className="bg-transparent text-white text-xs sm:text-sm font-medium outline-none cursor-pointer text-right appearance-none w-full min-w-0 text-ellipsis pr-5 truncate"
               >
-                {item.opts.map(o => <option key={o} value={o} className="bg-[#111626] text-white">{o}</option>)}
+                {item.opts.map(o => <option key={o} value={o} className="bg-[#1A1C29] text-white">{o}</option>)}
               </select>
-              <ChevronDown className="w-3.5 h-3.5 text-[#94a3b8] absolute right-2.5 pointer-events-none group-hover:text-purple-400 transition-colors" />
+              <ChevronDown className="absolute right-0 w-3.5 h-3.5 text-gray-400 pointer-events-none shrink-0" />
             </div>
           </div>
         ))}
         
-        {/* Sort (Spans 2 columns) */}
-        <div className="col-span-2 flex flex-col gap-1 mt-0.5">
-          <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#94a3b8] px-0.5">
-            SORT CATALOG
+        {/* Sort (Half width) */}
+        <div className="relative flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 rounded-xl px-3 py-1.5 sm:py-2">
+          <span className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-wider shrink-0 pr-1">
+            SORT
           </span>
-          <div className="relative bg-[#141b29] border border-[#20273c] hover:border-purple-500/50 rounded-xl h-[38px] px-3.5 flex items-center justify-between transition-all group shadow-sm">
+          <div className="relative flex items-center min-w-0 flex-1 justify-end">
             <select
               value={selectedSort}
               onChange={(e) => setSelectedSort(e.target.value)}
-              className="w-full text-[12px] font-semibold text-white bg-transparent appearance-none truncate pr-5 focus:outline-none cursor-pointer"
+              className="bg-transparent text-white text-xs sm:text-sm font-medium outline-none cursor-pointer text-right appearance-none w-full min-w-0 text-ellipsis pr-5 truncate"
             >
-              {SORTS.map(s => <option key={s.value} value={s.value} className="bg-[#111626] text-white">{s.label}</option>)}
+              {SORTS.map(s => <option key={s.value} value={s.value} className="bg-[#1A1C29] text-white">{s.label}</option>)}
             </select>
-            <ChevronDown className="w-3.5 h-3.5 text-[#94a3b8] absolute right-3 pointer-events-none group-hover:text-purple-400 transition-colors" />
+            <ChevronDown className="absolute right-0 w-3.5 h-3.5 text-gray-400 pointer-events-none shrink-0" />
           </div>
         </div>
       </div>
@@ -388,16 +413,26 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           <span className="text-[11px] text-[#64748b]">2 Columns • Smooth 60fps Virtualized</span>
         </div>
 
-        {displayedAnime.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-24 bg-slate-900/40 rounded-3xl border border-slate-800/80 space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-bold text-white">Loading Anime Catalog</p>
+              <p className="text-xs text-neutral-400 mt-1">Fetching live anime data from Cloudflare D1...</p>
+            </div>
+          </div>
+        ) : displayedAnime.length === 0 ? (
           <div className="text-center py-16 bg-slate-900/50 rounded-2xl border border-slate-800">
             <p className="text-slate-400 text-xs">No anime matches your selected filters.</p>
             <button
               onClick={() => {
                 setSelectedLanguage('All');
-                setSelectedGenre('All');
+                setSelectedGenre('All Genres');
                 setSelectedPlatform('All Platforms');
                 setSelectedType('All Types');
-                setSelectedStatus('All');
+                setSelectedStatus('All Status');
               }}
               className="mt-3 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold transition-all"
             >
@@ -411,7 +446,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               const isWatchlisted = watchlist.includes(anime.id);
               return (
                 <AnimeCard
-                  key={anime.id}
+                  key={`${anime.id}-${anime.image || (anime as any).posterUrl || anime.cover_image || ''}`}
                   anime={anime}
                   onSelect={(a) => onSelectAnime(a as any)}
                   isBookmarked={isWatchlisted}

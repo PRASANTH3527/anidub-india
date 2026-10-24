@@ -171,6 +171,8 @@ function runMigrations() {
   try { db.run("ALTER TABLE anime ADD COLUMN type TEXT DEFAULT 'TV Series';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN studio TEXT DEFAULT 'Unknown Studio';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN submissionStatus TEXT DEFAULT 'approved';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT '';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN mixedEntries TEXT DEFAULT '';"); } catch (e) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS episodes (
@@ -492,7 +494,11 @@ app.get('/api/anime', (req, res) => {
 
     const animeList = [];
     while (dataStmt.step()) {
-      animeList.push(dataStmt.getAsObject());
+      const row = dataStmt.getAsObject();
+      if (row.mixedEntries) {
+        try { row.mixedEntries = JSON.parse(row.mixedEntries as string); } catch (e) { row.mixedEntries = []; }
+      }
+      animeList.push(row);
     }
     dataStmt.free();
 
@@ -525,6 +531,9 @@ app.get('/api/anime/:id', (req, res) => {
       return res.status(404).json({ error: "Anime not found" });
     }
     const anime = stmt.getAsObject();
+    if (anime.mixedEntries) {
+      try { anime.mixedEntries = JSON.parse(anime.mixedEntries as string); } catch (e) { anime.mixedEntries = []; }
+    }
     stmt.free();
 
     // Get episodes
@@ -564,11 +573,23 @@ app.get('/api/anime/:id', (req, res) => {
   }
 });
 
+function normalizeAnimeType(val: any): string {
+  if (!val || typeof val !== 'string') return 'TV Series';
+  const trimmed = val.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower.includes('movie')) return 'Movie';
+  if (lower.includes('ova/special')) return 'OVA/Special';
+  if (lower.includes('ova') || lower.includes('special')) return 'OVA/Special';
+  if (lower.includes('ona')) return 'ONA';
+  if (lower.includes('tv') || lower.length > 0) return 'TV Series';
+  return 'TV Series';
+}
+
 // 6. POST /api/anime (Create Anime with ImgBB Poster & Banner URLs)
 app.post('/api/anime', (req, res) => {
   const start = Date.now();
   try {
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, languages, platform, type, studio } = req.body;
+    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, languages, platform, type, Type, studio, episodes_per_season, mixedEntries } = req.body;
     if (!title) return res.status(400).json({ error: "Title is required" });
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -578,31 +599,88 @@ app.post('/api/anime', (req, res) => {
     const finalStatus = isAdmin && status && status !== 'pending' ? status : 'pending';
     const finalSubmissionStatus = isAdmin && submissionStatus && submissionStatus !== 'pending' ? submissionStatus : 'pending';
 
-    db.run(
-      `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        title,
-        slug,
-        synopsis || 'An exciting new anime streaming exclusively on Cloudflare Pages.',
-        cover_image || 'https://i.ibb.co/vzS8G90/default-poster.jpg',
-        banner_image || cover_image || 'https://i.ibb.co/xL2y9Bv/default-banner.jpg',
-        parseFloat(rating) || 8.5,
-        parseInt(episodes_count) || 12,
-        finalStatus,
-        finalSubmissionStatus,
-        season || 'Spring',
-        parseInt(year) || 2026,
-        genres || 'Action,Fantasy',
-        finalStatus === 'pending' ? 0 : 1000,
-        languages || 'HIN,TAM,TEL',
-        platform || 'Crunchyroll',
-        type || 'TV Series',
-        studio || 'Unknown Studio'
-      ]
-    );
+    const resolvedType = normalizeAnimeType(type || Type || 'TV Series');
 
-    const resId = db.exec("SELECT last_insert_rowid() as id");
-    const animeId = resId[0].values[0][0];
+    // Check if anime already exists by slug to prevent UNIQUE constraint failure on re-imports
+    const existingStmt = db.prepare("SELECT id FROM anime WHERE slug = ?");
+    existingStmt.bind([slug]);
+    let animeId: number | null = null;
+    if (existingStmt.step()) {
+      animeId = existingStmt.getAsObject().id as number;
+    }
+    existingStmt.free();
+
+    if (animeId) {
+      db.run(
+        `UPDATE anime SET 
+          title = ?,
+          synopsis = COALESCE(?, synopsis),
+          cover_image = COALESCE(?, cover_image),
+          banner_image = COALESCE(?, banner_image),
+          rating = COALESCE(?, rating),
+          episodes_count = COALESCE(?, episodes_count),
+          status = ?,
+          submissionStatus = ?,
+          season = COALESCE(?, season),
+          year = COALESCE(?, year),
+          genres = COALESCE(?, genres),
+          languages = COALESCE(?, languages),
+          platform = COALESCE(?, platform),
+          type = ?,
+          studio = COALESCE(?, studio),
+          episodes_per_season = COALESCE(?, episodes_per_season),
+          mixedEntries = COALESCE(?, mixedEntries)
+        WHERE id = ?`,
+        [
+          title,
+          synopsis || 'An exciting new anime streaming exclusively on Cloudflare Pages.',
+          cover_image || null,
+          banner_image || cover_image || null,
+          parseFloat(rating) || 8.5,
+          parseInt(episodes_count) || 12,
+          finalStatus,
+          finalSubmissionStatus,
+          season || 'Spring',
+          parseInt(year) || 2026,
+          genres || 'Action,Fantasy',
+          languages || 'HIN,TAM,TEL',
+          platform || 'Crunchyroll',
+          resolvedType,
+          studio || 'Unknown Studio',
+          episodes_per_season || '',
+          mixedEntries ? JSON.stringify(mixedEntries) : '',
+          animeId
+        ]
+      );
+    } else {
+      db.run(
+        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          title,
+          slug,
+          synopsis || 'An exciting new anime streaming exclusively on Cloudflare Pages.',
+          cover_image || 'https://i.ibb.co/vzS8G90/default-poster.jpg',
+          banner_image || cover_image || 'https://i.ibb.co/xL2y9Bv/default-banner.jpg',
+          parseFloat(rating) || 8.5,
+          parseInt(episodes_count) || 12,
+          finalStatus,
+          finalSubmissionStatus,
+          season || 'Spring',
+          parseInt(year) || 2026,
+          genres || 'Action,Fantasy',
+          finalStatus === 'pending' ? 0 : 1000,
+          languages || 'HIN,TAM,TEL',
+          platform || 'Crunchyroll',
+          resolvedType,
+          studio || 'Unknown Studio',
+          episodes_per_season || '',
+          mixedEntries ? JSON.stringify(mixedEntries) : ''
+        ]
+      );
+
+      const resId = db.exec("SELECT last_insert_rowid() as id");
+      animeId = resId[0].values[0][0];
+    }
 
     // Auto generate episodes with ImgBB thumbnail
     for (let ep = 1; ep <= Math.min(parseInt(episodes_count) || 12, 12); ep++) {
@@ -670,28 +748,71 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
       const genres = item.genres || item.genre || 'Action,Fantasy';
       const languages = item.languages || item.dub || 'HIN,TAM,TEL';
       const platform = item.platform || 'Crunchyroll';
-      const type = item.type || 'TV Series';
+      const type = normalizeAnimeType(item.type || item.Type || 'TV Series');
+      const existingStmt = db.prepare("SELECT id FROM anime WHERE slug = ?");
+      existingStmt.bind([slug]);
+      let existingId: number | null = null;
+      if (existingStmt.step()) {
+        existingId = existingStmt.getAsObject().id as number;
+      }
+      existingStmt.free();
 
-      db.run(
-        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, popularity, languages, platform, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          title,
-          slug,
-          synopsis,
-          cover_image,
-          banner_image,
-          rating,
-          episodes_count,
-          status,
-          season,
-          year,
-          genres,
-          Math.floor(Math.random() * 50000) + 20000,
-          languages,
-          platform,
-          type
-        ]
-      );
+      if (existingId) {
+        db.run(
+          `UPDATE anime SET 
+            title = ?,
+            synopsis = COALESCE(?, synopsis),
+            cover_image = COALESCE(?, cover_image),
+            banner_image = COALESCE(?, banner_image),
+            rating = COALESCE(?, rating),
+            episodes_count = COALESCE(?, episodes_count),
+            status = ?,
+            season = COALESCE(?, season),
+            year = COALESCE(?, year),
+            genres = COALESCE(?, genres),
+            languages = COALESCE(?, languages),
+            platform = COALESCE(?, platform),
+            type = ?
+          WHERE id = ?`,
+          [
+            title,
+            synopsis,
+            cover_image,
+            banner_image,
+            rating,
+            episodes_count,
+            status,
+            season,
+            year,
+            genres,
+            languages,
+            platform,
+            type,
+            existingId
+          ]
+        );
+      } else {
+        db.run(
+          `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, popularity, languages, platform, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            title,
+            slug,
+            synopsis,
+            cover_image,
+            banner_image,
+            rating,
+            episodes_count,
+            status,
+            season,
+            year,
+            genres,
+            Math.floor(Math.random() * 50000) + 20000,
+            languages,
+            platform,
+            type
+          ]
+        );
+      }
       insertedCount++;
     }
 
@@ -771,7 +892,20 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
   const start = Date.now();
   try {
     const id = req.params.id;
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, studio } = req.body;
+    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, studio, type, Type, languages, platform } = req.body;
+
+    let resolvedType: string | null = null;
+    const rawT = type || Type;
+    if (rawT && typeof rawT === 'string') {
+      const trimmed = rawT.trim();
+      const lower = trimmed.toLowerCase();
+      if (lower === 'movie' || lower === 'film') resolvedType = 'Movie';
+      else if (lower === 'tv' || lower === 'tv series' || lower === 'series' || lower === 'tv show') resolvedType = 'TV Series';
+      else if (lower === 'ova') resolvedType = 'OVA';
+      else if (lower === 'ona') resolvedType = 'ONA';
+      else if (lower === 'special' || lower === 'specials') resolvedType = 'Special';
+      else resolvedType = trimmed;
+    }
 
     db.run(
       `UPDATE anime SET 
@@ -786,7 +920,10 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         season = COALESCE(?, season),
         year = COALESCE(?, year),
         genres = COALESCE(?, genres),
-        studio = COALESCE(?, studio)
+        studio = COALESCE(?, studio),
+        type = COALESCE(?, type),
+        languages = COALESCE(?, languages),
+        platform = COALESCE(?, platform)
       WHERE id = ?`,
       [
         title,
@@ -801,6 +938,9 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         year !== undefined ? parseInt(year) : null,
         genres,
         studio,
+        resolvedType,
+        languages,
+        platform,
         id
       ]
     );

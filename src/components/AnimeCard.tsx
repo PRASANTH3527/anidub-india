@@ -15,7 +15,11 @@ export interface AnimeCardData {
   title: string;
   slug?: string;
   synopsis?: string;
-  cover_image: string;
+  cover_image?: string;
+  image?: string;
+  poster?: string;
+  posterUrl?: string;
+  poster_url?: string;
   banner_image?: string;
   rating: number;
   episodes_count?: number;
@@ -92,20 +96,21 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   const isAiring = anime.status === 'Ongoing' || anime.status === 'Airing';
 
   const getCleanCover = () => {
-    if (!anime.cover_image || anime.cover_image.includes('i.ibb.co')) {
-      const fallbacks = [
-        'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1563089145-599997674d42?w=800&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800&auto=format&fit=crop&q=80'
-      ];
-      return fallbacks[(anime.id || 0) % fallbacks.length];
+    const directUrl = anime.cover_image || (anime as any).posterUrl || (anime as any).image || (anime as any).poster || (anime as any).poster_url;
+    if (directUrl && typeof directUrl === 'string' && directUrl.trim().length > 0) {
+      return directUrl.trim();
     }
-    return anime.cover_image;
+    const fallbacks = [
+      'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1563089145-599997674d42?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=800&auto=format&fit=crop&q=80'
+    ];
+    return fallbacks[(anime.id || 0) % fallbacks.length];
   };
 
   const handleLikeClick = (e: React.MouseEvent) => {

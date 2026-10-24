@@ -314,7 +314,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 >
                   {/* Thumbnail */}
                   <img 
-                    src={anime.cover_image && !anime.cover_image.includes('ibb.co') ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                    src={anime.cover_image ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
                     alt={anime.title}
                     onError={(e) => {
                       e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';

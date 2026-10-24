@@ -45,6 +45,8 @@ import {
 } from 'lucide-react';
 import { Anime } from './CatalogView';
 import { LiveChat } from './LiveChat';
+import { cloudflareApi } from '../services/cloudflareApi';
+import { getCloudflareUrl } from '../config/cloudflare';
 
 export interface AnimeDetailPageProps {
   animeId: number;
@@ -145,9 +147,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const fetchDetails = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/anime/${animeId}`);
-      if (res.ok) {
-        const data = await res.json();
+      const data = await cloudflareApi.getAnimeById(animeId);
+      if (data) {
         setDetails(data);
         if (data.popularity) setUpvotes(data.popularity);
         if (data.rating) setCurrentRating(data.rating);
@@ -156,7 +157,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         }
       }
     } catch (err) {
-      console.error('Failed to fetch anime details:', err);
+      console.error('Failed to fetch anime details from Cloudflare:', err);
     } finally {
       setLoading(false);
     }
@@ -170,9 +171,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const handleVote = async () => {
     setIsVoting(true);
     try {
-      const res = await fetch(`/api/anime/${animeId}/vote`, { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
+      const data = await cloudflareApi.upvoteAnime(animeId);
+      if (data && data.popularity) {
         setUpvotes(data.popularity);
         showToast(`🔥 Upvoted! Total upvotes increased to ${data.popularity}`);
       }
@@ -187,7 +187,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const handleRate = async (val: number) => {
     setIsRating(true);
     try {
-      const res = await fetch(`/api/anime/${animeId}/rate`, {
+      const url = getCloudflareUrl(`/api/anime/${animeId}/rate`);
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rating: val })
@@ -270,7 +271,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const title = details?.title || 'Anime Details';
   const nativeTitle = details?.nativeTitle || details?.romajiTitle || 'Japanese Native / Romaji Title';
   const coverImage = details?.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
-  const synopsis = details?.synopsis || details?.description || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
+  const rawSynopsis = details?.synopsis || details?.description || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
+  const synopsis = rawSynopsis.replace(/Imported via standardized CSV format\.?/gi, '').trim() || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
   const releaseYear = details?.releaseYear || details?.year || 2024;
   const status = details?.status || 'Ongoing';
   const type = details?.type || 'TV Series';
@@ -384,141 +386,134 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </div>
       </div>
 
-      {/* HERO HEADER CARD */}
-      <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#131926] border border-neutral-800 shadow-2xl">
+      {/* HERO HEADER CARD - CINEMATIC NETFLIX / CRUNCHYROLL STYLE */}
+      <div className="relative rounded-3xl overflow-hidden bg-[#101522] border border-neutral-800 shadow-[0_30px_90px_rgba(0,0,0,0.9)]">
         
-        {/* Blurred Backdrop Banner */}
-        <div className="absolute inset-0 h-48 sm:h-72 overflow-hidden opacity-30 pointer-events-none">
-          <img 
-            src={coverImage} 
-            alt={title} 
-            className="w-full h-full object-cover blur-2xl scale-125"
+        {/* Cinematic Backdrop Banner with Heavy Blur and Multi-stop Gradient */}
+        <div className="absolute inset-0 h-64 sm:h-96 overflow-hidden opacity-35 pointer-events-none">
+          <div 
+            className="w-full h-full bg-cover bg-center bg-no-repeat blur-3xl scale-125"
+            style={{ backgroundImage: `url(${coverImage})` }}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#131926]/80 to-[#131926]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#101522] via-[#101522]/80 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#101522]/90 via-transparent to-[#101522]/90" />
         </div>
 
         {/* Hero Content */}
-        <div className="relative z-10 p-5 sm:p-8 flex flex-col md:flex-row gap-6 sm:gap-8 items-start">
+        <div className="relative z-10 p-6 sm:p-10 flex flex-col md:flex-row gap-8 items-center md:items-start">
           
-          {/* Main Poster inside DynamicAmbientGlow */}
-          <div className="relative shrink-0 mx-auto md:mx-0 group">
-            <div 
-              className="absolute -inset-1 rounded-3xl opacity-75 blur-xl transition duration-500 group-hover:opacity-100"
-              style={{ background: dominantTheme.glow }}
-            />
-            <div className="relative w-44 sm:w-56 aspect-[3/4.2] rounded-2xl border-2 border-neutral-700/80 shadow-[0_20px_50px_rgba(0,0,0,0.85)] bg-neutral-900 overflow-hidden">
-              <img 
-                src={coverImage && !coverImage.includes('ibb.co/mC9t2Wp') ? coverImage : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'} 
-                alt={title}
-                onError={(e) => {
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
-                }}
-                className="w-full h-full object-cover" 
+          {/* Main Poster Column with Mobile Centering */}
+          <div className="flex flex-col items-center shrink-0 w-full md:w-auto">
+            <div className="relative group">
+              <div 
+                className="absolute -inset-2 rounded-3xl opacity-80 blur-2xl transition duration-500 group-hover:opacity-100"
+                style={{ background: dominantTheme.glow }}
               />
-              
-              {/* Language badges overlay on poster */}
-              <div className="absolute top-2.5 left-2.5 right-2.5 flex flex-wrap gap-1">
-                {languages.slice(0, 3).map((l: string) => (
+              <div className="relative w-48 sm:w-60 aspect-[3/4.3] rounded-2xl sm:rounded-3xl border-2 border-neutral-700/80 shadow-[0_25px_60px_rgba(0,0,0,0.95)] bg-neutral-900 overflow-hidden">
+                <img 
+                  src={coverImage ? coverImage : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'} 
+                  alt={title}
+                  onError={(e) => {
+                    e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+                  }}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                />
+
+                {/* Streaming provider tag overlay */}
+                <div className="absolute bottom-2.5 left-2.5 right-2.5 bg-black/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center justify-between text-xs text-white">
+                  <span className="font-extrabold text-orange-400">{platform}</span>
+                  <span className="text-emerald-400 font-bold">{status}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Language & Status Badges Grouped Nicely Below Poster */}
+            <div className="mt-4 w-full flex flex-col items-center gap-2">
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 mr-1">Dub Audio:</span>
+                {languages.map((l: string) => (
                   <span 
                     key={l}
-                    className="bg-black/80 backdrop-blur-md text-amber-300 text-[9px] font-black uppercase px-2 py-0.5 rounded shadow border border-amber-500/30"
+                    className="bg-[#182032] border border-neutral-700/80 text-amber-300 text-[10px] font-extrabold px-2.5 py-1 rounded-lg shadow"
                   >
                     {l}
                   </span>
                 ))}
               </div>
-
-              {/* Streaming provider tag */}
-              <div className="absolute bottom-2.5 left-2.5 right-2.5 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/10 flex items-center justify-between text-[10px] text-white">
-                <span className="font-bold text-orange-400">{platform}</span>
-                <span className="text-emerald-400 font-semibold">{status}</span>
-              </div>
             </div>
           </div>
 
-          {/* Title & Core Metadata */}
-          <div className="flex-1 min-w-0 space-y-4">
+          {/* Title, Metadata & CTAs */}
+          <div className="flex-1 min-w-0 space-y-5 text-center md:text-left">
             
-            {/* Pills row */}
-            <div className="flex items-center flex-wrap gap-2">
-              <span className="badge-primary-theme text-[10px] sm:text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full">
+            {/* Single Row Metadata (Type • Year • OTT • Studio) */}
+            <div className="flex items-center justify-center md:justify-start flex-wrap gap-2 text-xs font-bold text-neutral-300">
+              <span className="px-3 py-1 rounded-full bg-purple-950/80 border border-purple-500/40 text-purple-300 uppercase tracking-wider">
                 {type}
               </span>
-              <span className="badge-primary-theme text-[10px] sm:text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full">
-                {releaseYear}
-              </span>
-              <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${
-                status === 'Ongoing' || status === 'Airing'
-                  ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
-                  : 'bg-neutral-800 border-neutral-700 text-neutral-300'
-              }`}>
-                {status}
-              </span>
-              <span className="bg-amber-950/80 border border-amber-500/40 text-amber-300 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+              <span className="text-neutral-500">•</span>
+              <span className="text-white">{releaseYear}</span>
+              <span className="text-neutral-500">•</span>
+              <span className="text-amber-400 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 <span>100% Legal OTT</span>
               </span>
+              <span className="text-neutral-500">•</span>
+              <span className="text-neutral-400">{studio}</span>
             </div>
 
-            {/* H1 Title */}
+            {/* Main Title (Bigger, Bolder, Glowing White) */}
             <div>
-              <h1 className="font-black text-2xl sm:text-4xl lg:text-5xl text-white tracking-tight leading-tight">
+              <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight drop-shadow-[0_4px_25px_rgba(255,255,255,0.25)]">
                 {title}
               </h1>
-              <p className="text-xs sm:text-sm text-neutral-400 mt-1 font-medium italic">
+              <p className="text-xs sm:text-sm text-neutral-400 mt-1.5 font-medium italic">
                 {nativeTitle}
               </p>
             </div>
 
-            {/* Quick Metrics Bar (Global Rating, Dub Quality, Studio, Release Date) with glassmorphism */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-black/50 border border-neutral-800/80 backdrop-blur-md">
+            {/* Quick Metrics Bar (Global Rating, Dub Quality, Broadcast) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 rounded-2xl bg-black/65 border border-neutral-800/80 backdrop-blur-md">
               <div className="p-2 space-y-0.5">
-                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
+                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center justify-center md:justify-start gap-1">
                   <Star className="w-3 h-3 text-orange-400 fill-orange-400" />
                   <span>Global Rating</span>
                 </div>
                 <div className="text-lg font-black text-white">{currentRating.toFixed(1)} / 10</div>
-                <div className="text-[10px] text-neutral-500">Official IMDb/Score</div>
+                <div className="text-[10px] text-neutral-500">Official IMDb Score</div>
               </div>
 
               <div className="p-2 space-y-0.5">
-                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
+                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center justify-center md:justify-start gap-1">
                   <Languages className="w-3 h-3 text-primary-theme" />
                   <span>Dub Quality</span>
                 </div>
                 <div className="text-lg font-black text-amber-400">4.8 / 5.0</div>
-                <div className="text-[10px] text-neutral-500">Verified Dub Score</div>
+                <div className="text-[10px] text-neutral-500">Verified Indian Dub</div>
               </div>
 
-              <div className="p-2 space-y-0.5">
-                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
-                  <Building2 className="w-3 h-3 text-indigo-400" />
-                  <span>Studio</span>
-                </div>
-                <div className="text-sm font-bold text-white truncate">{studio}</div>
-                <div className="text-[10px] text-neutral-500">Animation Studio</div>
-              </div>
-
-              <div className="p-2 space-y-0.5">
-                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
+              <div className="p-2 space-y-0.5 col-span-2 sm:col-span-1">
+                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center justify-center md:justify-start gap-1">
                   <Calendar className="w-3 h-3 text-sky-400" />
-                  <span>Broadcast</span>
+                  <span>Status</span>
                 </div>
-                <div className="text-sm font-bold text-white">{releaseYear}</div>
-                <div className="text-[10px] text-neutral-500">{status}</div>
+                <div className="text-sm font-bold text-emerald-400">{status}</div>
+                <div className="text-[10px] text-neutral-500">Simulcast Active</div>
               </div>
             </div>
 
-            {/* Watchlist CTAs & Upvote Button */}
-            <div className="pt-2 flex flex-wrap items-center gap-3">
+            {/* Modern Premium Call-to-Action Buttons */}
+            <div className="pt-2 flex flex-wrap items-center justify-center md:justify-start gap-3.5">
               <button
                 onClick={() => onToggleWatchlist(animeId)}
-                className={`btn-primary-theme px-5 py-2.5 rounded-2xl font-bold text-xs inline-flex items-center gap-2 shadow-lg cursor-pointer transition-all ${
-                  isBookmarked ? 'ring-2 ring-white/30 brightness-110' : ''
+                className={`px-6 py-3 rounded-2xl font-black text-xs sm:text-sm inline-flex items-center gap-2.5 transition-all cursor-pointer shadow-xl active:scale-95 ${
+                  isBookmarked 
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60 ring-2 ring-emerald-400/50' 
+                    : 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-500 hover:to-indigo-500 text-white shadow-[0_0_30px_rgba(147,51,234,0.45)] border border-purple-400/40'
                 }`}
               >
                 <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-white' : ''}`} />
-                <span>{isBookmarked ? 'In Watchlist' : 'Add to Watchlist'}</span>
+                <span>{isBookmarked ? 'In Your Watchlist' : 'Add to Watchlist'}</span>
               </button>
 
               <button
@@ -526,20 +521,20 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   setIsWatched(!isWatched);
                   showToast(isWatched ? 'Marked as uncompleted' : 'Marked as Watched!');
                 }}
-                className={`px-4 py-2.5 rounded-2xl border text-xs font-bold inline-flex items-center gap-2 transition-all cursor-pointer ${
+                className={`px-5 py-3 rounded-2xl border text-xs sm:text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer active:scale-95 ${
                   isWatched 
-                    ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' 
-                    : 'bg-[#182032] border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-600'
+                    ? 'bg-emerald-950/90 border-emerald-500/60 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.3)]' 
+                    : 'bg-[#182032] border-neutral-700/80 text-neutral-200 hover:text-white hover:border-neutral-600 shadow-md'
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{isWatched ? 'Watched' : 'Mark as Watched'}</span>
+                <span>{isWatched ? 'Watched Completed' : 'Mark as Watched'}</span>
               </button>
 
               <button
                 onClick={handleVote}
                 disabled={isVoting}
-                className="px-4 py-2.5 rounded-2xl bg-[#182032] border border-orange-500/40 hover:border-orange-500 text-orange-400 hover:text-orange-300 text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                className="px-5 py-3 rounded-2xl bg-[#182032] border border-orange-500/40 hover:border-orange-500 text-orange-400 hover:text-orange-300 text-xs sm:text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95"
                 title="Upvote community popularity"
               >
                 <Flame className={`w-4 h-4 fill-orange-400 ${isVoting ? 'animate-bounce' : ''}`} />
@@ -554,436 +549,357 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       </div>
 
       {/* CONTENT GRID: 2 COLUMNS LEFT, 1 COLUMN RIGHT */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+      {/* SECTIONS BELOW HERO - RESPONSIVE UNIFIED GRID */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6 items-stretch">
         
-        {/* LEFT COLUMN (2 COLS SPAN) */}
-        <div className="lg:col-span-2 space-y-6">
-          
-          {/* 1. SYNOPSIS CARD */}
-          <div className="bg-[#131926] border border-neutral-800 rounded-2xl sm:rounded-3xl p-5 sm:p-7 shadow-xl space-y-4">
-            <h2 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-amber-400" />
-              <span>Synopsis & Overview</span>
-            </h2>
-            <p className="text-sm text-neutral-300 leading-relaxed font-normal">
+        {/* 1. SYNOPSIS & GENRES */}
+        <div className="bg-[#1A1C29]/60 backdrop-blur-md border border-gray-800 rounded-2xl p-3.5 sm:p-4 shadow-xl flex flex-col justify-between space-y-2.5">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-800/80">
+              <h2 className="text-sm sm:text-base font-bold text-gray-200 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                <span>Synopsis & Overview</span>
+              </h2>
+              <span className="text-[10px] font-bold text-purple-300 bg-purple-950/70 border border-purple-500/30 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                Storyline
+              </span>
+            </div>
+            <p className="text-xs text-gray-300 leading-relaxed font-normal">
               {synopsis}
             </p>
-
-            {/* Genre tags */}
-            <div className="pt-2 border-t border-neutral-800/80">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 mb-2">
-                GENRES & THEMES
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {genres.map((g: string) => (
-                  <span 
-                    key={g}
-                    className="px-3 py-1 rounded-xl bg-[#182032] border border-neutral-700/60 text-xs font-semibold text-neutral-300 hover:border-primary-theme/50 transition-colors"
-                  >
-                    {g}
-                  </span>
-                ))}
-                <span className="px-3 py-1 rounded-xl bg-purple-950/60 border border-purple-500/40 text-xs font-semibold text-purple-300">
-                  Regional Dubbed
-                </span>
-                <span className="px-3 py-1 rounded-xl bg-amber-950/60 border border-amber-500/40 text-xs font-semibold text-amber-300">
-                  Legal India Stream
-                </span>
-              </div>
-            </div>
           </div>
 
-          {/* 2. MAIN CHARACTERS & VOICE ACTORS CARD */}
-          <div className="bg-[#182032] border border-neutral-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black text-white flex items-center gap-2">
-                <Languages className="w-5 h-5 text-primary-theme" />
-                <span>Main Characters & Voice Actors</span>
-              </h2>
-              <span className="text-[11px] text-neutral-400 font-semibold bg-neutral-900/80 px-2.5 py-1 rounded-lg border border-neutral-800">
-                Japanese & Indian Cast
+          {/* Genre tags */}
+          <div className="pt-2 border-t border-gray-800/70">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">
+              Genres & Categories
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {genres.map((g: string) => (
+                <span 
+                  key={g}
+                  className="px-2.5 py-1 rounded-xl bg-[#141824]/90 border border-gray-700/60 text-xs font-semibold text-gray-300 hover:border-purple-400/50 transition-colors"
+                >
+                  {g}
+                </span>
+              ))}
+              <span className="px-2.5 py-1 rounded-xl bg-purple-950/60 border border-purple-500/40 text-xs font-semibold text-purple-300">
+                Regional Dubbed
+              </span>
+              <span className="px-2.5 py-1 rounded-xl bg-amber-950/60 border border-amber-500/40 text-xs font-semibold text-amber-300">
+                100% Legal OTT
               </span>
             </div>
-
-            <p className="text-xs text-neutral-400 leading-relaxed">
-              Official voice artists who brought these characters to life across Japanese, Hindi, Tamil, and Telugu dub recordings.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-2">
-              {characters.map((char, idx) => (
-                <div 
-                  key={idx}
-                  className="bg-[#131926] border border-neutral-800 rounded-2xl p-3.5 flex flex-col justify-between space-y-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <img 
-                      src={char.avatar} 
-                      alt={char.name}
-                      className="w-12 h-12 rounded-xl object-cover border border-neutral-700 shrink-0" 
-                    />
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-white truncate">{char.name}</h4>
-                      <p className="text-[10px] text-amber-400 font-semibold">{char.role}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 text-[11px] border-t border-neutral-800/80 pt-2">
-                    <div className="text-neutral-400">
-                      <span className="text-[9px] font-bold uppercase text-neutral-500">JP VA: </span>
-                      <span className="text-neutral-200">{char.jpVa}</span>
-                    </div>
-                    <div className="text-neutral-400">
-                      <span className="text-[9px] font-bold uppercase text-primary-theme">Indian VA: </span>
-                      <span className="text-neutral-200 font-medium">{char.indianVa}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
-
-          {/* 3. DUB QUALITY REVIEWS & RATINGS SYSTEM */}
-          <div className="bg-[#182032] border border-neutral-700/80 rounded-2xl p-5 sm:p-7 shadow-xl space-y-6">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <h2 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-purple-400" />
-                <span>Dub Quality Reviews & Community Ratings</span>
-              </h2>
-              <span className="badge-primary-theme text-[10px] font-bold px-2.5 py-0.5 rounded-full">
-                {reviewsList.length} Community Reviews
-              </span>
-            </div>
-
-            {/* Interactive Rating Slider & Submission Form */}
-            <form onSubmit={handleAddReview} className="bg-[#131926] border border-neutral-800 rounded-2xl p-4 sm:p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white">Rate Indian Dubbing Quality</span>
-                <span className="text-[11px] text-primary-theme font-medium">Logged in via Indian Viewer Session</span>
-              </div>
-
-              {/* Slider */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-neutral-400">Dub Performance Score</span>
-                  <span className="font-black text-amber-400 text-sm flex items-center gap-1">
-                    <Star className="w-3.5 h-3.5 fill-amber-400" />
-                    <span>{reviewRating.toFixed(1)} / 10.0</span>
-                  </span>
-                </div>
-                <input 
-                  type="range"
-                  min="1"
-                  max="10"
-                  step="0.5"
-                  value={reviewRating}
-                  onChange={(e) => setReviewRating(parseFloat(e.target.value))}
-                  className="w-full accent-purple-500 cursor-pointer"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] text-neutral-400 font-semibold mb-1">
-                    Language Reviewed
-                  </label>
-                  <select
-                    value={reviewLang}
-                    onChange={(e) => setReviewLang(e.target.value)}
-                    className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-primary-theme"
-                  >
-                    <option value="Hindi Dub">Hindi Dub</option>
-                    <option value="Tamil Dub">Tamil Dub</option>
-                    <option value="Telugu Dub">Telugu Dub</option>
-                    <option value="Malayalam Dub">Malayalam Dub</option>
-                    <option value="Kannada Dub">Kannada Dub</option>
-                  </select>
-                </div>
-
-                <div className="flex items-end">
-                  <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer mb-2">
-                    <input 
-                      type="checkbox"
-                      checked={hasSpoilers}
-                      onChange={(e) => setHasSpoilers(e.target.checked)}
-                      className="accent-purple-600 rounded"
-                    />
-                    <span>Review contains plot spoilers?</span>
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <textarea 
-                  rows={3}
-                  value={reviewComment}
-                  onChange={(e) => setReviewComment(e.target.value)}
-                  placeholder="Share details on dubbing accuracy, emotional delivery, background audio mixing, and character voice matching..."
-                  className="w-full bg-[#182032] border border-neutral-700 rounded-xl p-3 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-primary-theme resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end">
-                <button
-                  type="submit"
-                  className="btn-primary-theme px-5 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-md cursor-pointer hover:opacity-95"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Submit Dub Review</span>
-                </button>
-              </div>
-            </form>
-
-            {/* Reviews List */}
-            <div className="space-y-3 pt-2">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                LATEST COMMUNITY REVIEWS
-              </div>
-
-              {reviewsList.map((review) => (
-                <div 
-                  key={review.id}
-                  className="bg-[#131926] border border-neutral-800 rounded-2xl p-4 space-y-2.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-xs text-white">{review.author}</span>
-                      <span className="px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
-                        {review.language}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1 bg-amber-950/50 border border-amber-500/30 px-2 py-0.5 rounded-md text-[11px] font-bold text-amber-300">
-                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                      <span>{review.rating} / 10</span>
-                    </div>
-                  </div>
-
-                  {/* Comment with spoiler blur if needed */}
-                  <div className="relative">
-                    {review.spoilers && !review.revealed ? (
-                      <div className="p-3 rounded-xl bg-red-950/20 border border-red-500/30 flex items-center justify-between">
-                        <span className="text-xs text-red-300 font-medium flex items-center gap-1.5">
-                          <EyeOff className="w-3.5 h-3.5 text-red-400" />
-                          <span>This review contains spoilers.</span>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleSpoiler(review.id)}
-                          className="text-[11px] font-bold text-primary-theme hover:underline cursor-pointer"
-                        >
-                          Reveal Spoiler
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-neutral-300 leading-relaxed font-normal">
-                        {review.comment}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Footer with likes and timestamp */}
-                  <div className="flex items-center justify-between text-[11px] text-neutral-500 pt-1 border-t border-neutral-800/60">
-                    <span>{review.date || 'Recent'}</span>
-                    <button
-                      onClick={() => handleLikeReview(review.id)}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
-                        review.isLiked 
-                          ? 'bg-purple-950/80 border-purple-500 text-purple-300' 
-                          : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white'
-                      }`}
-                    >
-                      <ThumbsUp className="w-3 h-3" />
-                      <span>{review.likes || 0} Helpful</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-          </div>
-
-          {/* 4. REAL-TIME COMMUNITY CHAT (LIVECHAT) */}
-          <LiveChat />
-
         </div>
 
-        {/* RIGHT COLUMN (1 COL SPAN) */}
-        <div className="space-y-6">
-          
-          {/* 1. INDIAN DUB AVAILABILITY BREAKDOWN */}
-          <div className="bg-[#131926] border border-neutral-800 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
-            <h3 className="text-base font-black text-white flex items-center gap-2">
-              <Languages className="w-5 h-5 text-amber-400" />
-              <span>Indian Dub Availability</span>
-            </h3>
-            <p className="text-xs text-neutral-400">
-              Verified audio channels available for immediate streaming in India:
-            </p>
+        {/* 2. INDIAN DUB AVAILABILITY & OFFICIAL STREAMING LINKS (COMPACT) */}
+        <div className="bg-[#1A1C29]/60 backdrop-blur-md border border-gray-800 rounded-2xl p-3.5 sm:p-4 shadow-xl flex flex-col justify-between space-y-2.5">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-800/80">
+              <h2 className="text-sm sm:text-base font-bold text-gray-200 flex items-center gap-1.5">
+                <Languages className="w-4 h-4 text-amber-400" />
+                <span>Indian Dub Audio & Streaming</span>
+              </h2>
+              <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/70 border border-emerald-500/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                Simulcast Ready
+              </span>
+            </div>
 
-            <div className="space-y-2.5">
-              {[
-                { name: 'Hindi Dub', color: 'emerald', code: 'HI', status: 'Available', stream: platform },
-                { name: 'Tamil Dub', color: 'amber', code: 'TA', status: 'Available', stream: platform },
-                { name: 'Telugu Dub', color: 'sky', code: 'TE', status: 'Available', stream: platform },
-                { name: 'Malayalam Dub', color: 'purple', code: 'ML', status: 'Coming Soon', stream: platform },
-                { name: 'Kannada Dub', color: 'indigo', code: 'KN', status: 'In Production', stream: platform }
-              ].map((lang) => (
-                <div 
-                  key={lang.name}
-                  className="bg-[#182032] border border-neutral-800 rounded-2xl p-3 flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-7 h-7 rounded-lg bg-neutral-900 border border-white/10 text-white font-black text-[11px] flex items-center justify-center">
-                      {lang.code}
-                    </span>
-                    <div>
-                      <div className="text-xs font-bold text-white">{lang.name}</div>
-                      <div className="text-[10px] text-neutral-400">{lang.stream}</div>
+            {/* Compact Dub Audio List - Dynamically rendered based on actual anime.languages data */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {languages.map((langName: string) => {
+                const cleanName = langName.replace(/dub/gi, '').trim();
+                const upper = cleanName.toUpperCase();
+                let code = upper.slice(0, 2);
+                if (upper.includes('HIN')) code = 'HI';
+                else if (upper.includes('TAM')) code = 'TA';
+                else if (upper.includes('TEL')) code = 'TE';
+                else if (upper.includes('MAL')) code = 'ML';
+                else if (upper.includes('KAN')) code = 'KN';
+                else if (upper.includes('BEN')) code = 'BN';
+
+                return (
+                  <div 
+                    key={cleanName}
+                    className="bg-[#141824]/80 border border-gray-800/90 rounded-xl px-2.5 py-2 flex items-center justify-between gap-1"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-5 h-5 rounded-md bg-neutral-900 border border-white/10 text-white font-black text-[10px] flex items-center justify-center shrink-0">
+                        {code}
+                      </span>
+                      <span className="text-[11px] font-bold text-gray-200 truncate">{cleanName}</span>
                     </div>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md border shrink-0 bg-emerald-950/80 border-emerald-500/40 text-emerald-300">
+                      Ready
+                    </span>
                   </div>
-
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    lang.status === 'Available'
-                      ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
-                      : 'bg-neutral-800 border-neutral-700 text-neutral-400'
-                  }`}>
-                    {lang.status}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          {/* 2. OFFICIAL STREAMING LINKS (SMARTWATCHBUTTON) */}
-          <div className="bg-[#131926] border border-neutral-800 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
-            <h3 className="text-base font-black text-white flex items-center gap-2">
-              <Play className="w-5 h-5 text-orange-500" />
-              <span>Official Streaming Links</span>
-            </h3>
-            <p className="text-xs text-neutral-400 leading-relaxed">
-              Stream legally on authorized platforms with zero piracy. Supports deep linking to native mobile OTT apps:
-            </p>
-
+          {/* Compact Stream Link Card */}
+          <div className="pt-3 border-t border-gray-800/70 space-y-2">
+            <div className="flex items-center justify-between text-xs text-gray-400">
+              <span>Licensed OTT Stream:</span>
+              <span className="text-[11px] text-gray-400">Subtitles: En, Hi, Ta, Te</span>
+            </div>
             <a
               href="https://www.crunchyroll.com"
               target="_blank"
               rel="noreferrer"
-              className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white p-3.5 rounded-2xl flex items-center justify-between font-bold text-xs shadow-xl transition-all hover:scale-[1.02] cursor-pointer"
+              className="w-full bg-gradient-to-r from-orange-600 via-amber-600 to-orange-500 hover:from-orange-500 hover:to-amber-500 text-white px-4 py-2.5 rounded-xl flex items-center justify-between font-bold text-xs shadow-lg transition-all hover:scale-[1.01] cursor-pointer"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-black/20 flex items-center justify-center">
-                  <Play className="w-4 h-4 fill-white" />
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-black/25 flex items-center justify-center">
+                  <Play className="w-3.5 h-3.5 fill-white" />
                 </div>
-                <div className="text-left">
-                  <div>Watch on {platform}</div>
-                  <div className="text-[10px] font-normal text-orange-100 flex items-center gap-1">
-                    <Smartphone className="w-3 h-3" />
-                    <span>Smart App Deep Link</span>
-                  </div>
-                </div>
+                <span>Stream legally on {platform}</span>
               </div>
-              <ExternalLink className="w-4 h-4" />
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-orange-100">
+                <Smartphone className="w-3 h-3" />
+                <span>Deep Link</span>
+                <ExternalLink className="w-3.5 h-3.5 ml-1" />
+              </div>
             </a>
+          </div>
+        </div>
 
-            <div className="p-3 rounded-xl bg-[#182032] border border-neutral-800/80 text-[11px] text-neutral-400 space-y-1">
-              <div className="font-semibold text-neutral-300">Supported Subtitles:</div>
-              <div className="flex flex-wrap gap-1">
-                <span className="px-2 py-0.5 rounded bg-neutral-900 text-neutral-300 text-[10px]">English</span>
-                <span className="px-2 py-0.5 rounded bg-neutral-900 text-neutral-300 text-[10px]">Hindi</span>
-                <span className="px-2 py-0.5 rounded bg-neutral-900 text-neutral-300 text-[10px]">Tamil</span>
-                <span className="px-2 py-0.5 rounded bg-neutral-900 text-neutral-300 text-[10px]">Telugu</span>
-              </div>
-            </div>
+
+
+        {/* 4. PRODUCTION & AIRING DETAILS */}
+        <div className="bg-[#1A1C29]/60 backdrop-blur-md border border-gray-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-gray-800/80">
+            <h2 className="text-base sm:text-lg font-bold text-gray-200 flex items-center gap-2">
+              <Tv className="w-4 h-4 text-indigo-400" />
+              <span>Production & Airing Info</span>
+            </h2>
+            <span className="text-[10px] font-semibold text-indigo-300 bg-indigo-950/70 border border-indigo-500/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+              {status}
+            </span>
           </div>
 
-          {/* 3. PRODUCTION & AIRING DETAILS */}
-          <div className="bg-[#131926] border border-neutral-800 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
-            <h3 className="text-base font-black text-white flex items-center gap-2">
-              <Tv className="w-5 h-5 text-indigo-400" />
-              <span>Production & Airing</span>
-            </h3>
-
+          <div className="space-y-3">
             {/* Progress Bar */}
-            <div className="bg-[#182032] border border-neutral-800 rounded-2xl p-3.5 space-y-2">
+            <div className="bg-[#141824]/80 border border-gray-800/90 rounded-xl p-3 space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-neutral-400 font-medium">Series Scope</span>
-                <span className="font-bold text-white">Season 1 • Ongoing</span>
+                <span className="text-gray-400 font-medium">Broadcast Progress</span>
+                <span className="font-bold text-white">Season 1 • Simulcast Active</span>
               </div>
-              <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden">
+              <div className="w-full h-2 rounded-full bg-neutral-900 overflow-hidden">
                 <div className="w-3/4 h-full bg-gradient-to-r from-purple-500 via-indigo-500 to-emerald-400 rounded-full" />
               </div>
-              <div className="flex items-center justify-between text-[10px] text-neutral-500 font-semibold">
-                <span>SIMULCAST</span>
-                <span>REGIONAL SYNC 75%</span>
+              <div className="flex items-center justify-between text-[10px] text-gray-400 font-semibold">
+                <span>WEEKLY RELEASE</span>
+                <span className="text-emerald-400">REGIONAL SYNC 75%</span>
               </div>
             </div>
 
-            {/* Key-Value Breakdown */}
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-center justify-between py-1.5 border-b border-neutral-800/60">
-                <span className="text-neutral-400">Animation Studio</span>
-                <span className="font-bold text-white">{studio}</span>
+            {/* 4-Item Grid */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 rounded-xl bg-[#141824]/80 border border-gray-800/80">
+                <span className="text-[10px] text-gray-400 block uppercase font-bold">Studio</span>
+                <span className="font-bold text-white truncate block">{studio}</span>
               </div>
-              <div className="flex items-center justify-between py-1.5 border-b border-neutral-800/60">
-                <span className="text-neutral-400">Original Release Date</span>
-                <span className="font-bold text-white">{releaseYear}</span>
+              <div className="p-2.5 rounded-xl bg-[#141824]/80 border border-gray-800/80">
+                <span className="text-[10px] text-gray-400 block uppercase font-bold">Release Year</span>
+                <span className="font-bold text-white truncate block">{releaseYear}</span>
               </div>
-              <div className="flex items-center justify-between py-1.5 border-b border-neutral-800/60">
-                <span className="text-neutral-400">Format</span>
-                <span className="font-bold text-white">{type}</span>
+              <div className="p-2.5 rounded-xl bg-[#141824]/80 border border-gray-800/80">
+                <span className="text-[10px] text-gray-400 block uppercase font-bold">Format</span>
+                <span className="font-bold text-white truncate block">{type}</span>
               </div>
-              <div className="flex items-center justify-between py-1.5 border-b border-neutral-800/60">
-                <span className="text-neutral-400">Status</span>
-                <span className="font-bold text-emerald-400">{status}</span>
-              </div>
-              <div className="flex items-center justify-between py-1.5">
-                <span className="text-neutral-400">Broadcast Day</span>
-                <span className="font-bold text-white">Sundays (Simulcast)</span>
+              <div className="p-2.5 rounded-xl bg-[#141824]/80 border border-gray-800/80">
+                <span className="text-[10px] text-gray-400 block uppercase font-bold">Broadcast Day</span>
+                <span className="font-bold text-emerald-400 truncate block">Sundays (Simulcast)</span>
               </div>
             </div>
           </div>
+        </div>
 
+        {/* 5. DUB QUALITY REVIEWS & RATINGS */}
+        <div className="bg-[#1A1C29]/60 backdrop-blur-md border border-gray-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-gray-800/80">
+            <h2 className="text-base sm:text-lg font-bold text-gray-200 flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-purple-400" />
+              <span>Dub Reviews & Ratings</span>
+            </h2>
+            <span className="text-[10px] font-bold text-purple-300 bg-purple-950/80 border border-purple-500/40 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+              {reviewsList.length} Ratings
+            </span>
+          </div>
+
+          {/* Interactive Rating Slider & Submission Form */}
+          <form onSubmit={handleAddReview} className="bg-[#141824]/80 border border-gray-800 rounded-xl p-3.5 space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-gray-200">Rate Dubbing Quality</span>
+              <span className="text-amber-400 font-black flex items-center gap-1">
+                <Star className="w-3 h-3 fill-amber-400" />
+                <span>{reviewRating.toFixed(1)} / 10.0</span>
+              </span>
+            </div>
+
+            <input 
+              type="range"
+              min="1"
+              max="10"
+              step="0.5"
+              value={reviewRating}
+              onChange={(e) => setReviewRating(parseFloat(e.target.value))}
+              className="w-full accent-purple-500 cursor-pointer h-1.5"
+            />
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <select
+                  value={reviewLang}
+                  onChange={(e) => setReviewLang(e.target.value)}
+                  className="w-full bg-[#0c1017] border border-gray-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                >
+                  <option value="Hindi Dub">Hindi Dub</option>
+                  <option value="Tamil Dub">Tamil Dub</option>
+                  <option value="Telugu Dub">Telugu Dub</option>
+                  <option value="Malayalam Dub">Malayalam Dub</option>
+                  <option value="Kannada Dub">Kannada Dub</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end">
+                <label className="flex items-center gap-1.5 text-[11px] text-gray-300 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={hasSpoilers}
+                    onChange={(e) => setHasSpoilers(e.target.checked)}
+                    className="accent-purple-600 rounded"
+                  />
+                  <span>Contains spoiler?</span>
+                </label>
+              </div>
+            </div>
+
+            <textarea 
+              rows={2}
+              value={reviewComment}
+              onChange={(e) => setReviewComment(e.target.value)}
+              placeholder="Share details on dubbing accuracy, emotional delivery, background audio mixing..."
+              className="w-full bg-[#0c1017] border border-gray-700/80 rounded-lg p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none"
+            />
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                className="btn-primary-theme px-4 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 shadow cursor-pointer hover:opacity-95"
+              >
+                <Send className="w-3 h-3" />
+                <span>Submit Review</span>
+              </button>
+            </div>
+          </form>
+
+          {/* Reviews Stream */}
+          <div className="space-y-2.5 pt-1 max-h-80 overflow-y-auto pr-1">
+            {reviewsList.map((review) => (
+              <div 
+                key={review.id}
+                className="bg-[#141824]/70 border border-gray-800/80 rounded-xl p-3 space-y-2 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white">{review.author}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
+                      {review.language}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-amber-950/50 border border-amber-500/30 px-2 py-0.5 rounded-md text-[10px] font-bold text-amber-300">
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                    <span>{review.rating}</span>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  {review.spoilers && !review.revealed ? (
+                    <div className="p-2 rounded-lg bg-red-950/20 border border-red-500/30 flex items-center justify-between text-[11px]">
+                      <span className="text-red-300 flex items-center gap-1">
+                        <EyeOff className="w-3 h-3 text-red-400" />
+                        <span>Contains spoilers</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSpoiler(review.id)}
+                        className="font-bold text-purple-400 hover:underline cursor-pointer"
+                      >
+                        Reveal
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-gray-300 leading-relaxed font-normal text-[11px]">
+                      {review.comment}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1 border-t border-gray-800/60">
+                  <span>{review.date || 'Recent'}</span>
+                  <button
+                    onClick={() => handleLikeReview(review.id)}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-semibold transition-colors cursor-pointer ${
+                      review.isLiked 
+                        ? 'bg-purple-950/80 border-purple-500 text-purple-300' 
+                        : 'bg-neutral-900 border-gray-800 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <ThumbsUp className="w-2.5 h-2.5" />
+                    <span>{review.likes || 0}</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 6. REAL-TIME COMMUNITY DISCUSSION */}
+        <div className="flex flex-col">
+          <LiveChat className="h-full" />
         </div>
 
       </div>
 
       {/* SEO & FAQ FOOTER SECTION */}
-      <div className="bg-[#131926]/80 border border-neutral-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 space-y-6 mt-8">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-primary-theme/20 border border-primary-theme/40 text-primary-theme flex items-center justify-center">
-              <HelpCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-black text-white">
-                Frequently Asked Questions & Streaming Guide
-              </h3>
-              <p className="text-xs text-neutral-400">
-                Verified information regarding regional Indian dubbed releases.
-              </p>
-            </div>
+      <div className="bg-[#1A1C29]/60 backdrop-blur-md border border-gray-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4 mt-6">
+        <div className="flex items-center gap-2.5 pb-3 border-b border-gray-800/80">
+          <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-400 flex items-center justify-center">
+            <HelpCircle className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-gray-200">
+              Frequently Asked Questions & Streaming Guide
+            </h3>
+            <p className="text-xs text-gray-400">
+              Verified information regarding regional Indian dubbed releases.
+            </p>
           </div>
         </div>
 
         {/* FAQ Accordion */}
-        <div className="space-y-3 pt-2">
+        <div className="space-y-2.5 pt-1">
           {faqItems.map((item, idx) => {
             const isOpen = openFaqIndex === idx;
             return (
               <div 
                 key={idx}
-                className="bg-[#182032] border border-neutral-800 rounded-2xl overflow-hidden transition-all"
+                className="bg-[#141824]/80 border border-gray-800 rounded-xl overflow-hidden transition-all"
               >
                 <button
                   type="button"
                   onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
-                  className="w-full p-4 text-left flex items-center justify-between gap-4 text-xs sm:text-sm font-bold text-white hover:text-primary-theme transition-colors cursor-pointer"
+                  className="w-full p-3.5 text-left flex items-center justify-between gap-4 text-xs sm:text-sm font-bold text-gray-200 hover:text-purple-400 transition-colors cursor-pointer"
                 >
                   <span>{item.q}</span>
-                  {isOpen ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+                  {isOpen ? <ChevronUp className="w-4 h-4 shrink-0 text-purple-400" /> : <ChevronDown className="w-4 h-4 shrink-0 text-gray-400" />}
                 </button>
                 {isOpen && (
-                  <div className="p-4 pt-0 text-xs text-neutral-300 leading-relaxed border-t border-neutral-800/60 mt-1">
+                  <div className="p-3.5 pt-0 text-xs text-gray-300 leading-relaxed border-t border-gray-800/60 mt-1">
                     {item.a}
                   </div>
                 )}

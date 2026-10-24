@@ -32,7 +32,11 @@ const RANDOM_NAMES = [
   'Deku_Pune'
 ];
 
-export const LiveChat: React.FC = () => {
+export interface LiveChatProps {
+  className?: string;
+}
+
+export const LiveChat: React.FC<LiveChatProps> = ({ className }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 1,
@@ -117,16 +121,16 @@ export const LiveChat: React.FC = () => {
   };
 
   return (
-    <div className="bg-[#131926] border border-neutral-800 rounded-3xl p-5 sm:p-7 shadow-xl space-y-5 font-sans">
+    <div className={`bg-[#1A1C29]/60 backdrop-blur-md border border-gray-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4 font-sans ${className || ''}`}>
       
       {/* 1. HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-800/80">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <MessageSquare className="w-5 h-5 text-accent-theme" />
-            <h3 className="font-heading font-black text-xl text-white tracking-tight">
-              Real-time Live Chat & Discussion
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <MessageSquare className="w-4 h-4 text-purple-400" />
+            <h3 className="text-base sm:text-lg font-bold text-gray-200">
+              Live Community Discussion
             </h3>
             <span className="bg-purple-950/70 border border-purple-500/30 text-purple-300 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full">
               Guest Mode

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   X, 
   Search, 
@@ -14,16 +14,17 @@ import {
   Send
 } from 'lucide-react';
 import { AnimeRecord, DubLanguage, dbService } from '../services/databaseService';
+import { cloudflareApi } from '../services/cloudflareApi';
 
 interface DubInfoModalProps {
   isOpen: boolean;
   mode?: 'submit' | 'edit';
-  initialData?: AnimeRecord | null;
+  initialData?: any;
   onClose: () => void;
-  onSubmit: (updatedAnime?: AnimeRecord) => void;
+  onSubmit: (updatedAnime?: any) => void;
 }
 
-const ALL_LANGS: DubLanguage[] = ['Tamil', 'Telugu', 'Hindi', 'Malayalam', 'Kannada', 'English', 'Japanese'];
+const ALL_LANGS: DubLanguage[] = ['Tamil', 'Telugu', 'Hindi', 'Malayalam', 'Kannada'];
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
 const AVAILABLE_GENRES = [
   'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Isekai', 
@@ -32,6 +33,18 @@ const AVAILABLE_GENRES = [
   'Music', 'Military', 'Historical', 'Martial Arts', 'Ecchi', 'Gourmet', 'Workplace',
   'School', 'Mythology', 'Parody'
 ];
+
+const normalizeAnimeType = (val: any): string => {
+  if (!val || typeof val !== 'string') return 'TV Series';
+  const trimmed = val.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower.includes('movie')) return 'Movie';
+  if (lower.includes('ova/special')) return 'OVA/Special';
+  if (lower.includes('ova') || lower.includes('special')) return 'OVA/Special';
+  if (lower.includes('ona')) return 'ONA';
+  if (lower.includes('tv') || lower.length > 0) return 'TV Series';
+  return 'TV Series';
+};
 
 export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   isOpen,
@@ -44,7 +57,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
   const initDataAny = initialData as any;
 
-  // Form Fields
+  // Form Fields & formData state for strict select binding
+  const initialResolvedType = normalizeAnimeType(
+    initDataAny?.type || initDataAny?.Type || (initialData as any)?.type || (initialData as any)?.Type || 'TV Series'
+  );
+  const [formData, setFormData] = useState<any>(() => ({
+    ...(initialData || {}),
+    type: initialResolvedType
+  }));
   const [title, setTitle] = useState(initialData?.title || '');
   const [romajiTitle, setRomajiTitle] = useState(initialData?.japanese_title || '');
   const [poster, setPoster] = useState(initialData?.poster_url || initDataAny?.cover_image || '');
@@ -52,7 +72,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     initialData?.release_year || initDataAny?.year || new Date().getFullYear()
   );
   const [rating, setRating] = useState<number | ''>(initialData?.rating !== undefined ? initialData.rating : '');
-  const [type, setType] = useState<string>(initDataAny?.type || 'TV Series');
+  const [type, setType] = useState<string>(initialResolvedType);
   const [studio, setStudio] = useState(initialData?.studio || '');
   const [genres, setGenres] = useState<string[]>(
     initialData?.genres 
@@ -60,26 +80,49 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       : ['Action', 'Fantasy']
   );
   
-  // Advanced Progress Tracking
-  const [seasonDetails, setSeasonDetails] = useState<{ 
-    type: 'Season' | 'OVA' | 'Movie' | 'Special' | 'ONA'; 
-    label: string; 
-    episodeCount: number | ''; 
+  // Advanced Progress Tracking (Mixed Entries)
+  const [mixedEntries, setMixedEntries] = useState<{
+    id: number | string;
+    entryType: string;
+    seasonNumber: string;
+    episodes: string;
     languages: DubLanguage[];
   }[]>(
-    initialData ? [
-      { 
-        type: 'Season', 
-        label: initialData.release_season || initDataAny?.season || '1', 
-        episodeCount: initialData.episodes_count || 12, 
-        languages: (Array.isArray(initialData.languages) 
-          ? initialData.languages 
-          : (initialData.languages || 'Tamil, Hindi').split(',').map(s => s.trim())) as DubLanguage[]
-      }
-    ] : [
-      { type: 'Season', label: '1', episodeCount: 12, languages: ['Tamil', 'Hindi'] }
-    ]
+    initDataAny?.mixedEntries && Array.isArray(initDataAny.mixedEntries)
+      ? initDataAny.mixedEntries.map((e: any, idx: number) => ({
+          id: e.id || idx + 1,
+          entryType: e.entryType || e.type || 'Season',
+          seasonNumber: e.seasonNumber || e.number || String(idx + 1),
+          episodes: String(e.episodes || e.episodeCount || 12),
+          languages: e.languages || ['Tamil', 'Hindi']
+        }))
+      : initialData ? [
+          {
+            id: 1,
+            entryType: 'Season',
+            seasonNumber: initialData.release_season || initDataAny?.season || '1',
+            episodes: String(initialData.episodes_count || 12),
+            languages: (Array.isArray(initialData.languages) 
+              ? initialData.languages 
+              : (initialData.languages || 'Tamil, Hindi').split(',').map((s: string) => s.trim())) as DubLanguage[]
+          }
+        ] : [
+          {
+            id: 1,
+            entryType: 'Season',
+            seasonNumber: '1',
+            episodes: '12',
+            languages: ['Tamil', 'Hindi']
+          }
+        ]
   );
+
+  const seasonDetails = mixedEntries.map(entry => ({
+    type: (entry.entryType as any) || 'Season',
+    label: entry.seasonNumber || '1',
+    episodeCount: entry.episodes === '' ? '' : Number(entry.episodes) || 0,
+    languages: entry.languages || ['Tamil', 'Hindi']
+  }));
 
   const [currentSeason, setCurrentSeason] = useState<string>(initialData?.release_season || initDataAny?.season || '');
   const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number | ''>(initialData?.episodes_count || '');
@@ -96,7 +139,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         url: '', 
         languages: (Array.isArray(initialData.languages) 
           ? initialData.languages 
-          : (initialData.languages || 'Tamil, Hindi').split(',').map(s => s.trim())) as DubLanguage[]
+          : (initialData.languages || 'Tamil, Hindi').split(',').map((s: string) => s.trim())) as DubLanguage[]
       }
     ] : [
       { name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] }
@@ -108,22 +151,128 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   );
   const [releaseDay, setReleaseDay] = useState<string>('Saturday');
 
+  useEffect(() => {
+    if (initialData) {
+      setTitle(initialData.title || '');
+      setRomajiTitle(initialData.japanese_title || '');
+      setPoster(initialData.poster_url || initDataAny?.cover_image || '');
+      setReleaseYear(initialData.release_year || initDataAny?.year || new Date().getFullYear());
+      setRating(initialData.rating !== undefined ? initialData.rating : '');
+      
+      const rawType = initDataAny?.type || initDataAny?.Type || (initialData as any)?.type || (initialData as any)?.Type || 'TV Series';
+      let cleanType = 'TV Series';
+      if (rawType && typeof rawType === 'string') {
+        const trimmed = rawType.trim();
+        const lower = trimmed.toLowerCase();
+        if (lower === 'movie' || lower === 'film' || lower.includes('movie')) cleanType = 'Movie';
+        else if (lower === 'ova/special') cleanType = 'OVA/Special';
+        else if (lower === 'ova') cleanType = 'OVA';
+        else if (lower === 'ona') cleanType = 'ONA';
+        else if (lower === 'special' || lower === 'specials') cleanType = 'Special';
+        else if (lower.includes('ova') || lower.includes('special')) cleanType = 'OVA/Special';
+        else if (lower === 'tv' || lower === 'tv series' || lower === 'series' || lower.includes('tv') || lower.length > 0) cleanType = 'TV Series';
+        else cleanType = trimmed;
+      }
+      setType(cleanType);
+
+      // State Initialization: When the Edit Modal opens and sets its state, make sure the type property is explicitly included
+      const anime = initialData as any;
+      setFormData({ ...anime, type: anime.type || anime.Type || 'TV Series' });
+
+      const rawStatus = initDataAny?.status || (initialData as any).status || 'Completed';
+      const trimmedStatus = typeof rawStatus === 'string' ? rawStatus.trim() : rawStatus;
+      setAiringStatus(trimmedStatus.toLowerCase() === 'airing' || trimmedStatus.toLowerCase() === 'ongoing' ? 'Ongoing' : 'Completed');
+
+      if (initDataAny?.mixedEntries && Array.isArray(initDataAny.mixedEntries)) {
+        const mapped = initDataAny.mixedEntries.map((e: any, idx: number) => ({
+          id: e.id || idx + 1,
+          entryType: e.entryType || e.type || 'Season',
+          seasonNumber: e.seasonNumber || e.number || String(idx + 1),
+          episodes: String(e.episodes || e.episodeCount || 12),
+          languages: e.languages || ['Tamil', 'Hindi']
+        }));
+        setMixedEntries(mapped);
+        setCurrentSeason(String(mapped.length));
+        const last = mapped[mapped.length - 1];
+        if (last && last.episodes) {
+          setCurrentlyAiringEpisode(Number(last.episodes) || 12);
+        }
+      } else {
+        const rawEp = initDataAny?.episodes_per_season || initDataAny?.Episodes || initDataAny?.episodes || initialData.episodes_count;
+        if (rawEp) {
+          const epStr = String(rawEp);
+          const mappedLangs = (Array.isArray(initialData.languages) 
+            ? initialData.languages 
+            : (initialData.languages || 'Tamil, Hindi').split(',').map((s: string) => s.trim())) as DubLanguage[];
+          const episodesArray = epStr.split('|').map((ep: string) => ep.trim()).filter(Boolean);
+          if (episodesArray.length > 0) {
+            const parsedSeasons = episodesArray.map((epCount: string, idx: number) => ({
+              id: Date.now() + Math.random() + idx,
+              entryType: 'Season',
+              seasonNumber: String(idx + 1),
+              episodes: String(epCount),
+              languages: mappedLangs
+            }));
+            setMixedEntries(parsedSeasons);
+            setCurrentSeason(String(episodesArray.length));
+            setCurrentlyAiringEpisode(Number(episodesArray[episodesArray.length - 1]) || 12);
+          } else {
+            setMixedEntries([{
+              id: 1,
+              entryType: 'Season',
+              seasonNumber: initialData.release_season || initDataAny?.season || '1',
+              episodes: String(rawEp),
+              languages: mappedLangs
+            }]);
+            setCurrentSeason('1');
+            setCurrentlyAiringEpisode(Number(rawEp) || 12);
+          }
+        }
+      }
+    }
+  }, [initialData]);
+
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // NOTE: Remember to paste/replace your ImgBB API key below (e.g., 'ee6b4e37ae9c228c29b8448483b6591b')
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      setPoster(base64String);
-    };
-    reader.readAsDataURL(file);
+    setIsUploading(true);
+    try {
+      const formDataObj = new FormData();
+      formDataObj.append('image', file);
+
+      const apiKey = 'ee6b4e37ae9c228c29b8448483b6591b'; // TODO: Paste your ImgBB API key here
+      const res = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+        method: 'POST',
+        body: formDataObj
+      });
+      const data = await res.json();
+      if (data && data.success && data.data) {
+        const publicUrl = data.data.display_url || data.data.url;
+        setPoster(publicUrl);
+        setFormData((prev: any) => ({
+          ...prev,
+          poster: publicUrl,
+          cover_image: publicUrl,
+          posterUrl: publicUrl,
+          image: publicUrl
+        }));
+      } else {
+        console.warn('ImgBB API upload failed:', data);
+      }
+    } catch (err) {
+      console.error('ImgBB upload error:', err);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const addStreamingPartner = () => {
@@ -143,37 +292,38 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   };
 
   const addEntry = () => {
-    const lastEntry = seasonDetails[seasonDetails.length - 1];
-    let nextLabel = '1';
-    if (lastEntry && lastEntry.type === 'Season' && !isNaN(parseInt(lastEntry.label))) {
-      nextLabel = (parseInt(lastEntry.label) + 1).toString();
-    } else {
-      nextLabel = (seasonDetails.length + 1).toString();
+    const lastEntry = mixedEntries[mixedEntries.length - 1];
+    let nextNum = '1';
+    if (lastEntry && !isNaN(parseInt(lastEntry.seasonNumber))) {
+      nextNum = (parseInt(lastEntry.seasonNumber) + 1).toString();
     }
-    setSeasonDetails([...seasonDetails, { 
-      type: 'Season', 
-      label: nextLabel, 
-      episodeCount: 12, 
-      languages: lastEntry?.languages || ['Tamil'] 
+    setMixedEntries([...mixedEntries, {
+      id: Date.now() + Math.random(),
+      entryType: 'Season',
+      seasonNumber: nextNum,
+      episodes: '12',
+      languages: lastEntry?.languages || ['Tamil']
     }]);
   };
 
   const removeEntry = (index: number) => {
-    if (seasonDetails.length > 1) {
-      setSeasonDetails(seasonDetails.filter((_, i) => i !== index));
+    if (mixedEntries.length > 1) {
+      setMixedEntries(mixedEntries.filter((_, i) => i !== index));
     }
   };
 
-  const updateEntryField = (index: number, field: 'type' | 'label' | 'episodeCount' | 'languages', value: any) => {
-    const updated = [...seasonDetails];
-    if (field === 'episodeCount') {
-      updated[index] = { ...updated[index], episodeCount: value === '' ? '' : parseInt(value) || 0 };
+  const updateEntryField = (index: number, field: string, value: any) => {
+    const updated = [...mixedEntries];
+    if (field === 'episodeCount' || field === 'episodes') {
+      updated[index] = { ...updated[index], episodes: String(value) };
+    } else if (field === 'label' || field === 'number' || field === 'seasonNumber') {
+      updated[index] = { ...updated[index], seasonNumber: String(value) };
+    } else if (field === 'type' || field === 'entryType') {
+      updated[index] = { ...updated[index], entryType: value };
     } else if (field === 'languages') {
       updated[index] = { ...updated[index], languages: value };
-    } else {
-      updated[index] = { ...updated[index], [field]: value };
     }
-    setSeasonDetails(updated);
+    setMixedEntries(updated);
   };
 
   const toggleLangForEntry = (entryIdx: number, lang: DubLanguage) => {
@@ -205,11 +355,11 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     const derivedGlobalDubs = rawLanguages.length > 0 ? rawLanguages : (['Tamil', 'Hindi'] as DubLanguage[]);
 
     setIsSubmitting(true);
+    const defaultCover =
+      (poster || formData.posterUrl || formData.poster || formData.image || formData.cover_image || '').trim() ||
+      'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
 
     try {
-      const defaultCover =
-        poster.trim() ||
-        'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
 
       const totalEpisodes = seasonDetails.reduce((acc, s) => acc + (Number(s.episodeCount) || 0), 0);
       
@@ -224,12 +374,12 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         banner_image: defaultCover,
         rating: parsedRating,
         episodes_count: totalEpisodes || 12,
-        status: 'pending',
-        submissionStatus: 'pending',
+        status: mode === 'edit' ? 'approved' : 'pending',
+        submissionStatus: mode === 'edit' ? 'approved' : 'pending',
         airing_status: airingStatus === 'Ongoing' ? 'Airing' : 'Completed',
         languages: derivedGlobalDubs.join(', '),
         platform: streamingPartners[0]?.name || 'Crunchyroll',
-        type,
+        type: formData.type || type || 'TV Series',
         season: 'Spring',
         year: parsedYear,
         genres: Array.isArray(genres) ? genres.join(',') : genres,
@@ -237,32 +387,48 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         studio: studio || 'Unknown Studio'
       };
 
-      const res = await fetch('/api/anime', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        console.warn('Server responded with error:', errJson);
+      if (mode === 'edit' && initialData?.id) {
+        await cloudflareApi.updateAnime(initialData.id, payload);
+      } else {
+        await cloudflareApi.createAnime(payload);
       }
+
+      const fullUpdatedItem = {
+        ...payload,
+        id: initialData?.id,
+        cover_image: defaultCover,
+        image: defaultCover,
+        poster: defaultCover,
+        posterUrl: defaultCover,
+        poster_url: defaultCover
+      };
+
+      // Trigger parent state update immediately
+      onSubmit(fullUpdatedItem);
 
       setIsSuccess(true);
       setTimeout(() => {
         setIsSuccess(false);
         onClose();
-        onSubmit();
-      }, 2000);
+      }, 1500);
     } catch (err: any) {
       console.error('[Submission error]:', err);
       // Fallback local success so user isn't blocked by transient network errors
+      const fallbackItem = {
+        title: title.trim(),
+        id: initialData?.id,
+        cover_image: defaultCover,
+        image: defaultCover,
+        poster: defaultCover,
+        posterUrl: defaultCover,
+        poster_url: defaultCover
+      };
+      onSubmit(fallbackItem);
       setIsSuccess(true);
       setTimeout(() => {
         setIsSuccess(false);
         onClose();
-        onSubmit();
-      }, 2000);
+      }, 1500);
     } finally {
       setIsSubmitting(false);
     }
@@ -306,10 +472,12 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
               <h3 className="font-heading font-black text-lg text-white leading-tight">
                 {mode === 'edit' ? 'Edit Anime Info' : 'Submit Dub Info'}
               </h3>
-              <p className="text-[11px] text-amber-400 font-semibold flex items-center gap-1 mt-0.5">
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>Strict Moderation: Requires Admin Approval</span>
-              </p>
+              {mode !== 'edit' && (
+                <p className="text-[11px] text-amber-400 font-semibold flex items-center gap-1 mt-0.5">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span>Strict Moderation: Requires Admin Approval</span>
+                </p>
+              )}
             </div>
           </div>
 
@@ -326,15 +494,16 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
           <div className="p-5 sm:p-6 space-y-4">
             {isSuccess ? (
               <div className="py-8 text-center space-y-3">
-                <div className="w-14 h-14 rounded-full bg-amber-950/70 border border-amber-500/50 flex items-center justify-center mx-auto text-amber-400 animate-bounce">
+                <div className="w-14 h-14 rounded-full bg-emerald-950/70 border border-emerald-500/50 flex items-center justify-center mx-auto text-emerald-400 animate-bounce">
                   <CheckCircle2 className="w-7 h-7" />
                 </div>
                 <h4 className="font-heading font-black text-xl text-white">
-                  Saved with Status: "Pending"!
+                  {mode === 'edit' ? 'Changes Saved Successfully!' : 'Saved with Status: "Pending"!'}
                 </h4>
                 <p className="text-xs text-neutral-300 max-w-md mx-auto leading-relaxed">
-                  Your submission is currently locked under <strong className="text-amber-400">Strict Moderation</strong>. 
-                  It has been sent to the Admin Dashboard and will remain hidden from the website until approved.
+                  {mode === 'edit'
+                    ? 'Your edits have been successfully saved and updated directly in the live catalog.'
+                    : 'Your submission is currently locked under Strict Moderation. It has been sent to the Admin Dashboard and will remain hidden from the website until approved.'}
                 </p>
               </div>
             ) : (
@@ -366,13 +535,24 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   <div className="space-y-2">
                     <div className="flex gap-3 items-center">
                       <div 
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => !isUploading && fileInputRef.current?.click()}
                         className="flex-1 h-16 border-2 border-dashed border-neutral-700 hover:border-primary-theme rounded-2xl bg-[#171e2e] flex flex-col items-center justify-center cursor-pointer transition-all group"
                       >
-                        <Upload className="w-4 h-4 text-neutral-500 group-hover:text-accent-theme mb-0.5" />
-                        <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider group-hover:text-neutral-200">
-                          {poster ? 'Change Uploaded Photo' : 'Upload Image File'}
-                        </span>
+                        {isUploading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 text-primary-theme animate-spin mb-0.5" />
+                            <span className="text-[10px] text-neutral-300 font-bold uppercase tracking-wider">
+                              Uploading...
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 text-neutral-500 group-hover:text-accent-theme mb-0.5" />
+                            <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider group-hover:text-neutral-200">
+                              {poster ? 'Change Uploaded Photo' : 'Upload Image File'}
+                            </span>
+                          </>
+                        )}
                         <input 
                           type="file" 
                           ref={fileInputRef}
@@ -381,16 +561,26 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                           className="hidden" 
                         />
                       </div>
-                      {poster && (
+                      {(poster || formData.poster) && (
                         <div className="relative shrink-0">
                           <img
-                            src={poster || undefined}
+                            src={poster || formData.poster || undefined}
                             alt="Preview"
                             className="w-12 h-16 object-cover rounded-xl border border-primary-theme/50 shadow-xl"
                           />
                           <button 
                             type="button"
-                            onClick={() => setPoster('')}
+                            onClick={() => {
+                              setPoster('');
+                              setFormData((prev: any) => ({
+                                ...prev,
+                                poster: '',
+                                cover_image: '',
+                                posterUrl: '',
+                                image: ''
+                              }));
+                              if (fileInputRef.current) fileInputRef.current.value = '';
+                            }}
                             className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center text-white border border-black shadow-lg hover:bg-purple-500 transition-colors"
                           >
                             <X className="w-3 h-3" />
@@ -399,9 +589,18 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       )}
                     </div>
                     <input
-                      type="url"
-                      value={poster.startsWith('data:') ? '' : poster}
-                      onChange={(e) => setPoster(e.target.value)}
+                      type="text"
+                      value={poster || formData.poster || ''}
+                      onChange={(e) => {
+                        setPoster(e.target.value);
+                        setFormData((prev: any) => ({
+                          ...prev,
+                          poster: e.target.value,
+                          cover_image: e.target.value,
+                          posterUrl: e.target.value,
+                          image: e.target.value
+                        }));
+                      }}
                       placeholder="Or paste poster image URL (https://...)"
                       className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2 px-3 text-xs text-white placeholder-neutral-500 outline-none transition-all"
                     />
@@ -478,16 +677,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                 <div className={`grid grid-cols-1 ${airingStatus === 'Ongoing' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
                   <div>
                     <label className="block font-bold text-neutral-300 mb-1">Type</label>
-                    <select
-                      value={type}
-                      onChange={(e) => setType(e.target.value)}
+                    <select 
+                      value={formData.type || 'TV Series'} 
+                      onChange={(e) => setFormData({...formData, type: e.target.value})}
                       className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
                     >
                       <option value="TV Series">TV Series</option>
                       <option value="Movie">Movie</option>
-                      <option value="OVA">OVA</option>
-                      <option value="ONA">ONA</option>
-                      <option value="Special">Special</option>
+                      <option value="OVA/Special">OVA/Special</option>
                     </select>
                   </div>
 
@@ -741,12 +938,15 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
               className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-purple-600 hover:from-orange-500 hover:via-amber-500 hover:to-purple-500 text-white font-black text-sm flex items-center justify-center gap-3 cursor-pointer shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
             >
               {isSubmitting ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <div className="flex items-center gap-2 text-white">
+                  <Loader2 className="w-5 h-5 animate-spin text-amber-300" />
+                  <span>{mode === 'edit' ? 'Saving changes to Cloudflare D1...' : 'Submitting to Cloudflare Edge...'}</span>
+                </div>
               ) : (
                 <div className="relative flex items-center gap-3">
                   <div className="absolute -inset-1 bg-white rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity" />
                   <Send className="w-5 h-5 relative" />
-                  <span>{mode === 'edit' ? 'Save Anime Changes' : 'Submit Dub for Admin Approval'}</span>
+                  <span>{mode === 'edit' ? 'Save Anime Changes to Cloudflare' : 'Submit Dub for Admin Approval'}</span>
                 </div>
               )}
             </button>

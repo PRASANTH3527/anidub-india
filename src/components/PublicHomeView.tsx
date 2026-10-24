@@ -92,7 +92,7 @@ const ART_FALLBACKS: Record<number, { cover: string; banner: string }> = {
 };
 
 const getAnimeCover = (anime: Anime): string => {
-  if (anime.cover_image && !anime.cover_image.includes('ibb.co') && !anime.cover_image.includes('imgbb')) {
+  if (anime.cover_image) {
     return anime.cover_image;
   }
   if (ART_FALLBACKS[anime.id]?.cover) return ART_FALLBACKS[anime.id].cover;
@@ -100,7 +100,7 @@ const getAnimeCover = (anime: Anime): string => {
 };
 
 const getAnimeBanner = (anime: Anime): string => {
-  if (anime.banner_image && !anime.banner_image.includes('ibb.co') && !anime.banner_image.includes('imgbb')) {
+  if (anime.banner_image) {
     return anime.banner_image;
   }
   if (ART_FALLBACKS[anime.id]?.banner) return ART_FALLBACKS[anime.id].banner;

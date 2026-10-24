@@ -81,7 +81,7 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={isListening ? 'Listening in English / Hindi / Tamil...' : placeholder}
+        placeholder={isListening ? 'Listening in Hindi / Tamil / Telugu...' : placeholder}
         className={`w-full bg-[#121829]/95 border rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-12 pr-24 text-sm text-neutral-100 placeholder-neutral-500 outline-none transition-all duration-200 shadow-xl backdrop-blur-md ${
           isListening
             ? 'border-red-500/80 ring-4 ring-red-500/20 bg-red-950/20 text-white placeholder-red-300 animate-pulse'

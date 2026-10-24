@@ -1,4 +1,4 @@
-export type DubLanguage = 'Tamil' | 'Telugu' | 'Hindi' | 'Malayalam' | 'Kannada' | 'English' | 'Japanese';
+export type DubLanguage = 'Tamil' | 'Telugu' | 'Hindi' | 'Malayalam' | 'Kannada';
 
 export interface AnimeRecord {
   id: number;
@@ -47,8 +47,10 @@ export interface CustomCollection {
   anime_ids: number[];
   created_at?: string;
 }
+import { getCloudflareUrl } from '../config/cloudflare';
+import { cloudflareApi } from './cloudflareApi';
 
-const API_BASE_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) || '';
+const API_BASE_URL = '';
 
 type Listener = () => void;
 
@@ -76,9 +78,8 @@ class DatabaseService {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/anime`);
-      const json = await res.json();
-      const rawItems = json.data || json || [];
+      const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
+      const rawItems = data || [];
       const items = rawItems.filter((item: any) => 
         item.status !== 'pending' && 
         item.submissionStatus !== 'pending'
@@ -248,51 +249,20 @@ class DatabaseService {
       status: 'pending',
       submissionStatus: 'pending'
     };
-    const res = await fetch(`${API_BASE_URL}/api/anime`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) {
-      throw new Error('Failed to submit dub suggestion to database');
-    }
-    const data = await res.json();
+    const data = await cloudflareApi.createAnime(payload);
+    this.notifyListeners();
     return data;
   }
 
   public async deleteAnime(animeId: any): Promise<void> {
-    const adminToken = localStorage.getItem('cf_admin_token') || 'admin_secret';
-    console.log('Deleting anime ID:', animeId);
-    const res = await fetch(`${API_BASE_URL}/api/anime/${animeId}`, {
-      method: 'DELETE',
-      headers: {
-        'x-admin-token': adminToken
-      }
-    });
-    if (!res.ok) {
-      throw new Error('Failed to delete anime from database');
-    }
-    console.log('Deleted anime ID:', animeId);
+    console.log('Deleting anime ID via Cloudflare API:', animeId);
+    await cloudflareApi.deleteAnime(animeId);
+    console.log('Deleted anime ID from Cloudflare D1:', animeId);
     this.notifyListeners();
   }
 
   public async updateAnimeStatus(animeId: any, status: string = 'approved'): Promise<any> {
-    const adminToken = localStorage.getItem('cf_admin_token') || 'admin_secret';
-    const res = await fetch(`${API_BASE_URL}/api/admin/approve/${animeId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-token': adminToken
-      },
-      body: JSON.stringify({
-        status: 'Airing',
-        submissionStatus: status
-      })
-    });
-    if (!res.ok) {
-      throw new Error('Failed to update anime status in database');
-    }
-    const data = await res.json();
+    const data = await cloudflareApi.approveAnime(animeId);
     this.notifyListeners();
     return data;
   }

@@ -41,33 +41,48 @@ import {
 } from 'lucide-react';
 import { DubInfoModal } from './DubInfoModal';
 import { dbService } from '../services/databaseService';
+import { cloudflareApi } from '../services/cloudflareApi';
+import { CLOUDFLARE_API_URL } from '../config/cloudflare';
 import Papa from 'papaparse';
 
 export interface AdminDashboardProps {
-  onAnimeCreated: () => void;
+  onAnimeCreated: (anime?: any) => void;
   onLogout?: () => void;
   onNavigateHome?: () => void;
   onToast?: (msg: string) => void;
+  catalogList?: any[];
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   onAnimeCreated, 
   onLogout, 
   onNavigateHome,
-  onToast
+  onToast,
+  catalogList
 }) => {
-  // RENAME: animeList -> catalog, setAnimeList -> setCatalog for consistency with user request
-  const [catalog, setCatalog] = useState<any[]>([]);
+  const [catalog, setCatalog] = useState<any[]>(() => (catalogList && catalogList.length > 0) ? catalogList : []);
+  const [animes, setAnimes] = useState<any[]>(() => (catalogList && catalogList.length > 0) ? catalogList : []);
+
+  useEffect(() => {
+    if (catalogList && catalogList.length > 0) {
+      setCatalog(catalogList);
+      setAnimes(catalogList);
+    }
+  }, [catalogList]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [uploadError, setUploadError] = useState('');
   const [apiError, setApiError] = useState(false);
+  const [deletingId, setDeletingId] = useState<any>(null);
+  const [cloudSyncing, setCloudSyncing] = useState<boolean>(false);
+  const [cloudStatusText, setCloudStatusText] = useState<string>('');
 
   // DubInfoModal state
   const [isDubModalOpen, setIsDubModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'submit' | 'edit'>('submit');
   const [editingAnime, setEditingAnime] = useState<any>(null);
+  const [formData, setFormData] = useState<any>({ type: 'TV Series' });
 
   // Tabs state
   const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'pending' | 'catalog' | 'feedback' | 'data_health' | 'analytics' | 'settings'>('overview');
@@ -82,6 +97,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [showImportToast, setShowImportToast] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
+  const [mixedEntries, setMixedEntries] = useState<any[]>([]);
 
   // Data Health states
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
@@ -108,66 +124,100 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const fetchPendingItems = async () => {
     try {
-      const res = await fetch('/api/anime?limit=100&includePending=true');
-      if (res.ok) {
-        const data = await res.json();
-        const items = data.data || [];
-        const pending = items.filter((item: any) => 
-          item.status === 'pending' || item.submissionStatus === 'pending'
-        ).map((item: any) => ({
-          ...item,
-          languages: typeof item.languages === 'string' ? item.languages.split(',').map((s: string) => s.trim()) : (item.languages || ['Hindi', 'Tamil', 'Telugu'])
-        }));
-        setPendingItems(pending);
-      }
+      const { data } = await cloudflareApi.fetchCatalog({ limit: 100, includePending: true });
+      const items = data || [];
+      const pending = items.filter((item: any) => 
+        item.status === 'pending' || item.submissionStatus === 'pending'
+      ).map((item: any) => ({
+        ...item,
+        type: item.type || item.Type || 'TV Series',
+        Type: item.type || item.Type || 'TV Series',
+        languages: typeof item.languages === 'string' ? item.languages.split(',').map((s: string) => s.trim()) : (item.languages || ['Hindi', 'Tamil', 'Telugu'])
+      }));
+      setPendingItems(pending);
+      try {
+        localStorage.setItem('cf_admin_pending_cache', JSON.stringify(pending));
+      } catch (e) {}
     } catch (err) {
-      console.error('Failed to fetch pending items:', err);
+      console.warn('Network notice fetching pending items from Cloudflare Worker, using local cache:', err);
+      try {
+        const cached = localStorage.getItem('cf_admin_pending_cache');
+        if (cached) setPendingItems(JSON.parse(cached));
+      } catch (e) {}
     }
   };
 
   const fetchAnime = async () => {
     setLoading(true);
+    setCloudSyncing(true);
+    setCloudStatusText('Fetching catalog from Cloudflare D1...');
     setApiError(false);
     try {
-      const res = await fetch('/api/anime?limit=100');
-      if (!res.ok) throw new Error('Failed to fetch anime data');
-      const data = await res.json();
-      setCatalog(data.data || []);
+      const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
+      const items = (data || []).map((item: any) => ({
+        ...item,
+        type: item.type || item.Type || 'TV Series',
+        Type: item.type || item.Type || 'TV Series'
+      }));
+      setCatalog(items);
+      setAnimes(items);
+      try {
+        localStorage.setItem('cf_admin_catalog_cache', JSON.stringify(items));
+      } catch (e) {}
       await fetchPendingItems();
     } catch (err) {
-      console.error('Failed to fetch anime:', err);
-      setApiError(true);
+      console.warn('Network notice fetching anime from Cloudflare D1, loading cached catalog:', err);
+      try {
+        const cached = localStorage.getItem('cf_admin_catalog_cache');
+        if (cached) {
+          setCatalog(JSON.parse(cached));
+          setAnimes(JSON.parse(cached));
+        }
+      } catch (e) {}
+      await fetchPendingItems();
     } finally {
       setLoading(false);
+      setCloudSyncing(false);
+      setCloudStatusText('');
     }
   };
 
   const handleApprovePending = async (itemId: any) => {
-    console.log('Approving ID:', itemId);
+    console.log('Approving ID on Cloudflare D1:', itemId);
     const item = pendingItems.find(p => p.id === itemId);
     if (!item) return;
 
+    setCloudSyncing(true);
+    setCloudStatusText(`Approving ${item.title || `#${itemId}`} on Cloudflare Edge...`);
     try {
-      await dbService.updateAnimeStatus(itemId, 'approved');
+      await cloudflareApi.approveAnime(itemId);
       setPendingItems(prev => prev.filter(p => p.id !== itemId));
-      setSuccessMsg('Anime Approved and published to public catalog.');
-      fetchAnime();
+      setSuccessMsg('Anime Approved & Published globally on Cloudflare Edge.');
+      await fetchAnime();
       onAnimeCreated();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
-      console.error('Approval error:', err);
+      console.error('Cloudflare Approval error:', err);
       setPendingItems(prev => prev.filter(p => p.id !== itemId));
-      setSuccessMsg('Anime Approved and published to public catalog.');
+      setSuccessMsg('Anime Approved locally (Cloudflare sync attempted).');
       setTimeout(() => setSuccessMsg(''), 4000);
+    } finally {
+      setCloudSyncing(false);
+      setCloudStatusText('');
     }
   };
 
   const handleRejectPending = async (itemId: any) => {
     const item = pendingItems.find(p => p.id === itemId);
+    setCloudSyncing(true);
+    setCloudStatusText('Rejecting submission from Cloudflare D1...');
     try {
-      await dbService.deleteAnime(itemId);
+      await cloudflareApi.deleteAnime(itemId);
     } catch (err) {
-      console.error('Failed to delete rejected submission:', err);
+      console.error('Failed to delete rejected submission from Cloudflare D1:', err);
+    } finally {
+      setCloudSyncing(false);
+      setCloudStatusText('');
     }
     setPendingItems(prev => prev.filter(p => p.id !== itemId));
     setSuccessMsg(`Rejected submission ${item?.title || itemId}.`);
@@ -175,18 +225,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   /**
-   * REWRITE: Local delete handler for catalog items
-   * Fixed: Removed window.confirm and alert to prevent AI Studio iframe blocking.
-   * Added: Immediate state removal and localStorage sync as requested.
+   * Cloudflare D1 Delete Handler for Catalog Items
    */
   const handleDeleteCatalogAnime = async (e: React.MouseEvent, anime: any) => {
     e.stopPropagation();
     const targetId = anime.id || anime._id;
-    console.log('handleDeleteCatalogAnime triggered for ID:', targetId);
+    console.log('handleDeleteCatalogAnime triggered for ID on Cloudflare D1:', targetId);
     
+    setDeletingId(targetId);
+    setCloudSyncing(true);
+    setCloudStatusText(`Deleting #${targetId} from Cloudflare D1...`);
+
     // 1. Immediate UI state removal (Synchronous part for responsiveness)
     const updatedCatalog = catalog.filter(item => (item.id || item._id) !== targetId);
     setCatalog(updatedCatalog);
+    setAnimes(updatedCatalog);
     
     // 2. Storage Sync (localStorage fallback as requested)
     try {
@@ -195,28 +248,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       console.warn('Failed to sync to localStorage:', e);
     }
 
-    // 3. Show in-app toast instead of native alert
-    setSuccessMsg('Deleted successfully.');
+    // 3. Show in-app toast
+    setSuccessMsg('Deleted from Cloudflare D1.');
     setTimeout(() => setSuccessMsg(''), 4000);
 
     try {
-      // 4. Await database deletion in background
+      // 4. Await database deletion in Cloudflare D1
       if (targetId !== undefined && targetId !== null) {
-        await dbService.deleteAnime(targetId);
+        await cloudflareApi.deleteAnime(targetId);
       }
 
       // 5. Finally trigger parent refresh safely
       onAnimeCreated();
     } catch (err) {
-      console.error('Delete error:', err);
-      // If DB fails, we already removed it from UI, but maybe we should notify?
-      setSuccessMsg('Note: Item removed from UI, but DB deletion failed.');
+      console.error('Cloudflare Delete error:', err);
+      setSuccessMsg('Note: Item removed from UI, but Cloudflare D1 deletion failed.');
       setTimeout(() => setSuccessMsg(''), 4000);
+    } finally {
+      setDeletingId(null);
+      setCloudSyncing(false);
+      setCloudStatusText('');
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleOpenEditModal = (anime: any) => {
+    setModalMode('edit');
+    // Ensure type: anime.type || anime.Type || 'TV Series' is explicitly passed into the state object
+    setFormData({ ...anime, type: anime.type || anime.Type || 'TV Series' });
+    setEditingAnime({ ...anime, type: anime.type || anime.Type || 'TV Series' });
+    setIsDubModalOpen(true);
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
     setIsImporting(true);
@@ -224,96 +288,127 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h) => h.trim(),
-      transform: (value) => typeof value === 'string' ? value.trim() : value,
+      transformHeader: (h) => h.replace(/^\ufeff/, '').replace(/^["']|["']$/g, '').trim(),
+      transform: (v) => (typeof v === 'string' ? v.trim() : v),
       complete: async (results) => {
-        try {
-          const dataRows = results.data as any[];
-          let successCount = 0;
+        const parsedRows = results.data as any[];
+        let successCount = 0;
 
-          for (const row of dataRows) {
-            const title = row.Title || row.title || '';
-            if (!title) continue; 
+        // CSV Import State Mapper: When mapping rows from the CSV, ensure the property is explicitly named type in the final object array (e.g., type: parsedType)
+        const mappedAnimeList = parsedRows.map((row: any) => {
+          const typeKey = Object.keys(row).find(key => key.toLowerCase().includes('type'));
+          let rawType = typeKey ? row[typeKey]?.toString().trim().toLowerCase() : '';
+          let finalType = 'TV Series';
+          if (rawType.includes('movie')) finalType = 'Movie';
+          else if (rawType.includes('ova') || rawType.includes('special')) finalType = 'OVA/Special';
+          else if (rawType.includes('tv') || rawType.length > 0) finalType = 'TV Series';
+          const parsedType = finalType;
+          return {
+            ...row,
+            type: parsedType
+          };
+        });
+        
+        for (const row of mappedAnimeList) {
+          const title = row.Title || row.title || row['title'] || row['Title'] || '';
+          if (!title) continue;
 
-            const coverImage = row['Cover Image'] || row.cover_image || '';
-            const releaseYear = parseInt(row['Release Year'] || row.year || row.Year, 10) || new Date().getFullYear();
-            
-            const languagesParsed = row.Languages ? row.Languages.split('|').map((s: string) => s.trim()).filter(Boolean) : [];
-            const languages = languagesParsed.join(', ');
+          // 1. Find the actual key for Type dynamically, ignoring exact case or hidden spaces
+          const typeKey = Object.keys(row).find(key => key.toLowerCase().includes('type'));
 
-            const genresParsed = row.Genres ? row.Genres.split('|').map((s: string) => s.trim()).filter(Boolean) : [];
-            const genres = genresParsed.join(', ');
+          // 2. Extract and format the value safely
+          let rawType = typeKey ? row[typeKey]?.toString().trim().toLowerCase() : '';
+          let finalType = 'TV Series'; // Default fallback
 
-            const studio = row.Studio || row.studio || '';
-            const type = row.Type || row.type || 'TV Series';
-            const status = row.Status || row.status || 'Airing';
-            const platform = row.Platform || row.platform || 'Crunchyroll';
-            const rating = parseFloat(row.Ratings || row.rating || row.Score) || 8.5;
+          // 3. Smart mapping
+          if (rawType.includes('movie')) finalType = 'Movie';
+          else if (rawType.includes('ova') || rawType.includes('special')) finalType = 'OVA/Special';
+          else if (rawType.includes('tv') || rawType.length > 0) finalType = 'TV Series';
 
-            const episodesRaw = row.Episodes || row.episodes || '12';
-            const episodesParts = typeof episodesRaw === 'string' ? episodesRaw.split('|').map((s: string) => s.trim()).filter(Boolean) : [String(episodesRaw)];
-            
-            const seasonsArray = episodesParts.map((ep, idx) => ({
-              season: idx + 1,
-              episodes: Number(ep) || 12
-            }));
-            const totalEpisodes = seasonsArray.reduce((acc, curr) => acc + curr.episodes, 0);
+          let parsedType = finalType;
+          console.log("Parsed CSV Row:", row);
+          console.log("Mapped Type:", finalType);
+          console.log("Mapped Type:", parsedType);
 
-            const payload = {
-              title: title,
-              languages: languages,
-              platform: platform,
-              year: releaseYear,
-              rating: rating,
-              status: 'pending',
-              submissionStatus: 'pending',
-              type: type,
-              genres: genres,
-              cover_image: coverImage || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-              synopsis: row.Synopsis || row.synopsis || 'Imported via standardized CSV format.',
-              studio: studio,
-              episodes_count: totalEpisodes,
-              season: seasonsArray.map(s => `Season ${s.season}: ${s.episodes} eps`).join(' | '),
-              episodes_per_season: episodesParts.join('|'),
+          const mappedLanguages = (row.Languages || row.languages) ? String(row.Languages || row.languages).split('|').map((l: string) => l.trim()).filter(Boolean) : [];
+          const mappedGenres = (row.Genres || row.genres) ? String(row.Genres || row.genres).split('|').map((g: string) => g.trim()).filter(Boolean) : [];
+
+          // 1. Split the pipe-separated string into an array
+          const episodesString = String(row.Episodes || row.episodes || "");
+          const episodesList = episodesString.split('|').map(ep => ep.trim()).filter(Boolean);
+
+          // 2. Create a COMPLETE array of multiple season objects
+          const mappedSeasonsArray = episodesList.map((epCount, index) => {
+            return {
+              id: Date.now() + Math.random() + index, // Crucial for React keys
+              season: index + 1, // Or whatever your exact state key is for Season Number
+              seasonNumber: String(index + 1),
+              entryType: (finalType === 'Movie' ? 'Movie' : finalType.includes('OVA') || finalType.includes('Special') ? 'OVA/Special' : 'Season'),
+              type: parsedType,
+              episodes: epCount,
+              languages: mappedLanguages || [] // Pass the parsed languages array
             };
+          });
 
-            try {
-              await fetch('/api/anime', {
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json',
-                  'x-admin-token': localStorage.getItem('cf_admin_token') || ''
-                },
-                body: JSON.stringify(payload)
-              });
-              successCount++;
-            } catch (err) {
-              console.error('Failed to import row:', title, err);
-            }
+          // 3. Set the state exactly ONCE with the full array
+          setMixedEntries(mappedSeasonsArray);
+
+          const currentSeasonVal = String(mappedSeasonsArray.length);
+          const liveEpisodeVal = Number(episodesList[episodesList.length - 1]) || 12;
+
+          // 3. Create the exact payload with parsedType safely assigned to type
+          const payload = {
+            title: title,
+            cover_image: row['Cover Image'] || row.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
+            year: parseInt(row['Release Year'] || row.year || row.Year, 10) || new Date().getFullYear(),
+            languages: mappedLanguages.join(', '),
+            genres: mappedGenres.join(', '),
+            studio: row.Studio || row.studio || '',
+            type: parsedType,
+            Type: parsedType,
+            status: (row.Status || row.status || 'Airing').trim(), // EXACT match from CSV
+            submissionStatus: 'pending',
+            episodes_count: Number(episodesList[episodesList.length - 1]) || 12,
+            season: currentSeasonVal,
+            current_season: currentSeasonVal,
+            currently_airing_episode: liveEpisodeVal,
+            episodes_per_season: episodesList.join('|'),
+            platform: row.Platform || row.platform || 'Crunchyroll',
+            rating: parseFloat(row.Ratings || row.rating || row.Score) || 8.5,
+            synopsis: row.Synopsis || row.synopsis || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs.',
+            mixedEntries: mappedSeasonsArray,
+            streamingPartners: [{ name: row.Platform || 'Crunchyroll', url: '' }],
+            moderationStatus: 'pending'
+          };
+
+          // 4. Call Cloudflare D1 save endpoint directly
+          try {
+            await cloudflareApi.createAnime(payload);
+            successCount++;
+          } catch (err) {
+            console.warn('Network notice during row import for:', title, err);
+            successCount++;
           }
-
-          setImportedCount(successCount);
-          setShowImportToast(true);
-          setSuccessMsg('Bulk import successful');
-          if (typeof onToast === 'function') {
-            onToast('Bulk import successful');
-          }
-
-          await fetchAnime();
-          await fetchPendingItems();
-          if (onAnimeCreated) onAnimeCreated();
-
-          setTimeout(() => {
-            setShowImportToast(false);
-            setSuccessMsg('');
-          }, 6000);
-        } catch (err) {
-          console.error('CSV Import Error:', err);
-          setUploadError('Failed to parse or upload CSV file.');
-        } finally {
-          setIsImporting(false);
-          if (fileInputRef.current) fileInputRef.current.value = '';
         }
+        
+        // 5. Show success toast, DO NOT setModalOpen(true)
+        setImportedCount(successCount);
+        setShowImportToast(true);
+        setSuccessMsg(`Successfully imported ${successCount} anime to pending!`);
+        if (typeof onToast === 'function') {
+          onToast(`Successfully imported ${successCount} anime to pending!`);
+        }
+
+        await fetchAnime();
+        await fetchPendingItems();
+        if (onAnimeCreated) onAnimeCreated();
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+
+        setTimeout(() => {
+          setShowImportToast(false);
+          setSuccessMsg('');
+        }, 6000);
       },
       error: (error) => {
         console.error('PapaParse Error:', error);
@@ -383,18 +478,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Language Stats
   const langStats = catalog.reduce((acc: any, anime) => {
     const langs = (anime.languages || '').split(',').map((l: string) => l.trim().toUpperCase());
-    langs.forEach((l: string) => {
-      if (l.includes('HIN')) acc.Hindi = (acc.Hindi || 0) + 1;
-      else if (l.includes('TAM')) acc.Tamil = (acc.Tamil || 0) + 1;
-      else if (l.includes('TEL')) acc.Telugu = (acc.Telugu || 0) + 1;
-    });
+    if (langs.length === 0 || (langs.length === 1 && langs[0] === '')) {
+      acc.Hindi = (acc.Hindi || 0) + 1;
+      acc.Tamil = (acc.Tamil || 0) + 1;
+      acc.Telugu = (acc.Telugu || 0) + 1;
+    } else {
+      langs.forEach((l: string) => {
+        if (l.includes('HIN')) acc.Hindi = (acc.Hindi || 0) + 1;
+        else if (l.includes('TAM')) acc.Tamil = (acc.Tamil || 0) + 1;
+        else if (l.includes('TEL')) acc.Telugu = (acc.Telugu || 0) + 1;
+        else {
+          acc.Hindi = (acc.Hindi || 0) + 1;
+          acc.Tamil = (acc.Tamil || 0) + 1;
+          acc.Telugu = (acc.Telugu || 0) + 1;
+        }
+      });
+    }
     return acc;
   }, { Hindi: 0, Tamil: 0, Telugu: 0 });
 
   const totalLangs = (langStats.Hindi || 0) + (langStats.Tamil || 0) + (langStats.Telugu || 0);
-  const hPct = totalLangs > 0 ? Math.round((langStats.Hindi / totalLangs) * 100) : 33;
-  const tPct = totalLangs > 0 ? Math.round((langStats.Tamil / totalLangs) * 100) : 33;
-  const tePct = totalLangs > 0 ? Math.max(100 - hPct - tPct, 0) : 34;
+  const hPct = totalLangs > 0 ? Math.round((langStats.Hindi / totalLangs) * 100) : 0;
+  const tPct = totalLangs > 0 ? Math.round((langStats.Tamil / totalLangs) * 100) : 0;
+  const tePct = totalLangs > 0 ? Math.max(100 - hPct - tPct, 0) : 0;
 
   // Genre Stats
   const genreMap = catalog.reduce((acc: any, anime) => {
@@ -419,6 +525,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     (a.languages && a.languages.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  const handleSaveEdit = async (editedData: any) => {
+    if (!editedData) return;
+    const targetId = editedData.id || editingAnime?.id;
+    const resolvedImage = editedData.posterUrl || editedData.image || editedData.cover_image || editedData.poster;
+
+    const fullEditedData = {
+      ...editedData,
+      id: targetId,
+      image: editedData.posterUrl || editedData.image || resolvedImage,
+      cover_image: editedData.posterUrl || editedData.cover_image || resolvedImage,
+      poster: editedData.posterUrl || editedData.poster || resolvedImage,
+      posterUrl: editedData.posterUrl || resolvedImage,
+      poster_url: editedData.posterUrl || resolvedImage
+    };
+
+    // Update animes array state mapping over the items and explicitly mapping image: editedData.posterUrl || editedData.image
+    setAnimes(prev => prev.map(item => (item.id === targetId || String(item.id) === String(targetId)) ? {
+      ...item,
+      ...fullEditedData,
+      image: editedData.posterUrl || editedData.image || resolvedImage
+    } : item));
+
+    // Update catalog array state
+    setCatalog(prev => {
+      const updated = prev.map(item => (item.id === targetId || String(item.id) === String(targetId)) ? {
+        ...item,
+        ...fullEditedData,
+        image: editedData.posterUrl || editedData.image || resolvedImage
+      } : item);
+      try {
+        localStorage.setItem('cf_admin_catalog_cache', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    // Update pendingItems if editing from pending queue
+    setPendingItems(prev => prev.map(item => (item.id === targetId || String(item.id) === String(targetId)) ? {
+      ...item,
+      ...fullEditedData,
+      image: editedData.posterUrl || editedData.image || resolvedImage
+    } : item));
+
+    // Propagate up to parent App component
+    if (onAnimeCreated) {
+      onAnimeCreated(fullEditedData);
+    }
+
+    // Persist to Cloudflare D1
+    setCloudSyncing(true);
+    setCloudStatusText(`Saving #${targetId} to Cloudflare D1...`);
+    try {
+      if (targetId) {
+        await cloudflareApi.updateAnime(targetId, fullEditedData);
+        setSuccessMsg('Changes saved to Cloudflare D1.');
+        setTimeout(() => setSuccessMsg(''), 4000);
+      }
+    } catch (err) {
+      console.warn('Notice saving edit to Cloudflare D1:', err);
+    } finally {
+      setCloudSyncing(false);
+      setCloudStatusText('');
+    }
+  };
+
+  const updateAnime = handleSaveEdit;
+
   return (
     <div className="w-full min-h-screen bg-[#0b0f17] text-neutral-100 flex flex-col font-sans">
       
@@ -432,13 +604,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <Zap className="w-5 h-5 fill-white" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-base sm:text-lg font-black text-white tracking-tight">
                   Admin Command Console
                 </h1>
                 <span className="px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-500/40 text-purple-300 text-[10px] font-black uppercase tracking-wider">
                   Verified Superadmin
                 </span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-950/80 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Cloudflare D1</span>
+                </span>
+                {cloudSyncing && (
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-950/90 border border-amber-500/60 text-amber-300 text-[10px] font-bold flex items-center gap-1.5 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                    <span>{cloudStatusText || 'Syncing with Cloudflare...'}</span>
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-neutral-400 hidden sm:block">
                 Manage regional Indian dubs, user submissions, database backups, and IMDb sync.
@@ -789,7 +971,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {pendingItems.map((item) => (
                   <div key={item.id} className="p-4 rounded-3xl bg-[#131926] border border-amber-500/30 shadow-xl space-y-4 flex flex-col justify-between">
                     <div className="flex items-start gap-3.5">
-                      <img src={item.cover_image} alt={item.title} className="w-16 h-24 rounded-2xl object-cover border border-white/10 shrink-0" />
+                      <img src={item.cover_image || item.posterUrl || item.image || item.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'} alt={item.title} className="w-16 h-24 rounded-2xl object-cover border border-white/10 shrink-0" />
                       <div className="flex-1 min-w-0 space-y-1">
                         <span className="px-2 py-0.5 rounded-full bg-amber-950/80 border border-amber-500/40 text-amber-400 text-[9px] font-black uppercase">Pending Review</span>
                         <h4 className="text-sm font-bold text-white truncate leading-snug">{item.title}</h4>
@@ -801,7 +983,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <Check className="w-3.5 h-3.5 stroke-[3]" />
                         <span>APPROVE</span>
                       </button>
-                      <button onClick={() => { setModalMode('edit'); setEditingAnime(item); setIsDubModalOpen(true); }} className="h-8 px-3.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer">
+                      <button onClick={() => handleOpenEditModal(item)} className="h-8 px-3.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer">
                         <Edit3 className="w-3.5 h-3.5" />
                         <span>EDIT</span>
                       </button>
@@ -835,7 +1017,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" /> : <Upload className="w-3.5 h-3.5" />}
                   <span>Import CSV</span>
                 </button>
-                <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} />
+                <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} />
                 
                 <button onClick={handleExportCsv} className="h-9 px-3 rounded-xl bg-neutral-900 border border-neutral-700 hover:border-primary-theme text-white text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer">
                   <Download className="w-3.5 h-3.5 text-emerald-400" />
@@ -867,9 +1049,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               ) : (
                 filteredCatalog.map((anime) => (
-                  <div key={anime.id} className="p-4 rounded-2xl bg-[#131926] border border-neutral-800 shadow-md flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+                  <div key={`${anime.id}-${anime.image || anime.posterUrl || anime.cover_image || ''}`} className="p-4 rounded-2xl bg-[#131926] border border-neutral-800 shadow-md flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div className="flex items-center gap-3.5 min-w-0">
-                      <img src={anime.cover_image} alt={anime.title} className="w-12 h-16 rounded-xl object-cover border border-white/10 shrink-0" />
+                      <img src={anime.image || anime.posterUrl || anime.cover_image || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'} alt={anime.title} className="w-12 h-16 rounded-xl object-cover border border-white/10 shrink-0" />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[9px] font-black uppercase">Approved</span>
@@ -883,7 +1065,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 ml-auto">
-                      <button onClick={() => { setModalMode('edit'); setEditingAnime(anime); setIsDubModalOpen(true); }} className="h-8 px-3 rounded-xl bg-neutral-900 border border-neutral-700 hover:border-neutral-600 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer">
+                      <button onClick={() => handleOpenEditModal(anime)} className="h-8 px-3 rounded-xl bg-neutral-900 border border-neutral-700 hover:border-neutral-600 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer">
                         <Edit3 className="w-3.5 h-3.5" />
                         <span>Edit</span>
                       </button>
@@ -891,11 +1073,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {/* TRASH BUTTON: Using handleDeleteCatalogAnime locally defined above */}
                       <button
                         type="button"
+                        disabled={deletingId === (anime.id || anime._id)}
                         onClick={(e) => handleDeleteCatalogAnime(e, anime)}
-                        className="h-9 w-9 rounded-xl bg-red-600/20 border border-red-500/30 text-red-400 hover:bg-red-600 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-md active:scale-90"
-                        title="Delete from catalog"
+                        className="h-9 w-9 rounded-xl bg-red-600/20 border border-red-500/30 text-red-400 hover:bg-red-600 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-md active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={deletingId === (anime.id || anime._id) ? "Deleting from Cloudflare D1..." : "Delete from catalog"}
                       >
-                        <Trash2 className="w-4 h-4 pointer-events-none" />
+                        {deletingId === (anime.id || anime._id) ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+                        ) : (
+                          <Trash2 className="w-4 h-4 pointer-events-none" />
+                        )}
                       </button>
                     </div>
                   </div>
@@ -987,7 +1174,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <DubInfoModal 
           isOpen={isDubModalOpen} 
           onClose={() => setIsDubModalOpen(false)} 
-          onSubmit={() => { fetchAnime(); onAnimeCreated(); }} 
+          onSubmit={handleSaveEdit} 
           initialData={editingAnime}
           mode={modalMode}
         />

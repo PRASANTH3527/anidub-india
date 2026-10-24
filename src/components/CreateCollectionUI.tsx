@@ -285,7 +285,7 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                           {idx + 1}.
                         </span>
                         <img 
-                          src={anime.cover_image && !anime.cover_image.includes('ibb.co') ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                          src={anime.cover_image ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
                           alt={anime.title}
                           onError={(e) => {
                             e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
@@ -394,7 +394,7 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                   {/* Poster Thumbnail */}
                   <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
                     <img 
-                      src={anime.cover_image && !anime.cover_image.includes('ibb.co') ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                      src={anime.cover_image ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
                       alt={anime.title}
                       onError={(e) => {
                         e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
