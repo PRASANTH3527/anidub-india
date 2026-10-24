@@ -173,6 +173,7 @@ function runMigrations() {
   try { db.run("ALTER TABLE anime ADD COLUMN submissionStatus TEXT DEFAULT 'approved';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT '';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN mixedEntries TEXT DEFAULT '';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN imdbID TEXT DEFAULT '';"); } catch (e) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS episodes (
@@ -892,7 +893,8 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
   const start = Date.now();
   try {
     const id = req.params.id;
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, studio, type, Type, languages, platform } = req.body;
+    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, studio, type, Type, languages, platform, imdbID, imdb_id } = req.body;
+    const resolvedImdbId = imdbID || imdb_id;
 
     let resolvedType: string | null = null;
     const rawT = type || Type;
@@ -923,7 +925,8 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         studio = COALESCE(?, studio),
         type = COALESCE(?, type),
         languages = COALESCE(?, languages),
-        platform = COALESCE(?, platform)
+        platform = COALESCE(?, platform),
+        imdbID = COALESCE(?, imdbID)
       WHERE id = ?`,
       [
         title,
@@ -941,6 +944,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         resolvedType,
         languages,
         platform,
+        resolvedImdbId || null,
         id
       ]
     );
@@ -1117,25 +1121,32 @@ app.post('/api/cloudflare/d1/query', (req, res) => {
   }
 });
 
-// Proxy endpoint for OMDb API
+// Proxy endpoint for OMDb API (supports title search & IMDb ID lookup)
 app.get('/api/omdb', async (req, res) => {
-  const { title } = req.query;
-  const apiKey = process.env.OMDB_API_KEY;
+  const { title, t, i, id, apikey } = req.query;
+  const apiKey = process.env.OMDB_API_KEY || (apikey as string) || (process.env.VITE_OMDB_API_KEY && process.env.VITE_OMDB_API_KEY !== 'YOUR_OMDB_API_KEY' ? process.env.VITE_OMDB_API_KEY : '') || '30b1faf9';
 
-  if (!apiKey || apiKey === 'YOUR_OMDB_API_KEY') {
-    return res.status(500).json({ error: 'OMDB_API_KEY not configured' });
-  }
+  const imdbId = (i || id) as string;
+  const animeTitle = (title || t) as string;
 
-  if (!title) {
-    return res.status(400).json({ error: 'Missing title parameter' });
+  if (!imdbId && !animeTitle) {
+    return res.status(400).json({ Response: "False", Error: "Missing title or IMDb ID parameter" });
   }
 
   try {
-    const response = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(title as string)}&apikey=${apiKey}`);
+    let targetUrl = '';
+    if (imdbId) {
+      targetUrl = `https://www.omdbapi.com/?i=${encodeURIComponent(imdbId)}&apikey=${apiKey}`;
+    } else {
+      targetUrl = `https://www.omdbapi.com/?t=${encodeURIComponent(animeTitle)}&apikey=${apiKey}`;
+    }
+
+    const response = await fetch(targetUrl);
     const data = await response.json();
-    res.json(data);
+    return res.json(data);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('OMDb proxy fetch error:', err);
+    return res.status(502).json({ Response: "False", Error: err.message || "Failed to contact OMDb API" });
   }
 });
 
