@@ -528,10 +528,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     let updatedCount = 0;
     
     for (const anime of catalog) {
-      addTerminalLog('PROBE', `Checking: '${anime.title}'...`);
+      addTerminalLog('PROBE', `Auditing: '${anime.title}' (ID: ${anime.id})...`);
       
       try {
-        const res = await fetch(`/api/omdb?title=${encodeURIComponent(anime.title)}`);
+        const encodedTitle = encodeURIComponent(anime.title);
+        const res = await fetch(`/api/omdb?title=${encodedTitle}`);
+        
+        if (!res.ok) {
+           addTerminalLog('ERR', `[FAIL] '${anime.title}': Proxy API Error (${res.status})`);
+           continue;
+        }
+        
         const data = await res.json();
         
         if (data.Response === 'True') {
@@ -539,21 +546,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           const localRating = parseFloat(anime.rating);
           
           if (!isNaN(imdbRating) && imdbRating !== localRating) {
-            addTerminalLog('PROBE', `[MATCH] '${anime.title}': Local: ${localRating} | IMDb: ${imdbRating} -> UPDATING DB...`);
-            await cloudflareApi.updateAnime(anime.id, { ...anime, rating: imdbRating });
-            updatedCount++;
+            addTerminalLog('PROBE', `[UPDATING] '${anime.title}': ${localRating} -> ${imdbRating}...`);
+            
+            try {
+              // Send the full updated object as requested
+              await cloudflareApi.updateAnime(anime.id, { ...anime, rating: imdbRating });
+              updatedCount++;
+              addTerminalLog('PROBE', `[SUCCESS] '${anime.title}' updated successfully.`);
+            } catch (updateErr: any) {
+              addTerminalLog('ERR', `[FAIL] '${anime.title}': DB Update failed - ${updateErr.message}`);
+            }
           } else {
-            addTerminalLog('PROBE', `[OK] '${anime.title}': Ratings synced (Local: ${localRating})`);
+            addTerminalLog('PROBE', `[OK] '${anime.title}': Rating verified (${localRating})`);
           }
         } else {
-          addTerminalLog('WARN', `[MISS] '${anime.title}': Not found on IMDb`);
+          // Handle 'N/A' or not found cases
+          addTerminalLog('WARN', `[MISS] '${anime.title}': Not found on IMDb (Reason: ${data.Error || 'Title not found'})`);
         }
-      } catch (err) {
-        addTerminalLog('ERR', `[FAIL] '${anime.title}': API Error`);
+      } catch (err: any) {
+        addTerminalLog('ERR', `[FAIL] '${anime.title}': ${err.message}`);
       }
       
-      // Add a small delay to avoid hitting rate limits
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Delay to avoid hitting OMDb rate limits
+      await new Promise(resolve => setTimeout(resolve, 600));
     }
     
     setIsCheckingHealth(false);
@@ -561,7 +576,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     addTerminalLog('PROBE', `Probe complete. ${updatedCount} titles auto-corrected.`);
     setSuccessMsg(`IMDb health probe complete: ${updatedCount} titles updated.`);
     setTimeout(() => setSuccessMsg(''), 4500);
-    fetchAnime(); // Refresh catalog
+    
+    // Refresh catalog to reflect new ratings in the UI
+    await fetchAnime();
   };
 
   // --- DYNAMIC DASHBOARD CALCULATIONS ---
