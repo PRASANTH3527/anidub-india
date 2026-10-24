@@ -21,24 +21,35 @@ export default function App() {
   const [feedView, setFeedView] = useState('library');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Watchlist state
+  // Watchlist state (strictly real state - defaults to empty)
   const [watchlist, setWatchlist] = useState<number[]>(() => {
     try {
       const saved = localStorage.getItem('cf_anime_watchlist');
-      return saved ? JSON.parse(saved) : [1, 2];
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Clean out legacy fake [1, 2] mock placeholder if present
+        if (Array.isArray(parsed)) {
+          if (parsed.length === 2 && parsed[0] === 1 && parsed[1] === 2) {
+            localStorage.removeItem('cf_anime_watchlist');
+            return [];
+          }
+          return parsed;
+        }
+      }
+      return [];
     } catch {
-      return [1, 2];
+      return [];
     }
   });
 
-  // Recently viewed state
+  // Recently viewed state (strictly real state - defaults to empty)
   const [recentlyViewed, setRecentlyViewed] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('cf_anime_recently_viewed');
       if (saved) return JSON.parse(saved);
-      return FALLBACK_SEED_ANIME.slice(0, 4);
+      return [];
     } catch {
-      return FALLBACK_SEED_ANIME.slice(0, 4);
+      return [];
     }
   });
 
@@ -217,6 +228,13 @@ export default function App() {
     setActiveTab('home');
   };
 
+  // Verified real saved watchlist strictly matching actual catalog records
+  const realSavedWatchlist = React.useMemo(() => {
+    return catalogList.filter(anime => 
+      watchlist.some(wId => String(wId) === String(anime.id))
+    );
+  }, [catalogList, watchlist]);
+
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-primary-theme selection:text-white transition-colors duration-300 box-border">
       
@@ -224,7 +242,7 @@ export default function App() {
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        watchlistCount={watchlist.length}
+        watchlistCount={realSavedWatchlist.length}
         searchQuery={searchQuery}
         setSearchQuery={(q) => { 
           setSearchQuery(q); 
@@ -339,7 +357,7 @@ export default function App() {
         {/* WATCHLIST VIEW */}
         {activeTab === 'watchlist' && (
           <WatchlistView
-            watchlist={catalogList.filter(anime => watchlist.includes(anime.id))}
+            watchlist={realSavedWatchlist}
             onSelectAnime={(anime) => {
               setSelectedAnimeId(anime.id);
               addToRecentlyViewed(anime);
@@ -359,6 +377,7 @@ export default function App() {
             watchlist={watchlist}
             onToggleWatchlist={handleToggleWatchlist}
             onOpenSubmitDubModal={() => setIsDubModalOpen(true)}
+            catalogList={catalogList}
           />
         )}
 

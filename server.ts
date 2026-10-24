@@ -1117,6 +1117,28 @@ app.post('/api/cloudflare/d1/query', (req, res) => {
   }
 });
 
+// Proxy endpoint for OMDb API
+app.get('/api/omdb', async (req, res) => {
+  const { title } = req.query;
+  const apiKey = process.env.OMDB_API_KEY;
+
+  if (!apiKey || apiKey === 'YOUR_OMDB_API_KEY') {
+    return res.status(500).json({ error: 'OMDB_API_KEY not configured' });
+  }
+
+  if (!title) {
+    return res.status(400).json({ error: 'Missing title parameter' });
+  }
+
+  try {
+    const response = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(title as string)}&apikey=${apiKey}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 12. POST /api/ai/recommend (Gemini AI Anime Recommender with robust fallback)
 app.post('/api/ai/recommend', async (req, res) => {
   try {

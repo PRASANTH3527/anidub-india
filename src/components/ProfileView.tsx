@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Anime } from './CatalogView';
 import { LocalProfileModal } from './LocalProfileModal';
+import { AnimeDNAProfile } from './AnimeDNAProfile';
 
 export interface ProfileViewProps {
   watchlist: number[];
@@ -64,8 +65,48 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     setIsEditingName(false);
   };
 
-  // Filter watchlist items
-  const savedAnimeList = catalogList.filter((a) => watchlist.includes(a.id));
+  // Real verified watchlist items strictly matching catalog records
+  const savedAnimeList = catalogList.filter((a) => 
+    watchlist.some(wId => String(wId) === String(a.id))
+  );
+
+  // Real dynamic user stats from local storage & actual state
+  const watchedCount = React.useMemo(() => {
+    try {
+      const watched = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
+      return Array.isArray(watched) ? watched.length : 0;
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  const reviewCount = React.useMemo(() => {
+    try {
+      const reviews = JSON.parse(localStorage.getItem('cf_user_reviews') || '[]');
+      return Array.isArray(reviews) ? reviews.length : 0;
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  const upvoteCount = React.useMemo(() => {
+    try {
+      const upvotes = JSON.parse(localStorage.getItem('cf_user_upvoted_ids') || '[]');
+      return Array.isArray(upvotes) ? upvotes.length : 0;
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  const userCollections = React.useMemo(() => {
+    try {
+      const cols = JSON.parse(localStorage.getItem('cf_user_collections') || '[]');
+      return Array.isArray(cols) ? cols : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
   const filteredWatchlist = savedAnimeList.filter((anime) => {
     const matchesSearch = !searchQuery.trim() || 
       anime.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -176,28 +217,28 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 <div className="text-neutral-400 text-[10px] font-bold uppercase tracking-wider">
                   WATCHLIST
                 </div>
-                <div className="text-lg font-black text-white">{watchlist.length} Saved</div>
+                <div className="text-lg font-black text-white">{savedAnimeList.length} Saved</div>
               </div>
 
               <div className="bg-[#182032] border border-neutral-800 px-3 py-2 rounded-xl text-center sm:text-left">
                 <div className="text-neutral-400 text-[10px] font-bold uppercase tracking-wider">
                   TITLES WATCHED
                 </div>
-                <div className="text-lg font-black text-emerald-400">14 Completed</div>
+                <div className="text-lg font-black text-emerald-400">{watchedCount} Completed</div>
               </div>
 
               <div className="bg-[#182032] border border-neutral-800 px-3 py-2 rounded-xl text-center sm:text-left">
                 <div className="text-neutral-400 text-[10px] font-bold uppercase tracking-wider">
                   DUB REVIEWS
                 </div>
-                <div className="text-lg font-black text-purple-400">8 Reviews</div>
+                <div className="text-lg font-black text-purple-400">{reviewCount} Reviews</div>
               </div>
 
               <div className="bg-[#182032] border border-neutral-800 px-3 py-2 rounded-xl text-center sm:text-left">
                 <div className="text-neutral-400 text-[10px] font-bold uppercase tracking-wider">
                   COMMUNITY VOTES
                 </div>
-                <div className="text-lg font-black text-amber-400">42 Upvotes</div>
+                <div className="text-lg font-black text-amber-400">{upvoteCount} Upvotes</div>
               </div>
             </div>
 
@@ -218,7 +259,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           }`}
         >
           <Bookmark className="w-3.5 h-3.5" />
-          <span>Watchlist ({watchlist.length})</span>
+          <span>Watchlist ({savedAnimeList.length})</span>
         </button>
 
         <button
@@ -242,7 +283,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          <span>Collections</span>
+          <span>Collections ({userCollections.length})</span>
         </button>
       </div>
 
@@ -375,85 +416,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
       {/* TAB 2: ANIME DNA */}
       {activeTab === 'dna' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
-          {/* Regional Audio Affinity */}
-          <div className="p-6 rounded-3xl bg-[#131926] border border-neutral-800 shadow-xl space-y-4">
-            <div className="flex items-center gap-2.5">
-              <Languages className="w-5 h-5 text-primary-theme" />
-              <h3 className="text-base font-bold text-white">Regional Dub Affinity</h3>
-            </div>
-            <p className="text-xs text-neutral-400">
-              Your audio track preferences based on watch history and reviews:
-            </p>
-
-            <div className="space-y-3 pt-2">
-              <div>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-bold text-white">Hindi Dub</span>
-                  <span className="text-emerald-400 font-bold">52%</span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full w-[52%]" />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-bold text-white">Tamil Dub</span>
-                  <span className="text-amber-400 font-bold">31%</span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden">
-                  <div className="h-full bg-amber-500 rounded-full w-[31%]" />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-bold text-white">Telugu Dub</span>
-                  <span className="text-sky-400 font-bold">17%</span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden">
-                  <div className="h-full bg-sky-500 rounded-full w-[17%]" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Favorite Dub Genres */}
-          <div className="p-6 rounded-3xl bg-[#131926] border border-neutral-800 shadow-xl space-y-4">
-            <div className="flex items-center gap-2.5">
-              <Dna className="w-5 h-5 text-amber-400" />
-              <h3 className="text-base font-bold text-white">Genre Blueprint</h3>
-            </div>
-            <p className="text-xs text-neutral-400">
-              Your most watched anime genres across legal streaming providers:
-            </p>
-
-            <div className="space-y-3 pt-2">
-              {[
-                { genre: 'Action & Shonen', pct: '78%', color: 'from-purple-500 to-indigo-500' },
-                { genre: 'Fantasy & Supernatural', pct: '64%', color: 'from-amber-500 to-orange-500' },
-                { genre: 'Sci-Fi & Cyberpunk', pct: '45%', color: 'from-teal-500 to-emerald-500' },
-                { genre: 'Romance & Slice of Life', pct: '30%', color: 'from-pink-500 to-rose-500' }
-              ].map((g) => (
-                <div key={g.genre}>
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="font-bold text-white">{g.genre}</span>
-                    <span className="text-neutral-400 font-bold">{g.pct}</span>
-                  </div>
-                  <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden">
-                    <div 
-                      className={`h-full bg-gradient-to-r ${g.color} rounded-full`}
-                      style={{ width: g.pct }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </div>
+        <AnimeDNAProfile 
+          watchlist={savedAnimeList} 
+          onSelectAnime={onSelectAnime} 
+          onNavigateCatalog={onNavigateToCatalog} 
+        />
       )}
 
       {/* TAB 3: COLLECTIONS */}
@@ -475,53 +442,61 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {[
-              {
-                title: 'High-Octane Shonen (Hindi Dub)',
-                count: '12 Titles',
-                banner: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
-                desc: 'The best action sequences with top-tier Hindi voice acting.'
-              },
-              {
-                title: 'Tamil Dub Action Classics',
-                count: '8 Titles',
-                banner: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=600&auto=format&fit=crop&q=80',
-                desc: 'Unforgettable dialogue and emotional punch in Tamil dubs.'
-              },
-              {
-                title: 'Weekend Binge (Telugu Simulcasts)',
-                count: '10 Titles',
-                banner: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80',
-                desc: 'Simulcast series with clean sound engineering and Telugu dubs.'
-              }
-            ].map((col, idx) => (
-              <div 
-                key={idx}
-                className="rounded-2xl bg-[#131926] border border-neutral-800 overflow-hidden shadow-lg hover:border-neutral-700 transition-all group cursor-pointer"
-              >
-                <div className="h-32 overflow-hidden relative">
-                  <img 
-                    src={col.banner} 
-                    alt={col.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#131926] via-transparent to-black/40" />
-                  <span className="absolute bottom-2 left-3 px-2 py-0.5 rounded-full bg-black/80 backdrop-blur-md text-[10px] font-bold text-amber-300 border border-white/10">
-                    {col.count}
-                  </span>
-                </div>
-                <div className="p-4 space-y-1">
-                  <h4 className="text-sm font-bold text-white group-hover:text-primary-theme transition-colors">
-                    {col.title}
-                  </h4>
-                  <p className="text-xs text-neutral-400 line-clamp-2 leading-relaxed">
-                    {col.desc}
-                  </p>
-                </div>
+          {userCollections.length === 0 ? (
+            <div className="bg-[#131926] border border-neutral-800 rounded-3xl p-8 text-center space-y-4">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-neutral-800 text-neutral-400 flex items-center justify-center">
+                <Layers className="w-7 h-7" />
               </div>
-            ))}
-          </div>
+              <h4 className="text-lg font-bold text-white">No Custom Collections Yet</h4>
+              <p className="text-xs text-neutral-400 max-w-sm mx-auto">
+                You haven't created any custom collections yet. Group your favorite regional dubs into shareable playlists!
+              </p>
+              {onOpenCreateCollection && (
+                <button
+                  onClick={onOpenCreateCollection}
+                  className="btn-primary-theme px-5 py-2.5 rounded-xl text-xs font-bold text-white inline-flex items-center gap-2 shadow-lg cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create Your First Collection</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {userCollections.map((col: any, idx: number) => (
+                <div 
+                  key={col.id || idx}
+                  className="rounded-2xl bg-[#131926] border border-neutral-800 overflow-hidden shadow-lg hover:border-neutral-700 transition-all group cursor-pointer"
+                >
+                  <div className="h-32 overflow-hidden relative bg-[#182032] flex items-center justify-center">
+                    {col.banner ? (
+                      <img 
+                        src={col.banner} 
+                        alt={col.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300">
+                        <Layers className="w-6 h-6" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#131926] via-transparent to-black/40" />
+                    <span className="absolute bottom-2 left-3 px-2 py-0.5 rounded-full bg-black/80 backdrop-blur-md text-[10px] font-bold text-amber-300 border border-white/10">
+                      {col.count || 0} Titles
+                    </span>
+                  </div>
+                  <div className="p-4 space-y-1">
+                    <h4 className="text-sm font-bold text-white group-hover:text-primary-theme transition-colors">
+                      {col.title}
+                    </h4>
+                    <p className="text-xs text-neutral-400 line-clamp-2 leading-relaxed">
+                      {col.desc || 'Curated personal playlist of regional Indian anime dubs.'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

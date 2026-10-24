@@ -36,7 +36,7 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
   onSelectAnime
 }) => {
   const [collectionTitle, setCollectionTitle] = useState('My Curated Regional Anime Dubs');
-  const [selectedIds, setSelectedIds] = useState<number[]>([1, 2]);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLang, setSelectedLang] = useState('All');
   const [createdCollection, setCreatedCollection] = useState<{ id: string; title: string; count: number; shareUrl: string } | null>(null);
@@ -59,8 +59,15 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
       id: colId,
       title: collectionTitle.trim(),
       count: selectedIds.length,
-      shareUrl
+      shareUrl,
+      desc: `Curated regional anime collection with ${selectedIds.length} titles.`
     };
+
+    try {
+      const existing = JSON.parse(localStorage.getItem('cf_user_collections') || '[]');
+      localStorage.setItem('cf_user_collections', JSON.stringify([newCol, ...existing]));
+    } catch {}
+
     setCreatedCollection(newCol);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };

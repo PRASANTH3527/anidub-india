@@ -37,29 +37,14 @@ export interface LiveChatProps {
 }
 
 export const LiveChat: React.FC<LiveChatProps> = ({ className }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 1,
-      user: 'Tanjiro_Delhi',
-      text: 'Demon Slayer Telugu dub voice acting in episode 11 was incredible! 🔥',
-      timestamp: '10 mins ago',
-      isSelf: false
-    },
-    {
-      id: 2,
-      user: 'Gojo_Kerala',
-      text: 'Jujutsu Kaisen Malayalam dub release dates confirmed on Crunchyroll yet?',
-      timestamp: '6 mins ago',
-      isSelf: false
-    },
-    {
-      id: 3,
-      user: 'Goku_Chennai',
-      text: 'Tamil dub dialogue delivery for Solo Leveling is top notch. Vijay Anand did a phenomenal job.',
-      timestamp: '2 mins ago',
-      isSelf: false
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('cf_community_chat');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
-  ]);
+  });
 
   const [inputMessage, setInputMessage] = useState('');
   const [guestName, setGuestName] = useState(() => {
@@ -91,7 +76,15 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className }) => {
       isSelf: true
     };
 
-    setMessages(prev => [...prev, newMsg]);
+    setMessages(prev => {
+      const updated = [...prev, newMsg];
+      try {
+        localStorage.setItem('cf_community_chat', JSON.stringify(updated));
+      } catch (err) {
+        console.error(err);
+      }
+      return updated;
+    });
     setInputMessage('');
   };
 

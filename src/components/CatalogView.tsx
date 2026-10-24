@@ -272,7 +272,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               });
             }
           });
-          const calculatedLangs = uniqueLangs.size > 0 ? uniqueLangs.size : 5;
+          const calculatedLangs = uniqueLangs.size;
           const totalVotes = rawAnimeList.reduce((acc, curr) => acc + (curr.popularity || 0), 0);
 
           return (

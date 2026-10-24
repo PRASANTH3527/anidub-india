@@ -67,8 +67,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 }) => {
   const [details, setDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [upvotes, setUpvotes] = useState(1240);
-  const [currentRating, setCurrentRating] = useState(8.7);
+  const [upvotes, setUpvotes] = useState(0);
+  const [currentRating, setCurrentRating] = useState<number | null>(null);
   const [isVoting, setIsVoting] = useState(false);
   const [isRating, setIsRating] = useState(false);
   const [isWatched, setIsWatched] = useState(false);
@@ -78,49 +78,24 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const [reviewLang, setReviewLang] = useState('Hindi Dub');
   const [reviewComment, setReviewComment] = useState('');
   const [hasSpoilers, setHasSpoilers] = useState(false);
-  const [reviewsList, setReviewsList] = useState<any[]>([
-    {
-      id: 1,
-      author: 'Aarav Sharma',
-      rating: 9.0,
-      language: 'Hindi Dub',
-      comment: 'The Hindi dialogue delivery is top notch! Characters sound completely natural and emotional beats hit hard.',
-      spoilers: false,
-      likes: 42,
-      isLiked: false,
-      date: '2 days ago'
-    },
-    {
-      id: 2,
-      author: 'Karthik Raja',
-      rating: 8.5,
-      language: 'Tamil Dub',
-      comment: 'Tamil dub script is exceptionally well translated, especially during combat sequences. Highly recommended!',
-      spoilers: false,
-      likes: 29,
-      isLiked: false,
-      date: '4 days ago'
-    },
-    {
-      id: 3,
-      author: 'Rohit Varma',
-      rating: 8.0,
-      language: 'Telugu Dub',
-      comment: 'Audio mixing is clean. Voice actor choices for the protagonist fit the mood perfectly.',
-      spoilers: true,
-      revealed: false,
-      likes: 18,
-      isLiked: false,
-      date: '1 week ago'
+  const [reviewsList, setReviewsList] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem(`cf_reviews_${animeId}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
-  ]);
+  });
 
   // Live Community Chat state
-  const [chatMessages, setChatMessages] = useState<Array<{ id: number; user: string; text: string; time: string; langTag?: string }>>([
-    { id: 1, user: 'AnimeFan99', text: 'Hindi dub episode 12 was absolute cinema 🔥', time: '12:04', langTag: 'HI' },
-    { id: 2, user: 'Sanjay_TN', text: 'Waiting for season 2 Tamil dub release date!', time: '12:08', langTag: 'TA' },
-    { id: 3, user: 'Pooja_M', text: 'The dubbing quality on Crunchyroll India is getting better every season.', time: '12:15', langTag: 'HI' }
-  ]);
+  const [chatMessages, setChatMessages] = useState<Array<{ id: number; user: string; text: string; time: string; langTag?: string }>>(() => {
+    try {
+      const saved = localStorage.getItem(`cf_chat_${animeId}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [newChatMessage, setNewChatMessage] = useState('');
 
   // Toast / Modal states
@@ -140,6 +115,35 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   };
 
   useEffect(() => {
+    // Check watched status from localStorage
+    try {
+      const watched = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
+      const idNum = Number(animeId);
+      setIsWatched(watched.some((w: any) => Number(w) === idNum));
+    } catch {
+      setIsWatched(false);
+    }
+
+    // Load saved reviews and chats for this specific anime
+    try {
+      const savedRevs = localStorage.getItem(`cf_reviews_${animeId}`);
+      if (savedRevs) {
+        setReviewsList(JSON.parse(savedRevs));
+      } else {
+        setReviewsList([]);
+      }
+
+      const savedChat = localStorage.getItem(`cf_chat_${animeId}`);
+      if (savedChat) {
+        setChatMessages(JSON.parse(savedChat));
+      } else {
+        setChatMessages([]);
+      }
+    } catch {
+      setReviewsList([]);
+      setChatMessages([]);
+    }
+
     fetchDetails();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [animeId]);
@@ -180,6 +184,16 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       setUpvotes(prev => prev + 1);
       showToast('🔥 Upvoted!');
     } finally {
+      try {
+        const upvoted = JSON.parse(localStorage.getItem('cf_user_upvoted_ids') || '[]');
+        const idNum = Number(animeId);
+        if (!upvoted.some((u: any) => Number(u) === idNum)) {
+          upvoted.push(idNum);
+          localStorage.setItem('cf_user_upvoted_ids', JSON.stringify(upvoted));
+        }
+      } catch (e) {
+        console.error(e);
+      }
       setIsVoting(false);
     }
   };
@@ -223,8 +237,17 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       date: 'Just now'
     };
 
-    setReviewsList([newRev, ...reviewsList]);
+    const updated = [newRev, ...reviewsList];
+    setReviewsList(updated);
     setReviewComment('');
+    try {
+      localStorage.setItem(`cf_reviews_${animeId}`, JSON.stringify(updated));
+      const userRevs = JSON.parse(localStorage.getItem('cf_user_reviews') || '[]');
+      userRevs.unshift({ ...newRev, animeId });
+      localStorage.setItem('cf_user_reviews', JSON.stringify(userRevs));
+    } catch (err) {
+      console.error(err);
+    }
     await handleRate(reviewRating);
     showToast('Dub review and rating submitted successfully!');
   };
@@ -253,10 +276,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     if (!newChatMessage.trim()) return;
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    setChatMessages([
-      ...chatMessages,
-      { id: Date.now(), user: 'You', text: newChatMessage.trim(), time: timeStr, langTag: 'IN' }
-    ]);
+    const newMsg = { id: Date.now(), user: 'You', text: newChatMessage.trim(), time: timeStr, langTag: 'IN' };
+    const updatedChat = [...chatMessages, newMsg];
+    setChatMessages(updatedChat);
+    try {
+      localStorage.setItem(`cf_chat_${animeId}`, JSON.stringify(updatedChat));
+    } catch (err) {
+      console.error(err);
+    }
     setNewChatMessage('');
   };
 
@@ -479,17 +506,17 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   <Star className="w-3 h-3 text-orange-400 fill-orange-400" />
                   <span>Global Rating</span>
                 </div>
-                <div className="text-lg font-black text-white">{currentRating.toFixed(1)} / 10</div>
-                <div className="text-[10px] text-neutral-500">Official IMDb Score</div>
+                <div className="text-lg font-black text-white">{currentRating ? `${currentRating.toFixed(1)} / 10` : 'Unrated'}</div>
+                <div className="text-[10px] text-neutral-500">{currentRating ? 'Community Rating' : 'Awaiting ratings'}</div>
               </div>
 
               <div className="p-2 space-y-0.5">
                 <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center justify-center md:justify-start gap-1">
                   <Languages className="w-3 h-3 text-primary-theme" />
-                  <span>Dub Quality</span>
+                  <span>Dub Audio</span>
                 </div>
-                <div className="text-lg font-black text-amber-400">4.8 / 5.0</div>
-                <div className="text-[10px] text-neutral-500">Verified Indian Dub</div>
+                <div className="text-lg font-black text-amber-400">{languages.length} Languages</div>
+                <div className="text-[10px] text-neutral-500">Verified Indian Dubs</div>
               </div>
 
               <div className="p-2 space-y-0.5 col-span-2 sm:col-span-1">
@@ -498,7 +525,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   <span>Status</span>
                 </div>
                 <div className="text-sm font-bold text-emerald-400">{status}</div>
-                <div className="text-[10px] text-neutral-500">Simulcast Active</div>
+                <div className="text-[10px] text-neutral-500">{platform}</div>
               </div>
             </div>
 
@@ -518,8 +545,22 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
               <button
                 onClick={() => {
-                  setIsWatched(!isWatched);
-                  showToast(isWatched ? 'Marked as uncompleted' : 'Marked as Watched!');
+                  const nextWatched = !isWatched;
+                  setIsWatched(nextWatched);
+                  try {
+                    const watched = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
+                    const idNum = Number(animeId);
+                    let updated;
+                    if (nextWatched) {
+                      updated = Array.from(new Set([...watched, idNum]));
+                    } else {
+                      updated = watched.filter((w: any) => Number(w) !== idNum);
+                    }
+                    localStorage.setItem('cf_watched_anime_ids', JSON.stringify(updated));
+                  } catch (e) {
+                    console.error(e);
+                  }
+                  showToast(nextWatched ? 'Marked as Watched!' : 'Marked as uncompleted');
                 }}
                 className={`px-5 py-3 rounded-2xl border text-xs sm:text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer active:scale-95 ${
                   isWatched 
@@ -799,62 +840,69 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
           {/* Reviews Stream */}
           <div className="space-y-2.5 pt-1 max-h-80 overflow-y-auto pr-1">
-            {reviewsList.map((review) => (
-              <div 
-                key={review.id}
-                className="bg-[#141824]/70 border border-gray-800/80 rounded-xl p-3 space-y-2 text-xs"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-white">{review.author}</span>
-                    <span className="px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
-                      {review.language}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 bg-amber-950/50 border border-amber-500/30 px-2 py-0.5 rounded-md text-[10px] font-bold text-amber-300">
-                    <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                    <span>{review.rating}</span>
-                  </div>
-                </div>
-
-                <div className="relative">
-                  {review.spoilers && !review.revealed ? (
-                    <div className="p-2 rounded-lg bg-red-950/20 border border-red-500/30 flex items-center justify-between text-[11px]">
-                      <span className="text-red-300 flex items-center gap-1">
-                        <EyeOff className="w-3 h-3 text-red-400" />
-                        <span>Contains spoilers</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleSpoiler(review.id)}
-                        className="font-bold text-purple-400 hover:underline cursor-pointer"
-                      >
-                        Reveal
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-gray-300 leading-relaxed font-normal text-[11px]">
-                      {review.comment}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1 border-t border-gray-800/60">
-                  <span>{review.date || 'Recent'}</span>
-                  <button
-                    onClick={() => handleLikeReview(review.id)}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-semibold transition-colors cursor-pointer ${
-                      review.isLiked 
-                        ? 'bg-purple-950/80 border-purple-500 text-purple-300' 
-                        : 'bg-neutral-900 border-gray-800 text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <ThumbsUp className="w-2.5 h-2.5" />
-                    <span>{review.likes || 0}</span>
-                  </button>
-                </div>
+            {reviewsList.length === 0 ? (
+              <div className="py-6 text-center text-xs text-neutral-400 space-y-1 bg-[#141824]/40 border border-gray-800/60 rounded-xl p-4">
+                <p className="font-semibold text-neutral-300">No community reviews yet.</p>
+                <p className="text-[11px] text-neutral-500">Be the first to share your rating and review for this regional dub!</p>
               </div>
-            ))}
+            ) : (
+              reviewsList.map((review) => (
+                <div 
+                  key={review.id}
+                  className="bg-[#141824]/70 border border-gray-800/80 rounded-xl p-3 space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white">{review.author}</span>
+                      <span className="px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
+                        {review.language}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-amber-950/50 border border-amber-500/30 px-2 py-0.5 rounded-md text-[10px] font-bold text-amber-300">
+                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                      <span>{review.rating}</span>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    {review.spoilers && !review.revealed ? (
+                      <div className="p-2 rounded-lg bg-red-950/20 border border-red-500/30 flex items-center justify-between text-[11px]">
+                        <span className="text-red-300 flex items-center gap-1">
+                          <EyeOff className="w-3 h-3 text-red-400" />
+                          <span>Contains spoilers</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSpoiler(review.id)}
+                          className="font-bold text-purple-400 hover:underline cursor-pointer"
+                        >
+                          Reveal
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-gray-300 leading-relaxed font-normal text-[11px]">
+                        {review.comment}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1 border-t border-gray-800/60">
+                    <span>{review.date || 'Recent'}</span>
+                    <button
+                      onClick={() => handleLikeReview(review.id)}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-semibold transition-colors cursor-pointer ${
+                        review.isLiked 
+                          ? 'bg-purple-950/80 border-purple-500 text-purple-300' 
+                          : 'bg-neutral-900 border-gray-800 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <ThumbsUp className="w-2.5 h-2.5" />
+                      <span>{review.likes || 0}</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

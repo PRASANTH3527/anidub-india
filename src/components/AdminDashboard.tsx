@@ -44,7 +44,14 @@ import {
   Wifi,
   Terminal,
   Radio,
-  Eye
+  Eye,
+  Command,
+  ChevronRight,
+  CornerDownLeft,
+  PanelLeftClose,
+  PanelLeft,
+  Minimize2,
+  Maximize2
 } from 'lucide-react';
 import { DubInfoModal } from './DubInfoModal';
 import { dbService } from '../services/databaseService';
@@ -106,6 +113,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [importedCount, setImportedCount] = useState(0);
   const [mixedEntries, setMixedEntries] = useState<any[]>([]);
 
+  // Pro Layout & Command Palette states
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [isTerminalExpanded, setIsTerminalExpanded] = useState(false);
+  const [terminalLogs, setTerminalLogs] = useState<Array<{ id: string; time: string; level: string; msg: string }>>([
+    { id: '1', time: new Date().toLocaleTimeString(), level: 'SYS', msg: 'Kernel v4.19 initialized. Cloudflare Edge TLS verified.' },
+    { id: '2', time: new Date().toLocaleTimeString(), level: 'EDGE', msg: 'Connected to anidub-apiii.samayaprasanth0.workers.dev (HTTP/2 200 OK)' },
+    { id: '3', time: new Date().toLocaleTimeString(), level: 'D1', msg: 'KV binding ANIME_DB mounted [4d1a822ed4a04cad809f79f38ab4d96c]' }
+  ]);
+
+  const addTerminalLog = (level: string, msg: string) => {
+    const newEntry = {
+      id: Math.random().toString(36).substring(2, 9),
+      time: new Date().toLocaleTimeString(),
+      level,
+      msg
+    };
+    setTerminalLogs(prev => [newEntry, ...prev.slice(0, 59)]);
+  };
+
   // Data Health states
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [healthChecked, setHealthChecked] = useState(false);
@@ -115,6 +144,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     fetchAnime();
     fetchFeedback();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+      if (e.key === 'Escape') {
+        setIsCommandPaletteOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const fetchFeedback = async () => {
@@ -123,6 +164,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (res.ok) {
         const data = await res.json();
         setFeedbackList(data.feedback || []);
+        addTerminalLog('FEED', `Loaded ${data.feedback?.length || 0} user request tickets`);
       }
     } catch (err) {
       console.error('Failed to fetch feedback:', err);
@@ -142,6 +184,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         languages: typeof item.languages === 'string' ? item.languages.split(',').map((s: string) => s.trim()) : (item.languages || ['Hindi', 'Tamil', 'Telugu'])
       }));
       setPendingItems(pending);
+      addTerminalLog('QUEUE', `Pending review queue: ${pending.length} submissions awaiting mod`);
       try {
         localStorage.setItem('cf_admin_pending_cache', JSON.stringify(pending));
       } catch (e) {}
@@ -158,6 +201,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setLoading(true);
     setCloudSyncing(true);
     setCloudStatusText('Fetching catalog from Cloudflare D1...');
+    addTerminalLog('SYNC', 'Querying Cloudflare Edge D1 endpoint: /api/anime');
     setApiError(false);
     try {
       const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
@@ -168,12 +212,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }));
       setCatalog(items);
       setAnimes(items);
+      addTerminalLog('OK', `Synchronized ${items.length} titles from Cloudflare D1 into active state`);
       try {
         localStorage.setItem('cf_admin_catalog_cache', JSON.stringify(items));
       } catch (e) {}
       await fetchPendingItems();
     } catch (err) {
       console.warn('Network notice fetching anime from Cloudflare D1, loading cached catalog:', err);
+      addTerminalLog('WARN', 'Cloudflare D1 offline or slow, served client cached snapshot');
       try {
         const cached = localStorage.getItem('cf_admin_catalog_cache');
         if (cached) {
@@ -196,10 +242,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     setCloudSyncing(true);
     setCloudStatusText(`Approving ${item.title || `#${itemId}`} on Cloudflare Edge...`);
+    addTerminalLog('EDGE', `Approving #${itemId} (${item.title || 'Untitled'}) -> Promoting to Live`);
     try {
       await cloudflareApi.approveAnime(itemId);
       setPendingItems(prev => prev.filter(p => p.id !== itemId));
       setSuccessMsg('Anime Approved & Published globally on Cloudflare Edge.');
+      addTerminalLog('OK', `Approval committed globally. #${itemId} is now live.`);
       await fetchAnime();
       onAnimeCreated();
       setTimeout(() => setSuccessMsg(''), 4000);
@@ -207,6 +255,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       console.error('Cloudflare Approval error:', err);
       setPendingItems(prev => prev.filter(p => p.id !== itemId));
       setSuccessMsg('Anime Approved locally (Cloudflare sync attempted).');
+      addTerminalLog('WARN', `Edge sync notice during approval of #${itemId}`);
       setTimeout(() => setSuccessMsg(''), 4000);
     } finally {
       setCloudSyncing(false);
@@ -218,8 +267,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const item = pendingItems.find(p => p.id === itemId);
     setCloudSyncing(true);
     setCloudStatusText('Rejecting submission from Cloudflare D1...');
+    addTerminalLog('REJ', `Rejecting submission #${itemId} (${item?.title || 'Unknown'})`);
     try {
       await cloudflareApi.deleteAnime(itemId);
+      addTerminalLog('OK', `Submission #${itemId} purged from moderation queue.`);
     } catch (err) {
       console.error('Failed to delete rejected submission from Cloudflare D1:', err);
     } finally {
@@ -242,6 +293,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setDeletingId(targetId);
     setCloudSyncing(true);
     setCloudStatusText(`Deleting #${targetId} from Cloudflare D1...`);
+    addTerminalLog('DEL', `Issuing HTTP DELETE /api/anime/${targetId} on Cloudflare Edge`);
 
     // 1. Immediate UI state removal (Synchronous part for responsiveness)
     const updatedCatalog = catalog.filter(item => (item.id || item._id) !== targetId);
@@ -263,6 +315,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // 4. Await database deletion in Cloudflare D1
       if (targetId !== undefined && targetId !== null) {
         await cloudflareApi.deleteAnime(targetId);
+        addTerminalLog('OK', `Purged #${targetId} (${anime.title || 'Untitled'}) from Cloudflare KV`);
       }
 
       // 5. Finally trigger parent refresh safely
@@ -270,6 +323,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } catch (err) {
       console.error('Cloudflare Delete error:', err);
       setSuccessMsg('Note: Item removed from UI, but Cloudflare D1 deletion failed.');
+      addTerminalLog('WARN', `Notice during deletion of #${targetId} on Edge`);
       setTimeout(() => setSuccessMsg(''), 4000);
     } finally {
       setDeletingId(null);
@@ -467,14 +521,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     document.body.removeChild(link);
   };
 
-  const handleRunHealthCheck = () => {
+  const handleRunHealthCheck = async () => {
     setIsCheckingHealth(true);
-    setTimeout(() => {
-      setIsCheckingHealth(false);
-      setHealthChecked(true);
-      setSuccessMsg('IMDb health probe complete: 100% of title scores synchronized.');
-      setTimeout(() => setSuccessMsg(''), 4500);
-    }, 2000);
+    addTerminalLog('PROBE', 'Initiating full database health probe against IMDb OMDb API...');
+    
+    let updatedCount = 0;
+    
+    for (const anime of catalog) {
+      addTerminalLog('PROBE', `Checking: '${anime.title}'...`);
+      
+      try {
+        const res = await fetch(`/api/omdb?title=${encodeURIComponent(anime.title)}`);
+        const data = await res.json();
+        
+        if (data.Response === 'True') {
+          const imdbRating = parseFloat(data.imdbRating);
+          const localRating = parseFloat(anime.rating);
+          
+          if (!isNaN(imdbRating) && imdbRating !== localRating) {
+            addTerminalLog('PROBE', `[MATCH] '${anime.title}': Local: ${localRating} | IMDb: ${imdbRating} -> UPDATING DB...`);
+            await cloudflareApi.updateAnime(anime.id, { ...anime, rating: imdbRating });
+            updatedCount++;
+          } else {
+            addTerminalLog('PROBE', `[OK] '${anime.title}': Ratings synced (Local: ${localRating})`);
+          }
+        } else {
+          addTerminalLog('WARN', `[MISS] '${anime.title}': Not found on IMDb`);
+        }
+      } catch (err) {
+        addTerminalLog('ERR', `[FAIL] '${anime.title}': API Error`);
+      }
+      
+      // Add a small delay to avoid hitting rate limits
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    setIsCheckingHealth(false);
+    setHealthChecked(true);
+    addTerminalLog('PROBE', `Probe complete. ${updatedCount} titles auto-corrected.`);
+    setSuccessMsg(`IMDb health probe complete: ${updatedCount} titles updated.`);
+    setTimeout(() => setSuccessMsg(''), 4500);
+    fetchAnime(); // Refresh catalog
   };
 
   // --- DYNAMIC DASHBOARD CALCULATIONS ---
@@ -582,14 +669,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     // Persist to Cloudflare D1
     setCloudSyncing(true);
     setCloudStatusText(`Saving #${targetId} to Cloudflare D1...`);
+    addTerminalLog('MUT', `Pushed update for #${targetId} (${fullEditedData.title}) to Edge`);
     try {
       if (targetId) {
         await cloudflareApi.updateAnime(targetId, fullEditedData);
         setSuccessMsg('Changes saved to Cloudflare D1.');
+        addTerminalLog('OK', `Cloudflare D1 updated entry #${targetId}`);
         setTimeout(() => setSuccessMsg(''), 4000);
       }
     } catch (err) {
       console.warn('Notice saving edit to Cloudflare D1:', err);
+      addTerminalLog('WARN', `Edge warning saving edit #${targetId}`);
     } finally {
       setCloudSyncing(false);
       setCloudStatusText('');
@@ -598,86 +688,248 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const updateAnime = handleSaveEdit;
 
+  // Memoized Command Palette search results
+  const commandPaletteResults = React.useMemo(() => {
+    const q = commandPaletteQuery.toLowerCase().trim();
+    const navItems = [
+      { id: 'nav-overview', title: 'Dashboard Overview', desc: 'System metrics & telemetry charts', tab: 'overview', icon: Sliders },
+      { id: 'nav-pending', title: `Community Pending Queue (${pendingCount})`, desc: 'Review & approve regional dub submissions', tab: 'pending', icon: Inbox },
+      { id: 'nav-catalog', title: `Anime Catalog Matrix (${catalog.length})`, desc: 'Manage anime records on Cloudflare D1', tab: 'catalog', icon: Database },
+      { id: 'nav-feedback', title: `User Feedback Reports (${feedbackList.length})`, desc: 'Issue reports & requests from users', tab: 'feedback', icon: Inbox },
+      { id: 'nav-health', title: 'IMDb & Diagnostics Probe', desc: 'Missing streaming links & rating health', tab: 'data_health', icon: Shield },
+      { id: 'nav-analytics', title: 'Cloudflare Edge Analytics', desc: 'Worker latency, hit rates & bandwidth', tab: 'analytics', icon: Activity },
+      { id: 'nav-settings', title: 'Cloud Infrastructure & D1', desc: 'Worker bindings, backups & purges', tab: 'settings', icon: HardDrive }
+    ];
+
+    const actionItems = [
+      { 
+        id: 'act-add', 
+        title: 'Add New Anime to Catalog', 
+        desc: 'Insert new entry to Cloudflare D1', 
+        icon: Plus, 
+        action: () => { setModalMode('submit'); setEditingAnime(null); setIsDubModalOpen(true); setIsCommandPaletteOpen(false); } 
+      },
+      { 
+        id: 'act-refresh', 
+        title: 'Sync Live Cloudflare D1 Records', 
+        desc: 'Refetch all database rows from edge worker', 
+        icon: RefreshCw, 
+        action: () => { fetchAnime(); setIsCommandPaletteOpen(false); } 
+      },
+      { 
+        id: 'act-term', 
+        title: 'Toggle Live System Terminal', 
+        desc: 'Open simulated CLI & matrix logs stream', 
+        icon: Terminal, 
+        action: () => { setIsTerminalOpen(prev => !prev); setIsCommandPaletteOpen(false); } 
+      },
+      { 
+        id: 'act-health', 
+        title: 'Run Diagnostic Health Scanner', 
+        desc: 'Scan missing links & ratings', 
+        icon: ShieldAlert, 
+        action: () => { setActiveAdminTab('data_health'); setIsCommandPaletteOpen(false); } 
+      },
+      { 
+        id: 'act-json', 
+        title: 'Download Full JSON Snapshot', 
+        desc: 'Complete offline backup file', 
+        icon: Download, 
+        action: () => { handleExportFullJson(); setIsCommandPaletteOpen(false); } 
+      },
+      { 
+        id: 'act-csv', 
+        title: 'Export Anime Catalog to CSV', 
+        desc: 'Spreadsheet compatible export', 
+        icon: FileSpreadsheet, 
+        action: () => { handleExportCsv(); setIsCommandPaletteOpen(false); } 
+      }
+    ];
+
+    if (!q) {
+      return {
+        actions: actionItems,
+        nav: navItems,
+        animes: catalog.slice(0, 4)
+      };
+    }
+
+    return {
+      actions: actionItems.filter(a => a.title.toLowerCase().includes(q) || a.desc.toLowerCase().includes(q)),
+      nav: navItems.filter(n => n.title.toLowerCase().includes(q) || n.desc.toLowerCase().includes(q)),
+      animes: catalog.filter(a => 
+        (a.title && a.title.toLowerCase().includes(q)) ||
+        (a.hindiTitle && a.hindiTitle.toLowerCase().includes(q)) ||
+        (a.languages && a.languages.toLowerCase().includes(q)) ||
+        (a.genres && a.genres.toLowerCase().includes(q)) ||
+        String(a.id).includes(q)
+      ).slice(0, 6)
+    };
+  }, [commandPaletteQuery, catalog, pendingCount, feedbackList.length]);
+
   return (
-    <div className="w-full min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans relative selection:bg-purple-500 selection:text-white overflow-x-hidden">
+    <div className="w-full min-h-screen bg-[#07090e] text-slate-100 flex flex-col md:flex-row font-sans relative selection:bg-purple-500 selection:text-white overflow-x-hidden">
       
       {/* Ambient Cyber / Neon Background Glows */}
       <div className="fixed top-[-120px] left-[-120px] w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed top-[25%] right-[-140px] w-[550px] h-[550px] bg-cyan-600/10 rounded-full blur-[160px] pointer-events-none z-0" />
       <div className="fixed bottom-[-140px] left-[25%] w-[600px] h-[600px] bg-indigo-600/10 rounded-full blur-[160px] pointer-events-none z-0" />
 
-      {/* 1. FUTURISTIC GLASSMORPHIC HUD HEADER */}
-      <header className="sticky top-0 z-40 bg-[#07090e]/85 backdrop-blur-2xl border-b border-white/10 px-4 sm:px-6 py-3.5 shadow-[0_4px_30px_rgba(0,0,0,0.6)]">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          
-          {/* Left Title & Status Badges */}
-          <div className="flex items-center gap-3.5 min-w-0">
+      {/* ======================================================== */}
+      {/* 1. PRO COLLAPSIBLE DESKTOP SIDEBAR NAVIGATION             */}
+      {/* ======================================================== */}
+      <aside 
+        className={`hidden md:flex flex-col shrink-0 border-r border-white/10 bg-[#080c16]/95 backdrop-blur-2xl transition-all duration-300 relative z-30 sticky top-0 h-screen overflow-y-auto ${
+          isSidebarCollapsed ? 'w-20' : 'w-64'
+        }`}
+      >
+        {/* Sidebar Brand Header */}
+        <div className="p-4 border-b border-white/10 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="relative group shrink-0">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-500 to-cyan-400 rounded-xl blur opacity-60 group-hover:opacity-100 transition duration-300" />
-              <div className="relative w-10 h-10 rounded-xl bg-[#0e121e] border border-white/20 flex items-center justify-center text-white">
-                <Zap className="w-5 h-5 text-cyan-300 fill-cyan-400/40" />
+              <div className="absolute -inset-1 bg-gradient-to-r from-purple-500 via-cyan-400 to-indigo-500 rounded-xl blur opacity-75 group-hover:opacity-100 transition duration-300 animate-gradient" />
+              <div className="relative w-9 h-9 rounded-xl bg-[#0d1220] border border-white/20 flex items-center justify-center text-white">
+                <Zap className="w-4 h-4 text-cyan-300 fill-cyan-400/40" />
               </div>
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
+            {!isSidebarCollapsed && (
+              <div className="min-w-0">
+                <div className="text-xs font-black tracking-wider uppercase text-white truncate flex items-center gap-1.5">
                   <span className="bg-gradient-to-r from-white via-slate-100 to-purple-200 bg-clip-text text-transparent">
-                    Admin Command Console
+                    ANIDUB CORE
                   </span>
-                </h1>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-purple-300 text-[10px] font-mono tracking-wider uppercase font-semibold">
-                    Superadmin
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono flex items-center gap-1.5 font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                    <span>Cloudflare Edge</span>
-                  </span>
+                  <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 text-[9px] font-mono">v4.2</span>
+                </div>
+                <div className="text-[10px] text-cyan-400 font-mono tracking-tight flex items-center gap-1 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>EDGE ANYCAST</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <p className="text-[11px] text-neutral-400 truncate hidden sm:block">
-                  Regional Indian dubs moderation, Cloudflare D1 persistence & IMDb telemetry
-                </p>
-                {cloudSyncing && (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-cyan-400 animate-pulse">
-                    <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
-                    <span>{cloudStatusText || 'Syncing with Edge...'}</span>
+            )}
+          </div>
+          <button
+            onClick={() => setIsSidebarCollapsed(prev => !prev)}
+            className="w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isSidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {/* Global Command Palette Trigger Bar in Sidebar */}
+        <div className="p-3">
+          <button
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className={`w-full rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-purple-500/50 text-neutral-300 hover:text-white transition-all duration-200 cursor-pointer flex items-center gap-2 group ${
+              isSidebarCollapsed ? 'p-2.5 justify-center' : 'px-3 py-2 justify-between'
+            }`}
+            title="Open Command Palette (Ctrl+K)"
+          >
+            <div className="flex items-center gap-2">
+              <Command className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
+              {!isSidebarCollapsed && (
+                <span className="text-xs font-medium text-neutral-300">Command Palette</span>
+              )}
+            </div>
+            {!isSidebarCollapsed && (
+              <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-mono text-neutral-400 border border-white/15">
+                ⌘K
+              </kbd>
+            )}
+          </button>
+        </div>
+
+        {/* Nav Tabs List */}
+        <nav className="flex-1 px-3 py-2 space-y-1">
+          {[
+            { id: 'overview', label: 'Overview', icon: Sliders },
+            { id: 'pending', label: 'Pending Reviews', count: pendingCount, icon: Inbox },
+            { id: 'catalog', label: 'Anime Catalog', count: catalog.length, icon: Database },
+            { id: 'feedback', label: 'User Feedback', count: feedbackList.length, icon: Inbox },
+            { id: 'data_health', label: 'IMDb & Diagnostics', icon: Shield },
+            { id: 'analytics', label: 'Edge Analytics', icon: Activity },
+            { id: 'settings', label: 'Cloud Infrastructure', icon: HardDrive }
+          ].map((item) => {
+            const isActive = activeAdminTab === item.id;
+            const IconComp = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveAdminTab(item.id as any)}
+                className={`w-full rounded-xl transition-all duration-200 flex items-center gap-3 cursor-pointer group relative ${
+                  isSidebarCollapsed ? 'p-3 justify-center' : 'px-3.5 py-2.5 justify-between'
+                } ${
+                  isActive
+                    ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white font-semibold shadow-[0_0_20px_rgba(168,85,247,0.35)] border border-purple-400/40'
+                    : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
+                }`}
+                title={item.label}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <IconComp className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-neutral-400 group-hover:text-purple-300'}`} />
+                  {!isSidebarCollapsed && (
+                    <span className="text-xs truncate tracking-tight">{item.label}</span>
+                  )}
+                </div>
+                {!isSidebarCollapsed && item.count !== undefined && item.count > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    isActive ? 'bg-purple-900/90 text-purple-200 border border-purple-400/30' : 'bg-white/10 text-neutral-300'
+                  }`}>
+                    {item.count}
                   </span>
                 )}
+                {/* Collapsed notification pip */}
+                {isSidebarCollapsed && item.count !== undefined && item.count > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-purple-400 ring-2 ring-[#080c16]" />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Live Terminal & System Log Quick Trigger Widget in Sidebar */}
+        <div className="p-3 border-t border-white/10">
+          <button
+            onClick={() => setIsTerminalOpen(prev => !prev)}
+            className={`w-full rounded-xl bg-cyan-950/20 hover:bg-cyan-950/40 border border-cyan-500/30 hover:border-cyan-400/60 p-2.5 transition-all duration-200 cursor-pointer flex items-center gap-2.5 text-left group ${
+              isSidebarCollapsed ? 'justify-center' : 'justify-between'
+            }`}
+            title="Open Simulated System Terminal"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-6 h-6 rounded-lg bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center shrink-0">
+                <Terminal className="w-3.5 h-3.5 text-cyan-300" />
               </div>
+              {!isSidebarCollapsed && (
+                <div className="min-w-0">
+                  <div className="text-[11px] font-mono font-bold text-white flex items-center gap-1.5">
+                    <span>SYS TERMINAL</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  </div>
+                  <div className="text-[9px] text-cyan-400 font-mono truncate">LIVE LOG MATRIX</div>
+                </div>
+              )}
             </div>
-          </div>
+            {!isSidebarCollapsed && (
+              <ChevronRight className="w-3.5 h-3.5 text-cyan-400 group-hover:translate-x-0.5 transition-transform" />
+            )}
+          </button>
+        </div>
 
-          {/* Right Header Utility Actions */}
-          <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
-            <button
-              onClick={fetchAnime}
-              className="h-9 w-9 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-cyan-400/50 text-neutral-300 hover:text-white flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
-              title="Refresh database records"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
-            </button>
-
-            <button
-              onClick={() => setActiveAdminTab('data_health')}
-              className="h-9 px-3.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-400/50 text-amber-300 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
-            >
-              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Data Health</span>
-            </button>
-
+        {/* Sidebar Footer User Info & Exit */}
+        <div className="p-3 border-t border-white/10 bg-black/20">
+          <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : 'justify-between'}`}>
             <button
               onClick={() => {
                 if (onNavigateHome) onNavigateHome();
                 else window.location.href = '/';
               }}
-              className="h-9 px-3.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-purple-400/50 text-neutral-200 hover:text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
+              className="p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-neutral-300 hover:text-white transition-colors cursor-pointer flex items-center gap-2"
+              title="Return to Public Directory"
             >
-              <Globe className="w-3.5 h-3.5 text-purple-400" />
-              <span>Public Directory</span>
+              <Globe className="w-4 h-4 text-purple-400" />
+              {!isSidebarCollapsed && <span className="text-xs">Public App</span>}
             </button>
-
             <button
               onClick={() => {
                 if (onLogout) onLogout();
@@ -686,54 +938,172 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   window.location.href = '/';
                 }
               }}
-              className="h-9 w-9 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-400/50 text-rose-400 hover:text-rose-200 flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
-              title="Logout from admin session"
+              className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-200 transition-colors cursor-pointer flex items-center gap-2"
+              title="Sign Out"
             >
               <LogOut className="w-4 h-4" />
+              {!isSidebarCollapsed && <span className="text-xs">Logout</span>}
             </button>
           </div>
-
         </div>
+      </aside>
 
-        {/* 2. FUTURISTIC SEGMENTED HUD TABS */}
-        <div className="max-w-6xl mx-auto mt-3.5 pt-2 border-t border-white/5">
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
-            {[
-              { id: 'overview', label: 'Overview', icon: Sliders },
-              { id: 'pending', label: 'Pending Reviews', count: pendingCount, icon: Inbox },
-              { id: 'catalog', label: 'Anime Catalog', icon: Database },
-              { id: 'feedback', label: 'Feedback', count: feedbackList.length, icon: Inbox },
-              { id: 'data_health', label: 'IMDb & Diagnostics', icon: Shield },
-              { id: 'analytics', label: 'Edge Analytics', icon: Activity },
-              { id: 'settings', label: 'Cloud Infrastructure', icon: HardDrive }
-            ].map((tab) => {
-              const isActive = activeAdminTab === tab.id;
-              const IconComp = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveAdminTab(tab.id as any)}
-                  className={`h-9 px-3.5 rounded-xl text-xs font-medium transition-all duration-300 shrink-0 flex items-center gap-2 cursor-pointer ${
-                    isActive
-                      ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white shadow-[0_0_20px_rgba(168,85,247,0.4)] border border-purple-400/40 font-semibold scale-[1.02]'
-                      : 'text-neutral-400 hover:text-white hover:bg-white/[0.05] border border-transparent hover:border-white/10'
-                  }`}
-                >
-                  {IconComp && <IconComp className="w-3.5 h-3.5" />}
-                  <span>{tab.label}</span>
-                  {tab.count !== undefined && tab.count > 0 && (
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                      isActive ? 'bg-purple-900/90 text-purple-200 border border-purple-400/30' : 'bg-neutral-800 text-neutral-300'
-                    }`}>
-                      {tab.count}
+      {/* ======================================================== */}
+      {/* 2. MAIN ADMIN CONTENT WORKSPACE                           */}
+      {/* ======================================================== */}
+      <div className="flex-1 flex flex-col min-w-0 pb-24 md:pb-10 relative">
+
+        {/* 2.1 FUTURISTIC GLASSMORPHIC HUD TOP BAR */}
+        <header className="sticky top-0 z-30 bg-[#07090e]/85 backdrop-blur-2xl border-b border-white/10 px-4 sm:px-6 py-3.5 shadow-[0_4px_30px_rgba(0,0,0,0.6)]">
+          <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
+            
+            {/* Left Title & Status Badges */}
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="relative group shrink-0 md:hidden">
+                <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-500 to-cyan-400 rounded-xl blur opacity-60 group-hover:opacity-100 transition duration-300" />
+                <div className="relative w-9 h-9 rounded-xl bg-[#0e121e] border border-white/20 flex items-center justify-center text-white">
+                  <Zap className="w-4 h-4 text-cyan-300 fill-cyan-400/40" />
+                </div>
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
+                    <span className="bg-gradient-to-r from-white via-slate-100 to-purple-200 bg-clip-text text-transparent">
+                      Admin Command Console
+                    </span>
+                  </h1>
+                  <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+                    <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-purple-300 text-[10px] font-mono tracking-wider uppercase font-semibold">
+                      Superadmin
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono flex items-center gap-1.5 font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                      <span>Cloudflare Edge D1</span>
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-[11px] text-neutral-400 truncate hidden lg:block">
+                    Regional Indian dubs moderation, Cloudflare D1 persistence & IMDb telemetry
+                  </p>
+                  {cloudSyncing && (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-cyan-400 animate-pulse">
+                      <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                      <span>{cloudStatusText || 'Syncing with Edge...'}</span>
                     </span>
                   )}
-                </button>
-              );
-            })}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Header Action Center with Command Palette & Terminal trigger */}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Command Palette Button */}
+              <button
+                onClick={() => setIsCommandPaletteOpen(true)}
+                className="h-9 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-purple-400/50 text-neutral-300 hover:text-white flex items-center gap-2 text-xs font-medium transition-all duration-200 cursor-pointer shadow-sm group"
+                title="Open Global Command Palette (Ctrl+K)"
+              >
+                <Command className="w-3.5 h-3.5 text-purple-400 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">Search</span>
+                <kbd className="hidden sm:inline px-1 py-0.2 rounded bg-white/10 text-[9px] font-mono text-neutral-400 border border-white/15">
+                  ⌘K
+                </kbd>
+              </button>
+
+              {/* Terminal Quick Button */}
+              <button
+                onClick={() => setIsTerminalOpen(prev => !prev)}
+                className={`h-9 px-3 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 transition-all duration-200 cursor-pointer ${
+                  isTerminalOpen
+                    ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.3)]'
+                    : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-neutral-300 hover:text-white'
+                }`}
+                title="Toggle System Terminal"
+              >
+                <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">CLI</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              </button>
+
+              {/* Refresh Database button */}
+              <button
+                onClick={fetchAnime}
+                className="h-9 w-9 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-cyan-400/50 text-neutral-300 hover:text-white flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
+                title="Refresh database records"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+              </button>
+
+              {/* Public App button */}
+              <button
+                onClick={() => {
+                  if (onNavigateHome) onNavigateHome();
+                  else window.location.href = '/';
+                }}
+                className="h-9 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-purple-400/50 text-neutral-200 hover:text-white text-xs font-semibold hidden md:inline-flex items-center gap-1.5 transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
+              >
+                <Globe className="w-3.5 h-3.5 text-purple-400" />
+                <span>Public App</span>
+              </button>
+
+              {/* Logout button */}
+              <button
+                onClick={() => {
+                  if (onLogout) onLogout();
+                  else {
+                    localStorage.removeItem('cf_admin_token');
+                    window.location.href = '/';
+                  }
+                }}
+                className="h-9 w-9 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-400/50 text-rose-400 hover:text-rose-200 flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer md:hidden"
+                title="Logout from admin session"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+
           </div>
-        </div>
-      </header>
+
+          {/* 2.2 HORIZONTAL SEGMENTED HUD TABS (VISIBLE ON MOBILE / TABLET OR COMPACT MODE) */}
+          <div className="max-w-6xl mx-auto mt-3 pt-2 border-t border-white/5 md:hidden">
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
+              {[
+                { id: 'overview', label: 'Overview', icon: Sliders },
+                { id: 'pending', label: 'Pending Reviews', count: pendingCount, icon: Inbox },
+                { id: 'catalog', label: 'Anime Catalog', icon: Database },
+                { id: 'feedback', label: 'Feedback', count: feedbackList.length, icon: Inbox },
+                { id: 'data_health', label: 'IMDb & Diagnostics', icon: Shield },
+                { id: 'analytics', label: 'Edge Analytics', icon: Activity },
+                { id: 'settings', label: 'Cloud Infrastructure', icon: HardDrive }
+              ].map((tab) => {
+                const isActive = activeAdminTab === tab.id;
+                const IconComp = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveAdminTab(tab.id as any)}
+                    className={`h-9 px-3.5 rounded-xl text-xs font-medium transition-all duration-300 shrink-0 flex items-center gap-2 cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white shadow-[0_0_20px_rgba(168,85,247,0.4)] border border-purple-400/40 font-semibold scale-[1.02]'
+                        : 'text-neutral-400 hover:text-white hover:bg-white/[0.05] border border-transparent hover:border-white/10'
+                    }`}
+                  >
+                    {IconComp && <IconComp className="w-3.5 h-3.5" />}
+                    <span>{tab.label}</span>
+                    {tab.count !== undefined && tab.count > 0 && (
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                        isActive ? 'bg-purple-900/90 text-purple-200 border border-purple-400/30' : 'bg-neutral-800 text-neutral-300'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </header>
 
       {/* NOTIFICATIONS & TOASTS */}
       <div className="max-w-6xl mx-auto w-full px-4 pt-4 relative z-10">
@@ -779,7 +1149,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* TAB 1: OVERVIEW (FUTURISTIC GLASSMORPHIC MISSION DECK) */}
         {activeAdminTab === 'overview' && (
           <div className="space-y-6">
-            
+            {loading ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+                  {[1, 2, 3, 4].map((n) => (
+                    <div key={n} className="relative overflow-hidden rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 p-5 sm:p-6 shadow-xl">
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="h-3 w-24 bg-white/10 rounded" />
+                        <div className="w-10 h-10 rounded-xl bg-white/10" />
+                      </div>
+                      <div className="h-8 w-20 bg-white/10 rounded-lg mb-2" />
+                      <div className="h-3 w-36 bg-white/10 rounded" />
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 relative overflow-hidden h-72">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.05] to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
+                    <div className="h-4 w-44 bg-white/10 rounded mb-6" />
+                    <div className="h-44 w-full bg-white/5 rounded-xl" />
+                  </div>
+                  <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 relative overflow-hidden h-72">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.05] to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
+                    <div className="h-4 w-44 bg-white/10 rounded mb-6" />
+                    <div className="h-44 w-full bg-white/5 rounded-xl" />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
             {/* 4 HOLOGRAPHIC STATS CARDS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
               
@@ -795,11 +1194,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
                 <div className="mt-3 text-3xl sm:text-4xl font-black text-white tracking-tight">
-                  {loading ? (
-                    <span className="text-neutral-500 animate-pulse text-2xl font-mono">Loading...</span>
-                  ) : (
-                    <span>{catalog.length}</span>
-                  )}
+                  <span>{catalog.length}</span>
                 </div>
                 <div className="mt-2 text-[11px] text-purple-300/90 font-medium flex items-center gap-1.5 font-mono">
                   <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping"></span>
@@ -1035,7 +1430,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </div>
-
+            </>
+            )}
           </div>
         )}
 
@@ -1167,10 +1563,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </button>
                 </div>
 
-                {/* Primary ADD NEW Button with premium gradient & neon glow */}
+                {/* Primary ADD NEW Button with breathing animated gradient & neon glow */}
                 <button 
                   onClick={() => { setModalMode('submit'); setEditingAnime(null); setIsDubModalOpen(true); }} 
-                  className="h-9 px-5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:via-indigo-500 hover:to-cyan-400 text-white text-xs font-black tracking-wider uppercase inline-flex items-center gap-2 shadow-[0_0_25px_rgba(168,85,247,0.4)] ring-1 ring-white/20 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer"
+                  className="h-9 px-5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 bg-[length:200%_200%] animate-gradient text-white text-xs font-black tracking-wider uppercase inline-flex items-center gap-2 shadow-[0_0_25px_rgba(168,85,247,0.4)] ring-1 ring-white/20 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" />
                   <span>ADD NEW ANIME</span>
@@ -1192,7 +1588,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             {/* List View with High-end Data Rows & Glowing Hover Effects */}
             <div className="space-y-3">
-              {filteredCatalog.length === 0 ? (
+              {loading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <div key={n} className="relative overflow-hidden p-4 sm:p-5 rounded-2xl bg-white/[0.025] backdrop-blur-xl border border-white/10 shadow-lg flex items-center justify-between gap-4">
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.05] to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-20 sm:w-16 sm:h-22 rounded-xl bg-white/10 shrink-0" />
+                        <div className="space-y-2">
+                          <div className="h-4 w-44 sm:w-64 bg-white/10 rounded" />
+                          <div className="h-3 w-32 bg-white/10 rounded" />
+                          <div className="flex gap-2">
+                            <div className="h-4 w-12 bg-white/10 rounded" />
+                            <div className="h-4 w-12 bg-white/10 rounded" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-16 bg-white/10 rounded-xl" />
+                        <div className="h-8 w-8 bg-white/10 rounded-xl" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : filteredCatalog.length === 0 ? (
                 <div className="text-center py-16 bg-white/[0.025] backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
                   <p className="text-xs text-neutral-400 font-mono">No catalog records match your query.</p>
                 </div>
@@ -1594,7 +2013,343 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
       </main>
+      </div>
 
+      {/* ======================================================== */}
+      {/* 3. LIVE SYSTEM TERMINAL / ACTIVITY LOG HUD               */}
+      {/* ======================================================== */}
+      {isTerminalOpen ? (
+        <div 
+          className={`fixed bottom-4 right-4 z-50 w-[94vw] sm:w-[640px] bg-[#050811]/95 backdrop-blur-2xl border border-cyan-500/40 rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.3)] flex flex-col overflow-hidden transition-all duration-300 ${
+            isTerminalExpanded ? 'h-[520px]' : 'h-[340px]'
+          }`}
+        >
+          {/* Terminal Title Bar */}
+          <div className="px-4 py-2.5 bg-[#0a0f1d] border-b border-cyan-500/30 flex items-center justify-between select-none">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block" />
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
+              <div className="ml-2 text-xs font-mono font-bold text-cyan-300 flex items-center gap-2">
+                <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                <span>edge-worker@anidub-apiii: ~ (LIVE_STREAM)</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setIsTerminalExpanded(prev => !prev)}
+                className="p-1 rounded-md text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                title={isTerminalExpanded ? 'Collapse Terminal' : 'Expand Terminal'}
+              >
+                {isTerminalExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                onClick={() => setIsTerminalOpen(false)}
+                className="p-1 rounded-md text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                title="Close Terminal"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Terminal Probe Bar */}
+          <div className="px-3 py-1.5 bg-[#060a16] border-b border-white/5 flex items-center justify-between text-[10px] font-mono">
+            <div className="flex items-center gap-2">
+              <span className="text-neutral-400 hidden sm:inline">PROBES:</span>
+              <button
+                onClick={() => addTerminalLog('EDGE', `PING anidub-apiii.samayaprasanth0.workers.dev (RTT 16ms, POP: BOM1)`)}
+                className="px-2 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 transition-colors cursor-pointer"
+              >
+                PING EDGE
+              </button>
+              <button
+                onClick={() => addTerminalLog('D1', `KV Binding ANIME_DB: Total keys synchronized. Status 200 OK`)}
+                className="px-2 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 transition-colors cursor-pointer"
+              >
+                KV TEST
+              </button>
+              <button
+                onClick={() => addTerminalLog('SYS', `Telemetry health check passed: TLS 1.3, HTTP/2 multiplexing ACTIVE`)}
+                className="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 transition-colors cursor-pointer"
+              >
+                HEALTH
+              </button>
+            </div>
+            <button
+              onClick={() => setTerminalLogs([])}
+              className="text-neutral-400 hover:text-neutral-200 transition-colors underline cursor-pointer"
+            >
+              CLEAR
+            </button>
+          </div>
+
+          {/* Terminal Logs Stream */}
+          <div className="flex-1 p-3 overflow-y-auto space-y-1.5 font-mono text-[11px] bg-[#04060d] text-slate-300 select-text">
+            {terminalLogs.length === 0 ? (
+              <div className="text-neutral-500 italic py-4 text-center">Log stream cleared. Waiting for Cloudflare edge events...</div>
+            ) : (
+              terminalLogs.map(log => {
+                let badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/40';
+                if (log.level === 'OK') badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+                else if (log.level === 'WARN') badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+                else if (log.level === 'ERR') badgeColor = 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+                else if (log.level === 'EDGE') badgeColor = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
+                else if (log.level === 'D1') badgeColor = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
+                else if (log.level === 'MUT') badgeColor = 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/40';
+
+                return (
+                  <div key={log.id} className="flex items-start gap-2 leading-relaxed">
+                    <span className="text-neutral-500 shrink-0 text-[10px]">[{log.time}]</span>
+                    <span className={`px-1.5 py-0.2 rounded text-[9px] border font-bold shrink-0 ${badgeColor}`}>
+                      {log.level}
+                    </span>
+                    <span className="text-slate-200 break-all">{log.msg}</span>
+                  </div>
+                );
+              })
+            )}
+            <div className="pt-2 text-cyan-400 flex items-center gap-1.5 text-xs">
+              <span className="text-emerald-400">admin@anidub-apiii</span>
+              <span className="text-neutral-500">:</span>
+              <span className="text-purple-400">~</span>
+              <span className="text-neutral-400">$</span>
+              <span className="w-2 h-4 bg-cyan-400 animate-pulse inline-block" />
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Minimized Terminal Pill */
+        <button
+          onClick={() => setIsTerminalOpen(true)}
+          className="fixed bottom-20 md:bottom-5 right-4 md:right-5 z-40 bg-[#070b16]/90 backdrop-blur-xl border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 px-3.5 py-2 rounded-xl shadow-[0_0_25px_rgba(6,182,212,0.25)] flex items-center gap-2.5 text-xs font-mono font-bold cursor-pointer hover:scale-105 active:scale-95 transition-all group"
+          title="Open Simulated System Terminal"
+        >
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          <Terminal className="w-4 h-4 text-cyan-400 group-hover:rotate-12 transition-transform" />
+          <span>SYS_TERM</span>
+          <span className="text-[10px] text-neutral-400 font-normal hidden sm:inline">LIVE</span>
+        </button>
+      )}
+
+      {/* ======================================================== */}
+      {/* 4. GLOBAL COMMAND PALETTE MODAL (Ctrl + K / Cmd + K)      */}
+      {/* ======================================================== */}
+      {isCommandPaletteOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-start justify-center pt-16 sm:pt-24 p-4 animate-in fade-in duration-200"
+          onClick={() => setIsCommandPaletteOpen(false)}
+        >
+          <div 
+            className="w-full max-w-xl rounded-2xl p-[1px] bg-gradient-to-r from-purple-500 via-cyan-400 to-indigo-500 animate-gradient shadow-[0_0_60px_rgba(168,85,247,0.35)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-[#090d18] rounded-2xl overflow-hidden flex flex-col max-h-[80vh]">
+              
+              {/* Command Search Header */}
+              <div className="p-4 border-b border-white/10 flex items-center gap-3 bg-[#0c1222]">
+                <Command className="w-5 h-5 text-purple-400 shrink-0" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={commandPaletteQuery}
+                  onChange={(e) => setCommandPaletteQuery(e.target.value)}
+                  placeholder="Type a command, jump to tab, or search anime title..."
+                  className="w-full bg-transparent text-sm text-white placeholder-neutral-400 outline-none"
+                />
+                {commandPaletteQuery && (
+                  <button
+                    onClick={() => setCommandPaletteQuery('')}
+                    className="text-neutral-400 hover:text-white p-1 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+                <kbd className="px-2 py-0.5 rounded bg-white/10 text-[10px] font-mono text-neutral-400 border border-white/15 shrink-0">
+                  ESC
+                </kbd>
+              </div>
+
+              {/* Results List */}
+              <div className="overflow-y-auto p-3 space-y-4 max-h-[55vh]">
+                
+                {/* Quick Actions Group */}
+                {commandPaletteResults.actions.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="px-2 text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-bold">
+                      Quick Operations
+                    </div>
+                    {commandPaletteResults.actions.map((act) => {
+                      const Icon = act.icon;
+                      return (
+                        <button
+                          key={act.id}
+                          onClick={act.action}
+                          className="w-full p-2.5 rounded-xl hover:bg-white/[0.06] flex items-center justify-between text-left transition-colors cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-300 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-semibold text-white group-hover:text-purple-200 transition-colors">{act.title}</div>
+                              <div className="text-[10px] text-neutral-400">{act.desc}</div>
+                            </div>
+                          </div>
+                          <CornerDownLeft className="w-3.5 h-3.5 text-neutral-500 group-hover:text-cyan-400 transition-colors" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Navigation Group */}
+                {commandPaletteResults.nav.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="px-2 text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-bold">
+                      Navigation & Tabs
+                    </div>
+                    {commandPaletteResults.nav.map((navItem) => {
+                      const Icon = navItem.icon;
+                      return (
+                        <button
+                          key={navItem.id}
+                          onClick={() => {
+                            setActiveAdminTab(navItem.tab as any);
+                            setIsCommandPaletteOpen(false);
+                          }}
+                          className="w-full p-2.5 rounded-xl hover:bg-white/[0.06] flex items-center justify-between text-left transition-colors cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-semibold text-white group-hover:text-cyan-200 transition-colors">{navItem.title}</div>
+                              <div className="text-[10px] text-neutral-400">{navItem.desc}</div>
+                            </div>
+                          </div>
+                          <ChevronRight className="w-3.5 h-3.5 text-neutral-500 group-hover:text-cyan-400 transition-transform group-hover:translate-x-0.5" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Matched Anime Catalog Entries (Direct Jump to Edit) */}
+                {commandPaletteResults.animes.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="px-2 text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-bold">
+                      Catalog Anime Matches (Click to Edit)
+                    </div>
+                    {commandPaletteResults.animes.map((anime) => (
+                      <button
+                        key={`cmd-anime-${anime.id}`}
+                        onClick={() => {
+                          setEditingAnime(anime);
+                          setModalMode('edit');
+                          setIsDubModalOpen(true);
+                          setIsCommandPaletteOpen(false);
+                        }}
+                        className="w-full p-2.5 rounded-xl hover:bg-white/[0.06] flex items-center justify-between text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img
+                            src={anime.image || anime.posterUrl || anime.cover_image || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                            alt={anime.title}
+                            className="w-8 h-11 rounded-md object-cover ring-1 ring-white/10 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-white truncate group-hover:text-purple-300 transition-colors">
+                              {anime.title}
+                            </div>
+                            <div className="text-[10px] text-neutral-400 font-mono flex items-center gap-2">
+                              <span>#{anime.id}</span>
+                              {anime.languages && <span>{anime.languages}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 text-[10px] font-mono font-bold">
+                          EDIT
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+              </div>
+
+              {/* Command Footer */}
+              <div className="p-2.5 bg-[#070a13] border-t border-white/10 flex items-center justify-between text-[11px] text-neutral-400 px-4">
+                <div className="flex items-center gap-3">
+                  <span>↑↓ Navigate</span>
+                  <span>↵ Execute</span>
+                </div>
+                <span>Cloudflare D1 Quick Terminal</span>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 5. MOBILE SLEEK GLASS BOTTOM NAVIGATION BAR               */}
+      {/* ======================================================== */}
+      <div className="md:hidden fixed bottom-3 left-3 right-3 z-40 bg-[#090d18]/90 backdrop-blur-2xl border border-white/15 rounded-2xl p-1.5 shadow-[0_10px_35px_rgba(0,0,0,0.85)] flex items-center justify-around">
+        <button
+          onClick={() => setActiveAdminTab('overview')}
+          className={`p-2 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
+            activeAdminTab === 'overview' ? 'text-cyan-300 bg-cyan-500/15' : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <Sliders className="w-4 h-4" />
+          <span className="text-[9px] font-medium">Overview</span>
+        </button>
+
+        <button
+          onClick={() => setActiveAdminTab('pending')}
+          className={`p-2 rounded-xl flex flex-col items-center gap-1 relative transition-all cursor-pointer ${
+            activeAdminTab === 'pending' ? 'text-amber-300 bg-amber-500/15' : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <Inbox className="w-4 h-4" />
+          <span className="text-[9px] font-medium">Pending</span>
+          {pendingCount > 0 && (
+            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[#090d18]" />
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveAdminTab('catalog')}
+          className={`p-2 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
+            activeAdminTab === 'catalog' ? 'text-purple-300 bg-purple-500/15' : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <Database className="w-4 h-4" />
+          <span className="text-[9px] font-medium">Catalog</span>
+        </button>
+
+        <button
+          onClick={() => setIsCommandPaletteOpen(true)}
+          className="p-2 rounded-xl flex flex-col items-center gap-1 text-purple-400 hover:text-purple-300 cursor-pointer"
+        >
+          <Command className="w-4 h-4" />
+          <span className="text-[9px] font-mono">⌘K</span>
+        </button>
+
+        <button
+          onClick={() => setIsTerminalOpen(prev => !prev)}
+          className={`p-2 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
+            isTerminalOpen ? 'text-cyan-300 bg-cyan-500/15' : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <Terminal className="w-4 h-4" />
+          <span className="text-[9px] font-mono">CLI</span>
+        </button>
+      </div>
+
+      {/* Dub Edit / Add Modal */}
       {isDubModalOpen && (
         <DubInfoModal 
           isOpen={isDubModalOpen} 

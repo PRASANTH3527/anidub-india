@@ -18,12 +18,14 @@ import {
   Star
 } from 'lucide-react';
 import { Anime } from './CatalogView';
+import { cloudflareApi } from '../services/cloudflareApi';
 
 export interface ScheduleViewProps {
   onSelectAnime: (anime: Anime) => void;
   watchlist: number[];
   onToggleWatchlist: (animeId: number) => void;
   onOpenSubmitDubModal?: () => void;
+  catalogList?: Anime[];
 }
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
@@ -35,7 +37,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   onSelectAnime,
   watchlist,
   onToggleWatchlist,
-  onOpenSubmitDubModal
+  onOpenSubmitDubModal,
+  catalogList
 }) => {
   const [selectedDay, setSelectedDay] = useState<DayName>('Monday');
   const [selectedLanguage, setSelectedLanguage] = useState('All Dubs');
@@ -46,28 +49,52 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
-    fetchSchedule();
-  }, []);
+    if (catalogList && catalogList.length > 0) {
+      processScheduleData(catalogList);
+    } else {
+      fetchSchedule();
+    }
+  }, [catalogList]);
+
+  const processScheduleData = (rawItems: any[]) => {
+    // Only include anime that are ongoing/airing/simulcast or have a designated release/broadcast day
+    const airingItems = rawItems.filter((anime: any) => {
+      const status = (anime.status || '').toLowerCase();
+      const isOngoing = status.includes('airing') || status.includes('ongoing') || status.includes('simulcast');
+      const hasBroadcastDay = Boolean(anime.releaseDay || anime.broadcastDay || anime.broadcast_day);
+      return isOngoing || hasBroadcastDay;
+    });
+
+    const enriched = airingItems.map((anime: any, idx: number) => {
+      const rawDay = anime.releaseDay || anime.broadcastDay || anime.broadcast_day;
+      const validDay = DAYS.find(d => d.toLowerCase() === (rawDay || '').toLowerCase()) || DAYS[idx % DAYS.length];
+      const eps = anime.episodes_count || anime.episodes || anime.totalEpisodes || null;
+
+      return {
+        ...anime,
+        broadcastDay: validDay,
+        airTime: anime.airTime || anime.broadcast_time || '08:00 PM IST',
+        currentEpisode: anime.currentEpisode || anime.latestEpisode || 1,
+        totalEpisodes: eps,
+        platform: anime.platform || 'Crunchyroll / OTT'
+      };
+    });
+
+    setAnimeList(enriched);
+  };
 
   const fetchSchedule = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/anime?limit=60');
-      if (res.ok) {
-        const data = await res.json();
-        const items = data.data || [];
-        const enriched = items.map((anime: any, idx: number) => ({
-          ...anime,
-          broadcastDay: anime.releaseDay || DAYS[idx % DAYS.length],
-          airTime: ['06:30 PM IST', '08:00 PM IST', '09:30 PM IST', '11:00 PM IST'][idx % 4],
-          currentEpisode: (idx % 12) + 1,
-          totalEpisodes: anime.episodes_count || 24,
-          platform: anime.platform || (idx % 2 === 0 ? 'Crunchyroll' : 'Netflix')
-        }));
-        setAnimeList(enriched);
+      const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
+      if (data && data.length > 0) {
+        processScheduleData(data);
+      } else {
+        setAnimeList([]);
       }
     } catch (err) {
-      console.error('Failed to fetch schedule data:', err);
+      console.error('Failed to fetch schedule data from Cloudflare:', err);
+      setAnimeList([]);
     } finally {
       setLoading(false);
     }
@@ -122,7 +149,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
         <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#131926] border border-neutral-800 text-xs text-neutral-300">
             <Flame className="w-3.5 h-3.5 text-amber-400" />
-            <span className="font-bold text-white">{animeList.length || 24}</span>
+            <span className="font-bold text-white">{animeList.length}</span>
             <span>Simulcasts Airing</span>
           </div>
 
@@ -362,8 +389,17 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
   onToggleWatchlist,
   mode
 }) => {
-  const languages = anime.languages ? anime.languages.split(',').map((l: string) => l.trim()) : ['Hindi', 'Tamil', 'Telugu'];
-  const progressPercent = Math.min(Math.round(((anime.currentEpisode || 1) / (anime.totalEpisodes || 24)) * 100), 100);
+  const languages = anime.languages
+    ? (typeof anime.languages === 'string'
+        ? anime.languages.split(/[,|/]/).map((l: string) => l.trim()).filter(Boolean)
+        : Array.isArray(anime.languages)
+          ? anime.languages.filter(Boolean)
+          : [])
+    : [];
+
+  const totalEps = anime.totalEpisodes || anime.episodes_count || anime.episodes || null;
+  const currentEp = anime.currentEpisode || 1;
+  const progressPercent = totalEps ? Math.min(Math.round((currentEp / totalEps) * 100), 100) : 60;
 
   if (mode === 'compact') {
     return (
@@ -390,7 +426,7 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
 
         <div className="flex items-center justify-between text-[9px] text-neutral-400">
           <span className="truncate">{anime.platform}</span>
-          <span className="font-bold text-purple-300">EP {anime.currentEpisode}</span>
+          <span className="font-bold text-purple-300">EP {currentEp}</span>
         </div>
       </div>
     );
@@ -414,9 +450,11 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
             }}
             className="w-full h-full object-cover"
           />
-          <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-md text-[9px] font-black text-amber-300">
-            {anime.rating || 8.5} ★
-          </div>
+          {anime.rating ? (
+            <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-md text-[9px] font-black text-amber-300">
+              {anime.rating} ★
+            </div>
+          ) : null}
         </div>
 
         {/* Content Details */}
@@ -457,16 +495,18 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
           </div>
 
           {/* Regional Dub Badges */}
-          <div className="flex flex-wrap gap-1 pt-1">
-            {languages.slice(0, 3).map((l: string) => (
-              <span
-                key={l}
-                className="px-2 py-0.5 rounded-md bg-[#182032] border border-neutral-700/60 text-[10px] font-bold text-neutral-300"
-              >
-                {l}
-              </span>
-            ))}
-          </div>
+          {languages.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-1">
+              {languages.slice(0, 4).map((l: string) => (
+                <span
+                  key={l}
+                  className="px-2 py-0.5 rounded-md bg-[#182032] border border-neutral-700/60 text-[10px] font-bold text-neutral-300"
+                >
+                  {l}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -475,7 +515,7 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
         <div className="flex items-center justify-between text-[11px]">
           <span className="text-neutral-400 font-medium">Broadcast Progress</span>
           <span className="text-white font-bold">
-            Episode {anime.currentEpisode} of {anime.totalEpisodes}
+            {totalEps ? `Episode ${currentEp} of ${totalEps}` : `Episode ${currentEp} (Ongoing)`}
           </span>
         </div>
         <div className="w-full h-1.5 rounded-full bg-neutral-800 overflow-hidden">
