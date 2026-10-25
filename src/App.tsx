@@ -84,9 +84,12 @@ export default function App() {
           item.submissionStatus !== 'pending'
         );
         setCatalogList(approvedOnly);
+      } else {
+        setCatalogList([]);
       }
     } catch (err) {
-      console.warn('Notice fetching catalog from Cloudflare, using fallback seed catalog:', err);
+      console.warn('Failed fetching catalog from Cloudflare:', err);
+      setCatalogList([]);
     } finally {
       setIsCatalogLoading(false);
     }

@@ -151,9 +151,12 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           type: item.type || (idx % 4 === 0 ? 'Movie' : 'TV Series')
         }));
         setRawAnimeList(normalized);
+      } else {
+        setRawAnimeList([]);
       }
     } catch (err) {
-      console.warn('Connected to local catalog directory from Cloudflare:', err);
+      console.warn('Failed fetching catalog from Cloudflare:', err);
+      setRawAnimeList([]);
     } finally {
       setLoading(false);
     }
