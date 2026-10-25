@@ -290,7 +290,7 @@ export default {
             platform: body.platform || "Crunchyroll",
             type: normalizeType(body.type || body.Type),
             studio: body.studio || "Unknown Studio",
-            popularity: body.status === "pending" ? 0 : 1000,
+            popularity: 0,
             likesCount: 0,
             mixedEntries: body.mixedEntries || [],
             created_at: new Date().toISOString()

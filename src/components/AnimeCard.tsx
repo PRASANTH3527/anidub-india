@@ -74,10 +74,10 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   const [internalLiked, setInternalLiked] = useState(isLiked);
   const [internalUpvoted, setInternalUpvoted] = useState(isUpvoted);
   const [internalHeartCount, setInternalHeartCount] = useState(
-    anime.likesCount || Math.floor((anime.popularity || 1000) / 10) || 120
+    anime.likesCount ?? 0
   );
   const [internalUpvoteCount, setInternalUpvoteCount] = useState(
-    anime.popularity || 1000
+    anime.popularity ?? 0
   );
 
   // Normalize languages

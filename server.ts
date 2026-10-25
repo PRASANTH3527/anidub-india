@@ -183,6 +183,7 @@ function runMigrations() {
   try { db.run("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT '';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN mixedEntries TEXT DEFAULT '';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN imdbID TEXT DEFAULT '';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN likesCount INTEGER DEFAULT 0;"); } catch (e) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS episodes (
