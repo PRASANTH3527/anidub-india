@@ -138,7 +138,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Data Health states
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [healthChecked, setHealthChecked] = useState(false);
-  const [simulationFallbackEnabled, setSimulationFallbackEnabled] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -695,7 +694,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         for (const candId of directCandidateIds) {
           try {
-            const reqUrl = `/api/omdb?i=${encodeURIComponent(candId)}`;
+            const apiKey = import.meta.env.VITE_OMDB_API_KEY || '30b1faf9';
+            const reqUrl = `https://www.omdbapi.com/?i=${encodeURIComponent(candId)}&apikey=${apiKey}`;
             const startT = Date.now();
             addTerminalLog('EDGE', `[API REQ] GET ${reqUrl}`);
             
@@ -732,7 +732,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         for (const queryStr of queryCandidates) {
           try {
-            const reqUrl = `/api/omdb?title=${encodeURIComponent(queryStr)}`;
+            const apiKey = import.meta.env.VITE_OMDB_API_KEY || '30b1faf9';
+            const reqUrl = `https://www.omdbapi.com/?t=${encodeURIComponent(queryStr)}&apikey=${apiKey}`;
             const startT = Date.now();
             addTerminalLog('EDGE', `[API REQ] GET ${reqUrl}`);
             
@@ -760,27 +761,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       // =========================================================================
-      // STAGE 3: SIMULATION BENCHMARK FALLBACK (Guarantees zero downtime)
-      // =========================================================================
-      if (resolvedScore === null && (simulationFallbackEnabled || knownInfo)) {
-        if (knownInfo) {
-          resolvedScore = knownInfo.benchmarkRating;
-          resolvedImdbId = knownInfo.id || resolvedImdbId;
-          scoreSource = `Verified Benchmark Reference`;
-          addTerminalLog('WARN', `[SIMULATION FALLBACK] '${anime.title}': Using verified benchmark score (${resolvedScore})`);
-        }
-      }
-
-      // =========================================================================
-      // STAGE 4: SCORE COMPARISON & DATABASE PUT DISPATCH
+      // STAGE 3: SCORE COMPARISON & DATABASE PUT DISPATCH
       // =========================================================================
       if (resolvedScore !== null && !isNaN(resolvedScore)) {
         const localRating = Number(parseFloat(String(anime.rating || 0)).toFixed(1));
         const targetRating = Number(resolvedScore.toFixed(1));
 
         if (localRating !== targetRating) {
-          addTerminalLog('PROBE', `[MISMATCH DETECTED] '${anime.title}': Local DB ${localRating} != Real IMDb ${targetRating} (Source: ${scoreSource})`);
-          addTerminalLog('MUT', `[PUT DISPATCH] Sending HTTP PUT to ${CLOUDFLARE_API_URL || 'Edge'}/api/anime/${anime.id} (Rating: ${targetRating}, imdbID: ${resolvedImdbId || 'N/A'})`);
+          addTerminalLog('PROBE', `[MISMATCH DETECTED] '${anime.title}': Local DB ${localRating} != Real IMDb ${targetRating}`);
+          addTerminalLog('MUT', `[UPDATING] ${anime.title}: ${localRating} -> ${targetRating}`);
+          addTerminalLog('PUT', `Sending PUT to Cloudflare worker (anidub-apiii) for #${anime.id}...`);
 
           try {
             const updatedPayload = {
@@ -798,14 +788,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             setAnimes(prev => prev.map(item => (item.id === anime.id || String(item.id) === String(anime.id)) ? { ...item, rating: targetRating, imdbID: resolvedImdbId } : item));
 
             updatedCount++;
-            addTerminalLog('OK', `[DB COMMITTED] #${anime.id} '${anime.title}' rating auto-corrected from ${localRating} to ${targetRating} on Cloudflare D1 (HTTP 200 OK)`);
+            addTerminalLog('OK', `[DB COMMITTED] #${anime.id} '${anime.title}' rating auto-corrected to ${targetRating} on Cloudflare D1 (HTTP 200 OK)`);
           } catch (updateErr: any) {
             // Literal raw error logging in SYS_TERM as requested
             addTerminalLog('ERR', updateErr.message || `[ERROR] Failed updating #${anime.id} on Cloudflare`);
             console.error(`[HEALTH PROBE UPDATE ERROR] Anime #${anime.id}:`, updateErr);
           }
         } else {
-          addTerminalLog('OK', `[VERIFIED SYNC] '${anime.title}': Local DB rating (${localRating}) is currently equal to IMDb rating (${targetRating}). No auto-correction required.`);
+          addTerminalLog('OK', `[VERIFIED SYNC] '${anime.title}': Local DB rating (${localRating}) matches IMDb (${targetRating}). No auto-correction required.`);
         }
       } else {
         addTerminalLog('WARN', `[SKIPPED] '${anime.title}': Could not verify IMDb score. OMDb status: ${lastOmdbError || 'Unknown'}`);
@@ -825,29 +815,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     await fetchAnime();
     if (typeof onAnimeCreated === 'function') {
       onAnimeCreated();
-    }
-  };
-
-  /**
-   * Helper to set Dr. Stone rating to 5.0 to test the auto-correction mechanism on demand
-   */
-  const handleSetDrStoneTo5 = async () => {
-    const drStone = catalog.find(a => (a.title || '').toLowerCase().includes('stone'));
-    if (!drStone) {
-      addTerminalLog('ERR', '[ERROR] Dr. Stone not found in catalog');
-      return;
-    }
-    setIsTerminalOpen(true);
-    addTerminalLog('MUT', `[TEST SETUP] Setting Dr. Stone (ID ${drStone.id}) rating to 5.0 in Cloudflare database...`);
-    try {
-      await cloudflareApi.updateAnime(drStone.id, { ...drStone, rating: 5.0 });
-      setCatalog(prev => prev.map(a => a.id === drStone.id ? { ...a, rating: 5.0 } : a));
-      setAnimes(prev => prev.map(a => a.id === drStone.id ? { ...a, rating: 5.0 } : a));
-      addTerminalLog('OK', `[SUCCESS] Dr. Stone rating set to 5.0 in Cloudflare D1. Ready to test auto-correction!`);
-      setSuccessMsg("Dr. Stone set to 5.0. Click 'Initiate Full Health Probe' to verify auto-correction!");
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (e: any) {
-      addTerminalLog('ERR', `[ERROR] Failed to set Dr. Stone rating: ${e.message}`);
     }
   };
 
@@ -2035,47 +2002,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-wrap">
-                  <label className="flex items-center gap-2 cursor-pointer bg-white/[0.04] border border-white/10 px-3 py-2 rounded-xl hover:bg-white/[0.08] transition-all text-xs select-none">
-                    <input 
-                      type="checkbox"
-                      checked={simulationFallbackEnabled}
-                      onChange={(e) => setSimulationFallbackEnabled(e.target.checked)}
-                      className="rounded border-white/20 text-purple-600 focus:ring-0 cursor-pointer"
-                    />
-                    <span className="text-neutral-300">Simulation Fallback</span>
-                    <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 text-[9px] font-mono font-bold">Safe</span>
-                  </label>
-
-                  <button
-                    onClick={handleSetDrStoneTo5}
-                    disabled={isCheckingHealth}
-                    className="h-10 px-3.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50"
-                    title="Deliberately sets Dr. Stone rating to 5.0 in the Cloudflare database so you can watch the Health Probe detect the mismatch and auto-correct it"
-                  >
-                    <Edit3 className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Set 'Dr. Stone' to 5.0 (Test Mismatch)</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      const drStone = catalog.find(a => (a.title || '').toLowerCase().includes('stone'));
-                      handleRunHealthCheck(drStone ? drStone.id : undefined);
-                    }}
-                    disabled={isCheckingHealth}
-                    className="h-10 px-3.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-200 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50"
-                    title="Targeted test: audit Dr. Stone rating (5 -> 8.1)"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Test: 'Dr. Stone' (5 → 8.1)</span>
-                  </button>
-
                   <button 
                     onClick={() => handleRunHealthCheck()} 
                     disabled={isCheckingHealth}
-                    className="h-10 px-5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-white text-xs font-bold inline-flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(245,158,11,0.35)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
+                    className="h-10 px-6 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-white text-xs font-bold inline-flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(245,158,11,0.35)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
                   >
                     <RefreshCcw className={`w-4 h-4 text-white ${isCheckingHealth ? 'animate-spin' : ''}`} />
-                    <span>{isCheckingHealth ? 'Running Live Diagnostic Probe...' : 'Initiate Full Health Probe'}</span>
+                    <span>{isCheckingHealth ? 'Running Live OMDb Probe...' : 'Initiate Full Health Probe'}</span>
                   </button>
                 </div>
               </div>
