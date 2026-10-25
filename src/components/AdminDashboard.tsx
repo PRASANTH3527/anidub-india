@@ -374,16 +374,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           const title = row.Title || row.title || row['title'] || row['Title'] || '';
           if (!title) continue;
 
-          // Cross-reference against currently active catalog state (case-insensitive check)
+          // Cross-reference against both active catalog state and pending queue (case-insensitive check)
           const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-          const existingMatch = catalog.find(
+          const existingInCatalog = catalog.find(
+            item => item.slug === slug || (item.title && title && item.title.toLowerCase().trim() === title.toLowerCase().trim())
+          );
+          const existingInPending = pendingItems.find(
             item => item.slug === slug || (item.title && title && item.title.toLowerCase().trim() === title.toLowerCase().trim())
           );
 
-          if (existingMatch) {
+          if (existingInCatalog || existingInPending) {
             skippedCount++;
-            addTerminalLog('SKIP', `[CSV IMPORT] Skipped existing duplicate title: '${title}'`);
-            continue; // Completely reject/skip existing anime before reaching pending queue
+            addTerminalLog('REJ', `[CSV IMPORT] Strictly rejected duplicate anime title: '${title}' (Already exists in catalog or pending queue)`);
+            continue; // Completely reject duplicate anime: do not update, do not send to pending queue
           }
 
           // 1. Find the actual key for Type dynamically, ignoring exact case or hidden spaces
@@ -461,8 +464,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }
         }
         
-        // 5. Show success toast with exact breakdown of imported vs skipped duplicates
-        const feedbackMsg = `Imported ${importedCount} new anime. Skipped ${skippedCount} existing duplicates.`;
+        // 5. Show success toast with exact breakdown of imported vs rejected duplicates
+        const feedbackMsg = `Imported ${importedCount} new anime. Rejected ${skippedCount} duplicate anime.`;
         setImportedCount(importedCount);
         setShowImportToast(true);
         setSuccessMsg(feedbackMsg);
