@@ -890,9 +890,10 @@ app.post('/api/anime/:id/rate', (req, res) => {
 app.post('/api/admin/approve/:id', requireAdminAuth, (req, res) => {
   try {
     const animeId = req.params.id;
-    db.run("UPDATE anime SET status = 'Airing', submissionStatus = 'approved' WHERE id = ?", [animeId]);
+    // Keep current status, but mark as approved, and reset counts to 0.
+    db.run("UPDATE anime SET submissionStatus = 'approved', popularity = 0, likesCount = 0 WHERE id = ?", [animeId]);
     persistD1();
-    res.json({ success: true, id: animeId, status: 'Airing', submissionStatus: 'approved' });
+    res.json({ success: true, id: animeId, submissionStatus: 'approved' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -939,21 +940,21 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         imdbID = COALESCE(?, imdbID)
       WHERE id = ?`,
       [
-        title,
-        synopsis,
-        cover_image,
-        banner_image,
+        title || null,
+        synopsis || null,
+        cover_image || null,
+        banner_image || null,
         rating !== undefined ? parseFloat(rating) : null,
         episodes_count !== undefined ? parseInt(episodes_count) : null,
-        status,
-        submissionStatus,
-        season,
+        status || null,
+        submissionStatus || null,
+        season || null,
         year !== undefined ? parseInt(year) : null,
-        genres,
-        studio,
+        genres || null,
+        studio || null,
         resolvedType,
-        languages,
-        platform,
+        languages || null,
+        platform || null,
         resolvedImdbId || null,
         id
       ]
