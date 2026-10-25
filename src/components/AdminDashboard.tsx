@@ -779,8 +779,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const targetRating = Number(resolvedScore.toFixed(1));
 
         if (localRating !== targetRating) {
-          addTerminalLog('PROBE', `[UPDATING] '${anime.title}': Local DB ${localRating} -> Real IMDb ${targetRating} (Source: ${scoreSource})`);
-          addTerminalLog('MUT', `[PUT DISPATCH] Sending HTTP PUT /api/anime/${anime.id} (Rating: ${targetRating}, imdbID: ${resolvedImdbId || 'N/A'})`);
+          addTerminalLog('PROBE', `[MISMATCH DETECTED] '${anime.title}': Local DB ${localRating} != Real IMDb ${targetRating} (Source: ${scoreSource})`);
+          addTerminalLog('MUT', `[PUT DISPATCH] Sending HTTP PUT to ${CLOUDFLARE_API_URL || 'Edge'}/api/anime/${anime.id} (Rating: ${targetRating}, imdbID: ${resolvedImdbId || 'N/A'})`);
 
           try {
             const updatedPayload = {
@@ -798,12 +798,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             setAnimes(prev => prev.map(item => (item.id === anime.id || String(item.id) === String(anime.id)) ? { ...item, rating: targetRating, imdbID: resolvedImdbId } : item));
 
             updatedCount++;
-            addTerminalLog('OK', `[DB COMMITTED] #${anime.id} '${anime.title}' rating synchronized to ${targetRating} on Cloudflare D1`);
+            addTerminalLog('OK', `[DB COMMITTED] #${anime.id} '${anime.title}' rating auto-corrected from ${localRating} to ${targetRating} on Cloudflare D1 (HTTP 200 OK)`);
           } catch (updateErr: any) {
-            addTerminalLog('ERR', `[FAIL] Cloudflare PUT /api/anime/${anime.id} failed: ${updateErr.message}`);
+            // Literal raw error logging in SYS_TERM as requested
+            addTerminalLog('ERR', updateErr.message || `[ERROR] Failed updating #${anime.id} on Cloudflare`);
+            console.error(`[HEALTH PROBE UPDATE ERROR] Anime #${anime.id}:`, updateErr);
           }
         } else {
-          addTerminalLog('OK', `[VERIFIED SYNC] '${anime.title}': Local rating (${localRating}) matches IMDb score perfectly.`);
+          addTerminalLog('OK', `[VERIFIED SYNC] '${anime.title}': Local DB rating (${localRating}) is currently equal to IMDb rating (${targetRating}). No auto-correction required.`);
         }
       } else {
         addTerminalLog('WARN', `[SKIPPED] '${anime.title}': Could not verify IMDb score. OMDb status: ${lastOmdbError || 'Unknown'}`);
@@ -823,6 +825,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     await fetchAnime();
     if (typeof onAnimeCreated === 'function') {
       onAnimeCreated();
+    }
+  };
+
+  /**
+   * Helper to set Dr. Stone rating to 5.0 to test the auto-correction mechanism on demand
+   */
+  const handleSetDrStoneTo5 = async () => {
+    const drStone = catalog.find(a => (a.title || '').toLowerCase().includes('stone'));
+    if (!drStone) {
+      addTerminalLog('ERR', '[ERROR] Dr. Stone not found in catalog');
+      return;
+    }
+    setIsTerminalOpen(true);
+    addTerminalLog('MUT', `[TEST SETUP] Setting Dr. Stone (ID ${drStone.id}) rating to 5.0 in Cloudflare database...`);
+    try {
+      await cloudflareApi.updateAnime(drStone.id, { ...drStone, rating: 5.0 });
+      setCatalog(prev => prev.map(a => a.id === drStone.id ? { ...a, rating: 5.0 } : a));
+      setAnimes(prev => prev.map(a => a.id === drStone.id ? { ...a, rating: 5.0 } : a));
+      addTerminalLog('OK', `[SUCCESS] Dr. Stone rating set to 5.0 in Cloudflare D1. Ready to test auto-correction!`);
+      setSuccessMsg("Dr. Stone set to 5.0. Click 'Initiate Full Health Probe' to verify auto-correction!");
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (e: any) {
+      addTerminalLog('ERR', `[ERROR] Failed to set Dr. Stone rating: ${e.message}`);
     }
   };
 
@@ -2020,6 +2045,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span className="text-neutral-300">Simulation Fallback</span>
                     <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 text-[9px] font-mono font-bold">Safe</span>
                   </label>
+
+                  <button
+                    onClick={handleSetDrStoneTo5}
+                    disabled={isCheckingHealth}
+                    className="h-10 px-3.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50"
+                    title="Deliberately sets Dr. Stone rating to 5.0 in the Cloudflare database so you can watch the Health Probe detect the mismatch and auto-correct it"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Set 'Dr. Stone' to 5.0 (Test Mismatch)</span>
+                  </button>
 
                   <button
                     onClick={() => {

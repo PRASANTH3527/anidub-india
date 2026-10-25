@@ -155,19 +155,49 @@ class CloudflareApiService {
   }
 
   /**
-   * UPDATE: Updates an existing anime in Cloudflare D1
+   * UPDATE: Updates an existing anime in Cloudflare D1 / Worker
    */
-  public async updateAnime(id: number | string, payload: Partial<AnimePayload>): Promise<{ success: boolean; id: string | number }> {
+  public async updateAnime(id: number | string, payload: Partial<AnimePayload>): Promise<{ success: boolean; id: string | number; data?: any }> {
     const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id));
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: this.getHeaders(true),
-      body: JSON.stringify(payload)
-    });
+    const cleanPayload = {
+      ...payload,
+      id: id,
+      rating: payload.rating !== undefined ? Number(parseFloat(String(payload.rating)).toFixed(1)) : undefined
+    };
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'PUT',
+        headers: this.getHeaders(true),
+        body: JSON.stringify(cleanPayload)
+      });
+    } catch (networkErr: any) {
+      throw new Error(`[ERROR] Network/CORS Failed: ${networkErr.message} while reaching ${url}`);
+    }
+
+    // Fallback to PATCH if method PUT is not accepted or returned 405
+    if (res.status === 405) {
+      try {
+        res = await fetch(url, {
+          method: 'PATCH',
+          headers: this.getHeaders(true),
+          body: JSON.stringify(cleanPayload)
+        });
+      } catch (patchErr: any) {
+        throw new Error(`[ERROR] Network/CORS Failed on PATCH: ${patchErr.message} while reaching ${url}`);
+      }
+    }
 
     if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.error || `Failed to update anime ID ${id} on Cloudflare D1 (Status ${res.status})`);
+      let errBody = '';
+      try {
+        const json = await res.json();
+        errBody = json.error || json.message || JSON.stringify(json);
+      } catch {
+        errBody = await res.text().catch(() => res.statusText);
+      }
+      throw new Error(`[ERROR] Backend returned ${res.status} (${res.statusText}): ${errBody || 'Update rejected'}`);
     }
 
     return await res.json();

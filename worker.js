@@ -107,8 +107,8 @@ const INITIAL_SEED_ANIME = [
 // Helper: Standard CORS Headers
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, X-Admin-Token, Accept, Origin, x-requested-with",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -368,17 +368,27 @@ export default {
       }
 
       // ----------------------------------------------------------------------
-      // 5. PUT /api/anime/:id - Edit / Update Anime
+      // 5. PUT / PATCH /api/anime/:id - Edit / Update Anime
       // ----------------------------------------------------------------------
-      const putMatch = path.match(/^\/api\/anime\/([^/]+)$/);
-      if (putMatch && method === "PUT") {
-        const id = putMatch[1];
-        const body = await request.json();
+      const putMatch = path.match(/^\/api\/anime\/([^/]+)\/?$/);
+      if ((putMatch || path === "/api/anime" || path === "/api/anime/") && (method === "PUT" || method === "PATCH")) {
+        let body = {};
+        try {
+          body = await request.json();
+        } catch (e) {
+          return jsonResponse({ error: "Malformed JSON payload in request body", message: e.message }, 400);
+        }
+
+        const id = putMatch ? putMatch[1] : (body.id || body._id);
+        if (!id) {
+          return jsonResponse({ error: "Missing anime ID parameter in URL path or request body", status: 400 }, 400);
+        }
+
         const catalog = await getCatalog(env);
-        const index = catalog.findIndex((a) => String(a.id) === id);
+        const index = catalog.findIndex((a) => String(a.id) === String(id));
 
         if (index === -1) {
-          return jsonResponse({ error: "Anime not found" }, 404);
+          return jsonResponse({ error: `Anime #${id} not found in database`, status: 404 }, 404);
         }
 
         const existing = catalog[index];
@@ -388,13 +398,17 @@ export default {
           ...existing,
           ...body,
           id: existing.id,
+          rating: body.rating !== undefined ? parseFloat(body.rating) : existing.rating,
+          imdbID: body.imdbID || body.imdb_id || existing.imdbID || existing.imdb_id || '',
+          imdb_id: body.imdbID || body.imdb_id || existing.imdbID || existing.imdb_id || '',
           cover_image: resolvedCover,
           image: resolvedCover,
           posterUrl: resolvedCover,
           poster: resolvedCover,
           type: normalizeType(body.type || body.Type || existing.type),
           genres: Array.isArray(body.genres) ? body.genres.join(", ") : (body.genres || existing.genres),
-          languages: Array.isArray(body.languages) ? body.languages.join(", ") : (body.languages || existing.languages)
+          languages: Array.isArray(body.languages) ? body.languages.join(", ") : (body.languages || existing.languages),
+          updated_at: new Date().toISOString()
         };
 
         catalog[index] = updated;
@@ -403,8 +417,9 @@ export default {
         return jsonResponse({
           success: true,
           id: existing.id,
+          message: `Anime #${existing.id} (${existing.title}) updated successfully`,
           data: updated
-        });
+        }, 200);
       }
 
       // ----------------------------------------------------------------------
