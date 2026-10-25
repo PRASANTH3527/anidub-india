@@ -890,10 +890,23 @@ app.post('/api/anime/:id/rate', (req, res) => {
 app.post('/api/admin/approve/:id', requireAdminAuth, (req, res) => {
   try {
     const animeId = req.params.id;
-    // Keep current status, but mark as approved, and reset counts to 0.
-    db.run("UPDATE anime SET submissionStatus = 'approved', popularity = 0, likesCount = 0 WHERE id = ?", [animeId]);
+    const bodyStatus = req.body?.status || req.body?.airing_status;
+    if (bodyStatus) {
+      db.run("UPDATE anime SET status = ?, submissionStatus = 'approved', popularity = 0, likesCount = 0 WHERE id = ?", [bodyStatus, animeId]);
+    } else {
+      db.run(`UPDATE anime SET 
+        status = CASE 
+          WHEN status IS NULL OR status = '' OR LOWER(status) = 'pending' THEN 
+            (CASE WHEN type = 'Movie' THEN 'Completed' ELSE 'Ongoing' END)
+          ELSE status 
+        END,
+        submissionStatus = 'approved',
+        popularity = 0,
+        likesCount = 0
+        WHERE id = ?`, [animeId]);
+    }
     persistD1();
-    res.json({ success: true, id: animeId, submissionStatus: 'approved' });
+    res.json({ success: true, id: animeId, submissionStatus: 'approved', status: bodyStatus });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -904,8 +917,9 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
   const start = Date.now();
   try {
     const id = req.params.id;
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, studio, type, Type, languages, platform, imdbID, imdb_id } = req.body;
+    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, season, year, genres, studio, type, Type, languages, platform, imdbID, imdb_id } = req.body;
     const resolvedImdbId = imdbID || imdb_id;
+    const resolvedStatus = (status !== undefined && status !== null && status !== '') ? String(status).trim() : ((airing_status !== undefined && airing_status !== null && airing_status !== '') ? String(airing_status).trim() : null);
 
     let resolvedType: string | null = null;
     const rawT = type || Type;
@@ -946,7 +960,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         banner_image || null,
         rating !== undefined ? parseFloat(rating) : null,
         episodes_count !== undefined ? parseInt(episodes_count) : null,
-        status || null,
+        resolvedStatus,
         submissionStatus || null,
         season || null,
         year !== undefined ? parseInt(year) : null,

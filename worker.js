@@ -335,10 +335,15 @@ export default {
         const existing = catalog[index];
         const resolvedCover = body.posterUrl || body.cover_image || body.image || body.poster || existing.cover_image;
 
+        const rawStatus = body.status !== undefined ? body.status : (body.airing_status !== undefined ? body.airing_status : existing.status);
+        const resolvedStatus = (rawStatus !== undefined && rawStatus !== null) ? String(rawStatus).trim() : existing.status;
+
         const updated = {
           ...existing,
           ...body,
           id: existing.id,
+          status: resolvedStatus,
+          airing_status: resolvedStatus,
           rating: body.rating !== undefined ? parseFloat(body.rating) : existing.rating,
           imdbID: body.imdbID || body.imdb_id || existing.imdbID || existing.imdb_id || '',
           imdb_id: body.imdbID || body.imdb_id || existing.imdbID || existing.imdb_id || '',
@@ -399,7 +404,20 @@ export default {
           return jsonResponse({ error: "Anime not found" }, 404);
         }
 
-        catalog[index].status = "Airing";
+        let approveBody = {};
+        try {
+          approveBody = await request.json();
+        } catch (_) {}
+
+        const item = catalog[index];
+        // Strictly accept whatever exact string value is passed in the status field
+        let targetStatus = approveBody.status || approveBody.airing_status || item.status;
+        if (!targetStatus || String(targetStatus).toLowerCase() === 'pending') {
+          targetStatus = (item.type === 'Movie' || item.Type === 'Movie') ? 'Completed' : 'Ongoing';
+        }
+
+        catalog[index].status = targetStatus;
+        catalog[index].airing_status = targetStatus;
         catalog[index].submissionStatus = "approved";
         catalog[index].popularity = 0;
         catalog[index].likesCount = 0;
@@ -409,7 +427,7 @@ export default {
         return jsonResponse({
           success: true,
           id,
-          status: "Airing",
+          status: targetStatus,
           submissionStatus: "approved",
           data: catalog[index]
         });

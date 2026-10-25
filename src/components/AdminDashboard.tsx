@@ -269,12 +269,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setCloudStatusText(`Approving ${item.title || `#${itemId}`} on Cloudflare Edge...`);
     addTerminalLog('EDGE', `Approving #${itemId} (${item.title || 'Untitled'}) -> Promoting to Live`);
     try {
-      await cloudflareApi.approveAnime(itemId);
+      const rawType = item.type || item.Type || 'TV Series';
+      const targetStatus = (item.status && item.status.toLowerCase() !== 'pending')
+        ? item.status
+        : (rawType === 'Movie' ? 'Completed' : 'Ongoing');
+
+      await cloudflareApi.approveAnime(itemId, targetStatus);
       setPendingItems(prev => prev.filter(p => p.id !== itemId));
       setSuccessMsg('Anime Approved & Published globally on Cloudflare Edge.');
-      addTerminalLog('OK', `Approval committed globally. #${itemId} is now live.`);
+      addTerminalLog('OK', `Approval committed globally. #${itemId} is now live with status "${targetStatus}".`);
       await fetchAnime();
-      onAnimeCreated();
+      if (typeof onAnimeCreated === 'function') {
+        onAnimeCreated();
+      }
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       console.error('Cloudflare Approval error:', err);
@@ -356,9 +363,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleOpenEditModal = (anime: any) => {
     setModalMode('edit');
-    // Ensure type: anime.type || anime.Type || 'TV Series' is explicitly passed into the state object
-    setFormData({ ...anime, type: anime.type || anime.Type || 'TV Series' });
-    setEditingAnime({ ...anime, type: anime.type || anime.Type || 'TV Series' });
+    const resolvedType = anime.type || anime.Type || 'TV Series';
+    const rawStatus = anime.status || anime.airing_status;
+    let resolvedStatus = 'Ongoing';
+    if (rawStatus && typeof rawStatus === 'string') {
+      const s = rawStatus.trim().toLowerCase();
+      if (s === 'completed' || s === 'finished' || s.includes('complete')) resolvedStatus = 'Completed';
+      else if (s === 'ongoing' || s === 'airing' || s.includes('ongoing') || s.includes('airing')) resolvedStatus = 'Ongoing';
+      else resolvedStatus = resolvedType === 'Movie' ? 'Completed' : 'Ongoing';
+    } else {
+      resolvedStatus = resolvedType === 'Movie' ? 'Completed' : 'Ongoing';
+    }
+
+    const payloadState = {
+      ...anime,
+      type: resolvedType,
+      Type: resolvedType,
+      status: resolvedStatus,
+      airing_status: resolvedStatus
+    };
+    setFormData(payloadState);
+    setEditingAnime(payloadState);
     setIsDubModalOpen(true);
   };
 
@@ -919,10 +944,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!editedData) return;
     const targetId = editedData.id || editingAnime?.id;
     const resolvedImage = editedData.posterUrl || editedData.image || editedData.cover_image || editedData.poster;
+    const resolvedType = editedData.type || editedData.Type || editingAnime?.type || 'TV Series';
+    const resolvedStatus = editedData.status || editedData.airing_status || (resolvedType === 'Movie' ? 'Completed' : 'Ongoing');
 
     const fullEditedData = {
       ...editedData,
       id: targetId,
+      type: resolvedType,
+      Type: resolvedType,
+      status: resolvedStatus,
+      airing_status: resolvedStatus,
       image: editedData.posterUrl || editedData.image || resolvedImage,
       cover_image: editedData.posterUrl || editedData.cover_image || resolvedImage,
       poster: editedData.posterUrl || editedData.poster || resolvedImage,

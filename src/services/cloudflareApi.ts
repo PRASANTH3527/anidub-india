@@ -224,12 +224,17 @@ class CloudflareApiService {
   /**
    * APPROVE: Approves a pending submission in Cloudflare D1
    */
-  public async approveAnime(id: number | string): Promise<any> {
+  public async approveAnime(id: number | string, status?: string): Promise<any> {
     const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.APPROVE(id));
+    const payload: Record<string, any> = { submissionStatus: 'approved' };
+    if (status) {
+      payload.status = status;
+      payload.airing_status = status;
+    }
     const res = await fetch(url, {
       method: 'POST',
       headers: this.getHeaders(true),
-      body: JSON.stringify({ status: 'Airing', submissionStatus: 'approved' })
+      body: JSON.stringify(payload)
     });
 
     if (!res.ok) {

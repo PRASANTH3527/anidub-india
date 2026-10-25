@@ -146,9 +146,19 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     ]
   );
 
-  const [airingStatus, setAiringStatus] = useState<'Ongoing' | 'Completed'>(
-    initialData?.status?.toLowerCase() === 'airing' || initialData?.status?.toLowerCase() === 'ongoing' ? 'Ongoing' : 'Completed'
-  );
+  const [airingStatus, setAiringStatus] = useState<'Ongoing' | 'Completed'>(() => {
+    const raw = initialData?.status || (initialData as any)?.airing_status;
+    if (raw && typeof raw === 'string') {
+      const lower = raw.trim().toLowerCase();
+      if (lower === 'completed' || lower === 'finished' || lower.includes('complete')) return 'Completed';
+      if (lower === 'ongoing' || lower === 'airing' || lower.includes('ongoing') || lower.includes('airing')) return 'Ongoing';
+    }
+    const rawType = (initialData as any)?.type || (initialData as any)?.Type;
+    if (rawType && typeof rawType === 'string' && rawType.toLowerCase().includes('movie')) {
+      return 'Completed';
+    }
+    return 'Completed';
+  });
   const [releaseDay, setReleaseDay] = useState<string>('Saturday');
 
   useEffect(() => {
@@ -177,11 +187,30 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       // State Initialization: When the Edit Modal opens and sets its state, make sure the type property is explicitly included
       const anime = initialData as any;
-      setFormData({ ...anime, type: anime.type || anime.Type || 'TV Series' });
+      const rawStatus = initDataAny?.status || (initialData as any)?.status || (initialData as any)?.airing_status;
+      let resolvedStatus: 'Ongoing' | 'Completed' = 'Completed';
+      if (rawStatus && typeof rawStatus === 'string') {
+        const s = rawStatus.trim().toLowerCase();
+        if (s === 'completed' || s === 'finished' || s.includes('complete') || s.includes('finish')) {
+          resolvedStatus = 'Completed';
+        } else if (cleanType === 'Movie') {
+          resolvedStatus = s.includes('ongoing') || s.includes('airing') ? 'Ongoing' : 'Completed';
+        } else if (s === 'ongoing' || s === 'airing' || s.includes('ongoing') || s.includes('airing')) {
+          resolvedStatus = 'Ongoing';
+        } else {
+          resolvedStatus = 'Completed';
+        }
+      } else {
+        resolvedStatus = cleanType === 'Movie' ? 'Completed' : 'Ongoing';
+      }
 
-      const rawStatus = initDataAny?.status || (initialData as any).status || 'Completed';
-      const trimmedStatus = typeof rawStatus === 'string' ? rawStatus.trim() : rawStatus;
-      setAiringStatus(trimmedStatus.toLowerCase() === 'airing' || trimmedStatus.toLowerCase() === 'ongoing' ? 'Ongoing' : 'Completed');
+      setFormData({ 
+        ...anime, 
+        type: cleanType,
+        status: resolvedStatus,
+        airing_status: resolvedStatus
+      });
+      setAiringStatus(resolvedStatus);
 
       if (initDataAny?.mixedEntries && Array.isArray(initDataAny.mixedEntries)) {
         const mapped = initDataAny.mixedEntries.map((e: any, idx: number) => ({
@@ -374,8 +403,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         banner_image: defaultCover,
         rating: parsedRating,
         episodes_count: totalEpisodes || 12,
-        airing_status: airingStatus === 'Ongoing' ? 'Airing' : 'Completed',
-        status: airingStatus === 'Ongoing' ? 'Airing' : 'Completed',
+        airing_status: airingStatus,
+        status: airingStatus,
         submissionStatus: mode === 'edit' ? 'approved' : 'pending',
         languages: derivedGlobalDubs.join(', '),
         platform: streamingPartners[0]?.name || 'Crunchyroll',
@@ -396,6 +425,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       const fullUpdatedItem = {
         ...payload,
         id: initialData?.id,
+        status: airingStatus,
+        airing_status: airingStatus,
         cover_image: defaultCover,
         image: defaultCover,
         poster: defaultCover,
@@ -417,6 +448,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       const fallbackItem = {
         title: title.trim(),
         id: initialData?.id,
+        status: airingStatus,
+        airing_status: airingStatus,
+        type: formData.type || type || 'TV Series',
         cover_image: defaultCover,
         image: defaultCover,
         poster: defaultCover,
@@ -678,8 +712,16 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   <div>
                     <label className="block font-bold text-neutral-300 mb-1">Type</label>
                     <select 
-                      value={formData.type || 'TV Series'} 
-                      onChange={(e) => setFormData({...formData, type: e.target.value})}
+                      value={formData.type || type || 'TV Series'} 
+                      onChange={(e) => {
+                        const newType = e.target.value;
+                        setFormData((prev: any) => ({ ...prev, type: newType }));
+                        setType(newType);
+                        if (newType === 'Movie') {
+                          setAiringStatus('Completed');
+                          setFormData((prev: any) => ({ ...prev, status: 'Completed', airing_status: 'Completed' }));
+                        }
+                      }}
                       className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
                     >
                       <option value="TV Series">TV Series</option>
@@ -692,7 +734,11 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                     <label className="block font-bold text-neutral-300 mb-1">Status</label>
                     <select
                       value={airingStatus}
-                      onChange={(e) => setAiringStatus(e.target.value as 'Ongoing' | 'Completed')}
+                      onChange={(e) => {
+                        const newStatus = e.target.value as 'Ongoing' | 'Completed';
+                        setAiringStatus(newStatus);
+                        setFormData((prev: any) => ({ ...prev, status: newStatus, airing_status: newStatus }));
+                      }}
                       className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
                     >
                       <option value="Ongoing">Ongoing (Simulcast)</option>

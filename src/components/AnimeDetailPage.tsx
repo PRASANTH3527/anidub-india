@@ -301,8 +301,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const rawSynopsis = details?.synopsis || details?.description || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
   const synopsis = rawSynopsis.replace(/Imported via standardized CSV format\.?/gi, '').trim() || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
   const releaseYear = details?.releaseYear || details?.year || 2024;
-  const status = details?.status || 'Ongoing';
   const type = details?.type || 'TV Series';
+  const status = details?.status || (type === 'Movie' ? 'Completed' : 'Ongoing');
   const studio = details?.studio || 'Animation Studio';
   const platform = details?.platform || 'Crunchyroll';
   const languages = details?.languages ? details.languages.split(',').map((l: string) => l.trim()) : ['Hindi', 'Tamil', 'Telugu', 'Malayalam'];
