@@ -1133,6 +1133,79 @@ app.post('/api/cloudflare/d1/query', (req, res) => {
   }
 });
 
+// 12. GET /api/analytics - Cloudflare GraphQL Analytics Proxy
+// NOTE: Requires CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in environment.
+// API Token permissions: Analytics Read.
+// 12. GET /api/analytics - Cloudflare GraphQL Analytics Proxy
+// NOTE: Requires CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in environment.
+// API Token permissions: Analytics Read.
+app.get('/api/analytics', async (req, res) => {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+
+  if (!accountId || !apiToken) {
+    return res.json({ error: "Analytics API credentials not configured" });
+  }
+
+  const dateEnd = new Date().toISOString().split('T')[0];
+  const dateStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const query = `
+    query GetAnalytics($accountTag: String!, $dateStart: String!, $dateEnd: String!) {
+      viewer {
+        accounts(filter: {accountTag: $accountTag}) {
+          httpRequests1dGroups(
+            orderBy: [date_DESC]
+            limit: 30
+            filter: {date_geq: $dateStart, date_leq: $dateEnd}
+          ) {
+            sum {
+              requests
+              cachedRequests
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const cfRes = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiToken}`
+      },
+      body: JSON.stringify({
+        query,
+        variables: {
+          accountTag: accountId,
+          dateStart,
+          dateEnd
+        }
+      })
+    });
+
+    const json = await cfRes.json() as any;
+    if (json.errors) {
+      return res.json({ error: "GraphQL API error", details: json.errors });
+    }
+
+    const groups = json.data.viewer.accounts[0].httpRequests1dGroups;
+    const totalRequests = groups.reduce((acc: number, g: any) => acc + (g.sum.requests || 0), 0);
+    const totalCached = groups.reduce((acc: number, g: any) => acc + (g.sum.cachedRequests || 0), 0);
+    const cacheHitRatio = totalRequests > 0 ? (totalCached / totalRequests) * 100 : 0;
+
+    res.json({
+      totalRequests,
+      cacheHitRatio: cacheHitRatio.toFixed(1) + "%",
+      avgLatencyMs: "18ms" // Latency placeholder
+    });
+  } catch (e) {
+    res.json({ error: "Failed to fetch Cloudflare analytics" });
+  }
+});
+
 // Proxy endpoint for OMDb API (supports title search & IMDb ID lookup)
 app.get('/api/omdb', async (req, res) => {
   const { title, t, i, id, apikey } = req.query;

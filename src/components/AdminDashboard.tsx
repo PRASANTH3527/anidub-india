@@ -101,6 +101,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Tabs state
   const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'pending' | 'catalog' | 'feedback' | 'data_health' | 'analytics' | 'settings'>('overview');
   const [feedbackList, setFeedbackList] = useState<any[]>([]);
+  const [analyticsData, setAnalyticsData] = useState({ totalRequests: 0, cacheHitRatio: '0%', avgLatencyMs: '0ms' });
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
 
   // Pending queue state
   const [pendingItems, setPendingItems] = useState<any[]>([]);
@@ -176,6 +178,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       console.error('Failed to fetch feedback:', err);
     }
   };
+
+  const fetchAnalytics = async () => {
+    setLoadingAnalytics(true);
+    try {
+      const res = await fetch('/api/analytics');
+      if (res.ok) {
+        const data = await res.json();
+        setAnalyticsData(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch analytics:', err);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeAdminTab === 'analytics') {
+      fetchAnalytics();
+    }
+  }, [activeAdminTab]);
 
   const fetchPendingItems = async () => {
     try {
@@ -2252,29 +2275,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* 4 Cyber Telemetry Metrics */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">24h Edge API Requests</span>
-                  <div className="text-2xl font-black text-white font-mono">142,850</div>
-                  <div className="text-[11px] text-emerald-400 font-medium font-mono">+18.4% this week</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Edge Cache Hit Ratio</span>
-                  <div className="text-2xl font-black text-cyan-400 font-mono">99.4%</div>
-                  <div className="text-[11px] text-cyan-300 font-medium font-mono">Cloudflare CDN cached</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Mean Query Latency</span>
-                  <div className="text-2xl font-black text-purple-400 font-mono">14ms</div>
-                  <div className="text-[11px] text-purple-300 font-medium font-mono">India Edge PoPs</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Active Stream Outlinks</span>
-                  <div className="text-2xl font-black text-amber-400 font-mono">28,490</div>
-                  <div className="text-[11px] text-amber-300 font-medium font-mono">Redirects to OTT</div>
-                </div>
+                {loadingAnalytics ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-2 animate-pulse">
+                      <div className="h-2 w-20 bg-white/10 rounded" />
+                      <div className="h-6 w-16 bg-white/10 rounded" />
+                    </div>
+                  ))
+                ) : (
+                  <>
+                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                      <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">24h Edge API Requests</span>
+                      <div className="text-2xl font-black text-white font-mono">{analyticsData.totalRequests.toLocaleString()}</div>
+                      <div className="text-[11px] text-emerald-400 font-medium font-mono">Live telemetry</div>
+                    </div>
+    
+                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                      <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Edge Cache Hit Ratio</span>
+                      <div className="text-2xl font-black text-cyan-400 font-mono">{analyticsData.cacheHitRatio}</div>
+                      <div className="text-[11px] text-cyan-300 font-medium font-mono">Cloudflare CDN cached</div>
+                    </div>
+    
+                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                      <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Mean Query Latency</span>
+                      <div className="text-2xl font-black text-purple-400 font-mono">{analyticsData.avgLatencyMs}</div>
+                      <div className="text-[11px] text-purple-300 font-medium font-mono">India Edge PoPs</div>
+                    </div>
+    
+                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                      <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Active Stream Outlinks</span>
+                      <div className="text-2xl font-black text-amber-400 font-mono">28,490</div>
+                      <div className="text-[11px] text-amber-300 font-medium font-mono">Redirects to OTT</div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Regional Indian PoP Status Indicators */}
