@@ -138,6 +138,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Data Health states
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [healthChecked, setHealthChecked] = useState(false);
+  const [pendingCorrections, setPendingCorrections] = useState<Array<{
+    anime: any;
+    currentLocalRating: number;
+    realImdbRating: number;
+    imdbID: string;
+  }>>([]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -217,16 +223,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         localStorage.setItem('cf_admin_catalog_cache', JSON.stringify(items));
       } catch (e) {}
       await fetchPendingItems();
-    } catch (err) {
-      console.warn('Network notice fetching anime from Cloudflare D1, loading cached catalog:', err);
-      addTerminalLog('WARN', 'Cloudflare D1 offline or slow, served client cached snapshot');
-      try {
-        const cached = localStorage.getItem('cf_admin_catalog_cache');
-        if (cached) {
-          setCatalog(JSON.parse(cached));
-          setAnimes(JSON.parse(cached));
-        }
-      } catch (e) {}
+    } catch (err: any) {
+      console.warn('Network notice fetching anime from Cloudflare D1:', err);
+      addTerminalLog('ERR', `[ERROR] Failed to fetch catalog from Cloudflare D1: ${err.message}`);
+      setApiError(true);
+      setCatalog([]);
+      setAnimes([]);
       await fetchPendingItems();
     } finally {
       setLoading(false);
@@ -295,36 +297,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setCloudStatusText(`Deleting #${targetId} from Cloudflare D1...`);
     addTerminalLog('DEL', `Issuing HTTP DELETE /api/anime/${targetId} on Cloudflare Edge`);
 
-    // 1. Immediate UI state removal (Synchronous part for responsiveness)
-    const updatedCatalog = catalog.filter(item => (item.id || item._id) !== targetId);
-    setCatalog(updatedCatalog);
-    setAnimes(updatedCatalog);
-    
-    // 2. Storage Sync (localStorage fallback as requested)
     try {
-      localStorage.setItem('cf_admin_catalog_cache', JSON.stringify(updatedCatalog));
-    } catch (e) {
-      console.warn('Failed to sync to localStorage:', e);
-    }
-
-    // 3. Show in-app toast
-    setSuccessMsg('Deleted from Cloudflare D1.');
-    setTimeout(() => setSuccessMsg(''), 4000);
-
-    try {
-      // 4. Await database deletion in Cloudflare D1
+      // 1. Await database deletion in Cloudflare D1 FIRST
       if (targetId !== undefined && targetId !== null) {
         await cloudflareApi.deleteAnime(targetId);
-        addTerminalLog('OK', `Purged #${targetId} (${anime.title || 'Untitled'}) from Cloudflare KV`);
+        addTerminalLog('OK', `Purged #${targetId} (${anime.title || 'Untitled'}) from Cloudflare D1`);
       }
 
-      // 5. Finally trigger parent refresh safely
-      onAnimeCreated();
-    } catch (err) {
-      console.error('Cloudflare Delete error:', err);
-      setSuccessMsg('Note: Item removed from UI, but Cloudflare D1 deletion failed.');
-      addTerminalLog('WARN', `Notice during deletion of #${targetId} on Edge`);
+      // 2. ONLY remove from local React state upon successful 200 OK response from backend
+      const updatedCatalog = catalog.filter(item => (item.id || item._id) !== targetId);
+      setCatalog(updatedCatalog);
+      setAnimes(updatedCatalog);
+      
+      try {
+        localStorage.setItem('cf_admin_catalog_cache', JSON.stringify(updatedCatalog));
+      } catch (e) {}
+
+      setSuccessMsg('Successfully deleted from Cloudflare D1.');
       setTimeout(() => setSuccessMsg(''), 4000);
+
+      if (typeof onAnimeCreated === 'function') {
+        onAnimeCreated();
+      }
+    } catch (err: any) {
+      console.error('Cloudflare Delete error:', err);
+      setSuccessMsg(`Failed to delete anime from Cloudflare D1: ${err.message || 'Server error'}`);
+      addTerminalLog('ERR', `[ERROR] Failed deleting #${targetId} on Edge: ${err.message}`);
+      setTimeout(() => setSuccessMsg(''), 5000);
     } finally {
       setDeletingId(null);
       setCloudSyncing(false);
@@ -642,7 +641,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleRunHealthCheck = async (targetAnimeId?: any) => {
     setIsCheckingHealth(true);
     setIsTerminalOpen(true);
-    addTerminalLog('SYS', '=== [HEALTH PROBE INITIALIZED: OMDb & IMDb Engine v4.3] ===');
+    addTerminalLog('SYS', '=== [HEALTH PROBE INITIALIZED: OMDb & IMDb Auditor v4.5] ===');
     
     // Target either full catalog or a specific anime if clicked
     const itemsToProbe = targetAnimeId 
@@ -656,7 +655,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     addTerminalLog('PROBE', `Beginning live audit across ${itemsToProbe.length} title(s)...`);
     
-    let updatedCount = 0;
+    const collectedCorrections: Array<{
+      anime: any;
+      currentLocalRating: number;
+      realImdbRating: number;
+      imdbID: string;
+    }> = [];
     
     for (const anime of itemsToProbe) {
       const currentRatingNum = Number(parseFloat(String(anime.rating || 0)).toFixed(1));
@@ -672,10 +676,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       let scoreSource = '';
       let lastOmdbError = '';
 
-      // =========================================================================
-      // STAGE 1: DIRECT IMDb ID LOOKUP (100% Fail-Proof)
-      // Checks database record first, then verified known mapping
-      // =========================================================================
+      // STAGE 1: DIRECT IMDb ID LOOKUP
       const directCandidateIds: string[] = [];
       if (resolvedImdbId) directCandidateIds.push(resolvedImdbId);
       if (knownInfo) {
@@ -722,10 +723,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }
       }
 
-      // =========================================================================
       // STAGE 2: FUZZY CLEAN TITLE SEARCH
-      // Iterates through progressively sanitized title variations
-      // =========================================================================
       if (resolvedScore === null) {
         const queryCandidates = getCleanOmdbQueryTitles(knownInfo?.fallbackTitle || anime.title);
         addTerminalLog('PROBE', `[FUZZY TITLE SEARCH] Candidate variations: [${queryCandidates.map(c => `"${c}"`).join(', ')}]`);
@@ -760,61 +758,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }
       }
 
-      // =========================================================================
-      // STAGE 3: SCORE COMPARISON & DATABASE PUT DISPATCH
-      // =========================================================================
+      // STAGE 3: SCORE AUDIT & MANUAL APPROVAL QUEUEING
       if (resolvedScore !== null && !isNaN(resolvedScore)) {
         const localRating = Number(parseFloat(String(anime.rating || 0)).toFixed(1));
         const targetRating = Number(resolvedScore.toFixed(1));
 
         if (localRating !== targetRating) {
-          addTerminalLog('PROBE', `[MISMATCH DETECTED] '${anime.title}': Local DB ${localRating} != Real IMDb ${targetRating}`);
-          addTerminalLog('MUT', `[UPDATING] ${anime.title}: ${localRating} -> ${targetRating}`);
-          addTerminalLog('PUT', `Sending PUT to Cloudflare worker (anidub-apiii) for #${anime.id}...`);
-
-          try {
-            const updatedPayload = {
-              ...anime,
-              rating: targetRating,
-              imdbID: resolvedImdbId || anime.imdbID || anime.imdb_id,
-              imdb_id: resolvedImdbId || anime.imdbID || anime.imdb_id,
-              id: anime.id
-            };
-
-            await cloudflareApi.updateAnime(anime.id, updatedPayload);
-
-            // Optimistic instant state update for immediate UI reflection across tabs
-            setCatalog(prev => prev.map(item => (item.id === anime.id || String(item.id) === String(anime.id)) ? { ...item, rating: targetRating, imdbID: resolvedImdbId } : item));
-            setAnimes(prev => prev.map(item => (item.id === anime.id || String(item.id) === String(anime.id)) ? { ...item, rating: targetRating, imdbID: resolvedImdbId } : item));
-
-            updatedCount++;
-            addTerminalLog('OK', `[DB COMMITTED] #${anime.id} '${anime.title}' rating auto-corrected to ${targetRating} on Cloudflare D1 (HTTP 200 OK)`);
-          } catch (updateErr: any) {
-            // Literal raw error logging in SYS_TERM as requested
-            addTerminalLog('ERR', updateErr.message || `[ERROR] Failed updating #${anime.id} on Cloudflare`);
-            console.error(`[HEALTH PROBE UPDATE ERROR] Anime #${anime.id}:`, updateErr);
-          }
+          addTerminalLog('PROBE', `[MISMATCH FOUND] Action required for '${anime.title}': Local DB ${localRating} != Real IMDb ${targetRating}`);
+          collectedCorrections.push({
+            anime,
+            currentLocalRating: localRating,
+            realImdbRating: targetRating,
+            imdbID: resolvedImdbId
+          });
         } else {
-          addTerminalLog('OK', `[VERIFIED SYNC] '${anime.title}': Local DB rating (${localRating}) matches IMDb (${targetRating}). No auto-correction required.`);
+          addTerminalLog('OK', `[VERIFIED SYNC] '${anime.title}': Local DB rating (${localRating}) matches IMDb (${targetRating}). No action required.`);
         }
       } else {
         addTerminalLog('WARN', `[SKIPPED] '${anime.title}': Could not verify IMDb score. OMDb status: ${lastOmdbError || 'Unknown'}`);
       }
 
-      // Safe pacing delay
       await new Promise(resolve => setTimeout(resolve, 300));
     }
     
     setIsCheckingHealth(false);
     setHealthChecked(true);
-    addTerminalLog('SYS', `=== [PROBE SUMMARY] Audited: ${itemsToProbe.length} title(s) | Auto-Corrected: ${updatedCount} record(s) ===`);
-    setSuccessMsg(`IMDb health probe complete: ${updatedCount} title(s) auto-corrected on Cloudflare D1.`);
+    setPendingCorrections(collectedCorrections);
+    addTerminalLog('SYS', `=== [PROBE AUDIT COMPLETE] Audited: ${itemsToProbe.length} title(s) | Mismatches Found: ${collectedCorrections.length} pending admin approval ===`);
+    setSuccessMsg(`IMDb health probe complete: ${collectedCorrections.length} mismatch(es) found requiring admin approval.`);
     setTimeout(() => setSuccessMsg(''), 5000);
-    
-    // Refresh catalog from Cloudflare Worker to guarantee complete persistence
-    await fetchAnime();
-    if (typeof onAnimeCreated === 'function') {
-      onAnimeCreated();
+  };
+
+  const handleApproveCorrection = async (correction: { anime: any; currentLocalRating: number; realImdbRating: number; imdbID: string }) => {
+    const { anime, realImdbRating, imdbID } = correction;
+    addTerminalLog('MUT', `[ADMIN APPROVAL] Pushing update for '${anime.title}' (${correction.currentLocalRating} -> ${realImdbRating}) to Cloudflare D1...`);
+    try {
+      const updatedPayload = {
+        ...anime,
+        rating: realImdbRating,
+        imdbID: imdbID || anime.imdbID || anime.imdb_id,
+        imdb_id: imdbID || anime.imdbID || anime.imdb_id,
+        id: anime.id
+      };
+      await cloudflareApi.updateAnime(anime.id, updatedPayload);
+
+      setCatalog(prev => prev.map(item => (item.id === anime.id || String(item.id) === String(anime.id)) ? { ...item, rating: realImdbRating, imdbID: imdbID } : item));
+      setAnimes(prev => prev.map(item => (item.id === anime.id || String(item.id) === String(anime.id)) ? { ...item, rating: realImdbRating, imdbID: imdbID } : item));
+
+      setPendingCorrections(prev => prev.filter(c => c.anime.id !== anime.id));
+      addTerminalLog('OK', `[SUCCESS] Admin approved update for '${anime.title}'`);
+      setSuccessMsg(`Approved & pushed rating update for ${anime.title}`);
+      setTimeout(() => setSuccessMsg(''), 4000);
+      if (typeof onAnimeCreated === 'function') onAnimeCreated();
+    } catch (err: any) {
+      addTerminalLog('ERR', `[ERROR] Failed updating #${anime.id}: ${err.message}`);
+      setSuccessMsg(`Failed to push update for ${anime.title}`);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    }
+  };
+
+  const handleApproveAllCorrections = async () => {
+    for (const correction of [...pendingCorrections]) {
+      await handleApproveCorrection(correction);
     }
   };
 
@@ -2042,6 +2047,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <p className="text-[11px] text-neutral-500">Cloudflare Anycast route</p>
                 </div>
               </div>
+
+              {/* PENDING RATING CORRECTIONS MANUAL APPROVAL SECTION */}
+              {pendingCorrections.length > 0 && (
+                <div className="p-6 rounded-2xl bg-gradient-to-r from-amber-950/40 via-orange-950/30 to-amber-950/40 border border-amber-500/40 shadow-2xl space-y-4 animate-in fade-in duration-300">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.25)]">
+                        <AlertTriangle className="w-5 h-5 text-amber-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-bold text-white">Pending Rating Corrections ({pendingCorrections.length})</h4>
+                        <p className="text-xs text-neutral-300">Audited mismatches requiring admin consent before pushing to Cloudflare D1</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleApproveAllCorrections}
+                      className="h-9 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <Check className="w-4 h-4 stroke-[3]" />
+                      <span>Approve & Push All ({pendingCorrections.length})</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    {pendingCorrections.map((item, idx) => (
+                      <div key={idx} className="p-4 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <img 
+                            src={item.anime.cover_image || item.anime.posterUrl || item.anime.image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'} 
+                            alt={item.anime.title} 
+                            className="w-12 h-16 rounded-lg object-cover ring-1 ring-white/20 shrink-0" 
+                          />
+                          <div className="min-w-0 space-y-1">
+                            <span className="text-[10px] font-mono text-amber-400 uppercase tracking-wider font-semibold">Mismatch Detected</span>
+                            <h5 className="text-sm font-bold text-white truncate">{item.anime.title}</h5>
+                            <div className="flex items-center gap-3 text-xs font-mono">
+                              <span className="text-neutral-400">Current Local Rating: <strong className="text-rose-400">{item.currentLocalRating}</strong></span>
+                              <span className="text-neutral-400">→</span>
+                              <span className="text-neutral-400">Real IMDb Rating: <strong className="text-emerald-400">{item.realImdbRating}</strong></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/10">
+                          <button
+                            onClick={() => handleApproveCorrection(item)}
+                            className="h-9 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-md hover:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            <span>Approve & Push</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Real-time Diagnostics Terminal Stream Embed */}
               <div className="p-4 rounded-xl bg-[#07090e]/95 border border-white/10 font-mono text-xs space-y-2 shadow-inner">
