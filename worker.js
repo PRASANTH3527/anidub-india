@@ -20,90 +20,6 @@
  *  - POST /api/upload (ImgBB image upload proxy)
  */
 
-// Initial Seed Anime if KV is empty on first deployment
-const INITIAL_SEED_ANIME = [
-  {
-    id: 1,
-    title: "Tokyo Revengers",
-    slug: "tokyo-revengers",
-    synopsis: "Watching the news, Takemichi Hanagaki learns that his girlfriend from way back in middle school, Hinata Tachibana, has died. Suddenly finding himself transported 12 years into the past, he must save her by changing the Tokyo Manji Gang.",
-    cover_image: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.4,
-    episodes_count: 24,
-    status: "Completed",
-    submissionStatus: "approved",
-    season: "Spring",
-    year: 2021,
-    genres: "Action, Drama, Supernatural, Time Travel",
-    languages: "Hindi, Tamil, Telugu",
-    platform: "Crunchyroll",
-    type: "TV Series",
-    studio: "LIDENFILMS",
-    popularity: 2840
-  },
-  {
-    id: 2,
-    title: "Jujutsu Kaisen",
-    slug: "jujutsu-kaisen",
-    synopsis: "Yuji Itadori is a boy with tremendous physical strength, though he lives a completely ordinary high school life. One day, to save a classmate, he eats the finger of Ryomen Sukuna, taking the curse into his own soul.",
-    cover_image: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.9,
-    episodes_count: 47,
-    status: "Airing",
-    submissionStatus: "approved",
-    season: "Fall",
-    year: 2023,
-    genres: "Action, Dark Fantasy, Supernatural",
-    languages: "Hindi, Tamil, Telugu, Malayalam, Kannada",
-    platform: "Crunchyroll",
-    type: "TV Series",
-    studio: "MAPPA",
-    popularity: 4920
-  },
-  {
-    id: 3,
-    title: "Demon Slayer: Kimetsu no Yaiba",
-    slug: "demon-slayer-kimetsu-no-yaiba",
-    synopsis: "It is the Taisho Period in Japan. Tanjiro, a kindhearted boy who sells charcoal for a living, finds his family slaughtered by a demon. To make matters worse, his younger sister Nezuko has been transformed into a demon herself.",
-    cover_image: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.8,
-    episodes_count: 55,
-    status: "Airing",
-    submissionStatus: "approved",
-    season: "Spring",
-    year: 2024,
-    genres: "Action, Fantasy, Historical, Shonen",
-    languages: "Hindi, Tamil, Telugu",
-    platform: "Netflix",
-    type: "TV Series",
-    studio: "ufotable",
-    popularity: 5120
-  },
-  {
-    id: 4,
-    title: "Solo Leveling",
-    slug: "solo-leveling",
-    synopsis: "In a world where hunters, humans who possess magical abilities, battle deadly monsters to protect the human race from certain annihilation, a notoriously weak hunter named Sung Jinwoo finds himself in a struggle for survival.",
-    cover_image: "https://images.unsplash.com/photo-1563089145-599997674d42?w=800&auto=format&fit=crop&q=80",
-    banner_image: "https://images.unsplash.com/photo-1563089145-599997674d42?w=1600&auto=format&fit=crop&q=80",
-    rating: 8.7,
-    episodes_count: 12,
-    status: "Completed",
-    submissionStatus: "approved",
-    season: "Winter",
-    year: 2024,
-    genres: "Action, Adventure, Fantasy",
-    languages: "Hindi, Tamil, Telugu",
-    platform: "Crunchyroll",
-    type: "TV Series",
-    studio: "A-1 Pictures",
-    popularity: 3950
-  }
-];
-
 // Helper: Standard CORS Headers
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,22 +49,16 @@ function normalizeType(val) {
   return 'TV Series';
 }
 
-// Helper: Get or Initialize Catalog from Cloudflare KV
+// Helper: Get Catalog from Cloudflare KV (Strict D1/KV Reflection, No Seed / No Mock Data)
 async function getCatalog(env) {
-  // Check if ANIME_DB is bound to KV
   if (!env.ANIME_DB) {
-    console.warn("KV Namespace 'ANIME_DB' is not bound. Using memory fallback.");
-    return INITIAL_SEED_ANIME;
+    return [];
   }
-
   const raw = await env.ANIME_DB.get("anime_catalog", { type: "json" });
-  if (raw && Array.isArray(raw) && raw.length > 0) {
+  if (raw && Array.isArray(raw)) {
     return raw;
   }
-
-  // Pre-seed KV database with initial anime catalog
-  await env.ANIME_DB.put("anime_catalog", JSON.stringify(INITIAL_SEED_ANIME));
-  return INITIAL_SEED_ANIME;
+  return [];
 }
 
 // Helper: Save Catalog back to Cloudflare KV
