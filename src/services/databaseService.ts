@@ -18,6 +18,7 @@ export interface AnimeRecord {
   studio?: string;
   release_year?: number;
   created_at?: string;
+  likesCount?: number;
 }
 
 export interface WatchlistEntry {

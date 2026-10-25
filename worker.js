@@ -262,6 +262,7 @@ export default {
             episodes_count: body.episodes_count !== undefined ? parseInt(body.episodes_count, 10) : existing.episodes_count,
             status: body.status || existing.status,
             submissionStatus: body.submissionStatus || existing.submissionStatus || 'pending',
+            likesCount: body.likesCount !== undefined ? parseInt(body.likesCount, 10) : (existing.likesCount || 0),
             updated_at: new Date().toISOString()
           };
           catalog[existingIndex] = targetAnime;
@@ -290,6 +291,7 @@ export default {
             type: normalizeType(body.type || body.Type),
             studio: body.studio || "Unknown Studio",
             popularity: body.status === "pending" ? 0 : 1000,
+            likesCount: 0,
             mixedEntries: body.mixedEntries || [],
             created_at: new Date().toISOString()
           };
@@ -347,6 +349,7 @@ export default {
           type: normalizeType(body.type || body.Type || existing.type),
           genres: Array.isArray(body.genres) ? body.genres.join(", ") : (body.genres || existing.genres),
           languages: Array.isArray(body.languages) ? body.languages.join(", ") : (body.languages || existing.languages),
+          likesCount: body.likesCount !== undefined ? parseInt(body.likesCount, 10) : (existing.likesCount || 0),
           updated_at: new Date().toISOString()
         };
 
