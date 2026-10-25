@@ -416,7 +416,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           const currentSeasonVal = String(mappedSeasonsArray.length);
           const liveEpisodeVal = Number(episodesList[episodesList.length - 1]) || 12;
 
-          // 3. Create the exact payload with parsedType safely assigned to type
+          const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+          const existingMatch = catalog.find(
+            item => item.slug === slug || (item.title && title && item.title.toLowerCase().trim() === title.toLowerCase().trim())
+          );
+          const isUpdate = Boolean(existingMatch);
+
+          // 3. Create the exact payload with parsedType safely assigned to type and update status if title exists
           const payload = {
             title: title,
             cover_image: row['Cover Image'] || row.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
@@ -426,8 +432,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             studio: row.Studio || row.studio || '',
             type: parsedType,
             Type: parsedType,
-            status: (row.Status || row.status || 'Airing').trim(), // EXACT match from CSV
-            submissionStatus: 'pending',
+            status: isUpdate ? 'Update Pending' : (row.Status || row.status || 'Airing').trim(),
+            submissionStatus: isUpdate ? 'update_pending' : 'pending',
             episodes_count: Number(episodesList[episodesList.length - 1]) || 12,
             season: currentSeasonVal,
             current_season: currentSeasonVal,
@@ -438,7 +444,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             synopsis: row.Synopsis || row.synopsis || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs.',
             mixedEntries: mappedSeasonsArray,
             streamingPartners: [{ name: row.Platform || 'Crunchyroll', url: '' }],
-            moderationStatus: 'pending'
+            moderationStatus: isUpdate ? 'update_pending' : 'pending'
           };
 
           // 4. Call Cloudflare D1 save endpoint directly

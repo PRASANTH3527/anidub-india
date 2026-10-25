@@ -611,9 +611,9 @@ app.post('/api/anime', (req, res) => {
 
     const resolvedType = normalizeAnimeType(type || Type || 'TV Series');
 
-    // Check if anime already exists by slug to prevent UNIQUE constraint failure on re-imports
-    const existingStmt = db.prepare("SELECT id FROM anime WHERE slug = ?");
-    existingStmt.bind([slug]);
+    // Check if anime already exists by slug or title to prevent UNIQUE constraint failure on re-imports
+    const existingStmt = db.prepare("SELECT id FROM anime WHERE slug = ? OR LOWER(title) = LOWER(?)");
+    existingStmt.bind([slug, title.trim()]);
     let animeId: number | null = null;
     if (existingStmt.step()) {
       animeId = existingStmt.getAsObject().id as number;

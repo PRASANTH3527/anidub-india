@@ -221,7 +221,7 @@ export default {
       }
 
       // ----------------------------------------------------------------------
-      // 4. POST /api/anime - Create / Submit new Anime
+      // 4. POST /api/anime - Create / Submit new Anime (Strict Upsert Deduplication)
       // ----------------------------------------------------------------------
       if (path === "/api/anime" && method === "POST") {
         const body = await request.json();
@@ -230,51 +230,79 @@ export default {
         }
 
         const catalog = await getCatalog(env);
-        const maxId = catalog.reduce((max, a) => Math.max(max, Number(a.id) || 0), 0);
-        const newId = maxId + 1;
         const slug = (body.slug || body.title)
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/(^-|-$)/g, "");
 
+        const existingIndex = catalog.findIndex(
+          (a) => a.slug === slug || (a.title && body.title && a.title.toLowerCase().trim() === body.title.toLowerCase().trim())
+        );
+
+        let targetAnime;
+        let targetId;
         const resolvedCover = body.posterUrl || body.cover_image || body.image || body.poster || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80";
 
-        const newAnime = {
-          id: newId,
-          title: body.title.trim(),
-          slug,
-          synopsis: body.synopsis || "Follow this thrilling dubbed adventure streaming exclusively on AniDub India.",
-          cover_image: resolvedCover,
-          banner_image: body.banner_image || resolvedCover,
-          image: resolvedCover,
-          posterUrl: resolvedCover,
-          poster: resolvedCover,
-          rating: parseFloat(body.rating) || 8.5,
-          episodes_count: parseInt(body.episodes_count, 10) || 12,
-          status: body.status || "pending",
-          submissionStatus: body.submissionStatus || "pending",
-          season: body.season || "Spring",
-          year: parseInt(body.year, 10) || new Date().getFullYear(),
-          genres: Array.isArray(body.genres) ? body.genres.join(", ") : (body.genres || "Action, Fantasy"),
-          languages: Array.isArray(body.languages) ? body.languages.join(", ") : (body.languages || "Hindi, Tamil, Telugu"),
-          platform: body.platform || "Crunchyroll",
-          type: normalizeType(body.type || body.Type),
-          studio: body.studio || "Unknown Studio",
-          popularity: body.status === "pending" ? 0 : 1000,
-          mixedEntries: body.mixedEntries || [],
-          created_at: new Date().toISOString()
-        };
+        if (existingIndex !== -1) {
+          // UPSERT: Update existing record instead of creating duplicate
+          const existing = catalog[existingIndex];
+          targetId = existing.id;
+          targetAnime = {
+            ...existing,
+            ...body,
+            id: existing.id,
+            slug,
+            cover_image: resolvedCover,
+            banner_image: body.banner_image || resolvedCover,
+            image: resolvedCover,
+            posterUrl: resolvedCover,
+            poster: resolvedCover,
+            rating: body.rating !== undefined ? parseFloat(body.rating) : existing.rating,
+            episodes_count: body.episodes_count !== undefined ? parseInt(body.episodes_count, 10) : existing.episodes_count,
+            status: body.status || existing.status,
+            submissionStatus: body.submissionStatus || existing.submissionStatus || 'pending',
+            updated_at: new Date().toISOString()
+          };
+          catalog[existingIndex] = targetAnime;
+        } else {
+          const maxId = catalog.reduce((max, a) => Math.max(max, Number(a.id) || 0), 0);
+          targetId = maxId + 1;
+          targetAnime = {
+            id: targetId,
+            title: body.title.trim(),
+            slug,
+            synopsis: body.synopsis || "Follow this thrilling dubbed adventure streaming exclusively on AniDub India.",
+            cover_image: resolvedCover,
+            banner_image: body.banner_image || resolvedCover,
+            image: resolvedCover,
+            posterUrl: resolvedCover,
+            poster: resolvedCover,
+            rating: parseFloat(body.rating) || 8.5,
+            episodes_count: parseInt(body.episodes_count, 10) || 12,
+            status: body.status || "pending",
+            submissionStatus: body.submissionStatus || "pending",
+            season: body.season || "Spring",
+            year: parseInt(body.year, 10) || new Date().getFullYear(),
+            genres: Array.isArray(body.genres) ? body.genres.join(", ") : (body.genres || "Action, Fantasy"),
+            languages: Array.isArray(body.languages) ? body.languages.join(", ") : (body.languages || "Hindi, Tamil, Telugu"),
+            platform: body.platform || "Crunchyroll",
+            type: normalizeType(body.type || body.Type),
+            studio: body.studio || "Unknown Studio",
+            popularity: body.status === "pending" ? 0 : 1000,
+            mixedEntries: body.mixedEntries || [],
+            created_at: new Date().toISOString()
+          };
+          catalog.unshift(targetAnime);
+        }
 
-        // Add to catalog and save
-        catalog.unshift(newAnime);
         await saveCatalog(env, catalog);
 
         return jsonResponse({
           success: true,
-          animeId: newId,
+          animeId: targetId,
           slug,
-          data: newAnime
-        }, 201);
+          data: targetAnime
+        }, existingIndex !== -1 ? 200 : 201);
       }
 
       // ----------------------------------------------------------------------
