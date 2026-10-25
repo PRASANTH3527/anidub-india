@@ -401,9 +401,8 @@ export default {
 
         catalog[index].status = "Airing";
         catalog[index].submissionStatus = "approved";
-        if (!catalog[index].popularity || catalog[index].popularity === 0) {
-          catalog[index].popularity = 1000;
-        }
+        catalog[index].popularity = 0;
+        catalog[index].likesCount = 0;
 
         await saveCatalog(env, catalog);
 

@@ -1550,7 +1550,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
                 <div className="mt-3 text-3xl sm:text-4xl font-black text-white tracking-tight">
-                  {formattedUpvotes}
+                  {totalUpvotes}
                 </div>
                 <div className="mt-2 text-[11px] text-cyan-300/90 font-medium flex items-center gap-1.5 font-mono">
                   <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
