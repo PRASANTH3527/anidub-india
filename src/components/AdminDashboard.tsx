@@ -352,7 +352,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       transform: (v) => (typeof v === 'string' ? v.trim() : v),
       complete: async (results) => {
         const parsedRows = results.data as any[];
-        let successCount = 0;
+        let importedCount = 0;
+        let skippedCount = 0;
 
         // CSV Import State Mapper: When mapping rows from the CSV, ensure the property is explicitly named type in the final object array (e.g., type: parsedType)
         const mappedAnimeList = parsedRows.map((row: any) => {
@@ -373,6 +374,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           const title = row.Title || row.title || row['title'] || row['Title'] || '';
           if (!title) continue;
 
+          // Cross-reference against currently active catalog state (case-insensitive check)
+          const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+          const existingMatch = catalog.find(
+            item => item.slug === slug || (item.title && title && item.title.toLowerCase().trim() === title.toLowerCase().trim())
+          );
+
+          if (existingMatch) {
+            skippedCount++;
+            addTerminalLog('SKIP', `[CSV IMPORT] Skipped existing duplicate title: '${title}'`);
+            continue; // Completely reject/skip existing anime before reaching pending queue
+          }
+
           // 1. Find the actual key for Type dynamically, ignoring exact case or hidden spaces
           const typeKey = Object.keys(row).find(key => key.toLowerCase().includes('type'));
 
@@ -386,9 +399,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           else if (rawType.includes('tv') || rawType.length > 0) finalType = 'TV Series';
 
           let parsedType = finalType;
-          console.log("Parsed CSV Row:", row);
-          console.log("Mapped Type:", finalType);
-          console.log("Mapped Type:", parsedType);
 
           const mappedLanguages = (row.Languages || row.languages) ? String(row.Languages || row.languages).split('|').map((l: string) => l.trim()).filter(Boolean) : [];
           const mappedGenres = (row.Genres || row.genres) ? String(row.Genres || row.genres).split('|').map((g: string) => g.trim()).filter(Boolean) : [];
@@ -416,13 +426,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           const currentSeasonVal = String(mappedSeasonsArray.length);
           const liveEpisodeVal = Number(episodesList[episodesList.length - 1]) || 12;
 
-          const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-          const existingMatch = catalog.find(
-            item => item.slug === slug || (item.title && title && item.title.toLowerCase().trim() === title.toLowerCase().trim())
-          );
-          const isUpdate = Boolean(existingMatch);
-
-          // 3. Create the exact payload with parsedType safely assigned to type and update status if title exists
+          // 3. Create the exact payload with parsedType safely assigned to type
           const payload = {
             title: title,
             cover_image: row['Cover Image'] || row.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
@@ -432,8 +436,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             studio: row.Studio || row.studio || '',
             type: parsedType,
             Type: parsedType,
-            status: isUpdate ? 'Update Pending' : (row.Status || row.status || 'Airing').trim(),
-            submissionStatus: isUpdate ? 'update_pending' : 'pending',
+            status: (row.Status || row.status || 'Airing').trim(),
+            submissionStatus: 'pending',
             episodes_count: Number(episodesList[episodesList.length - 1]) || 12,
             season: currentSeasonVal,
             current_season: currentSeasonVal,
@@ -444,25 +448,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             synopsis: row.Synopsis || row.synopsis || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs.',
             mixedEntries: mappedSeasonsArray,
             streamingPartners: [{ name: row.Platform || 'Crunchyroll', url: '' }],
-            moderationStatus: isUpdate ? 'update_pending' : 'pending'
+            moderationStatus: 'pending'
           };
 
-          // 4. Call Cloudflare D1 save endpoint directly
+          // 4. Call Cloudflare D1 save endpoint directly for new items only
           try {
             await cloudflareApi.createAnime(payload);
-            successCount++;
+            importedCount++;
           } catch (err) {
             console.warn('Network notice during row import for:', title, err);
-            successCount++;
+            importedCount++;
           }
         }
         
-        // 5. Show success toast, DO NOT setModalOpen(true)
-        setImportedCount(successCount);
+        // 5. Show success toast with exact breakdown of imported vs skipped duplicates
+        const feedbackMsg = `Imported ${importedCount} new anime. Skipped ${skippedCount} existing duplicates.`;
+        setImportedCount(importedCount);
         setShowImportToast(true);
-        setSuccessMsg(`Successfully imported ${successCount} anime to pending!`);
+        setSuccessMsg(feedbackMsg);
         if (typeof onToast === 'function') {
-          onToast(`Successfully imported ${successCount} anime to pending!`);
+          onToast(feedbackMsg);
         }
 
         await fetchAnime();
