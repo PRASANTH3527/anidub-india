@@ -50,21 +50,52 @@ function normalizeType(val) {
   return 'TV Series';
 }
 
-// Helper: Get Catalog from Cloudflare KV (Strict D1/KV Reflection, No Seed / No Mock Data)
+// Helper: Check if Cloudflare D1 SQL binding is attached
+function getD1(env) {
+  if (env && env.DB && typeof env.DB.prepare === 'function') return env.DB;
+  if (env && env.ANIME_DB && typeof env.ANIME_DB.prepare === 'function') return env.ANIME_DB;
+  if (env && env.DATABASE && typeof env.DATABASE.prepare === 'function') return env.DATABASE;
+  return null;
+}
+
+// Helper: Get Catalog from Cloudflare D1 or KV (Strict Reflection, No Seed / No Mock Data)
 async function getCatalog(env) {
-  if (!env.ANIME_DB) {
-    return [];
+  const d1 = getD1(env);
+  if (d1) {
+    try {
+      const { results } = await d1.prepare("SELECT * FROM anime ORDER BY id DESC").all();
+      if (results && Array.isArray(results) && results.length > 0) {
+        return results.map(item => ({
+          ...item,
+          likes: Number(item.likes !== undefined ? item.likes : (item.likesCount !== undefined ? item.likesCount : 0)),
+          likesCount: Number(item.likesCount !== undefined ? item.likesCount : (item.likes !== undefined ? item.likes : 0)),
+          upvotes: Number(item.upvotes !== undefined ? item.upvotes : (item.popularity !== undefined ? item.popularity : 0)),
+          popularity: Number(item.popularity !== undefined ? item.popularity : (item.upvotes !== undefined ? item.upvotes : 0))
+        }));
+      }
+    } catch (err) {
+      console.warn("[Worker] D1 query failed, falling back to KV:", err);
+    }
   }
-  const raw = await env.ANIME_DB.get("anime_catalog", { type: "json" });
-  if (raw && Array.isArray(raw)) {
-    return raw;
+
+  if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
+    const raw = await env.ANIME_DB.get("anime_catalog", { type: "json" });
+    if (raw && Array.isArray(raw)) {
+      return raw.map(item => ({
+        ...item,
+        likes: Number(item.likes !== undefined ? item.likes : (item.likesCount !== undefined ? item.likesCount : 0)),
+        likesCount: Number(item.likesCount !== undefined ? item.likesCount : (item.likes !== undefined ? item.likes : 0)),
+        upvotes: Number(item.upvotes !== undefined ? item.upvotes : (item.popularity !== undefined ? item.popularity : 0)),
+        popularity: Number(item.popularity !== undefined ? item.popularity : (item.upvotes !== undefined ? item.upvotes : 0))
+      }));
+    }
   }
   return [];
 }
 
 // Helper: Save Catalog back to Cloudflare KV
 async function saveCatalog(env, catalog) {
-  if (env.ANIME_DB) {
+  if (env && env.ANIME_DB && typeof env.ANIME_DB.put === 'function') {
     await env.ANIME_DB.put("anime_catalog", JSON.stringify(catalog));
   }
 }
@@ -434,9 +465,9 @@ export default {
       }
 
       // ----------------------------------------------------------------------
-      // 8. POST /api/anime/:id/vote - Community Upvote
+      // 8. POST /api/anime/:id/vote or /api/anime/:id/upvote - Community Upvote
       // ----------------------------------------------------------------------
-      const voteMatch = path.match(/^\/api\/anime\/([^/]+)\/vote$/);
+      const voteMatch = path.match(/^\/api\/anime\/([^/]+)\/(?:vote|upvote)$/);
       if (voteMatch && method === "POST") {
         const id = voteMatch[1];
         let body = {};
@@ -444,27 +475,60 @@ export default {
           body = await request.json();
         } catch (_) {}
 
-        const catalog = await getCatalog(env);
-        const item = catalog.find((a) => String(a.id) === id);
-
-        if (!item) return jsonResponse({ error: "Anime not found" }, 404);
-
         const delta = typeof body.delta === 'number' ? body.delta : (body.action === 'down' ? -1 : 1);
-        item.popularity = Math.max(0, (Number(item.popularity) || 0) + delta);
-        await saveCatalog(env, catalog);
+        const d1 = getD1(env);
+        let finalUpvotes = 0;
+        let d1Updated = false;
 
-        // If Cloudflare D1 SQL binding is also bound in env
-        if (env.DB && typeof env.DB.prepare === 'function') {
+        // 1. Direct Cloudflare D1 Update
+        if (d1) {
           try {
-            await env.DB.prepare(
-              "UPDATE anime SET popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?"
-            ).bind(delta, id).run();
-          } catch (_) {}
+            // Attempt to update both upvotes and popularity columns
+            try {
+              await d1.prepare(
+                "UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + ?), popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?"
+              ).bind(delta, delta, id).run();
+              d1Updated = true;
+            } catch (colErr) {
+              // If only one of the columns exists, try updating individual columns
+              try {
+                await d1.prepare("UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + ?) WHERE id = ?").bind(delta, id).run();
+                d1Updated = true;
+              } catch (_) {
+                await d1.prepare("UPDATE anime SET popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?").bind(delta, id).run();
+                d1Updated = true;
+              }
+            }
+
+            // Read back fresh value from D1
+            const d1Row = await d1.prepare("SELECT upvotes, popularity FROM anime WHERE id = ?").bind(id).first();
+            if (d1Row) {
+              finalUpvotes = Number(d1Row.upvotes !== undefined ? d1Row.upvotes : (d1Row.popularity !== undefined ? d1Row.popularity : 0));
+            }
+          } catch (d1Err) {
+            console.error(`[Worker D1 Upvote Error for anime #${id}]:`, d1Err);
+          }
+        }
+
+        // 2. Synchronize with KV storage
+        const catalog = await getCatalog(env);
+        const item = catalog.find((a) => String(a.id) === String(id));
+        if (item) {
+          if (!d1Updated) {
+            finalUpvotes = Math.max(0, (Number(item.upvotes !== undefined ? item.upvotes : item.popularity) || 0) + delta);
+          }
+          item.upvotes = finalUpvotes;
+          item.popularity = finalUpvotes;
+          await saveCatalog(env, catalog);
+        } else if (!d1Updated) {
+          return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404);
         }
 
         return jsonResponse({
           success: true,
-          popularity: item.popularity
+          id,
+          upvotes: finalUpvotes,
+          popularity: finalUpvotes
         });
       }
 
@@ -479,27 +543,60 @@ export default {
           body = await request.json();
         } catch (_) {}
 
-        const catalog = await getCatalog(env);
-        const item = catalog.find((a) => String(a.id) === id);
-
-        if (!item) return jsonResponse({ error: "Anime not found" }, 404);
-
         const delta = typeof body.delta === 'number' ? body.delta : (body.action === 'unlike' ? -1 : 1);
-        item.likesCount = Math.max(0, (Number(item.likesCount) || 0) + delta);
-        await saveCatalog(env, catalog);
+        const d1 = getD1(env);
+        let finalLikes = 0;
+        let d1Updated = false;
 
-        // If Cloudflare D1 SQL binding is also bound in env
-        if (env.DB && typeof env.DB.prepare === 'function') {
+        // 1. Direct Cloudflare D1 Update
+        if (d1) {
           try {
-            await env.DB.prepare(
-              "UPDATE anime SET likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?"
-            ).bind(delta, id).run();
-          } catch (_) {}
+            // Attempt to update both likes and likesCount columns
+            try {
+              await d1.prepare(
+                "UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + ?), likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?"
+              ).bind(delta, delta, id).run();
+              d1Updated = true;
+            } catch (colErr) {
+              // If only one of the columns exists, try updating individual columns
+              try {
+                await d1.prepare("UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + ?) WHERE id = ?").bind(delta, id).run();
+                d1Updated = true;
+              } catch (_) {
+                await d1.prepare("UPDATE anime SET likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?").bind(delta, id).run();
+                d1Updated = true;
+              }
+            }
+
+            // Read back fresh value from D1
+            const d1Row = await d1.prepare("SELECT likes, likesCount FROM anime WHERE id = ?").bind(id).first();
+            if (d1Row) {
+              finalLikes = Number(d1Row.likes !== undefined ? d1Row.likes : (d1Row.likesCount !== undefined ? d1Row.likesCount : 0));
+            }
+          } catch (d1Err) {
+            console.error(`[Worker D1 Like Error for anime #${id}]:`, d1Err);
+          }
+        }
+
+        // 2. Synchronize with KV storage
+        const catalog = await getCatalog(env);
+        const item = catalog.find((a) => String(a.id) === String(id));
+        if (item) {
+          if (!d1Updated) {
+            finalLikes = Math.max(0, (Number(item.likes !== undefined ? item.likes : item.likesCount) || 0) + delta);
+          }
+          item.likes = finalLikes;
+          item.likesCount = finalLikes;
+          await saveCatalog(env, catalog);
+        } else if (!d1Updated) {
+          return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404);
         }
 
         return jsonResponse({
           success: true,
-          likesCount: item.likesCount
+          id,
+          likes: finalLikes,
+          likesCount: finalLikes
         });
       }
 

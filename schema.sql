@@ -28,7 +28,10 @@ CREATE TABLE IF NOT EXISTS anime (
   season TEXT DEFAULT 'Spring',
   year INTEGER DEFAULT 2026,
   genres TEXT NOT NULL,
-  popularity INTEGER DEFAULT 1000,
+  popularity INTEGER DEFAULT 0,
+  upvotes INTEGER DEFAULT 0,
+  likes INTEGER DEFAULT 0,
+  likesCount INTEGER DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 

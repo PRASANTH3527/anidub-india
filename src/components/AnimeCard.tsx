@@ -202,14 +202,18 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         action: nextLiked ? 'like' : 'unlike',
         delta
       });
-      if (res && typeof res.likesCount === 'number') {
-        setInternalHeartCount(res.likesCount);
-        if (onToggleLike && res.likesCount !== optimisticCount) {
-          onToggleLike(anime.id, nextLiked, res.likesCount);
-        }
+      const updatedCount = (res && typeof res.likes === 'number') 
+        ? res.likes 
+        : (res && typeof res.likesCount === 'number') 
+          ? res.likesCount 
+          : optimisticCount;
+      setInternalHeartCount(updatedCount);
+      if (onToggleLike && updatedCount !== optimisticCount) {
+        onToggleLike(anime.id, nextLiked, updatedCount);
       }
-    } catch (err) {
-      console.warn(`[AniDub] Failed to sync like for anime #${anime.id}:`, err);
+    } catch (error) {
+      console.log(error);
+      console.error(`[AnimeCard] Failed to sync like for anime #${anime.id}:`, error);
     } finally {
       setIsLiking(false);
     }
@@ -251,14 +255,18 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         action: nextUpvoted ? 'up' : 'down',
         delta
       });
-      if (res && typeof res.popularity === 'number') {
-        setInternalUpvoteCount(res.popularity);
-        if (onToggleUpvote && res.popularity !== optimisticCount) {
-          onToggleUpvote(anime.id, nextUpvoted, res.popularity);
-        }
+      const updatedCount = (res && typeof res.upvotes === 'number') 
+        ? res.upvotes 
+        : (res && typeof res.popularity === 'number') 
+          ? res.popularity 
+          : optimisticCount;
+      setInternalUpvoteCount(updatedCount);
+      if (onToggleUpvote && updatedCount !== optimisticCount) {
+        onToggleUpvote(anime.id, nextUpvoted, updatedCount);
       }
-    } catch (err) {
-      console.warn(`[AniDub] Failed to sync upvote for anime #${anime.id}:`, err);
+    } catch (error) {
+      console.log(error);
+      console.error(`[AnimeCard] Failed to sync upvote for anime #${anime.id}:`, error);
     } finally {
       setIsVoting(false);
     }

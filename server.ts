@@ -182,8 +182,9 @@ function runMigrations() {
   try { db.run("ALTER TABLE anime ADD COLUMN submissionStatus TEXT DEFAULT 'approved';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT '';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN mixedEntries TEXT DEFAULT '';"); } catch (e) {}
-  try { db.run("ALTER TABLE anime ADD COLUMN imdbID TEXT DEFAULT '';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN likesCount INTEGER DEFAULT 0;"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN likes INTEGER DEFAULT 0;"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN upvotes INTEGER DEFAULT 0;"); } catch (e) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS episodes (
@@ -840,19 +841,23 @@ app.post('/api/anime/:id/vote', (req, res) => {
   try {
     const animeId = req.params.id;
     const delta = typeof req.body?.delta === 'number' ? req.body.delta : (req.body?.action === 'down' ? -1 : 1);
-    db.run("UPDATE anime SET popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?", [delta, animeId]);
+    try {
+      db.run("UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + ?), popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?", [delta, delta, animeId]);
+    } catch (_) {
+      db.run("UPDATE anime SET popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?", [delta, animeId]);
+    }
     persistD1();
     
-    const stmt = db.prepare("SELECT popularity FROM anime WHERE id = ?");
+    const stmt = db.prepare("SELECT upvotes, popularity FROM anime WHERE id = ?");
     stmt.bind([animeId]);
     let newPopularity = 0;
     if (stmt.step()) {
       const row: any = stmt.getAsObject();
-      newPopularity = row.popularity ?? 0;
+      newPopularity = row.upvotes ?? row.popularity ?? 0;
     }
     stmt.free();
 
-    res.json({ success: true, popularity: newPopularity });
+    res.json({ success: true, upvotes: newPopularity, popularity: newPopularity });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -863,19 +868,23 @@ app.post('/api/anime/:id/like', (req, res) => {
   try {
     const animeId = req.params.id;
     const delta = typeof req.body?.delta === 'number' ? req.body.delta : (req.body?.action === 'unlike' ? -1 : 1);
-    db.run("UPDATE anime SET likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?", [delta, animeId]);
+    try {
+      db.run("UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + ?), likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?", [delta, delta, animeId]);
+    } catch (_) {
+      db.run("UPDATE anime SET likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?", [delta, animeId]);
+    }
     persistD1();
 
-    const stmt = db.prepare("SELECT likesCount FROM anime WHERE id = ?");
+    const stmt = db.prepare("SELECT likes, likesCount FROM anime WHERE id = ?");
     stmt.bind([animeId]);
     let newLikes = 0;
     if (stmt.step()) {
       const row: any = stmt.getAsObject();
-      newLikes = row.likesCount ?? 0;
+      newLikes = row.likes ?? row.likesCount ?? 0;
     }
     stmt.free();
 
-    res.json({ success: true, likesCount: newLikes });
+    res.json({ success: true, likes: newLikes, likesCount: newLikes });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

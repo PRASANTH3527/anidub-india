@@ -248,17 +248,32 @@ class CloudflareApiService {
   /**
    * LIKE: Registers like increment or decrement in Cloudflare Worker / D1
    */
-  public async likeAnime(id: number | string, options?: { action?: 'like' | 'unlike'; delta?: number }): Promise<{ success: boolean; likesCount: number }> {
+  public async likeAnime(id: number | string, options?: { action?: 'like' | 'unlike'; delta?: number }): Promise<{ success: boolean; likes?: number; likesCount?: number }> {
     const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.LIKE(id));
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: this.getHeaders(false),
-      body: JSON.stringify(options || {})
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: this.getHeaders(false),
+        body: JSON.stringify(options || {})
+      });
+    } catch (networkErr: any) {
+      throw new Error(`[Network/Fetch Error] Unable to connect to ${url}: ${networkErr.message}`);
+    }
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Failed to like anime ID ${id} on Cloudflare API`);
+      let errDetail = '';
+      try {
+        const errJson = await res.json();
+        errDetail = errJson.error || errJson.message || JSON.stringify(errJson);
+      } catch {
+        errDetail = await res.text().catch(() => res.statusText);
+      }
+      const httpError = new Error(`HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update like'} at ${url}`);
+      (httpError as any).status = res.status;
+      (httpError as any).statusText = res.statusText;
+      (httpError as any).url = url;
+      throw httpError;
     }
 
     return await res.json();
@@ -267,17 +282,32 @@ class CloudflareApiService {
   /**
    * VOTE: Registers community upvote in Cloudflare D1
    */
-  public async upvoteAnime(id: number | string, options?: { action?: 'up' | 'down'; delta?: number }): Promise<{ success: boolean; popularity: number }> {
+  public async upvoteAnime(id: number | string, options?: { action?: 'up' | 'down'; delta?: number }): Promise<{ success: boolean; upvotes?: number; popularity?: number }> {
     const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.VOTE(id));
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: this.getHeaders(false),
-      body: JSON.stringify(options || {})
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: this.getHeaders(false),
+        body: JSON.stringify(options || {})
+      });
+    } catch (networkErr: any) {
+      throw new Error(`[Network/Fetch Error] Unable to connect to ${url}: ${networkErr.message}`);
+    }
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Failed to upvote anime ID ${id} on Cloudflare API`);
+      let errDetail = '';
+      try {
+        const errJson = await res.json();
+        errDetail = errJson.error || errJson.message || JSON.stringify(errJson);
+      } catch {
+        errDetail = await res.text().catch(() => res.statusText);
+      }
+      const httpError = new Error(`HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update upvote'} at ${url}`);
+      (httpError as any).status = res.status;
+      (httpError as any).statusText = res.statusText;
+      (httpError as any).url = url;
+      throw httpError;
     }
 
     return await res.json();
