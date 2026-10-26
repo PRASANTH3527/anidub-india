@@ -7,9 +7,11 @@ import {
   Share2, 
   Heart, 
   Bookmark, 
-  Star 
+  Star,
+  Check
 } from 'lucide-react';
 import { cloudflareApi } from '../services/cloudflareApi';
+import { useToast } from './Toast';
 
 export interface AnimeCardData {
   id: number;
@@ -72,25 +74,9 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   isTrending = true,
   isCached = true
 }) => {
-  const [internalLiked, setInternalLiked] = useState<boolean>(() => {
-    if (typeof isLiked === 'boolean') return isLiked;
-    try {
-      const saved = JSON.parse(localStorage.getItem('cf_user_likes') || '[]');
-      return Array.isArray(saved) && saved.includes(anime.id);
-    } catch {
-      return false;
-    }
-  });
-
-  const [internalUpvoted, setInternalUpvoted] = useState<boolean>(() => {
-    if (typeof isUpvoted === 'boolean') return isUpvoted;
-    try {
-      const saved = JSON.parse(localStorage.getItem('cf_user_upvotes') || '[]');
-      return Array.isArray(saved) && saved.includes(anime.id);
-    } catch {
-      return false;
-    }
-  });
+  // IP-Based Vote States (No LocalStorage limitations)
+  const [internalLiked, setInternalLiked] = useState<boolean>(Boolean(isLiked));
+  const [internalUpvoted, setInternalUpvoted] = useState<boolean>(Boolean(isUpvoted));
 
   const [internalHeartCount, setInternalHeartCount] = useState<number>(
     Number(anime.likesCount) || 0
@@ -101,6 +87,30 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 
   const [isLiking, setIsLiking] = useState(false);
   const [isVoting, setIsVoting] = useState(false);
+  const [cardNotice, setCardNotice] = useState<string | null>(null);
+
+  // Safe toast access
+  let toast: any = null;
+  try {
+    toast = useToast();
+  } catch {
+    toast = null;
+  }
+
+  // Check IP vote status from backend on mount
+  useEffect(() => {
+    let isMounted = true;
+    cloudflareApi.checkVoteStatus(anime.id).then((status) => {
+      if (isMounted) {
+        if (status.hasLiked) setInternalLiked(true);
+        if (status.hasUpvoted) setInternalUpvoted(true);
+      }
+    }).catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [anime.id]);
 
   // Sync state when props change
   useEffect(() => {
@@ -114,24 +124,26 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   useEffect(() => {
     if (typeof isLiked === 'boolean') {
       setInternalLiked(isLiked);
-    } else {
-      try {
-        const saved = JSON.parse(localStorage.getItem('cf_user_likes') || '[]');
-        if (Array.isArray(saved)) setInternalLiked(saved.includes(anime.id));
-      } catch {}
     }
-  }, [anime.id, isLiked]);
+  }, [isLiked]);
 
   useEffect(() => {
     if (typeof isUpvoted === 'boolean') {
       setInternalUpvoted(isUpvoted);
-    } else {
-      try {
-        const saved = JSON.parse(localStorage.getItem('cf_user_upvotes') || '[]');
-        if (Array.isArray(saved)) setInternalUpvoted(saved.includes(anime.id));
-      } catch {}
     }
-  }, [anime.id, isUpvoted]);
+  }, [isUpvoted]);
+
+  const showNotification = (title: string, message: string, type: 'success' | 'warning' | 'info' = 'warning') => {
+    setCardNotice(message);
+    if (toast) {
+      if (type === 'success') toast.success(title, message);
+      else if (type === 'warning') toast.error(title, message);
+      else toast.info(title, message);
+    }
+    setTimeout(() => {
+      setCardNotice(null);
+    }, 2800);
+  };
 
   // Normalize languages
   const rawLangs = Array.isArray(anime.languages)
@@ -166,107 +178,89 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     return fallbacks[(anime.id || 0) % fallbacks.length];
   };
 
+  // 1-Vote per user IP like handler
   const handleLikeClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isLiking) return;
-    setIsLiking(true);
 
-    const nextLiked = !internalLiked;
-    const delta = nextLiked ? 1 : -1;
-    const optimisticCount = Math.max(0, (internalHeartCount || 0) + delta);
-
-    // 1. Instant local and optimistic UI updates
-    setInternalLiked(nextLiked);
-    setInternalHeartCount(optimisticCount);
-
-    // 2. Persist local user state in localStorage
-    try {
-      const saved = JSON.parse(localStorage.getItem('cf_user_likes') || '[]');
-      const set = new Set(Array.isArray(saved) ? saved : []);
-      if (nextLiked) {
-        set.add(anime.id);
-      } else {
-        set.delete(anime.id);
-      }
-      localStorage.setItem('cf_user_likes', JSON.stringify(Array.from(set)));
-    } catch {}
-
-    // 3. Notify parent listener (updates catalogList in App / CatalogView)
-    if (onToggleLike) {
-      onToggleLike(anime.id, nextLiked, optimisticCount);
+    if (internalLiked) {
+      showNotification('Already Voted', 'You have already liked this anime from this IP.', 'warning');
+      return;
     }
 
-    // 4. Send API POST to Cloudflare Worker / D1
+    setIsLiking(true);
+
     try {
       const res = await cloudflareApi.likeAnime(anime.id, {
-        action: nextLiked ? 'like' : 'unlike',
-        delta
+        action: 'like',
+        delta: 1
       });
       const updatedCount = (res && typeof res.likes === 'number') 
         ? res.likes 
         : (res && typeof res.likesCount === 'number') 
           ? res.likesCount 
-          : optimisticCount;
+          : (internalHeartCount + 1);
+
+      setInternalLiked(true);
       setInternalHeartCount(updatedCount);
-      if (onToggleLike && updatedCount !== optimisticCount) {
-        onToggleLike(anime.id, nextLiked, updatedCount);
+      if (onToggleLike) {
+        onToggleLike(anime.id, true, updatedCount);
       }
-    } catch (error) {
+      showNotification('Vote Recorded', `Liked ${anime.title}!`, 'success');
+    } catch (error: any) {
       console.log(error);
-      console.error(`[AnimeCard] Failed to sync like for anime #${anime.id}:`, error);
+      const isAlreadyVoted = error?.alreadyVoted || /already voted/i.test(error?.message || '');
+      if (isAlreadyVoted) {
+        setInternalLiked(true);
+        showNotification('Already Voted', 'Already voted! 1 vote allowed per IP address.', 'warning');
+      } else {
+        console.error(`[AnimeCard] Failed to sync like for anime #${anime.id}:`, error);
+        showNotification('Vote Failed', error?.message || 'Could not register vote.', 'warning');
+      }
     } finally {
       setIsLiking(false);
     }
   };
 
+  // 1-Vote per user IP upvote handler
   const handleUpvoteClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isVoting) return;
-    setIsVoting(true);
 
-    const nextUpvoted = !internalUpvoted;
-    const delta = nextUpvoted ? 1 : -1;
-    const optimisticCount = Math.max(0, (internalUpvoteCount || 0) + delta);
-
-    // 1. Instant local and optimistic UI updates
-    setInternalUpvoted(nextUpvoted);
-    setInternalUpvoteCount(optimisticCount);
-
-    // 2. Persist local user state in localStorage
-    try {
-      const saved = JSON.parse(localStorage.getItem('cf_user_upvotes') || '[]');
-      const set = new Set(Array.isArray(saved) ? saved : []);
-      if (nextUpvoted) {
-        set.add(anime.id);
-      } else {
-        set.delete(anime.id);
-      }
-      localStorage.setItem('cf_user_upvotes', JSON.stringify(Array.from(set)));
-    } catch {}
-
-    // 3. Notify parent listener (updates catalogList in App / CatalogView)
-    if (onToggleUpvote) {
-      onToggleUpvote(anime.id, nextUpvoted, optimisticCount);
+    if (internalUpvoted) {
+      showNotification('Already Voted', 'You have already upvoted this anime from this IP.', 'warning');
+      return;
     }
 
-    // 4. Send API POST to Cloudflare Worker / D1
+    setIsVoting(true);
+
     try {
       const res = await cloudflareApi.upvoteAnime(anime.id, {
-        action: nextUpvoted ? 'up' : 'down',
-        delta
+        action: 'up',
+        delta: 1
       });
       const updatedCount = (res && typeof res.upvotes === 'number') 
         ? res.upvotes 
         : (res && typeof res.popularity === 'number') 
           ? res.popularity 
-          : optimisticCount;
+          : (internalUpvoteCount + 1);
+
+      setInternalUpvoted(true);
       setInternalUpvoteCount(updatedCount);
-      if (onToggleUpvote && updatedCount !== optimisticCount) {
-        onToggleUpvote(anime.id, nextUpvoted, updatedCount);
+      if (onToggleUpvote) {
+        onToggleUpvote(anime.id, true, updatedCount);
       }
-    } catch (error) {
+      showNotification('Vote Recorded', `Upvoted ${anime.title}!`, 'success');
+    } catch (error: any) {
       console.log(error);
-      console.error(`[AnimeCard] Failed to sync upvote for anime #${anime.id}:`, error);
+      const isAlreadyVoted = error?.alreadyVoted || /already voted/i.test(error?.message || '');
+      if (isAlreadyVoted) {
+        setInternalUpvoted(true);
+        showNotification('Already Voted', 'Already voted! 1 vote allowed per IP address.', 'warning');
+      } else {
+        console.error(`[AnimeCard] Failed to sync upvote for anime #${anime.id}:`, error);
+        showNotification('Vote Failed', error?.message || 'Could not register upvote.', 'warning');
+      }
     } finally {
       setIsVoting(false);
     }
@@ -296,6 +290,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         onClick={() => onSelect(anime)}
         className="group relative flex flex-col h-full bg-[#131926] transition-all duration-300 cursor-pointer select-none rounded-2xl overflow-hidden border border-neutral-800/60 hover:border-purple-500/40 shadow-lg"
       >
+        {/* CARD NOTIFICATION BADGE */}
+        {cardNotice && (
+          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-3 py-1 bg-neutral-900/95 border border-purple-500/60 text-white text-[10px] font-bold rounded-full shadow-2xl backdrop-blur-md pointer-events-none text-center whitespace-nowrap">
+            {cardNotice}
+          </div>
+        )}
+
         {/* POSTER CONTAINER */}
         <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
           <img
@@ -353,12 +354,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
             {/* Always Visible Like Button */}
             <button
               onClick={handleLikeClick}
+              disabled={isLiking || internalLiked}
               className={`p-1.5 rounded-full backdrop-blur-md border transition-all active:scale-90 shadow-md ${
                 internalLiked 
-                  ? 'bg-primary-theme text-white border-primary-light/50 shadow-lg shadow-purple-950/40' 
-                  : 'bg-black/60 text-neutral-300 hover:text-primary-theme border-white/10'
-              }`}
-              title="Like"
+                  ? 'bg-primary-theme text-white border-primary-light/50 shadow-lg shadow-purple-950/40 cursor-default' 
+                  : 'bg-black/60 text-neutral-300 hover:text-primary-theme border-white/10 cursor-pointer'
+              } ${isLiking ? 'opacity-50 animate-pulse' : ''}`}
+              title={internalLiked ? 'Already liked from this IP' : 'Like (1 per IP)'}
             >
               <Heart className={`w-3.5 h-3.5 ${internalLiked ? 'fill-white text-white' : ''}`} />
             </button>
@@ -470,11 +472,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               <button
                 type="button"
                 onClick={handleLikeClick}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black cursor-pointer transition-all active:scale-95 ${
+                disabled={isLiking || internalLiked}
+                title={internalLiked ? 'Already liked from this IP' : 'Like (1 vote per IP)'}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all active:scale-95 ${
                   internalLiked
-                    ? 'bg-primary-theme/20 text-primary-theme border border-primary-theme/40'
-                    : 'bg-[#161d2f] text-neutral-400 border border-neutral-800'
-                }`}
+                    ? 'bg-primary-theme/25 text-primary-theme border border-primary-theme/50 cursor-default'
+                    : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:border-purple-500/40 cursor-pointer'
+                } ${isLiking ? 'opacity-50' : ''}`}
               >
                 <Heart className={`w-3 h-3 ${internalLiked ? 'fill-current' : ''}`} />
                 <span>{internalHeartCount}</span>
@@ -484,11 +488,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               <button
                 type="button"
                 onClick={handleUpvoteClick}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black cursor-pointer transition-all active:scale-95 ${
+                disabled={isVoting || internalUpvoted}
+                title={internalUpvoted ? 'Already upvoted from this IP' : 'Upvote (1 vote per IP)'}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all active:scale-95 ${
                   internalUpvoted
-                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
-                    : 'bg-[#161d2f] text-neutral-400 border border-neutral-800'
-                }`}
+                    ? 'bg-orange-500/25 text-orange-400 border border-orange-500/50 cursor-default'
+                    : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:border-orange-500/40 cursor-pointer'
+                } ${isVoting ? 'opacity-50' : ''}`}
               >
                 <Flame className={`w-3 h-3 ${internalUpvoted ? 'fill-current' : ''}`} />
                 <span>{internalUpvoteCount}</span>

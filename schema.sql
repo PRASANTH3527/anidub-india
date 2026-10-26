@@ -91,6 +91,19 @@ CREATE TABLE IF NOT EXISTS cloudflare_logs (
   details TEXT
 );
 
+-- 8. IP-Based User Votes Table (Strictly 1 vote per IP per anime per type)
+CREATE TABLE IF NOT EXISTS user_votes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  anime_id INTEGER NOT NULL,
+  ip_address TEXT NOT NULL,
+  vote_type TEXT NOT NULL CHECK(vote_type IN ('like', 'upvote')),
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (anime_id) REFERENCES anime(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_votes_unique ON user_votes(anime_id, ip_address, vote_type);
+CREATE INDEX IF NOT EXISTS idx_user_votes_lookup ON user_votes(ip_address, anime_id);
+
 -- Indexes for lightning-fast D1 catalog queries & pagination
 CREATE INDEX IF NOT EXISTS idx_anime_popularity ON anime(popularity DESC);
 CREATE INDEX IF NOT EXISTS idx_anime_rating ON anime(rating DESC);

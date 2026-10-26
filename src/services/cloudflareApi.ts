@@ -263,15 +263,22 @@ class CloudflareApiService {
 
     if (!res.ok) {
       let errDetail = '';
+      let isAlreadyVoted = false;
       try {
         const errJson = await res.json();
-        errDetail = errJson.error || errJson.message || JSON.stringify(errJson);
+        errDetail = errJson.message || errJson.error || JSON.stringify(errJson);
+        if (errJson.alreadyVoted || errJson.error === 'Already voted' || /already voted/i.test(errDetail)) {
+          isAlreadyVoted = true;
+        }
       } catch {
         errDetail = await res.text().catch(() => res.statusText);
+        if (/already voted/i.test(errDetail)) isAlreadyVoted = true;
       }
-      const httpError = new Error(`HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update like'} at ${url}`);
+      const httpError = new Error(isAlreadyVoted ? 'Already voted' : `HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update like'} at ${url}`);
       (httpError as any).status = res.status;
       (httpError as any).statusText = res.statusText;
+      (httpError as any).alreadyVoted = isAlreadyVoted;
+      (httpError as any).rawMessage = errDetail;
       (httpError as any).url = url;
       throw httpError;
     }
@@ -280,7 +287,7 @@ class CloudflareApiService {
   }
 
   /**
-   * VOTE: Registers community upvote in Cloudflare D1
+   * VOTE: Registers community upvote in Cloudflare D1 (Strict 1 vote per IP)
    */
   public async upvoteAnime(id: number | string, options?: { action?: 'up' | 'down'; delta?: number }): Promise<{ success: boolean; upvotes?: number; popularity?: number }> {
     const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.VOTE(id));
@@ -297,20 +304,41 @@ class CloudflareApiService {
 
     if (!res.ok) {
       let errDetail = '';
+      let isAlreadyVoted = false;
       try {
         const errJson = await res.json();
-        errDetail = errJson.error || errJson.message || JSON.stringify(errJson);
+        errDetail = errJson.message || errJson.error || JSON.stringify(errJson);
+        if (errJson.alreadyVoted || errJson.error === 'Already voted' || /already voted/i.test(errDetail)) {
+          isAlreadyVoted = true;
+        }
       } catch {
         errDetail = await res.text().catch(() => res.statusText);
+        if (/already voted/i.test(errDetail)) isAlreadyVoted = true;
       }
-      const httpError = new Error(`HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update upvote'} at ${url}`);
+      const httpError = new Error(isAlreadyVoted ? 'Already voted' : `HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update upvote'} at ${url}`);
       (httpError as any).status = res.status;
       (httpError as any).statusText = res.statusText;
+      (httpError as any).alreadyVoted = isAlreadyVoted;
+      (httpError as any).rawMessage = errDetail;
       (httpError as any).url = url;
       throw httpError;
     }
 
     return await res.json();
+  }
+
+  /**
+   * VOTE STATUS: Checks if current client IP has already voted for this anime
+   */
+  public async checkVoteStatus(id: number | string): Promise<{ hasLiked: boolean; hasUpvoted: boolean }> {
+    try {
+      const url = getCloudflareUrl(`/api/anime/${id}/vote-status`);
+      const res = await fetch(url, { headers: this.getHeaders(false) });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (_) {}
+    return { hasLiked: false, hasUpvoted: false };
   }
 
   /**

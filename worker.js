@@ -50,6 +50,34 @@ function normalizeType(val) {
   return 'TV Series';
 }
 
+// Helper: Extract real client IP in Cloudflare Worker environment
+function getClientIP(request) {
+  return request.headers.get('cf-connecting-ip') ||
+         request.headers.get('x-real-ip') ||
+         request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+         '127.0.0.1';
+}
+
+// Helper: Ensure user_votes table exists in D1
+async function ensureUserVotesTable(d1) {
+  if (!d1) return;
+  try {
+    await d1.prepare(`
+      CREATE TABLE IF NOT EXISTS user_votes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        anime_id INTEGER NOT NULL,
+        ip_address TEXT NOT NULL,
+        vote_type TEXT NOT NULL CHECK(vote_type IN ('like', 'upvote')),
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (anime_id) REFERENCES anime(id) ON DELETE CASCADE
+      );
+    `).run();
+    await d1.prepare(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_votes_unique ON user_votes(anime_id, ip_address, vote_type);
+    `).run();
+  } catch (_) {}
+}
+
 // Helper: Check if Cloudflare D1 SQL binding is attached
 function getD1(env) {
   if (env && env.DB && typeof env.DB.prepare === 'function') return env.DB;
@@ -465,138 +493,253 @@ export default {
       }
 
       // ----------------------------------------------------------------------
-      // 8. POST /api/anime/:id/vote or /api/anime/:id/upvote - Community Upvote
+      // 8. POST /api/anime/:id/vote or /api/anime/:id/upvote - Community Upvote (IP Tracked)
       // ----------------------------------------------------------------------
       const voteMatch = path.match(/^\/api\/anime\/([^/]+)\/(?:vote|upvote)$/);
       if (voteMatch && method === "POST") {
         const id = voteMatch[1];
-        let body = {};
-        try {
-          body = await request.json();
-        } catch (_) {}
-
-        const delta = typeof body.delta === 'number' ? body.delta : (body.action === 'down' ? -1 : 1);
+        const clientIp = getClientIP(request);
         const d1 = getD1(env);
         let finalUpvotes = 0;
         let d1Updated = false;
 
-        // 1. Direct Cloudflare D1 Update
+        // 1. Check and Record Vote in Cloudflare D1
         if (d1) {
           try {
-            // Attempt to update both upvotes and popularity columns
+            await ensureUserVotesTable(d1);
+
+            // Check if this IP has already upvoted this anime
+            const existingVote = await d1.prepare(
+              "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'upvote'"
+            ).bind(id, clientIp).first();
+
+            if (existingVote) {
+              return jsonResponse({
+                error: "Already voted",
+                message: "You have already upvoted this anime from this IP address.",
+                alreadyVoted: true,
+                animeId: id,
+                ip: clientIp
+              }, 400);
+            }
+
+            // Record vote in user_votes table
+            await d1.prepare(
+              "INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'upvote')"
+            ).bind(id, clientIp).run();
+
+            // Increment upvotes in main anime table
             try {
               await d1.prepare(
-                "UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + ?), popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?"
-              ).bind(delta, delta, id).run();
+                "UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + 1), popularity = MAX(0, COALESCE(popularity, 0) + 1) WHERE id = ?"
+              ).bind(id).run();
               d1Updated = true;
             } catch (colErr) {
-              // If only one of the columns exists, try updating individual columns
               try {
-                await d1.prepare("UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + ?) WHERE id = ?").bind(delta, id).run();
+                await d1.prepare("UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + 1) WHERE id = ?").bind(id).run();
                 d1Updated = true;
               } catch (_) {
-                await d1.prepare("UPDATE anime SET popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?").bind(delta, id).run();
+                await d1.prepare("UPDATE anime SET popularity = MAX(0, COALESCE(popularity, 0) + 1) WHERE id = ?").bind(id).run();
                 d1Updated = true;
               }
             }
 
-            // Read back fresh value from D1
+            // Read fresh count from D1
             const d1Row = await d1.prepare("SELECT upvotes, popularity FROM anime WHERE id = ?").bind(id).first();
             if (d1Row) {
               finalUpvotes = Number(d1Row.upvotes !== undefined ? d1Row.upvotes : (d1Row.popularity !== undefined ? d1Row.popularity : 0));
             }
           } catch (d1Err) {
             console.error(`[Worker D1 Upvote Error for anime #${id}]:`, d1Err);
+            if (String(d1Err?.message || d1Err).toLowerCase().includes("unique")) {
+              return jsonResponse({
+                error: "Already voted",
+                message: "You have already upvoted this anime from this IP address.",
+                alreadyVoted: true
+              }, 400);
+            }
           }
         }
 
         // 2. Synchronize with KV storage
-        const catalog = await getCatalog(env);
-        const item = catalog.find((a) => String(a.id) === String(id));
-        if (item) {
-          if (!d1Updated) {
-            finalUpvotes = Math.max(0, (Number(item.upvotes !== undefined ? item.upvotes : item.popularity) || 0) + delta);
+        if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
+          const kvVoteKey = `vote_${id}_${clientIp}_upvote`;
+          if (!d1) {
+            const hasVotedKV = await env.ANIME_DB.get(kvVoteKey);
+            if (hasVotedKV) {
+              return jsonResponse({
+                error: "Already voted",
+                message: "You have already upvoted this anime from this IP address.",
+                alreadyVoted: true
+              }, 400);
+            }
+            await env.ANIME_DB.put(kvVoteKey, "1");
           }
-          item.upvotes = finalUpvotes;
-          item.popularity = finalUpvotes;
-          await saveCatalog(env, catalog);
-        } else if (!d1Updated) {
-          return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404);
+
+          const catalog = await getCatalog(env);
+          const item = catalog.find((a) => String(a.id) === String(id));
+          if (item) {
+            if (!d1Updated) {
+              finalUpvotes = Math.max(0, (Number(item.upvotes !== undefined ? item.upvotes : item.popularity) || 0) + 1);
+            }
+            item.upvotes = finalUpvotes;
+            item.popularity = finalUpvotes;
+            await saveCatalog(env, catalog);
+          } else if (!d1Updated) {
+            return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404);
+          }
         }
 
         return jsonResponse({
           success: true,
           id,
           upvotes: finalUpvotes,
-          popularity: finalUpvotes
+          popularity: finalUpvotes,
+          alreadyVoted: false,
+          message: "Upvote recorded successfully"
         });
       }
 
       // ----------------------------------------------------------------------
-      // 8.5. POST /api/anime/:id/like - Community Like
+      // 8.5. POST /api/anime/:id/like - Community Like (IP Tracked)
       // ----------------------------------------------------------------------
       const likeMatch = path.match(/^\/api\/anime\/([^/]+)\/like$/);
       if (likeMatch && method === "POST") {
         const id = likeMatch[1];
-        let body = {};
-        try {
-          body = await request.json();
-        } catch (_) {}
-
-        const delta = typeof body.delta === 'number' ? body.delta : (body.action === 'unlike' ? -1 : 1);
+        const clientIp = getClientIP(request);
         const d1 = getD1(env);
         let finalLikes = 0;
         let d1Updated = false;
 
-        // 1. Direct Cloudflare D1 Update
+        // 1. Check and Record Vote in Cloudflare D1
         if (d1) {
           try {
-            // Attempt to update both likes and likesCount columns
+            await ensureUserVotesTable(d1);
+
+            // Check if this IP has already liked this anime
+            const existingVote = await d1.prepare(
+              "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'like'"
+            ).bind(id, clientIp).first();
+
+            if (existingVote) {
+              return jsonResponse({
+                error: "Already voted",
+                message: "You have already liked this anime from this IP address.",
+                alreadyVoted: true,
+                animeId: id,
+                ip: clientIp
+              }, 400);
+            }
+
+            // Record vote in user_votes table
+            await d1.prepare(
+              "INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'like')"
+            ).bind(id, clientIp).run();
+
+            // Increment likes in main anime table
             try {
               await d1.prepare(
-                "UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + ?), likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?"
-              ).bind(delta, delta, id).run();
+                "UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + 1), likesCount = MAX(0, COALESCE(likesCount, 0) + 1) WHERE id = ?"
+              ).bind(id).run();
               d1Updated = true;
             } catch (colErr) {
-              // If only one of the columns exists, try updating individual columns
               try {
-                await d1.prepare("UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + ?) WHERE id = ?").bind(delta, id).run();
+                await d1.prepare("UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + 1) WHERE id = ?").bind(id).run();
                 d1Updated = true;
               } catch (_) {
-                await d1.prepare("UPDATE anime SET likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?").bind(delta, id).run();
+                await d1.prepare("UPDATE anime SET likesCount = MAX(0, COALESCE(likesCount, 0) + 1) WHERE id = ?").bind(id).run();
                 d1Updated = true;
               }
             }
 
-            // Read back fresh value from D1
+            // Read fresh count from D1
             const d1Row = await d1.prepare("SELECT likes, likesCount FROM anime WHERE id = ?").bind(id).first();
             if (d1Row) {
               finalLikes = Number(d1Row.likes !== undefined ? d1Row.likes : (d1Row.likesCount !== undefined ? d1Row.likesCount : 0));
             }
           } catch (d1Err) {
             console.error(`[Worker D1 Like Error for anime #${id}]:`, d1Err);
+            if (String(d1Err?.message || d1Err).toLowerCase().includes("unique")) {
+              return jsonResponse({
+                error: "Already voted",
+                message: "You have already liked this anime from this IP address.",
+                alreadyVoted: true
+              }, 400);
+            }
           }
         }
 
         // 2. Synchronize with KV storage
-        const catalog = await getCatalog(env);
-        const item = catalog.find((a) => String(a.id) === String(id));
-        if (item) {
-          if (!d1Updated) {
-            finalLikes = Math.max(0, (Number(item.likes !== undefined ? item.likes : item.likesCount) || 0) + delta);
+        if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
+          const kvVoteKey = `vote_${id}_${clientIp}_like`;
+          if (!d1) {
+            const hasVotedKV = await env.ANIME_DB.get(kvVoteKey);
+            if (hasVotedKV) {
+              return jsonResponse({
+                error: "Already voted",
+                message: "You have already liked this anime from this IP address.",
+                alreadyVoted: true
+              }, 400);
+            }
+            await env.ANIME_DB.put(kvVoteKey, "1");
           }
-          item.likes = finalLikes;
-          item.likesCount = finalLikes;
-          await saveCatalog(env, catalog);
-        } else if (!d1Updated) {
-          return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404);
+
+          const catalog = await getCatalog(env);
+          const item = catalog.find((a) => String(a.id) === String(id));
+          if (item) {
+            if (!d1Updated) {
+              finalLikes = Math.max(0, (Number(item.likes !== undefined ? item.likes : item.likesCount) || 0) + 1);
+            }
+            item.likes = finalLikes;
+            item.likesCount = finalLikes;
+            await saveCatalog(env, catalog);
+          } else if (!d1Updated) {
+            return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404);
+          }
         }
 
         return jsonResponse({
           success: true,
           id,
           likes: finalLikes,
-          likesCount: finalLikes
+          likesCount: finalLikes,
+          alreadyVoted: false,
+          message: "Like recorded successfully"
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // 8.8. GET /api/anime/:id/vote-status - Check if IP has voted
+      // ----------------------------------------------------------------------
+      const statusMatch = path.match(/^\/api\/anime\/([^/]+)\/vote-status$/);
+      if (statusMatch && method === "GET") {
+        const id = statusMatch[1];
+        const clientIp = getClientIP(request);
+        const d1 = getD1(env);
+        let hasLiked = false;
+        let hasUpvoted = false;
+
+        if (d1) {
+          try {
+            await ensureUserVotesTable(d1);
+            const votes = await d1.prepare(
+              "SELECT vote_type FROM user_votes WHERE anime_id = ? AND ip_address = ?"
+            ).bind(id, clientIp).all();
+            if (votes && votes.results) {
+              hasLiked = votes.results.some(v => v.vote_type === 'like');
+              hasUpvoted = votes.results.some(v => v.vote_type === 'upvote');
+            }
+          } catch (_) {}
+        } else if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
+          hasLiked = Boolean(await env.ANIME_DB.get(`vote_${id}_${clientIp}_like`));
+          hasUpvoted = Boolean(await env.ANIME_DB.get(`vote_${id}_${clientIp}_upvote`));
+        }
+
+        return jsonResponse({
+          animeId: id,
+          ip: clientIp,
+          hasLiked,
+          hasUpvoted
         });
       }
 

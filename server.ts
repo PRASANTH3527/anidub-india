@@ -237,6 +237,15 @@ function runMigrations() {
       latency_ms INTEGER NOT NULL,
       details TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS user_votes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      anime_id INTEGER NOT NULL,
+      ip_address TEXT NOT NULL,
+      vote_type TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(anime_id, ip_address, vote_type)
+    );
   `);
 
   // Ensure default user exists
@@ -836,15 +845,36 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
   }
 });
 
-// POST /api/anime/:id/vote (Community Upvote)
+// POST /api/anime/:id/vote (Community Upvote - IP Tracked)
 app.post('/api/anime/:id/vote', (req, res) => {
   try {
     const animeId = req.params.id;
-    const delta = typeof req.body?.delta === 'number' ? req.body.delta : (req.body?.action === 'down' ? -1 : 1);
+    const clientIp = (req.headers['cf-connecting-ip'] as string) || req.ip || req.socket.remoteAddress || '127.0.0.1';
+
+    // 1. Check if user already voted from this IP
+    const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'upvote'");
+    checkStmt.bind([animeId, clientIp]);
+    const alreadyVoted = checkStmt.step();
+    checkStmt.free();
+
+    if (alreadyVoted) {
+      return res.status(400).json({
+        error: "Already voted",
+        message: "You have already upvoted this anime from this IP address.",
+        alreadyVoted: true,
+        animeId,
+        ip: clientIp
+      });
+    }
+
+    // 2. Insert IP vote record
+    db.run("INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'upvote')", [animeId, clientIp]);
+
+    // 3. Increment count
     try {
-      db.run("UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + ?), popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?", [delta, delta, animeId]);
+      db.run("UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + 1), popularity = MAX(0, COALESCE(popularity, 0) + 1) WHERE id = ?", [animeId]);
     } catch (_) {
-      db.run("UPDATE anime SET popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?", [delta, animeId]);
+      db.run("UPDATE anime SET popularity = MAX(0, COALESCE(popularity, 0) + 1) WHERE id = ?", [animeId]);
     }
     persistD1();
     
@@ -857,21 +887,45 @@ app.post('/api/anime/:id/vote', (req, res) => {
     }
     stmt.free();
 
-    res.json({ success: true, upvotes: newPopularity, popularity: newPopularity });
+    res.json({ success: true, upvotes: newPopularity, popularity: newPopularity, message: "Upvote recorded successfully" });
   } catch (err: any) {
+    if (String(err?.message).toLowerCase().includes("unique")) {
+      return res.status(400).json({ error: "Already voted", alreadyVoted: true });
+    }
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/anime/:id/like (Community Like)
+// POST /api/anime/:id/like (Community Like - IP Tracked)
 app.post('/api/anime/:id/like', (req, res) => {
   try {
     const animeId = req.params.id;
-    const delta = typeof req.body?.delta === 'number' ? req.body.delta : (req.body?.action === 'unlike' ? -1 : 1);
+    const clientIp = (req.headers['cf-connecting-ip'] as string) || req.ip || req.socket.remoteAddress || '127.0.0.1';
+
+    // 1. Check if user already liked from this IP
+    const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'like'");
+    checkStmt.bind([animeId, clientIp]);
+    const alreadyVoted = checkStmt.step();
+    checkStmt.free();
+
+    if (alreadyVoted) {
+      return res.status(400).json({
+        error: "Already voted",
+        message: "You have already liked this anime from this IP address.",
+        alreadyVoted: true,
+        animeId,
+        ip: clientIp
+      });
+    }
+
+    // 2. Insert IP vote record
+    db.run("INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'like')", [animeId, clientIp]);
+
+    // 3. Increment count
     try {
-      db.run("UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + ?), likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?", [delta, delta, animeId]);
+      db.run("UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + 1), likesCount = MAX(0, COALESCE(likesCount, 0) + 1) WHERE id = ?", [animeId]);
     } catch (_) {
-      db.run("UPDATE anime SET likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?", [delta, animeId]);
+      db.run("UPDATE anime SET likesCount = MAX(0, COALESCE(likesCount, 0) + 1) WHERE id = ?", [animeId]);
     }
     persistD1();
 
@@ -884,7 +938,32 @@ app.post('/api/anime/:id/like', (req, res) => {
     }
     stmt.free();
 
-    res.json({ success: true, likes: newLikes, likesCount: newLikes });
+    res.json({ success: true, likes: newLikes, likesCount: newLikes, message: "Like recorded successfully" });
+  } catch (err: any) {
+    if (String(err?.message).toLowerCase().includes("unique")) {
+      return res.status(400).json({ error: "Already voted", alreadyVoted: true });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/anime/:id/vote-status (Check if IP has voted)
+app.get('/api/anime/:id/vote-status', (req, res) => {
+  try {
+    const animeId = req.params.id;
+    const clientIp = (req.headers['cf-connecting-ip'] as string) || req.ip || req.socket.remoteAddress || '127.0.0.1';
+
+    const likeStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'like'");
+    likeStmt.bind([animeId, clientIp]);
+    const hasLiked = likeStmt.step();
+    likeStmt.free();
+
+    const upvoteStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'upvote'");
+    upvoteStmt.bind([animeId, clientIp]);
+    const hasUpvoted = upvoteStmt.step();
+    upvoteStmt.free();
+
+    res.json({ animeId, ip: clientIp, hasLiked, hasUpvoted });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
