@@ -35,17 +35,20 @@ export interface Anime {
   releaseYear?: number;
   genres: string;
   popularity: number;
+  likesCount?: number;
   languages?: string;
   platform?: string;
   type?: string;
 }
 
-interface CatalogViewProps {
+export interface CatalogViewProps {
   catalogList?: any[];
   onSelectAnime: (anime: Anime) => void;
   searchQuery: string;
   watchlist: number[];
   onToggleWatchlist: (animeId: number) => void;
+  onToggleLike?: (animeId: number, liked: boolean, count: number) => void;
+  onToggleUpvote?: (animeId: number, upvoted: boolean, count: number) => void;
   onOpenRoulette: () => void;
   onOpenCollection: () => void;
   feedView?: string;
@@ -100,6 +103,8 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   searchQuery,
   watchlist,
   onToggleWatchlist,
+  onToggleLike,
+  onToggleUpvote,
   onOpenRoulette,
   onOpenCollection,
   feedView = 'library',
@@ -111,10 +116,30 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   
   // Sync rawAnimeList whenever catalogList prop updates from parent
   useEffect(() => {
-    if (catalogList && catalogList.length > 0) {
+    if (catalogList) {
       setRawAnimeList(catalogList);
     }
   }, [catalogList]);
+
+  const handleLike = (animeId: number, liked?: boolean, newCount?: number) => {
+    setRawAnimeList(prev => prev.map(a => {
+      if (a.id === animeId || String(a.id) === String(animeId)) {
+        return { ...a, likesCount: newCount !== undefined ? newCount : (Number(a.likesCount) || 0) + (liked ? 1 : -1) };
+      }
+      return a;
+    }));
+    if (onToggleLike) onToggleLike(animeId, Boolean(liked), newCount ?? 0);
+  };
+
+  const handleUpvote = (animeId: number, upvoted?: boolean, newCount?: number) => {
+    setRawAnimeList(prev => prev.map(a => {
+      if (a.id === animeId || String(a.id) === String(animeId)) {
+        return { ...a, popularity: newCount !== undefined ? newCount : (Number(a.popularity) || 0) + (upvoted ? 1 : -1) };
+      }
+      return a;
+    }));
+    if (onToggleUpvote) onToggleUpvote(animeId, Boolean(upvoted), newCount ?? 0);
+  };
 
   // Filter States
   const [selectedLanguage, setSelectedLanguage] = useState('All');
@@ -276,7 +301,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             }
           });
           const calculatedLangs = uniqueLangs.size;
-          const totalVotes = rawAnimeList.reduce((acc, curr) => acc + (curr.popularity || 0), 0);
+          const totalVotes = rawAnimeList.reduce((acc, curr) => acc + (Number(curr.popularity) || 0) + (Number(curr.likesCount) || 0), 0);
 
           return (
             <AnimatedStats
@@ -454,6 +479,8 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                   onSelect={(a) => onSelectAnime(a as any)}
                   isBookmarked={isWatchlisted}
                   onToggleBookmark={onToggleWatchlist}
+                  onToggleLike={handleLike}
+                  onToggleUpvote={handleUpvote}
                 />
               );
             })}

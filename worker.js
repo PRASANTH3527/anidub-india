@@ -439,17 +439,67 @@ export default {
       const voteMatch = path.match(/^\/api\/anime\/([^/]+)\/vote$/);
       if (voteMatch && method === "POST") {
         const id = voteMatch[1];
+        let body = {};
+        try {
+          body = await request.json();
+        } catch (_) {}
+
         const catalog = await getCatalog(env);
         const item = catalog.find((a) => String(a.id) === id);
 
         if (!item) return jsonResponse({ error: "Anime not found" }, 404);
 
-        item.popularity = (Number(item.popularity) || 0) + 1;
+        const delta = typeof body.delta === 'number' ? body.delta : (body.action === 'down' ? -1 : 1);
+        item.popularity = Math.max(0, (Number(item.popularity) || 0) + delta);
         await saveCatalog(env, catalog);
+
+        // If Cloudflare D1 SQL binding is also bound in env
+        if (env.DB && typeof env.DB.prepare === 'function') {
+          try {
+            await env.DB.prepare(
+              "UPDATE anime SET popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?"
+            ).bind(delta, id).run();
+          } catch (_) {}
+        }
 
         return jsonResponse({
           success: true,
           popularity: item.popularity
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // 8.5. POST /api/anime/:id/like - Community Like
+      // ----------------------------------------------------------------------
+      const likeMatch = path.match(/^\/api\/anime\/([^/]+)\/like$/);
+      if (likeMatch && method === "POST") {
+        const id = likeMatch[1];
+        let body = {};
+        try {
+          body = await request.json();
+        } catch (_) {}
+
+        const catalog = await getCatalog(env);
+        const item = catalog.find((a) => String(a.id) === id);
+
+        if (!item) return jsonResponse({ error: "Anime not found" }, 404);
+
+        const delta = typeof body.delta === 'number' ? body.delta : (body.action === 'unlike' ? -1 : 1);
+        item.likesCount = Math.max(0, (Number(item.likesCount) || 0) + delta);
+        await saveCatalog(env, catalog);
+
+        // If Cloudflare D1 SQL binding is also bound in env
+        if (env.DB && typeof env.DB.prepare === 'function') {
+          try {
+            await env.DB.prepare(
+              "UPDATE anime SET likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?"
+            ).bind(delta, id).run();
+          } catch (_) {}
+        }
+
+        return jsonResponse({
+          success: true,
+          likesCount: item.likesCount
         });
       }
 

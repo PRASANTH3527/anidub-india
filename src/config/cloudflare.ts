@@ -28,6 +28,7 @@ export const CLOUDFLARE_ENDPOINTS = {
   ANIME_BY_ID: (id: string | number) => `/api/anime/${id}`,
   APPROVE: (id: string | number) => `/api/admin/approve/${id}`,
   VOTE: (id: string | number) => `/api/anime/${id}/vote`,
+  LIKE: (id: string | number) => `/api/anime/${id}/like`,
   RATE: (id: string | number) => `/api/anime/${id}/rate`,
   WATCHLIST: '/api/watchlist',
   REVIEWS: '/api/reviews',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Flame, 
   CheckCircle2, 
@@ -9,6 +9,7 @@ import {
   Bookmark, 
   Star 
 } from 'lucide-react';
+import { cloudflareApi } from '../services/cloudflareApi';
 
 export interface AnimeCardData {
   id: number;
@@ -35,15 +36,15 @@ export interface AnimeCardData {
   likesCount?: number;
 }
 
-interface AnimeCardProps {
+export interface AnimeCardProps {
   anime: AnimeCardData;
   onSelect: (anime: AnimeCardData) => void;
   isBookmarked?: boolean;
   onToggleBookmark?: (id: number) => void;
   isLiked?: boolean;
-  onToggleLike?: (id: number) => void;
+  onToggleLike?: (id: number, liked?: boolean, newCount?: number) => void;
   isUpvoted?: boolean;
-  onToggleUpvote?: (id: number) => void;
+  onToggleUpvote?: (id: number, upvoted?: boolean, newCount?: number) => void;
   isTrending?: boolean;
   isCached?: boolean;
 }
@@ -64,21 +65,73 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   onSelect,
   isBookmarked = false,
   onToggleBookmark,
-  isLiked = false,
+  isLiked,
   onToggleLike,
-  isUpvoted = false,
+  isUpvoted,
   onToggleUpvote,
   isTrending = true,
   isCached = true
 }) => {
-  const [internalLiked, setInternalLiked] = useState(isLiked);
-  const [internalUpvoted, setInternalUpvoted] = useState(isUpvoted);
-  const [internalHeartCount, setInternalHeartCount] = useState(
-    anime.likesCount ?? 0
+  const [internalLiked, setInternalLiked] = useState<boolean>(() => {
+    if (typeof isLiked === 'boolean') return isLiked;
+    try {
+      const saved = JSON.parse(localStorage.getItem('cf_user_likes') || '[]');
+      return Array.isArray(saved) && saved.includes(anime.id);
+    } catch {
+      return false;
+    }
+  });
+
+  const [internalUpvoted, setInternalUpvoted] = useState<boolean>(() => {
+    if (typeof isUpvoted === 'boolean') return isUpvoted;
+    try {
+      const saved = JSON.parse(localStorage.getItem('cf_user_upvotes') || '[]');
+      return Array.isArray(saved) && saved.includes(anime.id);
+    } catch {
+      return false;
+    }
+  });
+
+  const [internalHeartCount, setInternalHeartCount] = useState<number>(
+    Number(anime.likesCount) || 0
   );
-  const [internalUpvoteCount, setInternalUpvoteCount] = useState(
-    anime.popularity ?? 0
+  const [internalUpvoteCount, setInternalUpvoteCount] = useState<number>(
+    Number(anime.popularity) || 0
   );
+
+  const [isLiking, setIsLiking] = useState(false);
+  const [isVoting, setIsVoting] = useState(false);
+
+  // Sync state when props change
+  useEffect(() => {
+    setInternalHeartCount(Number(anime.likesCount) || 0);
+  }, [anime.likesCount]);
+
+  useEffect(() => {
+    setInternalUpvoteCount(Number(anime.popularity) || 0);
+  }, [anime.popularity]);
+
+  useEffect(() => {
+    if (typeof isLiked === 'boolean') {
+      setInternalLiked(isLiked);
+    } else {
+      try {
+        const saved = JSON.parse(localStorage.getItem('cf_user_likes') || '[]');
+        if (Array.isArray(saved)) setInternalLiked(saved.includes(anime.id));
+      } catch {}
+    }
+  }, [anime.id, isLiked]);
+
+  useEffect(() => {
+    if (typeof isUpvoted === 'boolean') {
+      setInternalUpvoted(isUpvoted);
+    } else {
+      try {
+        const saved = JSON.parse(localStorage.getItem('cf_user_upvotes') || '[]');
+        if (Array.isArray(saved)) setInternalUpvoted(saved.includes(anime.id));
+      } catch {}
+    }
+  }, [anime.id, isUpvoted]);
 
   // Normalize languages
   const rawLangs = Array.isArray(anime.languages)
@@ -113,23 +166,101 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     return fallbacks[(anime.id || 0) % fallbacks.length];
   };
 
-  const handleLikeClick = (e: React.MouseEvent) => {
+  const handleLikeClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isLiking) return;
+    setIsLiking(true);
+
+    const nextLiked = !internalLiked;
+    const delta = nextLiked ? 1 : -1;
+    const optimisticCount = Math.max(0, (internalHeartCount || 0) + delta);
+
+    // 1. Instant local and optimistic UI updates
+    setInternalLiked(nextLiked);
+    setInternalHeartCount(optimisticCount);
+
+    // 2. Persist local user state in localStorage
+    try {
+      const saved = JSON.parse(localStorage.getItem('cf_user_likes') || '[]');
+      const set = new Set(Array.isArray(saved) ? saved : []);
+      if (nextLiked) {
+        set.add(anime.id);
+      } else {
+        set.delete(anime.id);
+      }
+      localStorage.setItem('cf_user_likes', JSON.stringify(Array.from(set)));
+    } catch {}
+
+    // 3. Notify parent listener (updates catalogList in App / CatalogView)
     if (onToggleLike) {
-      onToggleLike(anime.id);
-    } else {
-      setInternalLiked(!internalLiked);
-      setInternalHeartCount(prev => internalLiked ? prev - 1 : prev + 1);
+      onToggleLike(anime.id, nextLiked, optimisticCount);
+    }
+
+    // 4. Send API POST to Cloudflare Worker / D1
+    try {
+      const res = await cloudflareApi.likeAnime(anime.id, {
+        action: nextLiked ? 'like' : 'unlike',
+        delta
+      });
+      if (res && typeof res.likesCount === 'number') {
+        setInternalHeartCount(res.likesCount);
+        if (onToggleLike && res.likesCount !== optimisticCount) {
+          onToggleLike(anime.id, nextLiked, res.likesCount);
+        }
+      }
+    } catch (err) {
+      console.warn(`[AniDub] Failed to sync like for anime #${anime.id}:`, err);
+    } finally {
+      setIsLiking(false);
     }
   };
 
-  const handleUpvoteClick = (e: React.MouseEvent) => {
+  const handleUpvoteClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isVoting) return;
+    setIsVoting(true);
+
+    const nextUpvoted = !internalUpvoted;
+    const delta = nextUpvoted ? 1 : -1;
+    const optimisticCount = Math.max(0, (internalUpvoteCount || 0) + delta);
+
+    // 1. Instant local and optimistic UI updates
+    setInternalUpvoted(nextUpvoted);
+    setInternalUpvoteCount(optimisticCount);
+
+    // 2. Persist local user state in localStorage
+    try {
+      const saved = JSON.parse(localStorage.getItem('cf_user_upvotes') || '[]');
+      const set = new Set(Array.isArray(saved) ? saved : []);
+      if (nextUpvoted) {
+        set.add(anime.id);
+      } else {
+        set.delete(anime.id);
+      }
+      localStorage.setItem('cf_user_upvotes', JSON.stringify(Array.from(set)));
+    } catch {}
+
+    // 3. Notify parent listener (updates catalogList in App / CatalogView)
     if (onToggleUpvote) {
-      onToggleUpvote(anime.id);
-    } else {
-      setInternalUpvoted(!internalUpvoted);
-      setInternalUpvoteCount(prev => internalUpvoted ? prev - 1 : prev + 1);
+      onToggleUpvote(anime.id, nextUpvoted, optimisticCount);
+    }
+
+    // 4. Send API POST to Cloudflare Worker / D1
+    try {
+      const res = await cloudflareApi.upvoteAnime(anime.id, {
+        action: nextUpvoted ? 'up' : 'down',
+        delta
+      });
+      if (res && typeof res.popularity === 'number') {
+        setInternalUpvoteCount(res.popularity);
+        if (onToggleUpvote && res.popularity !== optimisticCount) {
+          onToggleUpvote(anime.id, nextUpvoted, res.popularity);
+        }
+      }
+    } catch (err) {
+      console.warn(`[AniDub] Failed to sync upvote for anime #${anime.id}:`, err);
+    } finally {
+      setIsVoting(false);
     }
   };
 

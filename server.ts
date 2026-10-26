@@ -170,7 +170,7 @@ function runMigrations() {
       season TEXT DEFAULT 'Spring',
       year INTEGER DEFAULT 2026,
       genres TEXT NOT NULL,
-      popularity INTEGER DEFAULT 1000,
+      popularity INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -679,7 +679,7 @@ app.post('/api/anime', (req, res) => {
           season || 'Spring',
           parseInt(year) || 2026,
           genres || 'Action,Fantasy',
-          finalStatus === 'pending' ? 0 : 1000,
+          0,
           languages || 'HIN,TAM,TEL',
           platform || 'Crunchyroll',
           resolvedType,
@@ -839,19 +839,43 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
 app.post('/api/anime/:id/vote', (req, res) => {
   try {
     const animeId = req.params.id;
-    db.run("UPDATE anime SET popularity = popularity + 1 WHERE id = ?", [animeId]);
+    const delta = typeof req.body?.delta === 'number' ? req.body.delta : (req.body?.action === 'down' ? -1 : 1);
+    db.run("UPDATE anime SET popularity = MAX(0, COALESCE(popularity, 0) + ?) WHERE id = ?", [delta, animeId]);
     persistD1();
     
     const stmt = db.prepare("SELECT popularity FROM anime WHERE id = ?");
     stmt.bind([animeId]);
-    let newPopularity = 1000;
+    let newPopularity = 0;
     if (stmt.step()) {
       const row: any = stmt.getAsObject();
-      newPopularity = row.popularity;
+      newPopularity = row.popularity ?? 0;
     }
     stmt.free();
 
     res.json({ success: true, popularity: newPopularity });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/anime/:id/like (Community Like)
+app.post('/api/anime/:id/like', (req, res) => {
+  try {
+    const animeId = req.params.id;
+    const delta = typeof req.body?.delta === 'number' ? req.body.delta : (req.body?.action === 'unlike' ? -1 : 1);
+    db.run("UPDATE anime SET likesCount = MAX(0, COALESCE(likesCount, 0) + ?) WHERE id = ?", [delta, animeId]);
+    persistD1();
+
+    const stmt = db.prepare("SELECT likesCount FROM anime WHERE id = ?");
+    stmt.bind([animeId]);
+    let newLikes = 0;
+    if (stmt.step()) {
+      const row: any = stmt.getAsObject();
+      newLikes = row.likesCount ?? 0;
+    }
+    stmt.free();
+
+    res.json({ success: true, likesCount: newLikes });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

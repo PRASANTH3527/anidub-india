@@ -246,17 +246,38 @@ class CloudflareApiService {
   }
 
   /**
-   * VOTE: Registers community upvote in Cloudflare D1
+   * LIKE: Registers like increment or decrement in Cloudflare Worker / D1
    */
-  public async upvoteAnime(id: number | string): Promise<{ success: boolean; popularity: number }> {
-    const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.VOTE(id));
+  public async likeAnime(id: number | string, options?: { action?: 'like' | 'unlike'; delta?: number }): Promise<{ success: boolean; likesCount: number }> {
+    const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.LIKE(id));
     const res = await fetch(url, {
       method: 'POST',
-      headers: this.getHeaders(false)
+      headers: this.getHeaders(false),
+      body: JSON.stringify(options || {})
     });
 
     if (!res.ok) {
-      throw new Error(`Failed to upvote anime ID ${id} on Cloudflare API`);
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to like anime ID ${id} on Cloudflare API`);
+    }
+
+    return await res.json();
+  }
+
+  /**
+   * VOTE: Registers community upvote in Cloudflare D1
+   */
+  public async upvoteAnime(id: number | string, options?: { action?: 'up' | 'down'; delta?: number }): Promise<{ success: boolean; popularity: number }> {
+    const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.VOTE(id));
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: this.getHeaders(false),
+      body: JSON.stringify(options || {})
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to upvote anime ID ${id} on Cloudflare API`);
     }
 
     return await res.json();

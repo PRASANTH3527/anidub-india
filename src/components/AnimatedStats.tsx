@@ -42,8 +42,8 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
   }, [totalAnime, totalVotes, totalLanguages]);
 
   const formattedVotes = votesCount >= 1000 
-    ? `${(votesCount / 1000).toFixed(0)}k` 
-    : `${votesCount}`;
+    ? `${(votesCount / 1000).toFixed(1).replace(/\.0$/, '')}k` 
+    : `${votesCount.toLocaleString()}`;
 
   return (
     <div className="w-full max-w-5xl mx-auto px-2.5 sm:px-4 mb-3 sm:mb-6 box-border">

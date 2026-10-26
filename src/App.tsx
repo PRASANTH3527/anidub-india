@@ -238,6 +238,24 @@ export default function App() {
     );
   }, [catalogList, watchlist]);
 
+  const handleToggleLike = (animeId: number, _liked: boolean, count: number) => {
+    setCatalogList(prev => prev.map(a => {
+      if (a.id === animeId || String(a.id) === String(animeId)) {
+        return { ...a, likesCount: count };
+      }
+      return a;
+    }));
+  };
+
+  const handleToggleUpvote = (animeId: number, _upvoted: boolean, count: number) => {
+    setCatalogList(prev => prev.map(a => {
+      if (a.id === animeId || String(a.id) === String(animeId)) {
+        return { ...a, popularity: count };
+      }
+      return a;
+    }));
+  };
+
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-primary-theme selection:text-white transition-colors duration-300 box-border">
       
@@ -331,6 +349,8 @@ export default function App() {
             searchQuery={searchQuery}
             watchlist={watchlist}
             onToggleWatchlist={handleToggleWatchlist}
+            onToggleLike={handleToggleLike}
+            onToggleUpvote={handleToggleUpvote}
             onOpenRoulette={() => setIsRouletteOpen(true)}
             onOpenCollection={() => setIsCollectionOpen(true)}
             feedView={feedView}
