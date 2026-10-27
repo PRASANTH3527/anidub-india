@@ -178,13 +178,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     return fallbacks[(anime.id || 0) % fallbacks.length];
   };
 
-  // 1-Vote per user IP like handler
+  // 1-Vote per device like handler
   const handleLikeClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isLiking) return;
 
     if (internalLiked) {
-      showNotification('Already Voted', 'You have already liked this anime from this IP.', 'warning');
+      showNotification('Already Voted', 'You have already liked this anime from this device.', 'warning');
       return;
     }
 
@@ -212,7 +212,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
       const isAlreadyVoted = error?.alreadyVoted || /already voted/i.test(error?.message || '');
       if (isAlreadyVoted) {
         setInternalLiked(true);
-        showNotification('Already Voted', 'Already voted! 1 vote allowed per IP address.', 'warning');
+        showNotification('Already Voted', 'Already voted! 1 vote allowed per device.', 'warning');
       } else {
         console.error(`[AnimeCard] Failed to sync like for anime #${anime.id}:`, error);
         showNotification('Vote Failed', error?.message || 'Could not register vote.', 'warning');
@@ -222,13 +222,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     }
   };
 
-  // 1-Vote per user IP upvote handler
+  // 1-Vote per device upvote handler
   const handleUpvoteClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isVoting) return;
 
     if (internalUpvoted) {
-      showNotification('Already Voted', 'You have already upvoted this anime from this IP.', 'warning');
+      showNotification('Already Voted', 'You have already upvoted this anime from this device.', 'warning');
       return;
     }
 
@@ -256,7 +256,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
       const isAlreadyVoted = error?.alreadyVoted || /already voted/i.test(error?.message || '');
       if (isAlreadyVoted) {
         setInternalUpvoted(true);
-        showNotification('Already Voted', 'Already voted! 1 vote allowed per IP address.', 'warning');
+        showNotification('Already Voted', 'Already voted! 1 vote allowed per device.', 'warning');
       } else {
         console.error(`[AnimeCard] Failed to sync upvote for anime #${anime.id}:`, error);
         showNotification('Vote Failed', error?.message || 'Could not register upvote.', 'warning');
@@ -473,7 +473,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
                 type="button"
                 onClick={handleLikeClick}
                 disabled={isLiking || internalLiked}
-                title={internalLiked ? 'Already liked from this IP' : 'Like (1 vote per IP)'}
+                title={internalLiked ? 'Already liked from this device' : 'Like (1 vote per device)'}
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all active:scale-95 ${
                   internalLiked
                     ? 'bg-primary-theme/25 text-primary-theme border border-primary-theme/50 cursor-default'
@@ -489,7 +489,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
                 type="button"
                 onClick={handleUpvoteClick}
                 disabled={isVoting || internalUpvoted}
-                title={internalUpvoted ? 'Already upvoted from this IP' : 'Upvote (1 vote per IP)'}
+                title={internalUpvoted ? 'Already upvoted from this device' : 'Upvote (1 vote per device)'}
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all active:scale-95 ${
                   internalUpvoted
                     ? 'bg-orange-500/25 text-orange-400 border border-orange-500/50 cursor-default'

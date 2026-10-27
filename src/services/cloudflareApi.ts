@@ -246,7 +246,7 @@ class CloudflareApiService {
   }
 
   /**
-   * LIKE: Registers like increment or decrement in Cloudflare Worker / D1
+   * LIKE: Registers like increment or decrement in Cloudflare Worker / D1 (Strict 1 like per device via Cookie)
    */
   public async likeAnime(id: number | string, options?: { action?: 'like' | 'unlike'; delta?: number }): Promise<{ success: boolean; likes?: number; likesCount?: number }> {
     const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.LIKE(id));
@@ -255,6 +255,7 @@ class CloudflareApiService {
       res = await fetch(url, {
         method: 'POST',
         headers: this.getHeaders(false),
+        credentials: 'include',
         body: JSON.stringify(options || {})
       });
     } catch (networkErr: any) {
@@ -287,7 +288,7 @@ class CloudflareApiService {
   }
 
   /**
-   * VOTE: Registers community upvote in Cloudflare D1 (Strict 1 vote per IP)
+   * VOTE: Registers community upvote in Cloudflare D1 (Strict 1 vote per device via Cookie)
    */
   public async upvoteAnime(id: number | string, options?: { action?: 'up' | 'down'; delta?: number }): Promise<{ success: boolean; upvotes?: number; popularity?: number }> {
     const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.VOTE(id));
@@ -296,6 +297,7 @@ class CloudflareApiService {
       res = await fetch(url, {
         method: 'POST',
         headers: this.getHeaders(false),
+        credentials: 'include',
         body: JSON.stringify(options || {})
       });
     } catch (networkErr: any) {
@@ -328,12 +330,15 @@ class CloudflareApiService {
   }
 
   /**
-   * VOTE STATUS: Checks if current client IP has already voted for this anime
+   * VOTE STATUS: Checks if current client device has already voted for this anime
    */
   public async checkVoteStatus(id: number | string): Promise<{ hasLiked: boolean; hasUpvoted: boolean }> {
     try {
       const url = getCloudflareUrl(`/api/anime/${id}/vote-status`);
-      const res = await fetch(url, { headers: this.getHeaders(false) });
+      const res = await fetch(url, {
+        headers: this.getHeaders(false),
+        credentials: 'include'
+      });
       if (res.ok) {
         return await res.json();
       }

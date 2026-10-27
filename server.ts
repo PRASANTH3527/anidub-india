@@ -241,12 +241,16 @@ function runMigrations() {
     CREATE TABLE IF NOT EXISTS user_votes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       anime_id INTEGER NOT NULL,
-      ip_address TEXT NOT NULL,
+      device_id TEXT NOT NULL,
       vote_type TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(anime_id, ip_address, vote_type)
+      UNIQUE(anime_id, device_id, vote_type)
     );
   `);
+
+  try { db.run("ALTER TABLE user_votes RENAME COLUMN ip_address TO device_id;"); } catch (e) {}
+  try { db.run("ALTER TABLE user_votes ADD COLUMN device_id TEXT;"); } catch (e) {}
+  try { db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_votes_device ON user_votes(anime_id, device_id, vote_type);"); } catch (e) {}
 
   // Ensure default user exists
   const userRes = db.exec("SELECT COUNT(*) FROM users WHERE id = 'default_user'");
@@ -845,30 +849,51 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
   }
 });
 
-// POST /api/anime/:id/vote (Community Upvote - IP Tracked)
-app.post('/api/anime/:id/vote', (req, res) => {
+// Helper: Extract or Generate Device UUID from Cookies / Header in Express
+function getOrCreateDeviceIdExpress(req: any, res: any) {
+  const cookieHeader = req.headers.cookie || '';
+  const match = cookieHeader.match(/(?:^|;\s*)device_id=([^;]+)/);
+  if (match && match[1]) {
+    const existing = decodeURIComponent(match[1]).trim();
+    if (existing) return { deviceId: existing, isNew: false };
+  }
+  const headerId = req.headers['x-device-id'];
+  if (headerId && typeof headerId === 'string' && headerId.trim()) {
+    return { deviceId: headerId.trim(), isNew: false };
+  }
+  const newId = crypto.randomUUID();
+  const maxAge = 315360000; // 10 years in seconds
+  const expires = new Date(Date.now() + maxAge * 1000).toUTCString();
+  res.setHeader('Set-Cookie', `device_id=${encodeURIComponent(newId)}; Path=/; Max-Age=${maxAge}; Expires=${expires}; SameSite=Lax; HttpOnly`);
+  res.setHeader('x-device-id', newId);
+  return { deviceId: newId, isNew: true };
+}
+
+// POST /api/anime/:id/vote or /api/anime/:id/upvote (Community Upvote - Cookie Device UUID Tracked)
+app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/anime/:id/upvote'], (req, res, next) => {
+  if (req.method !== 'POST' && req.method !== 'PUT') return next();
   try {
     const animeId = req.params.id;
-    const clientIp = (req.headers['cf-connecting-ip'] as string) || req.ip || req.socket.remoteAddress || '127.0.0.1';
+    const { deviceId } = getOrCreateDeviceIdExpress(req, res);
 
-    // 1. Check if user already voted from this IP
-    const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'upvote'");
-    checkStmt.bind([animeId, clientIp]);
+    // 1. Check if user already voted from this device
+    const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'upvote'");
+    checkStmt.bind([animeId, deviceId]);
     const alreadyVoted = checkStmt.step();
     checkStmt.free();
 
     if (alreadyVoted) {
       return res.status(400).json({
         error: "Already voted",
-        message: "You have already upvoted this anime from this IP address.",
+        message: "This device has already upvoted this anime.",
         alreadyVoted: true,
         animeId,
-        ip: clientIp
+        deviceId
       });
     }
 
-    // 2. Insert IP vote record
-    db.run("INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'upvote')", [animeId, clientIp]);
+    // 2. Insert device vote record
+    db.run("INSERT INTO user_votes (anime_id, device_id, vote_type) VALUES (?, ?, 'upvote')", [animeId, deviceId]);
 
     // 3. Increment count
     try {
@@ -887,7 +912,7 @@ app.post('/api/anime/:id/vote', (req, res) => {
     }
     stmt.free();
 
-    res.json({ success: true, upvotes: newPopularity, popularity: newPopularity, message: "Upvote recorded successfully" });
+    res.json({ success: true, upvotes: newPopularity, popularity: newPopularity, deviceId, message: "Upvote recorded successfully" });
   } catch (err: any) {
     if (String(err?.message).toLowerCase().includes("unique")) {
       return res.status(400).json({ error: "Already voted", alreadyVoted: true });
@@ -896,30 +921,31 @@ app.post('/api/anime/:id/vote', (req, res) => {
   }
 });
 
-// POST /api/anime/:id/like (Community Like - IP Tracked)
-app.post('/api/anime/:id/like', (req, res) => {
+// POST /api/anime/:id/like (Community Like - Cookie Device UUID Tracked)
+app.all(['/api/anime/:id/like', '/api/anime/:id/likes', '/anime/:id/like', '/anime/:id/likes'], (req, res, next) => {
+  if (req.method !== 'POST' && req.method !== 'PUT') return next();
   try {
     const animeId = req.params.id;
-    const clientIp = (req.headers['cf-connecting-ip'] as string) || req.ip || req.socket.remoteAddress || '127.0.0.1';
+    const { deviceId } = getOrCreateDeviceIdExpress(req, res);
 
-    // 1. Check if user already liked from this IP
-    const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'like'");
-    checkStmt.bind([animeId, clientIp]);
+    // 1. Check if user already liked from this device
+    const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'like'");
+    checkStmt.bind([animeId, deviceId]);
     const alreadyVoted = checkStmt.step();
     checkStmt.free();
 
     if (alreadyVoted) {
       return res.status(400).json({
         error: "Already voted",
-        message: "You have already liked this anime from this IP address.",
+        message: "This device has already liked this anime.",
         alreadyVoted: true,
         animeId,
-        ip: clientIp
+        deviceId
       });
     }
 
-    // 2. Insert IP vote record
-    db.run("INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'like')", [animeId, clientIp]);
+    // 2. Insert device vote record
+    db.run("INSERT INTO user_votes (anime_id, device_id, vote_type) VALUES (?, ?, 'like')", [animeId, deviceId]);
 
     // 3. Increment count
     try {
@@ -938,7 +964,7 @@ app.post('/api/anime/:id/like', (req, res) => {
     }
     stmt.free();
 
-    res.json({ success: true, likes: newLikes, likesCount: newLikes, message: "Like recorded successfully" });
+    res.json({ success: true, likes: newLikes, likesCount: newLikes, deviceId, message: "Like recorded successfully" });
   } catch (err: any) {
     if (String(err?.message).toLowerCase().includes("unique")) {
       return res.status(400).json({ error: "Already voted", alreadyVoted: true });
@@ -947,23 +973,23 @@ app.post('/api/anime/:id/like', (req, res) => {
   }
 });
 
-// GET /api/anime/:id/vote-status (Check if IP has voted)
-app.get('/api/anime/:id/vote-status', (req, res) => {
+// GET /api/anime/:id/vote-status (Check if Device has voted)
+app.get(['/api/anime/:id/vote-status', '/api/anime/:id/vote_status', '/anime/:id/vote-status'], (req, res) => {
   try {
     const animeId = req.params.id;
-    const clientIp = (req.headers['cf-connecting-ip'] as string) || req.ip || req.socket.remoteAddress || '127.0.0.1';
+    const { deviceId } = getOrCreateDeviceIdExpress(req, res);
 
-    const likeStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'like'");
-    likeStmt.bind([animeId, clientIp]);
+    const likeStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'like'");
+    likeStmt.bind([animeId, deviceId]);
     const hasLiked = likeStmt.step();
     likeStmt.free();
 
-    const upvoteStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'upvote'");
-    upvoteStmt.bind([animeId, clientIp]);
+    const upvoteStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'upvote'");
+    upvoteStmt.bind([animeId, deviceId]);
     const hasUpvoted = upvoteStmt.step();
     upvoteStmt.free();
 
-    res.json({ animeId, ip: clientIp, hasLiked, hasUpvoted });
+    res.json({ animeId, deviceId, hasLiked, hasUpvoted });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

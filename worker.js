@@ -21,23 +21,64 @@
  *  - GET /api/analytics (Cloudflare GraphQL Analytics)
  */
 
-// Helper: Standard CORS Headers
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, X-Admin-Token, Accept, Origin, x-requested-with",
-  "Access-Control-Max-Age": "86400",
-};
+// Helper: Standard / Dynamic CORS Headers (Supports Cookies & Credentials)
+function getCorsHeaders(request) {
+  const origin = request ? (request.headers.get("Origin") || request.headers.get("origin")) : null;
+  return {
+    "Access-Control-Allow-Origin": origin || "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, X-Admin-Token, Accept, Origin, x-requested-with, x-device-id, cf-connecting-ip",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Expose-Headers": "Set-Cookie, x-device-id",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
-// Helper: JSON response with CORS
-function jsonResponse(data, status = 200) {
+// Helper: JSON response with CORS and optional Cookie headers
+function jsonResponse(data, status = 200, extraHeaders = {}, request = null) {
+  const headers = new Headers(getCorsHeaders(request));
+  headers.set("Content-Type", "application/json");
+  for (const [key, val] of Object.entries(extraHeaders)) {
+    if (val !== undefined && val !== null) {
+      headers.set(key, val);
+    }
+  }
   return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
+    headers,
   });
+}
+
+// Helper: Extract or Generate Device UUID from Cookie
+function getOrCreateDeviceId(request) {
+  const cookieHeader = request.headers.get("Cookie") || request.headers.get("cookie") || "";
+  const match = cookieHeader.match(/(?:^|;\s*)device_id=([^;]+)/);
+  if (match && match[1]) {
+    const existing = decodeURIComponent(match[1]).trim();
+    if (existing) {
+      return { deviceId: existing, isNew: false };
+    }
+  }
+
+  // Also check x-device-id header as fallback
+  const headerId = request.headers.get("x-device-id");
+  if (headerId && headerId.trim()) {
+    return { deviceId: headerId.trim(), isNew: false };
+  }
+
+  // Generate new UUID using web crypto
+  const newId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    ? crypto.randomUUID()
+    : 'dev_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+
+  return { deviceId: newId, isNew: true };
+}
+
+// Helper: Format 10-Year Permanent Cookie
+function buildDeviceCookie(deviceId) {
+  const maxAge = 315360000; // 10 years in seconds
+  const expiresDate = new Date(Date.now() + maxAge * 1000).toUTCString();
+  return `device_id=${encodeURIComponent(deviceId)}; Path=/; Max-Age=${maxAge}; Expires=${expiresDate}; SameSite=None; Secure; HttpOnly`;
 }
 
 // Helper: Normalize Anime Type
@@ -50,7 +91,7 @@ function normalizeType(val) {
   return 'TV Series';
 }
 
-// Helper: Extract real client IP in Cloudflare Worker environment
+// Helper: Extract real client IP in Cloudflare Worker environment (kept for audit logging)
 function getClientIP(request) {
   return request.headers.get('cf-connecting-ip') ||
          request.headers.get('x-real-ip') ||
@@ -58,7 +99,7 @@ function getClientIP(request) {
          '127.0.0.1';
 }
 
-// Helper: Ensure user_votes table exists in D1
+// Helper: Ensure user_votes table (device_id based) and vote columns exist in D1
 async function ensureUserVotesTable(d1) {
   if (!d1) return;
   try {
@@ -66,16 +107,26 @@ async function ensureUserVotesTable(d1) {
       CREATE TABLE IF NOT EXISTS user_votes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         anime_id INTEGER NOT NULL,
-        ip_address TEXT NOT NULL,
+        device_id TEXT NOT NULL,
         vote_type TEXT NOT NULL CHECK(vote_type IN ('like', 'upvote')),
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (anime_id) REFERENCES anime(id) ON DELETE CASCADE
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
     `).run();
+  } catch (_) {}
+
+  // Migrate legacy table schema from ip_address to device_id if needed
+  try { await d1.prepare("ALTER TABLE user_votes RENAME COLUMN ip_address TO device_id;").run(); } catch (_) {}
+  try { await d1.prepare("ALTER TABLE user_votes ADD COLUMN device_id TEXT;").run(); } catch (_) {}
+  try {
     await d1.prepare(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_votes_unique ON user_votes(anime_id, ip_address, vote_type);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_votes_unique ON user_votes(anime_id, device_id, vote_type);
     `).run();
   } catch (_) {}
+
+  // Auto-migrate anime columns if needed
+  try { await d1.prepare("ALTER TABLE anime ADD COLUMN likes INTEGER DEFAULT 0;").run(); } catch (_) {}
+  try { await d1.prepare("ALTER TABLE anime ADD COLUMN likesCount INTEGER DEFAULT 0;").run(); } catch (_) {}
+  try { await d1.prepare("ALTER TABLE anime ADD COLUMN upvotes INTEGER DEFAULT 0;").run(); } catch (_) {}
 }
 
 // Helper: Check if Cloudflare D1 SQL binding is attached
@@ -131,14 +182,14 @@ async function saveCatalog(env, catalog) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const path = url.pathname;
+    const path = url.pathname.replace(/\/+$/, "") || "/";
     const method = request.method;
 
     // 1. Handle CORS Preflight (OPTIONS)
     if (method === "OPTIONS") {
       return new Response(null, {
         status: 204,
-        headers: corsHeaders,
+        headers: getCorsHeaders(request),
       });
     }
 
@@ -493,40 +544,41 @@ export default {
       }
 
       // ----------------------------------------------------------------------
-      // 8. POST /api/anime/:id/vote or /api/anime/:id/upvote - Community Upvote (IP Tracked)
+      // 8. POST /api/anime/:id/vote or /api/anime/:id/upvote - Community Upvote (Cookie Device UUID Tracked)
       // ----------------------------------------------------------------------
-      const voteMatch = path.match(/^\/api\/anime\/([^/]+)\/(?:vote|upvote)$/);
-      if (voteMatch && method === "POST") {
-        const id = voteMatch[1];
-        const clientIp = getClientIP(request);
+      const voteMatch = path.match(/^(?:\/api)?\/anime\/([^/]+)\/(?:vote|upvote)s?$/i);
+      if (voteMatch && (method === "POST" || method === "PUT")) {
+        const id = decodeURIComponent(voteMatch[1]);
+        const { deviceId, isNew } = getOrCreateDeviceId(request);
         const d1 = getD1(env);
         let finalUpvotes = 0;
         let d1Updated = false;
+        const cookieHeaders = isNew ? { "Set-Cookie": buildDeviceCookie(deviceId) } : {};
 
         // 1. Check and Record Vote in Cloudflare D1
         if (d1) {
           try {
             await ensureUserVotesTable(d1);
 
-            // Check if this IP has already upvoted this anime
+            // Check if this device has already upvoted this anime
             const existingVote = await d1.prepare(
-              "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'upvote'"
-            ).bind(id, clientIp).first();
+              "SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'upvote'"
+            ).bind(id, deviceId).first();
 
             if (existingVote) {
               return jsonResponse({
                 error: "Already voted",
-                message: "You have already upvoted this anime from this IP address.",
+                message: "This device has already upvoted this anime.",
                 alreadyVoted: true,
                 animeId: id,
-                ip: clientIp
-              }, 400);
+                deviceId
+              }, 400, cookieHeaders, request);
             }
 
             // Record vote in user_votes table
             await d1.prepare(
-              "INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'upvote')"
-            ).bind(id, clientIp).run();
+              "INSERT INTO user_votes (anime_id, device_id, vote_type) VALUES (?, ?, 'upvote')"
+            ).bind(id, deviceId).run();
 
             // Increment upvotes in main anime table
             try {
@@ -554,24 +606,26 @@ export default {
             if (String(d1Err?.message || d1Err).toLowerCase().includes("unique")) {
               return jsonResponse({
                 error: "Already voted",
-                message: "You have already upvoted this anime from this IP address.",
-                alreadyVoted: true
-              }, 400);
+                message: "This device has already upvoted this anime.",
+                alreadyVoted: true,
+                deviceId
+              }, 400, cookieHeaders, request);
             }
           }
         }
 
         // 2. Synchronize with KV storage
         if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
-          const kvVoteKey = `vote_${id}_${clientIp}_upvote`;
+          const kvVoteKey = `vote_${id}_${deviceId}_upvote`;
           if (!d1) {
             const hasVotedKV = await env.ANIME_DB.get(kvVoteKey);
             if (hasVotedKV) {
               return jsonResponse({
                 error: "Already voted",
-                message: "You have already upvoted this anime from this IP address.",
-                alreadyVoted: true
-              }, 400);
+                message: "This device has already upvoted this anime.",
+                alreadyVoted: true,
+                deviceId
+              }, 400, cookieHeaders, request);
             }
             await env.ANIME_DB.put(kvVoteKey, "1");
           }
@@ -586,7 +640,7 @@ export default {
             item.popularity = finalUpvotes;
             await saveCatalog(env, catalog);
           } else if (!d1Updated) {
-            return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404);
+            return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404, cookieHeaders, request);
           }
         }
 
@@ -596,45 +650,47 @@ export default {
           upvotes: finalUpvotes,
           popularity: finalUpvotes,
           alreadyVoted: false,
+          deviceId,
           message: "Upvote recorded successfully"
-        });
+        }, 200, cookieHeaders, request);
       }
 
       // ----------------------------------------------------------------------
-      // 8.5. POST /api/anime/:id/like - Community Like (IP Tracked)
+      // 8.5. POST /api/anime/:id/like - Community Like (Cookie Device UUID Tracked)
       // ----------------------------------------------------------------------
-      const likeMatch = path.match(/^\/api\/anime\/([^/]+)\/like$/);
-      if (likeMatch && method === "POST") {
-        const id = likeMatch[1];
-        const clientIp = getClientIP(request);
+      const likeMatch = path.match(/^(?:\/api)?\/anime\/([^/]+)\/likes?$/i);
+      if (likeMatch && (method === "POST" || method === "PUT")) {
+        const id = decodeURIComponent(likeMatch[1]);
+        const { deviceId, isNew } = getOrCreateDeviceId(request);
         const d1 = getD1(env);
         let finalLikes = 0;
         let d1Updated = false;
+        const cookieHeaders = isNew ? { "Set-Cookie": buildDeviceCookie(deviceId) } : {};
 
         // 1. Check and Record Vote in Cloudflare D1
         if (d1) {
           try {
             await ensureUserVotesTable(d1);
 
-            // Check if this IP has already liked this anime
+            // Check if this device has already liked this anime
             const existingVote = await d1.prepare(
-              "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'like'"
-            ).bind(id, clientIp).first();
+              "SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'like'"
+            ).bind(id, deviceId).first();
 
             if (existingVote) {
               return jsonResponse({
                 error: "Already voted",
-                message: "You have already liked this anime from this IP address.",
+                message: "This device has already liked this anime.",
                 alreadyVoted: true,
                 animeId: id,
-                ip: clientIp
-              }, 400);
+                deviceId
+              }, 400, cookieHeaders, request);
             }
 
             // Record vote in user_votes table
             await d1.prepare(
-              "INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'like')"
-            ).bind(id, clientIp).run();
+              "INSERT INTO user_votes (anime_id, device_id, vote_type) VALUES (?, ?, 'like')"
+            ).bind(id, deviceId).run();
 
             // Increment likes in main anime table
             try {
@@ -662,24 +718,26 @@ export default {
             if (String(d1Err?.message || d1Err).toLowerCase().includes("unique")) {
               return jsonResponse({
                 error: "Already voted",
-                message: "You have already liked this anime from this IP address.",
-                alreadyVoted: true
-              }, 400);
+                message: "This device has already liked this anime.",
+                alreadyVoted: true,
+                deviceId
+              }, 400, cookieHeaders, request);
             }
           }
         }
 
         // 2. Synchronize with KV storage
         if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
-          const kvVoteKey = `vote_${id}_${clientIp}_like`;
+          const kvVoteKey = `vote_${id}_${deviceId}_like`;
           if (!d1) {
             const hasVotedKV = await env.ANIME_DB.get(kvVoteKey);
             if (hasVotedKV) {
               return jsonResponse({
                 error: "Already voted",
-                message: "You have already liked this anime from this IP address.",
-                alreadyVoted: true
-              }, 400);
+                message: "This device has already liked this anime.",
+                alreadyVoted: true,
+                deviceId
+              }, 400, cookieHeaders, request);
             }
             await env.ANIME_DB.put(kvVoteKey, "1");
           }
@@ -694,7 +752,7 @@ export default {
             item.likesCount = finalLikes;
             await saveCatalog(env, catalog);
           } else if (!d1Updated) {
-            return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404);
+            return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404, cookieHeaders, request);
           }
         }
 
@@ -704,43 +762,45 @@ export default {
           likes: finalLikes,
           likesCount: finalLikes,
           alreadyVoted: false,
+          deviceId,
           message: "Like recorded successfully"
-        });
+        }, 200, cookieHeaders, request);
       }
 
       // ----------------------------------------------------------------------
-      // 8.8. GET /api/anime/:id/vote-status - Check if IP has voted
+      // 8.8. GET /api/anime/:id/vote-status - Check if Device has voted
       // ----------------------------------------------------------------------
-      const statusMatch = path.match(/^\/api\/anime\/([^/]+)\/vote-status$/);
+      const statusMatch = path.match(/^(?:\/api)?\/anime\/([^/]+)\/(?:vote-status|vote_status|votestatus)$/i);
       if (statusMatch && method === "GET") {
-        const id = statusMatch[1];
-        const clientIp = getClientIP(request);
+        const id = decodeURIComponent(statusMatch[1]);
+        const { deviceId, isNew } = getOrCreateDeviceId(request);
         const d1 = getD1(env);
         let hasLiked = false;
         let hasUpvoted = false;
+        const cookieHeaders = isNew ? { "Set-Cookie": buildDeviceCookie(deviceId) } : {};
 
         if (d1) {
           try {
             await ensureUserVotesTable(d1);
             const votes = await d1.prepare(
-              "SELECT vote_type FROM user_votes WHERE anime_id = ? AND ip_address = ?"
-            ).bind(id, clientIp).all();
+              "SELECT vote_type FROM user_votes WHERE anime_id = ? AND device_id = ?"
+            ).bind(id, deviceId).all();
             if (votes && votes.results) {
               hasLiked = votes.results.some(v => v.vote_type === 'like');
               hasUpvoted = votes.results.some(v => v.vote_type === 'upvote');
             }
           } catch (_) {}
         } else if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
-          hasLiked = Boolean(await env.ANIME_DB.get(`vote_${id}_${clientIp}_like`));
-          hasUpvoted = Boolean(await env.ANIME_DB.get(`vote_${id}_${clientIp}_upvote`));
+          hasLiked = Boolean(await env.ANIME_DB.get(`vote_${id}_${deviceId}_like`));
+          hasUpvoted = Boolean(await env.ANIME_DB.get(`vote_${id}_${deviceId}_upvote`));
         }
 
         return jsonResponse({
           animeId: id,
-          ip: clientIp,
+          deviceId,
           hasLiked,
           hasUpvoted
-        });
+        }, 200, cookieHeaders, request);
       }
 
       // ----------------------------------------------------------------------

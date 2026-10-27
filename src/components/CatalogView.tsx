@@ -19,6 +19,7 @@ import { AnimeCard, AnimeCardData } from './AnimeCard';
 import { RecentlyViewedRow } from './RecentlyViewedRow';
 import { AnimatedStats } from './AnimatedStats';
 import { cloudflareApi } from '../services/cloudflareApi';
+import { calculateCatalogStats } from '../utils/languages';
 
 export interface Anime {
   id: number;
@@ -169,11 +170,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           item.status !== 'pending' && 
           item.submissionStatus !== 'pending'
         );
-        const normalized = approvedOnly.map((item: any, idx: number) => ({
+        const normalized = approvedOnly.map((item: any) => ({
           ...item,
-          languages: item.languages || (idx % 3 === 0 ? 'HIN,TAM,TEL' : idx % 2 === 0 ? 'HIN,TAM' : 'HIN,TEL'),
-          platform: item.platform || (idx % 2 === 0 ? 'Crunchyroll' : 'Netflix'),
-          type: item.type || (idx % 4 === 0 ? 'Movie' : 'TV Series')
+          languages: item.languages || '',
+          platform: item.platform || 'Crunchyroll',
+          type: item.type || 'TV Series'
         }));
         setRawAnimeList(normalized);
       } else {
@@ -288,26 +289,19 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         </button>
       </div>
 
-      {/* 2. ANIMATED STATS CARDS ROW */}
+      {/* 2. ANIMATED STATS CARDS ROW (DYNAMIC REAL STATS) */}
       <div className="mt-8">
         {(() => {
-          const uniqueLangs = new Set<string>();
-          rawAnimeList.forEach(anime => {
-            if (anime.languages) {
-              anime.languages.split(/[,|/]/).forEach(l => {
-                const trimmed = l.trim();
-                if (trimmed) uniqueLangs.add(trimmed);
-              });
-            }
-          });
-          const calculatedLangs = uniqueLangs.size;
-          const totalVotes = rawAnimeList.reduce((acc, curr) => acc + (Number(curr.popularity) || 0) + (Number(curr.likesCount) || 0), 0);
+          const stats = calculateCatalogStats(currentAnimeList);
 
           return (
             <AnimatedStats
-              totalAnime={rawAnimeList.length}
-              totalVotes={totalVotes}
-              totalLanguages={calculatedLangs}
+              animeList={currentAnimeList}
+              totalAnime={stats.totalAnime}
+              totalVotes={stats.totalVotes}
+              totalLanguages={stats.totalLanguages}
+              languagesList={stats.languagesList}
+              languagesString={stats.languagesString}
             />
           );
         })()}
