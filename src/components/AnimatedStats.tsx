@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Tv, Flame, Languages, CheckCircle2, TrendingUp, Sparkles } from 'lucide-react';
-import { extractUniqueLanguagesFromAnimeList, formatLanguagesBulletList } from '../utils/languages';
+import { extractUniqueLanguagesFromAnimeList, formatLanguagesBulletList, isExcludedLanguage } from '../utils/languages';
 
 export interface AnimatedStatsProps {
   totalAnime?: number;
@@ -19,11 +19,23 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
   languagesString,
   animeList = []
 }) => {
-  // Extract and normalize unique languages from animeList if not passed explicitly
+  // Extract and normalize unique Indian regional languages (strictly filtering out Japanese, English, Romaji, Korean, Chinese)
   const dynamicLanguages = useMemo(() => {
-    if (languagesList && Array.isArray(languagesList)) return languagesList;
-    if (animeList && animeList.length > 0) return extractUniqueLanguagesFromAnimeList(animeList);
-    return [];
+    let sourceList: string[] = [];
+    if (languagesList && Array.isArray(languagesList) && languagesList.length > 0) {
+      sourceList = languagesList;
+    } else if (animeList && Array.isArray(animeList) && animeList.length > 0) {
+      sourceList = extractUniqueLanguagesFromAnimeList(animeList);
+    }
+    
+    // Strict enforcement of language filter as requested
+    const strictlyFiltered = sourceList.filter(
+      (lang: any) => typeof lang === 'string' && 
+        !['Japanese', 'English', 'Romaji', 'Korean', 'Chinese'].includes(lang.trim()) && 
+        !isExcludedLanguage(lang)
+    );
+
+    return Array.from(new Set(strictlyFiltered));
   }, [animeList, languagesList]);
 
   // Determine final target counts
@@ -41,13 +53,22 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
       }, 0)
     : totalVotes;
 
-  const targetLangCount = typeof totalLanguages === 'number'
-    ? totalLanguages
-    : dynamicLanguages.length;
+  // Use dynamic count of regional languages so non-regional dubs are never counted
+  const targetLangCount = dynamicLanguages.length;
 
   const displayLanguagesString = useMemo(() => {
-    if (languagesString) return languagesString;
-    if (dynamicLanguages.length > 0) return formatLanguagesBulletList(dynamicLanguages);
+    if (dynamicLanguages.length > 0) {
+      return formatLanguagesBulletList(dynamicLanguages);
+    }
+    if (languagesString && typeof languagesString === 'string') {
+      const tokens = languagesString.split(/[•,/|]+/).map(s => s.trim()).filter(Boolean);
+      const filtered = tokens.filter(
+        lang => !['Japanese', 'English', 'Romaji', 'Korean', 'Chinese'].includes(lang.trim()) && !isExcludedLanguage(lang)
+      );
+      if (filtered.length > 0) {
+        return formatLanguagesBulletList(Array.from(new Set(filtered)));
+      }
+    }
     return 'None';
   }, [languagesString, dynamicLanguages]);
 
@@ -185,4 +206,3 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
     </div>
   );
 };
-

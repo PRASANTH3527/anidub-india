@@ -19,20 +19,55 @@ const D1_DATABASE_ID = '75f053ab-5b44-4d48-abf8-b3a357a89426';
 
 const SEED_ANIME: any[] = [];
 
-async function sendTelegramAlert(env: Env, text: string) {
+function escapeTelegramHtml(text: any): string {
+  if (text === null || text === undefined) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+async function sendTelegramAlert(env: Env, text: string, photoUrl?: string) {
   const token = env.TELEGRAM_BOT_TOKEN;
   const chatId = env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) return;
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    if (photoUrl && (photoUrl.startsWith('http://') || photoUrl.startsWith('https://'))) {
+      const pRes = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: photoUrl,
+          caption: text.slice(0, 1024),
+          parse_mode: 'HTML'
+        })
+      });
+      if (pRes.ok) return;
+    }
+
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: chatId,
-        text: text,
-        parse_mode: 'Markdown'
+        text: text.slice(0, 4096),
+        parse_mode: 'HTML'
       })
     });
+
+    if (!res.ok) {
+      // Plain text fallback if HTML fails
+      const plainText = text.replace(/<[^>]*>/g, '');
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: plainText.slice(0, 4096)
+        })
+      });
+    }
   } catch (err) {
     console.error('Telegram notification error:', err);
   }

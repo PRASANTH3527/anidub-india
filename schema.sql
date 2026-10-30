@@ -113,3 +113,14 @@ CREATE INDEX IF NOT EXISTS idx_episodes_anime_id ON episodes(anime_id, episode_n
 CREATE INDEX IF NOT EXISTS idx_reviews_anime_id ON reviews(anime_id);
 CREATE INDEX IF NOT EXISTS idx_watchlist_user ON watchlist(user_id, anime_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
+
+-- 9. Chat Messages Table (Stores real-time chat room messages for history persistence)
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user TEXT NOT NULL,
+  text TEXT NOT NULL,
+  timestamp TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at DESC);

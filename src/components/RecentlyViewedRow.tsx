@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import { 
   Clock, 
   Trash2, 
@@ -37,6 +38,10 @@ const parseLanguageBadges = (raw?: string): string[] => {
     .split(/[,/| ]+/)
     .map(s => s.trim())
     .filter(Boolean)
+    .filter(code => {
+      const u = code.toUpperCase();
+      return !['JAP', 'JPN', 'JAPANESE', 'ENG', 'ENGLISH', 'ROMAJI', 'KOR', 'KOREAN', 'CHI', 'CHINESE'].includes(u);
+    })
     .map(code => {
       const u = code.toUpperCase();
       if (u === 'HIN' || u === 'HI') return 'Hin';
@@ -44,8 +49,15 @@ const parseLanguageBadges = (raw?: string): string[] => {
       if (u === 'TEL' || u === 'TE') return 'Tel';
       if (u === 'MAL' || u === 'MA') return 'Mal';
       if (u === 'KAN' || u === 'KA') return 'Kan';
-      if (u === 'ENG' || u === 'EN') return 'Eng';
+      if (u === 'BEN' || u === 'BN') return 'Ben';
+      if (u === 'MAR' || u === 'MR') return 'Mar';
+      if (u === 'GUJ' || u === 'GU') return 'Guj';
+      if (u === 'PUN' || u === 'PA') return 'Pun';
       return code.slice(0, 3);
+    })
+    .filter(name => {
+      const u = name.toUpperCase();
+      return !['JAP', 'JPN', 'ENG'].includes(u);
     })
     .slice(0, 3);
 };
@@ -59,6 +71,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
   onToggleWatchlist
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   if (!items || items.length === 0) return null;
 
@@ -100,15 +113,20 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
         ref={scrollRef}
         className="flex items-stretch gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1.5 px-0.5 select-none w-full max-w-full"
       >
-        {items.map((anime) => {
+        {items.map((anime, idx) => {
           const isSaved = watchlist.includes(anime.id);
           const langBadges = parseLanguageBadges(anime.languages);
 
           return (
-            <div
+            <motion.div
               key={anime.id}
               onClick={() => onSelectAnime(anime)}
-              className="group relative flex-none w-36 sm:w-44 flex flex-col rounded-2xl bg-[#121829] border border-neutral-800/90 hover:border-purple-500/50 hover:shadow-xl hover:shadow-purple-950/30 transition-all duration-300 cursor-pointer overflow-hidden transform hover:-translate-y-1"
+              initial={shouldReduceMotion ? false : { opacity: 0, x: 20 }}
+              animate={shouldReduceMotion ? undefined : { opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: Math.min(idx * 0.05, 0.3) }}
+              whileHover={shouldReduceMotion ? undefined : { y: -4, transition: { duration: 0.2 } }}
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
+              className="group relative flex-none w-36 sm:w-44 flex flex-col rounded-2xl bg-[#121829] border border-neutral-800/90 hover:border-purple-500/50 hover:shadow-xl hover:shadow-purple-950/30 transition-colors cursor-pointer overflow-hidden will-change-transform"
             >
               {/* POSTER WRAPPER */}
               <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-900">
@@ -208,7 +226,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
                   <span className="transform group-hover:translate-x-1 transition-transform">→</span>
                 </div>
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>

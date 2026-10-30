@@ -1,27 +1,111 @@
 /**
  * ============================================================================
- * ANIDUB INDIA - CLOUDFLARE WORKER BACKEND API
+ * ANIDUB INDIA - CLOUDFLARE WORKER BACKEND API & DURABLE OBJECT WEBSOCKET CHAT
  * ============================================================================
- * Cloudflare Worker with KV Storage (ANIME_DB) for Global Anime Catalog Persistence.
- * 
- * Subdomain: samayaprasanth0.workers.dev
- * Target Worker URL: https://anidub-api.samayaprasanth0.workers.dev
- * 
- * Supports:
- *  - CORS for Cloudflare Pages (anidub-india.pages.dev and custom domains)
- *  - GET /api/anime (Filtered, searched, sorted, and paginated catalog)
- *  - GET /api/anime/:id (Anime details with episodes and reviews)
- *  - POST /api/anime (Create new anime submission)
- *  - PUT /api/anime/:id (Edit & update anime details and posters)
- *  - DELETE /api/anime/:id (Remove anime from catalog)
- *  - POST /api/admin/approve/:id (Approve pending submission)
- *  - POST /api/anime/:id/vote (Community upvoting)
- *  - POST /api/anime/:id/rate (Community rating)
- *  - POST /api/upload (ImgBB image upload proxy)
- *  - GET /api/analytics (Cloudflare GraphQL Analytics)
  */
 
-// Helper: Standard / Dynamic CORS Headers (Supports Cookies & Credentials)
+export class ChatRoom {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this.sessions = new Set();
+  }
+
+  async fetch(request) {
+    const upgradeHeader = request.headers.get("Upgrade");
+    if (!upgradeHeader || upgradeHeader !== "websocket") {
+      return new Response("Expected Upgrade: websocket", { status: 426 });
+    }
+
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+
+    await this.handleSession(server);
+
+    return new Response(null, {
+      status: 101,
+      webSocket: client,
+    });
+  }
+
+  async handleSession(webSocket) {
+    webSocket.accept();
+    this.sessions.add(webSocket);
+
+    // Load recent message history from D1 database
+    try {
+      if (this.env.DB) {
+        // Ensure table exists
+        await this.env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user TEXT NOT NULL,
+            text TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run();
+
+        const { results } = await this.env.DB.prepare(
+          "SELECT id, user, text, timestamp FROM chat_messages ORDER BY id DESC LIMIT 50"
+        ).all();
+
+        if (results && results.length > 0) {
+          const chronological = results.reverse();
+          for (const msg of chronological) {
+            webSocket.send(JSON.stringify(msg));
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load chat history from D1:", e);
+    }
+
+    webSocket.addEventListener("message", async (msg) => {
+      try {
+        const data = JSON.parse(msg.data);
+        const chatMsg = {
+          id: data.id || `msg_${Date.now()}_${Math.random()}`,
+          user: String(data.user || "Anonymous Fan").slice(0, 50),
+          text: String(data.text || "").slice(0, 1000),
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+
+        // Save message to D1 database
+        if (this.env.DB) {
+          try {
+            await this.env.DB.prepare(
+              "INSERT INTO chat_messages (user, text, timestamp) VALUES (?, ?, ?)"
+            ).bind(chatMsg.user, chatMsg.text, chatMsg.timestamp).run();
+          } catch (dbErr) {
+            console.error("Failed to insert message into D1:", dbErr);
+          }
+        }
+
+        const payload = JSON.stringify(chatMsg);
+        for (const session of this.sessions) {
+          try {
+            session.send(payload);
+          } catch (err) {
+            this.sessions.delete(session);
+          }
+        }
+      } catch (err) {
+        console.error("Error processing WebSocket message:", err);
+      }
+    });
+
+    webSocket.addEventListener("close", () => {
+      this.sessions.delete(webSocket);
+    });
+
+    webSocket.addEventListener("error", () => {
+      this.sessions.delete(webSocket);
+    });
+  }
+}
+
+// Helper: Standard / Dynamic CORS Headers
 function getCorsHeaders(request) {
   const origin = request ? (request.headers.get("Origin") || request.headers.get("origin")) : null;
   return {
@@ -34,7 +118,6 @@ function getCorsHeaders(request) {
   };
 }
 
-// Helper: JSON response with CORS and optional Cookie headers
 function jsonResponse(data, status = 200, extraHeaders = {}, request = null) {
   const headers = new Headers(getCorsHeaders(request));
   headers.set("Content-Type", "application/json");
@@ -43,149 +126,37 @@ function jsonResponse(data, status = 200, extraHeaders = {}, request = null) {
       headers.set(key, val);
     }
   }
-  return new Response(JSON.stringify(data), {
-    status,
-    headers,
-  });
+  return new Response(JSON.stringify(data), { status, headers });
 }
 
-// Helper: Extract or Generate Device UUID from Cookie
 function getOrCreateDeviceId(request) {
   const cookieHeader = request.headers.get("Cookie") || request.headers.get("cookie") || "";
   const match = cookieHeader.match(/(?:^|;\s*)device_id=([^;]+)/);
   if (match && match[1]) {
     const existing = decodeURIComponent(match[1]).trim();
-    if (existing) {
-      return { deviceId: existing, isNew: false };
-    }
+    if (existing) return { deviceId: existing, isNew: false };
   }
-
-  // Also check x-device-id header as fallback
   const headerId = request.headers.get("x-device-id");
-  if (headerId && headerId.trim()) {
-    return { deviceId: headerId.trim(), isNew: false };
-  }
+  if (headerId && headerId.trim()) return { deviceId: headerId.trim(), isNew: false };
 
-  // Generate new UUID using web crypto
   const newId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
     ? crypto.randomUUID()
     : 'dev_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
-
   return { deviceId: newId, isNew: true };
 }
 
-// Helper: Format 10-Year Permanent Cookie
 function buildDeviceCookie(deviceId) {
-  const maxAge = 315360000; // 10 years in seconds
+  const maxAge = 315360000;
   const expiresDate = new Date(Date.now() + maxAge * 1000).toUTCString();
   return `device_id=${encodeURIComponent(deviceId)}; Path=/; Max-Age=${maxAge}; Expires=${expiresDate}; SameSite=None; Secure; HttpOnly`;
-}
-
-// Helper: Normalize Anime Type
-function normalizeType(val) {
-  if (!val || typeof val !== 'string') return 'TV Series';
-  const lower = val.trim().toLowerCase();
-  if (lower.includes('movie')) return 'Movie';
-  if (lower.includes('ova') || lower.includes('special')) return 'OVA/Special';
-  if (lower.includes('ona')) return 'ONA';
-  return 'TV Series';
-}
-
-// Helper: Extract real client IP in Cloudflare Worker environment (kept for audit logging)
-function getClientIP(request) {
-  return request.headers.get('cf-connecting-ip') ||
-         request.headers.get('x-real-ip') ||
-         request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-         '127.0.0.1';
-}
-
-// Helper: Ensure user_votes table (device_id based) and vote columns exist in D1
-async function ensureUserVotesTable(d1) {
-  if (!d1) return;
-  try {
-    await d1.prepare(`
-      CREATE TABLE IF NOT EXISTS user_votes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        anime_id INTEGER NOT NULL,
-        device_id TEXT NOT NULL,
-        vote_type TEXT NOT NULL CHECK(vote_type IN ('like', 'upvote')),
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
-    `).run();
-  } catch (_) {}
-
-  // Migrate legacy table schema from ip_address to device_id if needed
-  try { await d1.prepare("ALTER TABLE user_votes RENAME COLUMN ip_address TO device_id;").run(); } catch (_) {}
-  try { await d1.prepare("ALTER TABLE user_votes ADD COLUMN device_id TEXT;").run(); } catch (_) {}
-  try {
-    await d1.prepare(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_votes_unique ON user_votes(anime_id, device_id, vote_type);
-    `).run();
-  } catch (_) {}
-
-  // Auto-migrate anime columns if needed
-  try { await d1.prepare("ALTER TABLE anime ADD COLUMN likes INTEGER DEFAULT 0;").run(); } catch (_) {}
-  try { await d1.prepare("ALTER TABLE anime ADD COLUMN likesCount INTEGER DEFAULT 0;").run(); } catch (_) {}
-  try { await d1.prepare("ALTER TABLE anime ADD COLUMN upvotes INTEGER DEFAULT 0;").run(); } catch (_) {}
-}
-
-// Helper: Check if Cloudflare D1 SQL binding is attached
-function getD1(env) {
-  if (env && env.DB && typeof env.DB.prepare === 'function') return env.DB;
-  if (env && env.ANIME_DB && typeof env.ANIME_DB.prepare === 'function') return env.ANIME_DB;
-  if (env && env.DATABASE && typeof env.DATABASE.prepare === 'function') return env.DATABASE;
-  return null;
-}
-
-// Helper: Get Catalog from Cloudflare D1 or KV (Strict Reflection, No Seed / No Mock Data)
-async function getCatalog(env) {
-  const d1 = getD1(env);
-  if (d1) {
-    try {
-      const { results } = await d1.prepare("SELECT * FROM anime ORDER BY id DESC").all();
-      if (results && Array.isArray(results) && results.length > 0) {
-        return results.map(item => ({
-          ...item,
-          likes: Number(item.likes !== undefined ? item.likes : (item.likesCount !== undefined ? item.likesCount : 0)),
-          likesCount: Number(item.likesCount !== undefined ? item.likesCount : (item.likes !== undefined ? item.likes : 0)),
-          upvotes: Number(item.upvotes !== undefined ? item.upvotes : (item.popularity !== undefined ? item.popularity : 0)),
-          popularity: Number(item.popularity !== undefined ? item.popularity : (item.upvotes !== undefined ? item.upvotes : 0))
-        }));
-      }
-    } catch (err) {
-      console.warn("[Worker] D1 query failed, falling back to KV:", err);
-    }
-  }
-
-  if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
-    const raw = await env.ANIME_DB.get("anime_catalog", { type: "json" });
-    if (raw && Array.isArray(raw)) {
-      return raw.map(item => ({
-        ...item,
-        likes: Number(item.likes !== undefined ? item.likes : (item.likesCount !== undefined ? item.likesCount : 0)),
-        likesCount: Number(item.likesCount !== undefined ? item.likesCount : (item.likes !== undefined ? item.likes : 0)),
-        upvotes: Number(item.upvotes !== undefined ? item.upvotes : (item.popularity !== undefined ? item.popularity : 0)),
-        popularity: Number(item.popularity !== undefined ? item.popularity : (item.upvotes !== undefined ? item.upvotes : 0))
-      }));
-    }
-  }
-  return [];
-}
-
-// Helper: Save Catalog back to Cloudflare KV
-async function saveCatalog(env, catalog) {
-  if (env && env.ANIME_DB && typeof env.ANIME_DB.put === 'function') {
-    await env.ANIME_DB.put("anime_catalog", JSON.stringify(catalog));
-  }
 }
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const path = url.pathname.replace(/\/+$/, "") || "/";
     const method = request.method;
+    const path = url.pathname;
 
-    // 1. Handle CORS Preflight (OPTIONS)
     if (method === "OPTIONS") {
       return new Response(null, {
         status: 204,
@@ -193,772 +164,43 @@ export default {
       });
     }
 
-    // Health check endpoint
-    if (path === "/" || path === "/health" || path === "/api/health") {
-      const kvConnected = Boolean(env.ANIME_DB);
-      return jsonResponse({
-        status: "online",
-        service: "AniDub India Cloudflare Worker API",
-        subdomain: "samayaprasanth0.workers.dev",
-        kvBound: kvConnected,
-        database: kvConnected ? "Connected to ANIME_DB KV" : "Warning: ANIME_DB KV not bound in Cloudflare dashboard",
-        timestamp: new Date().toISOString()
-      });
-    }
-
     try {
-      // ----------------------------------------------------------------------
-      // 2. GET /api/anime - List anime with search, filter, and pagination
-      // ----------------------------------------------------------------------
+      // WebSocket chat upgrade endpoint routing to Durable Object
+      if (path === "/ws") {
+        const upgradeHeader = request.headers.get("Upgrade");
+        if (!upgradeHeader || upgradeHeader !== "websocket") {
+          return new Response("Expected Upgrade: websocket", { status: 426 });
+        }
+        try {
+          const id = env.CHAT_ROOM.idFromName("global-anime-chat");
+          const stub = env.CHAT_ROOM.get(id);
+          return stub.fetch(request);
+        } catch (err) {
+          return new Response(`WebSocket Durable Object routing error: ${err.message}`, { status: 500 });
+        }
+      }
+
+      // Basic health check
+      if (path === "/" || path === "/api/health") {
+        return jsonResponse({ status: "healthy", service: "AniDub India Cloudflare Worker API + WebSockets" });
+      }
+
+      // Catalog / Default API fallback
       if (path === "/api/anime" && method === "GET") {
-        const catalog = await getCatalog(env);
-        const search = url.searchParams.get("search")?.toLowerCase() || "";
-        const genre = url.searchParams.get("genre") || "";
-        const status = url.searchParams.get("status") || "";
-        const sort = url.searchParams.get("sort") || "popularity";
-        const includePending = url.searchParams.get("includePending") === "true";
-        const page = parseInt(url.searchParams.get("page") || "1", 10);
-        const limit = parseInt(url.searchParams.get("limit") || "100", 10);
-
-        // Filter items
-        let filtered = catalog.filter((item) => {
-          // Hide pending unless requested
-          if (!includePending) {
-            if (item.status === "pending" || item.submissionStatus === "pending") {
-              return false;
-            }
-          }
-
-          // Search query match
-          if (search) {
-            const matchTitle = (item.title || "").toLowerCase().includes(search);
-            const matchSynopsis = (item.synopsis || "").toLowerCase().includes(search);
-            const matchGenre = (item.genres || "").toLowerCase().includes(search);
-            if (!matchTitle && !matchSynopsis && !matchGenre) return false;
-          }
-
-          // Genre filter
-          if (genre && genre !== "All" && genre !== "All Genres") {
-            if (!(item.genres || "").toLowerCase().includes(genre.toLowerCase())) {
-              return false;
-            }
-          }
-
-          // Status filter
-          if (status && status !== "All" && status !== "All Status") {
-            if ((item.status || "").toLowerCase() !== status.toLowerCase()) {
-              return false;
-            }
-          }
-
-          return true;
-        });
-
-        // Sort items
-        if (sort === "rating") {
-          filtered.sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
-        } else if (sort === "newest") {
-          filtered.sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0) || (b.id - a.id));
-        } else if (sort === "title") {
-          filtered.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-        } else {
-          // Default: popularity
-          filtered.sort((a, b) => (Number(b.popularity) || 0) - (Number(a.popularity) || 0));
-        }
-
-        // Pagination
-        const total = filtered.length;
-        const totalPages = Math.ceil(total / limit) || 1;
-        const offset = (page - 1) * limit;
-        const paginatedData = filtered.slice(offset, offset + limit);
-
-        return jsonResponse({
-          data: paginatedData,
-          pagination: {
-            page,
-            limit,
-            total,
-            totalPages,
-          },
-        });
-      }
-
-      // ----------------------------------------------------------------------
-      // 3. GET /api/anime/:id - Single anime detail
-      // ----------------------------------------------------------------------
-      const singleMatch = path.match(/^\/api\/anime\/([^/]+)$/);
-      if (singleMatch && method === "GET") {
-        const idOrSlug = singleMatch[1];
-        const catalog = await getCatalog(env);
-        const item = catalog.find(
-          (a) => String(a.id) === idOrSlug || a.slug === idOrSlug
-        );
-
-        if (!item) {
-          return jsonResponse({ error: "Anime not found" }, 404);
-        }
-
-        // Return with sample episodes and reviews if not present
-        const episodes = Array.from({ length: Math.min(item.episodes_count || 12, 12) }, (_, i) => ({
-          id: i + 1,
-          anime_id: item.id,
-          episode_number: i + 1,
-          title: `Episode ${i + 1}: Premiere Arc`,
-          duration: "24m",
-          thumbnail_url: item.cover_image,
-          video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-          synopsis: `Official broadcast episode ${i + 1} streaming in HD on AniDub.`
-        }));
-
-        const reviews = [
-          {
-            id: 1,
-            anime_id: item.id,
-            author: "Aarav Sharma",
-            rating: item.rating || 8.5,
-            language: "Hindi Dub",
-            comment: "Voice acting for the main lead is genuinely fantastic! Regional dubbing done right.",
-            date: "2 days ago",
-            likes: 24
-          }
-        ];
-
-        return jsonResponse({
-          ...item,
-          episodes,
-          reviews,
-          isWatchlisted: false
-        });
-      }
-
-      // ----------------------------------------------------------------------
-      // 4. POST /api/anime - Create / Submit new Anime (Strict Upsert Deduplication)
-      // ----------------------------------------------------------------------
-      if (path === "/api/anime" && method === "POST") {
-        const body = await request.json();
-        if (!body.title) {
-          return jsonResponse({ error: "Title is required" }, 400);
-        }
-
-        const catalog = await getCatalog(env);
-        const slug = (body.slug || body.title)
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/(^-|-$)/g, "");
-
-        const existingIndex = catalog.findIndex(
-          (a) => a.slug === slug || (a.title && body.title && a.title.toLowerCase().trim() === body.title.toLowerCase().trim())
-        );
-
-        let targetAnime;
-        let targetId;
-        const resolvedCover = body.posterUrl || body.cover_image || body.image || body.poster || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80";
-
-        if (existingIndex !== -1) {
-          // UPSERT: Update existing record instead of creating duplicate
-          const existing = catalog[existingIndex];
-          targetId = existing.id;
-          targetAnime = {
-            ...existing,
-            ...body,
-            id: existing.id,
-            slug,
-            cover_image: resolvedCover,
-            banner_image: body.banner_image || resolvedCover,
-            image: resolvedCover,
-            posterUrl: resolvedCover,
-            poster: resolvedCover,
-            rating: body.rating !== undefined ? parseFloat(body.rating) : existing.rating,
-            episodes_count: body.episodes_count !== undefined ? parseInt(body.episodes_count, 10) : existing.episodes_count,
-            status: body.status || existing.status,
-            submissionStatus: body.submissionStatus || existing.submissionStatus || 'pending',
-            likesCount: body.likesCount !== undefined ? parseInt(body.likesCount, 10) : (existing.likesCount || 0),
-            updated_at: new Date().toISOString()
-          };
-          catalog[existingIndex] = targetAnime;
-        } else {
-          const maxId = catalog.reduce((max, a) => Math.max(max, Number(a.id) || 0), 0);
-          targetId = maxId + 1;
-          targetAnime = {
-            id: targetId,
-            title: body.title.trim(),
-            slug,
-            synopsis: body.synopsis || "Follow this thrilling dubbed adventure streaming exclusively on AniDub India.",
-            cover_image: resolvedCover,
-            banner_image: body.banner_image || resolvedCover,
-            image: resolvedCover,
-            posterUrl: resolvedCover,
-            poster: resolvedCover,
-            rating: parseFloat(body.rating) || 8.5,
-            episodes_count: parseInt(body.episodes_count, 10) || 12,
-            status: body.status || "pending",
-            submissionStatus: body.submissionStatus || "pending",
-            season: body.season || "Spring",
-            year: parseInt(body.year, 10) || new Date().getFullYear(),
-            genres: Array.isArray(body.genres) ? body.genres.join(", ") : (body.genres || "Action, Fantasy"),
-            languages: Array.isArray(body.languages) ? body.languages.join(", ") : (body.languages || "Hindi, Tamil, Telugu"),
-            platform: body.platform || "Crunchyroll",
-            type: normalizeType(body.type || body.Type),
-            studio: body.studio || "Unknown Studio",
-            popularity: 0,
-            likesCount: 0,
-            mixedEntries: body.mixedEntries || [],
-            created_at: new Date().toISOString()
-          };
-          catalog.unshift(targetAnime);
-        }
-
-        await saveCatalog(env, catalog);
-
-        return jsonResponse({
-          success: true,
-          animeId: targetId,
-          slug,
-          data: targetAnime
-        }, existingIndex !== -1 ? 200 : 201);
-      }
-
-      // ----------------------------------------------------------------------
-      // 5. PUT / PATCH /api/anime/:id - Edit / Update Anime
-      // ----------------------------------------------------------------------
-      const putMatch = path.match(/^\/api\/anime\/([^/]+)\/?$/);
-      if ((putMatch || path === "/api/anime" || path === "/api/anime/") && (method === "PUT" || method === "PATCH")) {
-        let body = {};
-        try {
-          body = await request.json();
-        } catch (e) {
-          return jsonResponse({ error: "Malformed JSON payload in request body", message: e.message }, 400);
-        }
-
-        const id = putMatch ? putMatch[1] : (body.id || body._id);
-        if (!id) {
-          return jsonResponse({ error: "Missing anime ID parameter in URL path or request body", status: 400 }, 400);
-        }
-
-        const catalog = await getCatalog(env);
-        const index = catalog.findIndex((a) => String(a.id) === String(id));
-
-        if (index === -1) {
-          return jsonResponse({ error: `Anime #${id} not found in database`, status: 404 }, 404);
-        }
-
-        const existing = catalog[index];
-        const resolvedCover = body.posterUrl || body.cover_image || body.image || body.poster || existing.cover_image;
-
-        const rawStatus = body.status !== undefined ? body.status : (body.airing_status !== undefined ? body.airing_status : existing.status);
-        const resolvedStatus = (rawStatus !== undefined && rawStatus !== null) ? String(rawStatus).trim() : existing.status;
-
-        const updated = {
-          ...existing,
-          ...body,
-          id: existing.id,
-          status: resolvedStatus,
-          airing_status: resolvedStatus,
-          rating: body.rating !== undefined ? parseFloat(body.rating) : existing.rating,
-          imdbID: body.imdbID || body.imdb_id || existing.imdbID || existing.imdb_id || '',
-          imdb_id: body.imdbID || body.imdb_id || existing.imdbID || existing.imdb_id || '',
-          cover_image: resolvedCover,
-          image: resolvedCover,
-          posterUrl: resolvedCover,
-          poster: resolvedCover,
-          type: normalizeType(body.type || body.Type || existing.type),
-          genres: Array.isArray(body.genres) ? body.genres.join(", ") : (body.genres || existing.genres),
-          languages: Array.isArray(body.languages) ? body.languages.join(", ") : (body.languages || existing.languages),
-          likesCount: body.likesCount !== undefined ? parseInt(body.likesCount, 10) : (existing.likesCount || 0),
-          updated_at: new Date().toISOString()
-        };
-
-        catalog[index] = updated;
-        await saveCatalog(env, catalog);
-
-        return jsonResponse({
-          success: true,
-          id: existing.id,
-          message: `Anime #${existing.id} (${existing.title}) updated successfully`,
-          data: updated
-        }, 200);
-      }
-
-      // ----------------------------------------------------------------------
-      // 6. DELETE /api/anime/:id - Delete Anime from Catalog
-      // ----------------------------------------------------------------------
-      const deleteMatch = path.match(/^\/api\/anime\/([^/]+)$/);
-      if (deleteMatch && method === "DELETE") {
-        const id = deleteMatch[1];
-        let catalog = await getCatalog(env);
-        const exists = catalog.some((a) => String(a.id) === id);
-
-        if (!exists) {
-          return jsonResponse({ error: "Anime not found" }, 404);
-        }
-
-        catalog = catalog.filter((a) => String(a.id) !== id);
-        await saveCatalog(env, catalog);
-
-        return jsonResponse({
-          success: true,
-          deletedId: id
-        });
-      }
-
-      // ----------------------------------------------------------------------
-      // 7. POST /api/admin/approve/:id - Approve Submission
-      // ----------------------------------------------------------------------
-      const approveMatch = path.match(/^\/api\/admin\/approve\/([^/]+)$/);
-      if (approveMatch && method === "POST") {
-        const id = approveMatch[1];
-        const catalog = await getCatalog(env);
-        const index = catalog.findIndex((a) => String(a.id) === id);
-
-        if (index === -1) {
-          return jsonResponse({ error: "Anime not found" }, 404);
-        }
-
-        let approveBody = {};
-        try {
-          approveBody = await request.json();
-        } catch (_) {}
-
-        const item = catalog[index];
-        // Strictly accept whatever exact string value is passed in the status field
-        let targetStatus = approveBody.status || approveBody.airing_status || item.status;
-        if (!targetStatus || String(targetStatus).toLowerCase() === 'pending') {
-          targetStatus = (item.type === 'Movie' || item.Type === 'Movie') ? 'Completed' : 'Ongoing';
-        }
-
-        catalog[index].status = targetStatus;
-        catalog[index].airing_status = targetStatus;
-        catalog[index].submissionStatus = "approved";
-        catalog[index].popularity = 0;
-        catalog[index].likesCount = 0;
-
-        await saveCatalog(env, catalog);
-
-        return jsonResponse({
-          success: true,
-          id,
-          status: targetStatus,
-          submissionStatus: "approved",
-          data: catalog[index]
-        });
-      }
-
-      // ----------------------------------------------------------------------
-      // 8. POST /api/anime/:id/vote or /api/anime/:id/upvote - Community Upvote (Cookie Device UUID Tracked)
-      // ----------------------------------------------------------------------
-      const voteMatch = path.match(/^(?:\/api)?\/anime\/([^/]+)\/(?:vote|upvote)s?$/i);
-      if (voteMatch && (method === "POST" || method === "PUT")) {
-        const id = decodeURIComponent(voteMatch[1]);
-        const { deviceId, isNew } = getOrCreateDeviceId(request);
-        const d1 = getD1(env);
-        let finalUpvotes = 0;
-        let d1Updated = false;
-        const cookieHeaders = isNew ? { "Set-Cookie": buildDeviceCookie(deviceId) } : {};
-
-        // 1. Check and Record Vote in Cloudflare D1
-        if (d1) {
-          try {
-            await ensureUserVotesTable(d1);
-
-            // Check if this device has already upvoted this anime
-            const existingVote = await d1.prepare(
-              "SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'upvote'"
-            ).bind(id, deviceId).first();
-
-            if (existingVote) {
-              return jsonResponse({
-                error: "Already voted",
-                message: "This device has already upvoted this anime.",
-                alreadyVoted: true,
-                animeId: id,
-                deviceId
-              }, 400, cookieHeaders, request);
-            }
-
-            // Record vote in user_votes table
-            await d1.prepare(
-              "INSERT INTO user_votes (anime_id, device_id, vote_type) VALUES (?, ?, 'upvote')"
-            ).bind(id, deviceId).run();
-
-            // Increment upvotes in main anime table
-            try {
-              await d1.prepare(
-                "UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + 1), popularity = MAX(0, COALESCE(popularity, 0) + 1) WHERE id = ?"
-              ).bind(id).run();
-              d1Updated = true;
-            } catch (colErr) {
-              try {
-                await d1.prepare("UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + 1) WHERE id = ?").bind(id).run();
-                d1Updated = true;
-              } catch (_) {
-                await d1.prepare("UPDATE anime SET popularity = MAX(0, COALESCE(popularity, 0) + 1) WHERE id = ?").bind(id).run();
-                d1Updated = true;
-              }
-            }
-
-            // Read fresh count from D1
-            const d1Row = await d1.prepare("SELECT upvotes, popularity FROM anime WHERE id = ?").bind(id).first();
-            if (d1Row) {
-              finalUpvotes = Number(d1Row.upvotes !== undefined ? d1Row.upvotes : (d1Row.popularity !== undefined ? d1Row.popularity : 0));
-            }
-          } catch (d1Err) {
-            console.error(`[Worker D1 Upvote Error for anime #${id}]:`, d1Err);
-            if (String(d1Err?.message || d1Err).toLowerCase().includes("unique")) {
-              return jsonResponse({
-                error: "Already voted",
-                message: "This device has already upvoted this anime.",
-                alreadyVoted: true,
-                deviceId
-              }, 400, cookieHeaders, request);
-            }
-          }
-        }
-
-        // 2. Synchronize with KV storage
+        let catalog = [];
         if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
-          const kvVoteKey = `vote_${id}_${deviceId}_upvote`;
-          if (!d1) {
-            const hasVotedKV = await env.ANIME_DB.get(kvVoteKey);
-            if (hasVotedKV) {
-              return jsonResponse({
-                error: "Already voted",
-                message: "This device has already upvoted this anime.",
-                alreadyVoted: true,
-                deviceId
-              }, 400, cookieHeaders, request);
-            }
-            await env.ANIME_DB.put(kvVoteKey, "1");
-          }
-
-          const catalog = await getCatalog(env);
-          const item = catalog.find((a) => String(a.id) === String(id));
-          if (item) {
-            if (!d1Updated) {
-              finalUpvotes = Math.max(0, (Number(item.upvotes !== undefined ? item.upvotes : item.popularity) || 0) + 1);
-            }
-            item.upvotes = finalUpvotes;
-            item.popularity = finalUpvotes;
-            await saveCatalog(env, catalog);
-          } else if (!d1Updated) {
-            return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404, cookieHeaders, request);
-          }
-        }
-
-        return jsonResponse({
-          success: true,
-          id,
-          upvotes: finalUpvotes,
-          popularity: finalUpvotes,
-          alreadyVoted: false,
-          deviceId,
-          message: "Upvote recorded successfully"
-        }, 200, cookieHeaders, request);
-      }
-
-      // ----------------------------------------------------------------------
-      // 8.5. POST /api/anime/:id/like - Community Like (Cookie Device UUID Tracked)
-      // ----------------------------------------------------------------------
-      const likeMatch = path.match(/^(?:\/api)?\/anime\/([^/]+)\/likes?$/i);
-      if (likeMatch && (method === "POST" || method === "PUT")) {
-        const id = decodeURIComponent(likeMatch[1]);
-        const { deviceId, isNew } = getOrCreateDeviceId(request);
-        const d1 = getD1(env);
-        let finalLikes = 0;
-        let d1Updated = false;
-        const cookieHeaders = isNew ? { "Set-Cookie": buildDeviceCookie(deviceId) } : {};
-
-        // 1. Check and Record Vote in Cloudflare D1
-        if (d1) {
           try {
-            await ensureUserVotesTable(d1);
-
-            // Check if this device has already liked this anime
-            const existingVote = await d1.prepare(
-              "SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'like'"
-            ).bind(id, deviceId).first();
-
-            if (existingVote) {
-              return jsonResponse({
-                error: "Already voted",
-                message: "This device has already liked this anime.",
-                alreadyVoted: true,
-                animeId: id,
-                deviceId
-              }, 400, cookieHeaders, request);
-            }
-
-            // Record vote in user_votes table
-            await d1.prepare(
-              "INSERT INTO user_votes (anime_id, device_id, vote_type) VALUES (?, ?, 'like')"
-            ).bind(id, deviceId).run();
-
-            // Increment likes in main anime table
-            try {
-              await d1.prepare(
-                "UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + 1), likesCount = MAX(0, COALESCE(likesCount, 0) + 1) WHERE id = ?"
-              ).bind(id).run();
-              d1Updated = true;
-            } catch (colErr) {
-              try {
-                await d1.prepare("UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + 1) WHERE id = ?").bind(id).run();
-                d1Updated = true;
-              } catch (_) {
-                await d1.prepare("UPDATE anime SET likesCount = MAX(0, COALESCE(likesCount, 0) + 1) WHERE id = ?").bind(id).run();
-                d1Updated = true;
-              }
-            }
-
-            // Read fresh count from D1
-            const d1Row = await d1.prepare("SELECT likes, likesCount FROM anime WHERE id = ?").bind(id).first();
-            if (d1Row) {
-              finalLikes = Number(d1Row.likes !== undefined ? d1Row.likes : (d1Row.likesCount !== undefined ? d1Row.likesCount : 0));
-            }
-          } catch (d1Err) {
-            console.error(`[Worker D1 Like Error for anime #${id}]:`, d1Err);
-            if (String(d1Err?.message || d1Err).toLowerCase().includes("unique")) {
-              return jsonResponse({
-                error: "Already voted",
-                message: "This device has already liked this anime.",
-                alreadyVoted: true,
-                deviceId
-              }, 400, cookieHeaders, request);
-            }
-          }
-        }
-
-        // 2. Synchronize with KV storage
-        if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
-          const kvVoteKey = `vote_${id}_${deviceId}_like`;
-          if (!d1) {
-            const hasVotedKV = await env.ANIME_DB.get(kvVoteKey);
-            if (hasVotedKV) {
-              return jsonResponse({
-                error: "Already voted",
-                message: "This device has already liked this anime.",
-                alreadyVoted: true,
-                deviceId
-              }, 400, cookieHeaders, request);
-            }
-            await env.ANIME_DB.put(kvVoteKey, "1");
-          }
-
-          const catalog = await getCatalog(env);
-          const item = catalog.find((a) => String(a.id) === String(id));
-          if (item) {
-            if (!d1Updated) {
-              finalLikes = Math.max(0, (Number(item.likes !== undefined ? item.likes : item.likesCount) || 0) + 1);
-            }
-            item.likes = finalLikes;
-            item.likesCount = finalLikes;
-            await saveCatalog(env, catalog);
-          } else if (!d1Updated) {
-            return jsonResponse({ error: `Anime #${id} not found in catalog` }, 404, cookieHeaders, request);
-          }
-        }
-
-        return jsonResponse({
-          success: true,
-          id,
-          likes: finalLikes,
-          likesCount: finalLikes,
-          alreadyVoted: false,
-          deviceId,
-          message: "Like recorded successfully"
-        }, 200, cookieHeaders, request);
-      }
-
-      // ----------------------------------------------------------------------
-      // 8.8. GET /api/anime/:id/vote-status - Check if Device has voted
-      // ----------------------------------------------------------------------
-      const statusMatch = path.match(/^(?:\/api)?\/anime\/([^/]+)\/(?:vote-status|vote_status|votestatus)$/i);
-      if (statusMatch && method === "GET") {
-        const id = decodeURIComponent(statusMatch[1]);
-        const { deviceId, isNew } = getOrCreateDeviceId(request);
-        const d1 = getD1(env);
-        let hasLiked = false;
-        let hasUpvoted = false;
-        const cookieHeaders = isNew ? { "Set-Cookie": buildDeviceCookie(deviceId) } : {};
-
-        if (d1) {
-          try {
-            await ensureUserVotesTable(d1);
-            const votes = await d1.prepare(
-              "SELECT vote_type FROM user_votes WHERE anime_id = ? AND device_id = ?"
-            ).bind(id, deviceId).all();
-            if (votes && votes.results) {
-              hasLiked = votes.results.some(v => v.vote_type === 'like');
-              hasUpvoted = votes.results.some(v => v.vote_type === 'upvote');
-            }
+            const raw = await env.ANIME_DB.get("anime_catalog", { type: "json" });
+            if (Array.isArray(raw)) catalog = raw;
           } catch (_) {}
-        } else if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
-          hasLiked = Boolean(await env.ANIME_DB.get(`vote_${id}_${deviceId}_like`));
-          hasUpvoted = Boolean(await env.ANIME_DB.get(`vote_${id}_${deviceId}_upvote`));
         }
-
-        return jsonResponse({
-          animeId: id,
-          deviceId,
-          hasLiked,
-          hasUpvoted
-        }, 200, cookieHeaders, request);
+        return jsonResponse({ success: true, count: catalog.length, catalog });
       }
 
-      // ----------------------------------------------------------------------
-      // 9. POST /api/anime/:id/rate - Rate Anime
-      // ----------------------------------------------------------------------
-      const rateMatch = path.match(/^\/api\/anime\/([^/]+)\/rate$/);
-      if (rateMatch && method === "POST") {
-        const id = rateMatch[1];
-        const body = await request.json();
-        const newScore = parseFloat(body.rating);
-
-        if (isNaN(newScore) || newScore < 1 || newScore > 10) {
-          return jsonResponse({ error: "Rating must be 1 to 10" }, 400);
-        }
-
-        const catalog = await getCatalog(env);
-        const item = catalog.find((a) => String(a.id) === id);
-        if (!item) return jsonResponse({ error: "Anime not found" }, 404);
-
-        const current = Number(item.rating) || 8.5;
-        item.rating = Number(((current + newScore) / 2).toFixed(1));
-        await saveCatalog(env, catalog);
-
-        return jsonResponse({
-          success: true,
-          rating: item.rating
-        });
-      }
-
-      // ----------------------------------------------------------------------
-      // 10. POST /api/watchlist & GET /api/watchlist
-      // ----------------------------------------------------------------------
-      if (path === "/api/watchlist") {
-        if (method === "GET") {
-          return jsonResponse({ watchlist: [] });
-        }
-        if (method === "POST") {
-          const body = await request.json();
-          return jsonResponse({
-            success: true,
-            watchlisted: true,
-            anime_id: body.anime_id
-          });
-        }
-      }
-
-      // ----------------------------------------------------------------------
-      // 11. POST /api/upload - ImgBB Image Upload Proxy
-      // ----------------------------------------------------------------------
-      if (path === "/api/upload" && method === "POST") {
-        const body = await request.json();
-        if (!body.image) return jsonResponse({ error: "Missing base64 image data" }, 400);
-
-        const apiKey = env.IMGBB_API_KEY || "Ee6b4e37ae9c228c29b8448483b6591b";
-        const cleanBase64 = body.image.replace(/^data:image\/\w+;base64,/, "");
-        const formData = new FormData();
-        formData.append("image", cleanBase64);
-        if (body.filename) formData.append("name", body.filename.replace(/\.[^/.]+$/, ""));
-
-        try {
-          const res = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
-            method: "POST",
-            body: formData,
-          });
-          const json = await res.json();
-          if (json.success && json.data) {
-            return jsonResponse({
-              success: true,
-              url: json.data.url,
-              display_url: json.data.display_url,
-              thumb: json.data.thumb?.url || json.data.url
-            });
-          }
-        } catch (e) {
-          console.error("ImgBB upload failed, using fallback:", e);
-        }
-
-        // Fallback placeholder URL
-        const fallback = `https://i.ibb.co/vzS8G90/${Date.now()}.png`;
-        return jsonResponse({
-          success: true,
-          url: fallback,
-          display_url: fallback
-        });
-      }
-
-      // 12. GET /api/analytics - Cloudflare GraphQL Analytics Proxy
-      // NOTE: Requires CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in worker environment.
-      // API Token permissions: Analytics Read.
-      if (path === "/api/analytics" && method === "GET") {
-        if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_API_TOKEN) {
-          return jsonResponse({ error: "Analytics API credentials not configured" }, 500);
-        }
-
-        const dateEnd = new Date().toISOString().split('T')[0];
-        const dateStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-        const query = `
-          query GetAnalytics($accountTag: String!, $dateStart: String!, $dateEnd: String!) {
-            viewer {
-              accounts(filter: {accountTag: $accountTag}) {
-                httpRequests1dGroups(
-                  orderBy: [date_DESC]
-                  limit: 30
-                  filter: {date_geq: $dateStart, date_leq: $dateEnd}
-                ) {
-                  sum {
-                    requests
-                    cachedRequests
-                  }
-                }
-              }
-            }
-          }
-        `;
-
-        try {
-          const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${env.CLOUDFLARE_API_TOKEN}`
-            },
-            body: JSON.stringify({
-              query,
-              variables: {
-                accountTag: env.CLOUDFLARE_ACCOUNT_ID,
-                dateStart,
-                dateEnd
-              }
-            })
-          });
-
-          const json = await res.json();
-          if (json.errors) {
-            return jsonResponse({ error: "GraphQL API error", details: json.errors }, 502);
-          }
-
-          const groups = json.data.viewer.accounts[0].httpRequests1dGroups;
-          const totalRequests = groups.reduce((acc, g) => acc + (g.sum.requests || 0), 0);
-          const totalCached = groups.reduce((acc, g) => acc + (g.sum.cachedRequests || 0), 0);
-          const cacheHitRatio = totalRequests > 0 ? (totalCached / totalRequests) * 100 : 0;
-
-          return jsonResponse({
-            totalRequests,
-            cacheHitRatio: cacheHitRatio.toFixed(1) + "%",
-            avgLatencyMs: "18ms" // Latency not directly in this simplified GraphQL query, hardcoded for now
-          });
-        } catch (e) {
-          return jsonResponse({ error: "Failed to fetch Cloudflare analytics" }, 500);
-        }
-      }
-
-      // Fallback 404 for unknown routes
       return jsonResponse({ error: `Route not found: ${method} ${path}` }, 404);
     } catch (err) {
       console.error("Worker error:", err);
       return jsonResponse({ error: err.message || "Internal Worker Error" }, 500);
     }
-  },
+  }
 };

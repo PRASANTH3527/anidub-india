@@ -47,6 +47,43 @@ export const LANGUAGE_NAME_MAP: Record<string, string> = {
 };
 
 /**
+ * Non-regional languages excluded from the Indian regional dub stats.
+ * AniDub India is dedicated to Indian regional dub tracking.
+ */
+export const EXCLUDED_LANGUAGES = new Set([
+  'japanese',
+  'english',
+  'romaji',
+  'korean',
+  'chinese',
+  'japan',
+  'jpn',
+  'jap',
+  'ja',
+  'eng',
+  'en',
+  'kor',
+  'ko',
+  'chi',
+  'zh'
+]);
+
+/**
+ * Checks whether a language token or name is excluded from regional dub tracking.
+ */
+export function isExcludedLanguage(lang: string): boolean {
+  if (!lang || typeof lang !== 'string') return true;
+  const trimmed = lang.trim();
+  if (['Japanese', 'English', 'Romaji', 'Korean', 'Chinese'].some(
+    ex => ex.toLowerCase() === trimmed.toLowerCase()
+  )) {
+    return true;
+  }
+  const clean = trimmed.toLowerCase().replace(/^[^a-z]+|[^a-z]+$/g, '');
+  return EXCLUDED_LANGUAGES.has(clean) || ['japanese', 'english', 'romaji', 'korean', 'chinese', 'korea', 'china', 'kor', 'chi', 'zh', 'ko', 'ja', 'jp', 'jpn', 'jap', 'en', 'eng'].includes(clean);
+}
+
+/**
  * Normalizes any language token (e.g., 'HIN', 'ta', 'telugu') to its clean proper name.
  */
 export function normalizeLanguageName(rawLang: string): string {
@@ -61,14 +98,15 @@ export function normalizeLanguageName(rawLang: string): string {
 }
 
 /**
- * Extracts and deduplicates all unique language names from an array of anime objects.
+ * Extracts and deduplicates all unique Indian regional language names from an array of anime objects.
+ * Filters out Japanese, English, Romaji, Korean, and Chinese so only Indian regional languages are counted and displayed.
  */
 export function extractUniqueLanguagesFromAnimeList(animeList: any[] = []): string[] {
   if (!Array.isArray(animeList) || animeList.length === 0) {
     return [];
   }
 
-  const uniqueSet = new Set<string>();
+  const rawLanguages: string[] = [];
 
   animeList.forEach((anime) => {
     if (!anime) return;
@@ -83,15 +121,26 @@ export function extractUniqueLanguagesFromAnimeList(animeList: any[] = []): stri
     }
 
     tokens.forEach((token) => {
-      const normalized = normalizeLanguageName(token);
-      if (normalized) {
-        uniqueSet.add(normalized);
+      const trimmed = token.trim();
+      if (!trimmed) return;
+      if (['Japanese', 'English', 'Romaji', 'Korean', 'Chinese'].includes(trimmed)) return;
+      if (isExcludedLanguage(trimmed)) return;
+      const normalized = normalizeLanguageName(trimmed);
+      if (normalized && !isExcludedLanguage(normalized)) {
+        rawLanguages.push(normalized);
       }
     });
   });
 
+  // Strictly enforce the filter in the calculation logic as specified by the user:
+  const filteredLanguages = rawLanguages.filter(
+    lang => lang && !['Japanese', 'English', 'Romaji', 'Korean', 'Chinese'].includes(lang.trim()) && !isExcludedLanguage(lang)
+  );
+
+  const uniqueSet = new Set<string>(filteredLanguages);
+
   // Priority sort for Indian regional dub order
-  const priority = ['Hindi', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'Bengali', 'Marathi', 'English', 'Japanese'];
+  const priority = ['Hindi', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'Bengali', 'Marathi', 'Gujarati', 'Punjabi'];
   return Array.from(uniqueSet).sort((a, b) => {
     const pA = priority.indexOf(a);
     const pB = priority.indexOf(b);

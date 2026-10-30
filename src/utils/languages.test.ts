@@ -60,3 +60,26 @@ test('calculateCatalogStats computes accurate dynamic values', () => {
   assert.deepEqual(stats.languagesList, ['Hindi', 'Tamil', 'Telugu']);
   assert.equal(stats.languagesString, 'Hindi • Tamil • Telugu');
 });
+
+test('extractUniqueLanguagesFromAnimeList strictly filters out Japanese, English, Romaji, Korean, and Chinese', () => {
+  const animeWithForeignLangs = [
+    { id: 1, languages: 'Hindi, Japanese' },
+    { id: 2, languages: 'English, Tamil, Romaji' },
+    { id: 3, languages: ['Telugu', 'JPN', 'ENG'] },
+    { id: 4, languages: 'Korean, Chinese, Malayalam' }
+  ];
+
+  const filtered = extractUniqueLanguagesFromAnimeList(animeWithForeignLangs);
+  assert.deepEqual(filtered, ['Hindi', 'Tamil', 'Telugu', 'Malayalam']);
+  assert.equal(filtered.length, 4);
+
+  const stats = calculateCatalogStats(animeWithForeignLangs);
+  assert.equal(stats.totalLanguages, 4);
+  assert.equal(stats.languagesString, 'Hindi • Tamil • Telugu • Malayalam');
+  assert.equal(stats.languagesList.includes('Japanese'), false);
+  assert.equal(stats.languagesList.includes('English'), false);
+  assert.equal(stats.languagesList.includes('Romaji'), false);
+  assert.equal(stats.languagesList.includes('Korean'), false);
+  assert.equal(stats.languagesList.includes('Chinese'), false);
+});
+

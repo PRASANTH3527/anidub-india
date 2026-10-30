@@ -51,9 +51,12 @@ import {
   PanelLeftClose,
   PanelLeft,
   Minimize2,
-  Maximize2
+  Maximize2,
+  Send,
+  Bell
 } from 'lucide-react';
 import { DubInfoModal } from './DubInfoModal';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { dbService } from '../services/databaseService';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { CLOUDFLARE_API_URL } from '../config/cloudflare';
@@ -74,6 +77,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onToast,
   catalogList
 }) => {
+  const shouldReduceMotion = useReducedMotion();
   const [catalog, setCatalog] = useState<any[]>(() => (catalogList && catalogList.length > 0) ? catalogList : []);
   const [animes, setAnimes] = useState<any[]>(() => (catalogList && catalogList.length > 0) ? catalogList : []);
 
@@ -147,11 +151,84 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     imdbID: string;
   }>>([]);
 
+  // Telegram Bot integration state
+  const [telegramToken, setTelegramToken] = useState('');
+  const [telegramChatId, setTelegramChatId] = useState('');
+  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+  const [isSavingTelegram, setIsSavingTelegram] = useState(false);
+  const [telegramStatus, setTelegramStatus] = useState<{ configured: boolean; hasToken: boolean; hasChatId: boolean; tokenMasked?: string; chatId?: string }>({ configured: false, hasToken: false, hasChatId: false });
+  const [telegramNotice, setTelegramNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const fetchTelegramStatus = async () => {
+    try {
+      const res = await fetch('/api/telegram/status');
+      if (res.ok) {
+        const data = await res.json();
+        setTelegramStatus(data);
+        if (data.chatId && !telegramChatId) setTelegramChatId(data.chatId);
+      }
+    } catch (_) {}
+  };
+
+  const handleSaveTelegram = async () => {
+    setIsSavingTelegram(true);
+    setTelegramNotice(null);
+    try {
+      const token = localStorage.getItem('anidub_admin_token') || 'anidub_admin_authenticated';
+      const res = await fetch('/api/telegram/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+        body: JSON.stringify({ token: telegramToken, chatId: telegramChatId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTelegramNotice({ type: 'success', message: 'Telegram credentials saved successfully!' });
+        addTerminalLog('OK', `Telegram credentials updated: chat_id=${telegramChatId}`);
+        fetchTelegramStatus();
+      } else {
+        setTelegramNotice({ type: 'error', message: data.error || 'Failed to save credentials' });
+      }
+    } catch (err: any) {
+      setTelegramNotice({ type: 'error', message: err.message || 'Network error saving credentials' });
+    } finally {
+      setIsSavingTelegram(false);
+    }
+  };
+
+  const handleTestTelegram = async () => {
+    setIsTestingTelegram(true);
+    setTelegramNotice(null);
+    addTerminalLog('TG', 'Dispatching test notification probe to Telegram API...');
+    try {
+      const res = await fetch('/api/telegram/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: telegramToken || undefined, chatId: telegramChatId || undefined })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTelegramNotice({ type: 'success', message: 'Test message sent! Check your Telegram channel/group.' });
+        addTerminalLog('OK', 'Telegram test notification DELIVERED successfully (HTTP 200)');
+      } else {
+        const errMsg = data.error || 'Telegram rejected test notification';
+        setTelegramNotice({ type: 'error', message: errMsg });
+        addTerminalLog('ERR', `Telegram test notification failed: ${errMsg}`);
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Connection to Telegram API failed';
+      setTelegramNotice({ type: 'error', message: msg });
+      addTerminalLog('ERR', `Telegram probe exception: ${msg}`);
+    } finally {
+      setIsTestingTelegram(false);
+    }
+  };
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     fetchAnime();
     fetchFeedback();
+    fetchTelegramStatus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -1183,15 +1260,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 key={item.id}
                 onClick={() => setActiveAdminTab(item.id as any)}
-                className={`w-full rounded-xl transition-all duration-200 flex items-center gap-3 cursor-pointer group relative ${
+                className={`w-full rounded-xl transition-colors duration-200 flex items-center gap-3 cursor-pointer group relative ${
                   isSidebarCollapsed ? 'p-3 justify-center' : 'px-3.5 py-2.5 justify-between'
                 } ${
                   isActive
-                    ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white font-semibold shadow-[0_0_20px_rgba(168,85,247,0.35)] border border-purple-400/40'
+                    ? 'text-white font-semibold'
                     : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
                 }`}
                 title={item.label}
               >
+                {isActive && (
+                  <motion.div
+                    layoutId="admin-sidebar-active-tab"
+                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 shadow-[0_0_20px_rgba(168,85,247,0.35)] border border-purple-400/40 -z-10"
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  />
+                )}
                 <div className="flex items-center gap-3 min-w-0">
                   <IconComp className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-neutral-400 group-hover:text-purple-300'}`} />
                   {!isSidebarCollapsed && (
@@ -1410,10 +1494,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     key={tab.id}
                     onClick={() => setActiveAdminTab(tab.id as any)}
-                    className={`h-9 px-3.5 rounded-xl text-xs font-medium transition-all duration-300 shrink-0 flex items-center gap-2 cursor-pointer ${
+                    className={`relative h-9 px-3.5 rounded-xl text-xs font-medium transition-colors shrink-0 flex items-center gap-2 cursor-pointer pb-2 ${
                       isActive
-                        ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white shadow-[0_0_20px_rgba(168,85,247,0.4)] border border-purple-400/40 font-semibold scale-[1.02]'
-                        : 'text-neutral-400 hover:text-white hover:bg-white/[0.05] border border-transparent hover:border-white/10'
+                        ? 'text-white font-semibold'
+                        : 'text-neutral-400 hover:text-white hover:bg-white/[0.05]'
                     }`}
                   >
                     {IconComp && <IconComp className="w-3.5 h-3.5" />}
@@ -1424,6 +1508,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       }`}>
                         {tab.count}
                       </span>
+                    )}
+                    {isActive && (
+                      <motion.div
+                        layoutId="admin-mobile-tab-underline"
+                        className="absolute bottom-0 left-2 right-2 h-0.5 bg-gradient-to-r from-purple-400 via-cyan-400 to-indigo-400 rounded-full"
+                        transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                      />
                     )}
                   </button>
                 );
@@ -1472,9 +1563,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* MAIN ADMIN CONTENT BODY */}
       <main className="max-w-6xl mx-auto w-full px-4 py-6 space-y-6 flex-1">
-        
-        {/* TAB 1: OVERVIEW (FUTURISTIC GLASSMORPHIC MISSION DECK) */}
-        {activeAdminTab === 'overview' && (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeAdminTab}
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="w-full space-y-6"
+          >
+            {/* TAB 1: OVERVIEW (FUTURISTIC GLASSMORPHIC MISSION DECK) */}
+            {activeAdminTab === 'overview' && (
           <div className="space-y-6">
             {loading ? (
               <div className="space-y-6">
@@ -1614,28 +1713,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-6 py-2">
                   <div className="relative w-44 h-44 flex items-center justify-center shrink-0">
                     <svg className="w-full h-full transform -rotate-90 drop-shadow-[0_0_12px_rgba(168,85,247,0.25)]" viewBox="0 0 100 100">
-                      <circle
+                      <motion.circle
                         cx="50" cy="50" r="38"
                         fill="transparent"
                         stroke="#10b981"
                         strokeWidth="12"
                         strokeDasharray={`${hPct * 2.38} 238`}
+                        initial={shouldReduceMotion ? false : { strokeDasharray: "0 238" }}
+                        animate={{ strokeDasharray: `${hPct * 2.38} 238` }}
+                        transition={{ duration: 0.6, ease: "easeOut" }}
                       />
-                      <circle
+                      <motion.circle
                         cx="50" cy="50" r="38"
                         fill="transparent"
                         stroke="#f59e0b"
                         strokeWidth="12"
                         strokeDasharray={`${tPct * 2.38} 238`}
                         strokeDashoffset={`-${hPct * 2.38}`}
+                        initial={shouldReduceMotion ? false : { strokeDasharray: "0 238" }}
+                        animate={{ strokeDasharray: `${tPct * 2.38} 238` }}
+                        transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }}
                       />
-                      <circle
+                      <motion.circle
                         cx="50" cy="50" r="38"
                         fill="transparent"
                         stroke="#06b6d4"
                         strokeWidth="12"
                         strokeDasharray={`${tePct * 2.38} 238`}
                         strokeDashoffset={`-${(hPct + tPct) * 2.38}`}
+                        initial={shouldReduceMotion ? false : { strokeDasharray: "0 238" }}
+                        animate={{ strokeDasharray: `${tePct * 2.38} 238` }}
+                        transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
                       />
                     </svg>
                     <div className="absolute flex flex-col items-center justify-center text-center">
@@ -1698,9 +1806,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span className="text-[10px] font-mono font-bold text-neutral-400 mb-1 group-hover:text-cyan-300 transition-colors">
                           {bar.count}
                         </span>
-                        <div 
-                          className="w-full max-w-[32px] bg-gradient-to-t from-purple-600 via-indigo-500 to-cyan-400 rounded-t-lg transition-all duration-300 group-hover:brightness-125 group-hover:shadow-[0_0_15px_rgba(6,182,212,0.4)]"
-                          style={{ height: bar.height }}
+                        <motion.div 
+                          className="w-full max-w-[32px] bg-gradient-to-t from-purple-600 via-indigo-500 to-cyan-400 rounded-t-lg transition-colors group-hover:brightness-125 group-hover:shadow-[0_0_15px_rgba(6,182,212,0.4)]"
+                          initial={shouldReduceMotion ? false : { height: 0 }}
+                          animate={{ height: bar.height }}
+                          transition={{ duration: 0.45, delay: idx * 0.06, ease: "easeOut" }}
                         />
                         <span className="text-[10px] font-medium text-neutral-400 mt-2 truncate max-w-full group-hover:text-white transition-colors">
                           {bar.genre}
@@ -2421,6 +2531,94 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
 
+              {/* Telegram Channel Notifications Integration */}
+              <div className="mt-6 p-5 sm:p-6 rounded-2xl bg-[#090d19]/90 border border-sky-500/30 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center shrink-0">
+                      <Send className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                        <span>Telegram Channel &amp; Bot Notifications</span>
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                          telegramStatus.configured
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                        }`}>
+                          {telegramStatus.configured ? 'ACTIVE & CONNECTED' : 'SETUP REQUIRED'}
+                        </span>
+                      </h4>
+                      <p className="text-xs text-neutral-400">
+                        Automatically broadcasts new anime to your Telegram subscribers when approved in admin panel
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {telegramNotice && (
+                  <div className={`p-3 rounded-xl border text-xs font-medium ${
+                    telegramNotice.type === 'success'
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                  }`}>
+                    {telegramNotice.message}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-neutral-300">
+                      Telegram Bot Token:
+                    </label>
+                    <input
+                      type="password"
+                      value={telegramToken}
+                      onChange={(e) => setTelegramToken(e.target.value)}
+                      placeholder={telegramStatus.tokenMasked || "123456789:ABCdefGHIjklMNO..."}
+                      className="w-full px-3 py-2 rounded-xl bg-[#050811] border border-white/10 text-white text-xs font-mono placeholder-neutral-600 focus:border-sky-500 focus:outline-none"
+                    />
+                    <span className="text-[10px] text-neutral-500">Obtained from @BotFather on Telegram</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-neutral-300">
+                      Chat / Channel ID:
+                    </label>
+                    <input
+                      type="text"
+                      value={telegramChatId}
+                      onChange={(e) => setTelegramChatId(e.target.value)}
+                      placeholder={telegramStatus.chatId || "@anidub_india or -100123456789"}
+                      className="w-full px-3 py-2 rounded-xl bg-[#050811] border border-white/10 text-white text-xs font-mono placeholder-neutral-600 focus:border-sky-500 focus:outline-none"
+                    />
+                    <span className="text-[10px] text-neutral-500">Public channel username with @ or private chat ID</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSaveTelegram}
+                    disabled={isSavingTelegram}
+                    className="h-9 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isSavingTelegram ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                    <span>Save Credentials</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleTestTelegram}
+                    disabled={isTestingTelegram}
+                    className="h-9 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-sky-400/30 text-sky-300 text-xs font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isTestingTelegram ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    <span>Send Test Notification</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Danger Zone */}
               <div className="mt-6 p-5 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-3">
                 <div className="flex items-center gap-2 text-rose-400 text-xs font-bold font-mono uppercase tracking-wider">
@@ -2440,6 +2638,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
         )}
+          </motion.div>
+        </AnimatePresence>
       </main>
       </div>
 

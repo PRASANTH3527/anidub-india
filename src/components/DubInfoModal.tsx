@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import { 
   X, 
   Search, 
@@ -487,14 +488,26 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     'Zee5'
   ];
 
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto font-sans">
-      <div 
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity"
+        className="fixed inset-0 bg-black/80 backdrop-blur-md"
       />
 
-      <div className="relative w-full max-w-xl bg-[#0b0e18]/95 border border-white/10 hover:border-purple-500/40 rounded-3xl shadow-[0_0_50px_rgba(168,85,247,0.25)] overflow-hidden z-10 my-auto text-neutral-100 backdrop-blur-2xl max-h-[90vh] flex flex-col font-sans transition-all duration-300">
+      <motion.div 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 40 }}
+        animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 35 }}
+        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+        className="relative w-full max-w-xl bg-[#0b0e18]/95 border border-white/10 hover:border-purple-500/40 rounded-3xl shadow-[0_0_50px_rgba(168,85,247,0.25)] overflow-hidden z-10 my-auto text-neutral-100 backdrop-blur-2xl max-h-[90vh] flex flex-col font-sans will-change-transform"
+      >
         
         {/* HEADER */}
         <div className="p-5 border-b border-neutral-800 flex items-center justify-between bg-gradient-to-r from-purple-950/40 via-transparent to-transparent shrink-0">
@@ -999,7 +1012,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
           </div>
         )}
 
-      </div>
+      </motion.div>
     </div>
   );
 };

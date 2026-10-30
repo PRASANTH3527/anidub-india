@@ -7,5 +7,18 @@ compatibility_date = "2024-10-24"
 binding = "ANIME_DB"
 id = "4d1a822ed4a04cad809f79f38ab4d96c"
 
+# Cloudflare D1 Database Binding for Chat & Relational Data
+[[d1_databases]]
+binding = "DB"
+database_name = "anime-hub-db"
+database_id = "75f053ab-5b44-4d48-abf8-b3a357a89426"
+
+[durable_objects]
+bindings = [{ name = "CHAT_ROOM", class_name = "ChatRoom" }]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["ChatRoom"]
+
 [vars]
 ENVIRONMENT = "production"

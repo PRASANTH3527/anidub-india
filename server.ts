@@ -69,65 +69,154 @@ function persistD1() {
   fs.writeFileSync(dbFilePath, buffer);
 }
 
-async function sendTelegramNotification(anime: {
-  title: string;
-  synopsis: string;
-  cover_image: string;
-  rating: number;
-  episodes_count: number;
-  season: string;
-  year: number;
-  genres: string;
-  languages?: string;
-}) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+// Helper: Escape HTML special characters for Telegram HTML parse_mode
+function escapeTelegramHtml(text: any): string {
+  if (text === null || text === undefined) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
-  if (!token || !chatId) {
-    console.log('Telegram Bot notification skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured.');
-    return;
+// Helper: Get Telegram credentials from environment or SQLite system_settings
+function getTelegramConfig(): { token: string; chatId: string } {
+  let token = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+  let chatId = (process.env.TELEGRAM_CHAT_ID || '').trim();
+
+  if (db) {
+    try {
+      db.run("CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT)");
+      const stmt1 = db.prepare("SELECT value FROM system_settings WHERE key = 'TELEGRAM_BOT_TOKEN'");
+      if (stmt1.step()) {
+        const val = stmt1.getAsObject()?.value;
+        if (val && typeof val === 'string' && val.trim()) token = val.trim();
+      }
+      stmt1.free();
+
+      const stmt2 = db.prepare("SELECT value FROM system_settings WHERE key = 'TELEGRAM_CHAT_ID'");
+      if (stmt2.step()) {
+        const val = stmt2.getAsObject()?.value;
+        if (val && typeof val === 'string' && val.trim()) chatId = val.trim();
+      }
+      stmt2.free();
+    } catch (_) {}
   }
 
-  const langs = anime.languages || 'Tamil, Telugu, Hindi';
-  const caption = `🔥 *NEW ANIME ADDED TO DIRECTORY!* 🔥\n\n` +
-    `📌 *Title:* ${anime.title}\n` +
-    `⭐ *Rating:* ${anime.rating}/10\n` +
-    `📺 *Episodes:* ${anime.episodes_count}\n` +
-    `🎙 *Available Languages:* ${langs}\n` +
-    `🏷 *Genres:* ${anime.genres}\n` +
-    `📅 *Season:* ${anime.season} ${anime.year}\n\n` +
-    `💬 _"${anime.synopsis?.slice(0, 150)}..."_\n\n` +
-    `👉 Stream now legally on Anidub India!`;
+  return { token, chatId };
+}
+
+// Helper: Send general Telegram message with photo fallback & error resilience
+async function sendTelegramMessage(text: string, photoUrl?: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  const { token, chatId } = getTelegramConfig();
+
+  if (!token || !chatId) {
+    const errorMsg = 'Telegram notification skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured.';
+    console.log(`[Telegram] ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
 
   try {
-    if (anime.cover_image && anime.cover_image.startsWith('http')) {
-      const photoUrl = `https://api.telegram.org/bot${token}/sendPhoto`;
-      const res = await fetch(photoUrl, {
+    // 1. If photo provided, try sending photo with HTML caption
+    if (photoUrl && typeof photoUrl === 'string' && (photoUrl.startsWith('http://') || photoUrl.startsWith('https://'))) {
+      const photoEndpoint = `https://api.telegram.org/bot${token}/sendPhoto`;
+      const photoRes = await fetch(photoEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: chatId,
-          photo: anime.cover_image,
-          caption: caption,
-          parse_mode: 'Markdown'
+          photo: photoUrl,
+          caption: text.slice(0, 1024),
+          parse_mode: 'HTML'
         })
       });
-      if (res.ok) return;
+
+      if (photoRes.ok) {
+        console.log('[Telegram] Photo notification dispatched successfully.');
+        return { success: true, message: 'Telegram photo notification sent successfully.' };
+      }
+
+      const errData: any = await photoRes.json().catch(() => ({}));
+      console.warn('[Telegram] sendPhoto failed, falling back to sendMessage:', errData?.description || photoRes.statusText);
     }
 
-    const msgUrl = `https://api.telegram.org/bot${token}/sendMessage`;
-    await fetch(msgUrl, {
+    // 2. Try sendMessage with HTML
+    const msgEndpoint = `https://api.telegram.org/bot${token}/sendMessage`;
+    const res = await fetch(msgEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: chatId,
-        text: caption,
-        parse_mode: 'Markdown'
+        text: text.slice(0, 4096),
+        parse_mode: 'HTML'
       })
     });
-  } catch (err) {
-    console.error('Failed to send Telegram notification:', err);
+
+    if (res.ok) {
+      console.log('[Telegram] Text notification dispatched successfully.');
+      return { success: true, message: 'Telegram message sent successfully.' };
+    }
+
+    const errJson: any = await res.json().catch(() => ({}));
+    const desc = errJson?.description || res.statusText;
+
+    // 3. Fallback: If parse_mode HTML failed, send plain text
+    if (desc.includes('parse') || desc.includes('entity') || desc.includes('tag')) {
+      const plainText = text.replace(/<[^>]*>/g, '');
+      const plainRes = await fetch(msgEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: plainText.slice(0, 4096)
+        })
+      });
+      if (plainRes.ok) {
+        return { success: true, message: 'Telegram notification sent (plain text fallback).' };
+      }
+    }
+
+    console.error('[Telegram API Error]:', desc);
+    return { success: false, error: desc };
+  } catch (err: any) {
+    console.error('[Telegram Exception]:', err);
+    return { success: false, error: err.message || 'Failed to connect to Telegram API' };
   }
+}
+
+// Main anime announcement dispatcher
+async function sendTelegramNotification(anime: {
+  title: string;
+  synopsis?: string;
+  cover_image?: string;
+  rating?: number | string;
+  episodes_count?: number | string;
+  season?: string;
+  year?: number | string;
+  genres?: string;
+  languages?: string;
+  type?: string;
+  platform?: string;
+}): Promise<{ success: boolean; message?: string; error?: string }> {
+  const langs = anime.languages || 'Tamil, Telugu, Hindi';
+  const type = anime.type || 'TV Series';
+  const rating = anime.rating || '8.5';
+  const eps = anime.episodes_count || 12;
+  const platform = anime.platform || 'Crunchyroll';
+  const synop = anime.synopsis ? anime.synopsis.slice(0, 160) : 'Now streaming legally across India.';
+
+  const htmlMessage =
+    `🔥 <b>NEW ANIME ADDED TO DIRECTORY!</b> 🔥\n\n` +
+    `📌 <b>Title:</b> ${escapeTelegramHtml(anime.title)}\n` +
+    `⭐ <b>Rating:</b> ${escapeTelegramHtml(rating)}/10\n` +
+    `📺 <b>Type:</b> ${escapeTelegramHtml(type)} (${escapeTelegramHtml(eps)} Episodes)\n` +
+    `🎙 <b>Languages:</b> ${escapeTelegramHtml(langs)}\n` +
+    `🏷 <b>Genres:</b> ${escapeTelegramHtml(anime.genres || 'Action, Fantasy')}\n` +
+    `📅 <b>Season:</b> ${escapeTelegramHtml(anime.season || 'Spring')} ${escapeTelegramHtml(anime.year || 2026)}\n` +
+    `🌐 <b>Platform:</b> ${escapeTelegramHtml(platform)}\n\n` +
+    `💬 <i>"${escapeTelegramHtml(synop)}..."</i>\n\n` +
+    `👉 <b>Stream now on Anidub India!</b>`;
+
+  return await sendTelegramMessage(htmlMessage, anime.cover_image);
 }
 
 
@@ -1025,7 +1114,7 @@ app.post('/api/anime/:id/rate', (req, res) => {
 });
 
 // POST /api/admin/approve/:id (Admin: Approve pending anime - Protected)
-app.post('/api/admin/approve/:id', requireAdminAuth, (req, res) => {
+app.post('/api/admin/approve/:id', requireAdminAuth, async (req, res) => {
   try {
     const animeId = req.params.id;
     const bodyStatus = req.body?.status || req.body?.airing_status;
@@ -1044,9 +1133,165 @@ app.post('/api/admin/approve/:id', requireAdminAuth, (req, res) => {
         WHERE id = ?`, [animeId]);
     }
     persistD1();
-    res.json({ success: true, id: animeId, submissionStatus: 'approved', status: bodyStatus });
+
+    // Query approved anime details to dispatch real-time Telegram notification
+    let approvedAnime: any = null;
+    try {
+      const stmt = db.prepare("SELECT * FROM anime WHERE id = ?");
+      stmt.bind([animeId]);
+      if (stmt.step()) {
+        approvedAnime = stmt.getAsObject();
+      }
+      stmt.free();
+    } catch (e) {
+      console.warn('[Admin Approve] Could not fetch anime row for notification:', e);
+    }
+
+    if (approvedAnime) {
+      sendTelegramNotification({
+        title: approvedAnime.title,
+        synopsis: approvedAnime.synopsis,
+        cover_image: approvedAnime.cover_image,
+        rating: approvedAnime.rating,
+        episodes_count: approvedAnime.episodes_count,
+        season: approvedAnime.season,
+        year: approvedAnime.year,
+        genres: approvedAnime.genres,
+        languages: approvedAnime.languages,
+        type: approvedAnime.type,
+        platform: approvedAnime.platform
+      }).then(res => {
+        if (res.success) {
+          logCloudflareEvent('Telegram', 'APPROVE_ALERT_SENT', 200, 50, `Dispatched Telegram alert for "${approvedAnime.title}"`);
+        } else {
+          console.warn('[Telegram Approve Alert Notice]:', res.error);
+        }
+      }).catch(err => {
+        console.error('[Telegram Approve Alert Error]:', err);
+      });
+    }
+
+    res.json({ success: true, id: animeId, submissionStatus: 'approved', status: bodyStatus, data: approvedAnime });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/telegram (Direct message webhook)
+app.post('/api/telegram', async (req, res) => {
+  try {
+    const { message, text, photoUrl } = req.body;
+    const content = message || text || 'Notification from Anidub India';
+    const result = await sendTelegramMessage(content, photoUrl);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/report (Issue and broken link reports)
+app.post('/api/report', async (req, res) => {
+  try {
+    const { animeTitle, reason, notes } = req.body;
+    const reportMsg =
+      `🚨 <b>ANIME ISSUE REPORT RECEIVED</b> 🚨\n\n` +
+      `🎬 <b>Anime:</b> ${escapeTelegramHtml(animeTitle || 'Unknown')}\n` +
+      `⚠️ <b>Issue:</b> ${escapeTelegramHtml(reason || 'General Issue')}\n` +
+      `📝 <b>Notes:</b> ${escapeTelegramHtml(notes || 'None provided')}\n\n` +
+      `<i>Reported by user on Anidub India</i>`;
+
+    const result = await sendTelegramMessage(reportMsg);
+    res.json({ success: true, deliveredToTelegram: result.success });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/telegram/status (Check bot config status)
+app.get('/api/telegram/status', (req, res) => {
+  const { token, chatId } = getTelegramConfig();
+  const configured = Boolean(token && chatId);
+  res.json({
+    configured,
+    hasToken: Boolean(token),
+    hasChatId: Boolean(chatId),
+    tokenMasked: token ? `${token.slice(0, 6)}...${token.slice(-4)}` : '',
+    chatId: chatId || ''
+  });
+});
+
+// POST /api/telegram/settings (Update Bot Token & Chat ID dynamically)
+app.post('/api/telegram/settings', requireAdminAuth, (req, res) => {
+  try {
+    const { token, chatId } = req.body;
+    if (db) {
+      db.run("CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT)");
+      if (token !== undefined) {
+        db.run("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('TELEGRAM_BOT_TOKEN', ?)", [String(token).trim()]);
+      }
+      if (chatId !== undefined) {
+        db.run("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('TELEGRAM_CHAT_ID', ?)", [String(chatId).trim()]);
+      }
+      persistD1();
+    }
+    res.json({ success: true, message: 'Telegram credentials saved successfully.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/telegram/test (Send interactive test alert to Telegram)
+app.post('/api/telegram/test', async (req, res) => {
+  try {
+    const { token: customToken, chatId: customChatId } = req.body || {};
+    let token = customToken;
+    let chatId = customChatId;
+
+    if (!token || !chatId) {
+      const cfg = getTelegramConfig();
+      token = token || cfg.token;
+      chatId = chatId || cfg.chatId;
+    }
+
+    if (!token || !chatId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing Telegram configuration. Please provide TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in environment or admin settings.'
+      });
+    }
+
+    const testMsg =
+      `🤖 <b>ANIDUB INDIA - TELEGRAM BOT CONNECTED</b> 🤖\n\n` +
+      `✅ <b>Status:</b> Live &amp; Operational\n` +
+      `🕒 <b>Time:</b> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST\n` +
+      `📡 <b>Webhook:</b> Ready to announce newly approved anime and instant dub updates.\n\n` +
+      `<i>Sent from Anidub India Control Deck</i>`;
+
+    const endpoint = `https://api.telegram.org/bot${token}/sendMessage`;
+    const tgRes = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: testMsg,
+        parse_mode: 'HTML'
+      })
+    });
+
+    if (tgRes.ok) {
+      return res.json({
+        success: true,
+        message: 'Telegram test message delivered successfully to your chat/channel!'
+      });
+    }
+
+    const errJson: any = await tgRes.json().catch(() => ({}));
+    return res.status(400).json({
+      success: false,
+      error: errJson.description || `Telegram API error (Status ${tgRes.status})`
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Network error reaching Telegram API' });
   }
 });
 

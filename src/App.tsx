@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
 import { CatalogView, FALLBACK_SEED_ANIME } from './components/CatalogView';
 import { AnimeDetailModal } from './components/AnimeDetailModal';
@@ -83,13 +84,13 @@ export default function App() {
           item.status !== 'pending' && 
           item.submissionStatus !== 'pending'
         );
-        setCatalogList(approvedOnly);
+        setCatalogList(approvedOnly.length > 0 ? approvedOnly : FALLBACK_SEED_ANIME);
       } else {
-        setCatalogList([]);
+        setCatalogList(FALLBACK_SEED_ANIME);
       }
     } catch (err) {
-      console.warn('Failed fetching catalog from Cloudflare:', err);
-      setCatalogList([]);
+      console.warn('Failed fetching catalog from Cloudflare, using seed anime:', err);
+      setCatalogList(FALLBACK_SEED_ANIME);
     } finally {
       setIsCatalogLoading(false);
     }
@@ -438,48 +439,54 @@ export default function App() {
       />
 
 
-      {/* MODALS */}
-      {/* 1. Anime Detail Modal */}
-      {selectedAnimeId !== null && (
-        <AnimeDetailModal
-          animeId={selectedAnimeId}
-          onClose={() => setSelectedAnimeId(null)}
-          watchlist={watchlist}
-          onToggleWatchlist={handleToggleWatchlist}
-        />
-      )}
+      {/* MODALS WITH SPRING ANIMATEPRESENCE */}
+      <AnimatePresence>
+        {/* 1. Anime Detail Modal */}
+        {selectedAnimeId !== null && (
+          <AnimeDetailModal
+            key="anime-detail-modal"
+            animeId={selectedAnimeId}
+            onClose={() => setSelectedAnimeId(null)}
+            watchlist={watchlist}
+            onToggleWatchlist={handleToggleWatchlist}
+          />
+        )}
 
-      {/* 2. Surprise Me Roulette Modal */}
-      {isRouletteOpen && (
-        <RouletteModal
-          animeList={catalogList}
-          onClose={() => setIsRouletteOpen(false)}
-          onSelectAnime={(anime) => {
-            setSelectedAnimeId(anime.id);
-            addToRecentlyViewed(anime);
-          }}
-        />
-      )}
+        {/* 2. Surprise Me Roulette Modal */}
+        {isRouletteOpen && (
+          <RouletteModal
+            key="roulette-modal"
+            animeList={catalogList}
+            onClose={() => setIsRouletteOpen(false)}
+            onSelectAnime={(anime) => {
+              setSelectedAnimeId(anime.id);
+              addToRecentlyViewed(anime);
+            }}
+          />
+        )}
 
-      {/* 3. Shareable Custom Collection Modal */}
-      {isCollectionOpen && (
-        <CreateCollectionModal
-          animeList={catalogList}
-          onClose={() => setIsCollectionOpen(false)}
-        />
-      )}
+        {/* 3. Shareable Custom Collection Modal */}
+        {isCollectionOpen && (
+          <CreateCollectionModal
+            key="collection-modal"
+            animeList={catalogList}
+            onClose={() => setIsCollectionOpen(false)}
+          />
+        )}
 
-      {/* 4. Submit Dub Info Modal */}
-      {isDubModalOpen && (
-        <DubInfoModal
-          isOpen={isDubModalOpen}
-          onClose={() => setIsDubModalOpen(false)}
-          onSubmit={(data) => {
-            console.log('Submitted dub info:', data);
-            setIsDubModalOpen(false);
-          }}
-        />
-      )}
+        {/* 4. Submit Dub Info Modal */}
+        {isDubModalOpen && (
+          <DubInfoModal
+            key="dub-info-modal"
+            isOpen={isDubModalOpen}
+            onClose={() => setIsDubModalOpen(false)}
+            onSubmit={(data) => {
+              console.log('Submitted dub info:', data);
+              setIsDubModalOpen(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* 5. Stealth Admin Access Modal (Triggered by 5-taps on navbar logo) */}
       {isPasswordModalOpen && (

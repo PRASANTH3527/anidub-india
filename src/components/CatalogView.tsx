@@ -20,6 +20,7 @@ import { RecentlyViewedRow } from './RecentlyViewedRow';
 import { AnimatedStats } from './AnimatedStats';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { calculateCatalogStats } from '../utils/languages';
+import { SkeletonGrid } from './SkeletonGrid';
 
 export interface Anime {
   id: number;
@@ -436,14 +437,8 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         </div>
 
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 bg-slate-900/40 rounded-3xl border border-slate-800/80 space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
-              <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-bold text-white">Loading Anime Catalog</p>
-              <p className="text-xs text-neutral-400 mt-1">Fetching live anime data from Cloudflare D1...</p>
-            </div>
+          <div className="space-y-4">
+            <SkeletonGrid count={8} />
           </div>
         ) : displayedAnime.length === 0 ? (
           <div className="text-center py-16 bg-slate-900/50 rounded-2xl border border-slate-800">
@@ -464,12 +459,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         ) : (
           /* 2. CARD CONTAINER USING AnimeCard (grid-cols-2 gap-3.5) */
           <div className="grid grid-cols-2 gap-3.5">
-            {displayedAnime.map((anime) => {
+            {displayedAnime.map((anime, idx) => {
               const isWatchlisted = watchlist.includes(anime.id);
               return (
                 <AnimeCard
                   key={`${anime.id}-${anime.image || (anime as any).posterUrl || anime.cover_image || ''}`}
                   anime={anime}
+                  index={idx}
                   onSelect={(a) => onSelectAnime(a as any)}
                   isBookmarked={isWatchlisted}
                   onToggleBookmark={onToggleWatchlist}

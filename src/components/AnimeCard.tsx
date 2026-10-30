@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import { 
   Flame, 
   CheckCircle2, 
@@ -41,6 +42,7 @@ export interface AnimeCardData {
 export interface AnimeCardProps {
   anime: AnimeCardData;
   onSelect: (anime: AnimeCardData) => void;
+  index?: number;
   isBookmarked?: boolean;
   onToggleBookmark?: (id: number) => void;
   isLiked?: boolean;
@@ -65,6 +67,7 @@ export const ParallaxCard: React.FC<{ children: React.ReactNode; className?: str
 export const AnimeCard: React.FC<AnimeCardProps> = ({
   anime,
   onSelect,
+  index = 0,
   isBookmarked = false,
   onToggleBookmark,
   isLiked,
@@ -74,6 +77,8 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   isTrending = true,
   isCached = true
 }) => {
+  const shouldReduceMotion = useReducedMotion();
+  const staggerDelay = shouldReduceMotion ? 0 : Math.min((index % 12) * 0.05, 0.4);
   // IP-Based Vote States (No LocalStorage limitations)
   const [internalLiked, setInternalLiked] = useState<boolean>(Boolean(isLiked));
   const [internalUpvoted, setInternalUpvoted] = useState<boolean>(Boolean(isUpvoted));
@@ -145,10 +150,35 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     }, 2800);
   };
 
-  // Normalize languages
-  const rawLangs = Array.isArray(anime.languages)
+  // Parse, normalize, and strictly deduplicate languages using Set
+  const parsedLanguages = Array.isArray(anime.languages)
     ? anime.languages
-    : (anime.languages || 'HIN,TAM,TEL').split(',').map(s => s.trim());
+    : typeof anime.languages === 'string' && anime.languages.trim().length > 0
+      ? anime.languages.split(/[,/|•+]+/).map(s => s.trim()).filter(Boolean)
+      : ['HIN', 'TAM', 'TEL'];
+
+  const canonicalLanguages = parsedLanguages
+    .map(lang => {
+      const clean = String(lang).trim().toUpperCase().replace(/^[^A-Z]+|[^A-Z]+$/g, '');
+      if (!clean) return '';
+      if (clean.includes('HIN') || clean === 'HI') return 'HIN';
+      if (clean.includes('TAM') || clean === 'TA') return 'TAM';
+      if (clean.includes('TEL') || clean === 'TE') return 'TEL';
+      if (clean.includes('MAL') || clean === 'ML' || clean === 'MA') return 'MAL';
+      if (clean.includes('KAN') || clean === 'KN' || clean === 'KA') return 'KAN';
+      if (clean.includes('BEN') || clean === 'BN' || clean === 'BE') return 'BEN';
+      if (clean.includes('MAR') || clean === 'MR') return 'MAR';
+      if (clean.includes('GUJ') || clean === 'GU') return 'GUJ';
+      if (clean.includes('PUN') || clean === 'PAN' || clean === 'PA') return 'PUN';
+      if (clean.includes('ENG') || clean === 'EN') return 'ENG';
+      if (clean.includes('JAP') || clean.includes('JPN') || clean === 'JA') return 'JPN';
+      return clean.slice(0, 3);
+    })
+    .filter(Boolean);
+
+  const uniqueLanguages = [...new Set(canonicalLanguages)].filter(
+    code => !['JPN', 'JAP', 'JAPANESE', 'ENG', 'ENGLISH', 'ROMAJI'].includes(code)
+  );
 
   // Normalize platforms
   const rawPlatforms = Array.isArray(anime.platform)
@@ -159,6 +189,12 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   const releaseYear = anime.releaseYear || anime.year || 2026;
   const animeType = anime.type || 'TV Series';
   const isAiring = anime.status === 'Ongoing' || anime.status === 'Airing';
+
+  // Calculate total episodes across all seasons using reduce
+  const seasonsArray = (anime as any).seasons || (anime as any).mixedEntries || (anime as any).seasonsList || [];
+  const totalEpisodes = Array.isArray(seasonsArray) && seasonsArray.length > 0
+    ? seasonsArray.reduce((acc: number, season: any) => acc + Number(season.episodes || season.episode_count || 0), 0)
+    : Number(anime.episodes_count || (anime as any).episodes || (anime as any).episode_count || 0);
 
   const getCleanCover = () => {
     const directUrl = anime.cover_image || (anime as any).posterUrl || (anime as any).image || (anime as any).poster || (anime as any).poster_url;
@@ -286,9 +322,15 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 
   return (
     <ParallaxCard className="h-full">
-      <div 
+      <motion.div 
         onClick={() => onSelect(anime)}
-        className="group relative flex flex-col h-full bg-[#131926] transition-all duration-300 cursor-pointer select-none rounded-2xl overflow-hidden border border-neutral-800/60 hover:border-purple-500/40 shadow-lg"
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 20 }}
+        whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "60px" }}
+        transition={{ duration: 0.35, delay: staggerDelay, ease: [0.25, 0.1, 0.25, 1.0] }}
+        whileHover={shouldReduceMotion ? undefined : { y: -4, transition: { duration: 0.2 } }}
+        whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
+        className="group relative flex flex-col h-full bg-[#131926] cursor-pointer select-none rounded-2xl overflow-hidden border border-neutral-800/60 hover:border-purple-500/40 shadow-lg will-change-transform"
       >
         {/* CARD NOTIFICATION BADGE */}
         {cardNotice && (
@@ -313,49 +355,63 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
           {/* TOP-LEFT BADGES */}
           <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1.5 pointer-events-none">
             {isTrending && (
-              <div className="inline-flex items-center gap-1 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shadow-lg border border-purple-400/40">
+              <motion.div 
+                initial={shouldReduceMotion ? false : { scale: 0.75, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 22, delay: staggerDelay + 0.05 }}
+                className="inline-flex items-center gap-1 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shadow-lg border border-purple-400/40"
+              >
                 <Flame className="w-3 h-3 fill-current text-amber-200" />
                 <span>Trending</span>
-              </div>
+              </motion.div>
             )}
             {isCached && (
-              <div className="inline-flex items-center gap-1 bg-emerald-950/90 text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md border border-emerald-500/40 backdrop-blur-md">
+              <motion.div 
+                initial={shouldReduceMotion ? false : { scale: 0.75, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 22, delay: staggerDelay + 0.1 }}
+                className="inline-flex items-center gap-1 bg-emerald-950/90 text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md border border-emerald-500/40 backdrop-blur-md"
+              >
                 <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                 <span>Offline Ready</span>
-              </div>
+              </motion.div>
             )}
           </div>
 
           {/* TOP-RIGHT ACTION BUTTONS */}
           <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
             {/* Desktop Only Buttons */}
-            <button
+            <motion.button
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={(e) => { e.stopPropagation(); }}
-              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-all shadow-md"
+              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-colors shadow-md cursor-pointer"
               title="Download for offline"
             >
               <DownloadCloud className="w-3.5 h-3.5" />
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={(e) => { e.stopPropagation(); }}
-              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-all shadow-md"
+              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-colors shadow-md cursor-pointer"
               title="Report info"
             >
               <Flag className="w-3.5 h-3.5" />
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={handleShareClick}
-              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-all shadow-md"
+              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-colors shadow-md cursor-pointer"
               title="Share"
             >
               <Share2 className="w-3.5 h-3.5" />
-            </button>
+            </motion.button>
 
             {/* Always Visible Like Button */}
-            <button
+            <motion.button
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={handleLikeClick}
               disabled={isLiking || internalLiked}
-              className={`p-1.5 rounded-full backdrop-blur-md border transition-all active:scale-90 shadow-md ${
+              className={`p-1.5 rounded-full backdrop-blur-md border transition-all shadow-md ${
                 internalLiked 
                   ? 'bg-primary-theme text-white border-primary-light/50 shadow-lg shadow-purple-950/40 cursor-default' 
                   : 'bg-black/60 text-neutral-300 hover:text-primary-theme border-white/10 cursor-pointer'
@@ -363,12 +419,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               title={internalLiked ? 'Already liked from this IP' : 'Like (1 per IP)'}
             >
               <Heart className={`w-3.5 h-3.5 ${internalLiked ? 'fill-white text-white' : ''}`} />
-            </button>
+            </motion.button>
 
             {/* Always Visible Watchlist Bookmark Button */}
-            <button
+            <motion.button
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={handleBookmarkClick}
-              className={`p-1.5 rounded-full backdrop-blur-md border border-white/10 active:scale-90 shadow-md transition-all ${
+              className={`p-1.5 rounded-full backdrop-blur-md border border-white/10 shadow-md transition-colors cursor-pointer ${
                 isBookmarked 
                   ? 'bg-primary-theme text-white shadow-lg' 
                   : 'bg-black/60 text-neutral-300 hover:text-white'
@@ -376,7 +433,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               title="Bookmark"
             >
               <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-white text-white' : ''}`} />
-            </button>
+            </motion.button>
           </div>
 
           {/* POSTER BOTTOM STATS */}
@@ -390,10 +447,15 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 
             {/* Right Airing Badge */}
             {isAiring && (
-              <div className="flex items-center gap-1 bg-emerald-950/80 text-emerald-400 border border-emerald-700/50 px-1.5 py-0.5 rounded text-[10px] shadow-sm">
+              <motion.div 
+                initial={shouldReduceMotion ? false : { scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 22, delay: staggerDelay + 0.15 }}
+                className="flex items-center gap-1 bg-emerald-950/80 text-emerald-400 border border-emerald-700/50 px-1.5 py-0.5 rounded text-[10px] shadow-sm"
+              >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 <span>Airing</span>
-              </div>
+              </motion.div>
             )}
           </div>
         </div>
@@ -401,36 +463,66 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         {/* INFO SECTION */}
         <div className="p-3 sm:p-3.5 flex flex-col justify-between flex-grow min-w-0">
           <div>
-            {/* Dub Badges */}
+            {/* Dub Badges (Strictly Deduplicated) */}
             <div className="flex flex-wrap gap-1 mb-2">
-              {rawLangs.map((langStr, i) => {
-                const upper = langStr.toUpperCase();
+              {uniqueLanguages.map((code) => {
                 let badgeClass = 'bg-[#059669] text-emerald-100';
                 let shortLabel = 'Hin';
 
-                if (upper.includes('TAM')) {
-                  badgeClass = 'bg-[#b45309] text-amber-100';
-                  shortLabel = 'Tam';
-                } else if (upper.includes('TEL')) {
-                  badgeClass = 'bg-[#0284c7] text-sky-100';
-                  shortLabel = 'Tel';
-                } else if (upper.includes('HIN')) {
-                  badgeClass = 'bg-[#059669] text-emerald-100';
-                  shortLabel = 'Hin';
-                } else if (upper.includes('MAL')) {
-                  badgeClass = 'bg-[#7c3aed] text-purple-100';
-                  shortLabel = 'Mal';
-                } else if (upper.includes('KAN')) {
-                  badgeClass = 'bg-indigo-600 text-indigo-100';
-                  shortLabel = 'Kan';
-                } else if (upper.includes('BEN')) {
-                  badgeClass = 'bg-pink-600 text-pink-100';
-                  shortLabel = 'Ben';
+                switch (code) {
+                  case 'HIN':
+                    badgeClass = 'bg-[#059669] text-emerald-100';
+                    shortLabel = 'Hin';
+                    break;
+                  case 'TAM':
+                    badgeClass = 'bg-[#b45309] text-amber-100';
+                    shortLabel = 'Tam';
+                    break;
+                  case 'TEL':
+                    badgeClass = 'bg-[#0284c7] text-sky-100';
+                    shortLabel = 'Tel';
+                    break;
+                  case 'MAL':
+                    badgeClass = 'bg-[#7c3aed] text-purple-100';
+                    shortLabel = 'Mal';
+                    break;
+                  case 'KAN':
+                    badgeClass = 'bg-indigo-600 text-indigo-100';
+                    shortLabel = 'Kan';
+                    break;
+                  case 'BEN':
+                    badgeClass = 'bg-pink-600 text-pink-100';
+                    shortLabel = 'Ben';
+                    break;
+                  case 'MAR':
+                    badgeClass = 'bg-orange-600 text-orange-100';
+                    shortLabel = 'Mar';
+                    break;
+                  case 'GUJ':
+                    badgeClass = 'bg-teal-600 text-teal-100';
+                    shortLabel = 'Guj';
+                    break;
+                  case 'PUN':
+                    badgeClass = 'bg-amber-700 text-amber-100';
+                    shortLabel = 'Pun';
+                    break;
+                  case 'ENG':
+                    badgeClass = 'bg-slate-700 text-slate-200';
+                    shortLabel = 'Eng';
+                    break;
+                  case 'JPN':
+                    badgeClass = 'bg-red-900 text-red-200';
+                    shortLabel = 'Jpn';
+                    break;
+                  default:
+                    badgeClass = 'bg-neutral-800 text-neutral-200 border-neutral-700';
+                    shortLabel = code.charAt(0) + code.slice(1).toLowerCase();
+                    break;
                 }
 
                 return (
                   <span
-                    key={i}
+                    key={code}
                     className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm border border-white/5 ${badgeClass}`}
                   >
                     {shortLabel}
@@ -449,6 +541,12 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               <span>{animeType}</span>
               <span>•</span>
               <span>{releaseYear}</span>
+              {totalEpisodes > 0 && (
+                <>
+                  <span>•</span>
+                  <span>{totalEpisodes} Eps</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -469,12 +567,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
             {/* Right Counters */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
               {/* Heart Counter Button */}
-              <button
+              <motion.button
                 type="button"
+                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
                 onClick={handleLikeClick}
                 disabled={isLiking || internalLiked}
                 title={internalLiked ? 'Already liked from this device' : 'Like (1 vote per device)'}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all active:scale-95 ${
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-colors ${
                   internalLiked
                     ? 'bg-primary-theme/25 text-primary-theme border border-primary-theme/50 cursor-default'
                     : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:border-purple-500/40 cursor-pointer'
@@ -482,15 +581,16 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               >
                 <Heart className={`w-3 h-3 ${internalLiked ? 'fill-current' : ''}`} />
                 <span>{internalHeartCount}</span>
-              </button>
+              </motion.button>
 
               {/* Upvote Counter Button */}
-              <button
+              <motion.button
                 type="button"
+                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
                 onClick={handleUpvoteClick}
                 disabled={isVoting || internalUpvoted}
                 title={internalUpvoted ? 'Already upvoted from this device' : 'Upvote (1 vote per device)'}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all active:scale-95 ${
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-colors ${
                   internalUpvoted
                     ? 'bg-orange-500/25 text-orange-400 border border-orange-500/50 cursor-default'
                     : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:border-orange-500/40 cursor-pointer'
@@ -498,11 +598,11 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               >
                 <Flame className={`w-3 h-3 ${internalUpvoted ? 'fill-current' : ''}`} />
                 <span>{internalUpvoteCount}</span>
-              </button>
+              </motion.button>
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
     </ParallaxCard>
   );
 };

@@ -1,19 +1,5 @@
 import React, { useState, useEffect } from 'react';
-
-// Safe Motion wrapper for React 19 compatibility
-const motion = {
-  div: React.forwardRef<HTMLDivElement, any>(({ children, className, style, initial, animate, exit, transition, ...props }, ref) => (
-    <div 
-      ref={ref} 
-      className={`animate-in fade-in duration-300 ${className || ''}`} 
-      style={style} 
-      {...props}
-    >
-      {children}
-    </div>
-  ))
-};
-const AnimatePresence: React.FC<{ children: React.ReactNode }> = ({ children }) => <>{children}</>;
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, 
   Bookmark, 
@@ -21,27 +7,18 @@ import {
   Share2, 
   Flag, 
   Star, 
-  Tv, 
-  Calendar, 
-  Building2, 
-  Languages, 
-  Flame, 
   Play, 
   ExternalLink, 
-  Smartphone, 
   Send, 
-  MessageSquare, 
   ThumbsUp, 
   EyeOff, 
-  Eye, 
-  HelpCircle, 
   ChevronDown, 
   ChevronUp, 
   Sparkles, 
-  Loader2, 
   ShieldCheck,
-  Radio,
-  Check
+  Flame,
+  Volume2,
+  X
 } from 'lucide-react';
 import { Anime } from './CatalogView';
 import { LiveChat } from './LiveChat';
@@ -87,27 +64,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     }
   });
 
-  // Live Community Chat state
-  const [chatMessages, setChatMessages] = useState<Array<{ id: number; user: string; text: string; time: string; langTag?: string }>>(() => {
-    try {
-      const saved = localStorage.getItem(`cf_chat_${animeId}`);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [newChatMessage, setNewChatMessage] = useState('');
-
   // Toast / Modal states
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
-
-  // Dominant color theme
-  const dominantTheme = {
-    rgb: '147, 51, 234', // Purple rgb
-    glow: 'rgba(147, 51, 234, 0.45)'
-  };
+  const [isSynopsisExpanded, setIsSynopsisExpanded] = useState(false);
 
   const handleBack = () => {
     if (onBack) onBack();
@@ -124,7 +86,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       setIsWatched(false);
     }
 
-    // Load saved reviews and chats for this specific anime
+    // Load saved reviews for this specific anime
     try {
       const savedRevs = localStorage.getItem(`cf_reviews_${animeId}`);
       if (savedRevs) {
@@ -132,16 +94,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       } else {
         setReviewsList([]);
       }
-
-      const savedChat = localStorage.getItem(`cf_chat_${animeId}`);
-      if (savedChat) {
-        setChatMessages(JSON.parse(savedChat));
-      } else {
-        setChatMessages([]);
-      }
     } catch {
       setReviewsList([]);
-      setChatMessages([]);
     }
 
     fetchDetails();
@@ -178,7 +132,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       const data = await cloudflareApi.upvoteAnime(animeId);
       if (data && data.popularity) {
         setUpvotes(data.popularity);
-        showToast(`🔥 Upvoted! Total upvotes increased to ${data.popularity}`);
+        showToast(`🔥 Upvoted! Total upvotes: ${data.popularity}`);
       }
     } catch (err) {
       setUpvotes(prev => prev + 1);
@@ -249,7 +203,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       console.error(err);
     }
     await handleRate(reviewRating);
-    showToast('Dub review and rating submitted successfully!');
+    showToast('Dub review submitted successfully!');
   };
 
   const handleLikeReview = (id: number) => {
@@ -271,512 +225,393 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     }));
   };
 
-  const handleSendChat = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newChatMessage.trim()) return;
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const newMsg = { id: Date.now(), user: 'You', text: newChatMessage.trim(), time: timeStr, langTag: 'IN' };
-    const updatedChat = [...chatMessages, newMsg];
-    setChatMessages(updatedChat);
-    try {
-      localStorage.setItem(`cf_chat_${animeId}`, JSON.stringify(updatedChat));
-    } catch (err) {
-      console.error(err);
-    }
-    setNewChatMessage('');
-  };
-
   const handleShare = () => {
     navigator.clipboard?.writeText(window.location.href);
-    showToast('Link copied to clipboard! Share with fellow anime fans.');
+    showToast('Link copied to clipboard!');
   };
 
   const isBookmarked = watchlist.includes(animeId);
 
-  // Fallbacks if details loading
+  const handleToggleWatched = () => {
+    const nextWatched = !isWatched;
+    setIsWatched(nextWatched);
+    try {
+      const watched = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
+      const idNum = Number(animeId);
+      let updated;
+      if (nextWatched) {
+        updated = Array.from(new Set([...watched, idNum]));
+      } else {
+        updated = watched.filter((w: any) => Number(w) !== idNum);
+      }
+      localStorage.setItem('cf_watched_anime_ids', JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
+    showToast(nextWatched ? 'Marked as Watched!' : 'Marked as uncompleted');
+  };
+
+  // Anime properties and fallbacks
   const title = details?.title || 'Anime Details';
-  const nativeTitle = details?.nativeTitle || details?.romajiTitle || 'Japanese Native / Romaji Title';
   const coverImage = details?.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+  const posterImage = coverImage;
   const rawSynopsis = details?.synopsis || details?.description || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
   const synopsis = rawSynopsis.replace(/Imported via standardized CSV format\.?/gi, '').trim() || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
   const releaseYear = details?.releaseYear || details?.year || 2024;
   const type = details?.type || 'TV Series';
   const status = details?.status || (type === 'Movie' ? 'Completed' : 'Ongoing');
   const studio = details?.studio || 'Animation Studio';
-  const platform = details?.platform || 'Crunchyroll';
-  const languages = details?.languages ? details.languages.split(',').map((l: string) => l.trim()) : ['Hindi', 'Tamil', 'Telugu', 'Malayalam'];
+  
+  // Exclude non-Indian languages from dub badges (strictly exclude Japanese, English, Romaji, etc.)
+  const rawLanguages = details?.languages ? details.languages.split(',').map((l: string) => l.trim()) : ['Hindi', 'Tamil', 'Telugu', 'Malayalam'];
+  const languages = rawLanguages.filter(
+    (l: string) => !['japanese', 'english', 'romaji', 'korean', 'chinese', 'jap', 'jpn', 'eng'].includes(l.trim().toLowerCase())
+  );
+  const displayLanguages = languages.length > 0 ? languages : ['Hindi', 'Tamil', 'Telugu'];
+  
   const genres = details?.genre ? details.genre.split(',').map((g: string) => g.trim()) : ['Action', 'Fantasy', 'Adventure', 'Supernatural'];
 
-  // Voice Cast Data
-  const characters = [
-    {
-      name: 'Protagonist Lead',
-      role: 'Main Character',
-      jpVa: 'Hiroshi Kamiya',
-      indianVa: 'Sanket Mhatre (Hindi), Vijay Anand (Tamil)',
-      avatar: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=300&auto=format&fit=crop&q=80'
-    },
-    {
-      name: 'Deuteragonist / Rival',
-      role: 'Supporting Lead',
-      jpVa: 'Mamoru Miyano',
-      indianVa: 'Rajesh Kava (Hindi), Suriya S. (Tamil)',
-      avatar: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=300&auto=format&fit=crop&q=80'
-    },
-    {
-      name: 'Heroine / Strategist',
-      role: 'Main Heroine',
-      jpVa: 'Saori Hayami',
-      indianVa: 'Pooja Punjabi (Hindi), Keerthi V. (Telugu)',
-      avatar: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=300&auto=format&fit=crop&q=80'
+  // Helper for platform URLs with Android Intent Deep Linking and fallback
+  const getPlatformUrl = (platformName: string, animeTitle: string, defaultUrl?: string) => {
+    const p = platformName.toLowerCase();
+    let webUrl = `https://www.google.com/search?q=${encodeURIComponent(animeTitle + ' ' + platformName + ' watch online')}`;
+    let packageName = '';
+
+    if (p.includes('netflix')) {
+      webUrl = `https://www.netflix.com/search?q=${encodeURIComponent(animeTitle)}`;
+      packageName = 'com.netflix.mediaclient';
+    } else if (p.includes('crunchyroll')) {
+      webUrl = `https://www.crunchyroll.com/search?q=${encodeURIComponent(animeTitle)}`;
+      packageName = 'com.crunchyroll.crunchyroid';
+    } else if (p.includes('jiocinema') || p.includes('jio')) {
+      webUrl = `https://www.jiocinema.com/search/${encodeURIComponent(animeTitle)}`;
+      packageName = 'com.jio.media.stb.jiocinema';
+    } else if (p.includes('hotstar') || p.includes('disney')) {
+      webUrl = `https://www.hotstar.com/in/explore?search_query=${encodeURIComponent(animeTitle)}`;
+      packageName = 'in.startv.hotstar';
+    } else if (p.includes('youtube') || p.includes('muse') || p.includes('ani-one')) {
+      webUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(animeTitle + ' hindi dub')}`;
+      packageName = 'com.google.android.youtube';
+    } else if (p.includes('prime') || p.includes('amazon')) {
+      webUrl = `https://www.primevideo.com/search/ref=atv_nb_sr?phrase=${encodeURIComponent(animeTitle)}`;
+      packageName = 'com.amazon.avod.thirdpartyclient';
+    } else {
+      webUrl = defaultUrl || webUrl;
     }
-  ];
+
+    let intentUrl = webUrl;
+    try {
+      const parsed = new URL(webUrl);
+      const hostPath = parsed.host + parsed.pathname + parsed.search;
+      if (packageName) {
+        intentUrl = `intent://${hostPath}#Intent;scheme=https;package=${packageName};end;`;
+      }
+    } catch {}
+
+    return { name: platformName, url: webUrl, intentUrl };
+  };
+
+  const handleOpenPlatform = (platform: { name: string; url: string; intentUrl: string }) => {
+    setIsWatchOptionsOpen(false);
+    try {
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobile && platform.intentUrl.startsWith('intent://')) {
+        window.location.href = platform.intentUrl;
+        setTimeout(() => {
+          window.open(platform.url, '_blank');
+        }, 1500);
+        return;
+      }
+    } catch {}
+    window.open(platform.url, '_blank');
+  };
+
+  // Parse platforms list (supports 1 to 4+ platforms seamlessly)
+  const rawPlatformsList: string[] = (() => {
+    if (Array.isArray(details?.platforms) && details.platforms.length > 0) {
+      return details.platforms.map(String);
+    }
+    const platStr = details?.platform || details?.platforms || 'Crunchyroll';
+    if (typeof platStr === 'string') {
+      return platStr.split(/[,/•|]+/).map((s: string) => s.trim()).filter(Boolean);
+    }
+    return ['Crunchyroll'];
+  })();
+
+  const availablePlatforms = Array.from<string>(new Set(rawPlatformsList)).map((pName) => 
+    getPlatformUrl(pName, title, details?.stream_url || details?.watch_url)
+  );
+
+  // Calculate total episodes across all seasons using reduce
+  const seasonsArray = details?.seasons || details?.mixedEntries || details?.seasonsList || [];
+  const totalEpisodes = Array.isArray(seasonsArray) && seasonsArray.length > 0
+    ? seasonsArray.reduce((acc: number, season: any) => acc + Number(season.episodes || season.episode_count || 0), 0)
+    : (details?.episodes_count || details?.episodes || details?.episode_count || (type === 'Movie' ? 1 : null));
+  
+  const episodesText = totalEpisodes ? `${totalEpisodes} ${totalEpisodes === 1 ? 'Ep' : 'Eps'}` : null;
 
   // FAQ Items
   const faqItems = [
     {
       q: `Where can I legally watch ${title} dubbed in Hindi, Tamil, and Telugu?`,
-      a: `${title} is officially available for streaming in India on licensed platforms like ${platform}. You can choose between Hindi, Tamil, Telugu, and other regional voice tracks in your streaming player settings.`
+      a: `${title} is officially available for streaming in India on licensed platforms like ${availablePlatforms.map(p => p.name).join(', ')}. You can select regional voice tracks inside the player audio settings.`
     },
     {
       q: `Are all episodes of ${title} dubbed in regional Indian languages?`,
-      a: `Yes, new episodes simulcast with regional Indian dubs as they are released by official distributors. Check the Indian Dub Availability panel for verified per-language progress.`
+      a: `Yes, new episodes simulcast with regional Indian dubs as they are released by official distributors.`
     },
     {
       q: `How can I rate the Indian voice acting quality for ${title}?`,
-      a: `Use our Dub Quality Reviews & Ratings section above. You can rate the translation, dialogue delivery, voice actor performance, and sound mix on a scale of 0 to 10.`
+      a: `Use our Community Dub Reviews section below to rate voice delivery, sync, and translation quality.`
     }
   ];
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 15 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -15 }}
-      transition={{ duration: 0.25 }}
-      className="relative w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-8 font-sans"
-    >
+    <div className="relative w-full min-h-screen bg-[#050507] text-neutral-100 font-sans pb-36 overflow-x-hidden selection:bg-purple-500/30">
 
-      {/* AMBIENT GLOW BACKGROUND */}
-      <div 
-        className="fixed top-0 left-0 right-0 h-[640px] pointer-events-none -z-10 transition-all duration-700 opacity-60"
-        style={{
-          background: `radial-gradient(ellipse 90% 60% at 50% -10%, rgba(${dominantTheme.rgb}, 0.35), transparent 75%)`
-        }}
-      />
-      <div className="fixed inset-0 pointer-events-none -z-10 bg-[#0b0f17]/40" />
+      {/* 1. VIBRANT FULL-BLEED BACKGROUND */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <img 
+          src={coverImage} 
+          alt={title}
+          onError={(e) => {
+            e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80';
+          }}
+          className="w-full h-full object-cover blur-[100px] opacity-70 saturate-[1.5]" 
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#050507]/90"></div>
+      </div>
 
-      {/* TOAST NOTIFICATION */}
-      <AnimatePresence>
-        {toastMessage && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl bg-[#131926]/95 border border-primary-theme/60 backdrop-blur-xl shadow-2xl flex items-center gap-3 text-white text-xs font-semibold"
-          >
-            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>{toastMessage}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* TOP NAVIGATION BAR */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      {/* Top Floating Navigation Bar */}
+      <div className="relative z-20 px-6 py-5 flex items-center justify-between max-w-3xl mx-auto">
         <button
           onClick={handleBack}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-[#131926] border border-neutral-800 hover:border-neutral-700 text-neutral-300 hover:text-white text-xs font-bold transition-all shadow-md cursor-pointer hover:-translate-x-0.5"
+          className="p-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-white/80 hover:text-white transition-all cursor-pointer shadow-lg active:scale-95"
+          title="Back to Catalog"
+          aria-label="Back"
         >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Dub Library</span>
+          <ArrowLeft className="w-5 h-5" />
         </button>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsReportOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#131926] border border-neutral-800 hover:border-red-500/50 text-neutral-400 hover:text-red-400 text-xs font-semibold transition-all cursor-pointer"
-            title="Report audio or streaming link issue"
+            className="p-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-white/60 hover:text-red-400 transition-all cursor-pointer shadow-lg active:scale-95"
+            title="Report Issue"
+            aria-label="Report"
           >
-            <Flag className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Report Issue</span>
+            <Flag className="w-4 h-4" />
           </button>
-
           <button
-            onClick={handleShare}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-[#131926] border border-neutral-800 hover:border-primary-theme/60 text-neutral-300 hover:text-white text-xs font-semibold transition-all cursor-pointer"
-            title="Share anime"
+            onClick={handleBack}
+            className="p-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-white/80 hover:text-white transition-all cursor-pointer shadow-lg active:scale-95"
+            title="Close"
+            aria-label="Close"
           >
-            <Share2 className="w-3.5 h-3.5 text-primary-theme" />
-            <span>Share</span>
+            <X className="w-5 h-5" />
           </button>
         </div>
       </div>
 
-      {/* HERO HEADER CARD - CINEMATIC NETFLIX / CRUNCHYROLL STYLE */}
-      <div className="relative rounded-3xl overflow-hidden bg-[#101522] border border-neutral-800 shadow-[0_30px_90px_rgba(0,0,0,0.9)]">
-        
-        {/* Cinematic Backdrop Banner with Heavy Blur and Multi-stop Gradient */}
-        <div className="absolute inset-0 h-64 sm:h-96 overflow-hidden opacity-35 pointer-events-none">
-          <div 
-            className="w-full h-full bg-cover bg-center bg-no-repeat blur-3xl scale-125"
-            style={{ backgroundImage: `url(${coverImage})` }}
+      {/* TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-xl border border-white/20 shadow-2xl flex items-center gap-2.5 text-white text-xs font-semibold animate-in fade-in duration-200">
+          <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* 2. CINEMATIC HERO (TOP SECTION) */}
+      <div className="relative z-10 px-4 flex flex-col items-center text-center max-w-3xl mx-auto mt-6">
+        {/* Poster */}
+        <div className="relative w-44 h-64 mx-auto mb-6">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-48 bg-purple-600 blur-[70px] opacity-50 pointer-events-none"></div>
+          <img
+            src={posterImage}
+            alt={title}
+            onError={(e) => {
+              e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+            }}
+            className="relative w-44 h-64 rounded-2xl shadow-[0_20px_50px_rgba(168,85,247,0.4)] border border-white/10 object-cover z-10"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#101522] via-[#101522]/80 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#101522]/90 via-transparent to-[#101522]/90" />
         </div>
 
-        {/* Hero Content */}
-        <div className="relative z-10 p-6 sm:p-10 flex flex-col md:flex-row gap-8 items-center md:items-start">
-          
-          {/* Main Poster Column with Mobile Centering */}
-          <div className="flex flex-col items-center shrink-0 w-full md:w-auto">
-            <div className="relative group">
-              <div 
-                className="absolute -inset-2 rounded-3xl opacity-80 blur-2xl transition duration-500 group-hover:opacity-100"
-                style={{ background: dominantTheme.glow }}
-              />
-              <div className="relative w-48 sm:w-60 aspect-[3/4.3] rounded-2xl sm:rounded-3xl border-2 border-neutral-700/80 shadow-[0_25px_60px_rgba(0,0,0,0.95)] bg-neutral-900 overflow-hidden">
-                <img 
-                  src={coverImage ? coverImage : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'} 
-                  alt={title}
-                  onError={(e) => {
-                    e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
-                  }}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                />
+        {/* Title */}
+        <h1 className="text-3xl sm:text-4xl font-black text-center text-white drop-shadow-2xl mb-3 relative z-10 leading-tight max-w-xl">
+          {title}
+        </h1>
 
-                {/* Streaming provider tag overlay */}
-                <div className="absolute bottom-2.5 left-2.5 right-2.5 bg-black/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center justify-between text-xs text-white">
-                  <span className="font-extrabold text-orange-400">{platform}</span>
-                  <span className="text-emerald-400 font-bold">{status}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Language & Status Badges Grouped Nicely Below Poster */}
-            <div className="mt-4 w-full flex flex-col items-center gap-2">
-              <div className="flex flex-wrap items-center justify-center gap-1.5">
-                <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 mr-1">Dub Audio:</span>
-                {languages.map((l: string) => (
-                  <span 
-                    key={l}
-                    className="bg-[#182032] border border-neutral-700/80 text-amber-300 text-[10px] font-extrabold px-2.5 py-1 rounded-lg shadow"
-                  >
-                    {l}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Title, Metadata & CTAs */}
-          <div className="flex-1 min-w-0 space-y-5 text-center md:text-left">
-            
-            {/* Single Row Metadata (Type • Year • OTT • Studio) */}
-            <div className="flex items-center justify-center md:justify-start flex-wrap gap-2 text-xs font-bold text-neutral-300">
-              <span className="px-3 py-1 rounded-full bg-purple-950/80 border border-purple-500/40 text-purple-300 uppercase tracking-wider">
-                {type}
+        {/* Meta details: simple text separated by dots, NO pills or backgrounds */}
+        <div className="flex items-center justify-center flex-wrap gap-2 text-xs font-semibold text-white/80 relative z-10 mb-8">
+          {currentRating && (
+            <span className="flex items-center gap-1 text-amber-400 font-bold">
+              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+              <span>{currentRating.toFixed(1)} / 10</span>
+            </span>
+          )}
+          {currentRating && releaseYear && <span>•</span>}
+          {releaseYear && <span>{releaseYear}</span>}
+          <span>•</span>
+          <span className="text-purple-300 font-medium">{type}</span>
+          {episodesText && (
+            <>
+              <span>•</span>
+              <span>{episodesText}</span>
+            </>
+          )}
+          {status && (
+            <>
+              <span>•</span>
+              <span className="text-emerald-400 font-medium flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>{status}</span>
               </span>
-              <span className="text-neutral-500">•</span>
-              <span className="text-white">{releaseYear}</span>
-              <span className="text-neutral-500">•</span>
-              <span className="text-amber-400 flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>100% Legal OTT</span>
-              </span>
-              <span className="text-neutral-500">•</span>
-              <span className="text-neutral-400">{studio}</span>
-            </div>
-
-            {/* Main Title (Bigger, Bolder, Glowing White) */}
-            <div>
-              <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight drop-shadow-[0_4px_25px_rgba(255,255,255,0.25)]">
-                {title}
-              </h1>
-              <p className="text-xs sm:text-sm text-neutral-400 mt-1.5 font-medium italic">
-                {nativeTitle}
-              </p>
-            </div>
-
-            {/* Quick Metrics Bar (Global Rating, Dub Quality, Broadcast) */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 rounded-2xl bg-black/65 border border-neutral-800/80 backdrop-blur-md">
-              <div className="p-2 space-y-0.5">
-                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center justify-center md:justify-start gap-1">
-                  <Star className="w-3 h-3 text-orange-400 fill-orange-400" />
-                  <span>Global Rating</span>
-                </div>
-                <div className="text-lg font-black text-white">{currentRating ? `${currentRating.toFixed(1)} / 10` : 'Unrated'}</div>
-                <div className="text-[10px] text-neutral-500">{currentRating ? 'Community Rating' : 'Awaiting ratings'}</div>
-              </div>
-
-              <div className="p-2 space-y-0.5">
-                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center justify-center md:justify-start gap-1">
-                  <Languages className="w-3 h-3 text-primary-theme" />
-                  <span>Dub Audio</span>
-                </div>
-                <div className="text-lg font-black text-amber-400">{languages.length} Languages</div>
-                <div className="text-[10px] text-neutral-500">Verified Indian Dubs</div>
-              </div>
-
-              <div className="p-2 space-y-0.5 col-span-2 sm:col-span-1">
-                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center justify-center md:justify-start gap-1">
-                  <Calendar className="w-3 h-3 text-sky-400" />
-                  <span>Status</span>
-                </div>
-                <div className="text-sm font-bold text-emerald-400">{status}</div>
-                <div className="text-[10px] text-neutral-500">{platform}</div>
-              </div>
-            </div>
-
-            {/* Modern Premium Call-to-Action Buttons */}
-            <div className="pt-2 flex flex-wrap items-center justify-center md:justify-start gap-3.5">
-              <button
-                onClick={() => onToggleWatchlist(animeId)}
-                className={`px-6 py-3 rounded-2xl font-black text-xs sm:text-sm inline-flex items-center gap-2.5 transition-all cursor-pointer shadow-xl active:scale-95 ${
-                  isBookmarked 
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60 ring-2 ring-emerald-400/50' 
-                    : 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-500 hover:to-indigo-500 text-white shadow-[0_0_30px_rgba(147,51,234,0.45)] border border-purple-400/40'
-                }`}
-              >
-                <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-white' : ''}`} />
-                <span>{isBookmarked ? 'In Your Watchlist' : 'Add to Watchlist'}</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  const nextWatched = !isWatched;
-                  setIsWatched(nextWatched);
-                  try {
-                    const watched = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
-                    const idNum = Number(animeId);
-                    let updated;
-                    if (nextWatched) {
-                      updated = Array.from(new Set([...watched, idNum]));
-                    } else {
-                      updated = watched.filter((w: any) => Number(w) !== idNum);
-                    }
-                    localStorage.setItem('cf_watched_anime_ids', JSON.stringify(updated));
-                  } catch (e) {
-                    console.error(e);
-                  }
-                  showToast(nextWatched ? 'Marked as Watched!' : 'Marked as uncompleted');
-                }}
-                className={`px-5 py-3 rounded-2xl border text-xs sm:text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer active:scale-95 ${
-                  isWatched 
-                    ? 'bg-emerald-950/90 border-emerald-500/60 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.3)]' 
-                    : 'bg-[#182032] border-neutral-700/80 text-neutral-200 hover:text-white hover:border-neutral-600 shadow-md'
-                }`}
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{isWatched ? 'Watched Completed' : 'Mark as Watched'}</span>
-              </button>
-
-              <button
-                onClick={handleVote}
-                disabled={isVoting}
-                className="px-5 py-3 rounded-2xl bg-[#182032] border border-orange-500/40 hover:border-orange-500 text-orange-400 hover:text-orange-300 text-xs sm:text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95"
-                title="Upvote community popularity"
-              >
-                <Flame className={`w-4 h-4 fill-orange-400 ${isVoting ? 'animate-bounce' : ''}`} />
-                <span>{upvotes.toLocaleString()} Upvotes</span>
-              </button>
-            </div>
-
-          </div>
-
+            </>
+          )}
         </div>
 
+        {/* INLINE ACTION BAR */}
+        <div className="w-full max-w-md flex items-center justify-center gap-3 mb-4">
+          {availablePlatforms.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (availablePlatforms.length === 1) {
+                  handleOpenPlatform(availablePlatforms[0]);
+                } else {
+                  setIsWatchOptionsOpen(true);
+                }
+              }}
+              className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-6 py-3.5 rounded-full font-bold text-sm flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(168,85,247,0.4)] transition-all cursor-pointer"
+            >
+              <Play size={18} className="fill-white" />
+              {availablePlatforms.length > 1 ? "Watch Options" : `Watch on ${availablePlatforms[0].name}`}
+            </button>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => onToggleWatchlist(animeId)}
+              className={`w-12 h-12 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 transition-all cursor-pointer ${
+                isBookmarked ? 'text-purple-400 bg-purple-500/20 border-purple-500/40' : 'text-white'
+              }`}
+              title={isBookmarked ? 'In Watchlist' : 'Add to Watchlist'}
+            >
+              <Bookmark size={20} className={isBookmarked ? 'fill-purple-400' : ''} />
+            </button>
+            <button
+              type="button"
+              onClick={handleVote}
+              disabled={isVoting}
+              className="w-12 h-12 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 text-orange-400 transition-all relative cursor-pointer"
+              title="Upvote Anime"
+            >
+              <Flame size={22} className="fill-orange-400" />
+              <span className="absolute -top-1 -right-1 text-[9px] font-black bg-orange-500 text-white px-1.5 py-0.5 rounded-full shadow-lg">
+                {upvotes > 0 ? (upvotes >= 1000 ? `${(upvotes/1000).toFixed(1)}k` : upvotes) : '1K'}
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* CONTENT GRID: 2 COLUMNS LEFT, 1 COLUMN RIGHT */}
-      {/* SECTIONS BELOW HERO - RESPONSIVE UNIFIED GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6 items-stretch">
-        
-        {/* 1. SYNOPSIS & GENRES */}
-        <div className="bg-[#1A1C29]/60 backdrop-blur-md border border-gray-800 rounded-2xl p-3.5 sm:p-4 shadow-xl flex flex-col justify-between space-y-2.5">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between pb-2 border-b border-gray-800/80">
-              <h2 className="text-sm sm:text-base font-bold text-gray-200 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-purple-400" />
-                <span>Synopsis & Overview</span>
-              </h2>
-              <span className="text-[10px] font-bold text-purple-300 bg-purple-950/70 border border-purple-500/30 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                Storyline
-              </span>
-            </div>
-            <p className="text-xs text-gray-300 leading-relaxed font-normal">
-              {synopsis}
-            </p>
-          </div>
+      {/* 3. NAKED CONTENT FLOW (100% CARDLESS & BOXLESS) */}
+      <div className="relative z-10 max-w-2xl mx-auto px-4 sm:px-6">
 
-          {/* Genre tags */}
-          <div className="pt-2 border-t border-gray-800/70">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-              Genres & Categories
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {genres.map((g: string) => (
-                <span 
-                  key={g}
-                  className="px-2.5 py-1 rounded-xl bg-[#141824]/90 border border-gray-700/60 text-xs font-semibold text-gray-300 hover:border-purple-400/50 transition-colors"
-                >
-                  {g}
-                </span>
-              ))}
-              <span className="px-2.5 py-1 rounded-xl bg-purple-950/60 border border-purple-500/40 text-xs font-semibold text-purple-300">
-                Regional Dubbed
+        {/* SECTION 1: AVAILABLE REGIONAL DUBS */}
+        <div className="mt-12">
+          <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase mb-4 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+            Available Dubs
+          </h2>
+          <div className="flex flex-wrap gap-x-6 gap-y-3">
+            {displayLanguages.map((lang: string) => (
+              <div
+                key={lang}
+                className="flex items-center gap-2 text-sm font-bold text-white tracking-wide"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse" />
+                <span>{lang}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* SECTION 2: SYNOPSIS */}
+        <div className="mt-12">
+          <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase mb-4 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+            Synopsis
+          </h2>
+          <p className="text-sm sm:text-base text-neutral-200/90 leading-relaxed font-normal">
+            {isSynopsisExpanded || synopsis.length <= 280
+              ? synopsis
+              : `${synopsis.slice(0, 280)}...`}
+            {synopsis.length > 280 && (
+              <button
+                type="button"
+                onClick={() => setIsSynopsisExpanded(!isSynopsisExpanded)}
+                className="text-xs font-bold text-purple-400 hover:text-purple-300 ml-2 cursor-pointer transition-colors"
+              >
+                {isSynopsisExpanded ? 'Show less' : 'Read more'}
+              </button>
+            )}
+          </p>
+          <div className="flex flex-wrap items-center gap-2 pt-4 text-xs">
+            <span className="text-purple-300/60 text-[10px] font-bold tracking-widest uppercase mr-1">GENRES:</span>
+            {genres.map((g: string, i: number) => (
+              <span key={g} className="text-neutral-300 font-medium text-xs">
+                {g}{i < genres.length - 1 ? ' • ' : ''}
               </span>
-              <span className="px-2.5 py-1 rounded-xl bg-amber-950/60 border border-amber-500/40 text-xs font-semibold text-amber-300">
-                100% Legal OTT
+            ))}
+          </div>
+        </div>
+
+        {/* SECTION 3: STREAM SPECS */}
+        <div className="mt-12">
+          <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase mb-4 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+            Stream Specs
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+            <div>
+              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">PLATFORMS</span>
+              <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                <Play className="w-3.5 h-3.5 text-purple-400 fill-purple-400 shrink-0" />
+                <span className="truncate">{availablePlatforms.map(p => p.name).join(', ')}</span>
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">AUDIO TRACK</span>
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                <Volume2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Dolby 5.1 / Stereo</span>
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">STUDIO</span>
+              <span className="text-xs font-bold text-white truncate block">{studio}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">VERIFICATION</span>
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                <span>100% Legal</span>
               </span>
             </div>
           </div>
         </div>
 
-        {/* 2. INDIAN DUB AVAILABILITY & OFFICIAL STREAMING LINKS (COMPACT) */}
-        <div className="bg-[#1A1C29]/60 backdrop-blur-md border border-gray-800 rounded-2xl p-3.5 sm:p-4 shadow-xl flex flex-col justify-between space-y-2.5">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between pb-2 border-b border-gray-800/80">
-              <h2 className="text-sm sm:text-base font-bold text-gray-200 flex items-center gap-1.5">
-                <Languages className="w-4 h-4 text-amber-400" />
-                <span>Indian Dub Audio & Streaming</span>
-              </h2>
-              <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/70 border border-emerald-500/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                Simulcast Ready
-              </span>
-            </div>
+        {/* SECTION 4: COMMUNITY DUB REVIEWS */}
+        <div className="mt-12 space-y-6">
+          <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+            Community Dub Reviews ({reviewsList.length})
+          </h2>
 
-            {/* Compact Dub Audio List - Dynamically rendered based on actual anime.languages data */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {languages.map((langName: string) => {
-                const cleanName = langName.replace(/dub/gi, '').trim();
-                const upper = cleanName.toUpperCase();
-                let code = upper.slice(0, 2);
-                if (upper.includes('HIN')) code = 'HI';
-                else if (upper.includes('TAM')) code = 'TA';
-                else if (upper.includes('TEL')) code = 'TE';
-                else if (upper.includes('MAL')) code = 'ML';
-                else if (upper.includes('KAN')) code = 'KN';
-                else if (upper.includes('BEN')) code = 'BN';
-
-                return (
-                  <div 
-                    key={cleanName}
-                    className="bg-[#141824]/80 border border-gray-800/90 rounded-xl px-2.5 py-2 flex items-center justify-between gap-1"
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-5 h-5 rounded-md bg-neutral-900 border border-white/10 text-white font-black text-[10px] flex items-center justify-center shrink-0">
-                        {code}
-                      </span>
-                      <span className="text-[11px] font-bold text-gray-200 truncate">{cleanName}</span>
-                    </div>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md border shrink-0 bg-emerald-950/80 border-emerald-500/40 text-emerald-300">
-                      Ready
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Compact Stream Link Card */}
-          <div className="pt-3 border-t border-gray-800/70 space-y-2">
-            <div className="flex items-center justify-between text-xs text-gray-400">
-              <span>Licensed OTT Stream:</span>
-              <span className="text-[11px] text-gray-400">Subtitles: En, Hi, Ta, Te</span>
-            </div>
-            <a
-              href="https://www.crunchyroll.com"
-              target="_blank"
-              rel="noreferrer"
-              className="w-full bg-gradient-to-r from-orange-600 via-amber-600 to-orange-500 hover:from-orange-500 hover:to-amber-500 text-white px-4 py-2.5 rounded-xl flex items-center justify-between font-bold text-xs shadow-lg transition-all hover:scale-[1.01] cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-black/25 flex items-center justify-center">
-                  <Play className="w-3.5 h-3.5 fill-white" />
-                </div>
-                <span>Stream legally on {platform}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-orange-100">
-                <Smartphone className="w-3 h-3" />
-                <span>Deep Link</span>
-                <ExternalLink className="w-3.5 h-3.5 ml-1" />
-              </div>
-            </a>
-          </div>
-        </div>
-
-
-
-        {/* 4. PRODUCTION & AIRING DETAILS */}
-        <div className="bg-[#1A1C29]/60 backdrop-blur-md border border-gray-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-gray-800/80">
-            <h2 className="text-base sm:text-lg font-bold text-gray-200 flex items-center gap-2">
-              <Tv className="w-4 h-4 text-indigo-400" />
-              <span>Production & Airing Info</span>
-            </h2>
-            <span className="text-[10px] font-semibold text-indigo-300 bg-indigo-950/70 border border-indigo-500/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-              {status}
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {/* Progress Bar */}
-            <div className="bg-[#141824]/80 border border-gray-800/90 rounded-xl p-3 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-400 font-medium">Broadcast Progress</span>
-                <span className="font-bold text-white">Season 1 • Simulcast Active</span>
-              </div>
-              <div className="w-full h-2 rounded-full bg-neutral-900 overflow-hidden">
-                <div className="w-3/4 h-full bg-gradient-to-r from-purple-500 via-indigo-500 to-emerald-400 rounded-full" />
-              </div>
-              <div className="flex items-center justify-between text-[10px] text-gray-400 font-semibold">
-                <span>WEEKLY RELEASE</span>
-                <span className="text-emerald-400">REGIONAL SYNC 75%</span>
-              </div>
-            </div>
-
-            {/* 4-Item Grid */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2.5 rounded-xl bg-[#141824]/80 border border-gray-800/80">
-                <span className="text-[10px] text-gray-400 block uppercase font-bold">Studio</span>
-                <span className="font-bold text-white truncate block">{studio}</span>
-              </div>
-              <div className="p-2.5 rounded-xl bg-[#141824]/80 border border-gray-800/80">
-                <span className="text-[10px] text-gray-400 block uppercase font-bold">Release Year</span>
-                <span className="font-bold text-white truncate block">{releaseYear}</span>
-              </div>
-              <div className="p-2.5 rounded-xl bg-[#141824]/80 border border-gray-800/80">
-                <span className="text-[10px] text-gray-400 block uppercase font-bold">Format</span>
-                <span className="font-bold text-white truncate block">{type}</span>
-              </div>
-              <div className="p-2.5 rounded-xl bg-[#141824]/80 border border-gray-800/80">
-                <span className="text-[10px] text-gray-400 block uppercase font-bold">Broadcast Day</span>
-                <span className="font-bold text-emerald-400 truncate block">Sundays (Simulcast)</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 5. DUB QUALITY REVIEWS & RATINGS */}
-        <div className="bg-[#1A1C29]/60 backdrop-blur-md border border-gray-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-gray-800/80">
-            <h2 className="text-base sm:text-lg font-bold text-gray-200 flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-purple-400" />
-              <span>Dub Reviews & Ratings</span>
-            </h2>
-            <span className="text-[10px] font-bold text-purple-300 bg-purple-950/80 border border-purple-500/40 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-              {reviewsList.length} Ratings
-            </span>
-          </div>
-
-          {/* Interactive Rating Slider & Submission Form */}
-          <form onSubmit={handleAddReview} className="bg-[#141824]/80 border border-gray-800 rounded-xl p-3.5 space-y-3">
+          {/* Form */}
+          <form onSubmit={handleAddReview} className="space-y-4 pt-1">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-bold text-gray-200">Rate Dubbing Quality</span>
-              <span className="text-amber-400 font-black flex items-center gap-1">
-                <Star className="w-3 h-3 fill-amber-400" />
+              <span className="text-neutral-300 font-medium">Rate Dubbing Quality</span>
+              <span className="text-amber-400 font-bold flex items-center gap-1">
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                 <span>{reviewRating.toFixed(1)} / 10.0</span>
               </span>
             </div>
@@ -788,33 +623,31 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               step="0.5"
               value={reviewRating}
               onChange={(e) => setReviewRating(parseFloat(e.target.value))}
-              className="w-full accent-purple-500 cursor-pointer h-1.5"
+              className="w-full accent-purple-500 cursor-pointer h-1.5 bg-white/20 rounded-lg"
             />
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <select
-                  value={reviewLang}
-                  onChange={(e) => setReviewLang(e.target.value)}
-                  className="w-full bg-[#0c1017] border border-gray-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
-                >
-                  <option value="Hindi Dub">Hindi Dub</option>
-                  <option value="Tamil Dub">Tamil Dub</option>
-                  <option value="Telugu Dub">Telugu Dub</option>
-                  <option value="Malayalam Dub">Malayalam Dub</option>
-                  <option value="Kannada Dub">Kannada Dub</option>
-                </select>
-              </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <select
+                value={reviewLang}
+                onChange={(e) => setReviewLang(e.target.value)}
+                className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="Hindi Dub">Hindi Dub</option>
+                <option value="Tamil Dub">Tamil Dub</option>
+                <option value="Telugu Dub">Telugu Dub</option>
+                <option value="Malayalam Dub">Malayalam Dub</option>
+                <option value="Kannada Dub">Kannada Dub</option>
+              </select>
 
               <div className="flex items-center justify-end">
-                <label className="flex items-center gap-1.5 text-[11px] text-gray-300 cursor-pointer">
+                <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">
                   <input 
                     type="checkbox"
                     checked={hasSpoilers}
                     onChange={(e) => setHasSpoilers(e.target.checked)}
-                    className="accent-purple-600 rounded"
+                    className="accent-purple-500 rounded"
                   />
-                  <span>Contains spoiler?</span>
+                  <span>Contains spoilers?</span>
                 </label>
               </div>
             </div>
@@ -823,42 +656,41 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               rows={2}
               value={reviewComment}
               onChange={(e) => setReviewComment(e.target.value)}
-              placeholder="Share details on dubbing accuracy, emotional delivery, background audio mixing..."
-              className="w-full bg-[#0c1017] border border-gray-700/80 rounded-lg p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none"
+              placeholder="Share thoughts on voice acting, sync, and regional dialogue delivery..."
+              className="w-full bg-black/60 border border-white/10 rounded-2xl p-3.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400 resize-none"
             />
 
             <div className="flex justify-end">
               <button
                 type="submit"
-                className="btn-primary-theme px-4 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 shadow cursor-pointer hover:opacity-95"
+                className="px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-xs font-bold inline-flex items-center gap-2 cursor-pointer shadow-lg shadow-purple-900/40 transition-all active:scale-95"
               >
-                <Send className="w-3 h-3" />
+                <Send className="w-3.5 h-3.5" />
                 <span>Submit Review</span>
               </button>
             </div>
           </form>
 
-          {/* Reviews Stream */}
-          <div className="space-y-2.5 pt-1 max-h-80 overflow-y-auto pr-1">
+          {/* Reviews List */}
+          <div className="space-y-6 pt-2">
             {reviewsList.length === 0 ? (
-              <div className="py-6 text-center text-xs text-neutral-400 space-y-1 bg-[#141824]/40 border border-gray-800/60 rounded-xl p-4">
-                <p className="font-semibold text-neutral-300">No community reviews yet.</p>
-                <p className="text-[11px] text-neutral-500">Be the first to share your rating and review for this regional dub!</p>
+              <div className="py-2 text-xs text-neutral-400">
+                <p>No community reviews yet. Be the first to review this regional dub!</p>
               </div>
             ) : (
               reviewsList.map((review) => (
                 <div 
                   key={review.id}
-                  className="bg-[#141824]/70 border border-gray-800/80 rounded-xl p-3 space-y-2 text-xs"
+                  className="space-y-2 text-xs"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2.5">
                       <span className="font-bold text-white">{review.author}</span>
-                      <span className="px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
+                      <span className="text-[11px] text-purple-300 font-semibold">
                         {review.language}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 bg-amber-950/50 border border-amber-500/30 px-2 py-0.5 rounded-md text-[10px] font-bold text-amber-300">
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-amber-400">
                       <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                       <span>{review.rating}</span>
                     </div>
@@ -866,9 +698,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
                   <div className="relative">
                     {review.spoilers && !review.revealed ? (
-                      <div className="p-2 rounded-lg bg-red-950/20 border border-red-500/30 flex items-center justify-between text-[11px]">
-                        <span className="text-red-300 flex items-center gap-1">
-                          <EyeOff className="w-3 h-3 text-red-400" />
+                      <div className="py-1 flex items-center justify-between text-[11px] text-neutral-400">
+                        <span className="flex items-center gap-1.5">
+                          <EyeOff className="w-3.5 h-3.5 text-neutral-400" />
                           <span>Contains spoilers</span>
                         </span>
                         <button
@@ -880,23 +712,24 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                         </button>
                       </div>
                     ) : (
-                      <p className="text-gray-300 leading-relaxed font-normal text-[11px]">
+                      <p className="text-neutral-300/90 leading-relaxed font-normal text-xs">
                         {review.comment}
                       </p>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1 border-t border-gray-800/60">
+                  <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-1">
                     <span>{review.date || 'Recent'}</span>
                     <button
+                      type="button"
                       onClick={() => handleLikeReview(review.id)}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-semibold transition-colors cursor-pointer ${
+                      className={`inline-flex items-center gap-1.5 text-[11px] transition-colors cursor-pointer ${
                         review.isLiked 
-                          ? 'bg-purple-950/80 border-purple-500 text-purple-300' 
-                          : 'bg-neutral-900 border-gray-800 text-gray-400 hover:text-white'
+                          ? 'text-purple-400 font-bold' 
+                          : 'text-neutral-400 hover:text-white'
                       }`}
                     >
-                      <ThumbsUp className="w-2.5 h-2.5" />
+                      <ThumbsUp className="w-3.5 h-3.5" />
                       <span>{review.likes || 0}</span>
                     </button>
                   </div>
@@ -906,61 +739,208 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           </div>
         </div>
 
-        {/* 6. REAL-TIME COMMUNITY DISCUSSION */}
-        <div className="flex flex-col">
-          <LiveChat className="h-full" />
+        {/* SECTION 5: FREQUENTLY ASKED QUESTIONS */}
+        <div className="mt-12">
+          <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase mb-4 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+            Frequently Asked Questions
+          </h2>
+          <div className="space-y-4">
+            {faqItems.map((item, idx) => {
+              const isOpen = openFaqIndex === idx;
+              return (
+                <div key={idx} className="pb-3">
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
+                    className="w-full py-2 flex items-center justify-between text-left text-sm font-semibold text-white/90 hover:text-purple-300 transition-colors cursor-pointer"
+                  >
+                    <span>{item.q}</span>
+                    {isOpen ? (
+                      <ChevronUp className="w-4 h-4 text-purple-400 shrink-0 ml-2" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-white/40 shrink-0 ml-2" />
+                    )}
+                  </button>
+                  {isOpen && (
+                    <div className="pt-1 text-xs text-neutral-300/80 leading-relaxed">
+                      {item.a}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
       </div>
 
-      {/* SEO & FAQ FOOTER SECTION */}
-      <div className="bg-[#1A1C29]/60 backdrop-blur-md border border-gray-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4 mt-6">
-        <div className="flex items-center gap-2.5 pb-3 border-b border-gray-800/80">
-          <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-400 flex items-center justify-center">
-            <HelpCircle className="w-4 h-4" />
-          </div>
-          <div>
-            <h3 className="text-base sm:text-lg font-bold text-gray-200">
-              Frequently Asked Questions & Streaming Guide
-            </h3>
-            <p className="text-xs text-gray-400">
-              Verified information regarding regional Indian dubbed releases.
-            </p>
-          </div>
-        </div>
+      {/* 4. STICKY ACTION BAR */}
+      <div className="fixed bottom-6 left-4 right-4 max-w-md mx-auto z-50 backdrop-blur-3xl bg-black/40 border border-white/10 p-2.5 rounded-[2.5rem] flex items-center justify-between shadow-2xl">
+        {/* Watch Options Button */}
+        <button
+          type="button"
+          onClick={() => setIsWatchOptionsOpen(true)}
+          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3.5 rounded-full font-bold shadow-[0_0_20px_rgba(168,85,247,0.5)] flex items-center justify-center gap-2 hover:opacity-95 transition-all cursor-pointer text-xs uppercase tracking-wider active:scale-95"
+        >
+          <Play className="w-4 h-4 fill-white shrink-0" />
+          <span>Watch Options</span>
+          <ChevronUp className="w-3.5 h-3.5 opacity-80 shrink-0" />
+        </button>
 
-        {/* FAQ Accordion */}
-        <div className="space-y-2.5 pt-1">
-          {faqItems.map((item, idx) => {
-            const isOpen = openFaqIndex === idx;
-            return (
-              <div 
-                key={idx}
-                className="bg-[#141824]/80 border border-gray-800 rounded-xl overflow-hidden transition-all"
-              >
+        {/* Lightweight Icon Actions */}
+        <div className="flex items-center gap-1.5 pr-1">
+          {/* Upvote Button with count */}
+          <button
+            type="button"
+            onClick={handleVote}
+            disabled={isVoting}
+            className={`h-11 px-3 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 active:scale-95 ${
+              upvotes > 0
+                ? 'text-orange-400 border-orange-500/30 bg-orange-500/10'
+                : 'text-white/80 hover:text-white'
+            }`}
+            title={`Upvote (${upvotes} votes)`}
+            aria-label="Upvote"
+          >
+            <Flame className={`w-4 h-4 ${upvotes > 0 ? 'fill-orange-400 text-orange-400' : ''}`} />
+            <span className="text-xs font-bold">
+              {upvotes > 0 ? (upvotes >= 1000 ? `${(upvotes/1000).toFixed(1)}k` : upvotes) : ''}
+            </span>
+          </button>
+
+          {/* Watchlist Button */}
+          <button
+            type="button"
+            onClick={() => onToggleWatchlist(animeId)}
+            className={`w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
+              isBookmarked
+                ? 'text-purple-400 border-purple-500/40 bg-purple-500/15'
+                : 'text-white/80 hover:text-white'
+            }`}
+            title={isBookmarked ? 'In Watchlist' : 'Add to Watchlist'}
+            aria-label="Watchlist"
+          >
+            <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-purple-400 text-purple-400' : ''}`} />
+          </button>
+
+          {/* Mark Watched Button */}
+          <button
+            type="button"
+            onClick={handleToggleWatched}
+            className={`w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
+              isWatched
+                ? 'text-emerald-400 border-emerald-500/40 bg-emerald-500/15'
+                : 'text-white/80 hover:text-white'
+            }`}
+            title={isWatched ? 'Completed' : 'Mark as Watched'}
+            aria-label="Toggle Watched"
+          >
+            <CheckCircle2 className={`w-4 h-4 ${isWatched ? 'text-emerald-400' : ''}`} />
+          </button>
+
+          {/* Share Button */}
+          <button
+            type="button"
+            onClick={handleShare}
+            className="w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all cursor-pointer active:scale-95"
+            title="Share Anime"
+            aria-label="Share"
+          >
+            <Share2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* WATCH OPTIONS MODAL / DRAWER */}
+      <AnimatePresence>
+        {isWatchOptionsOpen && (
+          <div 
+            onClick={() => setIsWatchOptionsOpen(false)}
+            className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 80 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 80 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-[#0b0c10] border border-white/10 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <Play className="w-4 h-4 fill-purple-400 text-purple-400" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-white">
+                    Official Streaming Platforms
+                  </h3>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
-                  className="w-full p-3.5 text-left flex items-center justify-between gap-4 text-xs sm:text-sm font-bold text-gray-200 hover:text-purple-400 transition-colors cursor-pointer"
+                  onClick={() => setIsWatchOptionsOpen(false)}
+                  className="p-1 rounded-full text-neutral-400 hover:text-white cursor-pointer"
                 >
-                  <span>{item.q}</span>
-                  {isOpen ? <ChevronUp className="w-4 h-4 shrink-0 text-purple-400" /> : <ChevronDown className="w-4 h-4 shrink-0 text-gray-400" />}
+                  ✕
                 </button>
-                {isOpen && (
-                  <div className="p-3.5 pt-0 text-xs text-gray-300 leading-relaxed border-t border-gray-800/60 mt-1">
-                    {item.a}
-                  </div>
-                )}
               </div>
-            );
-          })}
-        </div>
-      </div>
+
+              <p className="text-xs text-neutral-400">
+                Select an official platform to stream {title} with regional Indian dub audio:
+              </p>
+
+              <div className="space-y-2 pt-1 max-h-[50vh] overflow-y-auto">
+                {availablePlatforms.map((plat) => (
+                  <a
+                    key={plat.name}
+                    href={plat.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleOpenPlatform(plat);
+                    }}
+                    className="w-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 rounded-2xl p-3.5 flex items-center justify-between text-sm font-semibold text-white transition-all group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-purple-950/60 border border-purple-500/30 flex items-center justify-center text-purple-300 group-hover:scale-105 transition-transform">
+                        <Play className="w-4 h-4 fill-purple-400 text-purple-400" />
+                      </div>
+                      <div className="text-left">
+                        <div className="font-bold text-white group-hover:text-purple-300 transition-colors">
+                          {plat.name}
+                        </div>
+                        <div className="text-[11px] text-neutral-400">
+                          Verified Indian Dubs • HD
+                        </div>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-neutral-400 group-hover:text-white" />
+                  </a>
+                ))}
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsWatchOptionsOpen(false)}
+                  className="w-full py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-xs font-semibold text-neutral-300 hover:text-white cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* REPORT ISSUE MODAL */}
       {isReportOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#131926] border border-neutral-800 rounded-3xl p-6 shadow-2xl space-y-4">
+        <div 
+          onClick={() => setIsReportOpen(false)}
+          className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-[#131926] border border-neutral-800 rounded-3xl p-6 shadow-2xl space-y-4"
+          >
             <div className="flex items-center justify-between">
               <h3 className="text-base font-black text-white flex items-center gap-2">
                 <Flag className="w-4 h-4 text-red-400" />
@@ -1001,7 +981,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               <button
                 type="button"
                 onClick={() => setIsReportOpen(false)}
-                className="px-4 py-2 rounded-xl bg-neutral-800 text-neutral-300 text-xs font-semibold hover:bg-neutral-700"
+                className="px-4 py-2 rounded-xl bg-neutral-800 text-neutral-300 text-xs font-semibold hover:bg-neutral-700 cursor-pointer"
               >
                 Cancel
               </button>
@@ -1011,7 +991,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   setIsReportOpen(false);
                   showToast('Thank you! Your report has been submitted to moderators.');
                 }}
-                className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-500"
+                className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-500 cursor-pointer"
               >
                 Submit Report
               </button>
@@ -1020,6 +1000,6 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </div>
       )}
 
-    </motion.div>
+    </div>
   );
 };
