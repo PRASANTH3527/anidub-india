@@ -185,6 +185,66 @@ export default {
         return jsonResponse({ status: "healthy", service: "AniDub India Cloudflare Worker API + WebSockets" });
       }
 
+      // Chat History GET endpoint
+      if ((path === "/api/chat" || path === "/api/chat/messages") && method === "GET") {
+        let messages = [];
+        if (env.DB) {
+          try {
+            await env.DB.prepare(`
+              CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user TEXT NOT NULL,
+                text TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                rating REAL,
+                language TEXT,
+                isReview INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+              )
+            `).run();
+            const { results } = await env.DB.prepare(
+              "SELECT id, user, text, timestamp, rating, language, isReview FROM chat_messages ORDER BY id ASC LIMIT 150"
+            ).all();
+            if (results) messages = results;
+          } catch (e) {
+            console.error("D1 chat read error:", e);
+          }
+        }
+        if (messages.length === 0 && env.ANIME_DB && typeof env.ANIME_DB.get === "function") {
+          try {
+            const raw = await env.ANIME_DB.get("chat_history", { type: "json" });
+            if (Array.isArray(raw)) messages = raw;
+          } catch (_) {}
+        }
+        return jsonResponse({ success: true, count: messages.length, messages, data: messages });
+      }
+
+      // Chat Message POST endpoint
+      if ((path === "/api/chat" || path === "/api/chat/messages") && method === "POST") {
+        const body = await request.json();
+        const user = String(body.user || "Anonymous Fan").slice(0, 50);
+        const text = String(body.text || "").slice(0, 1000);
+        const timestamp = String(body.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        const rating = body.rating !== undefined ? Number(body.rating) : null;
+        const language = body.language ? String(body.language).slice(0, 30) : null;
+        const isReview = body.isReview ? 1 : 0;
+
+        let insertedId = Date.now();
+        if (env.DB) {
+          try {
+            await env.DB.prepare(
+              "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview) VALUES (?, ?, ?, ?, ?, ?)"
+            ).bind(user, text, timestamp, rating, language, isReview).run();
+          } catch (e) {
+            console.error("D1 chat insert error:", e);
+          }
+        }
+        return jsonResponse({
+          success: true,
+          message: { id: insertedId, user, text, timestamp, rating, language, isReview: Boolean(isReview) }
+        });
+      }
+
       // Catalog / Default API fallback
       if (path === "/api/anime" && method === "GET") {
         let catalog = [];

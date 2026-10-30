@@ -335,11 +335,23 @@ function runMigrations() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(anime_id, device_id, vote_type)
     );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user TEXT NOT NULL,
+      text TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      rating REAL,
+      language TEXT,
+      isReview INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   try { db.run("ALTER TABLE user_votes RENAME COLUMN ip_address TO device_id;"); } catch (e) {}
   try { db.run("ALTER TABLE user_votes ADD COLUMN device_id TEXT;"); } catch (e) {}
   try { db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_votes_device ON user_votes(anime_id, device_id, vote_type);"); } catch (e) {}
+  try { db.run("CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at DESC);"); } catch (e) {}
 
   // Ensure default user exists
   const userRes = db.exec("SELECT COUNT(*) FROM users WHERE id = 'default_user'");
@@ -1402,6 +1414,97 @@ app.post('/api/anime/:id/reviews', (req, res) => {
     );
     persistD1();
     res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 8.5 GET & POST /api/chat (Live Community Chat Messages & Review History Persistence)
+app.get(['/api/chat', '/api/chat/messages'], (req, res) => {
+  try {
+    db.run(`CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user TEXT NOT NULL,
+      text TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      rating REAL,
+      language TEXT,
+      isReview INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    const stmt = db.prepare("SELECT id, user, text, timestamp, rating, language, isReview, created_at FROM chat_messages ORDER BY id ASC LIMIT 150");
+    const list = [];
+    while (stmt.step()) {
+      const row: any = stmt.getAsObject();
+      list.push({
+        id: row.id,
+        user: row.user,
+        text: row.text,
+        timestamp: row.timestamp,
+        rating: row.rating,
+        language: row.language,
+        isReview: Boolean(row.isReview)
+      });
+    }
+    stmt.free();
+
+    res.json({ success: true, count: list.length, messages: list, data: list });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message, messages: [] });
+  }
+});
+
+app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
+  try {
+    const { user, text, timestamp, rating, language, isReview } = req.body;
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ error: "Missing message text" });
+    }
+
+    db.run(`CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user TEXT NOT NULL,
+      text TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      rating REAL,
+      language TEXT,
+      isReview INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    const cleanUser = String(user || 'Anonymous Fan').slice(0, 50);
+    const cleanText = String(text).slice(0, 1000);
+    const cleanTimestamp = String(timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    const cleanRating = rating !== undefined ? Number(rating) : null;
+    const cleanLanguage = language ? String(language).slice(0, 30) : null;
+    const cleanIsReview = isReview ? 1 : 0;
+
+    db.run(
+      "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview) VALUES (?, ?, ?, ?, ?, ?)",
+      [cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview]
+    );
+    persistD1();
+
+    const stmt = db.prepare("SELECT last_insert_rowid() as id");
+    let insertedId: any = Date.now();
+    if (stmt.step()) {
+      insertedId = stmt.getAsObject().id;
+    }
+    stmt.free();
+
+    res.json({
+      success: true,
+      message: {
+        id: insertedId,
+        user: cleanUser,
+        text: cleanText,
+        timestamp: cleanTimestamp,
+        rating: cleanRating,
+        language: cleanLanguage,
+        isReview: Boolean(cleanIsReview)
+      }
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

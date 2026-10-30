@@ -199,6 +199,30 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       const userRevs = JSON.parse(localStorage.getItem('cf_user_reviews') || '[]');
       userRevs.unshift({ ...newRev, animeId });
       localStorage.setItem('cf_user_reviews', JSON.stringify(userRevs));
+
+      // Persist to D1 / SQLite database
+      fetch(getCloudflareUrl(`/api/anime/${animeId}/reviews`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_name: 'Indian Anime Fan',
+          rating: reviewRating,
+          comment: `[${reviewLang}] ${reviewComment}`
+        })
+      }).catch(() => {});
+
+      // Broadcast review into Live Community Chat
+      fetch(getCloudflareUrl('/api/chat'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user: 'Indian Anime Fan',
+          text: `[⭐ ${reviewRating}/10 • ${reviewLang}] ${reviewComment}`,
+          isReview: true,
+          rating: reviewRating,
+          language: reviewLang
+        })
+      }).catch(() => {});
     } catch (err) {
       console.error(err);
     }
@@ -737,6 +761,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               ))
             )}
           </div>
+        </div>
+
+        {/* LIVE COMMUNITY DISCUSSION & CHAT */}
+        <div className="mt-12">
+          <LiveChat defaultAnimeTitle={title} />
         </div>
 
         {/* SECTION 5: FREQUENTLY ASKED QUESTIONS */}
