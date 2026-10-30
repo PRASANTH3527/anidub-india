@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS reviews (
   user_name TEXT NOT NULL,
   user_avatar TEXT DEFAULT 'https://i.ibb.co/vzS8G90/default-avatar.png',
   rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 10),
+  language TEXT DEFAULT 'Hindi Dub',
   comment TEXT NOT NULL,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (anime_id) REFERENCES anime(id) ON DELETE CASCADE
@@ -120,6 +121,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   user TEXT NOT NULL,
   text TEXT NOT NULL,
   timestamp TEXT NOT NULL,
+  rating REAL,
+  language TEXT,
+  isReview INTEGER DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 

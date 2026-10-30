@@ -42,12 +42,15 @@ export class ChatRoom {
             user TEXT NOT NULL,
             text TEXT NOT NULL,
             timestamp TEXT NOT NULL,
+            rating REAL,
+            language TEXT,
+            isReview INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
           )
         `).run();
 
         const { results } = await this.env.DB.prepare(
-          "SELECT id, user, text, timestamp FROM chat_messages ORDER BY id DESC LIMIT 50"
+          "SELECT id, user, text, timestamp, rating, language, isReview FROM chat_messages ORDER BY id DESC LIMIT 60"
         ).all();
 
         if (results && results.length > 0) {
@@ -68,15 +71,18 @@ export class ChatRoom {
           id: data.id || `msg_${Date.now()}_${Math.random()}`,
           user: String(data.user || "Anonymous Fan").slice(0, 50),
           text: String(data.text || "").slice(0, 1000),
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          rating: data.rating !== undefined && data.rating !== null ? Number(data.rating) : null,
+          language: data.language ? String(data.language).slice(0, 30) : null,
+          isReview: data.isReview ? 1 : 0
         };
 
         // Save message to D1 database
         if (this.env.DB) {
           try {
             await this.env.DB.prepare(
-              "INSERT INTO chat_messages (user, text, timestamp) VALUES (?, ?, ?)"
-            ).bind(chatMsg.user, chatMsg.text, chatMsg.timestamp).run();
+              "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview) VALUES (?, ?, ?, ?, ?, ?)"
+            ).bind(chatMsg.user, chatMsg.text, chatMsg.timestamp, chatMsg.rating, chatMsg.language, chatMsg.isReview).run();
           } catch (dbErr) {
             console.error("Failed to insert message into D1:", dbErr);
           }

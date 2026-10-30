@@ -110,8 +110,29 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         setDetails(data);
         if (data.popularity) setUpvotes(data.popularity);
         if (data.rating) setCurrentRating(data.rating);
-        if (data.reviews && data.reviews.length > 0) {
-          setReviewsList(data.reviews);
+        if (data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
+          const normalized = data.reviews.map((r: any) => ({
+            id: r.id || Date.now(),
+            author: r.author || r.user_name || 'Indian Anime Fan',
+            rating: Number(r.rating) || 8.5,
+            language: r.language || (r.comment?.match(/\[(.*?) Dub\]/)?.[1] ? `${r.comment.match(/\[(.*?) Dub\]/)[1]} Dub` : 'Hindi Dub'),
+            comment: r.comment ? r.comment.replace(/^\[.*?\]\s*/, '') : '',
+            date: r.date || (r.created_at ? new Date(r.created_at).toLocaleDateString() : 'Recent'),
+            likes: r.likes || 1,
+            isLiked: false,
+            spoilers: Boolean(r.spoilers),
+            revealed: true
+          }));
+
+          setReviewsList(prev => {
+            const existingIds = new Set(prev.map(p => String(p.id)));
+            const newFromApi = normalized.filter((n: any) => !existingIds.has(String(n.id)));
+            const merged = [...prev, ...newFromApi];
+            try {
+              localStorage.setItem(`cf_reviews_${animeId}`, JSON.stringify(merged));
+            } catch {}
+            return merged.length > 0 ? merged : normalized;
+          });
         }
       }
     } catch (err) {
@@ -200,29 +221,46 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       userRevs.unshift({ ...newRev, animeId });
       localStorage.setItem('cf_user_reviews', JSON.stringify(userRevs));
 
-      // Persist to D1 / SQLite database
+      // 1. Persist to D1 / SQLite database
       fetch(getCloudflareUrl(`/api/anime/${animeId}/reviews`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_name: 'Indian Anime Fan',
           rating: reviewRating,
-          comment: `[${reviewLang}] ${reviewComment}`
+          language: reviewLang,
+          comment: reviewComment
         })
       }).catch(() => {});
 
-      // Broadcast review into Live Community Chat
+      // 2. Broadcast review into Live Community Chat REST API
+      const chatPayload = {
+        user: 'Indian Anime Fan',
+        text: `[⭐ ${reviewRating}/10 • ${reviewLang}] ${reviewComment}`,
+        isReview: true,
+        rating: reviewRating,
+        language: reviewLang,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
       fetch(getCloudflareUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user: 'Indian Anime Fan',
-          text: `[⭐ ${reviewRating}/10 • ${reviewLang}] ${reviewComment}`,
-          isReview: true,
-          rating: reviewRating,
-          language: reviewLang
-        })
+        body: JSON.stringify(chatPayload)
       }).catch(() => {});
+
+      // 3. Send through Cloudflare WebSocket so connected users receive it instantly
+      try {
+        const ws = new WebSocket('wss://anime-chat.samayaprasanth0.workers.dev/ws');
+        ws.onopen = () => {
+          ws.send(JSON.stringify({
+            id: `rev_${Date.now()}`,
+            ...chatPayload
+          }));
+          setTimeout(() => ws.close(), 800);
+        };
+      } catch (_) {}
+
     } catch (err) {
       console.error(err);
     }

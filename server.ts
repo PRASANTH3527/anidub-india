@@ -676,7 +676,19 @@ app.get('/api/anime/:id', (req, res) => {
     revStmt.bind([anime.id]);
     const reviews = [];
     while (revStmt.step()) {
-      reviews.push(revStmt.getAsObject());
+      const r: any = revStmt.getAsObject();
+      reviews.push({
+        id: r.id,
+        anime_id: r.anime_id,
+        user_name: r.user_name || 'Indian Anime Fan',
+        author: r.user_name || 'Indian Anime Fan',
+        user_avatar: r.user_avatar || 'https://i.ibb.co/vzS8G90/default-avatar.png',
+        rating: r.rating,
+        language: r.language || 'Regional Dub',
+        comment: r.comment,
+        date: r.created_at ? new Date(r.created_at).toLocaleDateString() : 'Recent',
+        created_at: r.created_at
+      });
     }
     revStmt.free();
 
@@ -1398,22 +1410,49 @@ app.delete('/api/anime/:id', requireAdminAuth, (req, res) => {
 app.post('/api/anime/:id/reviews', (req, res) => {
   try {
     const animeId = req.params.id;
-    const { user_name, user_avatar, rating, comment } = req.body;
+    const { user_name, user_avatar, rating, comment, language } = req.body;
     if (!user_name || !comment) return res.status(400).json({ error: "Missing name or comment" });
 
+    try { db.run("ALTER TABLE reviews ADD COLUMN language TEXT DEFAULT 'Hindi Dub';"); } catch (e) {}
+
+    const cleanUser = String(user_name || 'Indian Anime Fan').slice(0, 50);
+    const cleanRating = Number(rating) || 8.5;
+    const cleanComment = String(comment).slice(0, 2000);
+    const cleanLang = String(language || 'Regional Dub').slice(0, 50);
+
     db.run(
-      `INSERT INTO reviews (anime_id, user_id, user_name, user_avatar, rating, comment) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO reviews (anime_id, user_id, user_name, user_avatar, rating, comment, language) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         animeId,
         'default_user',
-        user_name,
+        cleanUser,
         user_avatar || 'https://i.ibb.co/vzS8G90/default-avatar.png',
-        parseInt(rating) || 10,
-        comment
+        cleanRating,
+        cleanComment,
+        cleanLang
       ]
     );
+
+    // Also mirror to chat_messages so it is immediately visible in Live Community Chat
+    try {
+      db.run(`CREATE TABLE IF NOT EXISTS chat_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user TEXT NOT NULL,
+        text TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        rating REAL,
+        language TEXT,
+        isReview INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );`);
+      db.run(
+        "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview) VALUES (?, ?, ?, ?, ?, 1)",
+        [cleanUser, cleanComment, new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), cleanRating, cleanLang]
+      );
+    } catch (_) {}
+
     persistD1();
-    res.json({ success: true });
+    res.json({ success: true, message: "Review saved and synchronized" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
