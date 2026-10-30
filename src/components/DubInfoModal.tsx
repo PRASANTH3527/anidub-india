@@ -67,6 +67,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     type: initialResolvedType
   }));
   const [title, setTitle] = useState(initialData?.title || '');
+  const [synopsis, setSynopsis] = useState<string>(
+    initialData?.synopsis || initDataAny?.synopsis || initDataAny?.description || ''
+  );
   const [romajiTitle, setRomajiTitle] = useState(initialData?.japanese_title || '');
   const [poster, setPoster] = useState(initialData?.poster_url || initDataAny?.cover_image || '');
   const [releaseYear, setReleaseYear] = useState<number | ''>(
@@ -165,6 +168,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   useEffect(() => {
     if (initialData) {
       setTitle(initialData.title || '');
+      setSynopsis(initialData.synopsis || initDataAny?.synopsis || initDataAny?.description || '');
       setRomajiTitle(initialData.japanese_title || '');
       setPoster(initialData.poster_url || initDataAny?.cover_image || '');
       setReleaseYear(initialData.release_year || initDataAny?.year || new Date().getFullYear());
@@ -400,6 +404,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       const payload = {
         title: title.trim(),
         slug,
+        synopsis: synopsis.trim(),
         cover_image: defaultCover,
         banner_image: defaultCover,
         rating: parsedRating,
@@ -413,7 +418,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         season: 'Spring',
         year: parsedYear,
         genres: Array.isArray(genres) ? genres.join(',') : genres,
-        popularity: 1000,
+        popularity: 0,
+        upvotes: 0,
         studio: studio || 'Unknown Studio'
       };
 
@@ -426,6 +432,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       const fullUpdatedItem = {
         ...payload,
         id: initialData?.id,
+        synopsis: synopsis.trim(),
         status: airingStatus,
         airing_status: airingStatus,
         cover_image: defaultCover,
@@ -448,6 +455,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       // Fallback local success so user isn't blocked by transient network errors
       const fallbackItem = {
         title: title.trim(),
+        synopsis: synopsis.trim(),
         id: initialData?.id,
         status: airingStatus,
         airing_status: airingStatus,
@@ -572,6 +580,21 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                     />
                     <Search className="w-4 h-4 text-neutral-500 absolute right-3 top-3 pointer-events-none" />
                   </div>
+                </div>
+
+                {/* Synopsis Field */}
+                <div>
+                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                    <span>Synopsis</span>
+                    <span className="text-[10px] text-neutral-400 font-normal">Plot summary & overview</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={synopsis}
+                    onChange={(e) => setSynopsis(e.target.value)}
+                    placeholder="Type or paste a descriptive summary of the anime..."
+                    className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2.5 px-3.5 text-xs text-white placeholder-neutral-500 outline-none transition-all resize-y leading-relaxed font-sans"
+                  />
                 </div>
 
                 {/* Poster Upload Area */}

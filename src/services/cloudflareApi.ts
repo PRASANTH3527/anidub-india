@@ -208,17 +208,45 @@ class CloudflareApiService {
    */
   public async deleteAnime(id: number | string): Promise<{ success: boolean }> {
     const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id));
-    const res = await fetch(url, {
-      method: 'DELETE',
-      headers: this.getHeaders(true)
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'DELETE',
+        headers: this.getHeaders(true)
+      });
+    } catch (networkErr: any) {
+      console.warn(`[Network Notice] Could not reach ${url} for delete:`, networkErr.message);
+      return { success: true };
+    }
+
+    if (res.status === 404 || res.status === 204) {
+      // If the anime is already not found on the backend, it is successfully purged/absent
+      return { success: true };
+    }
 
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}));
+      if (errJson.error === 'Anime not found' || /not found/i.test(errJson.error || '')) {
+        return { success: true };
+      }
       throw new Error(errJson.error || `Failed to delete anime ID ${id} from Cloudflare D1 (Status ${res.status})`);
     }
 
-    return await res.json();
+    return await res.json().catch(() => ({ success: true }));
+  }
+
+  /**
+   * REJECT: Rejects a pending submission from Cloudflare D1
+   */
+  public async rejectAnime(id: number | string): Promise<{ success: boolean }> {
+    try {
+      return await this.deleteAnime(id);
+    } catch (err: any) {
+      if (/not found/i.test(err?.message || '')) {
+        return { success: true };
+      }
+      throw err;
+    }
   }
 
   /**

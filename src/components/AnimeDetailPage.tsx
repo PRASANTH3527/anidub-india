@@ -571,7 +571,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             >
               <Flame size={22} className="fill-orange-400" />
               <span className="absolute -top-1 -right-1 text-[9px] font-black bg-orange-500 text-white px-1.5 py-0.5 rounded-full shadow-lg">
-                {upvotes > 0 ? (upvotes >= 1000 ? `${(upvotes/1000).toFixed(1)}k` : upvotes) : '1K'}
+                {upvotes > 0 ? (upvotes >= 1000 ? `${(upvotes/1000).toFixed(1)}k` : upvotes) : '0'}
               </span>
             </button>
           </div>

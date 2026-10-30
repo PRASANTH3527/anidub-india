@@ -29,6 +29,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   if (!isOpen) return null;
 
   const [title, setTitle] = useState('');
+  const [synopsis, setSynopsis] = useState('');
   const [coverImage, setCoverImage] = useState('https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80');
   const [bannerImage, setBannerImage] = useState('https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1600&auto=format&fit=crop&q=80');
   const [rating, setRating] = useState('8.5');
@@ -64,6 +65,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
     const payload = {
       title: title.trim(),
+      synopsis: synopsis.trim(),
       cover_image: coverImage,
       banner_image: bannerImage,
       rating: parseFloat(rating) || 8.5,
@@ -135,6 +137,20 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Solo Leveling Season 2 (Tamil Dub)"
               className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-accent-theme rounded-xl px-3.5 py-2.5 text-xs text-white outline-none transition-colors"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center justify-between">
+              <span>Synopsis</span>
+              <span className="text-[10px] text-neutral-500 font-normal lowercase">(optional plot summary)</span>
+            </label>
+            <textarea
+              rows={3}
+              value={synopsis}
+              onChange={(e) => setSynopsis(e.target.value)}
+              placeholder="Type or paste a descriptive summary of the anime..."
+              className="w-full bg-[#0a0e17] border border-neutral-800 focus:border-accent-theme rounded-xl px-3.5 py-2.5 text-xs text-white outline-none transition-colors resize-y leading-relaxed"
             />
           </div>
 

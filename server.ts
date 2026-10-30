@@ -468,10 +468,230 @@ app.post('/api/admin/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// Admin CSV Import (Protected)
+// Admin CSV Import (Protected - parses CSV text, records or batch JSON and stores synopsis & fields into D1)
 app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
-  logCloudflareEvent('D1', 'CSV_IMPORT', 200, 25, 'Imported CSV batch data');
-  res.json({ success: true, count: 159, skipped: 39 });
+  const start = Date.now();
+  try {
+    let rows: any[] = [];
+    const body = req.body;
+
+    if (Array.isArray(body)) {
+      rows = body;
+    } else if (Array.isArray(body?.animeList)) {
+      rows = body.animeList;
+    } else if (Array.isArray(body?.data)) {
+      rows = body.data;
+    } else if (typeof body?.csvText === 'string' || typeof body === 'string') {
+      const csvStr: string = (body?.csvText || body).trim();
+      const lines = csvStr.split(/\r?\n/).filter(line => line.trim().length > 0);
+      if (lines.length > 1) {
+        const parseLine = (line: string): string[] => {
+          const result: string[] = [];
+          let current = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+              if (inQuotes && line[i + 1] === '"') {
+                current += '"';
+                i++;
+              } else {
+                inQuotes = !inQuotes;
+              }
+            } else if (char === ',' && !inQuotes) {
+              result.push(current.trim());
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          result.push(current.trim());
+          return result;
+        };
+
+        const headers = parseLine(lines[0]).map(h => h.replace(/^["']|["']$/g, '').trim());
+        for (let i = 1; i < lines.length; i++) {
+          const values = parseLine(lines[i]).map(v => v.replace(/^["']|["']$/g, '').trim());
+          const rowObj: any = {};
+          headers.forEach((h, idx) => {
+            rowObj[h] = values[idx] !== undefined ? values[idx] : '';
+          });
+          rows.push(rowObj);
+        }
+      }
+    }
+
+    if (rows.length === 0) {
+      logCloudflareEvent('D1', 'CSV_IMPORT', 200, Date.now() - start, 'Empty CSV import payload');
+      return res.json({ success: true, count: 0, skipped: 0 });
+    }
+
+    let insertedCount = 0;
+    let skippedCount = 0;
+
+    for (const row of rows) {
+      const titleKey = Object.keys(row).find(k => {
+        const norm = k.trim().toLowerCase().replace(/[^a-z]/g, '');
+        return norm === 'title' || norm === 'animetitle' || norm === 'name';
+      });
+      const title = (titleKey ? row[titleKey] : (row.title || row.Title || ''))?.toString().trim();
+      if (!title) {
+        skippedCount++;
+        continue;
+      }
+
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+      // Synopsis Column resolution
+      const synopsisKey = Object.keys(row).find(k => {
+        const norm = k.trim().toLowerCase().replace(/[^a-z]/g, '');
+        return norm === 'synopsis' || norm === 'description' || norm === 'summary' || norm === 'plot' || norm === 'overview';
+      });
+      const synopsis = (synopsisKey ? row[synopsisKey] : (row.synopsis || row.Synopsis || row.description || row.Description || row.summary || row.Summary))?.toString().trim()
+        || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
+
+      // Type parsing
+      const typeKey = Object.keys(row).find(k => k.toLowerCase().includes('type'));
+      const rawType = typeKey ? row[typeKey]?.toString().trim() : (row.type || row.Type || 'TV Series');
+      const resolvedType = normalizeAnimeType(rawType);
+
+      // Status parsing
+      const statusKey = Object.keys(row).find(k => k.trim().toLowerCase().replace(/[^a-z]/g, '') === 'status');
+      const rawStatus = (statusKey ? row[statusKey] : (row.status || row.Status || 'Airing'))?.toString().trim() || 'Airing';
+      const status = rawStatus.toLowerCase().includes('complete') ? 'Completed' : 'Airing';
+
+      // Studio parsing
+      const studioKey = Object.keys(row).find(k => k.trim().toLowerCase().replace(/[^a-z]/g, '') === 'studio');
+      const studio = (studioKey ? row[studioKey] : (row.studio || row.Studio || ''))?.toString().trim() || 'Unknown Studio';
+
+      // Year parsing
+      const yearKey = Object.keys(row).find(k => {
+        const norm = k.trim().toLowerCase().replace(/[^a-z]/g, '');
+        return norm === 'year' || norm === 'releaseyear';
+      });
+      const year = parseInt(yearKey ? row[yearKey] : (row.year || row.Year || row['Release Year']), 10) || new Date().getFullYear();
+
+      // Rating parsing
+      const ratingKey = Object.keys(row).find(k => {
+        const norm = k.trim().toLowerCase().replace(/[^a-z]/g, '');
+        return norm === 'rating' || norm === 'ratings' || norm === 'score';
+      });
+      const rating = parseFloat(ratingKey ? row[ratingKey] : (row.rating || row.Ratings || row.Score)) || 8.5;
+
+      // Genres parsing
+      const genreKey = Object.keys(row).find(k => {
+        const norm = k.trim().toLowerCase().replace(/[^a-z]/g, '');
+        return norm === 'genres' || norm === 'genre';
+      });
+      const genres = (genreKey ? row[genreKey] : (row.genres || row.Genres || 'Action,Fantasy'))?.toString().trim() || 'Action,Fantasy';
+
+      // Streaming Partners / Platform parsing
+      const platformKey = Object.keys(row).find(k => {
+        const norm = k.trim().toLowerCase().replace(/[^a-z]/g, '');
+        return norm === 'streamingpartners' || norm === 'streamingpartner' || norm === 'platform' || norm === 'platforms' || norm === 'streaming';
+      });
+      const platform = (platformKey ? row[platformKey] : (row['Streaming Partners'] || row.platform || row.Platform || 'Crunchyroll'))?.toString().trim() || 'Crunchyroll';
+
+      // Languages parsing
+      const langKey = Object.keys(row).find(k => {
+        const norm = k.trim().toLowerCase().replace(/[^a-z]/g, '');
+        return norm === 'languages' || norm === 'language' || norm === 'dub';
+      });
+      const languages = (langKey ? row[langKey] : (row.languages || row.Languages || 'Tamil, Hindi'))?.toString().trim() || 'Tamil, Hindi';
+
+      // Episodes parsing
+      const epKey = Object.keys(row).find(k => {
+        const norm = k.trim().toLowerCase().replace(/[^a-z]/g, '');
+        return norm === 'episodes' || norm === 'episodescount' || norm === 'episodesperseason';
+      });
+      const episodes_per_season = (epKey ? row[epKey] : (row.episodes || row.Episodes || row.episodes_per_season || '12'))?.toString().trim() || '12';
+      const epParts = episodes_per_season.split('|').map((s: string) => parseInt(s.trim(), 10)).filter(Boolean);
+      const episodes_count = epParts.length > 0 ? epParts[epParts.length - 1] : 12;
+
+      const cover_image = row['Cover Image'] || row.cover_image || row.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+      const banner_image = row['Banner Image'] || row.banner_image || cover_image;
+
+      // Check if existing
+      const existingStmt = db.prepare("SELECT id FROM anime WHERE slug = ? OR LOWER(title) = LOWER(?)");
+      existingStmt.bind([slug, title]);
+      let existingId: number | null = null;
+      if (existingStmt.step()) {
+        existingId = existingStmt.getAsObject().id as number;
+      }
+      existingStmt.free();
+
+      if (existingId) {
+        db.run(
+          `UPDATE anime SET 
+            title = ?,
+            synopsis = COALESCE(?, synopsis),
+            cover_image = COALESCE(?, cover_image),
+            banner_image = COALESCE(?, banner_image),
+            rating = COALESCE(?, rating),
+            episodes_count = COALESCE(?, episodes_count),
+            status = ?,
+            season = 'Spring',
+            year = COALESCE(?, year),
+            genres = COALESCE(?, genres),
+            languages = COALESCE(?, languages),
+            platform = COALESCE(?, platform),
+            type = ?,
+            studio = COALESCE(?, studio),
+            episodes_per_season = COALESCE(?, episodes_per_season)
+          WHERE id = ?`,
+          [
+            title,
+            synopsis,
+            cover_image,
+            banner_image,
+            rating,
+            episodes_count,
+            status,
+            year,
+            genres,
+            languages,
+            platform,
+            resolvedType,
+            studio,
+            episodes_per_season,
+            existingId
+          ]
+        );
+      } else {
+        db.run(
+          `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            title,
+            slug,
+            synopsis,
+            cover_image,
+            banner_image,
+            rating,
+            episodes_count,
+            status,
+            'Spring',
+            year,
+            genres,
+            Math.floor(Math.random() * 50000) + 20000,
+            languages,
+            platform,
+            resolvedType,
+            studio,
+            episodes_per_season
+          ]
+        );
+      }
+      insertedCount++;
+    }
+
+    persistD1();
+    const latency = Date.now() - start;
+    logCloudflareEvent('D1', 'CSV_IMPORT', 200, latency, `Imported ${insertedCount} entries, skipped ${skippedCount}`);
+    res.json({ success: true, count: insertedCount, skipped: skippedCount });
+  } catch (err: any) {
+    console.error('CSV Import Error:', err);
+    res.status(500).json({ error: err.message || 'CSV Import failed' });
+  }
 });
 
 // Admin CSV Export (Protected)
@@ -875,8 +1095,8 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
       if (!title) continue;
 
       const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      const synopsis = item.synopsis || item.description || 'Imported via CSV bulk upload.';
-      const cover_image = item.cover_image || item.poster_url || item.image || 'https://i.ibb.co/vzS8G90/default-poster.jpg';
+      const synopsis = item.synopsis || item.description || item.summary || item.plot || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
+      const cover_image = item.cover_image || item.poster_url || item.image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
       const banner_image = item.banner_image || cover_image;
       const rating = parseFloat(item.rating || item.score) || 8.5;
       const episodes_count = parseInt(item.episodes_count || item.episodes) || 12;
@@ -885,7 +1105,10 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
       const year = parseInt(item.year) || 2026;
       const genres = item.genres || item.genre || 'Action,Fantasy';
       const languages = item.languages || item.dub || 'HIN,TAM,TEL';
-      const platform = item.platform || 'Crunchyroll';
+      const platform = item.platform || item.streamingPartners?.[0]?.name || 'Crunchyroll';
+      const studio = item.studio || item.animation_studio || 'Unknown Studio';
+      const episodes_per_season = item.episodes_per_season || String(episodes_count);
+      const mixedEntries = item.mixedEntries ? JSON.stringify(item.mixedEntries) : '';
       const type = normalizeAnimeType(item.type || item.Type || 'TV Series');
       const existingStmt = db.prepare("SELECT id FROM anime WHERE slug = ?");
       existingStmt.bind([slug]);
@@ -910,7 +1133,10 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
             genres = COALESCE(?, genres),
             languages = COALESCE(?, languages),
             platform = COALESCE(?, platform),
-            type = ?
+            type = ?,
+            studio = COALESCE(?, studio),
+            episodes_per_season = COALESCE(?, episodes_per_season),
+            mixedEntries = COALESCE(?, mixedEntries)
           WHERE id = ?`,
           [
             title,
@@ -926,12 +1152,15 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
             languages,
             platform,
             type,
+            studio,
+            episodes_per_season,
+            mixedEntries,
             existingId
           ]
         );
       } else {
         db.run(
-          `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, popularity, languages, platform, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             title,
             slug,
@@ -947,7 +1176,10 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
             Math.floor(Math.random() * 50000) + 20000,
             languages,
             platform,
-            type
+            type,
+            studio,
+            episodes_per_season,
+            mixedEntries
           ]
         );
       }
@@ -1397,9 +1629,26 @@ app.delete('/api/anime/:id', requireAdminAuth, (req, res) => {
     db.run("DELETE FROM episodes WHERE anime_id = ?", [id]);
     db.run("DELETE FROM reviews WHERE anime_id = ?", [id]);
     db.run("DELETE FROM watchlist WHERE anime_id = ?", [id]);
-    db.run("DELETE FROM anime WHERE id = ?", [id]);
+    db.run("DELETE FROM anime WHERE id = ? OR slug = ?", [id, id]);
     persistD1();
     logCloudflareEvent('D1', `DELETE /api/anime/${id}`, 200, Date.now() - start, `Deleted anime ID ${id}`);
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 8b. POST /api/admin/reject/:id (Admin: Reject/Purge Pending Anime - Protected)
+app.post('/api/admin/reject/:id', requireAdminAuth, (req, res) => {
+  const start = Date.now();
+  try {
+    const id = req.params.id;
+    db.run("DELETE FROM episodes WHERE anime_id = ?", [id]);
+    db.run("DELETE FROM reviews WHERE anime_id = ?", [id]);
+    db.run("DELETE FROM watchlist WHERE anime_id = ?", [id]);
+    db.run("DELETE FROM anime WHERE id = ? OR slug = ?", [id, id]);
+    persistD1();
+    logCloudflareEvent('D1', `REJECT /api/admin/reject/${id}`, 200, Date.now() - start, `Rejected anime ID ${id}`);
     res.json({ success: true, id });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

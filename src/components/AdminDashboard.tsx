@@ -352,7 +352,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         : (rawType === 'Movie' ? 'Completed' : 'Ongoing');
 
       await cloudflareApi.approveAnime(itemId, targetStatus);
-      setPendingItems(prev => prev.filter(p => p.id !== itemId));
+      setPendingItems(prev => {
+        const updated = prev.filter(p => p.id !== itemId);
+        try {
+          localStorage.setItem('cf_admin_pending_cache', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
       setSuccessMsg('Anime Approved & Published globally on Cloudflare Edge.');
       addTerminalLog('OK', `Approval committed globally. #${itemId} is now live with status "${targetStatus}".`);
       await fetchAnime();
@@ -362,7 +368,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       console.error('Cloudflare Approval error:', err);
-      setPendingItems(prev => prev.filter(p => p.id !== itemId));
+      setPendingItems(prev => {
+        const updated = prev.filter(p => p.id !== itemId);
+        try {
+          localStorage.setItem('cf_admin_pending_cache', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
       setSuccessMsg('Anime Approved locally (Cloudflare sync attempted).');
       addTerminalLog('WARN', `Edge sync notice during approval of #${itemId}`);
       setTimeout(() => setSuccessMsg(''), 4000);
@@ -380,13 +392,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       await cloudflareApi.deleteAnime(itemId);
       addTerminalLog('OK', `Submission #${itemId} purged from moderation queue.`);
-    } catch (err) {
-      console.error('Failed to delete rejected submission from Cloudflare D1:', err);
+    } catch (err: any) {
+      if (/not found/i.test(err?.message || '')) {
+        addTerminalLog('OK', `Submission #${itemId} already removed from Cloudflare D1.`);
+      } else {
+        console.warn('Notice while deleting rejected submission from Cloudflare D1:', err);
+        addTerminalLog('WARN', `Notice while purging #${itemId} from D1: ${err?.message || err}`);
+      }
     } finally {
       setCloudSyncing(false);
       setCloudStatusText('');
     }
-    setPendingItems(prev => prev.filter(p => p.id !== itemId));
+    setPendingItems(prev => {
+      const updated = prev.filter(p => p.id !== itemId);
+      try {
+        localStorage.setItem('cf_admin_pending_cache', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
     setSuccessMsg(`Rejected submission ${item?.title || itemId}.`);
     setTimeout(() => setSuccessMsg(''), 4000);
   };
@@ -496,7 +519,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         });
         
         for (const row of mappedAnimeList) {
-          const title = row.Title || row.title || row['title'] || row['Title'] || '';
+
+          // 1. Title Resolution (Dynamic Column Match)
+          const titleKey = Object.keys(row).find(key => {
+            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
+            return k === 'title' || k === 'animetitle' || k === 'name' || k === 'series' || k === 'showname';
+          });
+          const title = (titleKey ? row[titleKey] : (row.Title || row.title || row['title'] || row['Title']))?.toString().trim() || '';
           if (!title) continue;
 
           // Cross-reference against both active catalog state and pending queue (case-insensitive check)
@@ -514,75 +543,163 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             continue; // Completely reject duplicate anime: do not update, do not send to pending queue
           }
 
-          // 1. Find the actual key for Type dynamically, ignoring exact case or hidden spaces
+          // 2. Synopsis Resolution (Dynamic Match: Synopsis, Description, Summary, Plot, Overview)
+          const synopsisKey = Object.keys(row).find(key => {
+            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
+            return k === 'synopsis' || k === 'description' || k === 'summary' || k === 'plot' || k === 'overview' || k === 'story' || k === 'details';
+          });
+          const rawSynopsis = (synopsisKey ? row[synopsisKey] : (row.Synopsis || row.synopsis || row.Description || row.description || row.Summary || row.summary))?.toString().trim();
+          const parsedSynopsis = rawSynopsis && rawSynopsis.length > 0
+            ? rawSynopsis
+            : 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
+
+          // 3. Type Resolution (Dynamic Match: Type, Format)
           const typeKey = Object.keys(row).find(key => key.toLowerCase().includes('type'));
-
-          // 2. Extract and format the value safely
-          let rawType = typeKey ? row[typeKey]?.toString().trim().toLowerCase() : '';
-          let finalType = 'TV Series'; // Default fallback
-
-          // 3. Smart mapping
-          if (rawType.includes('movie')) finalType = 'Movie';
+          let rawType = typeKey ? row[typeKey]?.toString().trim().toLowerCase() : (row.Type || row.type || '').toString().trim().toLowerCase();
+          let finalType = 'TV Series';
+          if (rawType.includes('movie') || rawType.includes('film')) finalType = 'Movie';
+          else if (rawType.includes('ova/special')) finalType = 'OVA/Special';
           else if (rawType.includes('ova') || rawType.includes('special')) finalType = 'OVA/Special';
+          else if (rawType.includes('ona')) finalType = 'ONA';
           else if (rawType.includes('tv') || rawType.length > 0) finalType = 'TV Series';
+          const parsedType = finalType;
 
-          let parsedType = finalType;
+          // 4. Status Resolution (Dynamic Match: Status, Airing Status)
+          const statusKey = Object.keys(row).find(key => {
+            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
+            return k === 'status' || k === 'airingstatus' || k === 'state';
+          });
+          const rawStatus = (statusKey ? row[statusKey] : (row.Status || row.status || 'Airing'))?.toString().trim() || 'Airing';
+          let parsedStatus = 'Airing';
+          if (rawStatus.toLowerCase().includes('complete') || rawStatus.toLowerCase().includes('finish')) {
+            parsedStatus = 'Completed';
+          } else if (rawStatus.toLowerCase().includes('ongoing') || rawStatus.toLowerCase().includes('air')) {
+            parsedStatus = 'Airing';
+          } else {
+            parsedStatus = rawStatus;
+          }
 
-          const mappedLanguages = (row.Languages || row.languages) ? String(row.Languages || row.languages).split('|').map((l: string) => l.trim()).filter(Boolean) : [];
-          const mappedGenres = (row.Genres || row.genres) ? String(row.Genres || row.genres).split('|').map((g: string) => g.trim()).filter(Boolean) : [];
+          // 5. Studio Resolution (Dynamic Match: Studio, Animation Studio)
+          const studioKey = Object.keys(row).find(key => {
+            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
+            return k === 'studio' || k === 'animationstudio' || k === 'studios';
+          });
+          const parsedStudio = (studioKey ? row[studioKey] : (row.Studio || row.studio || ''))?.toString().trim() || 'Unknown Studio';
 
-          // 1. Split the pipe-separated string into an array
-          const episodesString = String(row.Episodes || row.episodes || "");
-          const episodesList = episodesString.split('|').map(ep => ep.trim()).filter(Boolean);
+          // 6. Release Year Resolution (Dynamic Match: Year, Release Year)
+          const yearKey = Object.keys(row).find(key => {
+            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
+            return k === 'year' || k === 'releaseyear' || k === 'airyear';
+          });
+          const parsedYear = parseInt(yearKey ? row[yearKey] : (row['Release Year'] || row.year || row.Year), 10) || new Date().getFullYear();
 
-          // 2. Create a COMPLETE array of multiple season objects
+          // 7. Rating Resolution (Dynamic Match: Rating, Ratings, Score, IMDb, MAL)
+          const ratingKey = Object.keys(row).find(key => {
+            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
+            return k === 'rating' || k === 'ratings' || k === 'score' || k === 'imdb' || k === 'mal';
+          });
+          const parsedRating = parseFloat(ratingKey ? row[ratingKey] : (row.Ratings || row.rating || row.Score)) || 8.5;
+
+          // 8. Genres Resolution (Dynamic Match: Genres, Genre, Category - supports comma and pipe separators)
+          const genresKey = Object.keys(row).find(key => {
+            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
+            return k === 'genres' || k === 'genre' || k === 'category' || k === 'categories';
+          });
+          const rawGenresStr = (genresKey ? row[genresKey] : (row.Genres || row.genres || ''))?.toString().trim();
+          const mappedGenres = rawGenresStr
+            ? rawGenresStr.includes('|')
+              ? rawGenresStr.split('|').map((g: string) => g.trim()).filter(Boolean)
+              : rawGenresStr.split(',').map((g: string) => g.trim()).filter(Boolean)
+            : ['Action', 'Fantasy'];
+
+          // 9. Streaming Partners Resolution (Dynamic Match: Streaming Partners, Platform, Watch On)
+          const platformKey = Object.keys(row).find(key => {
+            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
+            return k === 'streamingpartners' || k === 'streamingpartner' || k === 'streaming' || k === 'platform' || k === 'platforms' || k === 'watchon';
+          });
+          const rawPlatformStr = (platformKey ? row[platformKey] : (row['Streaming Partners'] || row['Streaming Partner'] || row.Platform || row.platform || 'Crunchyroll'))?.toString().trim() || 'Crunchyroll';
+          const partnersList = rawPlatformStr.includes('|')
+            ? rawPlatformStr.split('|').map((p: string) => ({ name: p.trim(), url: '' })).filter((p: any) => p.name)
+            : rawPlatformStr.includes(',')
+            ? rawPlatformStr.split(',').map((p: string) => ({ name: p.trim(), url: '' })).filter((p: any) => p.name)
+            : [{ name: rawPlatformStr, url: '' }];
+          const primaryPlatform = partnersList[0]?.name || rawPlatformStr || 'Crunchyroll';
+
+          // 10. Languages Resolution (Dynamic Match: Languages, Dubs)
+          const langKey = Object.keys(row).find(key => {
+            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
+            return k === 'languages' || k === 'language' || k === 'dubs' || k === 'dub';
+          });
+          const rawLangStr = (langKey ? row[langKey] : (row.Languages || row.languages || 'Tamil, Hindi'))?.toString().trim();
+          const mappedLanguages = rawLangStr
+            ? rawLangStr.includes('|')
+              ? rawLangStr.split('|').map((l: string) => l.trim()).filter(Boolean)
+              : rawLangStr.split(',').map((l: string) => l.trim()).filter(Boolean)
+            : ['Tamil', 'Hindi'];
+
+          // 11. Episodes & Seasons Resolution
+          const episodesKey = Object.keys(row).find(key => {
+            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
+            return k === 'episodes' || k === 'episodecount' || k === 'episodescount' || k === 'episodesperseason';
+          });
+          const episodesString = String(episodesKey ? row[episodesKey] : (row.Episodes || row.episodes || "12"));
+          const episodesList = episodesString.includes('|')
+            ? episodesString.split('|').map(ep => ep.trim()).filter(Boolean)
+            : episodesString.includes(',')
+            ? episodesString.split(',').map(ep => ep.trim()).filter(Boolean)
+            : [episodesString.trim() || "12"];
+
+          // Create complete seasons array
           const mappedSeasonsArray = episodesList.map((epCount, index) => {
             return {
-              id: Date.now() + Math.random() + index, // Crucial for React keys
-              season: index + 1, // Or whatever your exact state key is for Season Number
+              id: Date.now() + Math.random() + index,
+              season: index + 1,
               seasonNumber: String(index + 1),
               entryType: (finalType === 'Movie' ? 'Movie' : finalType.includes('OVA') || finalType.includes('Special') ? 'OVA/Special' : 'Season'),
               type: parsedType,
               episodes: epCount,
-              languages: mappedLanguages || [] // Pass the parsed languages array
+              languages: mappedLanguages || []
             };
           });
 
-          // 3. Set the state exactly ONCE with the full array
           setMixedEntries(mappedSeasonsArray);
 
           const currentSeasonVal = String(mappedSeasonsArray.length);
           const liveEpisodeVal = Number(episodesList[episodesList.length - 1]) || 12;
 
-          // 3. Create the exact payload with parsedType safely assigned to type
+          // 12. Build complete payload with Synopsis and all mapped fields
           const payload = {
             title: title,
-            cover_image: row['Cover Image'] || row.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-            year: parseInt(row['Release Year'] || row.year || row.Year, 10) || new Date().getFullYear(),
+            slug,
+            synopsis: parsedSynopsis,
+            description: parsedSynopsis,
+            cover_image: row['Cover Image'] || row.cover_image || row.poster || row.Poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
+            banner_image: row['Banner Image'] || row.banner_image || row['Cover Image'] || row.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
+            year: parsedYear,
             languages: mappedLanguages.join(', '),
             genres: mappedGenres.join(', '),
-            studio: row.Studio || row.studio || '',
+            studio: parsedStudio,
             type: parsedType,
             Type: parsedType,
-            status: (row.Status || row.status || 'Airing').trim(),
+            status: parsedStatus,
             submissionStatus: 'pending',
             episodes_count: Number(episodesList[episodesList.length - 1]) || 12,
             season: currentSeasonVal,
             current_season: currentSeasonVal,
             currently_airing_episode: liveEpisodeVal,
             episodes_per_season: episodesList.join('|'),
-            platform: row.Platform || row.platform || 'Crunchyroll',
-            rating: parseFloat(row.Ratings || row.rating || row.Score) || 8.5,
-            synopsis: row.Synopsis || row.synopsis || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs.',
+            platform: primaryPlatform,
+            rating: parsedRating,
             mixedEntries: mappedSeasonsArray,
-            streamingPartners: [{ name: row.Platform || 'Crunchyroll', url: '' }],
+            streamingPartners: partnersList,
             moderationStatus: 'pending'
           };
 
-          // 4. Call Cloudflare D1 save endpoint directly for new items only
+          // 13. Persist to Cloudflare D1 database via API
           try {
             await cloudflareApi.createAnime(payload);
             importedCount++;
+            addTerminalLog('D1', `[CSV IMPORT] Saved '${title}' to Cloudflare D1 with Synopsis: "${parsedSynopsis.slice(0, 45)}..."`);
           } catch (err) {
             console.warn('Network notice during row import for:', title, err);
             importedCount++;
@@ -618,10 +735,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleExportCsv = () => {
-    const headers = 'title,languages,platform,year,rating,status,type,genres,cover_image,synopsis,studio\n';
+    const headers = 'Title,Type,Status,Studio,Release Year,Rating,Genres,Synopsis,Streaming Partners,Languages,Episodes,Cover Image\n';
     const rows = catalog.map(a => {
-      const clean = (val: any) => `"${(String(val || '')).replace(/"/g, '""')}"`;
-      return `${clean(a.title)},${clean(a.languages)},${clean(a.platform)},${clean(a.year)},${clean(a.rating)},${clean(a.status)},${clean(a.type)},${clean(a.genres)},${clean(a.cover_image)},${clean(a.synopsis)},${clean(a.studio)}`;
+      const clean = (val: any) => `"${(String(val ?? '')).replace(/"/g, '""')}"`;
+      return `${clean(a.title)},${clean(a.type || a.Type || 'TV Series')},${clean(a.status || a.airing_status || 'Airing')},${clean(a.studio || '')},${clean(a.year || a.release_year || 2024)},${clean(a.rating || 8.5)},${clean(a.genres || a.genre || '')},${clean(a.synopsis || a.description || '')},${clean(a.platform || 'Crunchyroll')},${clean(a.languages || '')},${clean(a.episodes_per_season || a.episodes_count || 12)},${clean(a.cover_image || a.poster_url || '')}`;
     }).join('\n');
 
     const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
@@ -647,8 +764,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleDownloadTemplate = () => {
-    const headers = 'title,languages,platform,year,rating,status,type,genres,cover_image,synopsis,studio\n';
-    const example = '"Demon Slayer: Kimetsu no Yaiba","Hindi, Tamil, Telugu","Crunchyroll",2024,8.9,"Airing","TV Series","Action, Supernatural","https://example.com/cover.jpg","Tanjiro Kamado fights demons.","Ufotable"\n';
+    const headers = 'Title,Type,Status,Studio,Release Year,Rating,Genres,Synopsis,Streaming Partners,Languages,Episodes,Cover Image\n';
+    const example = '"Demon Slayer: Kimetsu no Yaiba","TV Series","Airing","Ufotable",2024,8.9,"Action, Supernatural","Tanjiro Kamado, a kindhearted boy whose family was slaughtered by demons, joins the Demon Slayer Corps to find a cure for his sister Nezuko and avenge his family.","Crunchyroll","Hindi, Tamil, Telugu","26|11|11","https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80"\n';
     const blob = new Blob([headers + example], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
