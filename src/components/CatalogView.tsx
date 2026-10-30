@@ -460,10 +460,10 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           /* 2. CARD CONTAINER USING AnimeCard (grid-cols-2 gap-3.5) */
           <div className="grid grid-cols-2 gap-3.5">
             {displayedAnime.map((anime, idx) => {
-              const isWatchlisted = watchlist.includes(anime.id);
+              const isWatchlisted = watchlist.map(Number).includes(Number(anime.id));
               return (
                 <AnimeCard
-                  key={`${anime.id}-${anime.image || (anime as any).posterUrl || anime.cover_image || ''}`}
+                  key={`catalog_anime_${anime.id}_${idx}`}
                   anime={anime}
                   index={idx}
                   onSelect={(a) => onSelectAnime(a as any)}

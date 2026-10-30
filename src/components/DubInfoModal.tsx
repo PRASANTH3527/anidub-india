@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AnimeRecord, DubLanguage, dbService } from '../services/databaseService';
 import { cloudflareApi } from '../services/cloudflareApi';
+import { useToast } from './Toast';
 
 interface DubInfoModalProps {
   isOpen: boolean;
@@ -102,7 +103,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         }))
       : initialData ? [
           {
-            id: 1,
+            id: Date.now() + 1,
             entryType: 'Season',
             seasonNumber: initialData.release_season || initDataAny?.season || '1',
             episodes: String(initialData.episodes_count || 12),
@@ -112,7 +113,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
           }
         ] : [
           {
-            id: 1,
+            id: Date.now() + 2,
             entryType: 'Season',
             seasonNumber: '1',
             episodes: '12',
@@ -219,7 +220,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       if (initDataAny?.mixedEntries && Array.isArray(initDataAny.mixedEntries)) {
         const mapped = initDataAny.mixedEntries.map((e: any, idx: number) => ({
-          id: e.id || idx + 1,
+          id: e.id || `entry-${Date.now()}-${idx}`,
           entryType: e.entryType || e.type || 'Season',
           seasonNumber: e.seasonNumber || e.number || String(idx + 1),
           episodes: String(e.episodes || e.episodeCount || 12),
@@ -252,7 +253,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
             setCurrentlyAiringEpisode(Number(episodesArray[episodesArray.length - 1]) || 12);
           } else {
             setMixedEntries([{
-              id: 1,
+              id: Date.now() + 3,
               entryType: 'Season',
               seasonNumber: initialData.release_season || initDataAny?.season || '1',
               episodes: String(rawEp),
@@ -270,6 +271,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const toast = useToast();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -383,12 +385,32 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     e.preventDefault();
     if (!title.trim()) return;
 
+    setIsSubmitting(true);
+
+    // Duplicate Validation: verify if an anime with the same Title already exists
+    if (mode === 'submit') {
+      try {
+        const { data: existing } = await cloudflareApi.fetchCatalog({ search: title.trim() });
+        const cleanTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
+        const isDuplicate = existing.some((item: any) => 
+          (item.title || '').toLowerCase().replace(/\s+/g, ' ').trim() === cleanTitle
+        );
+        
+        if (isDuplicate) {
+          toast.error('Anime Already Exists', 'This anime already exists in our database!');
+          setIsSubmitting(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('Duplicate check failed, proceeding with safety fallbacks:', err);
+      }
+    }
+
     const rawLanguages = Array.from(new Set(
       seasonDetails.flatMap(s => s.languages || [])
     )) as DubLanguage[];
     const derivedGlobalDubs = rawLanguages.length > 0 ? rawLanguages : (['Tamil', 'Hindi'] as DubLanguage[]);
 
-    setIsSubmitting(true);
     const defaultCover =
       (poster || formData.posterUrl || formData.poster || formData.image || formData.cover_image || '').trim() ||
       'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
@@ -414,6 +436,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         submissionStatus: mode === 'edit' ? 'approved' : 'pending',
         languages: derivedGlobalDubs.join(', '),
         platform: streamingPartners[0]?.name || 'Crunchyroll',
+        watch_url: streamingPartners[0]?.url || '',
+        platforms_data: streamingPartners,
         type: formData.type || type || 'TV Series',
         season: 'Spring',
         year: parsedYear,
@@ -452,6 +476,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }, 1500);
     } catch (err: any) {
       console.error('[Submission error]:', err);
+      
+      if (err?.message && (err.message.includes('already exists') || err.message.includes('Already exists'))) {
+        toast.error('Submission Failed', err.message);
+        setIsSubmitting(false);
+        return;
+      }
+
       // Fallback local success so user isn't blocked by transient network errors
       const fallbackItem = {
         title: title.trim(),
@@ -1022,13 +1053,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
               {isSubmitting ? (
                 <div className="flex items-center gap-2 text-white">
                   <Loader2 className="w-5 h-5 animate-spin text-amber-300" />
-                  <span>{mode === 'edit' ? 'Saving changes to Cloudflare D1...' : 'Submitting to Cloudflare Edge...'}</span>
+                  <span>{mode === 'edit' ? 'Saving changes...' : 'Submitting...'}</span>
                 </div>
               ) : (
                 <div className="relative flex items-center gap-3">
                   <div className="absolute -inset-1 bg-white rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity" />
                   <Send className="w-5 h-5 relative" />
-                  <span>{mode === 'edit' ? 'Save Anime Changes to Cloudflare' : 'Submit Dub for Admin Approval'}</span>
+                  <span>{mode === 'edit' ? 'Save Anime Changes' : 'Submit Dub for Admin Approval'}</span>
                 </div>
               )}
             </button>

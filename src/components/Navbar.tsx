@@ -15,8 +15,11 @@ import {
   Plus,
   Check,
   X,
-  User
+  User,
+  MessageSquare,
+  Mic
 } from 'lucide-react';
+import { useToast } from './Toast';
 
 interface NavbarProps {
   activeTab: string;
@@ -26,6 +29,7 @@ interface NavbarProps {
   setSearchQuery: (q: string) => void;
   onUnlockAdmin: () => void;
   onOpenCollection?: () => void;
+  onSelectAnime?: (id: number) => void;
   feedView?: string;
   setFeedView?: (view: string) => void;
   isAdminAuthenticated?: boolean;
@@ -47,6 +51,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   setSearchQuery,
   onUnlockAdmin,
   onOpenCollection,
+  onSelectAnime,
   feedView = 'library',
   setFeedView,
   isAdminAuthenticated,
@@ -86,6 +91,60 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const isForYouActive = activeTab === 'foryou' || feedView === 'foryou';
   const isDirectoryActive = (activeTab === 'home' || activeTab === 'library' || activeTab === 'catalog') && !isForYouActive;
+
+  const [isListening, setIsListening] = useState(false);
+  const toast = useToast();
+
+  const handleVoiceSearch = async () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error('Voice Search Unsupported', 'Your browser does not support speech recognition. Please try Chrome or Safari.');
+      return;
+    }
+
+    try {
+      // 1. Explicitly trigger the browser's native "Allow / Deny" prompt first
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+
+      // 2. Start recognition
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-IN';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          const cleanTranscript = transcript.replace(/[.,/#!$%^&*;:{}=\-_`~()?]/g, "").trim();
+          setSearchQuery(cleanTranscript);
+          if (activeTab !== 'home') {
+            setActiveTab('home');
+            if (setFeedView) setFeedView('library');
+          }
+          toast.success('Voice Recognized', `Searching for "${cleanTranscript}"`);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (err: any) {
+      console.warn('Voice Search interaction failed:', err.name);
+      setIsListening(false);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-40 w-full max-w-full bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 transition-colors box-border select-none">
@@ -129,6 +188,27 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* CENTER SCROLLABLE NAVIGATION ICONS */}
         <nav className="flex items-center gap-1 sm:gap-1.5 flex-grow overflow-x-auto no-scrollbar py-1 justify-center sm:justify-start">
           
+          {/* 0. Home Screen / Hero Button */}
+          <motion.button
+            whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
+            onClick={() => {
+              setActiveTab('home');
+              if (setFeedView) setFeedView('library');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            title="Home Screen & Featured Feed"
+            className={`w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'home' && feedView === 'library'
+                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
+            }`}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 sm:w-5 sm:h-5">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+          </motion.button>
+
           {/* 1. Compass (Directory) */}
           <motion.button
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
@@ -210,6 +290,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
           </motion.button>
 
+          {/* 5.5 MessageSquare (Live Community Chat) */}
+          <motion.button
+            whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
+            onClick={() => setActiveTab('chat')}
+            title="Live Community Chat & Dub Discussions"
+            className={`relative w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'chat'
+                ? 'bg-purple-600/30 text-purple-300 border border-purple-400 shadow-sm'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+          </motion.button>
+
           {/* 6. User / Avatar Profile */}
           <motion.button
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
@@ -266,19 +361,38 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Search className="w-4 h-4 text-neutral-400 absolute left-3 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search anime dubs..."
+              placeholder={isListening ? "Listening..." : "Search anime dubs..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#131926] border border-neutral-800/80 rounded-xl pl-9 pr-7 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500/50 transition-colors"
+              className={`w-full bg-[#131926] border rounded-xl pl-9 pr-14 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none transition-colors ${
+                isListening ? 'border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.5)]' : 'border-neutral-800/80 focus:border-purple-500/50'
+              }`}
             />
-            {searchQuery && (
+            
+            {/* Right Buttons Container inside search input */}
+            <div className="absolute right-2 flex items-center gap-1">
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="text-neutral-400 hover:text-white"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
               <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 text-neutral-400 hover:text-white"
+                type="button"
+                onClick={handleVoiceSearch}
+                className={`p-1 rounded-lg transition-all cursor-pointer ${
+                  isListening
+                    ? 'bg-purple-600 text-white animate-pulse shadow-lg ring-2 ring-purple-400'
+                    : 'text-neutral-400 hover:text-purple-300 hover:bg-white/5'
+                }`}
+                title={isListening ? 'Listening for voice input...' : 'Search by Voice'}
               >
-                <X className="w-3.5 h-3.5" />
+                <Mic className={`w-3.5 h-3.5 ${isListening ? 'animate-bounce text-white' : ''}`} />
               </button>
-            )}
+            </div>
           </motion.div>
 
           {/* Create List Button (LG screens) */}
@@ -299,12 +413,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => {
               window.location.reload();
             }}
-            title="D1 Cloudflare Sync"
+            title="Refresh Library"
             className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-950/40 border border-purple-500/40 text-purple-300 hover:text-white hover:bg-purple-900/60 text-xs font-bold transition-colors shadow-sm cursor-pointer"
           >
             <Cloud className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
             <span>Sync</span>
           </motion.button>
+
 
           {/* Language Switcher */}
           <div className="relative">
@@ -377,19 +492,35 @@ export const Navbar: React.FC<NavbarProps> = ({
               <input
                 type="text"
                 autoFocus
-                placeholder="Search anime by title, voice actor, or studio..."
+                placeholder={isListening ? "Listening..." : "Search anime by title, voice actor, or studio..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#131926] border border-neutral-700/80 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-500 transition-colors"
+                className={`w-full bg-[#131926] border rounded-xl pl-9 pr-14 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none transition-colors ${
+                  isListening ? 'border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.5)]' : 'border-neutral-700/80 focus:border-purple-500'
+                }`}
               />
-              {searchQuery && (
+              <div className="absolute right-2 flex items-center gap-1">
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="text-neutral-400 hover:text-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 text-neutral-400 hover:text-white"
+                  type="button"
+                  onClick={handleVoiceSearch}
+                  className={`p-1 rounded-lg transition-all cursor-pointer ${
+                    isListening
+                      ? 'bg-purple-600 text-white animate-pulse shadow-lg ring-2 ring-purple-400'
+                      : 'text-neutral-400 hover:text-purple-300 hover:bg-white/5'
+                  }`}
+                  title={isListening ? 'Listening for voice input...' : 'Search by Voice'}
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <Mic className={`w-3.5 h-3.5 ${isListening ? 'animate-bounce text-white' : ''}`} />
                 </button>
-              )}
+              </div>
             </div>
             <button
               onClick={() => setIsMobileSearchExpanded(false)}

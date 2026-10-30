@@ -32,6 +32,15 @@ CREATE TABLE IF NOT EXISTS anime (
   upvotes INTEGER DEFAULT 0,
   likes INTEGER DEFAULT 0,
   likesCount INTEGER DEFAULT 0,
+  languages TEXT DEFAULT 'HIN,TAM,TEL',
+  platform TEXT DEFAULT 'Crunchyroll',
+  type TEXT DEFAULT 'TV Series',
+  studio TEXT DEFAULT 'Unknown Studio',
+  submissionStatus TEXT DEFAULT 'approved',
+  episodes_per_season TEXT DEFAULT '',
+  mixedEntries TEXT DEFAULT '',
+  watch_url TEXT DEFAULT '',
+  platforms_data TEXT DEFAULT '',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 

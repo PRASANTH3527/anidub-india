@@ -114,12 +114,12 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
         className="flex items-stretch gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1.5 px-0.5 select-none w-full max-w-full"
       >
         {items.map((anime, idx) => {
-          const isSaved = watchlist.includes(anime.id);
+          const isSaved = watchlist.map(Number).includes(Number(anime.id));
           const langBadges = parseLanguageBadges(anime.languages);
 
           return (
             <motion.div
-              key={anime.id}
+              key={`recently_viewed_${anime.id}_${idx}`}
               onClick={() => onSelectAnime(anime)}
               initial={shouldReduceMotion ? false : { opacity: 0, x: 20 }}
               animate={shouldReduceMotion ? undefined : { opacity: 1, x: 0 }}

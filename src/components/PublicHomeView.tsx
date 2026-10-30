@@ -431,7 +431,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
         <div className="grid grid-cols-2 gap-3.5">
           {recentlyUpdatedList.map((anime) => {
             const langs = parseLanguages(anime.languages);
-            const isSaved = watchlist.includes(anime.id);
+            const isSaved = watchlist.map(Number).includes(Number(anime.id));
 
             return (
               <div

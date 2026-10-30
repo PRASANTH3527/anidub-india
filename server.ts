@@ -5,6 +5,12 @@ import fs from 'fs';
 import initSqlJs from 'sql.js';
 import { GoogleGenAI } from '@google/genai';
 import { createAdminToken, verifyAdminToken, validateAdminPassword } from './src/utils/auth.js';
+import { 
+  formatNotificationTitle, 
+  formatNotificationBody, 
+  formatTelegramNotificationHtml, 
+  NotificationPayload 
+} from './src/utils/notifications.js';
 
 const app = express();
 app.use((req, res, next) => {
@@ -219,6 +225,78 @@ async function sendTelegramNotification(anime: {
   return await sendTelegramMessage(htmlMessage, anime.cover_image);
 }
 
+// Live SSE Clients pool for Real-Time Community Notifications
+const sseClients = new Set<express.Response>();
+
+async function broadcastActivityNotification(payload: NotificationPayload, sendTelegram: boolean = true) {
+  const timestamp = payload.timestamp || new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
+  const title = formatNotificationTitle(payload);
+  const message = formatNotificationBody(payload);
+
+  const eventData = {
+    id: payload.id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    type: payload.type,
+    title,
+    message,
+    user: payload.user || 'Indian Anime Fan',
+    anime_id: payload.anime_id ?? null,
+    anime_title: payload.anime_title ?? null,
+    rating: payload.rating ?? null,
+    language: payload.language ?? null,
+    link: payload.link || (payload.anime_id ? `/?anime=${payload.anime_id}` : null),
+    timestamp
+  };
+
+  // 1. Persist to SQLite
+  if (db) {
+    try {
+      db.run(`CREATE TABLE IF NOT EXISTS activity_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        user TEXT,
+        anime_id INTEGER,
+        anime_title TEXT,
+        rating REAL,
+        language TEXT,
+        link TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );`);
+      db.run(
+        `INSERT INTO activity_notifications (type, title, message, user, anime_id, anime_title, rating, language, link) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [eventData.type, eventData.title, eventData.message, eventData.user, eventData.anime_id, eventData.anime_title, eventData.rating, eventData.language, eventData.link]
+      );
+      persistD1();
+    } catch (err) {
+      console.warn('[Activity Store Error]:', err);
+    }
+  }
+
+  // 2. Broadcast via SSE to connected clients
+  const sseData = `data: ${JSON.stringify(eventData)}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(sseData);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+
+  // 3. Dispatch to Telegram Bot
+  if (sendTelegram) {
+    const tgHtml = formatTelegramNotificationHtml({ ...payload, title, message, timestamp });
+    sendTelegramMessage(tgHtml).then(res => {
+      if (res.success) {
+        logCloudflareEvent('Telegram', 'ACTIVITY_ALERT', 200, 30, `Dispatched Telegram alert for ${payload.type}`);
+      }
+    }).catch(err => {
+      console.warn('[Telegram Dispatch Warning]:', err);
+    });
+  }
+
+  return eventData;
+}
 
 function logCloudflareEvent(service: string, eventType: string, status: number, latency: number, details: string) {
   try {
@@ -260,6 +338,8 @@ function runMigrations() {
       year INTEGER DEFAULT 2026,
       genres TEXT NOT NULL,
       popularity INTEGER DEFAULT 0,
+      watch_url TEXT DEFAULT '',
+      platforms_data TEXT DEFAULT '',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -274,6 +354,8 @@ function runMigrations() {
   try { db.run("ALTER TABLE anime ADD COLUMN likesCount INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN likes INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN upvotes INTEGER DEFAULT 0;"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN watch_url TEXT DEFAULT '';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN platforms_data TEXT DEFAULT '';"); } catch (e) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS episodes (
@@ -344,6 +426,20 @@ function runMigrations() {
       rating REAL,
       language TEXT,
       isReview INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS activity_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      user TEXT,
+      anime_id INTEGER,
+      anime_title TEXT,
+      rating REAL,
+      language TEXT,
+      link TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -947,7 +1043,7 @@ function normalizeAnimeType(val: any): string {
 app.post('/api/anime', (req, res) => {
   const start = Date.now();
   try {
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, languages, platform, type, Type, studio, episodes_per_season, mixedEntries } = req.body;
+    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, languages, platform, type, Type, studio, episodes_per_season, mixedEntries, watch_url, platforms_data } = req.body;
     if (!title) return res.status(400).json({ error: "Title is required" });
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -969,6 +1065,9 @@ app.post('/api/anime', (req, res) => {
     existingStmt.free();
 
     if (animeId) {
+      if (!isAdmin) {
+        return res.status(400).json({ error: "This anime already exists in our database!" });
+      }
       db.run(
         `UPDATE anime SET 
           title = ?,
@@ -987,7 +1086,9 @@ app.post('/api/anime', (req, res) => {
           type = ?,
           studio = COALESCE(?, studio),
           episodes_per_season = COALESCE(?, episodes_per_season),
-          mixedEntries = COALESCE(?, mixedEntries)
+          mixedEntries = COALESCE(?, mixedEntries),
+          watch_url = COALESCE(?, watch_url),
+          platforms_data = COALESCE(?, platforms_data)
         WHERE id = ?`,
         [
           title,
@@ -1006,13 +1107,15 @@ app.post('/api/anime', (req, res) => {
           resolvedType,
           studio || 'Unknown Studio',
           episodes_per_season || '',
-          mixedEntries ? JSON.stringify(mixedEntries) : '',
+          mixedEntries ? (typeof mixedEntries === 'string' ? mixedEntries : JSON.stringify(mixedEntries)) : '',
+          watch_url || '',
+          platforms_data ? (typeof platforms_data === 'string' ? platforms_data : JSON.stringify(platforms_data)) : '',
           animeId
         ]
       );
     } else {
       db.run(
-        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries, watch_url, platforms_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           title,
           slug,
@@ -1032,7 +1135,9 @@ app.post('/api/anime', (req, res) => {
           resolvedType,
           studio || 'Unknown Studio',
           episodes_per_season || '',
-          mixedEntries ? JSON.stringify(mixedEntries) : ''
+          mixedEntries ? (typeof mixedEntries === 'string' ? mixedEntries : JSON.stringify(mixedEntries)) : '',
+          watch_url || '',
+          platforms_data ? (typeof platforms_data === 'string' ? platforms_data : JSON.stringify(platforms_data)) : ''
         ]
       );
 
@@ -1059,7 +1164,7 @@ app.post('/api/anime', (req, res) => {
     persistD1();
     logCloudflareEvent('D1', 'POST /api/anime', 201, Date.now() - start, `Created anime: ${title} (ID: ${animeId}, Status: ${finalStatus})`);
 
-    // Trigger Telegram channel notification only if approved
+    // Trigger real-time notifications & Telegram dispatch
     if (finalStatus !== 'pending') {
       sendTelegramNotification({
         title,
@@ -1072,6 +1177,22 @@ app.post('/api/anime', (req, res) => {
         genres: genres || 'Action,Fantasy',
         languages: languages || 'Tamil, Telugu, Hindi'
       }).catch(e => console.error('Telegram notification error:', e));
+
+      broadcastActivityNotification({
+        type: 'anime_approved',
+        anime_id: animeId,
+        anime_title: title,
+        language: languages || 'Tamil, Telugu, Hindi',
+        message: `${title} is now streaming in ${languages || 'regional dubs'}!`
+      }, false).catch(() => {});
+    } else {
+      broadcastActivityNotification({
+        type: 'anime_submission',
+        anime_id: animeId,
+        anime_title: title,
+        language: languages || 'Hindi, Tamil',
+        message: `New community submission awaiting admin review.`
+      }, true).catch(() => {});
     }
 
     res.status(201).json({ success: true, animeId, slug });
@@ -1256,6 +1377,24 @@ app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/an
       newPopularity = row.upvotes ?? row.popularity ?? 0;
     }
     stmt.free();
+
+    // Query anime title for notification
+    let animeTitle = 'Anime';
+    try {
+      const tStmt = db.prepare("SELECT title FROM anime WHERE id = ?");
+      tStmt.bind([animeId]);
+      if (tStmt.step()) {
+        animeTitle = tStmt.getAsObject().title as string;
+      }
+      tStmt.free();
+    } catch (_) {}
+
+    broadcastActivityNotification({
+      type: 'upvote',
+      anime_id: Number(animeId) || animeId,
+      anime_title: animeTitle,
+      message: `${newPopularity} total upvotes`
+    }, true).catch(() => {});
 
     res.json({ success: true, upvotes: newPopularity, popularity: newPopularity, deviceId, message: "Upvote recorded successfully" });
   } catch (err: any) {
@@ -1551,6 +1690,93 @@ app.post('/api/telegram/test', async (req, res) => {
   }
 });
 
+// --- REAL-TIME NOTIFICATIONS (SSE Stream & Activity Feed) ---
+
+// GET /api/notifications/stream (Server-Sent Events for live in-app toasts & desktop notifications)
+app.get(['/api/notifications/stream', '/api/notifications/sse'], (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+
+  sseClients.add(res);
+  res.write(`data: ${JSON.stringify({ type: 'connected', message: 'Connected to AniDub India live event stream' })}\n\n`);
+
+  const keepAliveInterval = setInterval(() => {
+    try {
+      res.write(': keep-alive\n\n');
+    } catch {
+      clearInterval(keepAliveInterval);
+      sseClients.delete(res);
+    }
+  }, 20000);
+
+  req.on('close', () => {
+    clearInterval(keepAliveInterval);
+    sseClients.delete(res);
+  });
+});
+
+// GET /api/notifications (Recent Activity History)
+app.get(['/api/notifications', '/api/notifications/recent'], (req, res) => {
+  try {
+    if (!db) return res.json({ success: true, count: 0, notifications: [] });
+
+    db.run(`CREATE TABLE IF NOT EXISTS activity_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      user TEXT,
+      anime_id INTEGER,
+      anime_title TEXT,
+      rating REAL,
+      language TEXT,
+      link TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    const stmt = db.prepare("SELECT * FROM activity_notifications ORDER BY id DESC LIMIT 50");
+    const list = [];
+    while (stmt.step()) {
+      list.push(stmt.getAsObject());
+    }
+    stmt.free();
+
+    res.json({ success: true, count: list.length, notifications: list, data: list });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message, notifications: [] });
+  }
+});
+
+// POST /api/notifications/test (Trigger instant real-time broadcast across SSE, Toast & Telegram)
+app.post('/api/notifications/test', async (req, res) => {
+  try {
+    const { 
+      type = 'review', 
+      user = 'Tanjiro_Delhi', 
+      anime_title = 'Demon Slayer: Hashira Training Arc', 
+      rating = 9.8, 
+      language = 'Hindi Dub', 
+      message = 'The Hindi dub voice acting for Tanjiro and Giyu is simply phenomenal!' 
+    } = req.body || {};
+
+    const event = await broadcastActivityNotification({
+      type: type as any,
+      user,
+      anime_title,
+      rating,
+      language,
+      message
+    }, true);
+
+    res.json({ success: true, message: 'Test notification broadcasted to active sessions and Telegram', event });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 7. PUT /api/anime/:id (Admin: Update Anime Details in D1 - Protected)
 app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
   const start = Date.now();
@@ -1701,6 +1927,29 @@ app.post('/api/anime/:id/reviews', (req, res) => {
     } catch (_) {}
 
     persistD1();
+
+    // Query anime title for notification payload
+    let animeTitle = 'Anime';
+    try {
+      const tStmt = db.prepare("SELECT title FROM anime WHERE id = ? OR slug = ?");
+      tStmt.bind([animeId, animeId]);
+      if (tStmt.step()) {
+        animeTitle = tStmt.getAsObject().title as string;
+      }
+      tStmt.free();
+    } catch (_) {}
+
+    // Broadcast instant real-time notification + Telegram Bot dispatch
+    broadcastActivityNotification({
+      type: 'review',
+      user: cleanUser,
+      anime_id: Number(animeId) || animeId,
+      anime_title: animeTitle,
+      rating: cleanRating,
+      language: cleanLang,
+      message: cleanComment
+    }, true).catch(() => {});
+
     res.json({ success: true, message: "Review saved and synchronized" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1780,6 +2029,17 @@ app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
       insertedId = stmt.getAsObject().id;
     }
     stmt.free();
+
+    // Broadcast instant real-time notification + Telegram Bot dispatch
+    broadcastActivityNotification({
+      type: cleanIsReview ? 'review' : 'chat',
+      user: cleanUser,
+      message: cleanText,
+      timestamp: cleanTimestamp,
+      rating: cleanRating,
+      language: cleanLanguage,
+      anime_title: cleanIsReview ? 'Community Dub Review' : undefined
+    }, true).catch(() => {});
 
     res.json({
       success: true,
@@ -2133,21 +2393,12 @@ app.post('/api/feedback', async (req, res) => {
       persistD1();
     }
 
-    const tgMsg = `💬 *NEW FEEDBACK / DUB SUBMISSION*\n\n` +
-      `👤 *Name / Insta:* ${author}\n` +
-      `📧 *Email:* ${email || 'N/A'}\n` +
-      `📝 *Feedback:* ${content}\n\n` +
-      `_Received via Anidub India Local Server_`;
-
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
-    if (token && chatId) {
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: tgMsg, parse_mode: 'Markdown' })
-      }).catch(() => {});
-    }
+    // Broadcast instant real-time notification + Telegram Bot dispatch
+    broadcastActivityNotification({
+      type: 'feedback',
+      user: author,
+      message: content
+    }, true).catch(() => {});
 
     res.status(201).json({ success: true });
   } catch (err: any) {

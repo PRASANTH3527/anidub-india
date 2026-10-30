@@ -59,9 +59,15 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     );
   };
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+
+    setError(null);
+    setIsSubmitting(true);
 
     const payload = {
       title: title.trim(),
@@ -80,12 +86,18 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
     try {
       await dbService.submitDubInfo(payload);
-    } catch (err) {
-      console.warn('Submission saved with pending status:', err);
+      onSubmit(payload);
+      onClose();
+    } catch (err: any) {
+      console.warn('Submission error:', err);
+      if (err?.message?.includes('already exists')) {
+        setError("This anime already exists in our database!");
+      } else {
+        setError(err?.message || "An error occurred while submitting. Please try again.");
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onSubmit(payload);
-    onClose();
   };
 
   return (
@@ -310,14 +322,27 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
             </p>
           </div>
 
+          {/* ERROR MESSAGE */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-center gap-2.5 animate-in slide-in-from-bottom-2">
+              <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
+              <p className="text-[11px] font-bold text-red-200">{error}</p>
+            </div>
+          )}
+
           {/* STICKY FOOTER */}
           <div className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-[#111726] via-[#111726]/95 to-transparent backdrop-blur-lg border-t border-white/5 z-50">
             <button
               type="submit"
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-purple-600 hover:from-orange-500 hover:via-amber-500 hover:to-purple-500 text-white font-black text-sm flex items-center justify-center gap-3 cursor-pointer shadow-[0_0_30px_rgba(249,115,22,0.3)] transition-all active:scale-[0.99]"
+              disabled={isSubmitting}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-purple-600 hover:from-orange-500 hover:via-amber-500 hover:to-purple-500 text-white font-black text-sm flex items-center justify-center gap-3 cursor-pointer shadow-[0_0_30px_rgba(249,115,22,0.3)] transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send className="w-4 h-4" />
-              <span>Submit Official Dub Entry</span>
+              {isSubmitting ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+              <span>{isSubmitting ? 'Verifying & Submitting...' : 'Submit Official Dub Entry'}</span>
             </button>
           </div>
 

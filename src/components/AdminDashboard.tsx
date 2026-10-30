@@ -126,9 +126,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [isTerminalExpanded, setIsTerminalExpanded] = useState(false);
   const [terminalLogs, setTerminalLogs] = useState<Array<{ id: string; time: string; level: string; msg: string }>>([
-    { id: '1', time: new Date().toLocaleTimeString(), level: 'SYS', msg: 'Kernel v4.19 initialized. Cloudflare Edge TLS verified.' },
-    { id: '2', time: new Date().toLocaleTimeString(), level: 'EDGE', msg: 'Connected to anidub-apiii.samayaprasanth0.workers.dev (HTTP/2 200 OK)' },
-    { id: '3', time: new Date().toLocaleTimeString(), level: 'D1', msg: 'KV binding ANIME_DB mounted [4d1a822ed4a04cad809f79f38ab4d96c]' }
+    { id: 'log-sys-init', time: new Date().toLocaleTimeString(), level: 'SYS', msg: 'Kernel v4.19 initialized. Cloudflare Edge TLS verified.' },
+    { id: 'log-edge-conn', time: new Date().toLocaleTimeString(), level: 'EDGE', msg: 'Connected to anidub-apiii.samayaprasanth0.workers.dev (HTTP/2 200 OK)' },
+    { id: 'log-d1-mount', time: new Date().toLocaleTimeString(), level: 'D1', msg: 'KV binding ANIME_DB mounted [4d1a822ed4a04cad809f79f38ab4d96c]' }
   ]);
 
   const addTerminalLog = (level: string, msg: string) => {
@@ -2436,7 +2436,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       else if (log.level === 'SYS') badgeColor = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
 
                       return (
-                        <div key={log.id} className="flex items-start gap-2 leading-relaxed">
+                        <div key={`health-log-${log.id}-${idx}`} className="flex items-start gap-2 leading-relaxed">
                           <span className="text-neutral-500 shrink-0 text-[10px]">[{log.time}]</span>
                           <span className={`px-1.5 py-0.2 rounded text-[9px] border font-bold shrink-0 ${badgeColor}`}>
                             {log.level}
@@ -2844,7 +2844,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 else if (log.level === 'MUT') badgeColor = 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/40';
 
                 return (
-                  <div key={log.id} className="flex items-start gap-2 leading-relaxed">
+                  <div key={`terminal-log-${log.id}-${idx}`} className="flex items-start gap-2 leading-relaxed">
                     <span className="text-neutral-500 shrink-0 text-[10px]">[{log.time}]</span>
                     <span className={`px-1.5 py-0.2 rounded text-[9px] border font-bold shrink-0 ${badgeColor}`}>
                       {log.level}

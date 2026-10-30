@@ -68,7 +68,7 @@ export const VirtualizedAnimeGrid: React.FC<VirtualizedAnimeGridProps> = ({
                 style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
               >
                 {rowItems.map((anime) => {
-                  const isBookmarked = watchlist.includes(anime.id);
+                  const isBookmarked = watchlist.map(Number).includes(Number(anime.id));
                   return (
                     <AnimeCard
                       key={anime.id}

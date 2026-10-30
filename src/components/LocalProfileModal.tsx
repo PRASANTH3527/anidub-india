@@ -281,10 +281,10 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
             <div className="p-4 rounded-2xl bg-[#0a0e17] border border-neutral-800 space-y-3">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>Cloudflare D1 Local Storage Sync</span>
+                <span>Cloud Synchronization</span>
               </div>
               <p className="text-xs text-neutral-400 leading-relaxed">
-                Your watchlist items, custom collections, and profile preferences are securely persisted in your browser's local state and synced with Cloudflare edge worker bindings.
+                Your watchlist items, custom collections, and profile preferences are securely persisted and synchronized across your sessions.
               </p>
             </div>
 

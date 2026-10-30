@@ -12,6 +12,7 @@ import { WatchlistView } from './components/WatchlistView';
 import { ProfileView } from './components/ProfileView';
 import { AnimeTierListMaker } from './components/AnimeTierListMaker';
 import { RecommendationSystem } from './components/RecommendationSystem';
+import { CommunityChatView } from './components/CommunityChatView';
 import { FeedbackSection } from './components/FeedbackSection';
 import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown } from 'lucide-react';
 import { cloudflareApi } from './services/cloudflareApi';
@@ -34,7 +35,7 @@ export default function App() {
             localStorage.removeItem('cf_anime_watchlist');
             return [];
           }
-          return parsed;
+          return parsed.map(Number).filter(id => !isNaN(id));
         }
       }
       return [];
@@ -131,24 +132,28 @@ export default function App() {
   };
 
   const handleToggleWatchlist = async (animeId: number) => {
+    const idNum = Number(animeId);
     try {
       const res = await fetch(getCloudflareUrl('/api/watchlist'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ anime_id: animeId })
+        body: JSON.stringify({ anime_id: idNum })
       });
       const data = await res.json();
       if (data.watchlisted) {
-        setWatchlist(prev => [...prev, animeId]);
+        setWatchlist(prev => Array.from(new Set([...prev.map(Number), idNum])));
       } else {
-        setWatchlist(prev => prev.filter(id => id !== animeId));
+        setWatchlist(prev => prev.map(Number).filter(id => id !== idNum));
       }
     } catch (err) {
       console.error('Failed to toggle watchlist:', err);
       // Optimistic fallback
-      setWatchlist(prev => 
-        prev.includes(animeId) ? prev.filter(id => id !== animeId) : [...prev, animeId]
-      );
+      setWatchlist(prev => {
+        const normalized = prev.map(Number);
+        return normalized.includes(idNum) 
+          ? normalized.filter(id => id !== idNum) 
+          : [...normalized, idNum];
+      });
     }
   };
 
@@ -239,6 +244,34 @@ export default function App() {
     );
   }, [catalogList, watchlist]);
 
+  // Verified real recently viewed strictly matching actual catalog records
+  const realRecentlyViewed = React.useMemo(() => {
+    return recentlyViewed.filter(rv => 
+      catalogList.some(a => String(a.id) === String(rv.id))
+    );
+  }, [catalogList, recentlyViewed]);
+
+  // AUTO-CLEANUP: If items disappear from catalog, remove them from source watchlist/recently-viewed states
+  useEffect(() => {
+    if (isCatalogLoading || catalogList.length === 0) return;
+
+    // 1. Cleanup Watchlist
+    const validWatchlist = watchlist.filter(wId => 
+      catalogList.some(a => String(a.id) === String(wId))
+    );
+    if (validWatchlist.length !== watchlist.length) {
+      setWatchlist(validWatchlist);
+    }
+
+    // 2. Cleanup Recently Viewed
+    const validRecentlyViewed = recentlyViewed.filter(rv => 
+      catalogList.some(a => String(a.id) === String(rv.id))
+    );
+    if (validRecentlyViewed.length !== recentlyViewed.length) {
+      setRecentlyViewed(validRecentlyViewed);
+    }
+  }, [catalogList, isCatalogLoading]);
+
   const handleToggleLike = (animeId: number, _liked: boolean, count: number) => {
     setCatalogList(prev => prev.map(a => {
       if (a.id === animeId || String(a.id) === String(animeId)) {
@@ -287,6 +320,7 @@ export default function App() {
           }
         }}
         onOpenCollection={() => setIsCollectionOpen(true)}
+        onSelectAnime={(id) => setSelectedAnimeId(id)}
         feedView={feedView}
         setFeedView={setFeedView}
         isAdminAuthenticated={isAdminAuthenticated}
@@ -301,22 +335,35 @@ export default function App() {
             if (updatedAnime) {
               const targetId = updatedAnime.id;
               const newCover = updatedAnime.posterUrl || updatedAnime.image || updatedAnime.cover_image || updatedAnime.poster;
-              setCatalogList(prev => prev.map(a => (a.id === targetId || String(a.id) === String(targetId)) ? {
-                ...a,
+              const normalizedItem = {
                 ...updatedAnime,
-                image: updatedAnime.posterUrl || updatedAnime.image || newCover,
-                cover_image: updatedAnime.posterUrl || updatedAnime.cover_image || newCover,
-                poster: updatedAnime.posterUrl || updatedAnime.poster || newCover,
-                posterUrl: updatedAnime.posterUrl || newCover
-              } : a));
-              setRecentlyViewed(prev => prev.map(a => (a.id === targetId || String(a.id) === String(targetId)) ? {
-                ...a,
-                ...updatedAnime,
-                image: updatedAnime.posterUrl || updatedAnime.image || newCover,
-                cover_image: updatedAnime.posterUrl || updatedAnime.cover_image || newCover,
-                poster: updatedAnime.posterUrl || updatedAnime.poster || newCover,
-                posterUrl: updatedAnime.posterUrl || newCover
-              } : a));
+                image: newCover,
+                cover_image: newCover,
+                poster: newCover,
+                posterUrl: newCover,
+                status: updatedAnime.status || updatedAnime.airing_status || 'Ongoing'
+              };
+
+              setCatalogList(prev => {
+                const exists = prev.some(a => a.id === targetId || String(a.id) === String(targetId));
+                if (exists) {
+                  return prev.map(a => (a.id === targetId || String(a.id) === String(targetId)) ? { ...a, ...normalizedItem } : a);
+                } else {
+                  return [normalizedItem, ...prev];
+                }
+              });
+
+              setRecentlyViewed(prev => {
+                const exists = prev.some(a => a.id === targetId || String(a.id) === String(targetId));
+                if (exists) {
+                  return prev.map(a => (a.id === targetId || String(a.id) === String(targetId)) ? { ...a, ...normalizedItem } : a);
+                } else {
+                  return [normalizedItem, ...prev];
+                }
+              });
+            } else {
+              // Fallback refetch if no payload
+              fetchCatalogList();
             }
           }}
           onLogout={handleAdminLogout}
@@ -355,7 +402,7 @@ export default function App() {
             onOpenRoulette={() => setIsRouletteOpen(true)}
             onOpenCollection={() => setIsCollectionOpen(true)}
             feedView={feedView}
-            recentlyViewed={recentlyViewed}
+            recentlyViewed={realRecentlyViewed}
             onClearRecentlyViewed={handleClearRecentlyViewed}
             onRemoveRecentlyViewedItem={handleRemoveRecentlyViewedItem}
           />
@@ -429,6 +476,17 @@ export default function App() {
               addToRecentlyViewed(anime);
             }}
             onNavigateHome={() => setActiveTab('home')}
+          />
+        )}
+
+        {/* LIVE COMMUNITY CHAT VIEW */}
+        {activeTab === 'chat' && (
+          <CommunityChatView
+            onNavigateToCatalog={() => setActiveTab('home')}
+            onSelectAnime={(anime) => {
+              setSelectedAnimeId(anime.id);
+              addToRecentlyViewed(anime);
+            }}
           />
         )}
       </main>

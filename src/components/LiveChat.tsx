@@ -14,6 +14,8 @@ import {
   Volume2
 } from 'lucide-react';
 import { CLOUDFLARE_API_URL, getCloudflareUrl } from '../config/cloudflare';
+import { generateRandomUsername } from '../utils/randomUser';
+import { formatRelativeTime } from '../utils/timestamps';
 
 export interface ChatMessage {
   id: string | number;
@@ -28,15 +30,27 @@ export interface ChatMessage {
 
 const QUICK_REACTIONS = ['🔥', '❤️', '⚡', '🍿', '😭', '✨', '💯', '🎌'];
 
-const RANDOM_NAMES = [
-  'Tanjiro_Delhi',
-  'Goku_Chennai',
-  'Luffy_Mumbai',
-  'Zoro_Bengaluru',
-  'Naruto_Kolkata',
-  'Levi_Hyderabad',
-  'Gojo_Kerala',
-  'Deku_Pune'
+const ANIME_CHARACTERS = [
+  'Tanjiro', 'Nezuko', 'Zenitsu', 'Inosuke', 'Giyu', 'Rengoku', 'Tengen', 'Muzan', 'Akaza', 'Shinobu',
+  'Goku', 'Vegeta', 'Gohan', 'Piccolo', 'Trunks', 'Frieza', 'Beerus', 'Bulma', 'Krillin', 'Broly',
+  'Luffy', 'Zoro', 'Sanji', 'Nami', 'Robin', 'Chopper', 'Franky', 'Brook', 'Jinbe', 'Shanks',
+  'Naruto', 'Sasuke', 'Kakashi', 'Itachi', 'Madara', 'Minato', 'Hinata', 'Jiraiya', 'Gaara', 'Shikamaru',
+  'Gojo', 'Sukuna', 'Yuji', 'Megumi', 'Nobara', 'Nanami', 'Toji', 'Geto', 'Maki', 'Inumaki',
+  'Eren', 'Mikasa', 'Armin', 'Levi', 'Erwin', 'Hange', 'Reiner', 'Zeke', 'Jean', 'Sasha',
+  'Denji', 'Makima', 'Power', 'Aki', 'Himeno', 'Kobeni', 'Kishibe', 'Quanxi', 'Reze', 'Kishibe',
+  'Asta', 'Yuno', 'Noelle', 'Yami', 'Julius', 'Magna', 'Luck', 'Charmy', 'Finral', 'Gauche',
+  'Bojji', 'Kage', 'Daida', 'Hiling', 'Domas', 'Bein', 'Ouken', 'Miranja', 'Desha', 'Seyn'
+];
+
+const INDIAN_REGIONS = [
+  'Delhi', 'Chennai', 'Mumbai', 'Bengaluru', 'Kolkata', 'Hyderabad', 'Kerala', 'Pune',
+  'Kolkata', 'Ahmedabad', 'Jaipur', 'Lucknow', 'Patna', 'Varanasi', 'Chandigarh', 'Goa',
+  'Surat', 'Indore', 'Bhopal', 'Visakhapatnam', 'Coimbatore', 'Madurai', 'Mysuru', 'Mangaluru',
+  'Kochi', 'Thiruvananthapuram', 'Kozhikode', 'Thrissur', 'Guwahati', 'Shillong', 'Imphal', 'Aizawl',
+  'Bhubaneswar', 'Cuttack', 'Rourkela', 'Puri', 'Nagpur', 'Nashik', 'Aurangabad', 'Solapur',
+  'Vadodara', 'Rajkot', 'Surat', 'Gandhinagar', 'Jodhpur', 'Udaipur', 'Ajmer', 'Kota',
+  'Kanpur', 'Agra', 'Meerut', 'Prayagraj', 'Noida', 'Gurugram', 'Dehradun', 'Haridwar',
+  'Srinagar', 'Jammu', 'Leh', 'Amritsar', 'Ludhiana', 'Jalandhar', 'Patiala'
 ];
 
 export interface LiveChatProps {
@@ -69,7 +83,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
   const [inputMessage, setInputMessage] = useState('');
   const [guestName, setGuestName] = useState(() => {
-    return localStorage.getItem('anidub_guest_chat_name') || 'AnimeFan_IN';
+    return generateRandomUsername();
   });
   const [autoScroll, setAutoScroll] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
@@ -137,8 +151,9 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         response = await fetch(primaryUrl, {
           headers: { 'Accept': 'application/json' }
         });
-      } catch {
-        // Fallback to relative endpoint if URL resolution differs
+      } catch {}
+
+      if (!response || !response.ok) {
         response = await fetch('/api/chat', {
           headers: { 'Accept': 'application/json' }
         }).catch(() => null);
@@ -337,18 +352,19 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     // 3) Persist to Backend D1 / SQLite Database via HTTP POST
     try {
       const chatApiUrl = getCloudflareUrl('/api/chat');
-      fetch(chatApiUrl, {
+      let res = await fetch(chatApiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      }).catch(() => {
-        // Fallback relative post
-        fetch('/api/chat', {
+      }).catch(() => null);
+
+      if (!res || !res.ok) {
+        await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         }).catch(() => {});
-      });
+      }
     } catch (err) {
       console.warn('Network persistence note:', err);
     }
@@ -372,9 +388,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   };
 
   const handleRandomizeName = () => {
-    const random = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
-    const num = Math.floor(Math.random() * 90 + 10);
-    const chosen = `${random}_${num}`;
+    const chosen = generateRandomUsername();
     setGuestName(chosen);
     localStorage.setItem('anidub_guest_chat_name', chosen);
   };
@@ -400,12 +414,9 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             <h3 className="text-lg font-black text-white tracking-wide">
               Live Community Chat & Reviews
             </h3>
-            <span className="bg-purple-950/80 border border-purple-500/30 text-purple-300 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full">
-              Cloudflare Edge + D1
-            </span>
           </div>
           <p className="text-xs text-neutral-300/80">
-            Real-time chat with anime fans across India. All messages and dub reviews persist permanently in D1.
+            Real-time chat with anime fans across India. All messages and dub reviews are synchronized instantly.
           </p>
         </div>
 
@@ -424,8 +435,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             type="button"
             onClick={fetchChatHistory}
             disabled={isSyncing}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-white/80 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
-            title="Refresh & sync history from D1 database"
+            title="Refresh & sync history"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-purple-400' : ''}`} />
           </button>
@@ -436,7 +446,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       {syncStatus && (
         <div className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl flex items-center gap-2 animate-in fade-in duration-200">
           <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-          <span>{syncStatus} — connected to persistent D1 database.</span>
+          <span>{syncStatus} — connected and synchronized.</span>
         </div>
       )}
 
@@ -544,7 +554,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             <span>Auto-scroll to latest messages</span>
           </label>
           <span className="text-[11px] text-purple-300/80 font-medium">
-            {messages.length} messages in database
+            {messages.length} messages
           </span>
         </div>
 

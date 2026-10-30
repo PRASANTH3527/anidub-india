@@ -21,9 +21,10 @@ import {
   X
 } from 'lucide-react';
 import { Anime } from './CatalogView';
-import { LiveChat } from './LiveChat';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { getCloudflareUrl } from '../config/cloudflare';
+import { generateRandomUsername } from '../utils/randomUser';
+import { formatRelativeTime } from '../utils/timestamps';
 
 export interface AnimeDetailPageProps {
   animeId: number;
@@ -117,7 +118,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             rating: Number(r.rating) || 8.5,
             language: r.language || (r.comment?.match(/\[(.*?) Dub\]/)?.[1] ? `${r.comment.match(/\[(.*?) Dub\]/)[1]} Dub` : 'Hindi Dub'),
             comment: r.comment ? r.comment.replace(/^\[.*?\]\s*/, '') : '',
-            date: r.date || (r.created_at ? new Date(r.created_at).toLocaleDateString() : 'Recent'),
+            date: formatRelativeTime(r.created_at || r.date || Date.now()),
             likes: r.likes || 1,
             isLiked: false,
             spoilers: Boolean(r.spoilers),
@@ -199,9 +200,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     e.preventDefault();
     if (!reviewComment.trim()) return;
 
+    const currentUsername = generateRandomUsername();
+    const nowIso = new Date().toISOString();
+
     const newRev = {
       id: Date.now(),
-      author: 'Indian Anime Fan',
+      author: currentUsername,
       rating: reviewRating,
       language: reviewLang,
       comment: reviewComment,
@@ -209,7 +213,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       revealed: !hasSpoilers,
       likes: 1,
       isLiked: false,
-      date: 'Just now'
+      date: formatRelativeTime(nowIso),
+      created_at: nowIso
     };
 
     const updated = [newRev, ...reviewsList];
@@ -226,7 +231,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_name: 'Indian Anime Fan',
+          user_name: currentUsername,
           rating: reviewRating,
           language: reviewLang,
           comment: reviewComment
@@ -235,7 +240,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
       // 2. Broadcast review into Live Community Chat REST API
       const chatPayload = {
-        user: 'Indian Anime Fan',
+        user: currentUsername,
         text: `[⭐ ${reviewRating}/10 • ${reviewLang}] ${reviewComment}`,
         isReview: true,
         rating: reviewRating,
@@ -292,7 +297,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     showToast('Link copied to clipboard!');
   };
 
-  const isBookmarked = watchlist.includes(animeId);
+  const isBookmarked = watchlist.map(Number).includes(Number(animeId));
 
   const handleToggleWatched = () => {
     const nextWatched = !isWatched;
@@ -333,58 +338,39 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   
   const genres = details?.genre ? details.genre.split(',').map((g: string) => g.trim()) : ['Action', 'Fantasy', 'Adventure', 'Supernatural'];
 
-  // Helper for platform URLs with Android Intent Deep Linking and fallback
-  const getPlatformUrl = (platformName: string, animeTitle: string, defaultUrl?: string) => {
+  // Helper for platform URLs with direct web content links
+  const getPlatformUrl = (platformName: string, animeTitle: string, directUrl?: string) => {
     const p = platformName.toLowerCase();
-    let webUrl = `https://www.google.com/search?q=${encodeURIComponent(animeTitle + ' ' + platformName + ' watch online')}`;
-    let packageName = '';
+    
+    // If a direct URL is provided from the database, use it as the primary web URL
+    let webUrl = directUrl || '';
 
-    if (p.includes('netflix')) {
-      webUrl = `https://www.netflix.com/search?q=${encodeURIComponent(animeTitle)}`;
-      packageName = 'com.netflix.mediaclient';
-    } else if (p.includes('crunchyroll')) {
-      webUrl = `https://www.crunchyroll.com/search?q=${encodeURIComponent(animeTitle)}`;
-      packageName = 'com.crunchyroll.crunchyroid';
-    } else if (p.includes('jiocinema') || p.includes('jio')) {
-      webUrl = `https://www.jiocinema.com/search/${encodeURIComponent(animeTitle)}`;
-      packageName = 'com.jio.media.stb.jiocinema';
-    } else if (p.includes('hotstar') || p.includes('disney')) {
-      webUrl = `https://www.hotstar.com/in/explore?search_query=${encodeURIComponent(animeTitle)}`;
-      packageName = 'in.startv.hotstar';
-    } else if (p.includes('youtube') || p.includes('muse') || p.includes('ani-one')) {
-      webUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(animeTitle + ' hindi dub')}`;
-      packageName = 'com.google.android.youtube';
-    } else if (p.includes('prime') || p.includes('amazon')) {
-      webUrl = `https://www.primevideo.com/search/ref=atv_nb_sr?phrase=${encodeURIComponent(animeTitle)}`;
-      packageName = 'com.amazon.avod.thirdpartyclient';
-    } else {
-      webUrl = defaultUrl || webUrl;
+    // If no direct URL, fall back to intelligent search URLs
+    if (!webUrl) {
+      if (p.includes('netflix')) {
+        webUrl = `https://www.netflix.com/search?q=${encodeURIComponent(animeTitle)}`;
+      } else if (p.includes('crunchyroll')) {
+        webUrl = `https://www.crunchyroll.com/search?q=${encodeURIComponent(animeTitle)}`;
+      } else if (p.includes('jiocinema') || p.includes('jio')) {
+        webUrl = `https://www.jiocinema.com/search/${encodeURIComponent(animeTitle)}`;
+      } else if (p.includes('hotstar') || p.includes('disney')) {
+        webUrl = `https://www.hotstar.com/in/explore?search_query=${encodeURIComponent(animeTitle)}`;
+      } else if (p.includes('youtube') || p.includes('muse') || p.includes('ani-one')) {
+        webUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(animeTitle + ' hindi dub')}`;
+      } else if (p.includes('prime') || p.includes('amazon')) {
+        webUrl = `https://www.primevideo.com/search/ref=atv_nb_sr?phrase=${encodeURIComponent(animeTitle)}`;
+      } else {
+        webUrl = `https://www.google.com/search?q=${encodeURIComponent(animeTitle + ' ' + platformName + ' watch online')}`;
+      }
     }
 
-    let intentUrl = webUrl;
-    try {
-      const parsed = new URL(webUrl);
-      const hostPath = parsed.host + parsed.pathname + parsed.search;
-      if (packageName) {
-        intentUrl = `intent://${hostPath}#Intent;scheme=https;package=${packageName};end;`;
-      }
-    } catch {}
-
-    return { name: platformName, url: webUrl, intentUrl };
+    return { name: platformName, url: webUrl };
   };
 
-  const handleOpenPlatform = (platform: { name: string; url: string; intentUrl: string }) => {
+  const handleOpenPlatform = (platform: { name: string; url: string }) => {
     setIsWatchOptionsOpen(false);
-    try {
-      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      if (isMobile && platform.intentUrl.startsWith('intent://')) {
-        window.location.href = platform.intentUrl;
-        setTimeout(() => {
-          window.open(platform.url, '_blank');
-        }, 1500);
-        return;
-      }
-    } catch {}
+    // Standard window.open allows the browser/OS to intercept App Links / Universal Links
+    // This will open the native app if installed, or fallback to the mobile web view.
     window.open(platform.url, '_blank');
   };
 
@@ -400,9 +386,24 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     return ['Crunchyroll'];
   })();
 
-  const availablePlatforms = Array.from<string>(new Set(rawPlatformsList)).map((pName) => 
-    getPlatformUrl(pName, title, details?.stream_url || details?.watch_url)
-  );
+  const availablePlatforms = (() => {
+    let richPlatforms: any[] = [];
+    try {
+      if (details?.platforms_data) {
+        richPlatforms = typeof details.platforms_data === 'string' 
+          ? JSON.parse(details.platforms_data) 
+          : details.platforms_data;
+      }
+    } catch {}
+
+    return Array.from<string>(new Set(rawPlatformsList)).map((pName) => {
+      const richMatch = Array.isArray(richPlatforms) && richPlatforms.find(rp => 
+        String(rp?.name || '').toLowerCase() === pName.toLowerCase()
+      );
+      const directUrl = richMatch?.url || (pName.toLowerCase() === String(details?.platform || '').toLowerCase() ? details?.watch_url : '');
+      return getPlatformUrl(pName, title, directUrl);
+    });
+  })();
 
   // Calculate total episodes across all seasons using reduce
   const seasonsArray = details?.seasons || details?.mixedEntries || details?.seasonsList || [];
@@ -662,17 +663,32 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           </div>
         </div>
 
-        {/* SECTION 4: COMMUNITY DUB REVIEWS */}
-        <div className="mt-12 space-y-6">
-          <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
-            Community Dub Reviews ({reviewsList.length})
-          </h2>
+        {/* SECTION 4: COMMUNITY DUB REVIEWS (Dedicated Clean Card/Box) */}
+        <section className="mt-12 bg-white/[0.04] backdrop-blur-2xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.5)] space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shadow-md">
+                <Star className="w-4 h-4 fill-purple-400" />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-black text-white tracking-wide">
+                  Community Dub Reviews
+                </h2>
+                <p className="text-[11px] text-neutral-400">
+                  Ratings on voice acting, regional audio sync & script localization
+                </p>
+              </div>
+            </div>
+            <span className="bg-purple-950/80 border border-purple-500/40 text-purple-300 text-[11px] font-bold px-3 py-1 rounded-full">
+              {reviewsList.length} {reviewsList.length === 1 ? 'Review' : 'Reviews'}
+            </span>
+          </div>
 
-          {/* Form */}
-          <form onSubmit={handleAddReview} className="space-y-4 pt-1">
+          {/* Review Submission Form */}
+          <form onSubmit={handleAddReview} className="space-y-4 pt-1 bg-black/40 border border-white/10 rounded-2xl p-4 sm:p-5">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-neutral-300 font-medium">Rate Dubbing Quality</span>
-              <span className="text-amber-400 font-bold flex items-center gap-1">
+              <span className="text-neutral-300 font-semibold">Rate Dubbing Quality</span>
+              <span className="text-amber-400 font-bold flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">
                 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                 <span>{reviewRating.toFixed(1)} / 10.0</span>
               </span>
@@ -688,7 +704,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               className="w-full accent-purple-500 cursor-pointer h-1.5 bg-white/20 rounded-lg"
             />
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <select
                 value={reviewLang}
                 onChange={(e) => setReviewLang(e.target.value)}
@@ -701,7 +717,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 <option value="Kannada Dub">Kannada Dub</option>
               </select>
 
-              <div className="flex items-center justify-end">
+              <div className="flex items-center justify-start sm:justify-end">
                 <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">
                   <input 
                     type="checkbox"
@@ -719,7 +735,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               value={reviewComment}
               onChange={(e) => setReviewComment(e.target.value)}
               placeholder="Share thoughts on voice acting, sync, and regional dialogue delivery..."
-              className="w-full bg-black/60 border border-white/10 rounded-2xl p-3.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400 resize-none"
+              className="w-full bg-black/60 border border-white/10 rounded-xl p-3.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400 resize-none"
             />
 
             <div className="flex justify-end">
@@ -733,32 +749,32 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </div>
           </form>
 
-          {/* Reviews List */}
-          <div className="space-y-6 pt-2">
+          {/* Reviews List Scrollable Container */}
+          <div className="max-h-[420px] overflow-y-auto pr-1 space-y-4 pt-2 scrollbar-thin scrollbar-thumb-purple-600/50">
             {reviewsList.length === 0 ? (
-              <div className="py-2 text-xs text-neutral-400">
-                <p>No community reviews yet. Be the first to review this regional dub!</p>
+              <div className="py-6 text-center text-xs text-neutral-400 bg-black/20 border border-white/5 rounded-2xl p-4">
+                <p>No community reviews yet for this title. Be the first to rate this regional dub above!</p>
               </div>
             ) : (
-              reviewsList.map((review) => (
+              reviewsList.map((review, idx) => (
                 <div 
-                  key={review.id}
-                  className="space-y-2 text-xs"
+                  key={`review_${review.id}_${idx}`}
+                  className="space-y-2 text-xs p-4 rounded-2xl bg-black/30 border border-white/5 hover:border-white/10 transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                       <span className="font-bold text-white">{review.author}</span>
-                      <span className="text-[11px] text-purple-300 font-semibold">
+                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-purple-300 font-semibold">
                         {review.language}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-amber-400">
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
                       <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                       <span>{review.rating}</span>
                     </div>
                   </div>
 
-                  <div className="relative">
+                  <div className="relative pt-1">
                     {review.spoilers && !review.revealed ? (
                       <div className="py-1 flex items-center justify-between text-[11px] text-neutral-400">
                         <span className="flex items-center gap-1.5">
@@ -780,7 +796,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-1">
+                  <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-2 border-t border-white/5">
                     <span>{review.date || 'Recent'}</span>
                     <button
                       type="button"
@@ -799,12 +815,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               ))
             )}
           </div>
-        </div>
-
-        {/* LIVE COMMUNITY DISCUSSION & CHAT */}
-        <div className="mt-12">
-          <LiveChat defaultAnimeTitle={title} />
-        </div>
+        </section>
 
         {/* SECTION 5: FREQUENTLY ASKED QUESTIONS */}
         <div className="mt-12">

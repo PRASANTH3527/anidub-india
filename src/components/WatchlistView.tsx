@@ -112,10 +112,11 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-4">
-          {filteredWatchlist.map((anime) => (
+          {filteredWatchlist.map((anime, idx) => (
             <AnimeCard
-              key={anime.id}
+              key={`watchlist_anime_${anime.id}_${idx}`}
               anime={anime}
+              index={idx}
               onSelect={(a) => onSelectAnime(a as any)}
               isBookmarked={true}
               onToggleBookmark={onToggleWatchlist}

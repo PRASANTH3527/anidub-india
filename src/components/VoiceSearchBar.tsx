@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Mic, MicOff, X, Sparkles } from 'lucide-react';
+import { MicPermissionBottomSheet } from './MicPermissionBottomSheet';
 
 export interface VoiceSearchBarProps {
   value: string;
@@ -15,11 +16,14 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
   className = ''
 }) => {
   const [isListening, setIsListening] = useState(false);
+  const [showBottomSheet, setShowBottomSheet] = useState(false);
+  const [isPermanentlyBlocked, setIsPermanentlyBlocked] = useState(false);
   const recognitionRef = useRef<any>(null);
 
-  useEffect(() => {
+
+  const initRecognition = () => {
     const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognitionAPI) {
+    if (SpeechRecognitionAPI && !recognitionRef.current) {
       const recognition = new SpeechRecognitionAPI();
       recognition.continuous = false;
       recognition.interimResults = true;
@@ -30,8 +34,14 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
         onChange(transcript);
       };
 
-      recognition.onerror = () => {
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
         setIsListening(false);
+        
+        if (event.error === 'not-allowed') {
+          setIsPermanentlyBlocked(true);
+          setShowBottomSheet(true);
+        }
       };
 
       recognition.onend = () => {
@@ -39,24 +49,52 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
       };
 
       recognitionRef.current = recognition;
+      return recognition;
     }
+    return recognitionRef.current;
+  };
+
+  useEffect(() => {
+    initRecognition();
   }, [onChange]);
 
-  const toggleListening = () => {
-    if (!recognitionRef.current) {
-      alert('Speech recognition is not supported in your current browser.');
+  const startActualListening = () => {
+    const rec = initRecognition();
+    if (!rec) return;
+
+    try {
+      rec.start();
+      setIsListening(true);
+      setShowBottomSheet(false);
+    } catch (err) {
+      console.warn('Speech recognition start error:', err);
+      setIsListening(false);
+    }
+  };
+
+  const handleMicClick = async () => {
+    if (isListening) {
+      if (recognitionRef.current) recognitionRef.current.stop();
+      setIsListening(false);
       return;
     }
 
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      try {
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch (err) {
-        console.warn('Speech recognition start error:', err);
+    try {
+      // 1. Explicitly trigger the browser's native "Allow / Deny" prompt first
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // 2. If we reach here, permission was granted. Stop the test stream immediately.
+      stream.getTracks().forEach(track => track.stop());
+      
+      // 3. Proceed with actual Speech Recognition
+      startActualListening();
+    } catch (err: any) {
+      console.warn('Microphone permission interaction failed:', err.name);
+      
+      // 4. Handle permanent block / denial without showing generic toasts
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setIsPermanentlyBlocked(true);
+        setShowBottomSheet(true);
       }
     }
   };
@@ -104,7 +142,7 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
 
         <button
           type="button"
-          onClick={toggleListening}
+          onClick={handleMicClick}
           className={`relative p-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
             isListening
               ? 'bg-red-500 text-white shadow-lg shadow-red-500/50 ring-4 ring-red-500/30 animate-pulse scale-105'
@@ -126,6 +164,20 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
           <span className="font-bold">Listening for voice query... Speak now!</span>
         </div>
       )}
+
+      {/* PERMISSION BOTTOM SHEET */}
+      <MicPermissionBottomSheet 
+        isOpen={showBottomSheet}
+        isPermanentlyBlocked={isPermanentlyBlocked}
+        onClose={() => setShowBottomSheet(false)}
+        onAllow={() => {
+          // If they say they updated settings, reset the "blocked" state to try again
+          if (isPermanentlyBlocked) {
+            setIsPermanentlyBlocked(false);
+          }
+          startActualListening();
+        }}
+      />
 
     </div>
   );

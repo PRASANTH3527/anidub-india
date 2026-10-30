@@ -15,6 +15,7 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
   const [sourceLink, setSourceLink] = useState('');
   const [notes, setNotes] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
@@ -24,6 +25,8 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
     if (!animeName.trim()) return;
 
     setIsSubmitting(true);
+    setError(null);
+
     try {
       await dbService.submitDubInfo({
         title: animeName.trim(),
@@ -64,7 +67,11 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
       }, 2200);
     } catch (err: any) {
       console.error('Submission error:', err);
-      window.alert("Suggestion Error: " + (err?.message || String(err)));
+      if (err?.message?.includes('already exists')) {
+        setError("This anime already exists in our database!");
+      } else {
+        setError(err?.message || "Failed to submit suggestion. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -189,6 +196,13 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
               className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-primary-theme resize-none"
             />
           </div>
+
+          {error && (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-2.5 animate-in fade-in slide-in-from-top-1">
+              <Loader2 className="w-4 h-4 text-red-400 shrink-0 mt-0.5 rotate-45" />
+              <p className="text-[11px] font-bold text-red-200 leading-tight">{error}</p>
+            </div>
+          )}
 
           <button
             type="submit"

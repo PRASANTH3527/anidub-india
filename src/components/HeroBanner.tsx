@@ -44,11 +44,6 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ anime, onSelectAnime, on
         <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/40 to-transparent" />
       </div>
 
-      {/* Cloudflare Edge Badge */}
-      <div className="absolute top-4 left-4 z-10 flex items-center space-x-2 bg-slate-950/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-orange-500/30 text-xs font-medium text-orange-400">
-        <CloudLightning className="w-3.5 h-3.5 animate-pulse" />
-        <span>Cached via Cloudflare Edge (14ms)</span>
-      </div>
 
       {/* Content */}
       <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10 flex flex-col justify-end z-10 max-w-3xl">

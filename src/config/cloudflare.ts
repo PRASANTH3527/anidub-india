@@ -17,7 +17,7 @@
 const rawEnvUrl: string = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDFLARE_API_URL) || '';
 const matchedEnvUrl: string = rawEnvUrl ? (rawEnvUrl.match(/https?:\/\/[^\s\]\)"']+/)?.[0] || rawEnvUrl) : '';
 
-export const CLOUDFLARE_API_URL: string = matchedEnvUrl || 'https://anidub-apiii.samayaprasanth0.workers.dev';
+export const CLOUDFLARE_API_URL: string = matchedEnvUrl || '';
 
 // Optional: Cloudflare D1 Database binding identifier from wrangler.toml
 export const CLOUDFLARE_D1_DATABASE_NAME = 'anime-hub-db';
