@@ -33,12 +33,15 @@ const getOverriddenUrl = () => {
  * The base URL for the Cloudflare API.
  * Priority: localStorage Override > Environment Variable > Relative Path ('')
  */
-export const CLOUDFLARE_API_URL: string = (
-  ((typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDFLARE_API_URL) ||
-  (import.meta.env?.PROD ? 'https://anime-chat.samayaprasanth0.workers.dev' : ''))
-  .split(']')[0]
-  .replace(/\/+$/, '')
-).replace(/\/+$/, '');
+export const CLOUDFLARE_API_URL: string = (() => {
+  const isProd = import.meta.env?.PROD;
+  const envUrl = ((typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDFLARE_API_URL) || '');
+  const prodUrl = 'https://anime-chat.samayaprasanth0.workers.dev';
+  
+  const finalUrl = isProd ? prodUrl : (envUrl.split(']')[0].replace(/\/+$/, ''));
+  console.log('CLOUDFLARE_API_URL resolution:', { isProd, envUrl, finalUrl });
+  return finalUrl.replace(/\/+$/, '');
+})();
 
 /**
  * Default fallback Worker URL used when relative paths and env vars fail.
