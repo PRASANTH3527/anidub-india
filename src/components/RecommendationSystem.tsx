@@ -267,9 +267,9 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
       </div>
 
       <AnimatePresence mode="wait">
-        {currentStep < 5 && (
+        {currentStep < 5 ? (
           <motion.div 
-            key={currentStep}
+            key={`recommendation_step_${currentStep}`}
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -491,13 +491,14 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
             </div>
 
           </motion.div>
-        )}
-
-        {/* 4. STEP 5: RESULTS VIEW */}
-        {currentStep === 5 && (
+        ) : (
+          /* 4. STEP 5: RESULTS VIEW */
           <motion.div 
+            key="recommendation_step_5_results"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
             className="space-y-6"
           >
             
@@ -604,7 +605,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                         <div className="flex items-center gap-1">
                           {(anime.languages ? anime.languages.split(/[,/ ]+/) : ['HIN', 'TAM']).slice(0, 3).map((l, i) => (
                             <span
-                              key={i}
+                              key={`rec_match_${anime.id}_lang_${l}_${i}`}
                               className="px-1.5 py-0.5 rounded text-[8.5px] font-extrabold uppercase bg-primary-theme/10 border border-primary-theme/30 text-purple-300"
                             >
                               {l.trim()}

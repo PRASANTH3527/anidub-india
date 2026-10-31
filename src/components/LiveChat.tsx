@@ -673,7 +673,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                     className="bg-transparent text-xs text-amber-400 font-bold focus:outline-none cursor-pointer"
                   >
                     {[10, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.0, 5.0].map(r => (
-                      <option key={r} value={r} className="bg-neutral-900 text-white">{r}/10</option>
+                      <option key={`chat_rating_${r}`} value={r} className="bg-neutral-900 text-white">{r}/10</option>
                     ))}
                   </select>
                 </div>

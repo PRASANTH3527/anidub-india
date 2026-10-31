@@ -172,11 +172,11 @@ export const SharedListView: React.FC<SharedListViewProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 lg:gap-5">
-          {sharedAnimeList.map((anime) => {
+          {sharedAnimeList.map((anime, idx) => {
             const isBookmarked = watchlist.includes(anime.id);
             return (
               <AnimeCard
-                key={anime.id}
+                key={`shared_anime_${anime.id}_${idx}`}
                 anime={anime}
                 onSelect={(a) => onSelectAnime(a as any)}
                 isBookmarked={isBookmarked}

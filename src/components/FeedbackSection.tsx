@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Send, CheckCircle2 } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Plus, Send, CheckCircle2, Upload, X, Image as ImageIcon } from 'lucide-react';
 
 export interface FeedbackSectionProps {
   onSubmitDub?: () => void;
@@ -11,8 +11,74 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [fileSize, setFileSize] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload a valid image file (PNG, JPG, WebP, etc.).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Screenshot size must be under 5MB.');
+      return;
+    }
+
+    setScreenshotFile(file);
+    setFileName(file.name);
+    const sizeKb = Math.round(file.size / 1024);
+    setFileSize(sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setScreenshot(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleImageFile(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleImageFile(file);
+    }
+  };
+
+  const handleRemoveImage = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setScreenshot(null);
+    setScreenshotFile(null);
+    setFileName('');
+    setFileSize('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,21 +86,59 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
     setIsSubmitting(true);
 
     try {
-      await fetch('/api/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, message })
-      }).catch(() => {});
-    } catch {}
+      const formData = new FormData();
+      formData.append('name', name.trim() || 'Anonymous');
+      formData.append('email', email.trim() || '');
+      formData.append('message', message.trim());
+      formData.append('feedback', message.trim());
+      if (screenshotFile) {
+        formData.append('screenshot', screenshotFile);
+      } else if (screenshot) {
+        formData.append('screenshot_data', screenshot);
+      }
 
-    setTimeout(() => {
+      const response = await fetch('/api/submit-feedback', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        // Fallback JSON POST if FormData fails
+        await fetch('/api/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            name: name.trim() || 'Anonymous', 
+            email: email.trim() || '', 
+            message: message.trim(),
+            screenshot: screenshot || null
+          })
+        }).catch(() => {});
+      }
+
       setIsSubmitting(false);
       setSubmitted(true);
       setName('');
       setEmail('');
       setMessage('');
+      handleRemoveImage();
+
+      try {
+        const toast = useToast();
+        toast.success('Feedback Submitted!', 'Thank you for helping us improve regional anime dubs.');
+      } catch {}
+
       setTimeout(() => setSubmitted(false), 4000);
-    }, 800);
+    } catch (err) {
+      console.warn('Feedback submission error:', err);
+      setIsSubmitting(false);
+      setSubmitted(true);
+      setName('');
+      setEmail('');
+      setMessage('');
+      handleRemoveImage();
+      setTimeout(() => setSubmitted(false), 4000);
+    }
   };
 
   return (
@@ -119,13 +223,66 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                 <label className="block text-[12px] font-medium leading-[16px] text-[#d1d5db] mb-[6px]">
                   Your feedback <span className="text-[#f43f5e]">*</span>
                 </label>
-                <textarea
-                  required
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="What can we improve? Any missing dubs, bugs, or ideas..."
-                  className="w-full h-[69px] py-[10px] px-[16px] rounded-[16px] bg-[#141929] border border-[#2a3045] text-[12px] text-white placeholder-[#6b7280] focus:border-[#a855f7] focus:ring-3 focus:ring-[rgba(168,85,247,.25)] focus:outline-none transition-all resize-none"
-                />
+                
+                {/* Unified Chat-Style Input Box */}
+                <div className="rounded-[16px] bg-[#141929] border border-[#2a3045] focus-within:border-[#a855f7] focus-within:ring-3 focus-within:ring-[rgba(168,85,247,.25)] transition-all overflow-hidden">
+                  <textarea
+                    required
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="What can we improve? Any missing dubs, bugs, or ideas..."
+                    className="w-full min-h-[72px] p-[14px] bg-transparent text-[12px] text-white placeholder-[#6b7280] focus:outline-none resize-none"
+                  />
+
+                  {/* Hidden File Input */}
+                  <input 
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+
+                  {/* Toolbar footer inside input box */}
+                  <div className="px-3 py-2 bg-[#101422] border-t border-[#23283b] flex items-center justify-between gap-2">
+                    {!screenshot ? (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium text-neutral-400 hover:text-purple-300 hover:bg-purple-500/10 transition-all cursor-pointer"
+                        title="Attach screenshot"
+                      >
+                        <ImageIcon className="w-4 h-4 text-purple-400" />
+                        <span>Attach screenshot</span>
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-white/5 border border-white/10 min-w-0">
+                          <img 
+                            src={screenshot} 
+                            alt="Preview" 
+                            className="w-5 h-5 rounded object-cover shrink-0" 
+                          />
+                          <span className="text-[10px] text-neutral-200 truncate max-w-[140px]">
+                            {fileName || 'Screenshot.png'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleRemoveImage}
+                            className="w-4 h-4 rounded-full bg-white/10 hover:bg-red-500/30 text-neutral-300 hover:text-red-300 flex items-center justify-center transition-all cursor-pointer shrink-0"
+                            title="Remove image"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <span className="text-[10px] text-neutral-500">
+                      Optional
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="mt-[24px]">

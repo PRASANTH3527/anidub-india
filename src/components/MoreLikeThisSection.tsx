@@ -81,12 +81,12 @@ export const MoreLikeThisSection: React.FC<MoreLikeThisSectionProps> = ({
 
       {/* CARDS GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-        {recommendations.map((anime) => {
+        {recommendations.map((anime, idx) => {
           const isSaved = watchlist.includes(anime.id);
 
           return (
             <motion.div
-              key={anime.id}
+              key={`more_like_${anime.id}_${idx}`}
               onClick={() => onSelectAnime(anime)}
               whileHover={{ y: -4 }}
               transition={{ duration: 0.2 }}

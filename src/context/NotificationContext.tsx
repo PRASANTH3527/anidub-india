@@ -196,11 +196,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       playNotificationChime();
     }
 
-    // 3. Trigger In-App Toast
-    const toastType = (type === 'review' || type === 'anime_approved') 
-      ? 'success' 
-      : (type === 'report' ? 'warning' : 'info');
-    showToast(title, message, toastType);
+    // 3. Trigger In-App Toast (skip chat messages to prevent global popups on initial load or live messages)
+    if (type !== 'chat') {
+      const toastType = (type === 'review' || type === 'anime_approved') 
+        ? 'success' 
+        : (type === 'report' ? 'warning' : 'info');
+      showToast(title, message, toastType);
+    }
 
     // 4. Trigger Browser Notification (if permitted)
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {

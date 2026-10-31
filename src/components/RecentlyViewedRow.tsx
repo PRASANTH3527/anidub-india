@@ -195,7 +195,7 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
                 <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1 overflow-hidden">
                   {langBadges.map((lang, idx) => (
                     <span
-                      key={idx}
+                      key={`rv_lang_${anime.id}_${lang}_${idx}`}
                       className="px-1.5 py-0.5 rounded text-[8.5px] font-extrabold uppercase bg-black/80 backdrop-blur-md text-amber-300 border border-neutral-700/80"
                     >
                       {lang}

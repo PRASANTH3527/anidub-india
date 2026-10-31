@@ -284,7 +284,7 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                 <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
                   {queueAnime.map((anime, idx) => (
                     <div 
-                      key={anime.id}
+                      key={`queue_anime_${anime.id}_${idx}`}
                       className="p-2.5 rounded-2xl bg-neutral-950/80 border border-neutral-800 flex items-center justify-between gap-3 group"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -385,13 +385,13 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
 
           {/* Selectable Catalog Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-            {filteredCatalog.map((anime) => {
+            {filteredCatalog.map((anime, idx) => {
               const isSelected = selectedIds.includes(anime.id);
               const languages = anime.languages ? anime.languages.split(',').map((l: string) => l.trim()) : ['Hindi', 'Tamil', 'Telugu'];
 
               return (
                 <div 
-                  key={anime.id}
+                  key={`selectable_anime_${anime.id}_${idx}`}
                   className={`rounded-2xl bg-[#131926] border transition-all overflow-hidden flex flex-col justify-between shadow-md ${
                     isSelected 
                       ? 'border-emerald-500 ring-2 ring-emerald-500/50' 

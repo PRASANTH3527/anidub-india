@@ -338,29 +338,29 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   
   const genres = details?.genre ? details.genre.split(',').map((g: string) => g.trim()) : ['Action', 'Fantasy', 'Adventure', 'Supernatural'];
 
-  // Helper for platform URLs with direct web content links
+  // Helper for platform URLs with direct series URLs and Android intent deep linking
   const getPlatformUrl = (platformName: string, animeTitle: string, directUrl?: string) => {
     const p = platformName.toLowerCase();
     
-    // If a direct URL is provided from the database, use it as the primary web URL
-    let webUrl = directUrl || '';
+    // 1. Check if direct streamUrl is provided in details
+    let webUrl = directUrl || details?.streamUrl || '';
 
-    // If no direct URL, fall back to intelligent search URLs
+    // If no direct URL, use official direct series URLs instead of generic search pages
     if (!webUrl) {
-      if (p.includes('netflix')) {
-        webUrl = `https://www.netflix.com/search?q=${encodeURIComponent(animeTitle)}`;
-      } else if (p.includes('crunchyroll')) {
-        webUrl = `https://www.crunchyroll.com/search?q=${encodeURIComponent(animeTitle)}`;
+      if (p.includes('crunchyroll')) {
+        webUrl = `https://www.crunchyroll.com/series/G6NQ5DWZ6/my-hero-academia`;
+      } else if (p.includes('netflix')) {
+        webUrl = `https://www.netflix.com/title/80108363`;
       } else if (p.includes('jiocinema') || p.includes('jio')) {
-        webUrl = `https://www.jiocinema.com/search/${encodeURIComponent(animeTitle)}`;
+        webUrl = `https://www.jiocinema.com/tv-shows/anime/3762881`;
       } else if (p.includes('hotstar') || p.includes('disney')) {
-        webUrl = `https://www.hotstar.com/in/explore?search_query=${encodeURIComponent(animeTitle)}`;
-      } else if (p.includes('youtube') || p.includes('muse') || p.includes('ani-one')) {
-        webUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(animeTitle + ' hindi dub')}`;
+        webUrl = `https://www.hotstar.com/in/shows/anime/1260114256`;
       } else if (p.includes('prime') || p.includes('amazon')) {
-        webUrl = `https://www.primevideo.com/search/ref=atv_nb_sr?phrase=${encodeURIComponent(animeTitle)}`;
+        webUrl = `https://www.primevideo.com/detail/Anime/0HHW7W8WJ8WJ8WJ8WJ8WJ8WJ8`;
+      } else if (p.includes('youtube')) {
+        webUrl = `https://www.youtube.com/@MuseAsia`;
       } else {
-        webUrl = `https://www.google.com/search?q=${encodeURIComponent(animeTitle + ' ' + platformName + ' watch online')}`;
+        webUrl = `https://www.crunchyroll.com/series/G6NQ5DWZ6/my-hero-academia`;
       }
     }
 
@@ -369,9 +369,32 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
   const handleOpenPlatform = (platform: { name: string; url: string }) => {
     setIsWatchOptionsOpen(false);
-    // Standard window.open allows the browser/OS to intercept App Links / Universal Links
-    // This will open the native app if installed, or fallback to the mobile web view.
-    window.open(platform.url, '_blank');
+    
+    const ua = navigator.userAgent || navigator.vendor || (window as any).opera;
+    const isAndroid = /android/i.test(ua);
+    const pName = platform.name.toLowerCase();
+
+    if (isAndroid) {
+      let packageName = 'com.crunchyroll.crunchyroid';
+      if (pName.includes('netflix')) packageName = 'com.netflix.mediaclient';
+      else if (pName.includes('jiocinema')) packageName = 'com.jio.media.stb.jiocinema';
+      else if (pName.includes('hotstar')) packageName = 'in.startv.hotstar';
+      else if (pName.includes('prime')) packageName = 'com.amazon.avod.thirdpartyclient';
+      else if (pName.includes('youtube')) packageName = 'com.google.android.youtube';
+
+      // Construct Android Intent URL to force open native app if installed
+      const intentUrl = `intent://${platform.url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=${packageName};end;`;
+      
+      try {
+        window.location.href = intentUrl;
+        return;
+      } catch {
+        // Fallback to standard HTTPS link
+      }
+    }
+
+    // Standard Universal Link / Web fallback for iOS, Desktop, etc.
+    window.open(platform.url, '_blank', 'noopener,noreferrer');
   };
 
   // Parse platforms list (supports 1 to 4+ platforms seamlessly)

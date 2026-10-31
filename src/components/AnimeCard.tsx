@@ -465,7 +465,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
           <div>
             {/* Dub Badges (Strictly Deduplicated) */}
             <div className="flex flex-wrap gap-1 mb-2">
-              {uniqueLanguages.map((code) => {
+              {uniqueLanguages.map((code, idx) => {
                 let badgeClass = 'bg-[#059669] text-emerald-100';
                 let shortLabel = 'Hin';
 
@@ -522,7 +522,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 
                 return (
                   <span
-                    key={code}
+                    key={`card_${anime.id}_code_${code}_${idx}`}
                     className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm border border-white/5 ${badgeClass}`}
                   >
                     {shortLabel}
@@ -556,7 +556,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
             <div className="flex items-center gap-1 min-w-0 overflow-hidden">
               {displayedPlatforms.map((plat, idx) => (
                 <span
-                  key={idx}
+                  key={`card_${anime.id}_plat_${plat}_${idx}`}
                   className="text-[9px] font-semibold bg-[#1a2133] text-neutral-400 px-1.5 py-0.5 rounded truncate"
                 >
                   {plat}

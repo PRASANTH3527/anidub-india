@@ -2414,22 +2414,86 @@ app.get('/api/feedback', async (req, res) => {
   }
 });
 
-// 14. POST /api/feedback
-app.post('/api/feedback', async (req, res) => {
+import multer from 'multer';
+const upload = multer({ storage: multer.memoryStorage() });
+
+// 14. POST /api/feedback & /api/submit-feedback with multer multipart support
+app.post(['/api/feedback', '/api/submit-feedback'], upload.any(), async (req: any, res: any) => {
   try {
-    const { name, nameOrInsta, email, message, feedback } = req.body;
-    const author = name || nameOrInsta || 'Anonymous';
-    const content = message || feedback || '';
+    const body = req.body || {};
+    const files = req.files || [];
+    const name = body.name || body.nameOrInsta || 'Anonymous';
+    const email = body.email || '';
+    const feedback = body.feedback || body.message || '';
+    
+    // Find image file or base64 data
+    const imageFile = files.find((f: any) => f.fieldname === 'image' || f.fieldname === 'screenshot');
+    const screenshotData = body.screenshot || body.screenshot_data || null;
+
     if (db) {
-      db.run("INSERT INTO feedback (name_or_insta, email, feedback_text) VALUES (?, ?, ?)", [author, email || '', content]);
+      try {
+        db.run("ALTER TABLE feedback ADD COLUMN screenshot TEXT");
+      } catch (_) {}
+      try {
+        db.run("INSERT INTO feedback (name_or_insta, email, feedback_text, screenshot) VALUES (?, ?, ?, ?)", [name, email, feedback, screenshotData]);
+      } catch {
+        db.run("INSERT INTO feedback (name_or_insta, email, feedback_text) VALUES (?, ?, ?)", [name, email, feedback]);
+      }
       persistD1();
     }
 
-    // Broadcast instant real-time notification + Telegram Bot dispatch
+    // Telegram Bot dispatch
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+
+    if (botToken && chatId) {
+      const captionText = feedback;
+
+      if (imageFile || screenshotData) {
+        // Send photo to Telegram
+        const tgForm = new FormData();
+        tgForm.append('chat_id', chatId);
+        tgForm.append('caption', captionText);
+
+        if (imageFile) {
+          const blob = new Blob([imageFile.buffer], { type: imageFile.mimetype });
+          tgForm.append('photo', blob, imageFile.originalname || 'screenshot.png');
+        } else if (screenshotData && screenshotData.startsWith('data:image')) {
+          const arr = screenshotData.split(',');
+          const mime = arr[0].match(/:(.*?);/)[1];
+          const bstr = atob(arr[1]);
+          let n = bstr.length;
+          const u8arr = new Uint8Array(n);
+          while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+          }
+          const blob = new Blob([u8arr], { type: mime });
+          tgForm.append('photo', blob, 'screenshot.png');
+        }
+
+        await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+          method: 'POST',
+          body: tgForm
+        }).catch(() => {});
+      } else {
+        // Send text message to Telegram
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: captionText,
+            parse_mode: 'HTML'
+          })
+        }).catch(() => {});
+      }
+    }
+
+    // Broadcast instant real-time notification
     broadcastActivityNotification({
       type: 'feedback',
-      user: author,
-      message: content
+      user: name,
+      message: (imageFile || screenshotData) ? `${feedback} (Screenshot attached)` : feedback
     }, true).catch(() => {});
 
     res.status(201).json({ success: true });

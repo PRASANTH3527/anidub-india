@@ -36,13 +36,18 @@ interface NavbarProps {
   setFeedView?: (view: string) => void;
   isAdminAuthenticated?: boolean;
   onLogout?: () => void;
+  userAvatar?: string;
 }
 
 const LANGUAGES = [
-  { code: 'en', flag: '🇬🇧', native: 'English', english: 'English' },
-  { code: 'ta', flag: '🇮🇳', native: 'தமிழ்', english: 'Tamil' },
-  { code: 'te', flag: '🇮🇳', native: 'తెలుగు', english: 'Telugu' },
-  { code: 'hi', flag: '🇮🇳', native: 'हिन्दी', english: 'Hindi' },
+  { code: 'en', native: 'English' },
+  { code: 'ta', native: 'Tamil' },
+  { code: 'te', native: 'Telugu' },
+  { code: 'hi', native: 'Hindi' },
+  { code: 'ml', native: 'Malayalam' },
+  { code: 'kn', native: 'Kannada' },
+  { code: 'bn', native: 'Bengali' },
+  { code: 'mr', native: 'Marathi' },
 ];
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -57,7 +62,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   feedView = 'library',
   setFeedView,
   isAdminAuthenticated,
-  onLogout
+  onLogout,
+  userAvatar
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const [isLangOpen, setIsLangOpen] = useState(false);
@@ -373,7 +379,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <div className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white text-xs font-bold overflow-hidden shadow-sm">
-              <User className="w-3.5 h-3.5" />
+              {userAvatar ? (
+                <img 
+                  src={userAvatar} 
+                  alt="Profile" 
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <User className="w-3.5 h-3.5" />
+              )}
             </div>
           </motion.button>
 
@@ -484,14 +501,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             <motion.button
               whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
               onClick={() => setIsLangOpen(!isLangOpen)}
-              className="p-1.5 sm:p-2 rounded-xl bg-neutral-800/70 border border-neutral-700/40 text-neutral-300 hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
+              className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-neutral-800/70 border border-neutral-700/40 text-neutral-200 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer"
               title="Change Language"
             >
-              <Globe className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+              <Globe className="w-4 h-4 text-purple-400 shrink-0" />
+              <span className="hidden sm:inline">{LANGUAGES.find(l => l.code === selectedLang)?.native || 'English'}</span>
             </motion.button>
 
             {isLangOpen && (
-              <div className="absolute right-0 top-full mt-2 w-40 bg-[#121829] border border-neutral-800 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute right-0 top-full mt-2 w-44 bg-[#121829] border border-neutral-800/90 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 px-2.5 py-1">
                   Audio & Display
                 </div>
@@ -502,16 +520,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                       setSelectedLang(lang.code);
                       setIsLangOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
                       selectedLang === lang.code
-                        ? 'bg-purple-950/60 text-purple-300 font-bold'
+                        ? 'bg-purple-950/80 text-purple-300 font-bold border border-purple-500/30 shadow-inner'
                         : 'text-neutral-300 hover:bg-neutral-800/60 hover:text-white'
                     }`}
                   >
-                    <span className="flex items-center gap-1.5">
-                      <span>{lang.flag}</span>
-                      <span>{lang.native}</span>
-                    </span>
+                    <span>{lang.native}</span>
                     {selectedLang === lang.code && <Check className="w-3.5 h-3.5 text-purple-400" />}
                   </button>
                 ))}

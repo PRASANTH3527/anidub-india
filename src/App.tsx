@@ -59,6 +59,15 @@ export default function App() {
   const [isRouletteOpen, setIsRouletteOpen] = useState(false);
   const [isCollectionOpen, setIsCollectionOpen] = useState(false);
   const [catalogList, setCatalogList] = useState<any[]>(FALLBACK_SEED_ANIME);
+  const [userAvatar, setUserAvatar] = useState(() => {
+    try {
+      const saved = localStorage.getItem('anidub_avatar');
+      if (saved && !saved.includes('images.unsplash.com')) {
+        return saved;
+      }
+    } catch {}
+    return 'https://s4.anilist.co/file/anilistcdn/character/large/b127691-9zqh1xpIubn7.png';
+  });
 
   // Admin Authentication State
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
@@ -325,6 +334,7 @@ export default function App() {
         setFeedView={setFeedView}
         isAdminAuthenticated={isAdminAuthenticated}
         onLogout={handleAdminLogout}
+        userAvatar={userAvatar}
       />
 
       {/* 2. ADMIN DASHBOARD (When active in admin mode) */}
@@ -464,6 +474,8 @@ export default function App() {
             onToggleWatchlist={handleToggleWatchlist}
             onOpenCreateCollection={() => setIsCollectionOpen(true)}
             onNavigateToCatalog={() => setActiveTab('home')}
+            userAvatar={userAvatar}
+            onAvatarChange={(newAvatar) => setUserAvatar(newAvatar)}
           />
         )}
 

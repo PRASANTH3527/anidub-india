@@ -325,7 +325,6 @@ class CloudflareApiService {
       res = await fetch(url, {
         method: 'POST',
         headers: this.getHeaders(false),
-        credentials: 'include',
         body: JSON.stringify(options || {})
       });
     } catch (networkErr: any) {
@@ -364,8 +363,7 @@ class CloudflareApiService {
     try {
       const url = getCloudflareUrl(`/api/anime/${id}/vote-status`);
       const res = await fetch(url, {
-        headers: this.getHeaders(false),
-        credentials: 'include'
+        headers: this.getHeaders(false)
       });
       if (res.ok) {
         return await res.json();
@@ -404,8 +402,7 @@ class CloudflareApiService {
     try {
       const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.USER_STATS);
       const res = await fetch(url, {
-        headers: this.getHeaders(false),
-        credentials: 'include'
+        headers: this.getHeaders(false)
       });
       if (res.ok) {
         return await res.json();

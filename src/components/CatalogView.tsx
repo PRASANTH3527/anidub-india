@@ -41,6 +41,7 @@ export interface Anime {
   languages?: string;
   platform?: string;
   type?: string;
+  streamUrl?: string;
 }
 
 export interface CatalogViewProps {
@@ -370,9 +371,9 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           { label: 'PLATFORM', val: selectedPlatform, set: setSelectedPlatform, opts: PLATFORMS },
           { label: 'TYPE', val: selectedType, set: setSelectedType, opts: TYPES },
           { label: 'STATUS', val: selectedStatus, set: setSelectedStatus, opts: STATUSES }
-        ].map((item, i) => (
+        ].map((item) => (
           <div 
-            key={i} 
+            key={`catalog_filter_${item.label}`} 
             className="relative flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 rounded-xl px-3 py-1.5 sm:py-2"
           >
             <span className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-wider shrink-0 pr-1">
