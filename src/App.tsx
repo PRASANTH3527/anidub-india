@@ -88,18 +88,24 @@ export default function App() {
   const fetchCatalogList = async () => {
     setIsCatalogLoading(true);
     try {
-      const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
-      if (data && data.length > 0) {
+      console.log('[Catalog API] Fetching catalog list from Cloudflare Worker...');
+      const response = await cloudflareApi.fetchCatalog({ limit: 100 });
+      console.log('[Catalog API] Received response:', response);
+      
+      const data = response?.data;
+      if (data && Array.isArray(data) && data.length > 0) {
         const approvedOnly = data.filter((item: any) => 
           item.status !== 'pending' && 
           item.submissionStatus !== 'pending'
         );
+        console.log(`[Catalog API] Loaded ${approvedOnly.length} approved anime records.`);
         setCatalogList(approvedOnly.length > 0 ? approvedOnly : FALLBACK_SEED_ANIME);
       } else {
+        console.warn('[Catalog API] Received empty catalog data, falling back to seed anime.');
         setCatalogList(FALLBACK_SEED_ANIME);
       }
-    } catch (err) {
-      console.warn('Failed fetching catalog from Cloudflare, using seed anime:', err);
+    } catch (err: any) {
+      console.error('[Catalog API Error]: Failed fetching catalog from Cloudflare Worker:', err?.message || err, err);
       setCatalogList(FALLBACK_SEED_ANIME);
     } finally {
       setIsCatalogLoading(false);
