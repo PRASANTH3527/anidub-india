@@ -74,3 +74,9 @@ export function parseImgbbApiResponse(apiData: any): { success: boolean; url?: s
     error: errorMessage
   };
 }
+
+export function proxyUrl(url: string): string {
+  if (typeof url !== 'string') return url;
+  return url.startsWith('https://cdn.myanimelist.net/') ? `/api/proxy-image?url=${encodeURIComponent(url)}` : url;
+}
+

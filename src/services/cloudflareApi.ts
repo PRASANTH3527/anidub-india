@@ -70,7 +70,7 @@ class CloudflareApiService {
       // If it's a 404 or non-JSON, and we are NOT already on the fallback URL, retry with the absolute fallback Worker URL.
       const isFallbackUrl = url.startsWith(DEFAULT_FALLBACK_WORKER_URL);
       if ((res.status === 404 || !isJson || !res.ok) && !isFallbackUrl && DEFAULT_FALLBACK_WORKER_URL) {
-        const fallbackBase = DEFAULT_FALLBACK_WORKER_URL.replace(/\/+$/, '');
+        const fallbackBase = (DEFAULT_FALLBACK_WORKER_URL as string).replace(/\/+$/, '');
         const fallbackUrl = `${fallbackBase}${path.startsWith('/') ? path : '/' + path}`;
         
         if (fallbackUrl !== url) {
@@ -78,7 +78,6 @@ class CloudflareApiService {
           return await fetch(fallbackUrl, fetchOptions);
         }
       }
-
       return res;
     } catch (err: any) {
       const isFallbackUrl = url.startsWith(DEFAULT_FALLBACK_WORKER_URL);
@@ -93,7 +92,7 @@ class CloudflareApiService {
       
       // If network fails and we are NOT already on the fallback URL, retry with absolute fallback
       if (!isFallbackUrl && DEFAULT_FALLBACK_WORKER_URL) {
-        const fallbackBase = DEFAULT_FALLBACK_WORKER_URL.replace(/\/+$/, '');
+        const fallbackBase = (DEFAULT_FALLBACK_WORKER_URL as string).replace(/\/+$/, '');
         const fallbackUrl = `${fallbackBase}${path.startsWith('/') ? path : '/' + path}`;
         
         if (fallbackUrl !== url) {

@@ -21,6 +21,7 @@ import { AnimatedStats } from './AnimatedStats';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { calculateCatalogStats } from '../utils/languages';
 import { SkeletonGrid } from './SkeletonGrid';
+import { proxyUrl } from '../utils/imgbb';
 
 export interface Anime {
   id: number;
@@ -66,8 +67,8 @@ export const FALLBACK_SEED_ANIME: Anime[] = [
     title: 'Solo Leveling',
     slug: 'solo-leveling',
     synopsis: 'In a world where hunters must battle deadly monsters to protect mankind, Sung Jinwoo, the weakest hunter of them all, finds himself in an endless struggle for survival. After a mysterious incident in a high-rank dungeon, he gains the ability to level up.',
-    cover_image: 'https://cdn.myanimelist.net/images/anime/1546/141065.jpg',
-    banner_image: 'https://cdn.myanimelist.net/images/anime/1546/141065.jpg',
+    cover_image: proxyUrl('https://cdn.myanimelist.net/images/anime/1546/141065.jpg'),
+    banner_image: proxyUrl('https://cdn.myanimelist.net/images/anime/1546/141065.jpg'),
     rating: 8.7,
     episodes_count: 12,
     status: 'Completed',
@@ -84,8 +85,8 @@ export const FALLBACK_SEED_ANIME: Anime[] = [
     title: 'Demon Slayer: Kimetsu no Yaiba',
     slug: 'demon-slayer',
     synopsis: 'It is the Taisho Period in Japan. Tanjiro, a kindhearted boy who sells charcoal for a living, finds his family slaughtered by a demon. To make matters worse, his younger sister Nezuko, the sole survivor, has been transformed into a demon herself.',
-    cover_image: 'https://cdn.myanimelist.net/images/anime/1286/99889.jpg',
-    banner_image: 'https://cdn.myanimelist.net/images/anime/1286/99889.jpg',
+    cover_image: proxyUrl('https://cdn.myanimelist.net/images/anime/1286/99889.jpg'),
+    banner_image: proxyUrl('https://cdn.myanimelist.net/images/anime/1286/99889.jpg'),
     rating: 8.9,
     episodes_count: 26,
     status: 'Completed',
@@ -102,8 +103,8 @@ export const FALLBACK_SEED_ANIME: Anime[] = [
     title: 'Naruto Shippuden',
     slug: 'naruto-shippuden',
     synopsis: 'It has been two and a half years since Naruto Uzumaki left Konohagakure, the Hidden Leaf Village, for intense training following events which fueled his desire to be stronger. Now Akatsuki, the mysterious organization of elite rogue ninja, is closing in on their grand plan.',
-    cover_image: 'https://cdn.myanimelist.net/images/anime/1565/111305.jpg',
-    banner_image: 'https://cdn.myanimelist.net/images/anime/1565/111305.jpg',
+    cover_image: proxyUrl('https://cdn.myanimelist.net/images/anime/1565/111305.jpg'),
+    banner_image: proxyUrl('https://cdn.myanimelist.net/images/anime/1565/111305.jpg'),
     rating: 8.3,
     episodes_count: 500,
     status: 'Completed',
@@ -120,8 +121,8 @@ export const FALLBACK_SEED_ANIME: Anime[] = [
     title: 'Jujutsu Kaisen',
     slug: 'jujutsu-kaisen',
     synopsis: 'Yuji Itadori is a boy with tremendous physical strength, though he lives a completely ordinary high school life. One day, to save a classmate who has been attacked by curses, he eats the finger of Ryomen Sukuna, taking the curse into his own soul.',
-    cover_image: 'https://cdn.myanimelist.net/images/anime/1171/109222.jpg',
-    banner_image: 'https://cdn.myanimelist.net/images/anime/1171/109222.jpg',
+    cover_image: proxyUrl('https://cdn.myanimelist.net/images/anime/1171/109222.jpg'),
+    banner_image: proxyUrl('https://cdn.myanimelist.net/images/anime/1171/109222.jpg'),
     rating: 8.8,
     episodes_count: 24,
     status: 'Completed',
@@ -247,6 +248,8 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         );
         const normalized = approvedOnly.map((item: any) => ({
           ...item,
+          cover_image: proxyUrl(item.cover_image),
+          banner_image: proxyUrl(item.banner_image),
           languages: item.languages || '',
           platform: item.platform || 'Crunchyroll',
           type: item.type || 'TV Series'

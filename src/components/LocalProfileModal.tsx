@@ -321,9 +321,9 @@ export const AVATAR_LIST: AnimeAvatarItem[] = [
   { id: 'char_124_neferpitou', name: 'Neferpitou', tag: 'Hunters', url: 'https://cdn.myanimelist.net/images/characters/10/225647.jpg' },
 ];
 
-const FILTERS = ['All', 'Shonen', 'Ninjas', 'Sorcerers', 'Saiyans', 'Hunters'] as const;
+import { proxyUrl } from '../utils/imgbb';
 
-const proxyUrl = (url: string) => url.startsWith('https://cdn.myanimelist.net/') ? `/api/proxy-image?url=${encodeURIComponent(url)}` : url;
+const FILTERS = ['All', 'Shonen', 'Ninjas', 'Sorcerers', 'Saiyans', 'Hunters'] as const;
 
 // Single Avatar Card component using DiceBear Lorelei SVG API
 const AvatarCard: React.FC<{

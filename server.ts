@@ -61,6 +61,7 @@ app.get('/api/proxy-image', async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*'); // Allow CORS
     res.send(Buffer.from(buffer));
   } catch (err: any) {
+    console.error('Image proxy error:', err);
     res.status(502).send('Failed to fetch image: ' + err.message);
   }
 });
