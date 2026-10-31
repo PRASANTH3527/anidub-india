@@ -13,35 +13,7 @@
  */
 
 // ---> DYNAMIC API BASE URL CONFIGURATION <---
-const rawEnvUrl: string = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDFLARE_API_URL) || '';
-const matchedEnvUrl: string = rawEnvUrl ? (rawEnvUrl.match(/https?:\/\/[^\s\]\)"']+/)?.[0] || rawEnvUrl) : '';
-
-// Allow runtime override via localStorage for easier debugging/config on live Pages sites
-const getOverriddenUrl = () => {
-  try {
-    return localStorage.getItem('cf_api_url_override') || '';
-  } catch {
-    return '';
-  }
-};
-
-/**
- * Default fallback Worker URL used when relative paths and env vars fail.
- * Connects to the standalone Cloudflare Worker deployment.
- */
-/**
- * The base URL for the Cloudflare API.
- * Priority: localStorage Override > Environment Variable > Relative Path ('')
- */
-export const CLOUDFLARE_API_URL: string = (() => {
-  const isProd = import.meta.env?.PROD;
-  const envUrl = ((typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDFLARE_API_URL) || '');
-  const prodUrl = 'https://anime-chat.samayaprasanth0.workers.dev';
-  
-  const finalUrl = isProd ? prodUrl : (envUrl.split(']')[0].replace(/\/+$/, ''));
-  console.log('CLOUDFLARE_API_URL resolution:', { isProd, envUrl, finalUrl });
-  return finalUrl.replace(/\/+$/, '');
-})();
+export const CLOUDFLARE_API_URL: string = 'https://anime-chat.samayaprasanth0.workers.dev';
 
 /**
  * Default fallback Worker URL used when relative paths and env vars fail.
@@ -84,8 +56,16 @@ export function getCloudflareUrl(path: string): string {
   if (!CLOUDFLARE_API_URL || CLOUDFLARE_API_URL.trim() === '') {
     return cleanPath;
   }
-  const cleanBase = CLOUDFLARE_API_URL.replace(/\/+$/, '');
-  return `${cleanBase}${cleanPath}`;
+  // Robust check: Ensure URL is valid before returning. If malformed, fallback to relative path.
+  try {
+    const cleanBase = CLOUDFLARE_API_URL.replace(/\/+$/, '');
+    const fullUrl = `${cleanBase}${cleanPath}`;
+    new URL(fullUrl); // Validate
+    return fullUrl;
+  } catch (e) {
+    console.error('Invalid URL constructed in getCloudflareUrl, falling back to relative path:', { CLOUDFLARE_API_URL, path });
+    return cleanPath;
+  }
 }
 
 /**

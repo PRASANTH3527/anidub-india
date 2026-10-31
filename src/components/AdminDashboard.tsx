@@ -151,6 +151,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   });
 
+  const handleResetApiUrl = () => {
+    try {
+      localStorage.removeItem('cf_api_url_override');
+      setApiUrlOverride('');
+      addTerminalLog('SET', `API Worker URL reset to default (Relative Paths)`);
+      setSuccessMsg('API URL reset! Refreshing catalog...');
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleSaveApiUrlOverride = () => {
     try {
       localStorage.setItem('cf_api_url_override', apiUrlOverride.trim());
@@ -2656,7 +2668,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       onClick={handleSaveApiUrlOverride}
                       className="px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-black uppercase tracking-tighter transition-all cursor-pointer active:scale-95 flex items-center justify-center shrink-0"
                     >
-                      Save &amp; Sync
+                      Save & Sync
+                    </button>
+                    <button 
+                      onClick={handleResetApiUrl}
+                      className="px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[10px] font-black uppercase tracking-tighter transition-all cursor-pointer active:scale-95 flex items-center justify-center shrink-0"
+                    >
+                      Reset
                     </button>
                   </div>
                   <p className="text-[9px] text-neutral-500 italic ml-1">
@@ -2830,7 +2848,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
               <div className="ml-2 text-xs font-mono font-bold text-cyan-300 flex items-center gap-2">
                 <Terminal className="w-3.5 h-3.5 text-cyan-400" />
-                <span>edge-worker@anidub-apiii: ~ (LIVE_STREAM)</span>
+                <span>edge-worker@anime-chat: ~ (LIVE_STREAM)</span>
               </div>
             </div>
             <div className="flex items-center gap-1.5">
@@ -2908,7 +2926,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               })
             )}
             <div className="pt-2 text-cyan-400 flex items-center gap-1.5 text-xs">
-              <span className="text-emerald-400">admin@anidub-apiii</span>
+              <span className="text-emerald-400">admin@anime-chat</span>
               <span className="text-neutral-500">:</span>
               <span className="text-purple-400">~</span>
               <span className="text-neutral-400">$</span>
