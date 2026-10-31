@@ -55,7 +55,14 @@ app.get('/api/proxy-image', async (req, res) => {
   if (!imageUrl) return res.status(400).send('Missing url parameter');
   try {
     const response = await fetch(imageUrl);
-    if (!response.ok) throw new Error('Failed to fetch image');
+    if (!response.ok) {
+      console.warn(`Proxy fetch failed for ${imageUrl} with status: ${response.status} ${response.statusText}`);
+      if (response.status === 404) {
+        console.warn('Image not found, returning placeholder:', imageUrl);
+        return res.redirect('https://i.ibb.co/vzS8G90/default-avatar.png');
+      }
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    }
     const buffer = await response.arrayBuffer();
     res.set('Content-Type', response.headers.get('Content-Type') || 'image/jpeg');
     res.set('Access-Control-Allow-Origin', '*'); // Allow CORS
