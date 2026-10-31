@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Plus, Send, CheckCircle2, Upload, X, Image as ImageIcon } from 'lucide-react';
+import { useToast } from './Toast';
 
 export interface FeedbackSectionProps {
   onSubmitDub?: () => void;

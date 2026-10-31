@@ -24,14 +24,15 @@ interface TierDefinition {
   bgGradient: string;
   borderColor: string;
   glowColor: string;
+  textClass: string;
 }
 
 const TIERS: TierDefinition[] = [
-  { id: 'S', label: 'S', bgGradient: 'from-red-600 via-rose-600 to-pink-600', borderColor: 'border-red-500/50', glowColor: 'shadow-[0_0_25px_rgba(239,68,68,0.25)]' },
-  { id: 'A', label: 'A', bgGradient: 'from-amber-500 via-orange-600 to-red-500', borderColor: 'border-amber-500/50', glowColor: 'shadow-[0_0_25px_rgba(245,158,11,0.25)]' },
-  { id: 'B', label: 'B', bgGradient: 'from-yellow-400 via-amber-500 to-orange-500', borderColor: 'border-yellow-500/50', glowColor: 'shadow-[0_0_25px_rgba(234,179,8,0.25)]' },
-  { id: 'C', label: 'C', bgGradient: 'from-emerald-500 via-teal-600 to-cyan-600', borderColor: 'border-emerald-500/50', glowColor: 'shadow-[0_0_25px_rgba(16,185,129,0.25)]' },
-  { id: 'D', label: 'D', bgGradient: 'from-blue-500 via-indigo-600 to-purple-600', borderColor: 'border-blue-500/50', glowColor: 'shadow-[0_0_25px_rgba(59,130,246,0.25)]' },
+  { id: 'S', label: 'S', bgGradient: 'from-red-600 via-rose-600 to-pink-600', borderColor: 'border-red-500/50', glowColor: 'shadow-[0_0_25px_rgba(239,68,68,0.25)]', textClass: 'text-white font-black' },
+  { id: 'A', label: 'A', bgGradient: 'from-amber-500 via-orange-600 to-red-500', borderColor: 'border-amber-500/50', glowColor: 'shadow-[0_0_25px_rgba(245,158,11,0.25)]', textClass: 'text-white font-black' },
+  { id: 'B', label: 'B', bgGradient: 'from-yellow-400 via-amber-500 to-orange-500', borderColor: 'border-yellow-500/50', glowColor: 'shadow-[0_0_25px_rgba(234,179,8,0.25)]', textClass: 'text-black font-black' },
+  { id: 'C', label: 'C', bgGradient: 'from-emerald-500 via-teal-600 to-cyan-600', borderColor: 'border-emerald-500/50', glowColor: 'shadow-[0_0_25px_rgba(16,185,129,0.25)]', textClass: 'text-white font-black' },
+  { id: 'D', label: 'D', bgGradient: 'from-blue-500 via-indigo-600 to-purple-600', borderColor: 'border-blue-500/50', glowColor: 'shadow-[0_0_25px_rgba(59,130,246,0.25)]', textClass: 'text-white font-black' },
 ];
 
 export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({

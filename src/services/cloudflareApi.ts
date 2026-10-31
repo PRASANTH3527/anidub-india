@@ -130,6 +130,7 @@ class CloudflareApiService {
 
     const qs = queryParams.toString();
     const endpoint = `${CLOUDFLARE_ENDPOINTS.CATALOG}${qs ? `?${qs}` : ''}`;
+    const url = getCloudflareUrl(endpoint);
 
     const res = await this.smartFetch(endpoint, {
       method: 'GET',
