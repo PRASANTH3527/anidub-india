@@ -94,7 +94,7 @@ const SEED_ANIME = [
 
 function getCorsHeaders(request) {
   const origin = request ? (request.headers.get("Origin") || request.headers.get("origin")) : null;
-  const allowedOrigins = ["http://localhost:3000", "https://anidub-india-a1y.pages.dev"];
+  const allowedOrigins = ["http://localhost:3000", "https://anime-chat.samayaprasanth0.workers.dev", "https://anidub-india-a1y.pages.dev"];
   const headers = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, x-device-id, x-requested-with, Accept, Origin",

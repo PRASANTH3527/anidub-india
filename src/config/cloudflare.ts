@@ -33,16 +33,10 @@ const getOverriddenUrl = () => {
  * The base URL for the Cloudflare API.
  * Priority: localStorage Override > Environment Variable > Relative Path ('')
  */
-export const CLOUDFLARE_API_URL: string = (() => {
-  const override = getOverriddenUrl();
-  if (override) return override.replace(/\/+$/, '');
-  
-  if (false && matchedEnvUrl) return matchedEnvUrl.replace(/\/+$/, '');
-  
-  // If we're in AI Studio development (localhost:3000), default to relative paths
-  // which will be handled by our server.ts backend proxy.
-  return '';
-})().replace(/\/+$/, '');
+export const CLOUDFLARE_API_URL: string = (
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDFLARE_API_URL) ||
+  (import.meta.env?.PROD ? 'https://anime-chat.samayaprasanth0.workers.dev' : '')
+).replace(/\/+$/, '');
 
 /**
  * Default fallback Worker URL used when relative paths and env vars fail.

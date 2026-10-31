@@ -88,7 +88,7 @@ class CloudflareApiService {
         errorDetail = `Network error or CORS block (Check if ${url} is reachable and CORS headers are correct)`;
       }
 
-      console.error(`[API Fetch Failure] ${url}: ${errorDetail}`);
+      console.error(`[API Fetch Failure] ${url}:`, err);
       
       // If network fails and we are NOT already on the fallback URL, retry with absolute fallback
       if (!isFallbackUrl && DEFAULT_FALLBACK_WORKER_URL) {

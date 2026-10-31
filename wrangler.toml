@@ -1,4 +1,4 @@
-name = "anidub-apiii"
+name = "anime-chat"
 main = "worker.js"
 compatibility_date = "2024-10-24"
 
@@ -18,7 +18,7 @@ bindings = [{ name = "CHAT_ROOM", class_name = "ChatRoom" }]
 
 [[migrations]]
 tag = "v1"
-new_classes = ["ChatRoom"]
+new_sqlite_classes = ["ChatRoom"]
 
 [vars]
 ENVIRONMENT = "production"
