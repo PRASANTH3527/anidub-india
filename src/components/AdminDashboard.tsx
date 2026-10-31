@@ -141,6 +141,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTerminalLogs(prev => [newEntry, ...prev.slice(0, 59)]);
   };
 
+  // Cloud Infrastructure Settings
+  const [apiUrlOverride, setApiUrlOverride] = useState(() => {
+    try {
+      return localStorage.getItem('cf_api_url_override') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const handleSaveApiUrlOverride = () => {
+    try {
+      localStorage.setItem('cf_api_url_override', apiUrlOverride.trim());
+      addTerminalLog('SET', `API Worker URL updated to: ${apiUrlOverride || 'Relative Paths'}`);
+      setSuccessMsg('API URL configuration saved! Refreshing catalog...');
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Data Health states
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [healthChecked, setHealthChecked] = useState(false);
@@ -1671,9 +1691,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {apiError && (
-          <div className="rounded-2xl p-4 bg-red-950/80 border border-red-500/40 text-red-300 text-xs font-semibold mb-4 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-400" />
-            <span>Failed to reach anime catalog API. Operating in offline/cached session.</span>
+          <div className="rounded-2xl p-4 bg-red-950/80 border border-red-500/40 text-red-300 text-xs font-semibold mb-4 flex flex-col gap-2 shadow-lg animate-in fade-in zoom-in-95 duration-300">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400" />
+              <span>Failed to reach anime catalog API. Operating in offline/cached session.</span>
+            </div>
+            {terminalLogs.length > 0 && terminalLogs[0].level === 'ERR' && (
+              <div className="mt-1 p-2 rounded-lg bg-black/40 border border-white/5 font-mono text-[10px] text-red-400 break-all">
+                {terminalLogs[0].msg}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2611,22 +2638,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Topology Info Card */}
-              <div className="p-4 rounded-xl bg-[#07090e]/80 border border-white/10 space-y-2 font-mono text-xs">
-                <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                  <span className="text-neutral-400">Worker Hostname:</span>
-                  <span className="text-cyan-300 font-semibold">{CLOUDFLARE_API_URL || 'https://anidub-apiii.samayaprasanth0.workers.dev'}</span>
+              {/* Topology Info Card with Editable Worker Hostname */}
+              <div className="p-5 rounded-2xl bg-[#07090e]/80 border border-white/10 space-y-4 shadow-inner">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 ml-1">
+                    API Worker Hostname
+                  </label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={apiUrlOverride}
+                      onChange={(e) => setApiUrlOverride(e.target.value)}
+                      placeholder="e.g. https://your-worker.workers.dev (Leave empty for relative paths)"
+                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-cyan-300 font-mono focus:border-purple-500/50 outline-none transition-all"
+                    />
+                    <button 
+                      onClick={handleSaveApiUrlOverride}
+                      className="px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-black uppercase tracking-tighter transition-all cursor-pointer active:scale-95 flex items-center justify-center shrink-0"
+                    >
+                      Save &amp; Sync
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-neutral-500 italic ml-1">
+                    Tip: Use an absolute URL if your frontend and worker are on different subdomains.
+                  </p>
                 </div>
-                <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                  <span className="text-neutral-400">KV / D1 Binding:</span>
-                  <span className="text-purple-300 font-semibold">ANIME_DB (ID: 4d1a822ed4a04cad809f79f38ab4d96c)</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-neutral-400">Edge Network:</span>
-                  <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                    <span>Live Anycast Production Cluster</span>
-                  </span>
+
+                <div className="h-px bg-white/5 mx-2" />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-[10px]">
+                  <div className="space-y-1">
+                    <span className="text-neutral-500 block">D1 Database Binding</span>
+                    <span className="text-purple-300 font-bold block bg-purple-950/20 rounded-lg px-2 py-1 border border-purple-500/10">
+                      DB (ID: 75f053ab...9426)
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-neutral-500 block">Edge Connectivity</span>
+                    <div className="flex items-center gap-2 bg-emerald-950/20 rounded-lg px-2 py-1 border border-emerald-500/10">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-emerald-400 font-bold">Live Production Anycast</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 

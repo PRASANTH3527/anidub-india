@@ -101,6 +101,13 @@ class CloudflareApiService {
       throw new Error(`Cloudflare API fetch failed (${res.status}) at ${url}: ${errText || res.statusText}`);
     }
 
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const bodyText = await res.text().catch(() => 'no body');
+      console.error(`[API Error] Expected JSON but received ${contentType} from ${url}. Body:`, bodyText);
+      throw new Error(`Cloudflare API returned non-JSON response (${contentType}) from ${url}. Check if the backend is correctly deployed.`);
+    }
+
     const json = await res.json();
     const data = json.data || (Array.isArray(json) ? json : []);
     const pagination = json.pagination || {

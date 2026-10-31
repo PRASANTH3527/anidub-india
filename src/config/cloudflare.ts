@@ -16,13 +16,20 @@
 const rawEnvUrl: string = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDFLARE_API_URL) || '';
 const matchedEnvUrl: string = rawEnvUrl ? (rawEnvUrl.match(/https?:\/\/[^\s\]\)"']+/)?.[0] || rawEnvUrl) : '';
 
+// Allow runtime override via localStorage for easier debugging/config on live Pages sites
+const getOverriddenUrl = () => {
+  try {
+    return localStorage.getItem('cf_api_url_override') || '';
+  } catch {
+    return '';
+  }
+};
+
 /**
  * The base URL for the Cloudflare API.
- * Defaults to an empty string ('') which ensures relative path routing (e.g., /api/anime).
- * Relative paths are highly recommended for Cloudflare Pages + Functions to avoid CORS issues
- * and ensure requests stay within the same Edge deployment.
+ * Priority: localStorage Override > Environment Variable > Relative Path ('')
  */
-export const CLOUDFLARE_API_URL: string = matchedEnvUrl.replace(/\/+$/, '');
+export const CLOUDFLARE_API_URL: string = (getOverriddenUrl() || matchedEnvUrl).replace(/\/+$/, '');
 
 // Optional: Cloudflare D1 Database binding identifier from wrangler.toml
 export const CLOUDFLARE_D1_DATABASE_NAME = 'anime-hub-db';

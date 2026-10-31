@@ -251,16 +251,85 @@ export default {
         });
       }
 
-      // Catalog / Default API fallback
+      // 3. GET /api/anime (Catalog with pagination & search)
       if (path === "/api/anime" && method === "GET") {
-        let catalog = [];
-        if (env && env.ANIME_DB && typeof env.ANIME_DB.get === 'function') {
-          try {
+        try {
+          const page = parseInt(url.searchParams.get('page') || '1');
+          const limit = parseInt(url.searchParams.get('limit') || '8');
+          const offset = (page - 1) * limit;
+          const genre = url.searchParams.get('genre');
+          const status = url.searchParams.get('status');
+          const search = url.searchParams.get('search');
+          const sort = url.searchParams.get('sort') || 'popularity';
+
+          if (env.DB) {
+            let whereClauses = [];
+            let params = [];
+            if (genre && genre !== 'All') {
+              whereClauses.push("genres LIKE ?");
+              params.push(`%${genre}%`);
+            }
+            if (status && status !== 'All') {
+              whereClauses.push("status = ?");
+              params.push(status);
+            }
+            if (search) {
+              whereClauses.push("(title LIKE ? OR synopsis LIKE ? OR genres LIKE ?)");
+              params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+            }
+            const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+            let orderSql = "ORDER BY popularity DESC";
+            if (sort === 'rating') orderSql = "ORDER BY rating DESC";
+            else if (sort === 'newest') orderSql = "ORDER BY year DESC, id DESC";
+            else if (sort === 'title') orderSql = "ORDER BY title ASC";
+
+            const countRes = await env.DB.prepare(`SELECT COUNT(*) as total FROM anime ${whereSql}`).bind(...params).first();
+            const total = countRes ? Number(countRes.total) : 0;
+
+            if (total > 0) {
+              const queryParams = [...params, limit, offset];
+              const dataRes = await env.DB.prepare(`SELECT * FROM anime ${whereSql} ${orderSql} LIMIT ? OFFSET ?`).bind(...queryParams).all();
+              return jsonResponse({
+                success: true,
+                data: dataRes.results || [],
+                pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 }
+              });
+            }
+          }
+
+          // Fallback to KV if D1 is empty
+          if (env.ANIME_DB) {
             const raw = await env.ANIME_DB.get("anime_catalog", { type: "json" });
-            if (Array.isArray(raw)) catalog = raw;
-          } catch (_) {}
+            if (Array.isArray(raw) && raw.length > 0) {
+              return jsonResponse({
+                success: true,
+                data: raw.slice(offset, offset + limit),
+                pagination: { page, limit, total: raw.length, totalPages: Math.ceil(raw.length / limit) }
+              });
+            }
+          }
+
+          // Ultimate Fallback: SEED ANIME
+          const SEED_ANIME = [
+            { id: 1, title: 'Solo Leveling', slug: 'solo-leveling', synopsis: 'In a world of hunters and monsters...', cover_image: 'https://cdn.myanimelist.net/images/anime/1546/141065.jpg', rating: 8.7, year: 2024, genres: 'Action, Fantasy', platform: 'Crunchyroll' },
+            { id: 2, title: 'Demon Slayer', slug: 'demon-slayer', synopsis: 'Family slaughtered by demons...', cover_image: 'https://cdn.myanimelist.net/images/anime/1286/99889.jpg', rating: 8.9, year: 2019, genres: 'Action, Supernatural', platform: 'Netflix' },
+            { id: 3, title: 'Naruto Shippuden', slug: 'naruto-shippuden', synopsis: 'Intense training follow up...', cover_image: 'https://cdn.myanimelist.net/images/anime/1565/111305.jpg', rating: 8.3, year: 2007, genres: 'Action, Adventure', platform: 'Sony YAY!' },
+            { id: 4, title: 'Jujutsu Kaisen', slug: 'jujutsu-kaisen', synopsis: 'Boy with tremendous strength...', cover_image: 'https://cdn.myanimelist.net/images/anime/1171/109222.jpg', rating: 8.8, year: 2020, genres: 'Action, Supernatural', platform: 'Crunchyroll' }
+          ];
+
+          return jsonResponse({
+            success: true,
+            data: SEED_ANIME.slice(offset, offset + limit),
+            pagination: { 
+              page, 
+              limit, 
+              total: SEED_ANIME.length, 
+              totalPages: Math.ceil(SEED_ANIME.length / limit) 
+            }
+          });
+        } catch (err) {
+          return jsonResponse({ error: err.message }, 500);
         }
-        return jsonResponse({ success: true, count: catalog.length, catalog });
       }
 
       return jsonResponse({ error: `Route not found: ${method} ${path}` }, 404);
