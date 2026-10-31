@@ -17,13 +17,25 @@ export class ChatRoom {
   async fetch(request) {
     const upgradeHeader = request.headers.get("Upgrade");
     if (!upgradeHeader || upgradeHeader !== "websocket") {
-      return new Response("Expected Upgrade: websocket", { status: 426 });
+      // Allow non-websocket requests to pass through (e.g. status checks)
+      return new Response(JSON.stringify({ status: "ChatRoom DO active" }), { 
+        status: 200, 
+        headers: getCorsHeaders(request) 
+      });
     }
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     await this.handleSession(server);
-    return new Response(null, { status: 101, webSocket: client });
+    const response = new Response(null, { status: 101, webSocket: client });
+    
+    // WebSockets don't really have CORS headers in the response in the same way, 
+    // but the handshake might require them depending on the client.
+    const headers = getCorsHeaders(request);
+    for (const [key, value] of Object.entries(headers)) {
+      response.headers.set(key, value);
+    }
+    return response;
   }
 
   async handleSession(webSocket) {
@@ -93,26 +105,14 @@ const SEED_ANIME = [
 ];
 
 function getCorsHeaders(request) {
-  const origin = request ? (request.headers.get("Origin") || request.headers.get("origin")) : null;
-  const allowedOrigins = ["http://localhost:3000", "https://anime-chat.samayaprasanth0.workers.dev", "https://anidub-india-a1y.pages.dev"];
   const headers = {
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, x-device-id, x-requested-with, Accept, Origin",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, x-device-id, x-requested-with, Accept, Origin, Cache-Control, Pragma",
     "Access-Control-Expose-Headers": "Content-Length, Content-Type, Set-Cookie",
-    "Access-Control-Max-Age": "86400",
+    "Access-Control-Allow-Credentials": "false",
     "Vary": "Origin"
   };
-
-  if (origin && allowedOrigins.includes(origin)) {
-    headers["Access-Control-Allow-Origin"] = origin;
-    headers["Access-Control-Allow-Credentials"] = "true";
-  } else {
-    // If origin is not allowed, or missing, we can try to default to the allowed origin
-    // or just not set credentials true. Let's try the primary allowed origin for now.
-    headers["Access-Control-Allow-Origin"] = allowedOrigins[1];
-    headers["Access-Control-Allow-Credentials"] = "true";
-  }
-
   return headers;
 }
 
@@ -158,7 +158,17 @@ export default {
       if (env.CHAT_ROOM) {
         const id = env.CHAT_ROOM.idFromName("global_chat");
         const obj = env.CHAT_ROOM.get(id);
-        return obj.fetch(request);
+        const response = await obj.fetch(request);
+        const headers = getCorsHeaders(request);
+        const newResponse = new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: new Headers(response.headers)
+        });
+        for (const [key, value] of Object.entries(headers)) {
+          newResponse.headers.set(key, value);
+        }
+        return newResponse;
       }
       return jsonResponse({ error: "Durable Object binding missing" }, 503, request);
     }
