@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Plus, Send, CheckCircle2, Upload, X, Image as ImageIcon } from 'lucide-react';
 import { useToast } from './Toast';
+import { cloudflareApi } from '../services/cloudflareApi';
 
 export interface FeedbackSectionProps {
   onSubmitDub?: () => void;
@@ -98,24 +99,15 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
         formData.append('screenshot_data', screenshot);
       }
 
-      const response = await fetch('/api/submit-feedback', {
-        method: 'POST',
-        body: formData
-      });
+      const payload = {
+        name: name.trim() || 'Anonymous',
+        email: email.trim() || '',
+        message: message.trim(),
+        feedback: message.trim(),
+        screenshot: screenshot || null
+      };
 
-      if (!response.ok) {
-        // Fallback JSON POST if FormData fails
-        await fetch('/api/feedback', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            name: name.trim() || 'Anonymous', 
-            email: email.trim() || '', 
-            message: message.trim(),
-            screenshot: screenshot || null
-          })
-        }).catch(() => {});
-      }
+      await cloudflareApi.submitFeedback(payload);
 
       setIsSubmitting(false);
       setSubmitted(true);

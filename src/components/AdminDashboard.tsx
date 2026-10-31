@@ -347,8 +347,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       console.warn('Network notice fetching anime from Cloudflare D1:', err);
       addTerminalLog('ERR', `[ERROR] Failed to fetch catalog from Cloudflare D1: ${err.message}`);
       setApiError(true);
-      setCatalog([]);
-      setAnimes([]);
+      
+      // If we already have catalog data from props, keep it instead of wiping
+      if (catalogList && catalogList.length > 0) {
+        setCatalog(catalogList);
+        setAnimes(catalogList);
+      }
       await fetchPendingItems();
     } finally {
       setLoading(false);

@@ -52,9 +52,14 @@ class CloudflareApiService {
    */
   private async smartFetch(path: string, options: RequestInit = {}): Promise<Response> {
     const url = getCloudflareUrl(path);
+    const fetchOptions: RequestInit = {
+      ...options,
+      credentials: 'include' // Crucial for cross-origin cookie/session support with Worker fallback
+    };
     
     try {
-      const res = await fetch(url, options);
+      console.log(`[API Request] ${options.method || 'GET'} ${url}`);
+      const res = await fetch(url, fetchOptions);
       
       const contentType = res.headers.get('content-type') || '';
       const isJson = contentType.includes('application/json');
@@ -66,21 +71,22 @@ class CloudflareApiService {
 
       // If it's a 404 or non-JSON, and we are using relative paths (CLOUDFLARE_API_URL is empty),
       // retry with the absolute fallback Worker URL.
-      if ((res.status === 404 || !isJson) && !CLOUDFLARE_API_URL) {
+      if ((res.status === 404 || !isJson || !res.ok) && !CLOUDFLARE_API_URL) {
         const fallbackBase = DEFAULT_FALLBACK_WORKER_URL.replace(/\/+$/, '');
         const fallbackUrl = `${fallbackBase}${path.startsWith('/') ? path : '/' + path}`;
-        console.warn(`[API discovery] Path ${url} returned ${res.status}. Retrying with absolute fallback: ${fallbackUrl}`);
-        return await fetch(fallbackUrl, options);
+        console.warn(`[API discovery] Path ${url} returned ${res.status} (JSON: ${isJson}). Retrying with absolute fallback: ${fallbackUrl}`);
+        return await fetch(fallbackUrl, fetchOptions);
       }
 
       return res;
-    } catch (err) {
+    } catch (err: any) {
+      console.warn(`[API Network Error] ${url}: ${err.message}`);
       // If network fails and we are using relative paths, retry with absolute fallback
       if (!CLOUDFLARE_API_URL) {
         const fallbackBase = DEFAULT_FALLBACK_WORKER_URL.replace(/\/+$/, '');
         const fallbackUrl = `${fallbackBase}${path.startsWith('/') ? path : '/' + path}`;
         console.warn(`[API discovery] Network failed for ${url}. Retrying with absolute fallback: ${fallbackUrl}`);
-        return await fetch(fallbackUrl, options);
+        return await fetch(fallbackUrl, fetchOptions);
       }
       throw err;
     }
@@ -461,6 +467,75 @@ class CloudflareApiService {
       console.warn('Failed to fetch user stats from server:', err);
     }
     return { reviewCount: 0, voteCount: 0 };
+  }
+
+  /**
+   * ADMIN: Verifies current session token
+   */
+  public async verifyAdmin(): Promise<boolean> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.VERIFY_ADMIN, {
+        headers: this.getHeaders(true)
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * ADMIN: Authenticates with passphrase
+   */
+  public async loginAdmin(password: string): Promise<{ success: boolean; token?: string }> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.LOGIN_ADMIN, {
+        method: 'POST',
+        headers: this.getHeaders(false),
+        body: JSON.stringify({ password })
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      return { success: false };
+    } catch (err) {
+      console.error('Admin login error:', err);
+      return { success: false };
+    }
+  }
+
+  /**
+   * WATCHLIST: Toggles an anime in the user's watchlist
+   */
+  public async toggleWatchlist(animeId: number | string): Promise<{ success: boolean; watchlisted: boolean }> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.WATCHLIST, {
+        method: 'POST',
+        headers: this.getHeaders(false),
+        body: JSON.stringify({ anime_id: Number(animeId) })
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      return { success: false, watchlisted: false };
+    } catch {
+      return { success: false, watchlisted: false };
+    }
+  }
+
+  /**
+   * FEEDBACK: Submits user feedback or bug report
+   */
+  public async submitFeedback(payload: any): Promise<{ success: boolean }> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.FEEDBACK, {
+        method: 'POST',
+        headers: this.getHeaders(false),
+        body: JSON.stringify(payload)
+      });
+      return { success: res.ok };
+    } catch {
+      return { success: false };
+    }
   }
 }
 

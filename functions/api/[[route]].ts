@@ -146,15 +146,24 @@ async function sendTelegramAlert(env: Env, text: string, photoUrl?: string) {
   }
 }
 
-function jsonResponse(data: any, status = 200) {
+function jsonResponse(data: any, status = 200, request?: Request) {
+  const origin = request ? (request.headers.get("Origin") || request.headers.get("origin") || "*") : "*";
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token, x-device-id'
+  };
+
+  if (origin !== "*") {
+    headers['Access-Control-Allow-Origin'] = origin;
+    headers['Access-Control-Allow-Credentials'] = 'true';
+  } else {
+    headers['Access-Control-Allow-Origin'] = '*';
+  }
+
   return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
-    }
+    headers
   });
 }
 

@@ -149,12 +149,7 @@ export default function App() {
   const handleToggleWatchlist = async (animeId: number) => {
     const idNum = Number(animeId);
     try {
-      const res = await fetch(getCloudflareUrl('/api/watchlist'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ anime_id: idNum })
-      });
-      const data = await res.json();
+      const data = await cloudflareApi.toggleWatchlist(idNum);
       if (data.watchlisted) {
         setWatchlist(prev => Array.from(new Set([...prev.map(Number), idNum])));
       } else {
@@ -175,17 +170,15 @@ export default function App() {
   useEffect(() => {
     const token = localStorage.getItem('cf_admin_token');
     if (token) {
-      fetch('/api/admin/verify', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      }).then(res => {
-        if (res.ok) {
+      cloudflareApi.verifyAdmin().then(isValid => {
+        if (isValid) {
           setIsAdminAuthenticated(true);
         } else {
           localStorage.removeItem('cf_admin_token');
           setIsAdminAuthenticated(false);
           if (activeTab === 'admin') setActiveTab('home');
         }
-      }).catch(() => {});
+      });
     }
   }, []);
 
@@ -194,13 +187,8 @@ export default function App() {
     setAdminPasswordLoading(true);
     setAdminPasswordError(false);
     try {
-      const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: adminPasswordInput })
-      });
-      const data = await res.json();
-      if (res.ok && data.success && data.token) {
+      const data = await cloudflareApi.loginAdmin(adminPasswordInput);
+      if (data.success && data.token) {
         localStorage.setItem('cf_admin_token', data.token);
         setIsAdminAuthenticated(true);
         setActiveTab('admin');
