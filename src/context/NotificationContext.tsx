@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from '../components/Toast';
 import { ActivityType, formatNotificationTitle, formatNotificationBody } from '../utils/notifications';
+import { cloudflareApi } from '../services/cloudflareApi';
+import { getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
 
 export interface NotificationItem {
   id: string | number;
@@ -224,7 +226,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (!isMounted) return;
 
       try {
-        const sse = new EventSource('/api/notifications/stream');
+        const sseUrl = getCloudflareUrl('/api/notifications/stream');
+        const sse = new EventSource(sseUrl);
         eventSourceRef.current = sse;
 
         sse.onopen = () => {
@@ -277,7 +280,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     let wsActive = true;
     try {
-      const ws = new WebSocket('wss://anime-chat.samayaprasanth0.workers.dev/ws');
+      const ws = new WebSocket(getCloudflareWsUrl('/ws'));
       wsRef.current = ws;
 
       ws.onmessage = (event) => {
@@ -306,6 +309,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
         } catch {}
       };
+      ws.onerror = () => {
+        wsActive = false;
+        console.warn('WS connection failed, skipping.');
+      };
     } catch {}
 
     return () => {
@@ -320,30 +327,26 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     const fetchRecent = async () => {
       try {
-        const res = await fetch('/api/notifications/recent');
-        if (res.ok) {
-          const data = await res.json();
-          const list = data.notifications || data.data || [];
-          if (Array.isArray(list) && list.length > 0) {
-            setNotifications(prev => {
-              const ids = new Set(prev.map(p => p.id));
-              const newItems = list.filter((item: any) => !ids.has(item.id)).map((item: any) => ({
-                id: item.id,
-                type: item.type || 'system',
-                title: item.title,
-                message: item.message,
-                user: item.user,
-                anime_id: item.anime_id,
-                anime_title: item.anime_title,
-                rating: item.rating,
-                language: item.language,
-                link: item.link,
-                timestamp: item.created_at ? new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent',
-                read: true
-              }));
-              return [...prev, ...newItems].slice(0, 50);
-            });
-          }
+        const list = await cloudflareApi.fetchRecentNotifications();
+        if (Array.isArray(list) && list.length > 0) {
+          setNotifications(prev => {
+            const ids = new Set(prev.map(p => p.id));
+            const newItems = list.filter((item: any) => !ids.has(item.id)).map((item: any) => ({
+              id: item.id,
+              type: item.type || 'system',
+              title: item.title,
+              message: item.message,
+              user: item.user,
+              anime_id: item.anime_id,
+              anime_title: item.anime_title,
+              rating: item.rating,
+              language: item.language,
+              link: item.link,
+              timestamp: item.created_at ? new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent',
+              read: true
+            }));
+            return [...prev, ...newItems].slice(0, 50);
+          });
         }
       } catch {}
     };
@@ -367,7 +370,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const triggerTestNotification = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications/test', {
+      const res = await fetch(getCloudflareUrl('/api/notifications/test'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

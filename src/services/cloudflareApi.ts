@@ -54,39 +54,57 @@ class CloudflareApiService {
     const url = getCloudflareUrl(path);
     const fetchOptions: RequestInit = {
       ...options,
-      credentials: 'include' // Crucial for cross-origin cookie/session support with Worker fallback
+      credentials: 'include'
     };
     
     try {
-      console.log(`[API Request] ${options.method || 'GET'} ${url}`);
       const res = await fetch(url, fetchOptions);
       
       const contentType = res.headers.get('content-type') || '';
       const isJson = contentType.includes('application/json');
 
-      // If we got a successful JSON response, return it immediately
       if (res.ok && isJson) {
         return res;
       }
 
-      // If it's a 404 or non-JSON, and we are using relative paths (CLOUDFLARE_API_URL is empty),
-      // retry with the absolute fallback Worker URL.
-      if ((res.status === 404 || !isJson || !res.ok) && !CLOUDFLARE_API_URL) {
+      // If it's a 404 or non-JSON, and we are NOT already on the fallback URL, retry with the absolute fallback Worker URL.
+      const isFallbackUrl = url.startsWith(DEFAULT_FALLBACK_WORKER_URL);
+      if ((res.status === 404 || !isJson || !res.ok) && !isFallbackUrl && DEFAULT_FALLBACK_WORKER_URL) {
         const fallbackBase = DEFAULT_FALLBACK_WORKER_URL.replace(/\/+$/, '');
         const fallbackUrl = `${fallbackBase}${path.startsWith('/') ? path : '/' + path}`;
-        console.warn(`[API discovery] Path ${url} returned ${res.status} (JSON: ${isJson}). Retrying with absolute fallback: ${fallbackUrl}`);
-        return await fetch(fallbackUrl, fetchOptions);
+        
+        if (fallbackUrl !== url) {
+          console.warn(`[API discovery] Path ${url} returned ${res.status} (JSON: ${isJson}). Retrying with absolute fallback: ${fallbackUrl}`);
+          return await fetch(fallbackUrl, fetchOptions);
+        }
       }
 
       return res;
     } catch (err: any) {
-      console.warn(`[API Network Error] ${url}: ${err.message}`);
-      // If network fails and we are using relative paths, retry with absolute fallback
-      if (!CLOUDFLARE_API_URL) {
+      const isFallbackUrl = url.startsWith(DEFAULT_FALLBACK_WORKER_URL);
+      
+      // Detailed error message for diagnostics
+      let errorDetail = err.message || 'Unknown network error';
+      if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        errorDetail = `Network error or CORS block (Check if ${url} is reachable and CORS headers are correct)`;
+      }
+
+      console.error(`[API Fetch Failure] ${url}: ${errorDetail}`);
+      
+      // If network fails and we are NOT already on the fallback URL, retry with absolute fallback
+      if (!isFallbackUrl && DEFAULT_FALLBACK_WORKER_URL) {
         const fallbackBase = DEFAULT_FALLBACK_WORKER_URL.replace(/\/+$/, '');
         const fallbackUrl = `${fallbackBase}${path.startsWith('/') ? path : '/' + path}`;
-        console.warn(`[API discovery] Network failed for ${url}. Retrying with absolute fallback: ${fallbackUrl}`);
-        return await fetch(fallbackUrl, fetchOptions);
+        
+        if (fallbackUrl !== url) {
+          console.warn(`[API discovery] Primary fetch failed for ${url}. Retrying with absolute fallback: ${fallbackUrl}`);
+          try {
+            return await fetch(fallbackUrl, fetchOptions);
+          } catch (fallbackErr: any) {
+            console.error(`[API Fallback Failure] ${fallbackUrl}: ${fallbackErr.message}`);
+            throw new Error(`Critical API Failure: Both primary and fallback endpoints are unreachable. ${fallbackErr.message}`);
+          }
+        }
       }
       throw err;
     }
@@ -504,6 +522,24 @@ class CloudflareApiService {
   }
 
   /**
+   * WATCHLIST: Fetches the user's watchlist from Cloudflare D1
+   */
+  public async fetchWatchlist(): Promise<any[]> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.WATCHLIST, {
+        headers: this.getHeaders(false)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.watchlist || data.data || [];
+      }
+    } catch (err) {
+      console.warn('Failed to fetch watchlist:', err);
+    }
+    return [];
+  }
+
+  /**
    * WATCHLIST: Toggles an anime in the user's watchlist
    */
   public async toggleWatchlist(animeId: number | string): Promise<{ success: boolean; watchlisted: boolean }> {
@@ -531,6 +567,263 @@ class CloudflareApiService {
         method: 'POST',
         headers: this.getHeaders(false),
         body: JSON.stringify(payload)
+      });
+      return { success: res.ok };
+    } catch {
+      return { success: false };
+    }
+  }
+
+  /**
+   * CHAT: Fetches recent community chat messages
+   */
+  public async fetchChatHistory(): Promise<any[]> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data) ? data : (data.messages || data.data || []);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch chat history:', err);
+    }
+    return [];
+  }
+
+  /**
+   * CHAT: Sends a new message or review to the community chat
+   */
+  public async sendChatMessage(payload: any): Promise<{ success: boolean; message?: any }> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
+        method: 'POST',
+        headers: this.getHeaders(false),
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('Failed to send chat message:', err);
+    }
+    return { success: false };
+  }
+
+  /**
+   * RATE: Submits a star rating for an anime
+   */
+  public async rateAnime(id: number | string, rating: number): Promise<{ success: boolean; rating: number }> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.RATE(id), {
+        method: 'POST',
+        headers: this.getHeaders(false),
+        body: JSON.stringify({ rating })
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      throw new Error('Failed to submit rating');
+    } catch (err: any) {
+      console.error('Rate anime error:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * REVIEWS: Submits a new review for an anime
+   */
+  public async submitReview(id: number | string, payload: any): Promise<{ success: boolean; message?: string }> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.ANIME_REVIEWS(id), {
+        method: 'POST',
+        headers: this.getHeaders(false),
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      throw new Error('Failed to submit review');
+    } catch (err: any) {
+      console.error('Submit review error:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * REVIEWS: Fetches reviews for a specific anime
+   */
+  public async fetchReviews(id: number | string): Promise<any[]> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.ANIME_REVIEWS(id), {
+        headers: this.getHeaders(false)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.reviews || data.data || (Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.warn(`Failed to fetch reviews for anime ${id}:`, err);
+    }
+    return [];
+  }
+
+  /**
+   * NOTIFICATIONS: Fetches recent activity notifications
+   */
+  public async fetchRecentNotifications(): Promise<any[]> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.NOTIFICATIONS, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.notifications || data.data || [];
+      }
+    } catch (err) {
+      console.warn('Failed to fetch notifications:', err);
+    }
+    return [];
+  }
+
+  /**
+   * REPORT: Submits an issue report for an anime
+   */
+  public async reportIssue(payload: { animeTitle: string; reason: string; notes?: string }): Promise<{ success: boolean; deliveredToTelegram: boolean }> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.REPORT, {
+        method: 'POST',
+        headers: this.getHeaders(false),
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      throw new Error('Failed to submit report');
+    } catch (err: any) {
+      console.error('Report issue error:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * TELEGRAM: Fetches bot configuration status
+   */
+  public async fetchTelegramStatus(): Promise<any> {
+    try {
+      const res = await this.smartFetch('/api/telegram/status');
+      if (res.ok) return await res.json();
+    } catch (err) {
+      console.warn('Failed to fetch Telegram status:', err);
+    }
+    return { configured: false };
+  }
+
+  /**
+   * TELEGRAM: Updates bot credentials
+   */
+  public async updateTelegramSettings(payload: { token: string; chatId: string }): Promise<any> {
+    const res = await this.smartFetch('/api/telegram/settings', {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  }
+
+  /**
+   * TELEGRAM: Sends a test notification
+   */
+  public async testTelegram(payload: any = {}): Promise<any> {
+    const res = await this.smartFetch('/api/telegram/test', {
+      method: 'POST',
+      headers: this.getHeaders(false),
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  }
+
+  /**
+   * FEEDBACK: Fetches all user feedback
+   */
+  public async fetchFeedback(): Promise<any[]> {
+    try {
+      const res = await this.smartFetch('/api/feedback');
+      if (res.ok) {
+        const data = await res.json();
+        return data.feedback || [];
+      }
+    } catch (err) {
+      console.warn('Failed to fetch feedback:', err);
+    }
+    return [];
+  }
+
+  /**
+   * ANALYTICS: Fetches edge performance telemetry
+   */
+  public async fetchAnalytics(): Promise<any> {
+    try {
+      const res = await this.smartFetch('/api/analytics');
+      if (res.ok) return await res.json();
+    } catch (err) {
+      console.warn('Failed to fetch analytics:', err);
+    }
+    return { totalRequests: 0, cacheHitRatio: '0%', avgLatencyMs: '0ms' };
+  }
+
+  /**
+   * CLOUDFLARE: Fetches D1 and ImgBB ecosystem status
+   */
+  public async fetchCloudflareStatus(): Promise<any> {
+    try {
+      const res = await this.smartFetch('/api/cloudflare/status');
+      if (res.ok) return await res.json();
+    } catch (err) {
+      console.warn('Failed to fetch CF status:', err);
+    }
+    return null;
+  }
+
+  /**
+   * D1: Executes a raw SQL query on the edge database
+   */
+  public async executeD1Query(sql: string): Promise<any> {
+    const res = await this.smartFetch('/api/cloudflare/d1/query', {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ sql })
+    });
+    return await res.json();
+  }
+
+  /**
+   * ADMIN: Logs out and clears session
+   */
+  public async logoutAdmin(): Promise<boolean> {
+    try {
+      const token = this.getAdminToken();
+      if (token && token !== 'admin_secret') {
+        await this.smartFetch('/api/admin/logout', {
+          method: 'POST',
+          headers: this.getHeaders(true)
+        }).catch(() => {});
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * ADMIN: Resets the D1 database to initial state (Seed data)
+   */
+  public async resetDatabase(): Promise<{ success: boolean }> {
+    try {
+      const res = await this.smartFetch('/api/admin/reset-db', {
+        method: 'POST',
+        headers: this.getHeaders(true)
       });
       return { success: res.ok };
     } catch {

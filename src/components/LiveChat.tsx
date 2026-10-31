@@ -13,7 +13,8 @@ import {
   ShieldCheck,
   Volume2
 } from 'lucide-react';
-import { CLOUDFLARE_API_URL, getCloudflareUrl } from '../config/cloudflare';
+import { CLOUDFLARE_API_URL, getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
+import { cloudflareApi } from '../services/cloudflareApi';
 import { generateRandomUsername } from '../utils/randomUser';
 import { formatRelativeTime } from '../utils/timestamps';
 
@@ -171,38 +172,16 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   const fetchChatHistory = useCallback(async () => {
     setIsSyncing(true);
     try {
-      // Try Cloudflare Worker / Express /api/chat endpoint
-      const primaryUrl = getCloudflareUrl('/api/chat');
-      let response: Response | null = null;
-
-      try {
-        response = await fetch(primaryUrl, {
-          headers: { 'Accept': 'application/json' }
+      const data = await cloudflareApi.fetchChatHistory();
+      if (Array.isArray(data) && data.length > 0) {
+        setMessages(prev => {
+          const merged = mergeMessageLists(prev, data);
+          try {
+            localStorage.setItem('cf_community_chat', JSON.stringify(merged));
+          } catch {}
+          return merged;
         });
-      } catch {}
-
-      if (!response || !response.ok) {
-        response = await fetch('/api/chat', {
-          headers: { 'Accept': 'application/json' }
-        }).catch(() => null);
-      }
-
-      if (response && response.ok) {
-        const data = await response.json();
-        const incomingMessages = Array.isArray(data) 
-          ? data 
-          : (data.messages || data.data || []);
-
-        if (Array.isArray(incomingMessages) && incomingMessages.length > 0) {
-          setMessages(prev => {
-            const merged = mergeMessageLists(prev, incomingMessages);
-            try {
-              localStorage.setItem('cf_community_chat', JSON.stringify(merged));
-            } catch {}
-            return merged;
-          });
-          setSyncStatus('History loaded');
-        }
+        setSyncStatus('History loaded');
       }
     } catch (err) {
       console.warn('Could not fetch backend chat history, using local cache:', err);
@@ -242,7 +221,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
       try {
         setConnectionStatus('connecting');
-        const wsUrl = 'wss://anime-chat.samayaprasanth0.workers.dev/ws';
+        const wsUrl = getCloudflareWsUrl('/ws');
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
@@ -379,20 +358,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
     // 3) Persist to Backend D1 / SQLite Database via HTTP POST
     try {
-      const chatApiUrl = getCloudflareUrl('/api/chat');
-      let res = await fetch(chatApiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(() => null);
-
-      if (!res || !res.ok) {
-        await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }).catch(() => {});
-      }
+      await cloudflareApi.sendChatMessage(payload);
     } catch (err) {
       console.warn('Network persistence note:', err);
     }

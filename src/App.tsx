@@ -88,9 +88,7 @@ export default function App() {
   const fetchCatalogList = async () => {
     setIsCatalogLoading(true);
     try {
-      console.log('[Catalog API] Fetching catalog list from Cloudflare Worker...');
       const response = await cloudflareApi.fetchCatalog({ limit: 100 });
-      console.log('[Catalog API] Received response:', response);
       
       const data = response?.data;
       if (data && Array.isArray(data) && data.length > 0) {
@@ -98,14 +96,12 @@ export default function App() {
           item.status !== 'pending' && 
           item.submissionStatus !== 'pending'
         );
-        console.log(`[Catalog API] Loaded ${approvedOnly.length} approved anime records.`);
         setCatalogList(approvedOnly.length > 0 ? approvedOnly : FALLBACK_SEED_ANIME);
       } else {
-        console.warn('[Catalog API] Received empty catalog data, falling back to seed anime.');
         setCatalogList(FALLBACK_SEED_ANIME);
       }
     } catch (err: any) {
-      console.error('[Catalog API Error]: Failed fetching catalog from Cloudflare Worker:', err?.message || err, err);
+      console.error('[Catalog API Error]:', err?.message || err);
       setCatalogList(FALLBACK_SEED_ANIME);
     } finally {
       setIsCatalogLoading(false);
@@ -226,13 +222,7 @@ export default function App() {
   const handleAdminLogout = async () => {
     // Strictly clear all admin related state and storage
     try {
-      const token = localStorage.getItem('cf_admin_token');
-      if (token) {
-        await fetch('/api/admin/logout', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` }
-        }).catch(() => {});
-      }
+      await cloudflareApi.logoutAdmin();
     } catch {}
     
     localStorage.removeItem('cf_admin_token');
@@ -544,8 +534,7 @@ export default function App() {
             key="dub-info-modal"
             isOpen={isDubModalOpen}
             onClose={() => setIsDubModalOpen(false)}
-            onSubmit={(data) => {
-              console.log('Submitted dub info:', data);
+            onSubmit={() => {
               setIsDubModalOpen(false);
             }}
           />

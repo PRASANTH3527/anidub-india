@@ -125,7 +125,7 @@ export const RouletteModal: React.FC<RouletteModalProps> = ({
                   <span className="text-[10px] font-bold uppercase text-neutral-400 mr-1">Dubbed In:</span>
                   {(selectedAnime.languages ? selectedAnime.languages.split(/[,/ ]+/) : ['HIN', 'TAM', 'TEL']).map((lang, idx) => (
                     <span
-                      key={idx}
+                      key={`roulette_lang_${selectedAnime.id}_${lang.trim()}_${idx}`}
                       className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-primary-theme/20 border border-primary-theme/40 text-purple-300"
                     >
                       {lang.trim()}

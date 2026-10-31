@@ -183,7 +183,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
               <div className="absolute bottom-3 right-4 z-10 flex items-center space-x-1.5">
                 {featuredList.slice(0, 4).map((_, idx) => (
                   <button
-                    key={idx}
+                    key={`featured_indicator_${idx}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setFeaturedIndex(idx);
@@ -217,9 +217,9 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
 
               {/* Language Pills */}
               <div className="flex items-center space-x-1">
-                {parseLanguages(featuredAnime.languages).slice(0, 3).map((lang) => (
+                {parseLanguages(featuredAnime.languages).slice(0, 3).map((lang, lIdx) => (
                   <span
-                    key={lang}
+                    key={`featured_lang_${featuredAnime.id}_${lang}_${lIdx}`}
                     className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${getLanguagePillClass(lang)}`}
                   >
                     {lang}
@@ -335,11 +335,11 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
 
         {/* Scrollable Cards Container */}
         <div className="flex gap-3 overflow-x-auto pb-2 pt-1 -mx-4 px-4 scrollbar-none snap-x">
-          {airingNowList.map((anime) => {
+          {airingNowList.map((anime, aIdx) => {
             const langs = parseLanguages(anime.languages);
             return (
               <div
-                key={anime.id}
+                key={`airing_card_${anime.id}_${aIdx}`}
                 onClick={() => onSelectAnime(anime)}
                 className="w-[140px] sm:w-[150px] shrink-0 snap-start bg-[#0e1222] border border-[#1e2338] hover:border-purple-500/50 rounded-[20px] overflow-hidden group cursor-pointer shadow-xl transition-all duration-300 flex flex-col justify-between"
               >
@@ -372,9 +372,9 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                 <div className="p-3 space-y-1.5">
                   {/* Language Pills */}
                   <div className="flex flex-wrap gap-1">
-                    {langs.slice(0, 2).map((l) => (
+                    {langs.slice(0, 2).map((l, lIdx) => (
                       <span
-                        key={l}
+                        key={`airing_lang_${anime.id}_${l}_${lIdx}`}
                         className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${getLanguagePillClass(l)}`}
                       >
                         {l}
@@ -429,13 +429,13 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
 
         {/* 2-Column Responsive Grid */}
         <div className="grid grid-cols-2 gap-3.5">
-          {recentlyUpdatedList.map((anime) => {
+          {recentlyUpdatedList.map((anime, rIdx) => {
             const langs = parseLanguages(anime.languages);
             const isSaved = watchlist.map(Number).includes(Number(anime.id));
 
             return (
               <div
-                key={anime.id}
+                key={`recent_card_${anime.id}_${rIdx}`}
                 onClick={() => onSelectAnime(anime)}
                 className="group bg-[#0e1222] border border-[#1e2338] hover:border-purple-500/50 rounded-[22px] overflow-hidden shadow-xl transition-all duration-300 flex flex-col justify-between cursor-pointer"
               >
@@ -486,9 +486,9 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                   <div className="space-y-1.5">
                     {/* Available Languages Pills */}
                     <div className="flex flex-wrap gap-1">
-                      {langs.slice(0, 3).map((l) => (
+                      {langs.slice(0, 3).map((l, lIdx) => (
                         <span
-                          key={l}
+                          key={`recent_lang_${anime.id}_${l}_${lIdx}`}
                           className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${getLanguagePillClass(l)}`}
                         >
                           {l}

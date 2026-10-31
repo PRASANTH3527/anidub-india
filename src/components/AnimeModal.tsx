@@ -135,7 +135,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
               {langsList.map((lang, idx) => {
                 const badgeColor = DUB_LANGUAGE_COLORS[lang] || 'bg-neutral-800 text-neutral-300 border-neutral-700';
                 return (
-                  <div key={idx} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between ${badgeColor}`}>
+                  <div key={`modal_lang_${anime.id}_${lang}_${idx}`} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between ${badgeColor}`}>
                     <span>{lang} Dub</span>
                     <span className="text-[10px] font-extrabold uppercase">Verified</span>
                   </div>
@@ -204,7 +204,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
             <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">Genres</h4>
             <div className="flex flex-wrap gap-1.5">
               {genresList.map((g, i) => (
-                <span key={i} className="text-[11px] font-medium bg-[#171e2e] text-neutral-300 border border-neutral-800 px-2.5 py-1 rounded-full">
+                <span key={`modal_genre_${anime.id}_${g}_${i}`} className="text-[11px] font-medium bg-[#171e2e] text-neutral-300 border border-neutral-800 px-2.5 py-1 rounded-full">
                   {g}
                 </span>
               ))}

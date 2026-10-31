@@ -143,7 +143,7 @@ export const MoreLikeThisSection: React.FC<MoreLikeThisSectionProps> = ({
                   <div className="flex items-center gap-1">
                     {(anime.languages ? anime.languages.split(/[,/ ]+/) : ['HIN', 'TAM']).slice(0, 3).map((l, i) => (
                       <span
-                        key={i}
+                        key={`more_like_${anime.id}_lang_${i}`}
                         className="text-[9px] font-extrabold px-1.5 py-0.5 rounded transition-colors bg-primary-theme/15 text-purple-300 border border-primary-theme/30"
                       >
                         {l.trim()}

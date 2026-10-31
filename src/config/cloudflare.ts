@@ -29,13 +29,25 @@ const getOverriddenUrl = () => {
  * Default fallback Worker URL used when relative paths and env vars fail.
  * Connects to the standalone Cloudflare Worker deployment.
  */
-export const DEFAULT_FALLBACK_WORKER_URL = 'https://anidub-apiii.samayaprasanth0.workers.dev';
-
 /**
  * The base URL for the Cloudflare API.
  * Priority: localStorage Override > Environment Variable > Relative Path ('')
  */
-export const CLOUDFLARE_API_URL: string = (getOverriddenUrl() || matchedEnvUrl).replace(/\/+$/, '');
+export const CLOUDFLARE_API_URL: string = (() => {
+  const override = getOverriddenUrl();
+  if (override) return override.replace(/\/+$/, '');
+  
+  if (false && matchedEnvUrl) return matchedEnvUrl.replace(/\/+$/, '');
+  
+  // If we're in AI Studio development (localhost:3000), default to relative paths
+  // which will be handled by our server.ts backend proxy.
+  return '';
+})().replace(/\/+$/, '');
+
+/**
+ * Default fallback Worker URL used when relative paths and env vars fail.
+ */
+export const DEFAULT_FALLBACK_WORKER_URL = '';
 
 // Optional: Cloudflare D1 Database binding identifier from wrangler.toml
 export const CLOUDFLARE_D1_DATABASE_NAME = 'anime-hub-db';
@@ -51,13 +63,17 @@ export const CLOUDFLARE_ENDPOINTS = {
   RATE: (id: string | number) => `/api/anime/${id}/rate`,
   WATCHLIST: '/api/watchlist',
   REVIEWS: '/api/reviews',
+  ANIME_REVIEWS: (id: string | number) => `/api/anime/${id}/reviews`,
   FEEDBACK: '/api/feedback',
   UPLOAD: '/api/upload',
   RESET_DB: '/api/admin/reset-db',
   VERIFY_ADMIN: '/api/admin/verify',
   LOGIN_ADMIN: '/api/admin/login',
   EXPORT_CSV: '/api/admin/export-csv',
-  USER_STATS: '/api/user/stats'
+  USER_STATS: '/api/user/stats',
+  CHAT: '/api/chat',
+  NOTIFICATIONS: '/api/notifications',
+  REPORT: '/api/report'
 };
 
 /**
@@ -70,5 +86,18 @@ export function getCloudflareUrl(path: string): string {
     return cleanPath;
   }
   const cleanBase = CLOUDFLARE_API_URL.replace(/\/+$/, '');
+  return `${cleanBase}${cleanPath}`;
+}
+
+/**
+ * Resolves full Cloudflare WebSocket URL.
+ */
+export function getCloudflareWsUrl(path: string): string {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  if (!CLOUDFLARE_API_URL || CLOUDFLARE_API_URL.trim() === '') {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}${cleanPath}`;
+  }
+  const cleanBase = CLOUDFLARE_API_URL.replace(/\/+$/, '').replace(/^http/, 'ws');
   return `${cleanBase}${cleanPath}`;
 }

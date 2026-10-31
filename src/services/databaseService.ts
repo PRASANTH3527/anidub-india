@@ -48,10 +48,7 @@ export interface CustomCollection {
   anime_ids: number[];
   created_at?: string;
 }
-import { getCloudflareUrl } from '../config/cloudflare';
 import { cloudflareApi } from './cloudflareApi';
-
-const API_BASE_URL = '';
 
 type Listener = () => void;
 
@@ -137,10 +134,8 @@ class DatabaseService {
 
   public async getAnimeById(id: number): Promise<AnimeRecord | null> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/anime/${id}`);
-      if (res.ok) {
-        return await res.json();
-      }
+      const data = await cloudflareApi.getAnimeById(id);
+      if (data) return data;
     } catch (err) {
       console.warn(`Failed to fetch anime by id ${id} from API, checking local cache:`, err);
     }
@@ -149,17 +144,12 @@ class DatabaseService {
     return all.find(a => a.id === id) || null;
   }
 
-  public async toggleWatchlist(userId: string, animeId: number): Promise<{ watchlisted: boolean }> {
+  public async toggleWatchlist(_userId: string, animeId: number): Promise<{ watchlisted: boolean }> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/watchlist`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, anime_id: animeId })
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const { success, watchlisted } = await cloudflareApi.toggleWatchlist(animeId);
+      if (success) {
         this.notifyListeners();
-        return data;
+        return { watchlisted };
       }
     } catch (err) {
       console.error('toggleWatchlist error:', err);
@@ -176,13 +166,9 @@ class DatabaseService {
     await this.toggleWatchlist(userId, animeId);
   }
 
-  public async getUserWatchlist(userId: string): Promise<WatchlistEntry[]> {
+  public async getUserWatchlist(_userId: string): Promise<WatchlistEntry[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/watchlist?user_id=${userId}`);
-      if (res.ok) {
-        const data = await res.json();
-        return data.watchlist || [];
-      }
+      return await cloudflareApi.fetchWatchlist() as WatchlistEntry[];
     } catch (err) {
       console.error('getUserWatchlist error:', err);
     }
@@ -191,14 +177,9 @@ class DatabaseService {
 
   public async upvoteAnime(id: number): Promise<{ popularity: number }> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/anime/${id}/vote`, {
-        method: 'POST'
-      });
-      if (res.ok) {
-        const data = await res.json();
-        this.notifyListeners();
-        return data;
-      }
+      const data = await cloudflareApi.upvoteAnime(id);
+      this.notifyListeners();
+      return { popularity: data.popularity || 0 };
     } catch (err) {
       console.error('upvoteAnime error:', err);
     }
@@ -208,15 +189,10 @@ class DatabaseService {
 
   public async addReview(reviewData: Omit<DubReview, 'id' | 'date'>): Promise<DubReview> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/reviews`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reviewData)
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await cloudflareApi.submitReview(reviewData.anime_id, reviewData);
+      if (data.success) {
         this.notifyListeners();
-        return data;
+        return data as any;
       }
     } catch (err) {
       console.error('addReview error:', err);
@@ -233,11 +209,7 @@ class DatabaseService {
 
   public async getReviewsForAnime(animeId: number): Promise<DubReview[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/reviews?anime_id=${animeId}`);
-      if (res.ok) {
-        const data = await res.json();
-        return data.reviews || data || [];
-      }
+      return await cloudflareApi.fetchReviews(animeId);
     } catch (err) {
       console.error('getReviewsForAnime error:', err);
     }
@@ -276,10 +248,7 @@ class DatabaseService {
       this.cache = [];
       this.cacheTimestamp = 0;
       
-      await fetch(`${API_BASE_URL}/api/admin/reset-db`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
+      await cloudflareApi.resetDatabase();
     } catch (err) {
       console.error('clearAllData error:', err);
     }

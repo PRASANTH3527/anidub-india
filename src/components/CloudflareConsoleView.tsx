@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Cloud, Database, Cpu, Terminal, Play, Loader2, CheckCircle2, Shield, Activity, Image as ImageIcon, Copy, Check, Code, Upload } from 'lucide-react';
 import { validateImageUpload } from '../utils/imgbb';
+import { cloudflareApi } from '../services/cloudflareApi';
 
 export const CloudflareConsoleView: React.FC = () => {
   const [statusData, setStatusData] = useState<any>(null);
@@ -22,9 +23,8 @@ export const CloudflareConsoleView: React.FC = () => {
 
   const fetchCloudflareStatus = async () => {
     try {
-      const res = await fetch('/api/cloudflare/status');
-      const data = await res.json();
-      setStatusData(data);
+      const data = await cloudflareApi.fetchCloudflareStatus();
+      if (data) setStatusData(data);
     } catch (err) {
       console.error('Failed to fetch Cloudflare status:', err);
     } finally {
@@ -39,13 +39,8 @@ export const CloudflareConsoleView: React.FC = () => {
     setQueryError('');
     setQueryResult(null);
     try {
-      const res = await fetch('/api/cloudflare/d1/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sql: sqlQuery })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Query failed');
+      const data = await cloudflareApi.executeD1Query(sqlQuery);
+      if (data.error) throw new Error(data.error);
       setQueryResult(data);
       fetchCloudflareStatus();
     } catch (err: any) {
@@ -80,16 +75,7 @@ export const CloudflareConsoleView: React.FC = () => {
     reader.onload = async () => {
       const base64 = reader.result as string;
       try {
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            image: base64,
-            filename: file.name,
-            type: 'console_test'
-          })
-        });
-        const data = await res.json();
+        const data = await cloudflareApi.uploadImage(base64, file.name);
         setTestUploadResult(data);
         fetchCloudflareStatus();
       } catch (err) {
@@ -348,9 +334,9 @@ export const CloudflareConsoleView: React.FC = () => {
                       </tr>
                     ) : (
                       queryResult.results.map((row: any, i: number) => (
-                        <tr key={i} className="border-b border-slate-900/50 hover:bg-slate-900/40">
+                        <tr key={`query_row_${i}`} className="border-b border-slate-900/50 hover:bg-slate-900/40">
                           {Object.values(row).map((val: any, j: number) => (
-                            <td key={j} className="p-3 text-slate-300 truncate max-w-xs font-mono">
+                            <td key={`query_cell_${i}_${j}`} className="p-3 text-slate-300 truncate max-w-xs font-mono">
                               {typeof val === 'object' ? JSON.stringify(val) : String(val)}
                             </td>
                           ))}

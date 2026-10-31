@@ -49,7 +49,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ anime, onSelectAnime, on
       <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10 flex flex-col justify-end z-10 max-w-3xl">
         <div className="flex flex-wrap items-center gap-2 mb-3">
           {genresList.map((g, i) => (
-            <span key={i} className="px-2.5 py-0.5 rounded-md bg-orange-500/20 text-orange-300 text-xs font-semibold border border-orange-500/30">
+            <span key={`hero_genre_${g.trim()}_${i}`} className="px-2.5 py-0.5 rounded-md bg-orange-500/20 text-orange-300 text-xs font-semibold border border-orange-500/30">
               {g.trim()}
             </span>
           ))}

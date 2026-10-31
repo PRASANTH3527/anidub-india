@@ -275,38 +275,40 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // NOTE: Remember to paste/replace your ImgBB API key below (e.g., 'ee6b4e37ae9c228c29b8448483b6591b')
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
     try {
-      const formDataObj = new FormData();
-      formDataObj.append('image', file);
-
-      const apiKey = 'ee6b4e37ae9c228c29b8448483b6591b'; // TODO: Paste your ImgBB API key here
-      const res = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
-        method: 'POST',
-        body: formDataObj
-      });
-      const data = await res.json();
-      if (data && data.success && data.data) {
-        const publicUrl = data.data.display_url || data.data.url;
-        setPoster(publicUrl);
-        setFormData((prev: any) => ({
-          ...prev,
-          poster: publicUrl,
-          cover_image: publicUrl,
-          posterUrl: publicUrl,
-          image: publicUrl
-        }));
-      } else {
-        console.warn('ImgBB API upload failed:', data);
-      }
+      // Use FileReader to convert to base64 for the cloudflareApi proxy
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64String = (reader.result as string).split(',')[1];
+        try {
+          const data = await cloudflareApi.uploadImage(base64String, file.name);
+          if (data && data.success) {
+            const publicUrl = data.display_url || data.url;
+            setPoster(publicUrl);
+            setFormData((prev: any) => ({
+              ...prev,
+              poster: publicUrl,
+              cover_image: publicUrl,
+              posterUrl: publicUrl,
+              image: publicUrl
+            }));
+          } else {
+            console.warn('Cloudflare Proxy upload failed:', data);
+          }
+        } catch (err) {
+          console.error('Cloudflare Proxy upload error:', err);
+        } finally {
+          setIsUploading(false);
+        }
+      };
+      reader.readAsDataURL(file);
     } catch (err) {
-      console.error('ImgBB upload error:', err);
-    } finally {
+      console.error('Image processing error:', err);
       setIsUploading(false);
     }
   };

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, X, ShieldAlert, ArrowRight } from 'lucide-react';
+import { cloudflareApi } from '../services/cloudflareApi';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -19,13 +20,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
     setLoading(true);
     setError(false);
     try {
-      const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
-      });
-      const data = await res.json();
-      if (res.ok && data.success && data.token) {
+      const data = await cloudflareApi.loginAdmin(password);
+      if (data.success && data.token) {
         localStorage.setItem('cf_admin_token', data.token);
         setError(false);
         setPassword('');

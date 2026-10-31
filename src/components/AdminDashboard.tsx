@@ -56,10 +56,11 @@ import {
   Bell
 } from 'lucide-react';
 import { DubInfoModal } from './DubInfoModal';
+import { FALLBACK_SEED_ANIME } from './CatalogView';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { dbService } from '../services/databaseService';
 import { cloudflareApi } from '../services/cloudflareApi';
-import { CLOUDFLARE_API_URL } from '../config/cloudflare';
+import { CLOUDFLARE_API_URL, getCloudflareUrl } from '../config/cloudflare';
 import Papa from 'papaparse';
 
 export interface AdminDashboardProps {
@@ -181,12 +182,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const fetchTelegramStatus = async () => {
     try {
-      const res = await fetch('/api/telegram/status');
-      if (res.ok) {
-        const data = await res.json();
-        setTelegramStatus(data);
-        if (data.chatId && !telegramChatId) setTelegramChatId(data.chatId);
-      }
+      const data = await cloudflareApi.fetchTelegramStatus();
+      setTelegramStatus(data);
+      if (data.chatId && !telegramChatId) setTelegramChatId(data.chatId);
     } catch (_) {}
   };
 
@@ -194,14 +192,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsSavingTelegram(true);
     setTelegramNotice(null);
     try {
-      const token = localStorage.getItem('anidub_admin_token') || 'anidub_admin_authenticated';
-      const res = await fetch('/api/telegram/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
-        body: JSON.stringify({ token: telegramToken, chatId: telegramChatId })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await cloudflareApi.updateTelegramSettings({ token: telegramToken, chatId: telegramChatId });
+      if (data.success) {
         setTelegramNotice({ type: 'success', message: 'Telegram credentials saved successfully!' });
         addTerminalLog('OK', `Telegram credentials updated: chat_id=${telegramChatId}`);
         fetchTelegramStatus();
@@ -220,13 +212,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTelegramNotice(null);
     addTerminalLog('TG', 'Dispatching test notification probe to Telegram API...');
     try {
-      const res = await fetch('/api/telegram/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: telegramToken || undefined, chatId: telegramChatId || undefined })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await cloudflareApi.testTelegram({ token: telegramToken || undefined, chatId: telegramChatId || undefined });
+      if (data.success) {
         setTelegramNotice({ type: 'success', message: 'Test message sent! Check your Telegram channel/group.' });
         addTerminalLog('OK', 'Telegram test notification DELIVERED successfully (HTTP 200)');
       } else {
@@ -265,12 +252,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const fetchFeedback = async () => {
     try {
-      const res = await fetch('/api/feedback');
-      if (res.ok) {
-        const data = await res.json();
-        setFeedbackList(data.feedback || []);
-        addTerminalLog('FEED', `Loaded ${data.feedback?.length || 0} user request tickets`);
-      }
+      const data = await cloudflareApi.fetchFeedback();
+      setFeedbackList(data);
+      addTerminalLog('FEED', `Loaded ${data.length} user request tickets`);
     } catch (err) {
       console.error('Failed to fetch feedback:', err);
     }
@@ -279,11 +263,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const fetchAnalytics = async () => {
     setLoadingAnalytics(true);
     try {
-      const res = await fetch('/api/analytics');
-      if (res.ok) {
-        const data = await res.json();
-        setAnalyticsData(data);
-      }
+      const data = await cloudflareApi.fetchAnalytics();
+      setAnalyticsData(data);
     } catch (err) {
       console.error('Failed to fetch analytics:', err);
     } finally {
@@ -345,13 +326,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await fetchPendingItems();
     } catch (err: any) {
       console.warn('Network notice fetching anime from Cloudflare D1:', err);
-      addTerminalLog('ERR', `[ERROR] Failed to fetch catalog from Cloudflare D1: ${err.message}`);
+      const errorMsg = err.message || 'Unknown API Error';
+      addTerminalLog('ERR', `[CRITICAL] Failed to reach Cloudflare D1: ${errorMsg}`);
       setApiError(true);
       
-      // If we already have catalog data from props, keep it instead of wiping
+      // FALLBACK LOGIC: 
+      // 1. Try to use prop data if available
+      // 2. Try to use local cache if available
+      // 3. Last resort: use SEED data so UI isn't empty
       if (catalogList && catalogList.length > 0) {
         setCatalog(catalogList);
         setAnimes(catalogList);
+      } else {
+        const cached = localStorage.getItem('cf_admin_catalog_cache');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setCatalog(parsed);
+          setAnimes(parsed);
+        } else {
+          // Final fallback to seeds so UI isn't empty
+          setCatalog(FALLBACK_SEED_ANIME);
+          setAnimes(FALLBACK_SEED_ANIME);
+        }
       }
       await fetchPendingItems();
     } finally {
@@ -2566,7 +2562,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {loadingAnalytics ? (
                   Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-2 animate-pulse">
+                    <div key={`analytics_skeleton_${i}`} className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-2 animate-pulse">
                       <div className="h-2 w-20 bg-white/10 rounded" />
                       <div className="h-6 w-16 bg-white/10 rounded" />
                     </div>
@@ -2860,7 +2856,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-neutral-400 hidden sm:inline">PROBES:</span>
               <button
-                onClick={() => addTerminalLog('EDGE', `PING anidub-apiii.samayaprasanth0.workers.dev (RTT 16ms, POP: BOM1)`)}
+                onClick={() => addTerminalLog('EDGE', `PING ${new URL(getCloudflareUrl('/')).hostname} (RTT 14ms, POP: BOM1)`)}
                 className="px-2 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 transition-colors cursor-pointer"
               >
                 PING EDGE

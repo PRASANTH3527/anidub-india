@@ -77,7 +77,7 @@ export const SmartWatchButton: React.FC<SmartWatchButtonProps> = ({
           <span className="text-[8px] font-black uppercase text-neutral-500 tracking-wider">Audio:</span>
           {languages.map((lang, idx) => (
             <span
-              key={idx}
+              key={`smart_watch_${platform}_${lang}_${idx}`}
               className="bg-black/60 text-neutral-300 border border-white/10 px-1.5 py-0.2 rounded text-[8px] font-black uppercase"
             >
               {lang}

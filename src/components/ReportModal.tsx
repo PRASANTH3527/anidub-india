@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Flag, CheckCircle2, AlertTriangle, Send } from 'lucide-react';
+import { cloudflareApi } from '../services/cloudflareApi';
 
 export interface ReportModalProps {
   animeTitle: string;
@@ -29,18 +30,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      // Telegram / Report API endpoint simulation
-      await fetch('/api/report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ animeTitle, reason: selectedReason, notes })
-      }).catch(() => {});
-
-      await fetch('/api/telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `Report on ${animeTitle}: ${selectedReason} - ${notes}` })
-      }).catch(() => {});
+      await cloudflareApi.reportIssue({ animeTitle, reason: selectedReason, notes }).catch(() => {});
     } catch {}
 
     setTimeout(() => {

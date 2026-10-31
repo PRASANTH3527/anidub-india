@@ -233,9 +233,9 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                 <span>Title Suggestions:</span>
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {TITLE_SUGGESTIONS.map((sug) => (
+                {TITLE_SUGGESTIONS.map((sug, sIdx) => (
                   <button
-                    key={sug}
+                    key={`suggestion_${sIdx}`}
                     type="button"
                     onClick={() => setCollectionTitle(sug)}
                     className="text-[11px] px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/50 text-neutral-300 hover:text-white hover:border-primary-theme/60 transition-colors cursor-pointer"
@@ -284,7 +284,7 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                 <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
                   {queueAnime.map((anime, idx) => (
                     <div 
-                      key={`queue_anime_${anime.id}_${idx}`}
+                      key={`queue_item_${anime.id}_${idx}`}
                       className="p-2.5 rounded-2xl bg-neutral-950/80 border border-neutral-800 flex items-center justify-between gap-3 group"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -418,9 +418,9 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
 
                     {/* Bottom-left dub tags */}
                     <div className="absolute bottom-2 left-2 flex flex-wrap gap-1">
-                      {languages.slice(0, 2).map((l: string) => (
+                      {languages.slice(0, 2).map((l, lIdx) => (
                         <span 
-                          key={l}
+                          key={`selectable_lang_${anime.id}_${l}_${lIdx}`}
                           className="bg-black/80 backdrop-blur-md text-[9px] font-bold text-amber-300 px-1.5 py-0.5 rounded shadow"
                         >
                           {l}

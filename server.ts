@@ -14,9 +14,16 @@ import {
 
 const app = express();
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  res.header('Vary', 'Origin');
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-token');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-token, x-device-id');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }

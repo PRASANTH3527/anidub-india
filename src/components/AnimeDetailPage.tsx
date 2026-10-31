@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { Anime } from './CatalogView';
 import { cloudflareApi } from '../services/cloudflareApi';
-import { getCloudflareUrl } from '../config/cloudflare';
+import { getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
 import { generateRandomUsername } from '../utils/randomUser';
 import { formatRelativeTime } from '../utils/timestamps';
 
@@ -177,13 +177,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const handleRate = async (val: number) => {
     setIsRating(true);
     try {
-      const url = getCloudflareUrl(`/api/anime/${animeId}/rate`);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating: val })
-      });
-      const data = await res.json();
+      const data = await cloudflareApi.rateAnime(animeId, val);
       if (data.success) {
         setCurrentRating(data.rating);
         showToast(`⭐ Rated ${val}/10! Global rating updated to ${data.rating}`);
@@ -227,15 +221,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       localStorage.setItem('cf_user_reviews', JSON.stringify(userRevs));
 
       // 1. Persist to D1 / SQLite database
-      fetch(getCloudflareUrl(`/api/anime/${animeId}/reviews`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_name: currentUsername,
-          rating: reviewRating,
-          language: reviewLang,
-          comment: reviewComment
-        })
+      cloudflareApi.submitReview(animeId, {
+        user_name: currentUsername,
+        rating: reviewRating,
+        language: reviewLang,
+        comment: reviewComment
       }).catch(() => {});
 
       // 2. Broadcast review into Live Community Chat REST API
@@ -248,15 +238,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
-      fetch(getCloudflareUrl('/api/chat'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(chatPayload)
-      }).catch(() => {});
+      cloudflareApi.sendChatMessage(chatPayload).catch(() => {});
 
       // 3. Send through Cloudflare WebSocket so connected users receive it instantly
       try {
-        const ws = new WebSocket('wss://anime-chat.samayaprasanth0.workers.dev/ws');
+        const ws = new WebSocket(getCloudflareWsUrl('/ws'));
         ws.onopen = () => {
           ws.send(JSON.stringify({
             id: `rev_${Date.now()}`,
