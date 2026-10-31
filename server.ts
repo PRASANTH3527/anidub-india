@@ -1,4 +1,5 @@
 import express from 'express';
+import { WebSocketServer } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
@@ -47,6 +48,22 @@ if (fs.existsSync(schemaSqlPath)) {
 
 // Serve cached images if local fallback is triggered
 app.use('/imgbb-cache', express.static(imgCacheDir));
+
+// Proxy route for images to bypass ORB blocking
+app.get('/api/proxy-image', async (req, res) => {
+  const imageUrl = req.query.url as string;
+  if (!imageUrl) return res.status(400).send('Missing url parameter');
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw new Error('Failed to fetch image');
+    const buffer = await response.arrayBuffer();
+    res.set('Content-Type', response.headers.get('Content-Type') || 'image/jpeg');
+    res.set('Access-Control-Allow-Origin', '*'); // Allow CORS
+    res.send(Buffer.from(buffer));
+  } catch (err: any) {
+    res.status(502).send('Failed to fetch image: ' + err.message);
+  }
+});
 
 // Initialize Gemini client (Server-side only)
 const ai = new GoogleGenAI({
@@ -2543,8 +2560,18 @@ async function startServer() {
   }
 
   const PORT = 3000;
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Cloudflare Anime Hub server running on port ${PORT} (Cloudflare Pages + D1 + ImgBB)`);
+  });
+
+  const wss = new WebSocketServer({ server, path: '/ws' });
+  wss.on('connection', (ws) => {
+    console.log('Client connected to WebSocket');
+    ws.on('message', (message) => {
+      // Handle incoming messages if needed
+      console.log('Received: %s', message);
+    });
+    ws.send(JSON.stringify({ type: 'connected', message: 'WebSocket connection established' }));
   });
 }
 
