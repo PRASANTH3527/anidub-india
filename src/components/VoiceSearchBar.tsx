@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Mic, MicOff, X, Sparkles } from 'lucide-react';
 import { MicPermissionBottomSheet } from './MicPermissionBottomSheet';
+import { VoiceVisualizer } from './VoiceVisualizer';
 
 export interface VoiceSearchBarProps {
   value: string;
@@ -16,6 +17,7 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
   className = ''
 }) => {
   const [isListening, setIsListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [isPermanentlyBlocked, setIsPermanentlyBlocked] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -29,9 +31,17 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
       recognition.interimResults = true;
       recognition.lang = 'en-IN';
 
+      recognition.onstart = () => {
+        setIsListening(true);
+        setVoiceTranscript('');
+      };
+
       recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
-        onChange(transcript);
+        if (transcript) {
+          setVoiceTranscript(transcript);
+          onChange(transcript);
+        }
       };
 
       recognition.onerror = (event: any) => {
@@ -89,12 +99,21 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
       // 3. Proceed with actual Speech Recognition
       startActualListening();
     } catch (err: any) {
-      console.warn('Microphone permission interaction failed:', err.name);
+      console.warn('Microphone permission interaction failed:', err.name, err.message);
       
-      // 4. Handle permanent block / denial without showing generic toasts
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      // 4. Handle permanent block / denial (NotAllowedError / DOMException)
+      // This happens if the user previously selected "Deny" permanently
+      if (
+        err.name === 'NotAllowedError' || 
+        err.name === 'PermissionDeniedError' || 
+        err.name === 'SecurityError' ||
+        (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'AbortError'))
+      ) {
         setIsPermanentlyBlocked(true);
         setShowBottomSheet(true);
+      } else {
+        // Fallback for other errors (e.g. device not found)
+        console.error('Unexpected mic error:', err);
       }
     }
   };
@@ -119,10 +138,10 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={isListening ? 'Listening in Hindi / Tamil / Telugu...' : placeholder}
+        placeholder={isListening ? 'Listening for your query...' : placeholder}
         className={`w-full bg-[#121829]/95 border rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-12 pr-24 text-sm text-neutral-100 placeholder-neutral-500 outline-none transition-all duration-200 shadow-xl backdrop-blur-md ${
           isListening
-            ? 'border-red-500/80 ring-4 ring-red-500/20 bg-red-950/20 text-white placeholder-red-300 animate-pulse'
+            ? 'border-purple-500/80 ring-4 ring-purple-500/20 bg-purple-950/20 text-white placeholder-purple-300 animate-pulse'
             : 'border-neutral-700/80 group-hover:border-neutral-600 focus:border-accent-theme focus:ring-2 focus:ring-[var(--primary-ring)]'
         }`}
       />
@@ -145,25 +164,17 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
           onClick={handleMicClick}
           className={`relative p-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
             isListening
-              ? 'bg-red-500 text-white shadow-lg shadow-red-500/50 ring-4 ring-red-500/30 animate-pulse scale-105'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50 ring-4 ring-purple-500/30 animate-pulse scale-105'
               : 'bg-neutral-800/80 hover:bg-neutral-700 text-neutral-300 hover:text-white'
           }`}
           title={isListening ? 'Stop voice recognition' : 'Start voice search'}
         >
           {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 text-primary-theme" />}
           {isListening && (
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping" />
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full animate-ping" />
           )}
         </button>
       </div>
-
-      {/* FLOATING PREVIEW WHEN LISTENING */}
-      {isListening && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 p-2.5 bg-red-950/90 border border-red-500/40 rounded-xl text-xs text-red-200 flex items-center gap-2 shadow-2xl backdrop-blur-md z-40 animate-in fade-in">
-          <Sparkles className="w-4 h-4 text-red-400 animate-spin shrink-0" />
-          <span className="font-bold">Listening for voice query... Speak now!</span>
-        </div>
-      )}
 
       {/* PERMISSION BOTTOM SHEET */}
       <MicPermissionBottomSheet 
@@ -175,7 +186,17 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
           if (isPermanentlyBlocked) {
             setIsPermanentlyBlocked(false);
           }
-          startActualListening();
+          handleMicClick();
+        }}
+      />
+
+      {/* ACTIVE VOICE VISUALIZER */}
+      <VoiceVisualizer 
+        isListening={isListening}
+        transcript={voiceTranscript}
+        onClose={() => {
+          if (recognitionRef.current) recognitionRef.current.stop();
+          setIsListening(false);
         }}
       />
 

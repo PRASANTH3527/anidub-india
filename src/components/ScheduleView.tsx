@@ -287,9 +287,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {dayAnimeList.map((anime) => (
+              {dayAnimeList.map((anime, idx) => (
                 <AiringAnimeCard
-                  key={anime.id}
+                  key={`${anime.id}-${selectedDay}-${idx}`}
                   anime={anime}
                   onSelect={() => onSelectAnime(anime)}
                   isWatchlisted={watchlist.includes(anime.id)}
@@ -328,9 +328,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                       No simulcasts
                     </div>
                   ) : (
-                    dayItems.map((anime) => (
+                    dayItems.map((anime, idx) => (
                       <AiringAnimeCard
-                        key={anime.id}
+                        key={`${anime.id}-${day}-${idx}`}
                         anime={anime}
                         onSelect={() => onSelectAnime(anime)}
                         isWatchlisted={watchlist.includes(anime.id)}

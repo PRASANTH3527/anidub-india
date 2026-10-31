@@ -1696,7 +1696,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
                   {[1, 2, 3, 4].map((n) => (
-                    <div key={n} className="relative overflow-hidden rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 p-5 sm:p-6 shadow-xl">
+                    <div key={`overview_skeleton_${n}`} className="relative overflow-hidden rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 p-5 sm:p-6 shadow-xl">
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
                       <div className="flex items-center justify-between mb-4">
                         <div className="h-3 w-24 bg-white/10 rounded" />
@@ -1919,7 +1919,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="w-full text-center pb-8 text-neutral-500 text-xs font-mono">No genre telemetry available</div>
                   ) : (
                     sortedGenres.map((bar, idx) => (
-                      <div key={idx} className="flex flex-col items-center justify-end h-full flex-1 mx-1.5 group cursor-default">
+                      <div key={`genre_bar_${idx}`} className="flex flex-col items-center justify-end h-full flex-1 mx-1.5 group cursor-default">
                         <span className="text-[10px] font-mono font-bold text-neutral-400 mb-1 group-hover:text-cyan-300 transition-colors">
                           {bar.count}
                         </span>
@@ -2019,7 +2019,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
                 {pendingItems.map((item) => (
-                  <div key={item.id} className="p-5 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-amber-500/30 hover:border-amber-400/60 shadow-xl hover:shadow-[0_0_30px_rgba(245,158,11,0.15)] space-y-4 flex flex-col justify-between transition-all duration-300 hover:scale-[1.01] group">
+                  <div key={`pending_item_${item.id}`} className="p-5 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-amber-500/30 hover:border-amber-400/60 shadow-xl hover:shadow-[0_0_30px_rgba(245,158,11,0.15)] space-y-4 flex flex-col justify-between transition-all duration-300 hover:scale-[1.01] group">
                     <div className="flex items-start gap-4">
                       <div className="relative shrink-0">
                         <img 
@@ -2145,7 +2145,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {loading ? (
                 <div className="space-y-3">
                   {[1, 2, 3, 4, 5].map((n) => (
-                    <div key={n} className="relative overflow-hidden p-4 sm:p-5 rounded-2xl bg-white/[0.025] backdrop-blur-xl border border-white/10 shadow-lg flex items-center justify-between gap-4">
+                    <div key={`catalog_skeleton_${n}`} className="relative overflow-hidden p-4 sm:p-5 rounded-2xl bg-white/[0.025] backdrop-blur-xl border border-white/10 shadow-lg flex items-center justify-between gap-4">
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.05] to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
                       <div className="flex items-center gap-4">
                         <div className="w-14 h-20 sm:w-16 sm:h-22 rounded-xl bg-white/10 shrink-0" />
@@ -2172,7 +2172,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ) : (
                 filteredCatalog.map((anime) => (
                   <div 
-                    key={`${anime.id}-${anime.image || anime.posterUrl || anime.cover_image || ''}`} 
+                    key={`catalog_entry_${anime.id}_${anime.image || anime.posterUrl || anime.cover_image || ''}`} 
                     className="group relative p-4 sm:p-5 rounded-2xl bg-white/[0.025] hover:bg-white/[0.06] backdrop-blur-xl border border-white/10 hover:border-purple-500/50 shadow-lg hover:shadow-[0_0_30px_rgba(168,85,247,0.15)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300 hover:scale-[1.01]"
                   >
                     {/* Glowing hover line indicator on top */}
@@ -2367,7 +2367,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <div className="space-y-3 pt-2">
                     {pendingCorrections.map((item, idx) => (
-                      <div key={idx} className="p-4 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
+                      <div key={`rating_correction_${idx}`} className="p-4 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
                         <div className="flex items-center gap-3.5 min-w-0">
                           <img 
                             src={item.anime.cover_image || item.anime.posterUrl || item.anime.image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'} 
@@ -2424,7 +2424,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {terminalLogs.length === 0 ? (
                     <div className="text-neutral-500 italic py-2">No active logs. Click 'Initiate Full Health Probe' to stream.</div>
                   ) : (
-                    terminalLogs.slice(0, 15).map(log => {
+                    terminalLogs.slice(0, 15).map((log, idx) => {
                       let badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/40';
                       if (log.level === 'OK' || log.level === 'SUCCESS') badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
                       else if (log.level === 'WARN') badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
@@ -2481,7 +2481,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             ) : (
               <div className="space-y-4">
                 {feedbackList.map((fb, idx) => (
-                  <div key={idx} className="p-5 sm:p-6 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-purple-500/40 shadow-xl hover:shadow-[0_0_30px_rgba(168,85,247,0.12)] transition-all duration-300 hover:scale-[1.01] space-y-3">
+                  <div key={`feedback_ticket_${idx}`} className="p-5 sm:p-6 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-purple-500/40 shadow-xl hover:shadow-[0_0_30px_rgba(168,85,247,0.12)] transition-all duration-300 hover:scale-[1.01] space-y-3">
                     <div className="flex justify-between items-start gap-3">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-purple-600/20 border border-purple-400/30 text-purple-300 flex items-center justify-center font-bold text-xs font-mono">
@@ -2834,7 +2834,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {terminalLogs.length === 0 ? (
               <div className="text-neutral-500 italic py-4 text-center">Log stream cleared. Waiting for Cloudflare edge events...</div>
             ) : (
-              terminalLogs.map(log => {
+              terminalLogs.map((log, idx) => {
                 let badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/40';
                 if (log.level === 'OK') badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
                 else if (log.level === 'WARN') badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40';

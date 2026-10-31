@@ -21,6 +21,7 @@ import {
   Clock
 } from 'lucide-react';
 import { Anime } from './CatalogView';
+import { cloudflareApi } from '../services/cloudflareApi';
 import { LocalProfileModal } from './LocalProfileModal';
 import { AnimeDNAProfile } from './AnimeDNAProfile';
 
@@ -80,22 +81,22 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }
   }, []);
 
-  const reviewCount = React.useMemo(() => {
-    try {
-      const reviews = JSON.parse(localStorage.getItem('cf_user_reviews') || '[]');
-      return Array.isArray(reviews) ? reviews.length : 0;
-    } catch {
-      return 0;
-    }
-  }, []);
+  const [dbStats, setDbStats] = useState({ reviewCount: 0, voteCount: 0 });
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
 
-  const upvoteCount = React.useMemo(() => {
-    try {
-      const upvotes = JSON.parse(localStorage.getItem('cf_user_upvoted_ids') || '[]');
-      return Array.isArray(upvotes) ? upvotes.length : 0;
-    } catch {
-      return 0;
-    }
+  React.useEffect(() => {
+    const fetchStats = async () => {
+      setIsLoadingStats(true);
+      try {
+        const stats = await cloudflareApi.fetchUserStats();
+        setDbStats(stats);
+      } catch (err) {
+        console.warn('Failed to fetch D1 stats:', err);
+      } finally {
+        setIsLoadingStats(false);
+      }
+    };
+    fetchStats();
   }, []);
 
   const userCollections = React.useMemo(() => {
@@ -228,17 +229,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </div>
 
               <div className="bg-[#182032] border border-neutral-800 px-3 py-2 rounded-xl text-center sm:text-left">
-                <div className="text-neutral-400 text-[10px] font-bold uppercase tracking-wider">
+                <div className="text-neutral-400 text-[10px] font-bold uppercase tracking-wider text-ellipsis overflow-hidden">
                   DUB REVIEWS
                 </div>
-                <div className="text-lg font-black text-purple-400">{reviewCount} Reviews</div>
+                <div className="text-lg font-black text-purple-400">
+                  {isLoadingStats ? '...' : dbStats.reviewCount} Reviews
+                </div>
               </div>
 
               <div className="bg-[#182032] border border-neutral-800 px-3 py-2 rounded-xl text-center sm:text-left">
-                <div className="text-neutral-400 text-[10px] font-bold uppercase tracking-wider">
+                <div className="text-neutral-400 text-[10px] font-bold uppercase tracking-wider text-ellipsis overflow-hidden">
                   COMMUNITY VOTES
                 </div>
-                <div className="text-lg font-black text-amber-400">{upvoteCount} Upvotes</div>
+                <div className="text-lg font-black text-amber-400">
+                  {isLoadingStats ? '...' : dbStats.voteCount} Votes
+                </div>
               </div>
             </div>
 
@@ -348,9 +353,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredWatchlist.map((anime) => (
+              {filteredWatchlist.map((anime, idx) => (
                 <div 
-                  key={anime.id}
+                  key={`profile_watchlist_${anime.id}_${idx}`}
                   className="bg-[#131926] border border-neutral-800 hover:border-primary-theme rounded-2xl p-4 flex gap-4 transition-all shadow-md group"
                 >
                   {/* Thumbnail */}
@@ -465,7 +470,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {userCollections.map((col: any, idx: number) => (
                 <div 
-                  key={col.id || idx}
+                  key={`profile_collection_${col.id || idx}`}
                   className="rounded-2xl bg-[#131926] border border-neutral-800 overflow-hidden shadow-lg hover:border-neutral-700 transition-all group cursor-pointer"
                 >
                   <div className="h-32 overflow-hidden relative bg-[#182032] flex items-center justify-center">

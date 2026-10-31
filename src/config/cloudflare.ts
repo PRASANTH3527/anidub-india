@@ -38,7 +38,8 @@ export const CLOUDFLARE_ENDPOINTS = {
   RESET_DB: '/api/admin/reset-db',
   VERIFY_ADMIN: '/api/admin/verify',
   LOGIN_ADMIN: '/api/admin/login',
-  EXPORT_CSV: '/api/admin/export-csv'
+  EXPORT_CSV: '/api/admin/export-csv',
+  USER_STATS: '/api/user/stats'
 };
 
 /**

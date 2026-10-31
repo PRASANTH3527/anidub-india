@@ -97,18 +97,46 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   const [reviewLang, setReviewLang] = useState<string>('Tamil Dub');
 
   const wsRef = useRef<WebSocket | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const isInitialMountRef = useRef(true);
   const reconnectTimerRef = useRef<any>(null);
 
-  const scrollToBottom = useCallback(() => {
-    if (autoScroll && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = useCallback((smooth = true) => {
+    if (!autoScroll || !chatContainerRef.current) return;
+
+    // Apply auto-scroll-to-bottom STRICTLY to the inner scrollable chat container,
+    // ensuring the main window and outer page layout never shift or jump.
+    const container = chatContainerRef.current;
+    if (smooth) {
+      try {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: 'smooth'
+        });
+      } catch {
+        container.scrollTop = container.scrollHeight;
+      }
+    } else {
+      container.scrollTop = container.scrollHeight;
     }
   }, [autoScroll]);
 
+  // Auto-scroll on message updates (instant on first mount, smooth on subsequent incoming messages)
   useEffect(() => {
-    scrollToBottom();
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      scrollToBottom(false);
+    } else {
+      scrollToBottom(true);
+    }
   }, [messages, scrollToBottom]);
+
+  // Scroll to bottom when user re-enables autoScroll toggle
+  useEffect(() => {
+    if (autoScroll) {
+      scrollToBottom(true);
+    }
+  }, [autoScroll, scrollToBottom]);
 
   // Helper: Deduplicate and merge message lists cleanly
   const mergeMessageLists = useCallback((existing: ChatMessage[], incoming: any[]): ChatMessage[] => {
@@ -385,6 +413,18 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     }
 
     setInputMessage('');
+
+    // Ensure user's new message is scrolled into view within the container
+    if (chatContainerRef.current) {
+      setTimeout(() => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTo({
+            top: chatContainerRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 50);
+    }
   };
 
   const handleRandomizeName = () => {
@@ -478,7 +518,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       </div>
 
       {/* 2. SCROLLABLE MESSAGE STREAM */}
-      <div className="h-80 sm:h-96 overflow-y-auto pr-2 space-y-4 rounded-2xl bg-black/40 border border-white/10 p-4 scrollbar-thin scrollbar-thumb-purple-600/50">
+      <div 
+        ref={chatContainerRef}
+        className="h-80 sm:h-96 overflow-y-auto overscroll-contain pr-2 space-y-4 rounded-2xl bg-black/40 border border-white/10 p-4 scrollbar-thin scrollbar-thumb-purple-600/50"
+      >
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-neutral-400">
             <div className="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-500/30 flex items-center justify-center text-purple-400 shadow-lg">
@@ -537,7 +580,6 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             </div>
           ))
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* 3. CONTROLS & INPUT FORM */}
@@ -548,8 +590,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             <input 
               type="checkbox"
               checked={autoScroll}
-              onChange={(e) => setAutoScroll(e.target.checked)}
-              className="accent-purple-500 rounded"
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setAutoScroll(checked);
+                if (checked) {
+                  scrollToBottom(true);
+                }
+              }}
+              className="accent-purple-500 rounded cursor-pointer"
             />
             <span>Auto-scroll to latest messages</span>
           </label>

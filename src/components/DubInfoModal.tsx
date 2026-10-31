@@ -724,7 +724,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   
                   <div className="space-y-3">
                     {streamingPartners.map((partner, idx) => (
-                      <div key={idx} className="bg-[#141b29] border border-neutral-800 rounded-2xl p-3 space-y-2">
+                      <div key={`stream_partner_${idx}`} className="bg-[#141b29] border border-neutral-800 rounded-2xl p-3 space-y-2">
                         <div className="flex gap-2 items-start">
                           <div className="w-1/3">
                             <select
@@ -883,7 +883,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                   <div className="space-y-2.5">
                     {seasonDetails.map((entry, idx) => (
-                      <div key={idx} className="bg-[#171e2e] border border-neutral-700/80 rounded-2xl p-3 space-y-2.5">
+                      <div key={`season_entry_${idx}`} className="bg-[#171e2e] border border-neutral-700/80 rounded-2xl p-3 space-y-2.5">
                         <div className="grid grid-cols-12 gap-2">
                           <div className="col-span-4">
                             <select

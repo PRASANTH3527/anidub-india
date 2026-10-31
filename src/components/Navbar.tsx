@@ -20,6 +20,8 @@ import {
   Mic
 } from 'lucide-react';
 import { useToast } from './Toast';
+import { MicPermissionBottomSheet } from './MicPermissionBottomSheet';
+import { VoiceVisualizer } from './VoiceVisualizer';
 
 interface NavbarProps {
   activeTab: string;
@@ -93,7 +95,74 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isDirectoryActive = (activeTab === 'home' || activeTab === 'library' || activeTab === 'catalog') && !isForYouActive;
 
   const [isListening, setIsListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [showBottomSheet, setShowBottomSheet] = useState(false);
+  const [isPermanentlyBlocked, setIsPermanentlyBlocked] = useState(false);
+  const recognitionRef = useRef<any>(null);
   const toast = useToast();
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    setIsListening(false);
+  };
+
+  const startActualVoiceSearch = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-IN';
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setShowBottomSheet(false);
+        setVoiceTranscript('');
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          setVoiceTranscript(transcript);
+          const isFinal = event.results[0].isFinal;
+          
+          if (isFinal) {
+            const cleanTranscript = transcript.replace(/[.,/#!$%^&*;:{}=\-_`~()?]/g, "").trim();
+            setSearchQuery(cleanTranscript);
+            if (activeTab !== 'home') {
+              setActiveTab('home');
+              if (setFeedView) setFeedView('library');
+            }
+            toast.success('Voice Recognized', `Searching for "${cleanTranscript}"`);
+            setIsListening(false);
+          }
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition error:', event.error);
+        setIsListening(false);
+        if (event.error === 'not-allowed') {
+          setIsPermanentlyBlocked(true);
+          setShowBottomSheet(true);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.warn('Speech recognition start failed:', err);
+      setIsListening(false);
+    }
+  };
 
   const handleVoiceSearch = async () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -102,47 +171,34 @@ export const Navbar: React.FC<NavbarProps> = ({
       return;
     }
 
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
     try {
       // 1. Explicitly trigger the browser's native "Allow / Deny" prompt first
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // 2. If we reach here, permission was granted. Stop the test stream immediately.
       stream.getTracks().forEach(track => track.stop());
 
-      // 2. Start recognition
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'en-IN';
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
-
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          const cleanTranscript = transcript.replace(/[.,/#!$%^&*;:{}=\-_`~()?]/g, "").trim();
-          setSearchQuery(cleanTranscript);
-          if (activeTab !== 'home') {
-            setActiveTab('home');
-            if (setFeedView) setFeedView('library');
-          }
-          toast.success('Voice Recognized', `Searching for "${cleanTranscript}"`);
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.warn('Speech recognition error:', event.error);
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognition.start();
+      // 3. Proceed with actual Speech Recognition
+      startActualVoiceSearch();
     } catch (err: any) {
-      console.warn('Voice Search interaction failed:', err.name);
+      console.warn('Voice Search permission interaction failed:', err.name, err.message);
       setIsListening(false);
+
+      // 4. Handle permanent block / denial (NotAllowedError / DOMException)
+      if (
+        err.name === 'NotAllowedError' || 
+        err.name === 'PermissionDeniedError' || 
+        err.name === 'SecurityError' ||
+        (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'AbortError'))
+      ) {
+        setIsPermanentlyBlocked(true);
+        setShowBottomSheet(true);
+      }
     }
   };
 
@@ -365,7 +421,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={`w-full bg-[#131926] border rounded-xl pl-9 pr-14 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none transition-colors ${
-                isListening ? 'border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.5)]' : 'border-neutral-800/80 focus:border-purple-500/50'
+                isListening 
+                  ? 'border-purple-500/80 ring-4 ring-purple-500/20 bg-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.4)] animate-pulse placeholder-purple-300' 
+                  : 'border-neutral-800/80 focus:border-purple-500/50'
               }`}
             />
             
@@ -495,8 +553,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 placeholder={isListening ? "Listening..." : "Search anime by title, voice actor, or studio..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full bg-[#131926] border rounded-xl pl-9 pr-14 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none transition-colors ${
-                  isListening ? 'border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.5)]' : 'border-neutral-700/80 focus:border-purple-500'
+                className={`w-full bg-[#131926] border rounded-xl pl-9 pr-14 py-2 text-xs text-white placeholder-neutral-500 outline-none transition-colors ${
+                  isListening 
+                    ? 'border-purple-500/80 ring-4 ring-purple-500/20 bg-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.4)] animate-pulse placeholder-purple-300' 
+                    : 'border-neutral-700/80 focus:border-purple-500'
                 }`}
               />
               <div className="absolute right-2 flex items-center gap-1">
@@ -532,6 +592,26 @@ export const Navbar: React.FC<NavbarProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* PERMISSION BOTTOM SHEET */}
+      <MicPermissionBottomSheet 
+        isOpen={showBottomSheet}
+        isPermanentlyBlocked={isPermanentlyBlocked}
+        onClose={() => setShowBottomSheet(false)}
+        onAllow={() => {
+          if (isPermanentlyBlocked) {
+            setIsPermanentlyBlocked(false);
+          }
+          handleVoiceSearch();
+        }}
+      />
+
+      {/* ACTIVE VOICE VISUALIZER */}
+      <VoiceVisualizer 
+        isListening={isListening}
+        transcript={voiceTranscript}
+        onClose={stopListening}
+      />
     </header>
   );
 };

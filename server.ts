@@ -850,6 +850,38 @@ app.get('/api/user/profile', (req, res) => {
   }
 });
 
+// 2.5 GET /api/user/stats (Fetch real review and vote counts from D1)
+app.get('/api/user/stats', (req, res) => {
+  try {
+    const { deviceId } = getOrCreateDeviceIdExpress(req, res);
+    
+    // 1. Get review count (using 'default_user' as per current schema)
+    const reviewStmt = db.prepare("SELECT COUNT(*) as count FROM reviews WHERE user_id = 'default_user'");
+    let reviewCount = 0;
+    if (reviewStmt.step()) {
+      reviewCount = reviewStmt.getAsObject().count as number;
+    }
+    reviewStmt.free();
+
+    // 2. Get community votes count (upvotes + likes for this device)
+    const voteStmt = db.prepare("SELECT COUNT(*) as count FROM user_votes WHERE device_id = ?");
+    voteStmt.bind([deviceId]);
+    let voteCount = 0;
+    if (voteStmt.step()) {
+      voteCount = voteStmt.getAsObject().count as number;
+    }
+    voteStmt.free();
+
+    res.json({
+      reviewCount,
+      voteCount,
+      deviceId
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 3. PUT /api/user/profile (Update User Profile & ImgBB Avatar URL)
 app.put('/api/user/profile', (req, res) => {
   const start = Date.now();

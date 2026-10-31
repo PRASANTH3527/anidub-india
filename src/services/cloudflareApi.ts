@@ -396,6 +396,25 @@ class CloudflareApiService {
 
     return await res.json();
   }
+
+  /**
+   * USER STATS: Fetches real review and vote counts for the user from D1
+   */
+  public async fetchUserStats(): Promise<{ reviewCount: number; voteCount: number }> {
+    try {
+      const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.USER_STATS);
+      const res = await fetch(url, {
+        headers: this.getHeaders(false),
+        credentials: 'include'
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('Failed to fetch user stats from server:', err);
+    }
+    return { reviewCount: 0, voteCount: 0 };
+  }
 }
 
 export const cloudflareApi = new CloudflareApiService();

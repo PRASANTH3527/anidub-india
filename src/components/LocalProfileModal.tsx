@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import { 
-  User, 
-  X, 
-  Check, 
-  Search, 
-  Share2, 
-  Sparkles, 
-  Zap, 
+  User,
+  X,
+  Check,
+  Search,
+  Share2,
+  Sparkles,
+  Zap,
   Languages, 
-  ShieldCheck 
+  ShieldCheck,
+  Upload,
+  FileUp,
+  FileDown
 } from 'lucide-react';
+import { motion } from 'motion/react';
 
 export interface LocalProfileModalProps {
   isOpen: boolean;
@@ -43,11 +47,16 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
 
   const [name, setName] = useState(currentName);
   const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_LIST[0].url);
+  const [customAvatar, setCustomAvatar] = useState<string | null>(null);
   const [selectedLang, setSelectedLang] = useState('Tamil (தமிழ்)');
   const [activeTab, setActiveTab] = useState<'identity' | 'stats'>('identity');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [copied, setCopied] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const backupInputRef = React.useRef<HTMLInputElement>(null);
 
   const filteredAvatars = AVATAR_LIST.filter(avatar => {
     const matchesSearch = !searchQuery.trim() || avatar.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -67,6 +76,45 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
     navigator.clipboard?.writeText(profileUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setCustomAvatar(base64);
+        setSelectedAvatar(base64);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsImporting(true);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const content = event.target?.result as string;
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            localStorage.setItem('cf_anime_watchlist', JSON.stringify(parsed));
+            alert('Watchlist backup imported successfully! The page will refresh to apply changes.');
+            window.location.reload();
+          } else {
+            throw new Error('Invalid backup format');
+          }
+        } catch (err) {
+          alert('Failed to import backup. Please ensure the file is a valid JSON watchlist export.');
+        } finally {
+          setIsImporting(false);
+        }
+      };
+      reader.readAsText(file);
+    }
   };
 
   return (
@@ -105,24 +153,31 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
           </button>
         </div>
 
-        {/* TAB SWITCHER */}
-        <div className="flex items-center gap-1 p-1 bg-[#0a0e17] border-b border-neutral-800 mt-4 rounded-xl">
+        {/* MODERN SEGMENTED CONTROL TABS */}
+        <div className="relative flex items-center p-1 bg-[#0a0e17] border border-neutral-800 mt-6 rounded-2xl">
+          {/* Sliding background pill */}
+          <motion.div
+            className="absolute top-1 bottom-1 rounded-xl bg-primary-theme shadow-lg z-0"
+            initial={false}
+            animate={{
+              left: activeTab === 'identity' ? '4px' : '50%',
+              right: activeTab === 'identity' ? '50%' : '4px'
+            }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+          />
+
           <button
             onClick={() => setActiveTab('identity')}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'identity'
-                ? 'bg-primary-theme text-white shadow-md'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'
+            className={`relative z-10 flex-1 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'identity' ? 'text-white' : 'text-neutral-500 hover:text-neutral-300'
             }`}
           >
             Avatar & Identity
           </button>
           <button
             onClick={() => setActiveTab('stats')}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'stats'
-                ? 'bg-primary-theme text-white shadow-md'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'
+            className={`relative z-10 flex-1 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'stats' ? 'text-white' : 'text-neutral-500 hover:text-neutral-300'
             }`}
           >
             Watchlist Stats & Backup
@@ -207,6 +262,42 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
             {/* 50 Avatars Grid */}
             <div className="rounded-2xl bg-[#0a0e17] border border-neutral-800/90 p-2 sm:p-3 max-h-56 overflow-y-auto no-scrollbar">
               <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 sm:gap-2.5">
+                
+                {/* Custom Upload Button */}
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`relative group aspect-square rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all ${
+                    customAvatar && selectedAvatar === customAvatar
+                      ? 'border-accent-theme bg-accent-theme/5'
+                      : 'border-neutral-800 hover:border-neutral-600 bg-neutral-900/50'
+                  }`}
+                >
+                  <input 
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                  />
+                  {customAvatar ? (
+                    <img 
+                      src={customAvatar} 
+                      className="w-full h-full object-cover rounded-2xl" 
+                      alt="Custom"
+                    />
+                  ) : (
+                    <>
+                      <Upload className="w-5 h-5 text-neutral-500 group-hover:text-neutral-300 transition-colors" />
+                      <span className="text-[8px] font-black text-neutral-500 mt-1 uppercase">Custom</span>
+                    </>
+                  )}
+                  {customAvatar && selectedAvatar === customAvatar && (
+                    <div className="absolute -top-1 -right-1 w-5 h-5 btn-primary-theme rounded-full flex items-center justify-center text-white shadow-md">
+                      <Check className="w-3 h-3 stroke-[3]" />
+                    </div>
+                  )}
+                </div>
+
                 {filteredAvatars.map((avatar) => {
                   const isSelected = selectedAvatar === avatar.url;
                   return (
@@ -289,9 +380,13 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
             </div>
 
             {/* Backup Box */}
-            <div className="p-3.5 rounded-2xl bg-[#0d121f] border border-neutral-800 space-y-2.5">
-              <span className="text-xs font-bold text-white block">Export / Import Watchlist Backup</span>
-              <div className="flex items-center gap-2">
+            <div className="p-4 rounded-2xl bg-[#0d121f] border border-neutral-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-white block uppercase tracking-wider">Export / Import Watchlist Backup</span>
+                <span className="text-[10px] font-bold text-neutral-500 bg-black/40 px-2 py-0.5 rounded border border-neutral-800">JSON Format</span>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   onClick={() => {
                     const data = localStorage.getItem('cf_anime_watchlist') || '[]';
@@ -302,12 +397,34 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
                     a.download = 'anidub_watchlist_backup.json';
                     a.click();
                   }}
-                  className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-bold text-white transition-colors"
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#182032] border border-neutral-700/60 hover:bg-[#202940] hover:border-neutral-500 text-xs font-bold text-white transition-all cursor-pointer shadow-sm active:scale-95"
                 >
-                  Export JSON Backup
+                  <FileDown className="w-4 h-4 text-emerald-400" />
+                  <span>Export JSON</span>
                 </button>
-                <span className="text-[11px] text-neutral-500">Secure & Instant</span>
+
+                <div className="relative">
+                  <input 
+                    type="file"
+                    ref={backupInputRef}
+                    className="hidden"
+                    accept=".json"
+                    onChange={handleImportBackup}
+                  />
+                  <button
+                    disabled={isImporting}
+                    onClick={() => backupInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#182032] border border-neutral-700/60 hover:bg-[#202940] hover:border-neutral-500 text-xs font-bold text-white transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                  >
+                    <FileUp className="w-4 h-4 text-blue-400" />
+                    <span>{isImporting ? 'Processing...' : 'Import JSON'}</span>
+                  </button>
+                </div>
               </div>
+
+              <p className="text-[11px] text-neutral-500 italic leading-relaxed">
+                Tip: Importing a backup will overwrite your current local watchlist. Export your current data first if you wish to keep it.
+              </p>
             </div>
           </div>
         )}

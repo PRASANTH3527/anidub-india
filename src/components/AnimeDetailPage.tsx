@@ -826,7 +826,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             {faqItems.map((item, idx) => {
               const isOpen = openFaqIndex === idx;
               return (
-                <div key={idx} className="pb-3">
+                <div key={`anime_faq_${idx}`} className="pb-3">
                   <button
                     type="button"
                     onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
