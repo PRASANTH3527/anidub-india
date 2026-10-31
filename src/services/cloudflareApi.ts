@@ -97,7 +97,8 @@ class CloudflareApiService {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      throw new Error(`Cloudflare API fetch failed (${res.status}): ${errText || res.statusText}`);
+      console.error(`[API Error] GET ${url} failed with status ${res.status}:`, errText);
+      throw new Error(`Cloudflare API fetch failed (${res.status}) at ${url}: ${errText || res.statusText}`);
     }
 
     const json = await res.json();

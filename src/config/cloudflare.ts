@@ -12,12 +12,17 @@
  *   export const CLOUDFLARE_API_URL = 'https://anidub-india.pages.dev';
  */
 
-// ---> PLACEHOLDER VARIABLE FOR YOUR CLOUDFLARE WORKER / PAGES URL <---
-// PASTE YOUR ACTUAL CLOUDFLARE WORKER URL HERE:
+// ---> DYNAMIC API BASE URL CONFIGURATION <---
 const rawEnvUrl: string = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDFLARE_API_URL) || '';
 const matchedEnvUrl: string = rawEnvUrl ? (rawEnvUrl.match(/https?:\/\/[^\s\]\)"']+/)?.[0] || rawEnvUrl) : '';
 
-export const CLOUDFLARE_API_URL: string = matchedEnvUrl || '';
+/**
+ * The base URL for the Cloudflare API.
+ * Defaults to an empty string ('') which ensures relative path routing (e.g., /api/anime).
+ * Relative paths are highly recommended for Cloudflare Pages + Functions to avoid CORS issues
+ * and ensure requests stay within the same Edge deployment.
+ */
+export const CLOUDFLARE_API_URL: string = matchedEnvUrl.replace(/\/+$/, '');
 
 // Optional: Cloudflare D1 Database binding identifier from wrangler.toml
 export const CLOUDFLARE_D1_DATABASE_NAME = 'anime-hub-db';
