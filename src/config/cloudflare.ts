@@ -34,8 +34,10 @@ const getOverriddenUrl = () => {
  * Priority: localStorage Override > Environment Variable > Relative Path ('')
  */
 export const CLOUDFLARE_API_URL: string = (
-  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDFLARE_API_URL) ||
-  (import.meta.env?.PROD ? 'https://anime-chat.samayaprasanth0.workers.dev' : '')
+  ((typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDFLARE_API_URL) ||
+  (import.meta.env?.PROD ? 'https://anime-chat.samayaprasanth0.workers.dev' : ''))
+  .split(']')[0]
+  .replace(/\/+$/, '')
 ).replace(/\/+$/, '');
 
 /**
