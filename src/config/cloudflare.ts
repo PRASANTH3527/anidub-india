@@ -26,6 +26,12 @@ const getOverriddenUrl = () => {
 };
 
 /**
+ * Default fallback Worker URL used when relative paths and env vars fail.
+ * Connects to the standalone Cloudflare Worker deployment.
+ */
+export const DEFAULT_FALLBACK_WORKER_URL = 'https://anidub-apiii.samayaprasanth0.workers.dev';
+
+/**
  * The base URL for the Cloudflare API.
  * Priority: localStorage Override > Environment Variable > Relative Path ('')
  */

@@ -257,36 +257,41 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const sort = url.searchParams.get('sort') || 'popularity';
 
       if (env.DB) {
-        let whereClauses: string[] = [];
-        let params: any[] = [];
-        if (genre && genre !== 'All') {
-          whereClauses.push("genres LIKE ?");
-          params.push(`%${genre}%`);
-        }
-        if (status && status !== 'All') {
-          whereClauses.push("status = ?");
-          params.push(status);
-        }
-        if (search) {
-          whereClauses.push("(title LIKE ? OR synopsis LIKE ? OR genres LIKE ?)");
-          params.push(`%${search}%`, `%${search}%`, `%${search}%`);
-        }
-        const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-        let orderSql = "ORDER BY popularity DESC";
-        if (sort === 'rating') orderSql = "ORDER BY rating DESC";
-        else if (sort === 'newest') orderSql = "ORDER BY year DESC, id DESC";
-        else if (sort === 'title') orderSql = "ORDER BY title ASC";
+        try {
+          let whereClauses: string[] = [];
+          let params: any[] = [];
+          if (genre && genre !== 'All') {
+            whereClauses.push("genres LIKE ?");
+            params.push(`%${genre}%`);
+          }
+          if (status && status !== 'All') {
+            whereClauses.push("status = ?");
+            params.push(status);
+          }
+          if (search) {
+            whereClauses.push("(title LIKE ? OR synopsis LIKE ? OR genres LIKE ?)");
+            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+          }
+          const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+          let orderSql = "ORDER BY popularity DESC";
+          if (sort === 'rating') orderSql = "ORDER BY rating DESC";
+          else if (sort === 'newest') orderSql = "ORDER BY year DESC, id DESC";
+          else if (sort === 'title') orderSql = "ORDER BY title ASC";
 
-        const countRes = await env.DB.prepare(`SELECT COUNT(*) as total FROM anime ${whereSql}`).bind(...params).first();
-        const total = countRes ? Number(countRes.total) : 0;
+          const countRes = await env.DB.prepare(`SELECT COUNT(*) as total FROM anime ${whereSql}`).bind(...params).first();
+          const total = countRes ? Number(countRes.total) : 0;
 
-        if (total > 0) {
-          const queryParams = [...params, limit, offset];
-          const dataRes = await env.DB.prepare(`SELECT * FROM anime ${whereSql} ${orderSql} LIMIT ? OFFSET ?`).bind(...queryParams).all();
-          return jsonResponse({
-            data: dataRes.results || [],
-            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 }
-          });
+          if (total > 0) {
+            const queryParams = [...params, limit, offset];
+            const dataRes = await env.DB.prepare(`SELECT * FROM anime ${whereSql} ${orderSql} LIMIT ? OFFSET ?`).bind(...queryParams).all();
+            return jsonResponse({
+              data: dataRes.results || [],
+              pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 }
+            });
+          }
+        } catch (dbErr) {
+          console.error("D1 Catalog Query Error:", dbErr);
+          // Fall through to SEED_ANIME
         }
       }
 

@@ -126,9 +126,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [isTerminalExpanded, setIsTerminalExpanded] = useState(false);
   const [terminalLogs, setTerminalLogs] = useState<Array<{ id: string; time: string; level: string; msg: string }>>([
-    { id: 'log-sys-init', time: new Date().toLocaleTimeString(), level: 'SYS', msg: 'Kernel v4.19 initialized. Cloudflare Edge TLS verified.' },
-    { id: 'log-edge-conn', time: new Date().toLocaleTimeString(), level: 'EDGE', msg: 'Connected to anidub-apiii.samayaprasanth0.workers.dev (HTTP/2 200 OK)' },
-    { id: 'log-d1-mount', time: new Date().toLocaleTimeString(), level: 'D1', msg: 'KV binding ANIME_DB mounted [4d1a822ed4a04cad809f79f38ab4d96c]' }
+    { id: 'log-sys-init', time: new Date().toLocaleTimeString(), level: 'SYS', msg: 'AniDub Edge Kernel initialized. Cloudflare D1 connected.' },
+    { id: 'log-edge-conn', time: new Date().toLocaleTimeString(), level: 'EDGE', msg: `Link established: ${CLOUDFLARE_API_URL || 'Pages Native (Relative)'}` },
+    { id: 'log-d1-mount', time: new Date().toLocaleTimeString(), level: 'D1', msg: 'KV/D1 Catalog persistence mounted [DB: 75f053ab]' }
   ]);
 
   const addTerminalLog = (level: string, msg: string) => {

@@ -7,7 +7,7 @@
  * Cloudflare Workers and D1 database.
  */
 
-import { CLOUDFLARE_API_URL, getCloudflareUrl, CLOUDFLARE_ENDPOINTS } from '../config/cloudflare';
+import { CLOUDFLARE_API_URL, getCloudflareUrl, CLOUDFLARE_ENDPOINTS, DEFAULT_FALLBACK_WORKER_URL } from '../config/cloudflare';
 
 export interface AnimePayload {
   id?: number | string;
@@ -45,6 +45,47 @@ export interface FetchCatalogOptions {
 }
 
 class CloudflareApiService {
+  /**
+   * Performs a fetch with automatic absolute URL fallback for robustness.
+   * If a relative path request fails (due to missing Pages Functions), 
+   * it retries using the hardcoded absolute Worker URL.
+   */
+  private async smartFetch(path: string, options: RequestInit = {}): Promise<Response> {
+    const url = getCloudflareUrl(path);
+    
+    try {
+      const res = await fetch(url, options);
+      
+      const contentType = res.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+
+      // If we got a successful JSON response, return it immediately
+      if (res.ok && isJson) {
+        return res;
+      }
+
+      // If it's a 404 or non-JSON, and we are using relative paths (CLOUDFLARE_API_URL is empty),
+      // retry with the absolute fallback Worker URL.
+      if ((res.status === 404 || !isJson) && !CLOUDFLARE_API_URL) {
+        const fallbackBase = DEFAULT_FALLBACK_WORKER_URL.replace(/\/+$/, '');
+        const fallbackUrl = `${fallbackBase}${path.startsWith('/') ? path : '/' + path}`;
+        console.warn(`[API discovery] Path ${url} returned ${res.status}. Retrying with absolute fallback: ${fallbackUrl}`);
+        return await fetch(fallbackUrl, options);
+      }
+
+      return res;
+    } catch (err) {
+      // If network fails and we are using relative paths, retry with absolute fallback
+      if (!CLOUDFLARE_API_URL) {
+        const fallbackBase = DEFAULT_FALLBACK_WORKER_URL.replace(/\/+$/, '');
+        const fallbackUrl = `${fallbackBase}${path.startsWith('/') ? path : '/' + path}`;
+        console.warn(`[API discovery] Network failed for ${url}. Retrying with absolute fallback: ${fallbackUrl}`);
+        return await fetch(fallbackUrl, options);
+      }
+      throw err;
+    }
+  }
+
   /**
    * Retrieves the current admin authorization token
    */
@@ -88,9 +129,9 @@ class CloudflareApiService {
     if (options.includePending) queryParams.set('includePending', 'true');
 
     const qs = queryParams.toString();
-    const url = getCloudflareUrl(`${CLOUDFLARE_ENDPOINTS.CATALOG}${qs ? `?${qs}` : ''}`);
+    const endpoint = `${CLOUDFLARE_ENDPOINTS.CATALOG}${qs ? `?${qs}` : ''}`;
 
-    const res = await fetch(url, {
+    const res = await this.smartFetch(endpoint, {
       method: 'GET',
       headers: this.getHeaders(Boolean(options.includePending))
     });
@@ -129,8 +170,8 @@ class CloudflareApiService {
    * READ: Fetches single anime details by ID or slug from Cloudflare Worker / D1
    */
   public async getAnimeById(id: number | string): Promise<any> {
-    const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id));
-    const res = await fetch(url, {
+    const endpoint = CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id);
+    const res = await this.smartFetch(endpoint, {
       method: 'GET',
       headers: this.getHeaders()
     });
@@ -147,8 +188,8 @@ class CloudflareApiService {
    * CREATE: Adds a new anime to Cloudflare D1
    */
   public async createAnime(payload: AnimePayload): Promise<{ success: boolean; animeId?: number; data?: any }> {
-    const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.CATALOG);
-    const res = await fetch(url, {
+    const endpoint = CLOUDFLARE_ENDPOINTS.CATALOG;
+    const res = await this.smartFetch(endpoint, {
       method: 'POST',
       headers: this.getHeaders(true),
       body: JSON.stringify(payload)
@@ -166,7 +207,7 @@ class CloudflareApiService {
    * UPDATE: Updates an existing anime in Cloudflare D1 / Worker
    */
   public async updateAnime(id: number | string, payload: Partial<AnimePayload>): Promise<{ success: boolean; id: string | number; data?: any }> {
-    const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id));
+    const endpoint = CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id);
     const cleanPayload = {
       ...payload,
       id: id,
@@ -175,25 +216,25 @@ class CloudflareApiService {
 
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await this.smartFetch(endpoint, {
         method: 'PUT',
         headers: this.getHeaders(true),
         body: JSON.stringify(cleanPayload)
       });
     } catch (networkErr: any) {
-      throw new Error(`[ERROR] Network/CORS Failed: ${networkErr.message} while reaching ${url}`);
+      throw new Error(`[ERROR] Network/CORS Failed: ${networkErr.message} while reaching ${endpoint}`);
     }
 
     // Fallback to PATCH if method PUT is not accepted or returned 405
     if (res.status === 405) {
       try {
-        res = await fetch(url, {
+        res = await this.smartFetch(endpoint, {
           method: 'PATCH',
           headers: this.getHeaders(true),
           body: JSON.stringify(cleanPayload)
         });
       } catch (patchErr: any) {
-        throw new Error(`[ERROR] Network/CORS Failed on PATCH: ${patchErr.message} while reaching ${url}`);
+        throw new Error(`[ERROR] Network/CORS Failed on PATCH: ${patchErr.message} while reaching ${endpoint}`);
       }
     }
 
@@ -215,15 +256,15 @@ class CloudflareApiService {
    * DELETE: Deletes an anime from Cloudflare D1
    */
   public async deleteAnime(id: number | string): Promise<{ success: boolean }> {
-    const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id));
+    const endpoint = CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id);
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await this.smartFetch(endpoint, {
         method: 'DELETE',
         headers: this.getHeaders(true)
       });
     } catch (networkErr: any) {
-      console.warn(`[Network Notice] Could not reach ${url} for delete:`, networkErr.message);
+      console.warn(`[Network Notice] Could not reach ${endpoint} for delete:`, networkErr.message);
       return { success: true };
     }
 
@@ -261,13 +302,13 @@ class CloudflareApiService {
    * APPROVE: Approves a pending submission in Cloudflare D1
    */
   public async approveAnime(id: number | string, status?: string): Promise<any> {
-    const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.APPROVE(id));
+    const endpoint = CLOUDFLARE_ENDPOINTS.APPROVE(id);
     const payload: Record<string, any> = { submissionStatus: 'approved' };
     if (status) {
       payload.status = status;
       payload.airing_status = status;
     }
-    const res = await fetch(url, {
+    const res = await this.smartFetch(endpoint, {
       method: 'POST',
       headers: this.getHeaders(true),
       body: JSON.stringify(payload)
@@ -285,17 +326,17 @@ class CloudflareApiService {
    * LIKE: Registers like increment or decrement in Cloudflare Worker / D1 (Strict 1 like per device via Cookie)
    */
   public async likeAnime(id: number | string, options?: { action?: 'like' | 'unlike'; delta?: number }): Promise<{ success: boolean; likes?: number; likesCount?: number }> {
-    const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.LIKE(id));
+    const endpoint = CLOUDFLARE_ENDPOINTS.LIKE(id);
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await this.smartFetch(endpoint, {
         method: 'POST',
         headers: this.getHeaders(false),
         credentials: 'include',
         body: JSON.stringify(options || {})
       });
     } catch (networkErr: any) {
-      throw new Error(`[Network/Fetch Error] Unable to connect to ${url}: ${networkErr.message}`);
+      throw new Error(`[Network/Fetch Error] Unable to connect to ${endpoint}: ${networkErr.message}`);
     }
 
     if (!res.ok) {
@@ -311,12 +352,12 @@ class CloudflareApiService {
         errDetail = await res.text().catch(() => res.statusText);
         if (/already voted/i.test(errDetail)) isAlreadyVoted = true;
       }
-      const httpError = new Error(isAlreadyVoted ? 'Already voted' : `HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update like'} at ${url}`);
+      const httpError = new Error(isAlreadyVoted ? 'Already voted' : `HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update like'} at ${endpoint}`);
       (httpError as any).status = res.status;
       (httpError as any).statusText = res.statusText;
       (httpError as any).alreadyVoted = isAlreadyVoted;
       (httpError as any).rawMessage = errDetail;
-      (httpError as any).url = url;
+      (httpError as any).url = endpoint;
       throw httpError;
     }
 
@@ -327,16 +368,16 @@ class CloudflareApiService {
    * VOTE: Registers community upvote in Cloudflare D1 (Strict 1 vote per device via Cookie)
    */
   public async upvoteAnime(id: number | string, options?: { action?: 'up' | 'down'; delta?: number }): Promise<{ success: boolean; upvotes?: number; popularity?: number }> {
-    const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.VOTE(id));
+    const endpoint = CLOUDFLARE_ENDPOINTS.VOTE(id);
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await this.smartFetch(endpoint, {
         method: 'POST',
         headers: this.getHeaders(false),
         body: JSON.stringify(options || {})
       });
     } catch (networkErr: any) {
-      throw new Error(`[Network/Fetch Error] Unable to connect to ${url}: ${networkErr.message}`);
+      throw new Error(`[Network/Fetch Error] Unable to connect to ${endpoint}: ${networkErr.message}`);
     }
 
     if (!res.ok) {
@@ -352,12 +393,12 @@ class CloudflareApiService {
         errDetail = await res.text().catch(() => res.statusText);
         if (/already voted/i.test(errDetail)) isAlreadyVoted = true;
       }
-      const httpError = new Error(isAlreadyVoted ? 'Already voted' : `HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update upvote'} at ${url}`);
+      const httpError = new Error(isAlreadyVoted ? 'Already voted' : `HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update upvote'} at ${endpoint}`);
       (httpError as any).status = res.status;
       (httpError as any).statusText = res.statusText;
       (httpError as any).alreadyVoted = isAlreadyVoted;
       (httpError as any).rawMessage = errDetail;
-      (httpError as any).url = url;
+      (httpError as any).url = endpoint;
       throw httpError;
     }
 
@@ -369,8 +410,8 @@ class CloudflareApiService {
    */
   public async checkVoteStatus(id: number | string): Promise<{ hasLiked: boolean; hasUpvoted: boolean }> {
     try {
-      const url = getCloudflareUrl(`/api/anime/${id}/vote-status`);
-      const res = await fetch(url, {
+      const endpoint = `/api/anime/${id}/vote-status`;
+      const res = await this.smartFetch(endpoint, {
         headers: this.getHeaders(false)
       });
       if (res.ok) {
@@ -384,8 +425,8 @@ class CloudflareApiService {
    * UPLOAD: Proxies image upload to ImgBB via Cloudflare Worker backend
    */
   public async uploadImage(base64Image: string, filename?: string): Promise<{ success: boolean; url: string; display_url?: string }> {
-    const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.UPLOAD);
-    const res = await fetch(url, {
+    const endpoint = CLOUDFLARE_ENDPOINTS.UPLOAD;
+    const res = await this.smartFetch(endpoint, {
       method: 'POST',
       headers: this.getHeaders(false),
       body: JSON.stringify({
@@ -408,8 +449,8 @@ class CloudflareApiService {
    */
   public async fetchUserStats(): Promise<{ reviewCount: number; voteCount: number }> {
     try {
-      const url = getCloudflareUrl(CLOUDFLARE_ENDPOINTS.USER_STATS);
-      const res = await fetch(url, {
+      const endpoint = CLOUDFLARE_ENDPOINTS.USER_STATS;
+      const res = await this.smartFetch(endpoint, {
         headers: this.getHeaders(false)
       });
       if (res.ok) {
