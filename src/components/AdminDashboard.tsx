@@ -524,225 +524,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!file) return;
 
     setIsImporting(true);
+    addTerminalLog('CSV', `Reading CSV file: ${file.name} (${file.size} bytes)`);
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h) => h.replace(/^\ufeff/, '').replace(/^["']|["']$/g, '').trim(),
-      transform: (v) => (typeof v === 'string' ? v.trim() : v),
-      complete: async (results) => {
-        const parsedRows = results.data as any[];
-        let importedCount = 0;
-        let skippedCount = 0;
-
-        // CSV Import State Mapper: When mapping rows from the CSV, ensure the property is explicitly named type in the final object array (e.g., type: parsedType)
-        const mappedAnimeList = parsedRows.map((row: any) => {
-          const typeKey = Object.keys(row).find(key => key.toLowerCase().includes('type'));
-          let rawType = typeKey ? row[typeKey]?.toString().trim().toLowerCase() : '';
-          let finalType = 'TV Series';
-          if (rawType.includes('movie')) finalType = 'Movie';
-          else if (rawType.includes('ova') || rawType.includes('special')) finalType = 'OVA/Special';
-          else if (rawType.includes('tv') || rawType.length > 0) finalType = 'TV Series';
-          const parsedType = finalType;
-          return {
-            ...row,
-            type: parsedType
-          };
-        });
-        
-        for (const row of mappedAnimeList) {
-
-          // 1. Title Resolution (Dynamic Column Match)
-          const titleKey = Object.keys(row).find(key => {
-            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
-            return k === 'title' || k === 'animetitle' || k === 'name' || k === 'series' || k === 'showname';
-          });
-          const title = (titleKey ? row[titleKey] : (row.Title || row.title || row['title'] || row['Title']))?.toString().trim() || '';
-          if (!title) continue;
-
-          // Cross-reference against both active catalog state and pending queue (case-insensitive check)
-          const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-          const existingInCatalog = catalog.find(
-            item => item.slug === slug || (item.title && title && item.title.toLowerCase().trim() === title.toLowerCase().trim())
-          );
-          const existingInPending = pendingItems.find(
-            item => item.slug === slug || (item.title && title && item.title.toLowerCase().trim() === title.toLowerCase().trim())
-          );
-
-          if (existingInCatalog || existingInPending) {
-            skippedCount++;
-            addTerminalLog('REJ', `[CSV IMPORT] Strictly rejected duplicate anime title: '${title}' (Already exists in catalog or pending queue)`);
-            continue; // Completely reject duplicate anime: do not update, do not send to pending queue
-          }
-
-          // 2. Synopsis Resolution (Dynamic Match: Synopsis, Description, Summary, Plot, Overview)
-          const synopsisKey = Object.keys(row).find(key => {
-            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
-            return k === 'synopsis' || k === 'description' || k === 'summary' || k === 'plot' || k === 'overview' || k === 'story' || k === 'details';
-          });
-          const rawSynopsis = (synopsisKey ? row[synopsisKey] : (row.Synopsis || row.synopsis || row.Description || row.description || row.Summary || row.summary))?.toString().trim();
-          const parsedSynopsis = rawSynopsis && rawSynopsis.length > 0
-            ? rawSynopsis
-            : 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
-
-          // 3. Type Resolution (Dynamic Match: Type, Format)
-          const typeKey = Object.keys(row).find(key => key.toLowerCase().includes('type'));
-          let rawType = typeKey ? row[typeKey]?.toString().trim().toLowerCase() : (row.Type || row.type || '').toString().trim().toLowerCase();
-          let finalType = 'TV Series';
-          if (rawType.includes('movie') || rawType.includes('film')) finalType = 'Movie';
-          else if (rawType.includes('ova/special')) finalType = 'OVA/Special';
-          else if (rawType.includes('ova') || rawType.includes('special')) finalType = 'OVA/Special';
-          else if (rawType.includes('ona')) finalType = 'ONA';
-          else if (rawType.includes('tv') || rawType.length > 0) finalType = 'TV Series';
-          const parsedType = finalType;
-
-          // 4. Status Resolution (Dynamic Match: Status, Airing Status)
-          const statusKey = Object.keys(row).find(key => {
-            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
-            return k === 'status' || k === 'airingstatus' || k === 'state';
-          });
-          const rawStatus = (statusKey ? row[statusKey] : (row.Status || row.status || 'Airing'))?.toString().trim() || 'Airing';
-          let parsedStatus = 'Airing';
-          if (rawStatus.toLowerCase().includes('complete') || rawStatus.toLowerCase().includes('finish')) {
-            parsedStatus = 'Completed';
-          } else if (rawStatus.toLowerCase().includes('ongoing') || rawStatus.toLowerCase().includes('air')) {
-            parsedStatus = 'Airing';
-          } else {
-            parsedStatus = rawStatus;
-          }
-
-          // 5. Studio Resolution (Dynamic Match: Studio, Animation Studio)
-          const studioKey = Object.keys(row).find(key => {
-            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
-            return k === 'studio' || k === 'animationstudio' || k === 'studios';
-          });
-          const parsedStudio = (studioKey ? row[studioKey] : (row.Studio || row.studio || ''))?.toString().trim() || 'Unknown Studio';
-
-          // 6. Release Year Resolution (Dynamic Match: Year, Release Year)
-          const yearKey = Object.keys(row).find(key => {
-            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
-            return k === 'year' || k === 'releaseyear' || k === 'airyear';
-          });
-          const parsedYear = parseInt(yearKey ? row[yearKey] : (row['Release Year'] || row.year || row.Year), 10) || new Date().getFullYear();
-
-          // 7. Rating Resolution (Dynamic Match: Rating, Ratings, Score, IMDb, MAL)
-          const ratingKey = Object.keys(row).find(key => {
-            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
-            return k === 'rating' || k === 'ratings' || k === 'score' || k === 'imdb' || k === 'mal';
-          });
-          const parsedRating = parseFloat(ratingKey ? row[ratingKey] : (row.Ratings || row.rating || row.Score)) || 8.5;
-
-          // 8. Genres Resolution (Dynamic Match: Genres, Genre, Category - supports comma and pipe separators)
-          const genresKey = Object.keys(row).find(key => {
-            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
-            return k === 'genres' || k === 'genre' || k === 'category' || k === 'categories';
-          });
-          const rawGenresStr = (genresKey ? row[genresKey] : (row.Genres || row.genres || ''))?.toString().trim();
-          const mappedGenres = rawGenresStr
-            ? rawGenresStr.includes('|')
-              ? rawGenresStr.split('|').map((g: string) => g.trim()).filter(Boolean)
-              : rawGenresStr.split(',').map((g: string) => g.trim()).filter(Boolean)
-            : ['Action', 'Fantasy'];
-
-          // 9. Streaming Partners Resolution (Dynamic Match: Streaming Partners, Platform, Watch On)
-          const platformKey = Object.keys(row).find(key => {
-            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
-            return k === 'streamingpartners' || k === 'streamingpartner' || k === 'streaming' || k === 'platform' || k === 'platforms' || k === 'watchon';
-          });
-          const rawPlatformStr = (platformKey ? row[platformKey] : (row['Streaming Partners'] || row['Streaming Partner'] || row.Platform || row.platform || 'Crunchyroll'))?.toString().trim() || 'Crunchyroll';
-          const partnersList = rawPlatformStr.includes('|')
-            ? rawPlatformStr.split('|').map((p: string) => ({ name: p.trim(), url: '' })).filter((p: any) => p.name)
-            : rawPlatformStr.includes(',')
-            ? rawPlatformStr.split(',').map((p: string) => ({ name: p.trim(), url: '' })).filter((p: any) => p.name)
-            : [{ name: rawPlatformStr, url: '' }];
-          const primaryPlatform = partnersList[0]?.name || rawPlatformStr || 'Crunchyroll';
-
-          // 10. Languages Resolution (Dynamic Match: Languages, Dubs)
-          const langKey = Object.keys(row).find(key => {
-            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
-            return k === 'languages' || k === 'language' || k === 'dubs' || k === 'dub';
-          });
-          const rawLangStr = (langKey ? row[langKey] : (row.Languages || row.languages || 'Tamil, Hindi'))?.toString().trim();
-          const mappedLanguages = rawLangStr
-            ? rawLangStr.includes('|')
-              ? rawLangStr.split('|').map((l: string) => l.trim()).filter(Boolean)
-              : rawLangStr.split(',').map((l: string) => l.trim()).filter(Boolean)
-            : ['Tamil', 'Hindi'];
-
-          // 11. Episodes & Seasons Resolution
-          const episodesKey = Object.keys(row).find(key => {
-            const k = key.trim().toLowerCase().replace(/[^a-z]/g, '');
-            return k === 'episodes' || k === 'episodecount' || k === 'episodescount' || k === 'episodesperseason';
-          });
-          const episodesString = String(episodesKey ? row[episodesKey] : (row.Episodes || row.episodes || "12"));
-          const episodesList = episodesString.includes('|')
-            ? episodesString.split('|').map(ep => ep.trim()).filter(Boolean)
-            : episodesString.includes(',')
-            ? episodesString.split(',').map(ep => ep.trim()).filter(Boolean)
-            : [episodesString.trim() || "12"];
-
-          // Create complete seasons array
-          const mappedSeasonsArray = episodesList.map((epCount, index) => {
-            return {
-              id: Date.now() + Math.random() + index,
-              season: index + 1,
-              seasonNumber: String(index + 1),
-              entryType: (finalType === 'Movie' ? 'Movie' : finalType.includes('OVA') || finalType.includes('Special') ? 'OVA/Special' : 'Season'),
-              type: parsedType,
-              episodes: epCount,
-              languages: mappedLanguages || []
-            };
-          });
-
-          setMixedEntries(mappedSeasonsArray);
-
-          const currentSeasonVal = String(mappedSeasonsArray.length);
-          const liveEpisodeVal = Number(episodesList[episodesList.length - 1]) || 12;
-
-          // 12. Build complete payload with Synopsis and all mapped fields
-          const payload = {
-            title: title,
-            slug,
-            synopsis: parsedSynopsis,
-            description: parsedSynopsis,
-            cover_image: row['Cover Image'] || row.cover_image || row.poster || row.Poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-            banner_image: row['Banner Image'] || row.banner_image || row['Cover Image'] || row.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-            year: parsedYear,
-            languages: mappedLanguages.join(', '),
-            genres: mappedGenres.join(', '),
-            studio: parsedStudio,
-            type: parsedType,
-            Type: parsedType,
-            status: parsedStatus,
-            submissionStatus: 'pending',
-            episodes_count: Number(episodesList[episodesList.length - 1]) || 12,
-            season: currentSeasonVal,
-            current_season: currentSeasonVal,
-            currently_airing_episode: liveEpisodeVal,
-            episodes_per_season: episodesList.join('|'),
-            platform: primaryPlatform,
-            rating: parsedRating,
-            mixedEntries: mappedSeasonsArray,
-            streamingPartners: partnersList,
-            moderationStatus: 'pending'
-          };
-
-          // 13. Persist to Cloudflare D1 database via API
-          try {
-            await cloudflareApi.createAnime(payload);
-            importedCount++;
-            addTerminalLog('D1', `[CSV IMPORT] Saved '${title}' to Cloudflare D1 with Synopsis: "${parsedSynopsis.slice(0, 45)}..."`);
-          } catch (err) {
-            console.warn('Network notice during row import for:', title, err);
-            importedCount++;
-          }
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const csvText = e.target?.result as string;
+        if (!csvText) {
+          throw new Error('Empty CSV file content');
         }
+
+        addTerminalLog('CSV', 'Uploading CSV payload to Cloudflare D1 moderation queue...');
+        const res = await cloudflareApi.uploadCSV({ csvText });
         
-        // 5. Show success toast with exact breakdown of imported vs rejected duplicates
-        const feedbackMsg = `Imported ${importedCount} new anime. Rejected ${skippedCount} duplicate anime.`;
-        setImportedCount(importedCount);
+        const count = res.count || 0;
+        const skipped = res.skipped || 0;
+        const feedbackMsg = `Successfully synchronized ${count} anime entries to moderation queue! (Skipped duplicates: ${skipped})`;
+        
+        setImportedCount(count);
         setShowImportToast(true);
         setSuccessMsg(feedbackMsg);
+        addTerminalLog('OK', feedbackMsg);
+
         if (typeof onToast === 'function') {
           onToast(feedbackMsg);
         }
@@ -750,20 +553,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         await fetchAnime();
         await fetchPendingItems();
         if (onAnimeCreated) onAnimeCreated();
-        setIsImporting(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
 
         setTimeout(() => {
           setShowImportToast(false);
           setSuccessMsg('');
         }, 6000);
-      },
-      error: (error) => {
-        console.error('PapaParse Error:', error);
-        setUploadError('CSV file parsing failed.');
+      } catch (err: any) {
+        console.error('CSV Import Error:', err);
+        const errMsg = err.message || 'Server error during CSV import';
+        setUploadError(errMsg);
+        setSuccessMsg(`CSV Import Failed: ${errMsg}`);
+        addTerminalLog('ERR', `[ERROR] CSV Import failed: ${errMsg}`);
+        setTimeout(() => setSuccessMsg(''), 6000);
+      } finally {
         setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
-    });
+    };
+    reader.onerror = () => {
+      setIsImporting(false);
+      setUploadError('Failed to read CSV file.');
+      setSuccessMsg('Failed to read CSV file.');
+      setTimeout(() => setSuccessMsg(''), 4000);
+    };
+    reader.readAsText(file);
   };
 
   const handleExportCsv = () => {

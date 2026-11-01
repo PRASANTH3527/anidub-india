@@ -210,6 +210,35 @@ class CloudflareApiService {
   /**
    * CREATE: Adds a new anime to Cloudflare D1
    */
+  /**
+   * UPLOAD / IMPORT CSV: Sends CSV text or array to backend import route
+   */
+  public async uploadCSV(payload: { csvText?: string; animeList?: any[] } | string): Promise<{ success: boolean; count?: number; skipped?: number }> {
+    const endpoint = '/api/admin/import-csv';
+    const bodyData = typeof payload === 'string' ? { csvText: payload } : payload;
+    
+    const res = await this.smartFetch(endpoint, {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(bodyData)
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.log('CSV Upload Error Response:', errText);
+      let errorMsg = `CSV Import failed (Status ${res.status})`;
+      try {
+        const json = JSON.parse(errText);
+        if (json.error) errorMsg = json.error;
+      } catch {
+        if (errText) errorMsg = errText;
+      }
+      throw new Error(errorMsg);
+    }
+
+    return await res.json();
+  }
+
   public async createAnime(payload: AnimePayload): Promise<{ success: boolean; animeId?: number; data?: any }> {
     const endpoint = CLOUDFLARE_ENDPOINTS.CATALOG;
     const res = await this.smartFetch(endpoint, {
