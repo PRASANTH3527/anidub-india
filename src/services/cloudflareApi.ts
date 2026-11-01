@@ -54,7 +54,7 @@ class CloudflareApiService {
     const url = getCloudflareUrl(path);
     const fetchOptions: RequestInit = {
       ...options,
-      credentials: 'include'
+      credentials: 'omit' // Use omit to allow wildcard CORS
     };
     
     try {

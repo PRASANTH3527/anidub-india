@@ -105,25 +105,42 @@ const SEED_ANIME = [
 ];
 
 function getCorsHeaders(request) {
+  const origin = request ? (request.headers.get("Origin") || request.headers.get("origin")) : null;
+  const allowedOrigins = ["http://localhost:3000", "https://anime-chat.samayaprasanth0.workers.dev", "https://anidub-india-a1y.pages.dev"];
+  
   const headers = {
-    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, x-device-id, x-requested-with, Accept, Origin, Cache-Control, Pragma",
     "Access-Control-Expose-Headers": "Content-Length, Content-Type, Set-Cookie",
-    "Access-Control-Allow-Credentials": "false",
     "Vary": "Origin"
   };
+
+  // Explicitly return origin instead of wildcard
+  if (origin && allowedOrigins.includes(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers["Access-Control-Allow-Credentials"] = "true";
+  } else {
+    headers["Access-Control-Allow-Origin"] = allowedOrigins[0];
+    headers["Access-Control-Allow-Credentials"] = "true";
+  }
+
   return headers;
 }
 
 function jsonResponse(data, status = 200, request = null) {
-  return new Response(JSON.stringify(data), {
+  const response = new Response(JSON.stringify(data), {
     status,
     headers: {
-      "Content-Type": "application/json",
-      ...getCorsHeaders(request)
+      "Content-Type": "application/json"
     }
   });
+  
+  const headers = getCorsHeaders(request);
+  for (const [key, value] of Object.entries(headers)) {
+    response.headers.set(key, value);
+  }
+  
+  return response;
 }
 
 async function sendTelegramAlert(env, text) {
