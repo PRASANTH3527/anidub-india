@@ -98,7 +98,7 @@ export class ChatRoom {
 const DEFAULT_IMGBB_KEY = 'Ee6b4e37ae9c228c29b8448483b6591b';
 
 const SEED_ANIME = [
-  { id: 1, title: 'Solo Leveling', slug: 'solo-leveling', synopsis: 'In a world of hunters...', cover_image: 'https://cdn.myanimelist.net/images/anime/1546/141065.jpg', rating: 8.7, year: 2024, genres: 'Action, Fantasy', platform: 'Crunchyroll', popularity: 95000 },
+  { id: 1, title: 'Solo Leveling', slug: 'solo-leveling', synopsis: 'In a world of hunters...', cover_image: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800', rating: 8.7, year: 2024, genres: 'Action, Fantasy', platform: 'Crunchyroll', popularity: 95000 },
   { id: 2, title: 'Demon Slayer', slug: 'demon-slayer', synopsis: 'Family slaughtered...', cover_image: 'https://cdn.myanimelist.net/images/anime/1286/99889.jpg', rating: 8.9, year: 2019, genres: 'Action, Supernatural', platform: 'Netflix', popularity: 120000 },
   { id: 3, title: 'Naruto Shippuden', slug: 'naruto-shippuden', synopsis: 'Intense training...', cover_image: 'https://cdn.myanimelist.net/images/anime/1565/111305.jpg', rating: 8.3, year: 2007, genres: 'Action, Adventure', platform: 'Sony YAY!', popularity: 88000 },
   { id: 4, title: 'Jujutsu Kaisen', slug: 'jujutsu-kaisen', synopsis: 'Cursed spirit...', cover_image: 'https://cdn.myanimelist.net/images/anime/1171/109222.jpg', rating: 8.8, year: 2020, genres: 'Action, Supernatural', platform: 'Crunchyroll', popularity: 110000 }
@@ -341,7 +341,7 @@ export default {
 
       // 12. Individual Anime GET/DELETE
       const animeMatch = path.match(/^\/api\/anime\/([0-9a-zA-Z_-]+)$/);
-      if (animeMatch && !path.includes('/')) { // Ensure no sub-path
+      if (animeMatch) {
         const id = animeMatch[1];
         if (method === "GET") {
           if (env.DB) {
@@ -351,13 +351,107 @@ export default {
           const fallback = SEED_ANIME.find(a => String(a.id) === id || a.slug === id);
           return fallback ? jsonResponse(fallback, 200, request) : jsonResponse({ error: "Not found" }, 404, request);
         }
-        if (method === "DELETE" && env.DB) {
-          await env.DB.prepare("DELETE FROM anime WHERE id = ?").bind(id).run();
-          return jsonResponse({ success: true }, 200, request);
+        if (method === "DELETE") {
+          try {
+            if (env.DB) {
+              await env.DB.prepare("DELETE FROM episodes WHERE anime_id = ?").bind(id).run();
+              await env.DB.prepare("DELETE FROM reviews WHERE anime_id = ?").bind(id).run();
+              await env.DB.prepare("DELETE FROM watchlist WHERE anime_id = ?").bind(id).run();
+              await env.DB.prepare("DELETE FROM anime WHERE id = ? OR slug = ?").bind(id, id).run();
+            }
+            return jsonResponse({ success: true, id }, 200, request);
+          } catch (delErr) {
+            console.error("Worker DELETE error:", delErr);
+            return jsonResponse({ success: false, error: delErr.message }, 500, request);
+          }
         }
       }
 
-      // 13. Catch-all for /api/
+      // 13. Admin Pending Queue
+      if (path === "/api/admin/pending" && method === "GET") {
+        try {
+          if (env.DB) {
+            const { results } = await env.DB.prepare(
+              "SELECT * FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' ORDER BY id DESC"
+            ).all();
+            return jsonResponse({ success: true, data: results || [], total: (results || []).length }, 200, request);
+          }
+          return jsonResponse({ success: true, data: [], total: 0 }, 200, request);
+        } catch (e) {
+          return jsonResponse({ success: false, error: e.message, data: [] }, 500, request);
+        }
+      }
+
+      // 14. Admin CSV Import
+      if (path === "/api/admin/import-csv" && method === "POST") {
+        try {
+          const body = await request.json();
+          let rows = [];
+          if (Array.isArray(body)) rows = body;
+          else if (Array.isArray(body?.animeList)) rows = body.animeList;
+          else if (Array.isArray(body?.data)) rows = body.data;
+
+          if (!rows || rows.length === 0) {
+            return jsonResponse({ success: false, error: "Empty CSV payload" }, 400, request);
+          }
+
+          let insertedCount = 0;
+          let skippedCount = 0;
+
+          for (const row of rows) {
+            const title = (row.title || row.Title || row.name || row.Name || Object.values(row)[0] || '').toString().trim();
+            if (!title) {
+              skippedCount++;
+              continue;
+            }
+
+            const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+            const slug = `${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
+            const synopsis = (row.synopsis || row.Synopsis || row.description || row.Description || 'Exciting anime series').toString().trim();
+            const year = parseInt(row.year || row.Year || '2024', 10) || 2024;
+            const rating = parseFloat(row.rating || row.Ratings || '8.5') || 8.5;
+            const genres = (row.genres || row.Genres || 'Action, Fantasy').toString().trim();
+            const platform = (row.platform || row.Platform || 'Crunchyroll').toString().trim();
+            const languages = (row.languages || row.Languages || 'Tamil, Hindi').toString().trim();
+            const cover_image = row.cover_image || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
+            const banner_image = row.banner_image || row['Banner Image'] || cover_image;
+
+            if (env.DB) {
+              await env.DB.prepare(
+                `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 'Spring', ?, ?, 0, ?, ?, 'TV Series')`
+              ).bind(title, slug, synopsis, cover_image, banner_image, rating, 12, year, genres, languages, platform).run();
+            }
+            insertedCount++;
+          }
+
+          return jsonResponse({ success: true, count: insertedCount, skipped: skippedCount }, 200, request);
+        } catch (csvErr) {
+          console.error("Worker CSV Import error:", csvErr);
+          return jsonResponse({ success: false, error: csvErr.message }, 500, request);
+        }
+      }
+
+      // 15. Admin Approve / Reject
+      const approveMatch = path.match(/^\/api\/admin\/approve\/([0-9a-zA-Z_-]+)$/);
+      if (approveMatch && method === "POST") {
+        const id = approveMatch[1];
+        if (env.DB) {
+          await env.DB.prepare("UPDATE anime SET status = 'Ongoing', submissionStatus = 'approved' WHERE id = ?").bind(id).run();
+        }
+        return jsonResponse({ success: true, id, submissionStatus: 'approved' }, 200, request);
+      }
+
+      const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)$/);
+      if (rejectMatch && method === "POST") {
+        const id = rejectMatch[1];
+        if (env.DB) {
+          await env.DB.prepare("DELETE FROM anime WHERE id = ?").bind(id).run();
+        }
+        return jsonResponse({ success: true, id }, 200, request);
+      }
+
+      // 16. Catch-all for /api/
       if (path.startsWith("/api/")) {
         return jsonResponse({ error: "Endpoint not implemented on worker", path }, 404, request);
       }

@@ -101,7 +101,7 @@ export default function App() {
         setCatalogList(FALLBACK_SEED_ANIME);
       }
     } catch (err: any) {
-      console.error('[Catalog API Error]:', err?.message || err);
+      console.warn('[Catalog API Notice]:', err?.message || err);
       setCatalogList(FALLBACK_SEED_ANIME);
     } finally {
       setIsCatalogLoading(false);
@@ -325,7 +325,12 @@ export default function App() {
       {activeTab === 'admin' && isAdminAuthenticated && (
         <AdminDashboard
           catalogList={catalogList}
-          onAnimeCreated={(updatedAnime) => {
+          onAnimeCreated={(updatedAnime?: any, deletedId?: string | number) => {
+            if (deletedId !== undefined && deletedId !== null) {
+              setCatalogList(prev => prev.filter(a => String(a.id) !== String(deletedId)));
+              setRecentlyViewed(prev => prev.filter(a => String(a.id) !== String(deletedId)));
+              return;
+            }
             if (updatedAnime) {
               const targetId = updatedAnime.id;
               const newCover = updatedAnime.posterUrl || updatedAnime.image || updatedAnime.cover_image || updatedAnime.poster;

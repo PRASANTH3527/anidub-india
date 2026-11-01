@@ -64,7 +64,7 @@ import { CLOUDFLARE_API_URL, getCloudflareUrl } from '../config/cloudflare';
 import Papa from 'papaparse';
 
 export interface AdminDashboardProps {
-  onAnimeCreated: (anime?: any) => void;
+  onAnimeCreated?: (anime?: any, deletedId?: string | number) => void;
   onLogout?: () => void;
   onNavigateHome?: () => void;
   onToast?: (msg: string) => void;
@@ -463,24 +463,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         addTerminalLog('OK', `Purged #${targetId} (${anime.title || 'Untitled'}) from Cloudflare D1`);
       }
 
-      // 2. ONLY remove from local React state upon successful 200 OK response from backend
-      const updatedCatalog = catalog.filter(item => (item.id || item._id) !== targetId);
-      setCatalog(updatedCatalog);
-      setAnimes(updatedCatalog);
+      // 2. Remove from local React state immediately using functional state updates and string comparison
+      setCatalog(prev => prev.filter(item => String(item.id || item._id) !== String(targetId)));
+      setAnimes(prev => prev.filter(item => String(item.id || item._id) !== String(targetId)));
       
       try {
-        localStorage.setItem('cf_admin_catalog_cache', JSON.stringify(updatedCatalog));
+        const cached = localStorage.getItem('cf_admin_catalog_cache');
+        if (cached) {
+          const list = JSON.parse(cached);
+          localStorage.setItem('cf_admin_catalog_cache', JSON.stringify(list.filter((item: any) => String(item.id || item._id) !== String(targetId))));
+        }
       } catch (e) {}
 
       setSuccessMsg('Successfully deleted from Cloudflare D1.');
       setTimeout(() => setSuccessMsg(''), 4000);
 
       if (typeof onAnimeCreated === 'function') {
-        onAnimeCreated();
+        onAnimeCreated(undefined, targetId);
       }
     } catch (err: any) {
       console.error('Cloudflare Delete error:', err);
-      setSuccessMsg(`Failed to delete anime from Cloudflare D1: ${err.message || 'Server error'}`);
+      setSuccessMsg(`Failed to delete anime: ${err.message || 'Server error'}`);
       addTerminalLog('ERR', `[ERROR] Failed deleting #${targetId} on Edge: ${err.message}`);
       setTimeout(() => setSuccessMsg(''), 5000);
     } finally {
@@ -523,57 +526,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsImporting(true);
     addTerminalLog('CSV', `Reading CSV file: ${file.name} (${file.size} bytes)`);
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const csvText = e.target?.result as string;
-        if (!csvText) {
-          throw new Error('Empty CSV file content');
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (h) => h.toLowerCase().replace(/[^a-z0-9]/g, '_').trim(),
+      transform: (v) => (typeof v === 'string' ? v.trim() : v),
+      complete: async (results) => {
+        try {
+          const parsedRows = (results.data || []) as any[];
+          console.log("Parsed CSV Data:", parsedRows);
+          addTerminalLog('CSV', `Parsed ${parsedRows.length} rows from CSV`);
+
+          if (parsedRows.length === 0) {
+            throw new Error('CSV parsing failed: Check header format');
+          }
+
+          addTerminalLog('CSV', 'Uploading parsed CSV rows to Cloudflare D1 moderation queue...');
+          const res = await cloudflareApi.uploadCSV({ animeList: parsedRows });
+          
+          const count = res.count || parsedRows.length;
+          const skipped = res.skipped || 0;
+          const feedbackMsg = `Successfully synchronized ${count} anime entries to moderation queue! (Skipped duplicates: ${skipped})`;
+          
+          setImportedCount(count);
+          setShowImportToast(true);
+          setSuccessMsg(feedbackMsg);
+          addTerminalLog('OK', feedbackMsg);
+
+          if (typeof onToast === 'function') {
+            onToast(feedbackMsg);
+          }
+
+          await fetchAnime();
+          await fetchPendingItems();
+          if (onAnimeCreated) onAnimeCreated();
+
+          setTimeout(() => {
+            setShowImportToast(false);
+            setSuccessMsg('');
+          }, 6000);
+        } catch (err: any) {
+          console.error('CSV Import Error:', err);
+          const errMsg = err.message || 'CSV parsing failed: Check header format';
+          setUploadError(errMsg);
+          setSuccessMsg(`CSV Import Failed: ${errMsg}`);
+          addTerminalLog('ERR', `[ERROR] CSV Import failed: ${errMsg}`);
+          setTimeout(() => setSuccessMsg(''), 6000);
+        } finally {
+          setIsImporting(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
         }
-
-        addTerminalLog('CSV', 'Uploading CSV payload to Cloudflare D1 moderation queue...');
-        const res = await cloudflareApi.uploadCSV({ csvText });
-        
-        const count = res.count || 0;
-        const skipped = res.skipped || 0;
-        const feedbackMsg = `Successfully synchronized ${count} anime entries to moderation queue! (Skipped duplicates: ${skipped})`;
-        
-        setImportedCount(count);
-        setShowImportToast(true);
-        setSuccessMsg(feedbackMsg);
-        addTerminalLog('OK', feedbackMsg);
-
-        if (typeof onToast === 'function') {
-          onToast(feedbackMsg);
-        }
-
-        await fetchAnime();
-        await fetchPendingItems();
-        if (onAnimeCreated) onAnimeCreated();
-
-        setTimeout(() => {
-          setShowImportToast(false);
-          setSuccessMsg('');
-        }, 6000);
-      } catch (err: any) {
-        console.error('CSV Import Error:', err);
-        const errMsg = err.message || 'Server error during CSV import';
+      },
+      error: (error: any) => {
+        console.error('PapaParse Error:', error);
+        const errMsg = 'CSV parsing failed: Check header format';
         setUploadError(errMsg);
-        setSuccessMsg(`CSV Import Failed: ${errMsg}`);
-        addTerminalLog('ERR', `[ERROR] CSV Import failed: ${errMsg}`);
-        setTimeout(() => setSuccessMsg(''), 6000);
-      } finally {
+        setSuccessMsg(errMsg);
+        addTerminalLog('ERR', `[ERROR] ${errMsg}`);
         setIsImporting(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        setTimeout(() => setSuccessMsg(''), 5000);
       }
-    };
-    reader.onerror = () => {
-      setIsImporting(false);
-      setUploadError('Failed to read CSV file.');
-      setSuccessMsg('Failed to read CSV file.');
-      setTimeout(() => setSuccessMsg(''), 4000);
-    };
-    reader.readAsText(file);
+    });
   };
 
   const handleExportCsv = () => {

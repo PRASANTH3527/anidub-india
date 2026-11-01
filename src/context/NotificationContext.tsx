@@ -372,6 +372,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const res = await fetch(getCloudflareUrl('/api/notifications/test'), {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'review',

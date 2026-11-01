@@ -17,7 +17,9 @@ import {
   X,
   User,
   MessageSquare,
-  Mic
+  Mic,
+  ShieldCheck,
+  Shield
 } from 'lucide-react';
 import { useToast } from './Toast';
 import { MicPermissionBottomSheet } from './MicPermissionBottomSheet';
@@ -545,6 +547,32 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Sun className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400" />
             ) : (
               <Moon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-indigo-300" />
+            )}
+          </motion.button>
+
+          {/* Admin Console Access */}
+          <motion.button
+            whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
+            onClick={() => {
+              if (isAdminAuthenticated) {
+                setActiveTab(activeTab === 'admin' ? 'home' : 'admin');
+              } else {
+                onUnlockAdmin();
+              }
+            }}
+            className={`p-1.5 sm:p-2 rounded-xl transition-colors cursor-pointer border ${
+              activeTab === 'admin'
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm'
+                : isAdminAuthenticated
+                ? 'bg-purple-950/40 text-purple-300 border-purple-500/40 hover:text-white hover:bg-purple-900/60'
+                : 'bg-neutral-800/70 border-neutral-700/40 text-neutral-400 hover:text-white'
+            }`}
+            title={isAdminAuthenticated ? "Admin Dashboard" : "Admin Login"}
+          >
+            {isAdminAuthenticated ? (
+              <ShieldCheck className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400" />
+            ) : (
+              <Shield className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             )}
           </motion.button>
         </div>

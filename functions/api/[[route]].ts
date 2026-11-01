@@ -23,8 +23,8 @@ const SEED_ANIME: any[] = [
     title: 'Solo Leveling',
     slug: 'solo-leveling',
     synopsis: 'In a world where hunters must battle deadly monsters to protect mankind, Sung Jinwoo, the weakest hunter of them all, finds himself in an endless struggle for survival. After a mysterious incident in a high-rank dungeon, he gains the ability to level up.',
-    cover_image: 'https://cdn.myanimelist.net/images/anime/1546/141065.jpg',
-    banner_image: 'https://cdn.myanimelist.net/images/anime/1546/141065.jpg',
+    cover_image: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800',
+    banner_image: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800',
     rating: 8.7,
     episodes_count: 12,
     status: 'Completed',
@@ -532,6 +532,89 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     } catch (err: any) {
       return jsonResponse({ error: err.message }, 500);
     }
+  }
+
+  // 10c. GET /api/admin/pending
+  if (path === '/api/admin/pending' && method === 'GET') {
+    try {
+      if (env.DB) {
+        const res = await env.DB.prepare(
+          "SELECT * FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' ORDER BY id DESC"
+        ).all();
+        return jsonResponse({ success: true, data: res.results || [], total: (res.results || []).length });
+      }
+      return jsonResponse({ success: true, data: [], total: 0 });
+    } catch (err: any) {
+      return jsonResponse({ success: false, error: err.message, data: [] }, 500);
+    }
+  }
+
+  // 10d. POST /api/admin/import-csv
+  if (path === '/api/admin/import-csv' && method === 'POST') {
+    try {
+      const body: any = await request.json();
+      let rows: any[] = [];
+      if (Array.isArray(body)) rows = body;
+      else if (Array.isArray(body?.animeList)) rows = body.animeList;
+      else if (Array.isArray(body?.data)) rows = body.data;
+
+      if (!rows || rows.length === 0) {
+        return jsonResponse({ success: false, error: 'Empty CSV payload' }, 400);
+      }
+
+      let insertedCount = 0;
+      let skippedCount = 0;
+
+      for (const row of rows) {
+        const title = (row.title || row.Title || row.name || row.Name || Object.values(row)[0] || '').toString().trim();
+        if (!title) {
+          skippedCount++;
+          continue;
+        }
+
+        const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+        const slug = `${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
+        const synopsis = (row.synopsis || row.Synopsis || row.description || row.Description || 'Exciting anime series').toString().trim();
+        const year = parseInt(row.year || row.Year || '2024', 10) || 2024;
+        const rating = parseFloat(row.rating || row.Ratings || '8.5') || 8.5;
+        const genres = (row.genres || row.Genres || 'Action, Fantasy').toString().trim();
+        const platform = (row.platform || row.Platform || 'Crunchyroll').toString().trim();
+        const languages = (row.languages || row.Languages || 'Tamil, Hindi').toString().trim();
+        const cover_image = row.cover_image || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
+        const banner_image = row.banner_image || row['Banner Image'] || cover_image;
+
+        if (env.DB) {
+          await env.DB.prepare(
+            `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 'Spring', ?, ?, 0, ?, ?, 'TV Series')`
+          ).bind(title, slug, synopsis, cover_image, banner_image, rating, 12, year, genres, languages, platform).run();
+        }
+        insertedCount++;
+      }
+
+      return jsonResponse({ success: true, count: insertedCount, skipped: skippedCount });
+    } catch (err: any) {
+      return jsonResponse({ success: false, error: err.message }, 500);
+    }
+  }
+
+  // 10e. POST /api/admin/approve/:id & /api/admin/reject/:id
+  const approveMatch = path.match(/^\/api\/admin\/approve\/([0-9a-zA-Z_-]+)$/);
+  if (approveMatch && method === 'POST') {
+    const id = approveMatch[1];
+    if (env.DB) {
+      await env.DB.prepare("UPDATE anime SET status = 'Ongoing', submissionStatus = 'approved' WHERE id = ?").bind(id).run();
+    }
+    return jsonResponse({ success: true, id, submissionStatus: 'approved' });
+  }
+
+  const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)$/);
+  if (rejectMatch && method === 'POST') {
+    const id = rejectMatch[1];
+    if (env.DB) {
+      await env.DB.prepare("DELETE FROM anime WHERE id = ?").bind(id).run();
+    }
+    return jsonResponse({ success: true, id });
   }
 
   // 11. POST /api/admin/reset-db
