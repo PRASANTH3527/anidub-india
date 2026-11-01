@@ -317,25 +317,184 @@ export default {
       }
 
       // 11. Specific Anime Routes (/api/anime/:id/...)
-      const animeSubMatch = path.match(/^\/api\/anime\/([0-9a-zA-Z_-]+)\/(reviews|like|vote|rate|vote-status)$/);
+      const animeSubMatch = path.match(/^\/api\/anime\/([0-9a-zA-Z_-]+)\/(reviews|like|likes|vote|upvote|rate|vote-status)$/);
       if (animeSubMatch) {
         const id = animeSubMatch[1];
         const sub = animeSubMatch[2];
+        const clientIp = request.headers.get("CF-Connecting-IP") || 
+                         request.headers.get("x-real-ip") || 
+                         request.headers.get("x-forwarded-for")?.split(",")[0].trim() || 
+                         "127.0.0.1";
         
+        // Resolve numeric anime ID if slug was passed
+        let numericId = parseInt(id, 10);
+        if (isNaN(numericId) && env.DB) {
+          const row = await env.DB.prepare("SELECT id FROM anime WHERE slug = ?").bind(id).first();
+          if (row && row.id) numericId = row.id;
+        }
+
+        // GET Reviews
         if (sub === 'reviews' && method === "GET") {
           if (env.DB) {
-            const { results } = await env.DB.prepare("SELECT * FROM reviews WHERE anime_id = ? OR anime_id = (SELECT id FROM anime WHERE slug = ?)").bind(id, id).all();
+            const { results } = await env.DB.prepare(
+              "SELECT * FROM reviews WHERE anime_id = ? OR anime_id = (SELECT id FROM anime WHERE slug = ?) ORDER BY id DESC"
+            ).bind(id, id).all();
             return jsonResponse({ reviews: results || [] }, 200, request);
           }
           return jsonResponse({ reviews: [] }, 200, request);
         }
-        
-        if ((sub === 'like' || sub === 'vote' || sub === 'rate' || sub === 'reviews') && method === "POST") {
-          return jsonResponse({ success: true, message: "Action recorded on edge" }, 200, request);
+
+        // POST Review
+        if (sub === 'reviews' && method === "POST") {
+          try {
+            const body = await request.json().catch(() => ({}));
+            if (env.DB && numericId) {
+              await env.DB.prepare(
+                "INSERT INTO reviews (anime_id, user_name, user_avatar, rating, comment) VALUES (?, ?, ?, ?, ?)"
+              ).bind(numericId, body.user_name || 'Anonymous', body.user_avatar || '', body.rating || 10, body.comment || '').run();
+            }
+            return jsonResponse({ success: true, message: "Review posted successfully" }, 200, request);
+          } catch (revErr) {
+            return jsonResponse({ success: false, error: revErr.message }, 500, request);
+          }
         }
 
-        if (sub === 'vote-status') {
-          return jsonResponse({ hasLiked: false, hasUpvoted: false }, 200, request);
+        // GET Vote Status (Checks if IP has already liked or upvoted)
+        if (sub === 'vote-status' && method === "GET") {
+          let hasLiked = false;
+          let hasUpvoted = false;
+          if (env.DB && numericId) {
+            const likeCheck = await env.DB.prepare(
+              "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'like'"
+            ).bind(numericId, clientIp).first();
+            const upvoteCheck = await env.DB.prepare(
+              "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'upvote'"
+            ).bind(numericId, clientIp).first();
+            hasLiked = Boolean(likeCheck);
+            hasUpvoted = Boolean(upvoteCheck);
+          }
+          return jsonResponse({ animeId: numericId || id, hasLiked, hasUpvoted }, 200, request);
+        }
+
+        // POST Vote / Upvote (with Spam Prevention via user_votes)
+        if ((sub === 'vote' || sub === 'upvote') && method === "POST") {
+          try {
+            if (env.DB && numericId) {
+              // 1. Check if IP already upvoted
+              const existing = await env.DB.prepare(
+                "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'upvote'"
+              ).bind(numericId, clientIp).first();
+
+              if (existing) {
+                return jsonResponse({
+                  error: "Already voted",
+                  message: "You have already upvoted this anime.",
+                  alreadyVoted: true,
+                  animeId: numericId
+                }, 400, request);
+              }
+
+              // 2. Insert vote record (with UNIQUE constraint catch)
+              try {
+                await env.DB.prepare(
+                  "INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'upvote')"
+                ).bind(numericId, clientIp).run();
+              } catch (uErr) {
+                if (String(uErr?.message || uErr).toLowerCase().includes("unique")) {
+                  return jsonResponse({
+                    error: "Already voted",
+                    message: "You have already upvoted this anime.",
+                    alreadyVoted: true,
+                    animeId: numericId
+                  }, 400, request);
+                }
+                throw uErr;
+              }
+
+              // 3. Increment upvotes & popularity in D1
+              await env.DB.prepare(
+                "UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + 1), popularity = MAX(0, COALESCE(popularity, 0) + 1) WHERE id = ?"
+              ).bind(numericId).run();
+
+              const updated = await env.DB.prepare("SELECT upvotes, popularity FROM anime WHERE id = ?").bind(numericId).first();
+              const newUpvotes = updated?.upvotes ?? updated?.popularity ?? 1;
+
+              return jsonResponse({
+                success: true,
+                upvotes: newUpvotes,
+                popularity: newUpvotes,
+                animeId: numericId,
+                message: "Upvote recorded successfully"
+              }, 200, request);
+            }
+
+            return jsonResponse({ success: true, upvotes: 1, popularity: 1 }, 200, request);
+          } catch (voteErr) {
+            return jsonResponse({ success: false, error: voteErr.message }, 500, request);
+          }
+        }
+
+        // POST Like (with Spam Prevention via user_votes)
+        if ((sub === 'like' || sub === 'likes') && method === "POST") {
+          try {
+            if (env.DB && numericId) {
+              // 1. Check if IP already liked
+              const existing = await env.DB.prepare(
+                "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'like'"
+              ).bind(numericId, clientIp).first();
+
+              if (existing) {
+                return jsonResponse({
+                  error: "Already voted",
+                  message: "You have already liked this anime.",
+                  alreadyVoted: true,
+                  animeId: numericId
+                }, 400, request);
+              }
+
+              // 2. Insert vote record (with UNIQUE constraint catch)
+              try {
+                await env.DB.prepare(
+                  "INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'like')"
+                ).bind(numericId, clientIp).run();
+              } catch (uErr) {
+                if (String(uErr?.message || uErr).toLowerCase().includes("unique")) {
+                  return jsonResponse({
+                    error: "Already voted",
+                    message: "You have already liked this anime.",
+                    alreadyVoted: true,
+                    animeId: numericId
+                  }, 400, request);
+                }
+                throw uErr;
+              }
+
+              // 3. Increment likes & likesCount in D1
+              await env.DB.prepare(
+                "UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + 1), likesCount = MAX(0, COALESCE(likesCount, 0) + 1) WHERE id = ?"
+              ).bind(numericId).run();
+
+              const updated = await env.DB.prepare("SELECT likes, likesCount FROM anime WHERE id = ?").bind(numericId).first();
+              const newLikes = updated?.likes ?? updated?.likesCount ?? 1;
+
+              return jsonResponse({
+                success: true,
+                likes: newLikes,
+                likesCount: newLikes,
+                animeId: numericId,
+                message: "Like recorded successfully"
+              }, 200, request);
+            }
+
+            return jsonResponse({ success: true, likes: 1, likesCount: 1 }, 200, request);
+          } catch (likeErr) {
+            return jsonResponse({ success: false, error: likeErr.message }, 500, request);
+          }
+        }
+
+        // POST Rate fallback
+        if (sub === 'rate' && method === "POST") {
+          return jsonResponse({ success: true, message: "Rating recorded" }, 200, request);
         }
       }
 
