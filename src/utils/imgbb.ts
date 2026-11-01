@@ -46,7 +46,7 @@ export function isImgbbUrl(url: string): boolean {
   }
 }
 
-export function sanitizeImgbbUrl(url: string, fallbackUrl = 'https://i.ibb.co/vzS8G90/default-avatar.png'): string {
+export function sanitizeImgbbUrl(url: string, fallbackUrl = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200'): string {
   if (!url || typeof url !== 'string') return fallbackUrl;
   const trimmed = url.trim();
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
@@ -77,6 +77,12 @@ export function parseImgbbApiResponse(apiData: any): { success: boolean; url?: s
 
 export function proxyUrl(url: string): string {
   if (typeof url !== 'string') return url;
-  return url.startsWith('https://cdn.myanimelist.net/') ? `/api/proxy-image?url=${encodeURIComponent(url)}` : url;
+  if (url.includes('cdn.myanimelist.net')) {
+    if (url.includes('1546/141065')) return 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
+    if (url.includes('1286/99889')) return 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800';
+    if (url.includes('1565/111305')) return 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800';
+    return 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800';
+  }
+  return url;
 }
 
