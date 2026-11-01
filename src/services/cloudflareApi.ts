@@ -239,6 +239,24 @@ class CloudflareApiService {
     return await res.json();
   }
 
+  /**
+   * FETCH PENDING: Gets pending moderation queue items
+   */
+  public async fetchPendingItems(): Promise<any[]> {
+    const endpoint = '/api/admin/pending';
+    try {
+      const res = await this.smartFetch(endpoint, {
+        method: 'GET',
+        headers: this.getHeaders(true)
+      });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json.data || json.pending || [];
+    } catch {
+      return [];
+    }
+  }
+
   public async createAnime(payload: AnimePayload): Promise<{ success: boolean; animeId?: number; data?: any }> {
     const endpoint = CLOUDFLARE_ENDPOINTS.CATALOG;
     const res = await this.smartFetch(endpoint, {

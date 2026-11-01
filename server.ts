@@ -842,6 +842,24 @@ app.get('/api/admin/export-csv', requireAdminAuth, (req, res) => {
   }
 });
 
+// GET /api/admin/pending (Admin: Fetch pending moderation queue items)
+app.get('/api/admin/pending', requireAdminAuth, (req, res) => {
+  const start = Date.now();
+  try {
+    const stmt = db.prepare("SELECT * FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' ORDER BY id DESC");
+    const pendingItems: any[] = [];
+    while (stmt.step()) {
+      pendingItems.push(stmt.getAsObject());
+    }
+    stmt.free();
+    logCloudflareEvent('D1', 'GET /api/admin/pending', 200, Date.now() - start, `Fetched ${pendingItems.length} pending items`);
+    res.json({ success: true, data: pendingItems, total: pendingItems.length });
+  } catch (err: any) {
+    console.error('Fetch Pending Error:', err);
+    res.status(500).json({ success: false, error: err.message, data: [] });
+  }
+});
+
 // --- API ROUTES (Cloudflare Pages Functions / Workers) ---
 
 // 1. POST /api/upload (Secure Backend ImgBB Upload for Posters & User Avatars)

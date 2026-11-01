@@ -292,11 +292,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const fetchPendingItems = async () => {
     try {
-      const { data } = await cloudflareApi.fetchCatalog({ limit: 100, includePending: true });
-      const items = data || [];
-      const pending = items.filter((item: any) => 
-        item.status === 'pending' || item.submissionStatus === 'pending'
-      ).map((item: any) => ({
+      const data = await cloudflareApi.fetchPendingItems();
+      const pending = (data || []).map((item: any) => ({
         ...item,
         type: item.type || item.Type || 'TV Series',
         Type: item.type || item.Type || 'TV Series',
