@@ -551,9 +551,11 @@ export default function App() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
           <div className="w-full max-w-sm bg-[#121829] border border-primary-theme rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 relative">
             <div className="text-center mb-6">
-              <div className="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center mx-auto mb-3 text-purple-400 shadow-md">
-                <ShieldCheck className="w-6 h-6 text-purple-400" />
-              </div>
+              <img 
+                src="/logo.png" 
+                alt="ANIDUB INDIA" 
+                className="h-10 w-auto object-contain mx-auto mb-3"
+              />
               <h3 className="text-lg font-black text-white">Stealth Admin Access</h3>
               <p className="text-xs text-neutral-400 mt-1">Enter secure passphrase to unlock Anidub Dashboard</p>
             </div>

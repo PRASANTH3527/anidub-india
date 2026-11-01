@@ -1162,23 +1162,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Sidebar Brand Header */}
         <div className="p-4 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="relative group shrink-0">
-              <div className="absolute -inset-1 bg-gradient-to-r from-purple-500 via-cyan-400 to-indigo-500 rounded-xl blur opacity-75 group-hover:opacity-100 transition duration-300 animate-gradient" />
-              <div className="relative w-9 h-9 rounded-xl bg-[#0d1220] border border-white/20 flex items-center justify-center text-white">
-                <Zap className="w-4 h-4 text-cyan-300 fill-cyan-400/40" />
-              </div>
-            </div>
+            <img 
+              src="/logo.png" 
+              alt="ANIDUB" 
+              className={`transition-all duration-300 object-contain ${isSidebarCollapsed ? 'h-8 w-8' : 'h-10 w-auto'}`}
+            />
             {!isSidebarCollapsed && (
               <div className="min-w-0">
-                <div className="text-xs font-black tracking-wider uppercase text-white truncate flex items-center gap-1.5">
-                  <span className="bg-gradient-to-r from-white via-slate-100 to-purple-200 bg-clip-text text-transparent">
-                    ANIDUB CORE
-                  </span>
-                  <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 text-[9px] font-mono">v4.2</span>
+                <div className="text-[10px] font-black tracking-[0.2em] uppercase text-white/40 truncate">
+                  ADMIN CONSOLE
                 </div>
-                <div className="text-[10px] text-cyan-400 font-mono tracking-tight flex items-center gap-1 mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>EDGE ANYCAST</span>
+                <div className="text-[9px] text-cyan-400 font-mono tracking-tight flex items-center gap-1 mt-0.5">
+                  <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>v4.2 PRO</span>
                 </div>
               </div>
             )}

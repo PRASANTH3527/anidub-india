@@ -1,5 +1,6 @@
 import React from 'react';
 import { Sparkles, Dices, ShieldCheck, Layers } from 'lucide-react';
+import { motion } from 'motion/react';
 import { SupportedLanguage, translate } from '../utils/i18n';
 
 interface HeroProps {
@@ -33,6 +34,18 @@ export const Hero: React.FC<HeroProps> = ({
         <span className="hidden sm:inline-flex items-center gap-1 text-emerald-400 font-bold shrink-0">
           <ShieldCheck className="w-3 h-3" /> 100% Legal OTT
         </span>
+      </div>
+
+      {/* Primary Brand Logo Integration */}
+      <div className="mb-6 flex justify-center">
+        <motion.img 
+          src="/logo.png" 
+          alt="ANIDUB INDIA" 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="h-16 sm:h-20 md:h-24 w-auto object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.4)]"
+        />
       </div>
 
       {/* Homepage Main H1 forcefully targeting "Anidub India Official Website" */}

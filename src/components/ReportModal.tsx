@@ -51,9 +51,11 @@ export const ReportModal: React.FC<ReportModalProps> = ({
         {/* HEADER */}
         <div className="flex items-center justify-between pb-4 border-b border-neutral-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-primary-theme/10 border border-primary-theme/30 text-accent-theme shrink-0 shadow-lg flex items-center justify-center">
-              <Flag className="w-5 h-5" />
-            </div>
+            <img 
+              src="/logo.png" 
+              alt="ANIDUB" 
+              className="h-8 w-auto object-contain shrink-0 drop-shadow-md"
+            />
             <div>
               <h2 className="font-heading font-black text-white text-base sm:text-lg tracking-tight">
                 Report Issue

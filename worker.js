@@ -12,30 +12,87 @@ export class ChatRoom {
     this.state = state;
     this.env = env;
     this.sessions = new Set();
+    this.sseWriters = new Set();
   }
 
   async fetch(request) {
+    const url = new URL(request.url);
     const upgradeHeader = request.headers.get("Upgrade");
-    if (!upgradeHeader || upgradeHeader !== "websocket") {
-      // Allow non-websocket requests to pass through (e.g. status checks)
-      return new Response(JSON.stringify({ status: "ChatRoom DO active" }), { 
-        status: 200, 
-        headers: getCorsHeaders(request) 
+
+    // Internal Broadcast Trigger (via POST)
+    if (request.method === "POST" && url.pathname === "/internal/broadcast") {
+      const payload = await request.json();
+      this.broadcast(payload);
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
+    }
+
+    // SSE Connection Handler
+    if (url.pathname === "/api/notifications/stream") {
+      const { readable, writable } = new TransformStream();
+      const writer = writable.getWriter();
+      const encoder = new TextEncoder();
+
+      this.sseWriters.add(writer);
+      
+      const initialMsg = `data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`;
+      writer.write(encoder.encode(initialMsg));
+
+      // Cleanup on close
+      request.signal.addEventListener("abort", () => {
+        this.sseWriters.delete(writer);
+      });
+
+      return new Response(readable, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+          ...getCorsHeaders(request)
+        }
       });
     }
 
-    const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair);
-    await this.handleSession(server);
-    const response = new Response(null, { status: 101, webSocket: client });
-    
-    // WebSockets don't really have CORS headers in the response in the same way, 
-    // but the handshake might require them depending on the client.
-    const headers = getCorsHeaders(request);
-    for (const [key, value] of Object.entries(headers)) {
-      response.headers.set(key, value);
+    // WebSocket Handshake
+    if (upgradeHeader === "websocket") {
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      await this.handleSession(server);
+      const response = new Response(null, { status: 101, webSocket: client });
+      const headers = getCorsHeaders(request);
+      for (const [key, value] of Object.entries(headers)) {
+        response.headers.set(key, value);
+      }
+      return response;
     }
-    return response;
+
+    return new Response(JSON.stringify({ status: "ChatRoom DO active" }), { 
+      status: 200, 
+      headers: getCorsHeaders(request) 
+    });
+  }
+
+  broadcast(data) {
+    const payload = JSON.stringify(data);
+    const encoder = new TextEncoder();
+    const sseMsg = `data: ${payload}\n\n`;
+
+    // Send to WebSockets
+    for (const session of this.sessions) {
+      try {
+        session.send(payload);
+      } catch (err) {
+        this.sessions.delete(session);
+      }
+    }
+
+    // Send to SSE Writers
+    for (const writer of this.sseWriters) {
+      try {
+        writer.write(encoder.encode(sseMsg));
+      } catch (err) {
+        this.sseWriters.delete(writer);
+      }
+    }
   }
 
   async handleSession(webSocket) {
@@ -77,14 +134,7 @@ export class ChatRoom {
           ).bind(chatMsg.user, chatMsg.text, chatMsg.timestamp, chatMsg.rating, chatMsg.language, chatMsg.isReview).run();
         }
 
-        const payload = JSON.stringify(chatMsg);
-        for (const session of this.sessions) {
-          try {
-            session.send(payload);
-          } catch (err) {
-            this.sessions.delete(session);
-          }
-        }
+        this.broadcast(chatMsg);
       } catch (err) {
         console.error("WebSocket message error:", err);
       }
@@ -168,25 +218,32 @@ export default {
       });
     }
 
-    // 1.5 WebSocket Routing to ChatRoom Durable Object
+    // 1.5 WebSocket & SSE Routing to ChatRoom Durable Object
     if (path === "/ws" || path === "/api/chat/stream" || path === "/api/notifications/stream") {
       if (env.CHAT_ROOM) {
         const id = env.CHAT_ROOM.idFromName("global_chat");
         const obj = env.CHAT_ROOM.get(id);
-        const response = await obj.fetch(request);
-        const headers = getCorsHeaders(request);
-        const newResponse = new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: new Headers(response.headers)
-        });
-        for (const [key, value] of Object.entries(headers)) {
-          newResponse.headers.set(key, value);
-        }
-        return newResponse;
+        return obj.fetch(request);
       }
       return jsonResponse({ error: "Durable Object binding missing" }, 503, request);
     }
+
+    // Helper: Broadcast activity to all connected clients (internal)
+    const broadcastActivity = async (payload) => {
+      if (env.CHAT_ROOM) {
+        try {
+          const id = env.CHAT_ROOM.idFromName("global_chat");
+          const obj = env.CHAT_ROOM.get(id);
+          await obj.fetch(new Request("http://internal/internal/broadcast", {
+            method: "POST",
+            body: JSON.stringify(payload),
+            headers: { "Content-Type": "application/json" }
+          }));
+        } catch (e) {
+          console.error("Broadcast failed:", e);
+        }
+      }
+    };
 
     try {
       // 2. Health & Status
@@ -353,6 +410,23 @@ export default {
                 "INSERT INTO reviews (anime_id, user_name, user_avatar, rating, comment) VALUES (?, ?, ?, ?, ?)"
               ).bind(numericId, body.user_name || 'Anonymous', body.user_avatar || '', body.rating || 10, body.comment || '').run();
             }
+            
+            // Query title for notification
+            let animeTitle = 'Anime';
+            if (env.DB && numericId) {
+              const row = await env.DB.prepare("SELECT title FROM anime WHERE id = ?").bind(numericId).first();
+              if (row) animeTitle = row.title;
+            }
+
+            await broadcastActivity({
+              type: 'review',
+              anime_id: numericId,
+              anime_title: animeTitle,
+              user: body.user_name || 'Anonymous',
+              rating: body.rating,
+              message: body.comment
+            });
+
             return jsonResponse({ success: true, message: "Review posted successfully" }, 200, request);
           } catch (revErr) {
             return jsonResponse({ success: false, error: revErr.message }, 500, request);
@@ -416,8 +490,15 @@ export default {
                 "UPDATE anime SET upvotes = MAX(0, COALESCE(upvotes, 0) + 1), popularity = MAX(0, COALESCE(popularity, 0) + 1) WHERE id = ?"
               ).bind(numericId).run();
 
-              const updated = await env.DB.prepare("SELECT upvotes, popularity FROM anime WHERE id = ?").bind(numericId).first();
+              const updated = await env.DB.prepare("SELECT title, upvotes, popularity FROM anime WHERE id = ?").bind(numericId).first();
               const newUpvotes = updated?.upvotes ?? updated?.popularity ?? 1;
+
+              await broadcastActivity({
+                type: 'upvote',
+                anime_id: numericId,
+                anime_title: updated?.title || 'Anime',
+                message: `${newUpvotes} total upvotes`
+              });
 
               return jsonResponse({
                 success: true,
@@ -474,8 +555,15 @@ export default {
                 "UPDATE anime SET likes = MAX(0, COALESCE(likes, 0) + 1), likesCount = MAX(0, COALESCE(likesCount, 0) + 1) WHERE id = ?"
               ).bind(numericId).run();
 
-              const updated = await env.DB.prepare("SELECT likes, likesCount FROM anime WHERE id = ?").bind(numericId).first();
+              const updated = await env.DB.prepare("SELECT title, likes, likesCount FROM anime WHERE id = ?").bind(numericId).first();
               const newLikes = updated?.likes ?? updated?.likesCount ?? 1;
+
+              await broadcastActivity({
+                type: 'like',
+                anime_id: numericId,
+                anime_title: updated?.title || 'Anime',
+                message: `${newLikes} total likes`
+              });
 
               return jsonResponse({
                 success: true,

@@ -294,8 +294,13 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
       </div>
 
       {/* 5) FOOTER (40px below card) */}
-      <div className="mt-[40px] px-[24px] text-center">
-        <p className="text-[10px] leading-[16px] text-[#6b7280]">
+      <div className="mt-[40px] px-[24px] text-center flex flex-col items-center gap-3">
+        <img 
+          src="/logo.png" 
+          alt="ANIDUB INDIA" 
+          className="h-7 w-auto object-contain opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500"
+        />
+        <p className="text-[10px] leading-[16px] text-[#6b7280] max-w-sm">
           © 2026 AniDub India. All anime media belongs to their respective production companies. Licensed under fair-use catalog guidelines.
         </p>
       </div>

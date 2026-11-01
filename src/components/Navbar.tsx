@@ -72,30 +72,34 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [selectedLang, setSelectedLang] = useState('en');
   const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [logoClicks, setLogoClicks] = useState(0);
-  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   const handleLogoClick = () => {
-    if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
-
-    const nextCount = logoClicks + 1;
-    
-    if (nextCount >= 5) {
-      // Immediate Reset and Trigger
-      onUnlockAdmin();
-      setLogoClicks(0);
-    } else {
-      setLogoClicks(nextCount);
-      // Time-bound reset: Clear counter if next click doesn't happen within 2 seconds
-      clickTimeoutRef.current = setTimeout(() => {
-        setLogoClicks(0);
-      }, 2000);
-    }
-
-    // Navigation fallback
     if (activeTab !== 'home') {
       setActiveTab('home');
       if (setFeedView) setFeedView('library');
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const trimmed = searchQuery.trim().toLowerCase();
+      // Secret Admin Trigger Interception
+      if (
+        trimmed === '/admin-login' || 
+        trimmed === '/admin' || 
+        trimmed === 'admin123' || 
+        trimmed === 'prasanth123'
+      ) {
+        e.preventDefault();
+        setSearchQuery('');
+        setIsMobileSearchExpanded(false);
+        onUnlockAdmin();
+        return;
+      }
+
+      // Normal Search Execution
+      if (activeTab !== 'home' && activeTab !== 'catalog') {
+        setActiveTab('home');
+      }
     }
   };
 
@@ -214,39 +218,22 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="sticky top-0 z-40 w-full max-w-full bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 transition-colors box-border select-none">
       <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1 sm:gap-3">
         
-        {/* LEFT: BRAND LOGO WITH 5-TAP ADMIN TRIGGER (Fade in from top) */}
+        {/* LEFT: BRAND LOGO (Professional Image Asset) */}
         <motion.div 
           onClick={handleLogoClick}
           initial={shouldReduceMotion ? false : { opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
           whileTap={shouldReduceMotion ? undefined : { scale: 0.94 }}
-          className="flex items-center space-x-2 cursor-pointer select-none group shrink-0"
-          title="anidub INDIA (Tap 5 times for Admin Access)"
+          className="flex items-center cursor-pointer select-none group shrink-0"
+          title="anidub INDIA"
         >
-          {/* Logo Icon */}
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-[#ea580c] to-[#f59e0b] p-0.5 shadow-md flex items-center justify-center text-white">
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 sm:w-4.5 sm:h-4.5 ml-0.5">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          </div>
-
-          {/* Typography */}
-          <div className="flex flex-col justify-center leading-none">
-            <span className="font-extrabold text-[17px] sm:text-[19px] text-[#ff6a00] tracking-tight" style={{ lineHeight: 1 }}>
-              anidub
-            </span>
-            <div className="flex items-center space-x-1 mt-0.5">
-              <span className="font-bold text-[8px] sm:text-[9px] text-neutral-300 tracking-[0.25em]" style={{ lineHeight: 1 }}>
-                INDIA
-              </span>
-              <div className="flex items-center space-x-[2px]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#ff9933] inline-block" />
-                <span className="w-1.5 h-1.5 rounded-full bg-white inline-block" />
-                <span className="w-1.5 h-1.5 rounded-full bg-[#138808] inline-block" />
-              </div>
-            </div>
-          </div>
+          <img 
+            src="/logo.png" 
+            alt="ANIDUB INDIA Logo" 
+            className="h-9 sm:h-11 md:h-12 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
+            loading="eager"
+          />
         </motion.div>
 
         {/* CENTER SCROLLABLE NAVIGATION ICONS */}
@@ -439,6 +426,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               placeholder={isListening ? "Listening..." : "Search anime dubs..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               className={`w-full bg-[#131926] border rounded-xl pl-9 pr-14 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none transition-colors ${
                 isListening 
                   ? 'border-purple-500/80 ring-4 ring-purple-500/20 bg-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.4)] animate-pulse placeholder-purple-300' 
@@ -550,31 +538,23 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </motion.button>
 
-          {/* Admin Console Access */}
-          <motion.button
-            whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-            onClick={() => {
-              if (isAdminAuthenticated) {
+          {/* Admin Console Access - Stealth: Only visible once admin is unlocked/authenticated */}
+          {isAdminAuthenticated && (
+            <motion.button
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
+              onClick={() => {
                 setActiveTab(activeTab === 'admin' ? 'home' : 'admin');
-              } else {
-                onUnlockAdmin();
-              }
-            }}
-            className={`p-1.5 sm:p-2 rounded-xl transition-colors cursor-pointer border ${
-              activeTab === 'admin'
-                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm'
-                : isAdminAuthenticated
-                ? 'bg-purple-950/40 text-purple-300 border-purple-500/40 hover:text-white hover:bg-purple-900/60'
-                : 'bg-neutral-800/70 border-neutral-700/40 text-neutral-400 hover:text-white'
-            }`}
-            title={isAdminAuthenticated ? "Admin Dashboard" : "Admin Login"}
-          >
-            {isAdminAuthenticated ? (
+              }}
+              className={`p-1.5 sm:p-2 rounded-xl transition-colors cursor-pointer border ${
+                activeTab === 'admin'
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm'
+                  : 'bg-purple-950/40 text-purple-300 border-purple-500/40 hover:text-white hover:bg-purple-900/60'
+              }`}
+              title="Admin Dashboard"
+            >
               <ShieldCheck className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400" />
-            ) : (
-              <Shield className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
-            )}
-          </motion.button>
+            </motion.button>
+          )}
         </div>
       </div>
 
@@ -596,6 +576,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 placeholder={isListening ? "Listening..." : "Search anime by title, voice actor, or studio..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 className={`w-full bg-[#131926] border rounded-xl pl-9 pr-14 py-2 text-xs text-white placeholder-neutral-500 outline-none transition-colors ${
                   isListening 
                     ? 'border-purple-500/80 ring-4 ring-purple-500/20 bg-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.4)] animate-pulse placeholder-purple-300' 

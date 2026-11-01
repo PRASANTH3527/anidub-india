@@ -55,6 +55,10 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
           <div className="absolute inset-0 bg-gradient-to-t from-[#111724] via-[#111726]/60 to-transparent" />
 
           {/* CLOSE & ACTION BUTTONS */}
+          <div className="absolute top-4 left-4 z-20 flex items-center gap-3">
+            <img src="/logo.png" alt="ANIDUB INDIA" className="h-6 sm:h-8 w-auto object-contain brightness-0 invert opacity-80" />
+          </div>
+
           <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
             <button
               onClick={handleShare}

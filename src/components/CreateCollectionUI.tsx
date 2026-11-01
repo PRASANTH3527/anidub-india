@@ -109,9 +109,11 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
           </button>
 
           <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-primary-theme to-amber-500 flex items-center justify-center shadow-lg shadow-primary-theme/30 text-white shrink-0">
-              <Layers className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
+            <img 
+              src="/logo.png" 
+              alt="ANIDUB" 
+              className="h-10 sm:h-12 w-auto object-contain shrink-0 drop-shadow-lg"
+            />
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">

@@ -50,10 +50,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         
         {/* HEADER */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-primary-theme/30 border border-primary-theme/40 text-primary-theme flex items-center justify-center shadow-sm">
-              <LogIn className="w-4 h-4" />
-            </div>
+          <div className="flex items-center gap-4">
+            <img 
+              src="/logo.png" 
+              alt="ANIDUB INDIA" 
+              className="h-10 w-auto object-contain"
+            />
             <div>
               <h2 className="font-heading font-black text-lg text-white tracking-tight">
                 Sign in to Anidub India

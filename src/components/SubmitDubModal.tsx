@@ -109,9 +109,11 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         {/* HEADER */}
         <div className="p-5 border-b border-neutral-800 flex items-center justify-between bg-gradient-to-r from-[var(--primary-badge)]/40 via-transparent to-transparent shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl btn-primary-theme flex items-center justify-center text-white shadow-lg">
-              <Film className="w-5 h-5" />
-            </div>
+            <img 
+              src="/logo.png" 
+              alt="ANIDUB" 
+              className="h-9 w-auto object-contain shrink-0 drop-shadow-md"
+            />
             <div>
               <h2 className="font-heading font-black text-white text-base sm:text-lg flex items-center gap-1.5">
                 <span>Submit Official Indian Dub</span>

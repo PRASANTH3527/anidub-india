@@ -289,9 +289,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     </div>
                   )}
 
-                  <p className="text-xs sm:text-sm text-neutral-300/80 mt-1 font-medium max-w-xl leading-relaxed">
-                    Tracking official regional anime dubs across India.
-                  </p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <img 
+                      src="/logo.png" 
+                      alt="ANIDUB INDIA" 
+                      className="h-6 w-auto object-contain brightness-0 invert opacity-40 group-hover:opacity-100 transition-opacity"
+                    />
+                    <p className="text-xs sm:text-sm text-neutral-300/80 font-medium max-w-xl leading-relaxed">
+                      Tracking official regional anime dubs across India.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Badges Bar */}

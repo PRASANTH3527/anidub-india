@@ -33,9 +33,11 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       {/* HEADER BANNER */}
       <div className="bg-[#121829] border border-primary-theme/30 rounded-3xl p-5 sm:p-7 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-primary-theme flex items-center justify-center text-white shadow-lg shadow-primary-theme/30 ring-2 ring-accent-theme/40 shrink-0">
-            <Bookmark className="w-6 h-6 fill-white" />
-          </div>
+          <img 
+            src="/logo.png" 
+            alt="ANIDUB" 
+            className="h-10 sm:h-12 w-auto object-contain shrink-0 drop-shadow-md"
+          />
           <div>
             <div className="flex items-center flex-wrap gap-2.5">
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">

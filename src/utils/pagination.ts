@@ -107,8 +107,8 @@ export function filterAndSortCatalog<T extends {
     );
   }
 
-  // Search filter
-  if (options.search && options.search.trim()) {
+  // Search filter (ignores secret admin commands starting with /admin)
+  if (options.search && options.search.trim() && !options.search.trim().toLowerCase().startsWith('/admin')) {
     const q = options.search.toLowerCase().trim();
     filtered = filtered.filter(item => 
       item.title.toLowerCase().includes(q) ||

@@ -1,6 +1,6 @@
 {
-  "name": "Cloudflare Anime Hub",
-  "description": "Anime streaming platform powered entirely by Cloudflare Ecosystem (Pages, D1 SQL, R2 Storage, Workers API) with pagination, AI recommendations, and admin moderation.",
+  "name": "ANIDUB INDIA",
+  "description": "The Premier Destination for Anime Streaming & Dubbing in India. Discover hundreds of anime with Hindi, Tamil, and Telugu regional audio dubs powered by Cloudflare Ecosystem.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
