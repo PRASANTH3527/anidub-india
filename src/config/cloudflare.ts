@@ -13,7 +13,7 @@
  */
 
 // ---> DYNAMIC API BASE URL CONFIGURATION <---
-export const CLOUDFLARE_API_URL: string = 'https://anime-chat.samayaprasanth0.workers.dev';
+export const CLOUDFLARE_API_URL: string = '';
 
 /**
  * Default fallback Worker URL used when relative paths and env vars fail.

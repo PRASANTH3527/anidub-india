@@ -54,12 +54,13 @@ class CloudflareApiService {
     const url = getCloudflareUrl(path);
     const fetchOptions: RequestInit = {
       ...options,
-      credentials: 'omit' // Use omit to allow wildcard CORS
+      credentials: 'omit'
     };
     
+    const workerUrl = `https://anime-chat.samayaprasanth0.workers.dev${path.startsWith('/') ? path : '/' + path}`;
+
     try {
       const res = await fetch(url, fetchOptions);
-      
       const contentType = res.headers.get('content-type') || '';
       const isJson = contentType.includes('application/json');
 
@@ -67,42 +68,33 @@ class CloudflareApiService {
         return res;
       }
 
-      // If it's a 404 or non-JSON, and we are NOT already on the fallback URL, retry with the absolute fallback Worker URL.
-      const isFallbackUrl = url.startsWith(DEFAULT_FALLBACK_WORKER_URL);
-      if ((res.status === 404 || !isJson || !res.ok) && !isFallbackUrl && DEFAULT_FALLBACK_WORKER_URL) {
-        const fallbackBase = (DEFAULT_FALLBACK_WORKER_URL as string).replace(/\/+$/, '');
-        const fallbackUrl = `${fallbackBase}${path.startsWith('/') ? path : '/' + path}`;
-        
-        if (fallbackUrl !== url) {
-          console.warn(`[API discovery] Path ${url} returned ${res.status} (JSON: ${isJson}). Retrying with absolute fallback: ${fallbackUrl}`);
-          return await fetch(fallbackUrl, fetchOptions);
+      // Check if response is HTML (e.g. cookie check page)
+      if (contentType.includes('text/html') || contentType.includes('text/plain')) {
+        const text = await res.clone().text();
+        if (text.includes('<!doctype') || text.includes('<html') || text.includes('Cookie check')) {
+          console.warn(`[API warning] Caught HTML/Cookie check response at ${url}. Falling back to standalone worker: ${workerUrl}`);
+          if (workerUrl !== url) {
+            return await fetch(workerUrl, fetchOptions);
+          }
         }
       }
-      return res;
-    } catch (err: any) {
-      const isFallbackUrl = url.startsWith(DEFAULT_FALLBACK_WORKER_URL);
-      
-      // Detailed error message for diagnostics
-      let errorDetail = err.message || 'Unknown network error';
-      if (err instanceof TypeError && err.message === 'Failed to fetch') {
-        errorDetail = `Network error or CORS block (Check if ${url} is reachable and CORS headers are correct)`;
+
+      // If non-ok and we are not already using workerUrl, try workerUrl
+      if (!res.ok && url !== workerUrl) {
+        try {
+          const workerRes = await fetch(workerUrl, fetchOptions);
+          if (workerRes.ok) return workerRes;
+        } catch {}
       }
 
-      console.error(`[API Fetch Failure] ${url}:`, err);
-      
-      // If network fails and we are NOT already on the fallback URL, retry with absolute fallback
-      if (!isFallbackUrl && DEFAULT_FALLBACK_WORKER_URL) {
-        const fallbackBase = (DEFAULT_FALLBACK_WORKER_URL as string).replace(/\/+$/, '');
-        const fallbackUrl = `${fallbackBase}${path.startsWith('/') ? path : '/' + path}`;
-        
-        if (fallbackUrl !== url) {
-          console.warn(`[API discovery] Primary fetch failed for ${url}. Retrying with absolute fallback: ${fallbackUrl}`);
-          try {
-            return await fetch(fallbackUrl, fetchOptions);
-          } catch (fallbackErr: any) {
-            console.error(`[API Fallback Failure] ${fallbackUrl}: ${fallbackErr.message}`);
-            throw new Error(`Critical API Failure: Both primary and fallback endpoints are unreachable. ${fallbackErr.message}`);
-          }
+      return res;
+    } catch (err: any) {
+      console.warn(`[API Fetch Failure] ${url}:`, err);
+      if (workerUrl !== url) {
+        try {
+          return await fetch(workerUrl, fetchOptions);
+        } catch (fallbackErr: any) {
+          console.error(`[API Fallback Failure] ${workerUrl}:`, fallbackErr);
         }
       }
       throw err;

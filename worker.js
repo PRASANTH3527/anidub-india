@@ -106,7 +106,6 @@ const SEED_ANIME = [
 
 function getCorsHeaders(request) {
   const origin = request ? (request.headers.get("Origin") || request.headers.get("origin")) : null;
-  const allowedOrigins = ["http://localhost:3000", "https://anime-chat.samayaprasanth0.workers.dev", "https://anidub-india-a1y.pages.dev"];
   
   const headers = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
@@ -115,12 +114,11 @@ function getCorsHeaders(request) {
     "Vary": "Origin"
   };
 
-  // Explicitly return origin instead of wildcard
-  if (origin && allowedOrigins.includes(origin)) {
+  if (origin && (origin.includes('localhost') || origin.includes('.run.app') || origin.includes('workers.dev') || origin.includes('pages.dev'))) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Access-Control-Allow-Credentials"] = "true";
   } else {
-    headers["Access-Control-Allow-Origin"] = allowedOrigins[0];
+    headers["Access-Control-Allow-Origin"] = origin || "*";
     headers["Access-Control-Allow-Credentials"] = "true";
   }
 
