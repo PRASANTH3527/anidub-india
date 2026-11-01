@@ -822,7 +822,7 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
     res.json({ success: true, count: insertedCount, skipped: skippedCount });
   } catch (err: any) {
     console.error('CSV Import Error:', err);
-    res.status(500).json({ error: err.message || 'CSV Import failed' });
+    res.status(500).json({ success: false, error: err.message || 'CSV Import failed' });
   }
 });
 
@@ -1928,7 +1928,8 @@ app.delete('/api/anime/:id', requireAdminAuth, (req, res) => {
     logCloudflareEvent('D1', `DELETE /api/anime/${id}`, 200, Date.now() - start, `Deleted anime ID ${id}`);
     res.json({ success: true, id });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('Delete Anime Error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

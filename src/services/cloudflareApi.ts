@@ -219,8 +219,16 @@ class CloudflareApiService {
     });
 
     if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.error || `Failed to create anime on Cloudflare D1 (Status ${res.status})`);
+      const errText = await res.text().catch(() => '');
+      console.log('Create Anime Error Response:', errText);
+      let errorMsg = `Failed to create anime (Status ${res.status})`;
+      try {
+        const json = JSON.parse(errText);
+        if (json.error) errorMsg = json.error;
+      } catch {
+        if (errText) errorMsg = errText;
+      }
+      throw new Error(errorMsg);
     }
 
     return await res.json();
@@ -297,11 +305,19 @@ class CloudflareApiService {
     }
 
     if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
-      if (errJson.error === 'Anime not found' || /not found/i.test(errJson.error || '')) {
+      const errText = await res.text().catch(() => '');
+      console.log('Delete Anime Error Response:', errText);
+      let errorMsg = `Failed to delete anime ID ${id} (Status ${res.status})`;
+      try {
+        const json = JSON.parse(errText);
+        if (json.error) errorMsg = json.error;
+      } catch {
+        if (errText) errorMsg = errText;
+      }
+      if (/not found/i.test(errorMsg)) {
         return { success: true };
       }
-      throw new Error(errJson.error || `Failed to delete anime ID ${id} from Cloudflare D1 (Status ${res.status})`);
+      throw new Error(errorMsg);
     }
 
     return await res.json().catch(() => ({ success: true }));
