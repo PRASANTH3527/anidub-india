@@ -12,8 +12,17 @@
  *   export const CLOUDFLARE_API_URL = 'https://anidub-india.pages.dev';
  */
 
+function sanitizeApiUrl(raw?: string): string {
+  if (!raw) return '';
+  const match = raw.trim().match(/https?:\/\/[^\s\)"'\]]+/i);
+  if (!match) return '';
+  const url = match[0].replace(/\/+$/, '');
+  if (url.includes('your-subdomain') || url.includes('placeholder')) return '';
+  return url;
+}
+
 // ---> DYNAMIC API BASE URL CONFIGURATION <---
-export const CLOUDFLARE_API_URL: string = '';
+export const CLOUDFLARE_API_URL: string = sanitizeApiUrl(import.meta.env.VITE_CLOUDFLARE_API_URL);
 
 /**
  * Default fallback Worker URL used when relative paths and env vars fail.
