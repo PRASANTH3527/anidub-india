@@ -10,7 +10,7 @@ id = "4d1a822ed4a04cad809f79f38ab4d96c"
 # Cloudflare D1 Database Binding for Chat & Relational Data
 [[d1_databases]]
 binding = "DB"
-database_name = "anime-hub-db"
+database_name = "anime-db"
 database_id = "75f053ab-5b44-4d48-abf8-b3a357a89426"
 
 [durable_objects]

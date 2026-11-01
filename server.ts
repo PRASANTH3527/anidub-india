@@ -2231,7 +2231,7 @@ app.get('/api/cloudflare/status', (req, res) => {
         d1: {
           status: "Healthy",
           databaseId: "75f053ab-5b44-4d48-abf8-b3a357a89426",
-          databaseName: "anime-hub-db",
+          databaseName: "anime-db",
           databaseSize: `${(fs.statSync(dbFilePath).size / 1024).toFixed(1)} KB`,
           recordsCount: animeCount
         },

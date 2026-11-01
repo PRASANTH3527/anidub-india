@@ -456,7 +456,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         d1: {
           status: "Healthy",
           databaseId: D1_DATABASE_ID,
-          databaseName: "anime-hub-db",
+          databaseName: "anime-db",
           databaseSize: "48.0 KB",
           recordsCount: 8
         },

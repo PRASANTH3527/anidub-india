@@ -21,7 +21,7 @@ export const CLOUDFLARE_API_URL: string = '';
 export const DEFAULT_FALLBACK_WORKER_URL = '';
 
 // Optional: Cloudflare D1 Database binding identifier from wrangler.toml
-export const CLOUDFLARE_D1_DATABASE_NAME = 'anime-hub-db';
+export const CLOUDFLARE_D1_DATABASE_NAME = 'anime-db';
 export const CLOUDFLARE_D1_DATABASE_ID = '75f053ab-5b44-4d48-abf8-b3a357a89426';
 
 // Cloudflare Worker API routes specification

@@ -137,3 +137,52 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at DESC);
+
+-- ====================================================================
+-- Initial Seed Catalog Data (Approved Anime Entries)
+-- ====================================================================
+INSERT OR IGNORE INTO anime (
+  id, title, slug, synopsis, cover_image, banner_image, 
+  rating, episodes_count, status, season, year, genres, 
+  popularity, languages, platform, type, studio, submissionStatus
+) VALUES 
+(
+  1, 
+  'Solo Leveling', 
+  'solo-leveling', 
+  'In a world where hunters battle deadly monsters to protect mankind, Sung Jinwoo, the weakest hunter of them all, finds himself in an endless struggle for survival. After a mysterious incident in a high-rank dungeon, he gains the ability to level up.', 
+  'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800', 
+  'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800', 
+  8.7, 12, 'Completed', 'Winter', 2024, 'Action, Fantasy, Adventure', 
+  95000, 'Hindi, Tamil, Telugu, English, Japanese', 'Crunchyroll', 'TV Series', 'A-1 Pictures', 'approved'
+),
+(
+  2, 
+  'Demon Slayer: Kimetsu no Yaiba', 
+  'demon-slayer', 
+  'It is the Taisho Period in Japan. Tanjiro, a kindhearted boy who sells charcoal for a living, finds his family slaughtered by a demon. To make matters worse, his younger sister Nezuko has been transformed into a demon herself.', 
+  'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800', 
+  'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800', 
+  8.9, 26, 'Completed', 'Spring', 2019, 'Action, Supernatural', 
+  120000, 'Hindi, Tamil, Telugu, English', 'Netflix', 'TV Series', 'ufotable', 'approved'
+),
+(
+  3, 
+  'Naruto Shippuden', 
+  'naruto-shippuden', 
+  'Naruto returns to the Hidden Leaf Village after two and a half years of intense training with Jiraiya. Along with his friends, he faces off against the sinister Akatsuki organization while continuing his quest to bring Sasuke back.', 
+  'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800', 
+  'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800', 
+  8.3, 500, 'Completed', 'Winter', 2007, 'Action, Adventure', 
+  88000, 'Hindi, Tamil', 'Sony YAY!', 'TV Series', 'Studio Pierrot', 'approved'
+),
+(
+  4, 
+  'Jujutsu Kaisen', 
+  'jujutsu-kaisen', 
+  'A boy swallows a cursed talisman - the finger of a demon - and becomes cursed himself. He enters a shaman school to be able to locate the demons other body parts and thus exorcise himself.', 
+  'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800', 
+  'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800', 
+  8.8, 24, 'Completed', 'Fall', 2020, 'Action, Supernatural', 
+  110000, 'Hindi, Tamil, Telugu, English', 'Crunchyroll', 'TV Series', 'MAPPA', 'approved'
+);
