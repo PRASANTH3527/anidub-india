@@ -444,12 +444,12 @@ function runMigrations() {
     CREATE TABLE IF NOT EXISTS user_votes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       anime_id INTEGER NOT NULL,
-      device_id TEXT NOT NULL,
-      user_id TEXT,
+      user_id TEXT NOT NULL,
       vote_type TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(anime_id, device_id, vote_type)
+      UNIQUE(anime_id, user_id, vote_type)
     );
+
 
 
     CREATE TABLE IF NOT EXISTS chat_messages (
