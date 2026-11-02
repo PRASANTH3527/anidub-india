@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
 import { 
+  SignedIn, 
+  SignedOut, 
+  SignIn, 
+  UserProfile 
+} from '@clerk/clerk-react';
+import { 
   Bookmark, 
   Dna, 
   Layers, 
@@ -26,7 +32,8 @@ import {
   TrendingUp,
   Zap,
   Award,
-  ArrowRight
+  ArrowRight,
+  User as UserIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anime } from './CatalogView';
@@ -55,6 +62,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   userAvatar: propUserAvatar,
   onAvatarChange
 }) => {
+  const hasClerk = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY && !import.meta.env.VITE_CLERK_PUBLISHABLE_KEY.includes('anidub.india.app'));
   const [userName, setUserName] = useState(() => {
     return localStorage.getItem('anidub_username') || 'User';
   });
@@ -70,7 +78,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(userName);
-  const [activeTab, setActiveTab] = useState<'watchlist' | 'dna' | 'collections'>('watchlist');
+  const [activeTab, setActiveTab] = useState<'watchlist' | 'dna' | 'collections' | 'account'>('watchlist');
 
   // Watchlist tab states
   const [searchQuery, setSearchQuery] = useState('');
@@ -193,9 +201,24 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 space-y-8 relative z-10">
         
-        {/* =========================================================================
-            1. HERO PROFILE CARD (ACRYLIC GLASS & NEON AURA)
-           ========================================================================= */}
+        {hasClerk ? (
+          <>
+            <SignedOut>
+              <div className="flex flex-col items-center justify-center py-16 px-4 space-y-6">
+                <div className="text-center space-y-2 max-w-lg">
+                  <h2 className="font-heading font-black text-3xl text-white">Authentication Required</h2>
+                  <p className="text-sm text-neutral-400">Please sign in to access your profile, custom watchlists, reviews, and verified regional dub karma.</p>
+                </div>
+                <div className="w-full max-w-md rounded-3xl bg-white/[0.03] backdrop-blur-2xl border border-white/10 p-6 shadow-2xl flex justify-center">
+                  <SignIn routing="hash" />
+                </div>
+              </div>
+            </SignedOut>
+
+            <SignedIn>
+          {/* =========================================================================
+              1. HERO PROFILE CARD (ACRYLIC GLASS & NEON AURA)
+             ========================================================================= */}
         <div className="relative rounded-3xl bg-white/[0.03] backdrop-blur-2xl border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.7)] p-6 sm:p-8 overflow-hidden group">
           
           {/* Top Edge Laser Gradient Line */}
@@ -559,6 +582,24 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </span>
             </button>
 
+            {/* Tab 4: Account */}
+            <button
+              onClick={() => setActiveTab('account')}
+              className={`relative px-5 py-2.5 rounded-xl text-xs font-black transition-colors duration-300 flex items-center gap-2 cursor-pointer z-10 ${
+                activeTab === 'account' ? 'text-white' : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              {activeTab === 'account' && (
+                <motion.div 
+                  layoutId="profileActiveTabIndicator"
+                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 shadow-[0_0_25px_rgba(168,85,247,0.5)] -z-10"
+                  transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                />
+              )}
+              <UserIcon className="w-4 h-4" />
+              <span>Account</span>
+            </button>
+
           </div>
 
           {/* Watchlist Filter controls only visible when on watchlist tab */}
@@ -828,6 +869,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             )}
           </div>
         )}
+
+        {/* TAB 4: CLERK USER PROFILE VIEW */}
+        {activeTab === 'account' && (
+          <div className="flex justify-center py-6 animate-in fade-in duration-300">
+            <UserProfile routing="hash" />
+          </div>
+        )}
+
+        </SignedIn>
+          </>
+        ) : null}
 
       </div>
 

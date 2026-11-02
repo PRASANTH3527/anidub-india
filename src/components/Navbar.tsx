@@ -229,9 +229,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           title="anidub INDIA"
         >
           <img 
-            src="/logo.png" 
+            src="/assets/aistudio/1793549416959_eb47af13.png" 
             alt="ANIDUB INDIA Logo" 
-            className="h-9 sm:h-11 md:h-12 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
+            className="h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
             loading="eager"
           />
         </motion.div>
