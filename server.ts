@@ -1486,7 +1486,7 @@ app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/an
     }
 
     // 2. Insert vote record
-    db.run("INSERT INTO user_votes (anime_id, device_id, user_id, vote_type) VALUES (?, ?, ?, 'upvote')", [animeId, deviceId, userId]);
+    db.run("INSERT INTO user_votes (anime_id, user_id, vote_type) VALUES (?, ?, 'upvote')", [animeId, userId]);
 
     // 3. Increment count
     try {
@@ -1564,7 +1564,7 @@ app.all(['/api/anime/:id/like', '/api/anime/:id/likes', '/anime/:id/like', '/ani
     }
 
     // 2. Insert vote record
-    db.run("INSERT INTO user_votes (anime_id, device_id, user_id, vote_type) VALUES (?, ?, ?, 'like')", [animeId, deviceId, userId]);
+    db.run("INSERT INTO user_votes (anime_id, user_id, vote_type) VALUES (?, ?, 'like')", [animeId, userId]);
 
     // 3. Increment count
     try {
