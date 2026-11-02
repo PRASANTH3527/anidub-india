@@ -5,13 +5,10 @@ export default function Profile() {
   const { user } = useUser();
 
   return (
-    <div className="min-h-screen pt-24 px-4 pb-20 flex flex-col items-center justify-center text-neutral-100">
+    <div className="min-h-screen pt-24 px-4 pb-20 flex flex-col items-center justify-center">
       {/* Show ONLY the Login Box to guests */}
       <SignedOut>
         <div className="w-full max-w-md flex flex-col items-center justify-center">
-          <h2 className="text-2xl font-bold text-white mb-6 text-center">
-            Sign in to ANIDUB INDIA
-          </h2>
           <SignIn routing="hash" />
         </div>
       </SignedOut>

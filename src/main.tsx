@@ -5,7 +5,10 @@ import { NotificationProvider } from './context/NotificationContext.tsx';
 import { ClerkProvider } from '@clerk/clerk-react';
 import './index.css';
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const rawKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
+const PUBLISHABLE_KEY = rawKey.startsWith('pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bn')
+  ? 'pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bnRzLmRldiQ='
+  : (rawKey || 'pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bnRzLmRldiQ=');
 
 createRoot(document.getElementById('root')!).render(
   <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">

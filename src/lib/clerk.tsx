@@ -1,11 +1,22 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, Component, ErrorInfo } from 'react';
 import * as RealClerk from '../../node_modules/@clerk/clerk-react/dist/index.mjs';
+import { isPublishableKey } from '@clerk/shared/keys';
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-const isRealClerk = Boolean(PUBLISHABLE_KEY && PUBLISHABLE_KEY.startsWith('pk_') && !PUBLISHABLE_KEY.includes('anidub.india.app'));
+export function normalizeClerkKey(key?: string): string {
+  if (!key) return '';
+  const trimmed = key.trim();
+  if (trimmed.startsWith('pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bn')) {
+    return 'pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bnRzLmRldiQ=';
+  }
+  return trimmed;
+}
 
-// Local mock user interface
-export interface MockUser {
+const RAW_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const DEFAULT_KEY = 'pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bnRzLmRldiQ=';
+const PUBLISHABLE_KEY = normalizeClerkKey(RAW_KEY) || DEFAULT_KEY;
+const hasRealClerkKey = Boolean(PUBLISHABLE_KEY && isPublishableKey(PUBLISHABLE_KEY));
+
+export interface ClerkUser {
   id: string;
   fullName: string | null;
   firstName: string | null;
@@ -16,15 +27,15 @@ export interface MockUser {
   } | null;
 }
 
-interface ClerkContextType {
+interface ClerkContextValue {
   isLoaded: boolean;
   isSignedIn: boolean;
-  user: MockUser | null;
-  signIn: (email: string, name?: string, avatar?: string) => void;
+  user: ClerkUser | null;
+  signIn: (email: string) => void;
   signOut: () => void;
 }
 
-const ClerkContext = createContext<ClerkContextType>({
+const ClerkContext = createContext<ClerkContextValue>({
   isLoaded: true,
   isSignedIn: false,
   user: null,
@@ -32,23 +43,51 @@ const ClerkContext = createContext<ClerkContextType>({
   signOut: () => {},
 });
 
+class ClerkErrorBoundary extends Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.warn('[Clerk] Initialization safely guarded:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+
 export const ClerkProvider: React.FC<{
   publishableKey?: string;
   afterSignOutUrl?: string;
   children: React.ReactNode;
 }> = (props) => {
-  if (isRealClerk && props.publishableKey) {
-    const Component = RealClerk.ClerkProvider as any;
-    return <Component {...props} />;
+  const activeKey = normalizeClerkKey(props.publishableKey) || PUBLISHABLE_KEY;
+
+  if (activeKey && isPublishableKey(activeKey)) {
+    const RealProvider = RealClerk.ClerkProvider as any;
+    return (
+      <ClerkErrorBoundary fallback={<SimulatedClerkProvider>{props.children}</SimulatedClerkProvider>}>
+        <RealProvider {...props} publishableKey={activeKey}>
+          {props.children}
+        </RealProvider>
+      </ClerkErrorBoundary>
+    );
   }
 
-  return <LocalClerkProvider {...props} />;
+  return <SimulatedClerkProvider>{props.children}</SimulatedClerkProvider>;
 };
 
-function LocalClerkProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<MockUser | null>(() => {
+function SimulatedClerkProvider({ children }: { children: React.ReactNode }) {
+  // STRICT: Starts with null. No hardcoded users.
+  const [user, setUser] = useState<ClerkUser | null>(() => {
     try {
-      const saved = localStorage.getItem('clerk_simulated_user');
+      const saved = sessionStorage.getItem('clerk_active_session');
       if (saved) return JSON.parse(saved);
     } catch {
       // ignore
@@ -56,29 +95,32 @@ function LocalClerkProvider({ children }: { children: React.ReactNode }) {
     return null;
   });
 
-  const signIn = (email: string, name?: string, avatar?: string) => {
-    const defaultName = name || email.split('@')[0] || 'Anime Enthusiast';
-    const formattedName = defaultName.charAt(0).toUpperCase() + defaultName.slice(1);
-    const defaultAvatar = avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`;
+  const signIn = (email: string) => {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) return;
 
-    const newUser: MockUser = {
+    const username = cleanEmail.split('@')[0] || 'User';
+    const formattedName = username.charAt(0).toUpperCase() + username.slice(1);
+    const avatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(cleanEmail)}`;
+
+    const newUser: ClerkUser = {
       id: 'user_' + Math.random().toString(36).substring(2, 9),
       fullName: formattedName,
-      firstName: formattedName.split(' ')[0] || formattedName,
-      lastName: formattedName.split(' ')[1] || '',
-      imageUrl: defaultAvatar,
+      firstName: formattedName,
+      lastName: '',
+      imageUrl: avatar,
       primaryEmailAddress: {
-        emailAddress: email
-      }
+        emailAddress: cleanEmail,
+      },
     };
 
     setUser(newUser);
-    localStorage.setItem('clerk_simulated_user', JSON.stringify(newUser));
+    sessionStorage.setItem('clerk_active_session', JSON.stringify(newUser));
   };
 
   const signOut = () => {
     setUser(null);
-    localStorage.removeItem('clerk_simulated_user');
+    sessionStorage.removeItem('clerk_active_session');
   };
 
   return (
@@ -88,7 +130,7 @@ function LocalClerkProvider({ children }: { children: React.ReactNode }) {
         isSignedIn: Boolean(user),
         user,
         signIn,
-        signOut
+        signOut,
       }}
     >
       {children}
@@ -97,8 +139,12 @@ function LocalClerkProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useUser() {
-  if (isRealClerk) {
-    return RealClerk.useUser();
+  if (hasRealClerkKey) {
+    try {
+      return RealClerk.useUser();
+    } catch {
+      // Fallback if context not mounted
+    }
   }
   const ctx = useContext(ClerkContext);
   return {
@@ -109,8 +155,12 @@ export function useUser() {
 }
 
 export function useAuth() {
-  if (isRealClerk) {
-    return RealClerk.useAuth();
+  if (hasRealClerkKey) {
+    try {
+      return RealClerk.useAuth();
+    } catch {
+      // Fallback
+    }
   }
   const ctx = useContext(ClerkContext);
   return {
@@ -123,8 +173,12 @@ export function useAuth() {
 }
 
 export function useClerk() {
-  if (isRealClerk) {
-    return RealClerk.useClerk();
+  if (hasRealClerkKey) {
+    try {
+      return RealClerk.useClerk();
+    } catch {
+      // Fallback
+    }
   }
   const ctx = useContext(ClerkContext);
   return {
@@ -137,8 +191,9 @@ export function useClerk() {
 }
 
 export const SignedIn: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  if (isRealClerk) {
-    return <RealClerk.SignedIn>{children}</RealClerk.SignedIn>;
+  if (hasRealClerkKey) {
+    const Component = RealClerk.SignedIn as any;
+    return <Component>{children}</Component>;
   }
   const ctx = useContext(ClerkContext);
   if (ctx.isSignedIn) {
@@ -148,8 +203,9 @@ export const SignedIn: React.FC<{ children: React.ReactNode }> = ({ children }) 
 };
 
 export const SignedOut: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  if (isRealClerk) {
-    return <RealClerk.SignedOut>{children}</RealClerk.SignedOut>;
+  if (hasRealClerkKey) {
+    const Component = RealClerk.SignedOut as any;
+    return <Component>{children}</Component>;
   }
   const ctx = useContext(ClerkContext);
   if (!ctx.isSignedIn) {
@@ -159,37 +215,40 @@ export const SignedOut: React.FC<{ children: React.ReactNode }> = ({ children })
 };
 
 export const SignIn: React.FC<{ routing?: string; path?: string }> = (props) => {
-  if (isRealClerk) {
+  if (hasRealClerkKey) {
     const Component = RealClerk.SignIn as any;
     return <Component {...props} />;
   }
 
-  return <LocalSignInComponent />;
+  return <SimulatedSignInCard />;
 };
 
-function LocalSignInComponent() {
+function SimulatedSignInCard() {
   const ctx = useContext(ClerkContext);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleGoogleSignIn = () => {
-    ctx.signIn('prasanth01236@gmail.com', 'Prasanth', 'https://api.dicebear.com/7.x/bottts/svg?seed=prasanth');
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
-    ctx.signIn(email);
+    if (email.trim()) {
+      ctx.signIn(email.trim());
+    }
+  };
+
+  const handleGoogleSignIn = () => {
+    const inputEmail = window.prompt('Enter your email to sign in:');
+    if (inputEmail && inputEmail.trim()) {
+      ctx.signIn(inputEmail.trim());
+    }
   };
 
   return (
-    <div className="w-full max-w-sm rounded-3xl bg-[#13151b] border border-white/10 p-6 sm:p-8 shadow-2xl space-y-6 text-left">
+    <div className="w-full max-w-sm rounded-3xl bg-[#13151b] border border-white/10 p-6 sm:p-8 shadow-2xl space-y-6 text-left animate-in fade-in duration-300">
       <div className="text-center space-y-1.5">
         <h3 className="font-heading font-black text-xl text-white">Sign In</h3>
         <p className="text-xs text-neutral-400">to continue to ANIDUB INDIA</p>
       </div>
 
-      {/* Social Google Login Button */}
       <button
         type="button"
         onClick={handleGoogleSignIn}
@@ -252,7 +311,7 @@ function LocalSignInComponent() {
 }
 
 export const UserProfile: React.FC<{ routing?: string }> = (props) => {
-  if (isRealClerk) {
+  if (hasRealClerkKey) {
     const Component = RealClerk.UserProfile as any;
     return <Component {...props} />;
   }
@@ -260,8 +319,11 @@ export const UserProfile: React.FC<{ routing?: string }> = (props) => {
   return (
     <div className="p-6 rounded-2xl bg-neutral-900 border border-white/10 text-center space-y-4">
       <h3 className="font-heading font-black text-lg text-white">Clerk User Profile</h3>
-      <p className="text-xs text-neutral-400">Connected account: {ctx.user?.primaryEmailAddress?.emailAddress}</p>
+      <p className="text-xs text-neutral-400">
+        Connected account: {ctx.user?.primaryEmailAddress?.emailAddress}
+      </p>
       <button
+        type="button"
         onClick={ctx.signOut}
         className="px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-300 border border-red-500/30 text-xs font-bold transition-colors cursor-pointer"
       >
