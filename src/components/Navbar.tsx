@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { useUser } from '@clerk/clerk-react';
 import { 
   Compass, 
   Search, 
@@ -69,6 +70,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   userAvatar
 }) => {
   const shouldReduceMotion = useReducedMotion();
+  const { user } = useUser();
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [selectedLang, setSelectedLang] = useState('en');
   const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
@@ -369,9 +371,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <div className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white text-xs font-bold overflow-hidden shadow-sm">
-              {userAvatar ? (
+              {user?.imageUrl ? (
                 <img 
-                  src={userAvatar} 
+                  src={user.imageUrl} 
                   alt="Profile" 
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
