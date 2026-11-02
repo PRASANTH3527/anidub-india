@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      background-color: #0b0f17;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: white;
+      gap: 40px;
+    }
+    .preview-box {
+      border: 1px dashed rgba(255,255,255,0.2);
+      padding: 20px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <h2>Horizontal Navbar Lockup Preview</h2>
+  <div class="preview-box">
+    <!-- Horizontal Lockup -->
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 60" width="280" height="60">
+      <!-- Icon Group -->
+      <g transform="translate(4, 3)">
+        <!-- Orange Speech Bubble with Pointer -->
+        <path d="M 18,2 C 8,2 2,8 2,18 L 2,34 C 2,44 8,50 18,50 L 19,50 L 14,58 C 13,60 15,62 17,61 L 27,51 C 28,50 30,50 32,50 L 52,50 C 62,50 68,44 68,34 L 68,18 C 68,8 62,2 52,2 Z" 
+              fill="#FF6A00" />
+        
+        <!-- Black Play Triangle -->
+        <polygon points="28,17 28,35 44,26" fill="#0B0F17" />
+        
+        <!-- Inner Sound Wave (White) -->
+        <path d="M 74,18 C 79,23 79,29 74,34" 
+              fill="none" 
+              stroke="#FFFFFF" 
+              stroke-width="4.5" 
+              stroke-linecap="round" />
+        
+        <!-- Outer Sound Wave (Vibrant Green) -->
+        <path d="M 83,11 C 92,20 92,32 83,41" 
+              fill="none" 
+              stroke="#22C55E" 
+              stroke-width="4.5" 
+              stroke-linecap="round" />
+      </g>
+
+      <!-- Wordmark Group -->
+      <g transform="translate(108, 0)">
+        <!-- "ANI" in White + "DUB" in Orange -->
+        <text x="0" y="34" font-family="'Inter', 'Arial Black', -apple-system, sans-serif" font-weight="900" font-size="34" letter-spacing="-0.5px">
+          <tspan fill="#FFFFFF">ANI</tspan><tspan fill="#FF6A00">DUB</tspan>
+        </text>
+
+        <!-- "I N D I A" in clean tracked white text -->
+        <text x="2" y="49" font-family="'Inter', 'Arial', -apple-system, sans-serif" font-weight="700" font-size="10.5" fill="#FFFFFF" letter-spacing="4.5px">INDIA</text>
+        
+        <!-- Horizontal Accent Line -->
+        <line x1="56" y1="46" x2="150" y2="46" stroke="#4B5563" stroke-width="1.5" stroke-linecap="round" />
+      </g>
+    </svg>
+  </div>
+
+  <h2>Stacked Full Logo Preview (Exact match to reference)</h2>
+  <div class="preview-box">
+    <!-- Stacked Lockup -->
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" width="240" height="200">
+      <!-- Icon Center Top -->
+      <g transform="translate(68, 12)">
+        <!-- Orange Speech Bubble with Pointer -->
+        <path d="M 18,2 C 8,2 2,8 2,18 L 2,34 C 2,44 8,50 18,50 L 19,50 L 14,58 C 13,60 15,62 17,61 L 27,51 C 28,50 30,50 32,50 L 52,50 C 62,50 68,44 68,34 L 68,18 C 68,8 62,2 52,2 Z" 
+              fill="#FF6A00" />
+        
+        <!-- Black Play Triangle -->
+        <polygon points="28,17 28,35 44,26" fill="#0B0F17" />
+        
+        <!-- Inner Sound Wave (White) -->
+        <path d="M 74,18 C 79,23 79,29 74,34" 
+              fill="none" 
+              stroke="#FFFFFF" 
+              stroke-width="4.5" 
+              stroke-linecap="round" />
+        
+        <!-- Outer Sound Wave (Vibrant Green) -->
+        <path d="M 83,11 C 92,20 92,32 83,41" 
+              fill="none" 
+              stroke="#22C55E" 
+              stroke-width="4.5" 
+              stroke-linecap="round" />
+      </g>
+
+      <!-- Wordmark Below -->
+      <g transform="translate(18, 90)">
+        <text x="100" y="50" text-anchor="middle" font-family="'Inter', 'Arial Black', -apple-system, sans-serif" font-weight="900" font-size="44" letter-spacing="-1px">
+          <tspan fill="#FFFFFF">ANI</tspan><tspan fill="#FF6A00">DUB</tspan>
+        </text>
+
+        <g transform="translate(20, 72)">
+          <text x="0" y="0" font-family="'Inter', 'Arial', -apple-system, sans-serif" font-weight="700" font-size="13" fill="#FFFFFF" letter-spacing="6px">INDIA</text>
+          <line x1="72" y1="-4" x2="160" y2="-4" stroke="#374151" stroke-width="2" stroke-linecap="round" />
+        </g>
+      </g>
+    </svg>
+  </div>
+</body>
+</html>

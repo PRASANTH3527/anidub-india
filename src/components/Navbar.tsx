@@ -24,6 +24,7 @@ import {
 import { useToast } from './Toast';
 import { MicPermissionBottomSheet } from './MicPermissionBottomSheet';
 import { VoiceVisualizer } from './VoiceVisualizer';
+import { AniDubLogo } from './AniDubLogo';
 
 interface NavbarProps {
   activeTab: string;
@@ -218,7 +219,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="sticky top-0 z-40 w-full max-w-full bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 transition-colors box-border select-none">
       <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1 sm:gap-3">
         
-        {/* LEFT: BRAND LOGO (Professional Image Asset) */}
+        {/* LEFT: BRAND LOGO (Professional Vector Lockup) */}
         <motion.div 
           onClick={handleLogoClick}
           initial={shouldReduceMotion ? false : { opacity: 0, y: -12 }}
@@ -226,12 +227,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           transition={{ duration: 0.35, ease: "easeOut" }}
           whileTap={shouldReduceMotion ? undefined : { scale: 0.94 }}
           className="flex items-center cursor-pointer select-none group shrink-0"
-          title="anidub INDIA"
+          title="ANIDUB INDIA - Home"
         >
           <img 
-            src="/assets/aistudio/1793549416959_eb47af13.png" 
-            alt="ANIDUB INDIA Logo" 
-            className="h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
+            src="/logo.svg" 
+            alt="ANIDUB INDIA" 
+            className="h-7 sm:h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
             loading="eager"
           />
         </motion.div>

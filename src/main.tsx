@@ -16,7 +16,7 @@ const AppWrapper = () => {
     </ToastProvider>
   );
 
-  if (!PUBLISHABLE_KEY || PUBLISHABLE_KEY.includes('anidub.india.app')) {
+  if (!PUBLISHABLE_KEY) {
     return content;
   }
 
@@ -28,4 +28,3 @@ const AppWrapper = () => {
 };
 
 createRoot(document.getElementById('root')!).render(<AppWrapper />);
-
