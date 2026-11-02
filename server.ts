@@ -478,10 +478,22 @@ function runMigrations() {
     );
   `);
 
-  try { db.run("ALTER TABLE user_votes RENAME COLUMN ip_address TO device_id;"); } catch (e) {}
-  try { db.run("ALTER TABLE user_votes ADD COLUMN device_id TEXT;"); } catch (e) {}
-  try { db.run("ALTER TABLE user_votes ADD COLUMN user_id TEXT;"); } catch (e) {}
-  try { db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_votes_device ON user_votes(anime_id, device_id, vote_type);"); } catch (e) {}
+  // Drop old user_votes table with ip_address or device_id if needed, and recreate cleanly
+  try {
+    db.run("DROP TABLE IF EXISTS user_votes;");
+  } catch (e) {}
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_votes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      anime_id INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      vote_type TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(anime_id, user_id, vote_type)
+    );
+  `);
+
   try { db.run("CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at DESC);"); } catch (e) {}
 
   // Ensure default user exists
