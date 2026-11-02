@@ -332,3 +332,45 @@ export const UserProfile: React.FC<{ routing?: string }> = (props) => {
     </div>
   );
 };
+
+export const SignOutButton: React.FC<{ children?: React.ReactNode; redirectUrl?: string }> = ({ children, ...props }) => {
+  if (hasRealClerkKey) {
+    const Component = RealClerk.SignOutButton as any;
+    return <Component {...props}>{children}</Component>;
+  }
+  const ctx = useContext(ClerkContext);
+  return (
+    <span onClick={ctx.signOut} className="inline-block cursor-pointer">
+      {children || <button type="button">Sign out</button>}
+    </span>
+  );
+};
+
+export const SignInButton: React.FC<{
+  mode?: 'modal' | 'redirect';
+  children?: React.ReactNode;
+  fallbackRedirectUrl?: string;
+  forceRedirectUrl?: string;
+}> = ({ children, mode, ...props }) => {
+  if (hasRealClerkKey) {
+    const Component = RealClerk.SignInButton as any;
+    return <Component mode={mode} {...props}>{children}</Component>;
+  }
+  const ctx = useContext(ClerkContext);
+  return (
+    <span
+      onClick={() => {
+        const email = window.prompt('Enter your email to sign in:');
+        if (email && email.trim()) {
+          ctx.signIn(email.trim());
+        }
+      }}
+      className="inline-block cursor-pointer"
+    >
+      {children || <button type="button">Sign In</button>}
+    </span>
+  );
+};
+
+
+

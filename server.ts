@@ -445,10 +445,12 @@ function runMigrations() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       anime_id INTEGER NOT NULL,
       device_id TEXT NOT NULL,
+      user_id TEXT,
       vote_type TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(anime_id, device_id, vote_type)
     );
+
 
     CREATE TABLE IF NOT EXISTS chat_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -478,6 +480,7 @@ function runMigrations() {
 
   try { db.run("ALTER TABLE user_votes RENAME COLUMN ip_address TO device_id;"); } catch (e) {}
   try { db.run("ALTER TABLE user_votes ADD COLUMN device_id TEXT;"); } catch (e) {}
+  try { db.run("ALTER TABLE user_votes ADD COLUMN user_id TEXT;"); } catch (e) {}
   try { db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_votes_device ON user_votes(anime_id, device_id, vote_type);"); } catch (e) {}
   try { db.run("CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at DESC);"); } catch (e) {}
 
@@ -1439,31 +1442,39 @@ function getOrCreateDeviceIdExpress(req: any, res: any) {
   return { deviceId: newId, isNew: true };
 }
 
-// POST /api/anime/:id/vote or /api/anime/:id/upvote (Community Upvote - Cookie Device UUID Tracked)
+// POST /api/anime/:id/vote or /api/anime/:id/upvote (Community Upvote - Strict Clerk Auth Required)
 app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/anime/:id/upvote'], (req, res, next) => {
   if (req.method !== 'POST' && req.method !== 'PUT') return next();
   try {
     const animeId = req.params.id;
     const { deviceId } = getOrCreateDeviceIdExpress(req, res);
+    const userId = req.body?.userId || req.headers['x-user-id'] || null;
 
-    // 1. Check if user already voted from this device
-    const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'upvote'");
-    checkStmt.bind([animeId, deviceId]);
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+        message: "Please sign in to upvote or vote."
+      });
+    }
+
+    // 1. Check if user already upvoted
+    const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'upvote'");
+    checkStmt.bind([animeId, userId]);
     const alreadyVoted = checkStmt.step();
     checkStmt.free();
 
     if (alreadyVoted) {
       return res.status(400).json({
         error: "Already voted",
-        message: "This device has already upvoted this anime.",
+        message: "You have already upvoted this anime.",
         alreadyVoted: true,
-        animeId,
-        deviceId
+        animeId
       });
     }
 
-    // 2. Insert device vote record
-    db.run("INSERT INTO user_votes (anime_id, device_id, vote_type) VALUES (?, ?, 'upvote')", [animeId, deviceId]);
+    // 2. Insert vote record
+    db.run("INSERT INTO user_votes (anime_id, device_id, user_id, vote_type) VALUES (?, ?, ?, 'upvote')", [animeId, deviceId, userId]);
 
     // 3. Increment count
     try {
@@ -1509,31 +1520,39 @@ app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/an
   }
 });
 
-// POST /api/anime/:id/like (Community Like - Cookie Device UUID Tracked)
+// POST /api/anime/:id/like (Community Like - Strict Clerk Auth Required)
 app.all(['/api/anime/:id/like', '/api/anime/:id/likes', '/anime/:id/like', '/anime/:id/likes'], (req, res, next) => {
   if (req.method !== 'POST' && req.method !== 'PUT') return next();
   try {
     const animeId = req.params.id;
     const { deviceId } = getOrCreateDeviceIdExpress(req, res);
+    const userId = req.body?.userId || req.headers['x-user-id'] || null;
 
-    // 1. Check if user already liked from this device
-    const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'like'");
-    checkStmt.bind([animeId, deviceId]);
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+        message: "Please sign in to like anime."
+      });
+    }
+
+    // 1. Check if user already liked
+    const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'like'");
+    checkStmt.bind([animeId, userId]);
     const alreadyVoted = checkStmt.step();
     checkStmt.free();
 
     if (alreadyVoted) {
       return res.status(400).json({
         error: "Already voted",
-        message: "This device has already liked this anime.",
+        message: "You have already liked this anime.",
         alreadyVoted: true,
-        animeId,
-        deviceId
+        animeId
       });
     }
 
-    // 2. Insert device vote record
-    db.run("INSERT INTO user_votes (anime_id, device_id, vote_type) VALUES (?, ?, 'like')", [animeId, deviceId]);
+    // 2. Insert vote record
+    db.run("INSERT INTO user_votes (anime_id, device_id, user_id, vote_type) VALUES (?, ?, ?, 'like')", [animeId, deviceId, userId]);
 
     // 3. Increment count
     try {

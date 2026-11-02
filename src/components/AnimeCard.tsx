@@ -214,22 +214,50 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     return fallbacks[(anime.id || 0) % fallbacks.length];
   };
 
-  // 1-Vote per device like handler
+  // 1-Vote per device & Clerk user like handler
   const handleLikeClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isLiking) return;
 
+    // Guest check
+    const clerkUser = (window as any).Clerk?.user || null;
+    // Alternatively we can use useUser hook or check localStorage session
+    let isAuthed = false;
+    try {
+      const activeSession = sessionStorage.getItem('clerk_active_session');
+      if (activeSession || clerkUser) isAuthed = true;
+    } catch {}
+
+    // Check if real Clerk key is present or simulated auth is active
+    const hasClerk = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY && !import.meta.env.VITE_CLERK_PUBLISHABLE_KEY.includes('YOUR_'));
+    if (hasClerk && !isAuthed) {
+      showNotification('Sign In Required', 'Please sign in to vote and like anime.', 'warning');
+      return;
+    }
+
     if (internalLiked) {
-      showNotification('Already Voted', 'You have already liked this anime from this device.', 'warning');
+      showNotification('Already Voted', 'You have already liked this anime.', 'warning');
       return;
     }
 
     setIsLiking(true);
 
     try {
+      let currentUserId = 'default_user';
+      try {
+        const session = sessionStorage.getItem('clerk_active_session');
+        if (session) {
+          const parsed = JSON.parse(session);
+          if (parsed?.id) currentUserId = parsed.id;
+        }
+        const clerkUser = (window as any).Clerk?.user;
+        if (clerkUser?.id) currentUserId = clerkUser.id;
+      } catch {}
+
       const res = await cloudflareApi.likeAnime(anime.id, {
         action: 'like',
-        delta: 1
+        delta: 1,
+        userId: currentUserId
       });
       const updatedCount = (res && typeof res.likes === 'number') 
         ? res.likes 
@@ -248,7 +276,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
       const isAlreadyVoted = error?.alreadyVoted || /already voted/i.test(error?.message || '');
       if (isAlreadyVoted) {
         setInternalLiked(true);
-        showNotification('Already Voted', 'Already voted! 1 vote allowed per device.', 'warning');
+        showNotification('Already Voted', 'You have already voted for this anime.', 'warning');
       } else {
         console.error(`[AnimeCard] Failed to sync like for anime #${anime.id}:`, error);
         showNotification('Vote Failed', error?.message || 'Could not register vote.', 'warning');
@@ -258,22 +286,47 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     }
   };
 
-  // 1-Vote per device upvote handler
+  // 1-Vote per device & Clerk user upvote handler
   const handleUpvoteClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isVoting) return;
 
+    let isAuthed = false;
+    try {
+      const activeSession = sessionStorage.getItem('clerk_active_session');
+      const clerkUser = (window as any).Clerk?.user || null;
+      if (activeSession || clerkUser) isAuthed = true;
+    } catch {}
+
+    const hasClerk = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY && !import.meta.env.VITE_CLERK_PUBLISHABLE_KEY.includes('YOUR_'));
+    if (hasClerk && !isAuthed) {
+      showNotification('Sign In Required', 'Please sign in to upvote anime.', 'warning');
+      return;
+    }
+
     if (internalUpvoted) {
-      showNotification('Already Voted', 'You have already upvoted this anime from this device.', 'warning');
+      showNotification('Already Voted', 'You have already upvoted this anime.', 'warning');
       return;
     }
 
     setIsVoting(true);
 
     try {
+      let currentUserId = 'default_user';
+      try {
+        const session = sessionStorage.getItem('clerk_active_session');
+        if (session) {
+          const parsed = JSON.parse(session);
+          if (parsed?.id) currentUserId = parsed.id;
+        }
+        const clerkUser = (window as any).Clerk?.user;
+        if (clerkUser?.id) currentUserId = clerkUser.id;
+      } catch {}
+
       const res = await cloudflareApi.upvoteAnime(anime.id, {
         action: 'up',
-        delta: 1
+        delta: 1,
+        userId: currentUserId
       });
       const updatedCount = (res && typeof res.upvotes === 'number') 
         ? res.upvotes 
@@ -292,7 +345,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
       const isAlreadyVoted = error?.alreadyVoted || /already voted/i.test(error?.message || '');
       if (isAlreadyVoted) {
         setInternalUpvoted(true);
-        showNotification('Already Voted', 'Already voted! 1 vote allowed per device.', 'warning');
+        showNotification('Already Voted', 'You have already upvoted this anime.', 'warning');
       } else {
         console.error(`[AnimeCard] Failed to sync upvote for anime #${anime.id}:`, error);
         showNotification('Vote Failed', error?.message || 'Could not register upvote.', 'warning');

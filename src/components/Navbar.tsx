@@ -371,9 +371,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <div className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white text-xs font-bold overflow-hidden shadow-sm">
-              {user?.imageUrl ? (
+              {user ? (
                 <img 
-                  src={user.imageUrl} 
+                  src={localStorage.getItem('anidub_anime_avatar') || 'https://s4.anilist.co/file/anilistcdn/character/large/b127691-9zqh1xpIubn7.png'} 
                   alt="Profile" 
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';

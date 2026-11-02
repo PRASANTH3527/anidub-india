@@ -445,7 +445,17 @@ export default function App() {
 
         {/* PROFILE VIEW */}
         {activeTab === 'profile' && (
-          <ProfileView />
+          <ProfileView
+            watchlist={watchlist}
+            catalogList={catalogList}
+            onSelectAnime={(anime) => {
+              setSelectedAnimeId(anime.id);
+              addToRecentlyViewed(anime);
+            }}
+            onToggleWatchlist={handleToggleWatchlist}
+            onOpenCreateCollection={() => setIsCollectionOpen(true)}
+            onNavigateToCatalog={() => setActiveTab('home')}
+          />
         )}
 
         {/* TIER LIST MAKER VIEW */}

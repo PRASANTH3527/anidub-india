@@ -459,7 +459,7 @@ class CloudflareApiService {
   /**
    * LIKE: Registers like increment or decrement in Cloudflare Worker / D1 (Strict 1 like per device via Cookie)
    */
-  public async likeAnime(id: number | string, options?: { action?: 'like' | 'unlike'; delta?: number }): Promise<{ success: boolean; likes?: number; likesCount?: number }> {
+  public async likeAnime(id: number | string, options?: { action?: 'like' | 'unlike'; delta?: number; userId?: string }): Promise<{ success: boolean; likes?: number; likesCount?: number }> {
     const endpoint = CLOUDFLARE_ENDPOINTS.LIKE(id);
     let res: Response;
     try {
@@ -501,7 +501,7 @@ class CloudflareApiService {
   /**
    * VOTE: Registers community upvote in Cloudflare D1 (Strict 1 vote per device via Cookie)
    */
-  public async upvoteAnime(id: number | string, options?: { action?: 'up' | 'down'; delta?: number }): Promise<{ success: boolean; upvotes?: number; popularity?: number }> {
+  public async upvoteAnime(id: number | string, options?: { action?: 'up' | 'down'; delta?: number; userId?: string }): Promise<{ success: boolean; upvotes?: number; popularity?: number }> {
     const endpoint = CLOUDFLARE_ENDPOINTS.VOTE(id);
     let res: Response;
     try {
