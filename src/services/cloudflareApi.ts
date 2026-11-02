@@ -544,9 +544,23 @@ class CloudflareApiService {
    */
   public async checkVoteStatus(id: number | string): Promise<{ hasLiked: boolean; hasUpvoted: boolean }> {
     try {
-      const endpoint = `/api/anime/${id}/vote-status`;
+      let currentUserId = 'default_user';
+      try {
+        const session = sessionStorage.getItem('clerk_active_session');
+        if (session) {
+          const parsed = JSON.parse(session);
+          if (parsed?.id) currentUserId = parsed.id;
+        }
+        const clerkUser = (window as any).Clerk?.user;
+        if (clerkUser?.id) currentUserId = clerkUser.id;
+      } catch {}
+
+      const endpoint = `/api/anime/${id}/vote-status?userId=${encodeURIComponent(currentUserId)}`;
       const res = await this.smartFetch(endpoint, {
-        headers: this.getHeaders(false)
+        headers: {
+          ...this.getHeaders(false),
+          'x-user-id': currentUserId
+        }
       });
       if (res.ok) {
         return await res.json();

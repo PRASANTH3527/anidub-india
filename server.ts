@@ -950,9 +950,10 @@ app.get('/api/user/stats', (req, res) => {
     }
     reviewStmt.free();
 
-    // 2. Get community votes count (upvotes + likes for this device)
-    const voteStmt = db.prepare("SELECT COUNT(*) as count FROM user_votes WHERE device_id = ?");
-    voteStmt.bind([deviceId]);
+    // 2. Get community votes count (upvotes + likes for this user)
+    const userId = req.headers['x-user-id'] || 'default_user';
+    const voteStmt = db.prepare("SELECT COUNT(*) as count FROM user_votes WHERE user_id = ?");
+    voteStmt.bind([userId]);
     let voteCount = 0;
     if (voteStmt.step()) {
       voteCount = voteStmt.getAsObject().count as number;
@@ -1592,23 +1593,23 @@ app.all(['/api/anime/:id/like', '/api/anime/:id/likes', '/anime/:id/like', '/ani
   }
 });
 
-// GET /api/anime/:id/vote-status (Check if Device has voted)
+// GET /api/anime/:id/vote-status (Check if user has voted)
 app.get(['/api/anime/:id/vote-status', '/api/anime/:id/vote_status', '/anime/:id/vote-status'], (req, res) => {
   try {
     const animeId = req.params.id;
-    const { deviceId } = getOrCreateDeviceIdExpress(req, res);
+    const userId = req.headers['x-user-id'] || req.query.userId || 'default_user';
 
-    const likeStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'like'");
-    likeStmt.bind([animeId, deviceId]);
+    const likeStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'like'");
+    likeStmt.bind([animeId, userId]);
     const hasLiked = likeStmt.step();
     likeStmt.free();
 
-    const upvoteStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND device_id = ? AND vote_type = 'upvote'");
-    upvoteStmt.bind([animeId, deviceId]);
+    const upvoteStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'upvote'");
+    upvoteStmt.bind([animeId, userId]);
     const hasUpvoted = upvoteStmt.step();
     upvoteStmt.free();
 
-    res.json({ animeId, deviceId, hasLiked, hasUpvoted });
+    res.json({ animeId, userId, hasLiked, hasUpvoted });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
