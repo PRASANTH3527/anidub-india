@@ -416,10 +416,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (animeSubMatch) {
     const id = animeSubMatch[1];
     const sub = animeSubMatch[2];
-    const clientIp = request.headers.get("CF-Connecting-IP") || 
-                     request.headers.get("x-real-ip") || 
-                     request.headers.get("x-forwarded-for")?.split(",")[0].trim() || 
-                     "127.0.0.1";
 
     let numericId = parseInt(id, 10);
     if (isNaN(numericId) && env.DB) {
@@ -448,14 +444,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (sub === 'vote-status' && method === 'GET') {
       let hasLiked = false;
       let hasUpvoted = false;
-      if (env.DB && numericId) {
+      const userId = url.searchParams.get('userId') || url.searchParams.get('user_id') || request.headers.get('x-user-id');
+      if (env.DB && numericId && userId && userId !== 'default_user') {
         try {
           const likeCheck = await env.DB.prepare(
-            "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'like'"
-          ).bind(numericId, clientIp).first();
+            "SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'like'"
+          ).bind(numericId, userId).first();
           const upvoteCheck = await env.DB.prepare(
-            "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'upvote'"
-          ).bind(numericId, clientIp).first();
+            "SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'upvote'"
+          ).bind(numericId, userId).first();
           hasLiked = Boolean(likeCheck);
           hasUpvoted = Boolean(upvoteCheck);
         } catch {}
@@ -466,10 +463,21 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     // POST /api/anime/:id/vote (or /upvote)
     if ((sub === 'vote' || sub === 'upvote') && method === 'POST') {
       try {
+        const body: any = await request.json().catch(() => ({}));
+        const userId = body.userId || body.user_id || request.headers.get('x-user-id');
+
+        if (!userId) {
+          return jsonResponse({
+            error: "Authentication required",
+            message: "Please sign in to upvote anime titles.",
+            requiresAuth: true
+          }, 401);
+        }
+
         if (env.DB && numericId) {
           const existing = await env.DB.prepare(
-            "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'upvote'"
-          ).bind(numericId, clientIp).first();
+            "SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'upvote'"
+          ).bind(numericId, userId).first();
 
           if (existing) {
             return jsonResponse({
@@ -482,8 +490,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
           try {
             await env.DB.prepare(
-              "INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'upvote')"
-            ).bind(numericId, clientIp).run();
+              "INSERT INTO user_votes (anime_id, user_id, vote_type) VALUES (?, ?, 'upvote')"
+            ).bind(numericId, userId).run();
           } catch (uErr: any) {
             if (String(uErr?.message || uErr).toLowerCase().includes("unique")) {
               return jsonResponse({
@@ -520,10 +528,21 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     // POST /api/anime/:id/like (or /likes)
     if ((sub === 'like' || sub === 'likes') && method === 'POST') {
       try {
+        const body: any = await request.json().catch(() => ({}));
+        const userId = body.userId || body.user_id || request.headers.get('x-user-id');
+
+        if (!userId) {
+          return jsonResponse({
+            error: "Authentication required",
+            message: "Please sign in to like anime titles.",
+            requiresAuth: true
+          }, 401);
+        }
+
         if (env.DB && numericId) {
           const existing = await env.DB.prepare(
-            "SELECT id FROM user_votes WHERE anime_id = ? AND ip_address = ? AND vote_type = 'like'"
-          ).bind(numericId, clientIp).first();
+            "SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'like'"
+          ).bind(numericId, userId).first();
 
           if (existing) {
             return jsonResponse({
@@ -536,8 +555,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
           try {
             await env.DB.prepare(
-              "INSERT INTO user_votes (anime_id, ip_address, vote_type) VALUES (?, ?, 'like')"
-            ).bind(numericId, clientIp).run();
+              "INSERT INTO user_votes (anime_id, user_id, vote_type) VALUES (?, ?, 'like')"
+            ).bind(numericId, userId).run();
           } catch (uErr: any) {
             if (String(uErr?.message || uErr).toLowerCase().includes("unique")) {
               return jsonResponse({

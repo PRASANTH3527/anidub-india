@@ -436,16 +436,16 @@ export default {
         // GET Vote Status (Checks if authenticated user has already liked or upvoted)
         if (sub === 'vote-status' && method === "GET") {
           try {
-            const userId = url.searchParams.get('user_id') || request.headers.get('x-user-id') || request.headers.get('x-device-id') || 'default_user';
+            const userId = url.searchParams.get('userId') || url.searchParams.get('user_id') || request.headers.get('x-user-id') || request.headers.get('x-device-id') || 'default_user';
             let hasLiked = false;
             let hasUpvoted = false;
-            if (env.DB && numericId) {
+            if (env.DB && numericId && userId && userId !== 'default_user') {
               const likeCheck = await env.DB.prepare(
-                "SELECT id FROM user_votes WHERE anime_id = ? AND (user_id = ? OR ip_address = ?) AND vote_type = 'like'"
-              ).bind(numericId, userId, userId).first().catch(() => null);
+                "SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'like'"
+              ).bind(numericId, userId).first().catch(() => null);
               const upvoteCheck = await env.DB.prepare(
-                "SELECT id FROM user_votes WHERE anime_id = ? AND (user_id = ? OR ip_address = ?) AND vote_type = 'upvote'"
-              ).bind(numericId, userId, userId).first().catch(() => null);
+                "SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'upvote'"
+              ).bind(numericId, userId).first().catch(() => null);
               hasLiked = Boolean(likeCheck);
               hasUpvoted = Boolean(upvoteCheck);
             }
