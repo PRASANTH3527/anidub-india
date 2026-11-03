@@ -940,7 +940,7 @@ app.get('/api/user/profile', (req, res) => {
 // 2.5 GET /api/user/stats (Fetch real review and vote counts from D1)
 app.get('/api/user/stats', (req, res) => {
   try {
-    const { deviceId } = getOrCreateDeviceIdExpress(req, res);
+    const userId = req.headers['x-user-id'] || 'default_user';
     
     // 1. Get review count (using 'default_user' as per current schema)
     const reviewStmt = db.prepare("SELECT COUNT(*) as count FROM reviews WHERE user_id = 'default_user'");
@@ -951,7 +951,6 @@ app.get('/api/user/stats', (req, res) => {
     reviewStmt.free();
 
     // 2. Get community votes count (upvotes + likes for this user)
-    const userId = req.headers['x-user-id'] || 'default_user';
     const voteStmt = db.prepare("SELECT COUNT(*) as count FROM user_votes WHERE user_id = ?");
     voteStmt.bind([userId]);
     let voteCount = 0;
@@ -962,8 +961,7 @@ app.get('/api/user/stats', (req, res) => {
 
     res.json({
       reviewCount,
-      voteCount,
-      deviceId
+      voteCount
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1435,32 +1433,14 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
   }
 });
 
-// Helper: Extract or Generate Device UUID from Cookies / Header in Express
-function getOrCreateDeviceIdExpress(req: any, res: any) {
-  const cookieHeader = req.headers.cookie || '';
-  const match = cookieHeader.match(/(?:^|;\s*)device_id=([^;]+)/);
-  if (match && match[1]) {
-    const existing = decodeURIComponent(match[1]).trim();
-    if (existing) return { deviceId: existing, isNew: false };
-  }
-  const headerId = req.headers['x-device-id'];
-  if (headerId && typeof headerId === 'string' && headerId.trim()) {
-    return { deviceId: headerId.trim(), isNew: false };
-  }
-  const newId = crypto.randomUUID();
-  const maxAge = 315360000; // 10 years in seconds
-  const expires = new Date(Date.now() + maxAge * 1000).toUTCString();
-  res.setHeader('Set-Cookie', `device_id=${encodeURIComponent(newId)}; Path=/; Max-Age=${maxAge}; Expires=${expires}; SameSite=Lax; HttpOnly`);
-  res.setHeader('x-device-id', newId);
-  return { deviceId: newId, isNew: true };
-}
+// Helper: Get Clerk user ID from request
+
 
 // POST /api/anime/:id/vote or /api/anime/:id/upvote (Community Upvote - Strict Clerk Auth Required)
 app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/anime/:id/upvote'], (req, res, next) => {
   if (req.method !== 'POST' && req.method !== 'PUT') return next();
   try {
     const animeId = req.params.id;
-    const { deviceId } = getOrCreateDeviceIdExpress(req, res);
     const userId = req.body?.userId || req.headers['x-user-id'] || null;
 
     if (!userId || typeof userId !== 'string' || !userId.trim()) {
@@ -1524,7 +1504,7 @@ app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/an
       message: `${newPopularity} total upvotes`
     }, true).catch(() => {});
 
-    res.json({ success: true, upvotes: newPopularity, popularity: newPopularity, deviceId, message: "Upvote recorded successfully" });
+    res.json({ success: true, upvotes: newPopularity, popularity: newPopularity, message: "Upvote recorded successfully" });
   } catch (err: any) {
     if (String(err?.message).toLowerCase().includes("unique")) {
       return res.status(400).json({ error: "Already voted", alreadyVoted: true });
@@ -1538,7 +1518,6 @@ app.all(['/api/anime/:id/like', '/api/anime/:id/likes', '/anime/:id/like', '/ani
   if (req.method !== 'POST' && req.method !== 'PUT') return next();
   try {
     const animeId = req.params.id;
-    const { deviceId } = getOrCreateDeviceIdExpress(req, res);
     const userId = req.body?.userId || req.headers['x-user-id'] || null;
 
     if (!userId || typeof userId !== 'string' || !userId.trim()) {
@@ -1584,7 +1563,7 @@ app.all(['/api/anime/:id/like', '/api/anime/:id/likes', '/anime/:id/like', '/ani
     }
     stmt.free();
 
-    res.json({ success: true, likes: newLikes, likesCount: newLikes, deviceId, message: "Like recorded successfully" });
+    res.json({ success: true, likes: newLikes, likesCount: newLikes, message: "Like recorded successfully" });
   } catch (err: any) {
     if (String(err?.message).toLowerCase().includes("unique")) {
       return res.status(400).json({ error: "Already voted", alreadyVoted: true });
