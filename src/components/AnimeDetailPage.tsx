@@ -322,6 +322,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   );
   const displayLanguages = languages.length > 0 ? languages : ['Hindi', 'Tamil', 'Telugu'];
   
+  useEffect(() => {
+    if (displayLanguages.length > 0 && (!reviewLang || !displayLanguages.some((l: string) => reviewLang.includes(l)))) {
+      setReviewLang(`${displayLanguages[0]} Dub`);
+    }
+  }, [details]);
+  
   const genres = details?.genre ? details.genre.split(',').map((g: string) => g.trim()) : ['Action', 'Fantasy', 'Adventure', 'Supernatural'];
 
   // Helper for platform URLs with direct series URLs and Android intent deep linking
@@ -719,11 +725,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 onChange={(e) => setReviewLang(e.target.value)}
                 className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-purple-400 cursor-pointer"
               >
-                <option value="Hindi Dub">Hindi Dub</option>
-                <option value="Tamil Dub">Tamil Dub</option>
-                <option value="Telugu Dub">Telugu Dub</option>
-                <option value="Malayalam Dub">Malayalam Dub</option>
-                <option value="Kannada Dub">Kannada Dub</option>
+                {displayLanguages.map((lang: string) => (
+                  <option key={lang} value={`${lang} Dub`}>{lang} Dub</option>
+                ))}
               </select>
 
               <div className="flex items-center justify-start sm:justify-end">

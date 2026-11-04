@@ -23,6 +23,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [feedView, setFeedView] = useState('library');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentLang, setCurrentLang] = useState<string>(() => {
+    return localStorage.getItem('cf_anime_lang') || 'en';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('cf_anime_lang', currentLang);
+  }, [currentLang]);
   
   // Watchlist state (strictly real state - defaults to empty)
   const [watchlist, setWatchlist] = useState<number[]>(() => {
@@ -311,7 +318,8 @@ export default function App() {
         setFeedView={setFeedView}
         isAdminAuthenticated={isAdminAuthenticated}
         onLogout={handleAdminLogout}
-
+        currentLang={currentLang}
+        setCurrentLang={setCurrentLang}
       />
 
       {/* 2. ADMIN DASHBOARD (When active in admin mode) */}
@@ -397,6 +405,7 @@ export default function App() {
             recentlyViewed={realRecentlyViewed}
             onClearRecentlyViewed={handleClearRecentlyViewed}
             onRemoveRecentlyViewedItem={handleRemoveRecentlyViewedItem}
+            uiLanguage={currentLang as any}
           />
         )}
 

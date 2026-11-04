@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { CLOUDFLARE_API_URL, getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
 import { cloudflareApi } from '../services/cloudflareApi';
-import { generateRandomUsername } from '../utils/randomUser';
+import { generateRandomUsername, ANIME_CHARACTERS } from '../utils/randomUser';
 import { formatRelativeTime } from '../utils/timestamps';
 import { useUser } from '@clerk/clerk-react';
 
@@ -53,16 +53,57 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     return [];
   });
 
+  const getClerkSuffix = (userId?: string): string => {
+    const uid = userId || localStorage.getItem('anidub_device_fp') || 'guest_' + Math.random();
+    if (!localStorage.getItem('anidub_device_fp') && !userId) {
+      localStorage.setItem('anidub_device_fp', uid);
+    }
+    let hash = 0;
+    for (let i = 0; i < uid.length; i++) {
+      hash = ((hash << 5) - hash) + uid.charCodeAt(i);
+      hash |= 0;
+    }
+    const hex = Math.abs(hash).toString(36);
+    return (hex + uid).replace(/[^a-z0-9]/gi, '').substring(0, 4).toLowerCase();
+  };
+
   const [inputMessage, setInputMessage] = useState('');
   const [guestName, setGuestName] = useState(() => {
-    return generateRandomUsername();
+    try {
+      const saved = localStorage.getItem('anidub_guest_chat_name');
+      const suffix = getClerkSuffix(user?.id);
+      if (saved && saved.includes('_')) {
+        const parts = saved.split('_');
+        const char = parts[0] || ANIME_CHARACTERS[Math.floor(Math.random() * ANIME_CHARACTERS.length)];
+        return `${char}_${suffix}`;
+      }
+      const char = ANIME_CHARACTERS[Math.floor(Math.random() * ANIME_CHARACTERS.length)];
+      return `${char}_${suffix}`;
+    } catch {
+      return `AnimeFan_${getClerkSuffix(user?.id)}`;
+    }
   });
-  const currentUserName = (isSignedIn && (user?.fullName || user?.username || user?.firstName)) || guestName;
+
+  useEffect(() => {
+    if (user?.id) {
+      const suffix = getClerkSuffix(user.id);
+      setGuestName(prev => {
+        const parts = prev.split('_');
+        const char = parts[0] || 'AnimeFan';
+        const updated = `${char}_${suffix}`;
+        localStorage.setItem('anidub_guest_chat_name', updated);
+        return updated;
+      });
+    }
+  }, [user?.id]);
+
+  const currentUserName = guestName;
   const [autoScroll, setAutoScroll] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   // Review Mode toggling
   const [mode, setMode] = useState<'chat' | 'review'>('chat');
@@ -299,7 +340,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   ) => {
     if (!text.trim()) return;
 
-    const payload: ChatMessage = {
+    const payload: ChatMessage & { clerk_user_id?: string } = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       user: currentUserName.trim() || 'AnimeFan_IN',
       text: text.trim(),
@@ -307,7 +348,8 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       isSelf: true,
       isReview: Boolean(extra.isReview),
       rating: extra.rating ?? null,
-      language: extra.language ?? null
+      language: extra.language ?? null,
+      clerk_user_id: user?.id || localStorage.getItem('anidub_device_fp') || 'guest'
     };
 
     // 1) Instantly update local state & LocalStorage
@@ -330,9 +372,19 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
     // 3) Persist to Backend D1 / SQLite Database via HTTP POST
     try {
-      await cloudflareApi.sendChatMessage(payload);
-    } catch (err) {
+      const resp = await cloudflareApi.sendChatMessage(payload);
+      if (resp && resp.error) {
+        throw new Error(resp.error);
+      }
+    } catch (err: any) {
       console.warn('Network persistence note:', err);
+      const errMsg = err.message || '';
+      if (errMsg.includes('already claimed') || errMsg.includes('taken')) {
+        setChatError('Name taken, please choose another or use Randomize');
+      } else {
+        setChatError(errMsg || 'Failed to post message');
+      }
+      setTimeout(() => setChatError(null), 6000);
     }
   };
 
@@ -366,7 +418,9 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   };
 
   const handleRandomizeName = () => {
-    const chosen = generateRandomUsername();
+    const char = ANIME_CHARACTERS[Math.floor(Math.random() * ANIME_CHARACTERS.length)];
+    const suffix = getClerkSuffix(user?.id);
+    const chosen = `${char}_${suffix}`;
     setGuestName(chosen);
     localStorage.setItem('anidub_guest_chat_name', chosen);
   };

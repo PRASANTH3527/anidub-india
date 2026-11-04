@@ -26,6 +26,7 @@ import { useToast } from './Toast';
 import { MicPermissionBottomSheet } from './MicPermissionBottomSheet';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { AniDubLogo } from './AniDubLogo';
+import { LANGUAGES } from '../utils/translations';
 
 interface NavbarProps {
   activeTab: string;
@@ -41,18 +42,9 @@ interface NavbarProps {
   isAdminAuthenticated?: boolean;
   onLogout?: () => void;
   userAvatar?: string;
+  currentLang?: string;
+  setCurrentLang?: (lang: string) => void;
 }
-
-const LANGUAGES = [
-  { code: 'en', native: 'English' },
-  { code: 'ta', native: 'Tamil' },
-  { code: 'te', native: 'Telugu' },
-  { code: 'hi', native: 'Hindi' },
-  { code: 'ml', native: 'Malayalam' },
-  { code: 'kn', native: 'Kannada' },
-  { code: 'bn', native: 'Bengali' },
-  { code: 'mr', native: 'Marathi' },
-];
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
@@ -67,12 +59,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   setFeedView,
   isAdminAuthenticated,
   onLogout,
-  userAvatar
+  userAvatar,
+  currentLang = 'en',
+  setCurrentLang
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const { user } = useUser();
   const [isLangOpen, setIsLangOpen] = useState(false);
-  const [selectedLang, setSelectedLang] = useState('en');
+  const selectedLang = currentLang;
   const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const handleLogoClick = () => {
@@ -509,7 +503,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <button
                     key={lang.code}
                     onClick={() => {
-                      setSelectedLang(lang.code);
+                      if (setCurrentLang) setCurrentLang(lang.code);
                       setIsLangOpen(false);
                     }}
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${

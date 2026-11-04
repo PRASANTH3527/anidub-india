@@ -22,6 +22,7 @@ import { cloudflareApi } from '../services/cloudflareApi';
 import { calculateCatalogStats } from '../utils/languages';
 import { SkeletonGrid } from './SkeletonGrid';
 import { proxyUrl } from '../utils/imgbb';
+import { translate, SupportedLanguage } from '../utils/i18n';
 
 export interface Anime {
   id: number;
@@ -59,6 +60,7 @@ export interface CatalogViewProps {
   recentlyViewed?: any[];
   onClearRecentlyViewed?: () => void;
   onRemoveRecentlyViewedItem?: (id: number) => void;
+  uiLanguage?: SupportedLanguage;
 }
 
 export const FALLBACK_SEED_ANIME: Anime[] = [];
@@ -112,8 +114,10 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   feedView = 'library',
   recentlyViewed = [],
   onClearRecentlyViewed,
-  onRemoveRecentlyViewedItem
+  onRemoveRecentlyViewedItem,
+  uiLanguage = 'en'
 }) => {
+  const lang = uiLanguage || 'en';
   const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(catalogList || []);
   
   // Sync rawAnimeList whenever catalogList prop updates from parent
@@ -254,15 +258,14 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           ANIDUB INDIA OFFICIAL WEBSITE
         </h1>
         <h2 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white mb-4 leading-tight">
-          The Premier Destination for <br className="hidden sm:block" />
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-[#FF4500]">
-            Anime Streaming & Dubbing in India
+            {translate('hero.title', lang)}
           </span>
         </h2>
 
         {/* Hero Subtitle */}
-        <p className="text-[13px] text-[#94a3b8] leading-relaxed max-w-[380px] mx-auto mb-8">
-          Discover officially dubbed anime in Tamil, Telugu, Hindi, Malayalam, and Kannada — streaming legally on Crunchyroll, Netflix, JioHotstar, and JioCinema.
+        <p className="text-[13px] text-[#94a3b8] leading-relaxed max-w-[420px] mx-auto mb-8">
+          {translate('hero.subtitle', lang)}
         </p>
 
         {/* CTA Button 1: Surprise Me Roulette */}
@@ -271,9 +274,9 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           className="w-full flex items-center justify-center gap-3 rounded-full bg-gradient-to-r from-[#f59e0b] via-[#ea580c] to-[#9333ea] px-5 py-3.5 shadow-[0_6px_25px_rgba(234,88,12,0.4)] transition-transform active:scale-[0.98]"
         >
           <Dices className="w-5 h-5 text-white" />
-          <span className="text-[15px] font-extrabold text-white">Surprise Me Roulette</span>
+          <span className="text-[15px] font-extrabold text-white">{translate('surpriseMe', lang)}</span>
           <span className="bg-black/30 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase text-white inline-flex items-center gap-1 shrink-0">
-            🎲 RANDOM PICK
+            🎲 {translate('randomPick', lang)}
           </span>
         </button>
 
@@ -284,7 +287,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         >
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-white" />
-            <span className="text-[13px] font-bold text-white">Create Collection</span>
+            <span className="text-[13px] font-bold text-white">{translate('createCollection', lang)}</span>
           </div>
           <span className="bg-[#1e1436] border border-[#7e22ce] text-[#c084fc] text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full tracking-wide">
             SHAREABLE

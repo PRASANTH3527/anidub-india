@@ -196,14 +196,8 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   const getStatusBadge = () => {
     if (!rawStatus || rawStatus.toLowerCase() === 'pending') return null;
     const lower = rawStatus.toLowerCase();
-    if (lower.includes('complete') || lower.includes('finished')) {
-      return {
-        label: 'Completed',
-        badgeClass: 'bg-blue-950/80 text-blue-400 border-blue-700/50',
-        dotClass: 'bg-blue-400',
-        pulse: false
-      };
-    }
+    
+    // ONLY display if status is "Ongoing", "Airing", or "Simulcast"
     if (lower.includes('airing') || lower.includes('ongoing') || lower.includes('simulcast')) {
       const displayLabel = lower.includes('ongoing') ? 'Ongoing' : 'Airing';
       return {
@@ -213,21 +207,9 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         pulse: true
       };
     }
-    if (lower.includes('upcoming') || lower.includes('announced')) {
-      return {
-        label: 'Upcoming',
-        badgeClass: 'bg-amber-950/80 text-amber-400 border-amber-700/50',
-        dotClass: 'bg-amber-400',
-        pulse: false
-      };
-    }
-    const formatted = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
-    return {
-      label: formatted,
-      badgeClass: 'bg-purple-950/80 text-purple-400 border-purple-700/50',
-      dotClass: 'bg-purple-400',
-      pulse: false
-    };
+    
+    // Completely hide and do not render for Completed, Finished, Upcoming, etc.
+    return null;
   };
 
   const statusBadge = getStatusBadge();

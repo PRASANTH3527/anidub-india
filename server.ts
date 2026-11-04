@@ -402,6 +402,7 @@ function runMigrations() {
       rating REAL,
       language TEXT,
       isReview INTEGER DEFAULT 0,
+      clerk_user_id TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -419,6 +420,10 @@ function runMigrations() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  try {
+    db.run("ALTER TABLE chat_messages ADD COLUMN clerk_user_id TEXT;");
+  } catch {}
 
   // Ensure default user exists
   try {
@@ -1489,19 +1494,41 @@ app.get(['/api/chat', '/api/chat/messages'], (req, res) => {
 
 app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
   try {
-    const { user, text, timestamp, rating, language, isReview } = req.body;
+    const { user, text, timestamp, rating, language, isReview, clerk_user_id } = req.body;
     if (!text || !String(text).trim()) return res.status(400).json({ error: "Missing message text" });
 
     const cleanUser = String(user || 'Anonymous Fan').slice(0, 50);
+    const cleanClerkId = String(clerk_user_id || req.headers['x-clerk-user-id'] || req.headers['authorization'] || 'guest').trim();
     const cleanText = String(text).slice(0, 1000);
     const cleanTimestamp = String(timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     const cleanRating = rating !== undefined ? Number(rating) : null;
     const cleanLanguage = language ? String(language).slice(0, 30) : null;
     const cleanIsReview = isReview ? 1 : 0;
 
+    // Check if username is already claimed by another user
+    try {
+      const checkStmt = db.prepare("SELECT DISTINCT clerk_user_id FROM chat_messages WHERE LOWER(user) = LOWER(?) AND clerk_user_id IS NOT NULL AND clerk_user_id != ''");
+      checkStmt.bind([cleanUser]);
+      let claimedByOther = false;
+      while (checkStmt.step()) {
+        const row = checkStmt.getAsObject();
+        if (row.clerk_user_id && String(row.clerk_user_id).trim() !== cleanClerkId) {
+          claimedByOther = true;
+          break;
+        }
+      }
+      checkStmt.free();
+
+      if (claimedByOther) {
+        return res.status(400).json({ error: "This username is already claimed by another user." });
+      }
+    } catch (chkErr) {
+      console.warn('Username check warning:', chkErr);
+    }
+
     db.run(
-      "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview) VALUES (?, ?, ?, ?, ?, ?)",
-      [cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview]
+      "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview, clerk_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId]
     );
     persistD1();
 
