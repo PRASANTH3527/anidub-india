@@ -153,7 +153,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
   const [status, setStatus] = useState<string>(() => {
     const anime = (initialData || {}) as any;
-    return (anime.status && anime.status !== 'pending') ? anime.status : 'Airing';
+    const raw = anime.status || anime.airing_status || 'Airing';
+    return (raw && raw !== 'pending') ? raw : 'Airing';
   });
   const [releaseDay, setReleaseDay] = useState<string>('Saturday');
 
@@ -184,13 +185,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       // State Initialization: When the Edit Modal opens and sets its state, make sure the type property is explicitly included
       const anime = initialData as any;
-      const initialStatus = (initDataAny?.status && initDataAny.status !== 'pending') ? initDataAny.status : 'Airing';
+      const initialStatus = ((initDataAny?.status || initDataAny?.airing_status) && (initDataAny?.status !== 'pending' && initDataAny?.airing_status !== 'pending')) ? (initDataAny.status || initDataAny.airing_status) : 'Airing';
       setStatus(initialStatus);
 
       setFormData({ 
         ...anime, 
         type: cleanType,
-        status: initialStatus
+        status: initialStatus,
+        airing_status: initialStatus
       });
 
       if (initDataAny?.mixedEntries && Array.isArray(initDataAny.mixedEntries)) {
@@ -412,6 +414,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         rating: parsedRating,
         episodes_count: totalEpisodes || 12,
         status: status,
+        airing_status: status,
         submissionStatus: resolvedSubmissionStatus,
         languages: derivedGlobalDubs.join(', '),
         platform: streamingPartners[0]?.name || 'Crunchyroll',
