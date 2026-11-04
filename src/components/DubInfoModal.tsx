@@ -153,8 +153,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
   const [status, setStatus] = useState<string>(() => {
     const anime = (initialData || {}) as any;
-    const raw = anime.status || anime.airing_status || 'Airing';
-    return (raw && raw !== 'pending') ? raw : 'Airing';
+    return anime.status === 'Completed' ? 'Completed' : 'Airing';
   });
   const [releaseDay, setReleaseDay] = useState<string>('Saturday');
 
@@ -185,7 +184,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       // State Initialization: When the Edit Modal opens and sets its state, make sure the type property is explicitly included
       const anime = initialData as any;
-      const initialStatus = ((initDataAny?.status || initDataAny?.airing_status) && (initDataAny?.status !== 'pending' && initDataAny?.airing_status !== 'pending')) ? (initDataAny.status || initDataAny.airing_status) : 'Airing';
+      const initialStatus = initDataAny?.status === 'Completed' ? 'Completed' : 'Airing';
       setStatus(initialStatus);
 
       setFormData({ 

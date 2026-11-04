@@ -551,20 +551,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           const cleanedRows = parsedRows.map((row: any) => {
             const mappedStudio = String(row.Studio || row.studio || row.STUDIO || row['Studio Name'] || 'Unknown Studio').trim();
-            const statusInput = (row.Status || row.status || row['Release Status'] || row['release_status'] || row.airing_status || 'Airing').toString().trim().toLowerCase();
-            
-            let resolvedStatus = 'Airing';
-            if (statusInput.includes('complete') || statusInput.includes('completet') || statusInput.includes('finished') || statusInput.includes('ended')) {
-              resolvedStatus = 'Completed';
-            } else if (statusInput.includes('upcoming') || statusInput.includes('unreleased')) {
-              resolvedStatus = 'Upcoming';
-            } else if (statusInput.includes('ongoing') || statusInput.includes('simulcast')) {
-              resolvedStatus = 'Ongoing';
-            } else if (statusInput.includes('airing')) {
-              resolvedStatus = 'Airing';
-            } else if (statusInput) {
-              resolvedStatus = statusInput.charAt(0).toUpperCase() + statusInput.slice(1);
-            }
+            let rawStatus = (row.Status || row.status || row.STATUS || row['Release Status'] || row.airing_status || 'Airing').toString().trim();
+            let cleanStatus = rawStatus.toLowerCase() === 'completed' ? 'Completed' : 'Airing';
+            const resolvedStatus = cleanStatus;
 
             return {
               ...row,

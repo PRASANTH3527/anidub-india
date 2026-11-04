@@ -1364,19 +1364,8 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       const languages = (row.languages || row.Languages || 'Tamil, Hindi').toString().trim();
       const episodes_count = parseInt(row.episodes_count || row.episodes || 12, 10) || 12;
       
-      const rawStatus = (row.Status || row.status || row.release_status || row['release status'] || row['Release Status'] || 'Airing').toString().trim().toLowerCase();
-      let resolvedStatus = 'Airing';
-      if (rawStatus.includes('complete') || rawStatus.includes('completet') || rawStatus.includes('finished') || rawStatus.includes('ended')) {
-        resolvedStatus = 'Completed';
-      } else if (rawStatus.includes('upcoming') || rawStatus.includes('unreleased')) {
-        resolvedStatus = 'Upcoming';
-      } else if (rawStatus.includes('ongoing') || rawStatus.includes('simulcast')) {
-        resolvedStatus = 'Ongoing';
-      } else if (rawStatus.includes('airing')) {
-        resolvedStatus = 'Airing';
-      } else if (rawStatus) {
-        resolvedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
-      }
+      let rawStatus = (row.Status || row.status || row.STATUS || row.release_status || row['release status'] || row['Release Status'] || 'Airing').toString().trim();
+      let resolvedStatus = rawStatus.toLowerCase() === 'completed' ? 'Completed' : 'Airing';
 
       const cover_image = row.cover_image || row.poster || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
       const banner_image = row.banner_image || row['Banner Image'] || cover_image;
