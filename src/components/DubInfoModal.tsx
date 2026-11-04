@@ -151,18 +151,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     ]
   );
 
-  const [releaseStatus, setReleaseStatus] = useState<string>(() => {
+  const [status, setStatus] = useState<string>(() => {
     const anime = (initialData || {}) as any;
-    const raw = anime.airing_status || anime.airingStatus || (anime.status !== 'pending' ? anime.status : null) || anime.status;
-    if (raw && typeof raw === 'string' && raw.trim().toLowerCase() !== 'pending') {
-      const lower = raw.trim().toLowerCase();
-      if (['complete', 'completed', 'finished', 'ended'].includes(lower) || lower.includes('complete')) return 'Completed';
-      if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(lower) || lower.includes('upcoming')) return 'Upcoming';
-      if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(lower) || lower.includes('airing')) return 'Airing';
-      if (['ongoing'].includes(lower) || lower.includes('ongoing')) return 'Ongoing';
-      return raw.charAt(0).toUpperCase() + raw.slice(1);
-    }
-    return 'Airing';
+    return (anime.status && anime.status !== 'pending') ? anime.status : 'Airing';
   });
   const [releaseDay, setReleaseDay] = useState<string>('Saturday');
 
@@ -193,31 +184,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       // State Initialization: When the Edit Modal opens and sets its state, make sure the type property is explicitly included
       const anime = initialData as any;
-      const rawStatus = initDataAny?.airing_status || initDataAny?.airingStatus || (initDataAny?.status !== 'pending' ? initDataAny?.status : null) || initDataAny?.status;
-      let resolvedStatus = 'Airing';
-      if (rawStatus && typeof rawStatus === 'string' && rawStatus.trim().toLowerCase() !== 'pending') {
-        const s = rawStatus.trim().toLowerCase();
-        if (['complete', 'completed', 'finished', 'ended'].includes(s) || s.includes('complete')) {
-          resolvedStatus = 'Completed';
-        } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(s) || s.includes('upcoming')) {
-          resolvedStatus = 'Upcoming';
-        } else if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(s) || s.includes('airing')) {
-          resolvedStatus = 'Airing';
-        } else if (['ongoing'].includes(s) || s.includes('ongoing')) {
-          resolvedStatus = 'Ongoing';
-        } else {
-          resolvedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
-        }
-      } else {
-        resolvedStatus = cleanType === 'Movie' ? 'Completed' : 'Airing';
-      }
+      const initialStatus = (initDataAny?.status && initDataAny.status !== 'pending') ? initDataAny.status : 'Airing';
+      setStatus(initialStatus);
 
       setFormData({ 
         ...anime, 
         type: cleanType,
-        airing_status: resolvedStatus
+        status: initialStatus
       });
-      setReleaseStatus(resolvedStatus);
 
       if (initDataAny?.mixedEntries && Array.isArray(initDataAny.mixedEntries)) {
         const mapped = initDataAny.mixedEntries.map((e: any, idx: number) => ({
@@ -437,8 +411,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         banner_image: defaultCover,
         rating: parsedRating,
         episodes_count: totalEpisodes || 12,
-        airing_status: releaseStatus,
-        status: releaseStatus,
+        status: status,
         submissionStatus: resolvedSubmissionStatus,
         languages: derivedGlobalDubs.join(', '),
         platform: streamingPartners[0]?.name || 'Crunchyroll',
@@ -464,8 +437,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         ...payload,
         id: initialData?.id || savedResult?.animeId || savedResult?.id,
         synopsis: synopsis.trim(),
-        status: releaseStatus,
-        airing_status: releaseStatus,
+        status: status,
         cover_image: defaultCover,
         image: defaultCover,
         poster: defaultCover,
@@ -495,8 +467,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         title: title.trim(),
         synopsis: synopsis.trim(),
         id: initialData?.id,
-        status: releaseStatus,
-        airing_status: releaseStatus,
+        status: status,
         type: formData.type || type || 'TV Series',
         cover_image: defaultCover,
         image: defaultCover,
@@ -782,7 +753,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                 </div>
 
                 {/* 3-Column Grid (Type, Status, Release Day) */}
-                <div className={`grid grid-cols-1 ${releaseStatus === 'Ongoing' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
+                <div className={`grid grid-cols-1 ${status === 'Ongoing' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
                   <div>
                     <label className="block font-bold text-neutral-300 mb-1">Type</label>
                     <select 
@@ -792,7 +763,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                         setFormData((prev: any) => ({ ...prev, type: newType }));
                         setType(newType);
                         if (newType === 'Movie') {
-                          setReleaseStatus('Completed');
+                          setStatus('Completed');
                           setFormData((prev: any) => ({ ...prev, status: 'Completed', airing_status: 'Completed' }));
                         }
                       }}
@@ -807,10 +778,10 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   <div>
                     <label className="block font-bold text-neutral-300 mb-1">Status</label>
                     <select
-                      value={releaseStatus}
+                      value={status}
                       onChange={(e) => {
                         const newStatus = e.target.value;
-                        setReleaseStatus(newStatus);
+                        setStatus(newStatus);
                         setFormData((prev: any) => ({ ...prev, status: newStatus, airing_status: newStatus }));
                       }}
                       className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
@@ -822,7 +793,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                     </select>
                   </div>
 
-                  {releaseStatus === 'Ongoing' && (
+                  {status === 'Ongoing' && (
                     <div>
                       <label className="block font-bold text-neutral-300 mb-1">Release Day</label>
                       <select
@@ -839,7 +810,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                 </div>
 
                 {/* Ongoing Airing Status Box */}
-                {releaseStatus === 'Ongoing' && (
+                {status === 'Ongoing' && (
                   <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider">

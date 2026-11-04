@@ -1175,9 +1175,9 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
   const start = Date.now();
   try {
     const id = req.params.id;
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, season, year, genres, studio, type, Type, languages, platform, imdbID, imdb_id } = req.body;
+    const { title, synopsis, cover_image, banner_image, rating, episodes_count, airing_status, submissionStatus, season, year, genres, studio, type, Type, languages, platform, imdbID, imdb_id } = req.body;
     const resolvedImdbId = imdbID || imdb_id;
-    const resolvedAiringStatus = (airing_status !== undefined && airing_status !== null && airing_status !== '') ? String(airing_status).trim() : ((status !== undefined && status !== null && status !== '') ? String(status).trim() : null);
+    const resolvedAiringStatus = (airing_status !== undefined && airing_status !== null && airing_status !== '') ? String(airing_status).trim() : 'Airing';
     const resolvedType = (type || Type) ? normalizeAnimeType(type || Type) : null;
 
     db.run(
@@ -1188,9 +1188,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         banner_image = COALESCE(?, banner_image),
         rating = COALESCE(?, rating),
         episodes_count = COALESCE(?, episodes_count),
-        airing_status = COALESCE(?, airing_status),
-        status = COALESCE(?, status),
-        submissionStatus = COALESCE(?, submissionStatus),
+        airing_status = ?,
         season = COALESCE(?, season),
         year = COALESCE(?, year),
         genres = COALESCE(?, genres),
@@ -1208,8 +1206,6 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         rating !== undefined ? parseFloat(rating) : null,
         episodes_count !== undefined ? parseInt(episodes_count) : null,
         resolvedAiringStatus,
-        resolvedAiringStatus,
-        submissionStatus || null,
         season || null,
         year !== undefined ? parseInt(year) : null,
         genres || null,
@@ -1224,7 +1220,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
 
     persistD1();
     logCloudflareEvent('D1', `PUT /api/anime/${id}`, 200, Date.now() - start, `Updated anime ID ${id}`);
-    res.json({ success: true, id });
+    res.json({ success: true, id, airing_status: resolvedAiringStatus });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1353,50 +1349,28 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       const platform = (row.platform || row.Platform || 'Crunchyroll').toString().trim();
       const languages = (row.languages || row.Languages || 'Tamil, Hindi').toString().trim();
       const episodes_count = parseInt(row.episodes_count || row.episodes || 12, 10) || 12;
-      const rawStatus = (row.Status || row.status || row.release_status || row['release status'] || row['Release Status'] || row.airing_status || row.airingStatus || row.state || row.completion || row.status_type || '').toString().trim().toLowerCase();
-      let resolvedAiringStatus = 'Airing';
-      if (['complete', 'completed', 'completet', 'finished', 'ended'].some(k => rawStatus.includes(k))) {
-        resolvedAiringStatus = 'Completed';
-      } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].some(k => rawStatus.includes(k))) {
-        resolvedAiringStatus = 'Upcoming';
-      } else if (['ongoing', 'simulcast', 'current'].some(k => rawStatus.includes(k))) {
-        resolvedAiringStatus = 'Ongoing';
-      } else if (['airing', 'airing now'].some(k => rawStatus.includes(k))) {
-        resolvedAiringStatus = 'Airing';
+      
+      const rawStatus = (row.Status || row.status || row.release_status || row['release status'] || row['Release Status'] || 'Airing').toString().trim().toLowerCase();
+      let resolvedStatus = 'Airing';
+      if (rawStatus.includes('complete') || rawStatus.includes('completet') || rawStatus.includes('finished') || rawStatus.includes('ended')) {
+        resolvedStatus = 'Completed';
+      } else if (rawStatus.includes('upcoming') || rawStatus.includes('unreleased')) {
+        resolvedStatus = 'Upcoming';
+      } else if (rawStatus.includes('ongoing') || rawStatus.includes('simulcast')) {
+        resolvedStatus = 'Ongoing';
+      } else if (rawStatus.includes('airing')) {
+        resolvedStatus = 'Airing';
       } else if (rawStatus) {
-        resolvedAiringStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
-      } else {
-        resolvedAiringStatus = resolvedType === 'Movie' ? 'Completed' : 'Airing';
+        resolvedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
       }
 
       const cover_image = row.cover_image || row.poster || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
       const banner_image = row.banner_image || row['Banner Image'] || cover_image;
-
-      let studio = '';
-      if (row.Studio !== undefined && row.Studio !== null && String(row.Studio).trim() !== '') {
-        studio = String(row.Studio).trim();
-      } else if (row.studio !== undefined && row.studio !== null && String(row.studio).trim() !== '') {
-        studio = String(row.studio).trim();
-      } else if (row.STUDIO !== undefined && row.STUDIO !== null && String(row.STUDIO).trim() !== '') {
-        studio = String(row.STUDIO).trim();
-      } else if (row['Studio Name'] || row['studio_name'] || row['Studio_Name'] || row.studio_name) {
-        studio = String(row['Studio Name'] || row['studio_name'] || row['Studio_Name'] || row.studio_name).trim();
-      } else if (row.animation_studio || row.Animation_Studio || row.AnimationStudio || row['Animation Studio'] || row.animationstudio) {
-        studio = String(row.animation_studio || row.Animation_Studio || row.AnimationStudio || row['Animation Studio'] || row.animationstudio).trim();
-      } else {
-        const studioKey = Object.keys(row).find(k => {
-          const clean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
-          return clean === 'studio' || clean.includes('studio') || clean.includes('animationstudio');
-        });
-        if (studioKey && row[studioKey]) {
-          studio = String(row[studioKey]).trim();
-        }
-      }
-      if (!studio) studio = 'Unknown Studio';
+      const studio = String(row.Studio || row.studio || row.STUDIO || row['Studio Name'] || 'Unknown Studio').trim();
 
       db.run(
-        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, airing_status, status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, resolvedAiringStatus, resolvedAiringStatus, year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, resolvedType, studio, String(episodes_count)]
+        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, resolvedStatus, year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, resolvedType, studio, String(episodes_count)]
       );
       insertedCount++;
     }

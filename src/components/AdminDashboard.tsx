@@ -550,53 +550,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }
 
           const cleanedRows = parsedRows.map((row: any) => {
-            // Aggressive case-insensitive studio mapping
-            let mappedStudio = '';
-            if (row.Studio !== undefined && row.Studio !== null && String(row.Studio).trim() !== '') {
-              mappedStudio = String(row.Studio).trim();
-            } else if (row.studio !== undefined && row.studio !== null && String(row.studio).trim() !== '') {
-              mappedStudio = String(row.studio).trim();
-            } else if (row.STUDIO !== undefined && row.STUDIO !== null && String(row.STUDIO).trim() !== '') {
-              mappedStudio = String(row.STUDIO).trim();
-            } else if (row['Studio Name'] || row['studio_name'] || row['Studio_Name'] || row.studio_name) {
-              mappedStudio = String(row['Studio Name'] || row['studio_name'] || row['Studio_Name'] || row.studio_name).trim();
-            } else if (row.animation_studio || row.Animation_Studio || row.AnimationStudio || row['Animation Studio'] || row.animationstudio) {
-              mappedStudio = String(row.animation_studio || row.Animation_Studio || row.AnimationStudio || row['Animation Studio'] || row.animationstudio).trim();
-            } else {
-              const studioKey = Object.keys(row).find(k => {
-                const clean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
-                return clean === 'studio' || clean.includes('studio') || clean.includes('animationstudio');
-              });
-              if (studioKey && row[studioKey]) {
-                mappedStudio = String(row[studioKey]).trim();
-              }
-            }
-
-            const rawStatus = (row.status || row.Status || row.release_status || row['release status'] || row['Release Status'] || row.airing_status || row.Airing_Status || row.state || row.completion || row.status_type || '').toString().trim().toLowerCase();
-            let resolvedAiringStatus = 'Airing';
-            if (['complete', 'completed', 'completet', 'finished', 'ended'].some(k => rawStatus.includes(k))) {
-              resolvedAiringStatus = 'Completed';
-            } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].some(k => rawStatus.includes(k))) {
-              resolvedAiringStatus = 'Upcoming';
-            } else if (['ongoing', 'simulcast', 'current'].some(k => rawStatus.includes(k))) {
-              resolvedAiringStatus = 'Ongoing';
-            } else if (['airing', 'airing now'].some(k => rawStatus.includes(k))) {
-              resolvedAiringStatus = 'Airing';
-            } else if (rawStatus) {
-              resolvedAiringStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
-            } else {
-              const rowType = (row.type || row.Type || '').toString().toLowerCase();
-              resolvedAiringStatus = rowType.includes('movie') ? 'Completed' : 'Airing';
+            const mappedStudio = String(row.Studio || row.studio || row.STUDIO || row['Studio Name'] || 'Unknown Studio').trim();
+            const statusInput = (row.Status || row.status || row['Release Status'] || row['release_status'] || row.airing_status || 'Airing').toString().trim().toLowerCase();
+            
+            let resolvedStatus = 'Airing';
+            if (statusInput.includes('complete') || statusInput.includes('completet') || statusInput.includes('finished') || statusInput.includes('ended')) {
+              resolvedStatus = 'Completed';
+            } else if (statusInput.includes('upcoming') || statusInput.includes('unreleased')) {
+              resolvedStatus = 'Upcoming';
+            } else if (statusInput.includes('ongoing') || statusInput.includes('simulcast')) {
+              resolvedStatus = 'Ongoing';
+            } else if (statusInput.includes('airing')) {
+              resolvedStatus = 'Airing';
+            } else if (statusInput) {
+              resolvedStatus = statusInput.charAt(0).toUpperCase() + statusInput.slice(1);
             }
 
             return {
               ...row,
-              studio: mappedStudio || 'Unknown Studio',
-              Studio: mappedStudio || 'Unknown Studio',
-              submissionStatus: 'pending',
+              studio: mappedStudio,
+              Studio: mappedStudio,
+              status: resolvedStatus,
               approval_status: 'pending',
-              is_published: false,
-              airing_status: resolvedAiringStatus
+              submissionStatus: 'pending',
+              is_published: 0
             };
           });
 
