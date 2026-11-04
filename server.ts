@@ -1005,7 +1005,7 @@ app.post('/api/anime', (req, res) => {
       );
     } else {
       db.run(
-        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, airing_status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries, watch_url, platforms_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, airing_status, status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries, watch_url, platforms_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           title,
           slug,
@@ -1014,6 +1014,7 @@ app.post('/api/anime', (req, res) => {
           banner_image || cover_image || 'https://i.ibb.co/xL2y9Bv/default-banner.jpg',
           parseFloat(rating) || 8.5,
           parseInt(episodes_count) || 12,
+          finalAiringStatus,
           finalAiringStatus,
           finalSubmissionStatus,
           season || 'Spring',
@@ -1188,6 +1189,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         rating = COALESCE(?, rating),
         episodes_count = COALESCE(?, episodes_count),
         airing_status = COALESCE(?, airing_status),
+        status = COALESCE(?, status),
         submissionStatus = COALESCE(?, submissionStatus),
         season = COALESCE(?, season),
         year = COALESCE(?, year),
@@ -1205,6 +1207,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         banner_image || null,
         rating !== undefined ? parseFloat(rating) : null,
         episodes_count !== undefined ? parseInt(episodes_count) : null,
+        resolvedAiringStatus,
         resolvedAiringStatus,
         submissionStatus || null,
         season || null,
@@ -1388,8 +1391,8 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       if (!studio) studio = 'Unknown Studio';
 
       db.run(
-        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, resolvedAiringStatus, year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, resolvedType, studio, String(episodes_count)]
+        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, airing_status, status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, resolvedAiringStatus, resolvedAiringStatus, year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, resolvedType, studio, String(episodes_count)]
       );
       insertedCount++;
     }

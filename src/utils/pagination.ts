@@ -62,9 +62,8 @@ export function filterAndSortCatalog<T extends {
   options: CatalogFilterOptions
 ): T[] {
   let filtered = [...items].filter(item => {
-    const s = (item.status || '').toLowerCase();
-    const subS = ((item as any).submissionStatus || '').toLowerCase();
-    return s !== 'pending' && subS !== 'pending';
+    const subS = ((item as any).submissionStatus || (item as any).approval_status || '').toLowerCase();
+    return subS !== 'pending';
   });
 
   // Regional Dub Language Filter
@@ -104,7 +103,7 @@ export function filterAndSortCatalog<T extends {
   if (options.status && options.status !== 'All') {
     const targetStatus = options.status.toLowerCase();
     filtered = filtered.filter(item => {
-      const itemStatus = (item.status || (item as any).airing_status || '').toLowerCase();
+      const itemStatus = ((item as any).airing_status || item.status || '').toLowerCase();
       if (targetStatus === 'airing') {
         return itemStatus === 'airing' || itemStatus === 'ongoing' || itemStatus.includes('simulcast');
       }

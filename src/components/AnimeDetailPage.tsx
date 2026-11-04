@@ -312,7 +312,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const synopsis = rawSynopsis.replace(/Imported via standardized CSV format\.?/gi, '').trim() || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
   const releaseYear = details?.releaseYear || details?.year || 2024;
   const type = details?.type || 'TV Series';
-  const status = details?.status || (type === 'Movie' ? 'Completed' : 'Ongoing');
+  const status = details?.airing_status || details?.status || (type === 'Movie' ? 'Completed' : 'Airing');
   const studio = details?.studio || 'Animation Studio';
   
   // Exclude non-Indian languages from dub badges (strictly exclude Japanese, English, Romaji, etc.)
