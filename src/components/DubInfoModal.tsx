@@ -152,7 +152,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   );
 
   const [airingStatus, setAiringStatus] = useState<string>(() => {
-    const raw = initialData?.status || (initialData as any)?.airing_status;
+    const raw = initialData?.airing_status || (initialData as any)?.airingStatus;
     if (raw && typeof raw === 'string') {
       const lower = raw.trim().toLowerCase();
       if (['complete', 'completed', 'finished', 'ended'].includes(lower) || lower.includes('complete')) return 'Completed';
@@ -196,7 +196,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       // State Initialization: When the Edit Modal opens and sets its state, make sure the type property is explicitly included
       const anime = initialData as any;
-      const rawStatus = initDataAny?.status || (initialData as any)?.status || (initialData as any)?.airing_status;
+      const rawStatus = initDataAny?.airing_status || initDataAny?.airingStatus || (initialData as any)?.airing_status;
       let resolvedStatus = 'Airing';
       if (rawStatus && typeof rawStatus === 'string') {
         const s = rawStatus.trim().toLowerCase();
@@ -218,7 +218,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       setFormData({ 
         ...anime, 
         type: cleanType,
-        status: resolvedStatus,
         airing_status: resolvedStatus
       });
       setAiringStatus(resolvedStatus);

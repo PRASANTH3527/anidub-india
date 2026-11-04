@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS anime (
   rating REAL DEFAULT 0.0,
   episodes_count INTEGER DEFAULT 12,
   status TEXT DEFAULT 'Airing',
+  airing_status TEXT DEFAULT 'Airing',
   season TEXT DEFAULT 'Spring',
   year INTEGER DEFAULT 2026,
   genres TEXT NOT NULL,

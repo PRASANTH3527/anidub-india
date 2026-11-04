@@ -29,6 +29,7 @@ export interface AnimeCardData {
   rating: number;
   episodes_count?: number;
   status?: string;
+  airing_status?: string;
   season?: string;
   year?: number;
   releaseYear?: number;
@@ -193,7 +194,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   const animeType = anime.type || 'TV Series';
 
   // Dynamic status badge resolution based on actual database status
-  const rawStatus = (anime.status || (anime as any).airing_status || '').trim();
+  const rawStatus = (anime.airing_status || '').trim();
   const getStatusBadge = () => {
     if (!rawStatus || rawStatus.toLowerCase() === 'pending') return null;
     const lower = rawStatus.toLowerCase();
