@@ -1091,7 +1091,7 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
       const genres = item.genres || item.genre || 'Action,Fantasy';
       const languages = item.languages || item.dub || 'HIN,TAM,TEL';
       const platform = item.platform || item.streamingPartners?.[0]?.name || 'Crunchyroll';
-      const studio = item.studio || item.animation_studio || 'Unknown Studio';
+      const studio = item.studio || item.animation_studio || item.animationstudio || 'Unknown Studio';
       const episodes_per_season = item.episodes_per_season || String(episodes_count);
       const mixedEntries = item.mixedEntries ? (typeof item.mixedEntries === 'string' ? item.mixedEntries : JSON.stringify(item.mixedEntries)) : '';
       const type = normalizeAnimeType(item.type || item.Type || 'TV Series');

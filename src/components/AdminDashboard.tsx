@@ -561,7 +561,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             }
             return {
               ...row,
-              status: resolvedStatus
+              status: resolvedStatus,
+              studio: row.studio || row.animation_studio || row.animationstudio || 'Unknown Studio'
             };
           });
 
