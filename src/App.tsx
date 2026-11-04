@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
-import { AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
 import { CatalogView } from './components/CatalogView';
 import { FeedbackSection } from './components/FeedbackSection';
@@ -388,137 +388,147 @@ export default function App() {
         </Suspense>
       )}
 
-      {/* 3. MAIN CONTENT VIEWS */}
+      {/* 3. MAIN CONTENT VIEWS WITH SMOOTH PAGE TRANSITIONS */}
       <main className="flex-grow w-full max-w-full overflow-x-hidden pt-4 sm:pt-6 pb-12 sm:pb-16 transition-all duration-500 box-border">
-        
-        {/* FOR YOU HEADER METADATA BLOCK (WHEN FORYOU FEED ACTIVE) */}
-        {feedView === 'foryou' && (activeTab === 'home' || activeTab === 'catalog') && (
-          <div className="w-full max-w-5xl mx-auto px-4 mb-6">
-            <div className="p-5 rounded-3xl bg-primary-theme/5 border border-primary-theme/10 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-black text-white">Recommended For You</h2>
-                <p className="text-xs text-neutral-400">Curated specifically based on your watch history and dub preferences.</p>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`page_view_${activeTab}_${activeTab === 'home' ? feedView : ''}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="w-full"
+          >
+            {/* FOR YOU HEADER METADATA BLOCK (WHEN FORYOU FEED ACTIVE) */}
+            {feedView === 'foryou' && (activeTab === 'home' || activeTab === 'catalog') && (
+              <div className="w-full max-w-5xl mx-auto px-4 mb-6">
+                <div className="p-5 rounded-3xl bg-primary-theme/5 border border-primary-theme/10 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-black text-white">Recommended For You</h2>
+                    <p className="text-xs text-neutral-400">Curated specifically based on your watch history and dub preferences.</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* MAIN CATALOG & FEED VIEW */}
-        {(activeTab === 'home' || activeTab === 'catalog') && feedView !== 'foryou' && (
-          <CatalogView
-            catalogList={catalogList}
-            onSelectAnime={(anime) => {
-              setSelectedAnimeId(anime.id);
-              addToRecentlyViewed(anime);
-            }}
-            searchQuery={searchQuery}
-            watchlist={watchlist}
-            onToggleWatchlist={handleToggleWatchlist}
-            onToggleLike={handleToggleLike}
-            onToggleUpvote={handleToggleUpvote}
-            onOpenRoulette={() => setIsRouletteOpen(true)}
-            onOpenCollection={() => setIsCollectionOpen(true)}
-            feedView={feedView}
-            recentlyViewed={realRecentlyViewed}
-            onClearRecentlyViewed={handleClearRecentlyViewed}
-            onRemoveRecentlyViewedItem={handleRemoveRecentlyViewedItem}
-            uiLanguage={currentLang as any}
-          />
-        )}
+            {/* MAIN CATALOG & FEED VIEW */}
+            {(activeTab === 'home' || activeTab === 'catalog') && feedView !== 'foryou' && (
+              <CatalogView
+                catalogList={catalogList}
+                onSelectAnime={(anime) => {
+                  setSelectedAnimeId(anime.id);
+                  addToRecentlyViewed(anime);
+                }}
+                searchQuery={searchQuery}
+                watchlist={watchlist}
+                onToggleWatchlist={handleToggleWatchlist}
+                onToggleLike={handleToggleLike}
+                onToggleUpvote={handleToggleUpvote}
+                onOpenRoulette={() => setIsRouletteOpen(true)}
+                onOpenCollection={() => setIsCollectionOpen(true)}
+                feedView={feedView}
+                recentlyViewed={realRecentlyViewed}
+                onClearRecentlyViewed={handleClearRecentlyViewed}
+                onRemoveRecentlyViewedItem={handleRemoveRecentlyViewedItem}
+                uiLanguage={currentLang as any}
+              />
+            )}
 
-        {/* INTERACTIVE RECOMMENDATION SYSTEM (FOR YOU / MATCHMAKER) */}
-        {(activeTab === 'recommendations' || ((activeTab === 'home' || activeTab === 'catalog') && feedView === 'foryou')) && (
-          <Suspense fallback={<ViewLoadingFallback />}>
-            <RecommendationSystem
-              catalogList={catalogList}
-              onSelectAnime={(anime) => {
-                setSelectedAnimeId(anime.id);
-                addToRecentlyViewed(anime);
-              }}
-              watchlist={watchlist}
-              onToggleWatchlist={handleToggleWatchlist}
-              onNavigateCatalog={() => {
-                setActiveTab('home');
-                setFeedView('library');
-              }}
-            />
-          </Suspense>
-        )}
+            {/* INTERACTIVE RECOMMENDATION SYSTEM (FOR YOU / MATCHMAKER) */}
+            {(activeTab === 'recommendations' || ((activeTab === 'home' || activeTab === 'catalog') && feedView === 'foryou')) && (
+              <Suspense fallback={<ViewLoadingFallback />}>
+                <RecommendationSystem
+                  catalogList={catalogList}
+                  onSelectAnime={(anime) => {
+                    setSelectedAnimeId(anime.id);
+                    addToRecentlyViewed(anime);
+                  }}
+                  watchlist={watchlist}
+                  onToggleWatchlist={handleToggleWatchlist}
+                  onNavigateCatalog={() => {
+                    setActiveTab('home');
+                    setFeedView('library');
+                  }}
+                />
+              </Suspense>
+            )}
 
-        {/* WATCHLIST VIEW */}
-        {activeTab === 'watchlist' && (
-          <Suspense fallback={<ViewLoadingFallback />}>
-            <WatchlistView
-              watchlist={realSavedWatchlist}
-              onSelectAnime={(anime) => {
-                setSelectedAnimeId(anime.id);
-                addToRecentlyViewed(anime);
-              }}
-              onToggleWatchlist={handleToggleWatchlist}
-              onNavigateToCatalog={() => setActiveTab('home')}
-            />
-          </Suspense>
-        )}
+            {/* WATCHLIST VIEW */}
+            {activeTab === 'watchlist' && (
+              <Suspense fallback={<ViewLoadingFallback />}>
+                <WatchlistView
+                  watchlist={realSavedWatchlist}
+                  onSelectAnime={(anime) => {
+                    setSelectedAnimeId(anime.id);
+                    addToRecentlyViewed(anime);
+                  }}
+                  onToggleWatchlist={handleToggleWatchlist}
+                  onNavigateToCatalog={() => setActiveTab('home')}
+                />
+              </Suspense>
+            )}
 
-        {/* WEEKLY SIMULCAST SCHEDULE VIEW */}
-        {activeTab === 'schedule' && (
-          <Suspense fallback={<ViewLoadingFallback />}>
-            <WeeklyScheduleView
-              onSelectAnime={(anime) => {
-                setSelectedAnimeId(anime.id);
-                addToRecentlyViewed(anime);
-              }}
-              watchlist={watchlist}
-              onToggleWatchlist={handleToggleWatchlist}
-              onOpenSubmitDubModal={() => setIsDubModalOpen(true)}
-              catalogList={catalogList}
-            />
-          </Suspense>
-        )}
+            {/* WEEKLY SIMULCAST SCHEDULE VIEW */}
+            {activeTab === 'schedule' && (
+              <Suspense fallback={<ViewLoadingFallback />}>
+                <WeeklyScheduleView
+                  onSelectAnime={(anime) => {
+                    setSelectedAnimeId(anime.id);
+                    addToRecentlyViewed(anime);
+                  }}
+                  watchlist={watchlist}
+                  onToggleWatchlist={handleToggleWatchlist}
+                  onOpenSubmitDubModal={() => setIsDubModalOpen(true)}
+                  catalogList={catalogList}
+                />
+              </Suspense>
+            )}
 
-        {/* PROFILE VIEW */}
-        {activeTab === 'profile' && (
-          <Suspense fallback={<ViewLoadingFallback />}>
-            <ProfileView
-              watchlist={watchlist}
-              catalogList={catalogList}
-              onSelectAnime={(anime) => {
-                setSelectedAnimeId(anime.id);
-                addToRecentlyViewed(anime);
-              }}
-              onToggleWatchlist={handleToggleWatchlist}
-              onOpenCreateCollection={() => setIsCollectionOpen(true)}
-              onNavigateToCatalog={() => setActiveTab('home')}
-            />
-          </Suspense>
-        )}
+            {/* PROFILE VIEW */}
+            {activeTab === 'profile' && (
+              <Suspense fallback={<ViewLoadingFallback />}>
+                <ProfileView
+                  watchlist={watchlist}
+                  catalogList={catalogList}
+                  onSelectAnime={(anime) => {
+                    setSelectedAnimeId(anime.id);
+                    addToRecentlyViewed(anime);
+                  }}
+                  onToggleWatchlist={handleToggleWatchlist}
+                  onOpenCreateCollection={() => setIsCollectionOpen(true)}
+                  onNavigateToCatalog={() => setActiveTab('home')}
+                />
+              </Suspense>
+            )}
 
-        {/* TIER LIST MAKER VIEW */}
-        {activeTab === 'tierlist' && (
-          <Suspense fallback={<ViewLoadingFallback />}>
-            <AnimeTierListMaker
-              catalogList={catalogList}
-              onSelectAnime={(anime) => {
-                setSelectedAnimeId(anime.id);
-                addToRecentlyViewed(anime);
-              }}
-              onNavigateHome={() => setActiveTab('home')}
-            />
-          </Suspense>
-        )}
+            {/* TIER LIST MAKER VIEW */}
+            {activeTab === 'tierlist' && (
+              <Suspense fallback={<ViewLoadingFallback />}>
+                <AnimeTierListMaker
+                  catalogList={catalogList}
+                  onSelectAnime={(anime) => {
+                    setSelectedAnimeId(anime.id);
+                    addToRecentlyViewed(anime);
+                  }}
+                  onNavigateHome={() => setActiveTab('home')}
+                />
+              </Suspense>
+            )}
 
-        {/* LIVE COMMUNITY CHAT VIEW */}
-        {activeTab === 'chat' && (
-          <Suspense fallback={<ViewLoadingFallback />}>
-            <CommunityChatView
-              onNavigateToCatalog={() => setActiveTab('home')}
-              onSelectAnime={(anime) => {
-                setSelectedAnimeId(anime.id);
-                addToRecentlyViewed(anime);
-              }}
-            />
-          </Suspense>
-        )}
+            {/* LIVE COMMUNITY CHAT VIEW */}
+            {activeTab === 'chat' && (
+              <Suspense fallback={<ViewLoadingFallback />}>
+                <CommunityChatView
+                  onNavigateToCatalog={() => setActiveTab('home')}
+                  onSelectAnime={(anime) => {
+                    setSelectedAnimeId(anime.id);
+                    addToRecentlyViewed(anime);
+                  }}
+                />
+              </Suspense>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* FEEDBACK SECTION / FOOTER */}

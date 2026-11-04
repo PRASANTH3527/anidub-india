@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { 
   Flame, 
   CheckCircle2, 
@@ -95,6 +95,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   const [isLiking, setIsLiking] = useState(false);
   const [isVoting, setIsVoting] = useState(false);
   const [cardNotice, setCardNotice] = useState<string | null>(null);
+  const [showLikeAnimation, setShowLikeAnimation] = useState(false);
 
   // Safe toast access
   let toast: any = null;
@@ -241,6 +242,13 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   // 1-Vote per Clerk user like handler
   const handleLikeClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
+
+    // Trigger the fun anime chibi like micro-interaction
+    setShowLikeAnimation(true);
+    setTimeout(() => {
+      setShowLikeAnimation(false);
+    }, 700);
+
     if (isLiking) return;
 
     if (!isSignedIn || !user) {
@@ -364,7 +372,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
         transition={{ duration: 0.35, delay: staggerDelay, ease: [0.25, 0.1, 0.25, 1.0] }}
         whileHover={shouldReduceMotion ? undefined : { y: -4, transition: { duration: 0.2 } }}
         whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
-        className="group relative flex flex-col h-full bg-[#131926] cursor-pointer select-none rounded-2xl overflow-hidden border border-neutral-800/60 hover:border-purple-500/40 shadow-lg will-change-transform"
+        className="group relative flex flex-col h-full bg-[#131926] cursor-pointer select-none rounded-2xl border border-neutral-800/60 hover:border-purple-500/40 shadow-lg will-change-transform"
       >
         {/* CARD NOTIFICATION BADGE */}
         {cardNotice && (
@@ -420,50 +428,65 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
           <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
             {/* Desktop Only Buttons */}
             <motion.button
+              whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
               whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={(e) => { e.stopPropagation(); }}
-              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-colors shadow-md cursor-pointer"
+              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-all duration-200 shadow-md cursor-pointer"
               title="Download for offline"
             >
               <DownloadCloud className="w-3.5 h-3.5" />
             </motion.button>
             <motion.button
+              whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
               whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={(e) => { e.stopPropagation(); }}
-              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-colors shadow-md cursor-pointer"
+              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-all duration-200 shadow-md cursor-pointer"
               title="Report info"
             >
               <Flag className="w-3.5 h-3.5" />
             </motion.button>
             <motion.button
+              whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
               whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={handleShareClick}
-              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-colors shadow-md cursor-pointer"
+              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-all duration-200 shadow-md cursor-pointer"
               title="Share"
             >
               <Share2 className="w-3.5 h-3.5" />
             </motion.button>
 
-            {/* Always Visible Like Button */}
-            <motion.button
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
-              onClick={handleLikeClick}
-              disabled={isLiking || internalLiked}
-              className={`p-1.5 rounded-full backdrop-blur-md border transition-all shadow-md ${
-                internalLiked 
-                  ? 'bg-primary-theme text-white border-primary-light/50 shadow-lg shadow-purple-950/40 cursor-default' 
-                  : 'bg-black/60 text-neutral-300 hover:text-primary-theme border-white/10 cursor-pointer'
-              } ${isLiking ? 'opacity-50 animate-pulse' : ''}`}
-              title={internalLiked ? 'Already liked from this IP' : 'Like (1 per IP)'}
-            >
-              <Heart className={`w-3.5 h-3.5 ${internalLiked ? 'fill-white text-white' : ''}`} />
-            </motion.button>
+            {/* Always Visible Like Button with Pure Tailwind Pop-up Micro-interaction */}
+            <div className="relative">
+              {showLikeAnimation && (
+                <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none whitespace-nowrap select-none">
+                  <div className="px-3 py-1 rounded-full bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 text-xs font-black text-white shadow-2xl shadow-pink-500/50 border border-white/50 transition-all duration-700 ease-out opacity-100 translate-y-0 scale-100">
+                    (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧ 💖
+                  </div>
+                </div>
+              )}
+
+              <motion.button
+                whileHover={shouldReduceMotion || internalLiked ? undefined : { scale: 1.1 }}
+                whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
+                onClick={handleLikeClick}
+                disabled={isLiking || internalLiked}
+                className={`p-1.5 rounded-full backdrop-blur-md border transition-all duration-200 shadow-md ${
+                  internalLiked 
+                    ? 'bg-primary-theme text-white border-primary-light/50 shadow-lg shadow-purple-950/40 cursor-default' 
+                    : 'bg-black/60 text-neutral-300 hover:text-primary-theme hover:scale-105 border-white/10 cursor-pointer'
+                } ${isLiking ? 'opacity-50 animate-pulse' : ''}`}
+                title={internalLiked ? 'Already liked from this IP' : 'Like (1 per IP)'}
+              >
+                <Heart className={`w-3.5 h-3.5 ${internalLiked ? 'fill-white text-white' : ''}`} />
+              </motion.button>
+            </div>
 
             {/* Always Visible Watchlist Bookmark Button */}
             <motion.button
+              whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
               whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={handleBookmarkClick}
-              className={`p-1.5 rounded-full backdrop-blur-md border border-white/10 shadow-md transition-colors cursor-pointer ${
+              className={`p-1.5 rounded-full backdrop-blur-md border border-white/10 shadow-md transition-all duration-200 hover:scale-105 active:scale-90 cursor-pointer ${
                 isBookmarked 
                   ? 'bg-primary-theme text-white shadow-lg' 
                   : 'bg-black/60 text-neutral-300 hover:text-white'
@@ -605,30 +628,63 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
             {/* Right Counters */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
               {/* Heart Counter Button */}
-              <motion.button
-                type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={handleLikeClick}
-                disabled={isLiking || internalLiked}
-                title={internalLiked ? 'Already liked from this device' : 'Like (1 vote per device)'}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-colors ${
-                  internalLiked
-                    ? 'bg-primary-theme/25 text-primary-theme border border-primary-theme/50 cursor-default'
-                    : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:border-purple-500/40 cursor-pointer'
-                } ${isLiking ? 'opacity-50' : ''}`}
-              >
-                <Heart className={`w-3 h-3 ${internalLiked ? 'fill-current' : ''}`} />
-                <span>{internalHeartCount}</span>
-              </motion.button>
+              <div className="relative">
+                <AnimatePresence>
+                  {showLikeAnimation && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.2, y: 5 }}
+                      animate={{ opacity: 1, scale: 1.15, y: -42 }}
+                      exit={{ opacity: 0, scale: 0.6, y: -62 }}
+                      transition={{ 
+                        type: "spring", 
+                        stiffness: 480, 
+                        damping: 18,
+                        duration: 0.9 
+                      }}
+                      className="absolute -top-2 left-1/2 -translate-x-1/2 pointer-events-none z-50 flex flex-col items-center select-none"
+                    >
+                      <div className="px-2 py-0.5 rounded-full bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 text-[8px] font-black text-white shadow-lg shadow-pink-500/40 flex items-center gap-0.5 mb-1 whitespace-nowrap border border-pink-300/40">
+                        <span>💖</span>
+                        <span>Sugoi!</span>
+                      </div>
+                      <div className="relative w-9 h-9 flex items-center justify-center">
+                        <img
+                          src="https://api.dicebear.com/9.x/fun-emoji/svg?seed=AnyaChibiLove&backgroundColor=b6e3f4,ffd5dc,ffdfbf"
+                          alt="Anime Chibi"
+                          className="w-8 h-8 object-contain drop-shadow-[0_4px_8px_rgba(244,63,94,0.5)] transform -rotate-6"
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <motion.button
+                  type="button"
+                  whileHover={shouldReduceMotion ? undefined : { scale: 1.06 }}
+                  whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
+                  onClick={handleLikeClick}
+                  disabled={isLiking || internalLiked}
+                  title={internalLiked ? 'Already liked from this device' : 'Like (1 vote per device)'}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all duration-200 ${
+                    internalLiked
+                      ? 'bg-primary-theme/25 text-primary-theme border border-primary-theme/50 cursor-default'
+                      : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:border-purple-500/40 cursor-pointer'
+                  } ${isLiking ? 'opacity-50' : ''}`}
+                >
+                  <Heart className={`w-3 h-3 ${internalLiked ? 'fill-current' : ''}`} />
+                  <span>{internalHeartCount}</span>
+                </motion.button>
+              </div>
 
               {/* Upvote Counter Button */}
               <motion.button
                 type="button"
+                whileHover={shouldReduceMotion ? undefined : { scale: 1.06 }}
                 whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
                 onClick={handleUpvoteClick}
                 disabled={isVoting || internalUpvoted}
                 title={internalUpvoted ? 'Already upvoted from this device' : 'Upvote (1 vote per device)'}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-colors ${
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all duration-200 ${
                   internalUpvoted
                     ? 'bg-orange-500/25 text-orange-400 border border-orange-500/50 cursor-default'
                     : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:border-orange-500/40 cursor-pointer'

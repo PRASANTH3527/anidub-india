@@ -149,7 +149,7 @@ export const RouletteModal: React.FC<RouletteModalProps> = ({
                 type="button"
                 onClick={rollRoulette}
                 disabled={isSpinning}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1c2438] hover:bg-[#252f4a] text-amber-300 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm disabled:opacity-50 active:scale-95"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1c2438] hover:bg-[#252f4a] text-amber-300 border border-amber-500/30 text-xs font-bold transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-sm disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSpinning ? 'animate-spin' : ''}`} />
                 <span>Spin Again</span>
@@ -161,7 +161,7 @@ export const RouletteModal: React.FC<RouletteModalProps> = ({
                   <button
                     type="button"
                     onClick={() => onToggleWatchlist(selectedAnime.id)}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-90 cursor-pointer ${
                       isSaved
                         ? 'bg-primary-theme text-white shadow-md'
                         : 'bg-[#1c2438] hover:bg-[#252f4a] text-neutral-300 border border-neutral-700'
@@ -179,7 +179,7 @@ export const RouletteModal: React.FC<RouletteModalProps> = ({
                     onSelectAnime(selectedAnime);
                     onClose();
                   }}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary-theme to-[var(--primary-accent)] hover:opacity-95 text-white text-xs font-extrabold shadow-lg shadow-primary-theme/30 transition-all cursor-pointer active:scale-95 flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary-theme to-[var(--primary-accent)] hover:opacity-95 text-white text-xs font-extrabold shadow-lg shadow-primary-theme/30 transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-2"
                 >
                   <span>View Anime Details</span>
                   <Play className="w-3 h-3 fill-current" />

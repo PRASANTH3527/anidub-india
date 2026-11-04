@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useUser } from '@clerk/clerk-react';
 import { 
@@ -68,7 +68,22 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isLangOpen, setIsLangOpen] = useState(false);
   const selectedLang = currentLang;
   const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved) return saved === 'dark';
+    return true; // Default dark
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
   const handleLogoClick = () => {
     if (activeTab !== 'home') {
       setActiveTab('home');

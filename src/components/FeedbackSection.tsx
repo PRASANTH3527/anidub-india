@@ -283,7 +283,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                 <button
                   type="submit"
                   disabled={!message.trim() || isSubmitting}
-                  className="w-full h-[36px] rounded-[14px] bg-gradient-to-r from-[#7e22ce] to-[#9333ea] shadow-[0_6px_16px_rgba(91,33,182,.35)] text-[12px] font-semibold text-white flex items-center justify-center gap-[8px] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full h-[36px] rounded-[14px] bg-gradient-to-r from-[#7e22ce] to-[#9333ea] shadow-[0_6px_16px_rgba(91,33,182,.35)] text-[12px] font-semibold text-white flex items-center justify-center gap-[8px] transition-all duration-300 hover:scale-[1.02] active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <span>{isSubmitting ? 'Submitting feedback...' : 'Submit feedback'}</span>
                   <Send className="w-[14px] h-[14px]" />

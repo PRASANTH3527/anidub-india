@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import { Bookmark, Compass, Search, X, Sparkles, Film, ArrowRight } from 'lucide-react';
 import { Anime } from './CatalogView';
 import { AnimeCard } from './AnimeCard';
@@ -110,7 +111,13 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-4">
+        <motion.div 
+          key={`watchlist_grid_${filteredWatchlist.length}`}
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1.0] }}
+          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-4"
+        >
           {filteredWatchlist.map((anime, idx) => (
             <AnimeCard
               key={`watchlist_anime_${anime.id}_${idx}`}
@@ -121,7 +128,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               onToggleBookmark={onToggleWatchlist}
             />
           ))}
-        </div>
+        </motion.div>
       )}
 
       {/* FOOTER CALL-TO-ACTION */}

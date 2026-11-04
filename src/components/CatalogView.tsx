@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { motion } from 'motion/react';
 import { 
   Star, 
   Tv, 
@@ -277,7 +278,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         {/* CTA Button 1: Surprise Me Roulette */}
         <button
           onClick={onOpenRoulette}
-          className="w-full flex items-center justify-center gap-3 rounded-full bg-gradient-to-r from-[#f59e0b] via-[#ea580c] to-[#9333ea] px-5 py-3.5 shadow-[0_6px_25px_rgba(234,88,12,0.4)] transition-transform active:scale-[0.98]"
+          className="w-full flex items-center justify-center gap-3 rounded-full bg-gradient-to-r from-[#f59e0b] via-[#ea580c] to-[#9333ea] px-5 py-3.5 shadow-[0_6px_25px_rgba(234,88,12,0.4)] transition-all duration-300 hover:scale-[1.02] active:scale-95 cursor-pointer"
         >
           <Dices className="w-5 h-5 text-white" />
           <span className="text-[15px] font-extrabold text-white">{translate('surpriseMe', lang)}</span>
@@ -289,7 +290,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         {/* CTA Button 2: Create Collection */}
         <button
           onClick={onOpenCollection}
-          className="mt-3 w-full bg-[#111524] border border-[#262d47] hover:border-[#3d4669] rounded-full px-5 py-2.5 inline-flex items-center justify-center gap-2.5 transition-all active:scale-[0.98]"
+          className="mt-3 w-full bg-[#111524] border border-[#262d47] hover:border-purple-500/40 rounded-full px-5 py-2.5 inline-flex items-center justify-center gap-2.5 transition-all duration-300 hover:scale-[1.02] active:scale-95 cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-white" />
@@ -356,7 +357,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
               <button
                 key={lang.value}
                 onClick={() => setSelectedLanguage(lang.value)}
-                className={`flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[12px] font-bold shrink-0 transition-all cursor-pointer active:scale-95 ${
+                className={`flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[12px] font-bold shrink-0 transition-all duration-300 cursor-pointer active:scale-95 hover:scale-105 ${
                   active
                     ? 'bg-gradient-to-r from-[#9333ea] to-[#6366f1] text-white shadow-[0_3px_12px_rgba(147,51,234,0.4)] ring-1 ring-purple-400/50'
                     : 'bg-[#141b29] border border-[#20273c] hover:border-neutral-700 text-[#cbd5e1] hover:text-white'
@@ -384,7 +385,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         ].map((item) => (
           <div 
             key={`catalog_filter_${item.label}`} 
-            className="relative flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 rounded-xl px-3 py-1.5 sm:py-2"
+            className="relative flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 hover:border-purple-500/40 rounded-xl px-3 py-1.5 sm:py-2 transition-colors duration-200"
           >
             <span className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-wider shrink-0 pr-1">
               {item.label}
@@ -403,7 +404,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         ))}
         
         {/* Sort (Half width) */}
-        <div className="relative flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 rounded-xl px-3 py-1.5 sm:py-2">
+        <div className="relative flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 hover:border-purple-500/40 rounded-xl px-3 py-1.5 sm:py-2 transition-colors duration-200">
           <span className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-wider shrink-0 pr-1">
             SORT
           </span>
@@ -462,14 +463,20 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 setSelectedType('All Types');
                 setSelectedStatus('All Status');
               }}
-              className="mt-3 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold transition-all"
+              className="mt-3 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-md"
             >
               Reset All Filters
             </button>
           </div>
         ) : (
-          /* 2. CARD CONTAINER USING AnimeCard (grid-cols-2 gap-3.5) */
-          <div className="grid grid-cols-2 gap-3.5">
+          /* 2. CARD CONTAINER USING AnimeCard (grid-cols-2 gap-3.5) WITH FLUID STAGGERED MOTION */
+          <motion.div 
+            key={`catalog_grid_${selectedLanguage}_${selectedGenre}_${selectedPlatform}_${selectedType}_${selectedStatus}_${selectedSort}`}
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1.0] }}
+            className="grid grid-cols-2 gap-3.5"
+          >
             {displayedAnime.map((anime, idx) => {
               const isWatchlisted = watchlist.map(Number).includes(Number(anime.id));
               return (
@@ -485,7 +492,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 />
               );
             })}
-          </div>
+          </motion.div>
         )}
 
         {/* Intersection Observer Sentinel & Loading Spinner */}
