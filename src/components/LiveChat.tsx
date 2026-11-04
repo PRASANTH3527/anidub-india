@@ -373,8 +373,8 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     // 3) Persist to Backend D1 / SQLite Database via HTTP POST
     try {
       const resp = await cloudflareApi.sendChatMessage(payload);
-      if (resp && resp.error) {
-        throw new Error(resp.error);
+      if (!resp.success) {
+        throw new Error(resp.error || 'Failed to post message');
       }
     } catch (err: any) {
       console.warn('Network persistence note:', err);
@@ -616,6 +616,12 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         </div>
 
         {/* Input Form */}
+        {chatError && (
+          <div className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-[11px] font-medium flex items-center gap-2">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            {chatError}
+          </div>
+        )}
         <form onSubmit={handleSendMessageSubmit} className="space-y-3">
           {/* Top row: Nickname & Dub Review Options */}
           <div className="flex items-center gap-2 flex-wrap">

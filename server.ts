@@ -1114,6 +1114,7 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
             rating = COALESCE(?, rating),
             episodes_count = COALESCE(?, episodes_count),
             status = ?,
+            submissionStatus = 'pending',
             season = COALESCE(?, season),
             year = COALESCE(?, year),
             genres = COALESCE(?, genres),
@@ -1128,8 +1129,8 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
         );
       } else {
         db.run(
-          `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, type, studio, episodes_per_season, mixedEntries]
+          `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, 'pending', season, year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, type, studio, episodes_per_season, mixedEntries]
         );
       }
       insertedCount++;

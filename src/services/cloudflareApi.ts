@@ -687,20 +687,22 @@ class CloudflareApiService {
   /**
    * CHAT: Sends a new message or review to the community chat
    */
-  public async sendChatMessage(payload: any): Promise<{ success: boolean; message?: any }> {
+  public async sendChatMessage(payload: any): Promise<{ success: boolean; message?: any; error?: string }> {
     try {
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
         method: 'POST',
         headers: this.getHeaders(false),
         body: JSON.stringify(payload)
       });
+      const data = await res.json();
       if (res.ok) {
-        return await res.json();
+        return { success: true, message: data };
       }
-    } catch (err) {
+      return { success: false, error: data.error || 'Failed to send message' };
+    } catch (err: any) {
       console.warn('Failed to send chat message:', err);
+      return { success: false, error: err.message };
     }
-    return { success: false };
   }
 
   /**
