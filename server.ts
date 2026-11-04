@@ -902,14 +902,19 @@ function normalizeAnimeType(val: any): string {
 app.post('/api/anime', (req, res) => {
   const start = Date.now();
   try {
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, languages, platform, type, Type, studio, episodes_per_season, mixedEntries, watch_url, platforms_data } = req.body;
+    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, season, year, genres, languages, platform, type, Type, studio, episodes_per_season, mixedEntries, watch_url, platforms_data } = req.body;
     if (!title) return res.status(400).json({ error: "Title is required" });
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    const isAdmin = Boolean(req.headers['x-admin-token']);
-    const finalStatus = isAdmin && status && status !== 'pending' ? status : 'pending';
-    const finalSubmissionStatus = isAdmin && submissionStatus && submissionStatus !== 'pending' ? submissionStatus : 'pending';
+    const isAdmin = Boolean(req.headers['x-admin-token'] || req.headers['authorization']);
     const resolvedType = normalizeAnimeType(type || Type || 'TV Series');
+    
+    // Explicitly preserve the status chosen by the admin/user (e.g. 'Completed', 'Airing', 'Ongoing', 'Upcoming')
+    const incomingStatus = (status || airing_status || '').trim();
+    const finalStatus = (incomingStatus && incomingStatus.toLowerCase() !== 'pending')
+      ? incomingStatus
+      : (isAdmin ? (resolvedType === 'Movie' ? 'Completed' : 'Airing') : 'pending');
+    const finalSubmissionStatus = (isAdmin || submissionStatus === 'approved') ? 'approved' : (submissionStatus || 'pending');
 
     const existingStmt = db.prepare("SELECT id FROM anime WHERE slug = ? OR LOWER(title) = LOWER(?)");
     existingStmt.bind([slug, title.trim()]);
@@ -1312,12 +1317,17 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       const platform = (row.platform || row.Platform || 'Crunchyroll').toString().trim();
       const languages = (row.languages || row.Languages || 'Tamil, Hindi').toString().trim();
       const episodes_count = parseInt(row.episodes_count || row.episodes || 12, 10) || 12;
-      const cover_image = row.cover_image || row.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
-      const banner_image = row.banner_image || cover_image;
+      const rawStatus = (row.status || row.airing_status || row.state || row.completion || row.status_type || '').toString().trim();
+      const resolvedStatus = rawStatus 
+        ? (rawStatus.toLowerCase() === 'completed' ? 'Completed' : rawStatus.toLowerCase() === 'upcoming' ? 'Upcoming' : rawStatus.toLowerCase() === 'airing' ? 'Airing' : rawStatus.toLowerCase() === 'ongoing' ? 'Ongoing' : rawStatus)
+        : 'Airing';
+
+      const cover_image = row.cover_image || row.poster || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
+      const banner_image = row.banner_image || row['Banner Image'] || cover_image;
 
       db.run(
         `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, 'pending', 'pending', 'Spring', year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, resolvedType, 'Unknown Studio', String(episodes_count)]
+        [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, resolvedStatus, 'approved', 'Spring', year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, resolvedType, 'Unknown Studio', String(episodes_count)]
       );
       insertedCount++;
     }

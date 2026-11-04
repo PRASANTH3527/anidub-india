@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Send, CheckCircle2, Film, Plus, Loader2 } from 'lucide-react';
 import { DubLanguage } from '../types/anime';
 import { dbService } from '../services/databaseService';
+import { AniDubLogo } from './AniDubLogo';
 
 interface SuggestDubModalProps {
   isOpen: boolean;
@@ -31,8 +32,8 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
       await dbService.submitDubInfo({
         title: animeName.trim(),
         romajiTitle: "",
-        poster: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
-        imageUrl: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
+        poster: "",
+        imageUrl: "",
         type: 'TV Series',
         releaseYear: 0,
         originalReleaseDate: "",
@@ -86,12 +87,8 @@ export const SuggestDubModal: React.FC<SuggestDubModalProps> = ({ isOpen, onClos
 
       <div className="relative w-full max-w-md bg-[#131926] border border-neutral-700 rounded-2xl shadow-2xl overflow-hidden z-10 p-6 text-neutral-100">
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-neutral-800">
-          <div className="flex items-center gap-2">
-            <img 
-              src="/logo.png" 
-              alt="ANIDUB" 
-              className="h-8 w-auto object-contain shrink-0 drop-shadow-md"
-            />
+          <div className="flex items-center gap-2.5">
+            <AniDubLogo variant="horizontal" size="sm" className="shrink-0 drop-shadow-md" />
             <h3 className="font-heading font-black text-lg text-white">
               Submit an Anime / Dub
             </h3>

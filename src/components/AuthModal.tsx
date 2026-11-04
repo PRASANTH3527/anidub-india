@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, LogIn, Mail, Lock, ShieldCheck, ArrowRight } from 'lucide-react';
+import { AniDubLogo } from './AniDubLogo';
 
 export interface AuthModalProps {
   isOpen: boolean;
@@ -51,11 +52,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* HEADER */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <img 
-              src="/logo.png" 
-              alt="ANIDUB INDIA" 
-              className="h-10 w-auto object-contain"
-            />
+            <AniDubLogo variant="horizontal" size="sm" />
             <div>
               <h2 className="font-heading font-black text-lg text-white tracking-tight">
                 Sign in to Anidub India

@@ -2,6 +2,7 @@ import React from 'react';
 import { Sparkles, Dices, ShieldCheck, Layers } from 'lucide-react';
 import { motion } from 'motion/react';
 import { SupportedLanguage, translate } from '../utils/i18n';
+import { AniDubLogo } from './AniDubLogo';
 
 interface HeroProps {
   totalCount: number;
@@ -38,14 +39,17 @@ export const Hero: React.FC<HeroProps> = ({
 
       {/* Primary Brand Logo Integration */}
       <div className="mb-6 flex justify-center">
-        <motion.img 
-          src="/logo.png" 
-          alt="ANIDUB INDIA" 
+        <motion.div 
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="h-16 sm:h-20 md:h-24 w-auto object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.4)]"
-        />
+        >
+          <AniDubLogo 
+            variant="stacked" 
+            size="lg" 
+            className="drop-shadow-[0_12px_24px_rgba(0,0,0,0.5)]" 
+          />
+        </motion.div>
       </div>
 
       {/* Homepage Main H1 forcefully targeting "Anidub India Official Website" */}

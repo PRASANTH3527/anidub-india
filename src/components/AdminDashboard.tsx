@@ -56,12 +56,12 @@ import {
   Bell
 } from 'lucide-react';
 import { DubInfoModal } from './DubInfoModal';
-import { FALLBACK_SEED_ANIME } from './CatalogView';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { dbService } from '../services/databaseService';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { CLOUDFLARE_API_URL, getCloudflareUrl } from '../config/cloudflare';
 import Papa from 'papaparse';
+import { AniDubLogo } from './AniDubLogo';
 
 export interface AdminDashboardProps {
   onAnimeCreated?: (anime?: any, deletedId?: string | number) => void;
@@ -349,13 +349,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       } else {
         const cached = localStorage.getItem('cf_admin_catalog_cache');
         if (cached) {
-          const parsed = JSON.parse(cached);
-          setCatalog(parsed);
-          setAnimes(parsed);
+          try {
+            const parsed = JSON.parse(cached);
+            setCatalog(parsed);
+            setAnimes(parsed);
+          } catch {
+            setCatalog([]);
+            setAnimes([]);
+          }
         } else {
-          // Final fallback to seeds so UI isn't empty
-          setCatalog(FALLBACK_SEED_ANIME);
-          setAnimes(FALLBACK_SEED_ANIME);
+          setCatalog([]);
+          setAnimes([]);
         }
       }
       await fetchPendingItems();
@@ -1010,20 +1014,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       poster_url: editedData.posterUrl || resolvedImage
     };
 
-    // Update animes array state mapping over the items and explicitly mapping image: editedData.posterUrl || editedData.image
-    setAnimes(prev => prev.map(item => (item.id === targetId || String(item.id) === String(targetId)) ? {
-      ...item,
-      ...fullEditedData,
-      image: editedData.posterUrl || editedData.image || resolvedImage
-    } : item));
+    // Update animes array state mapping over the items or prepending new item
+    setAnimes(prev => {
+      const exists = prev.some(item => (item.id === targetId || String(item.id) === String(targetId)));
+      return exists
+        ? prev.map(item => (item.id === targetId || String(item.id) === String(targetId)) ? { ...item, ...fullEditedData, image: editedData.posterUrl || editedData.image || resolvedImage } : item)
+        : [fullEditedData, ...prev];
+    });
 
     // Update catalog array state
     setCatalog(prev => {
-      const updated = prev.map(item => (item.id === targetId || String(item.id) === String(targetId)) ? {
-        ...item,
-        ...fullEditedData,
-        image: editedData.posterUrl || editedData.image || resolvedImage
-      } : item);
+      const exists = prev.some(item => (item.id === targetId || String(item.id) === String(targetId)));
+      const updated = exists
+        ? prev.map(item => (item.id === targetId || String(item.id) === String(targetId)) ? { ...item, ...fullEditedData, image: editedData.posterUrl || editedData.image || resolvedImage } : item)
+        : [fullEditedData, ...prev];
       try {
         localStorage.setItem('cf_admin_catalog_cache', JSON.stringify(updated));
       } catch (e) {}
@@ -1162,11 +1166,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Sidebar Brand Header */}
         <div className="p-4 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <img 
-              src="/logo.png" 
-              alt="ANIDUB" 
-              className={`transition-all duration-300 object-contain ${isSidebarCollapsed ? 'h-8 w-8' : 'h-10 w-auto'}`}
-            />
+            {isSidebarCollapsed ? (
+              <AniDubLogo variant="icon" size="sm" />
+            ) : (
+              <AniDubLogo variant="horizontal" size="sm" />
+            )}
             {!isSidebarCollapsed && (
               <div className="min-w-0">
                 <div className="text-[10px] font-black tracking-[0.2em] uppercase text-white/40 truncate">

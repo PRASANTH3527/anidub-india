@@ -231,11 +231,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="flex items-center cursor-pointer select-none group shrink-0"
           title="ANIDUB INDIA - Home"
         >
-          <img 
-            src="/logo.svg" 
-            alt="ANIDUB INDIA" 
-            className="h-7 sm:h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
-            loading="eager"
+          <AniDubLogo
+            variant="horizontal"
+            size="sm"
+            className="transition-transform duration-300 group-hover:scale-105"
           />
         </motion.div>
 

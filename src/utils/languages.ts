@@ -178,13 +178,10 @@ export function calculateCatalogStats(animeList: any[] = []) {
   const uniqueLanguages = extractUniqueLanguagesFromAnimeList(animeList);
   const totalVotes = animeList.reduce((acc, curr) => {
     const popularity = Number(curr.popularity) || 0;
-    const likesCount = Number(curr.likesCount) || 0;
     const upvotes = Number(curr.upvotes) || 0;
-    const likes = Number(curr.likes) || 0;
-    // Prefer upvotes/likes if present, else popularity/likesCount
-    const effectiveUpvotes = upvotes || popularity;
-    const effectiveLikes = likes || likesCount;
-    return acc + effectiveUpvotes + effectiveLikes;
+    // Strictly sum upvotes or popularity, explicitly excluding likes and likesCount
+    const effectiveUpvotes = upvotes !== undefined && upvotes !== null && upvotes > 0 ? Number(upvotes) : popularity;
+    return acc + Math.max(0, effectiveUpvotes);
   }, 0);
 
   return {

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { useToast } from './Toast';
+import { useUser } from '@clerk/clerk-react';
 
 export interface AnimeCardData {
   id: number;
@@ -77,9 +78,10 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
   isTrending = true,
   isCached = true
 }) => {
+  const { user, isSignedIn } = useUser();
   const shouldReduceMotion = useReducedMotion();
   const staggerDelay = shouldReduceMotion ? 0 : Math.min((index % 12) * 0.05, 0.4);
-  // IP-Based Vote States (No LocalStorage limitations)
+  // Real Clerk-Based Vote States
   const [internalLiked, setInternalLiked] = useState<boolean>(Boolean(isLiked));
   const [internalUpvoted, setInternalUpvoted] = useState<boolean>(Boolean(isUpvoted));
 
@@ -102,10 +104,10 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     toast = null;
   }
 
-  // Check IP vote status from backend on mount
+  // Check real user vote status from backend on mount or user change
   useEffect(() => {
     let isMounted = true;
-    cloudflareApi.checkVoteStatus(anime.id).then((status) => {
+    cloudflareApi.checkVoteStatus(anime.id, user?.id).then((status) => {
       if (isMounted) {
         if (status.hasLiked) setInternalLiked(true);
         if (status.hasUpvoted) setInternalUpvoted(true);
@@ -115,7 +117,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [anime.id]);
+  }, [anime.id, user?.id]);
 
   // Sync state when props change
   useEffect(() => {
@@ -155,7 +157,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     ? anime.languages
     : typeof anime.languages === 'string' && anime.languages.trim().length > 0
       ? anime.languages.split(/[,/|•+]+/).map(s => s.trim()).filter(Boolean)
-      : ['HIN', 'TAM', 'TEL'];
+      : [];
 
   const canonicalLanguages = parsedLanguages
     .map(lang => {
@@ -188,7 +190,47 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 
   const releaseYear = anime.releaseYear || anime.year || 2026;
   const animeType = anime.type || 'TV Series';
-  const isAiring = anime.status === 'Ongoing' || anime.status === 'Airing';
+
+  // Dynamic status badge resolution based on actual database status
+  const rawStatus = (anime.status || (anime as any).airing_status || '').trim();
+  const getStatusBadge = () => {
+    if (!rawStatus || rawStatus.toLowerCase() === 'pending') return null;
+    const lower = rawStatus.toLowerCase();
+    if (lower.includes('complete') || lower.includes('finished')) {
+      return {
+        label: 'Completed',
+        badgeClass: 'bg-blue-950/80 text-blue-400 border-blue-700/50',
+        dotClass: 'bg-blue-400',
+        pulse: false
+      };
+    }
+    if (lower.includes('airing') || lower.includes('ongoing') || lower.includes('simulcast')) {
+      const displayLabel = lower.includes('ongoing') ? 'Ongoing' : 'Airing';
+      return {
+        label: displayLabel,
+        badgeClass: 'bg-emerald-950/80 text-emerald-400 border-emerald-700/50',
+        dotClass: 'bg-emerald-400',
+        pulse: true
+      };
+    }
+    if (lower.includes('upcoming') || lower.includes('announced')) {
+      return {
+        label: 'Upcoming',
+        badgeClass: 'bg-amber-950/80 text-amber-400 border-amber-700/50',
+        dotClass: 'bg-amber-400',
+        pulse: false
+      };
+    }
+    const formatted = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+    return {
+      label: formatted,
+      badgeClass: 'bg-purple-950/80 text-purple-400 border-purple-700/50',
+      dotClass: 'bg-purple-400',
+      pulse: false
+    };
+  };
+
+  const statusBadge = getStatusBadge();
 
   // Calculate total episodes across all seasons using reduce
   const seasonsArray = (anime as any).seasons || (anime as any).mixedEntries || (anime as any).seasonsList || [];
@@ -214,24 +256,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     return fallbacks[(anime.id || 0) % fallbacks.length];
   };
 
-  // 1-Vote per device & Clerk user like handler
+  // 1-Vote per Clerk user like handler
   const handleLikeClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isLiking) return;
 
-    // Guest check
-    const clerkUser = (window as any).Clerk?.user || null;
-    // Alternatively we can use useUser hook or check localStorage session
-    let isAuthed = false;
-    try {
-      const activeSession = sessionStorage.getItem('clerk_active_session');
-      if (activeSession || clerkUser) isAuthed = true;
-    } catch {}
-
-    // Check if real Clerk key is present or simulated auth is active
-    const hasClerk = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY && !import.meta.env.VITE_CLERK_PUBLISHABLE_KEY.includes('YOUR_'));
-    if (hasClerk && !isAuthed) {
-      showNotification('Sign In Required', 'Please sign in to vote and like anime.', 'warning');
+    if (!isSignedIn || !user) {
+      showNotification('Sign In Required', 'Please sign in with Clerk to like anime.', 'warning');
       return;
     }
 
@@ -243,21 +274,10 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     setIsLiking(true);
 
     try {
-      let currentUserId = 'default_user';
-      try {
-        const session = sessionStorage.getItem('clerk_active_session');
-        if (session) {
-          const parsed = JSON.parse(session);
-          if (parsed?.id) currentUserId = parsed.id;
-        }
-        const clerkUser = (window as any).Clerk?.user;
-        if (clerkUser?.id) currentUserId = clerkUser.id;
-      } catch {}
-
       const res = await cloudflareApi.likeAnime(anime.id, {
         action: 'like',
         delta: 1,
-        userId: currentUserId
+        userId: user.id
       });
       const updatedCount = (res && typeof res.likes === 'number') 
         ? res.likes 
@@ -272,7 +292,6 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
       }
       showNotification('Vote Recorded', `Liked ${anime.title}!`, 'success');
     } catch (error: any) {
-      console.log(error);
       const isAlreadyVoted = error?.alreadyVoted || /already voted/i.test(error?.message || '');
       if (isAlreadyVoted) {
         setInternalLiked(true);
@@ -286,21 +305,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     }
   };
 
-  // 1-Vote per device & Clerk user upvote handler
+  // 1-Vote per Clerk user upvote handler
   const handleUpvoteClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isVoting) return;
 
-    let isAuthed = false;
-    try {
-      const activeSession = sessionStorage.getItem('clerk_active_session');
-      const clerkUser = (window as any).Clerk?.user || null;
-      if (activeSession || clerkUser) isAuthed = true;
-    } catch {}
-
-    const hasClerk = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY && !import.meta.env.VITE_CLERK_PUBLISHABLE_KEY.includes('YOUR_'));
-    if (hasClerk && !isAuthed) {
-      showNotification('Sign In Required', 'Please sign in to upvote anime.', 'warning');
+    if (!isSignedIn || !user) {
+      showNotification('Sign In Required', 'Please sign in with Clerk to upvote anime.', 'warning');
       return;
     }
 
@@ -312,21 +323,10 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     setIsVoting(true);
 
     try {
-      let currentUserId = 'default_user';
-      try {
-        const session = sessionStorage.getItem('clerk_active_session');
-        if (session) {
-          const parsed = JSON.parse(session);
-          if (parsed?.id) currentUserId = parsed.id;
-        }
-        const clerkUser = (window as any).Clerk?.user;
-        if (clerkUser?.id) currentUserId = clerkUser.id;
-      } catch {}
-
       const res = await cloudflareApi.upvoteAnime(anime.id, {
         action: 'up',
         delta: 1,
-        userId: currentUserId
+        userId: user.id
       });
       const updatedCount = (res && typeof res.upvotes === 'number') 
         ? res.upvotes 
@@ -341,7 +341,6 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
       }
       showNotification('Vote Recorded', `Upvoted ${anime.title}!`, 'success');
     } catch (error: any) {
-      console.log(error);
       const isAlreadyVoted = error?.alreadyVoted || /already voted/i.test(error?.message || '');
       if (isAlreadyVoted) {
         setInternalUpvoted(true);
@@ -498,16 +497,16 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               <span>{anime.rating ? `${anime.rating.toFixed(1)}/10` : 'N/A'}</span>
             </div>
 
-            {/* Right Airing Badge */}
-            {isAiring && (
+            {/* Dynamic Status Badge (uses real database status) */}
+            {statusBadge && (
               <motion.div 
                 initial={shouldReduceMotion ? false : { scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: "spring", stiffness: 400, damping: 22, delay: staggerDelay + 0.15 }}
-                className="flex items-center gap-1 bg-emerald-950/80 text-emerald-400 border border-emerald-700/50 px-1.5 py-0.5 rounded text-[10px] shadow-sm"
+                className={`flex items-center gap-1 border px-1.5 py-0.5 rounded text-[10px] font-semibold shadow-sm backdrop-blur-sm ${statusBadge.badgeClass}`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Airing</span>
+                <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.dotClass} ${statusBadge.pulse ? 'animate-pulse' : ''}`} />
+                <span>{statusBadge.label}</span>
               </motion.div>
             )}
           </div>

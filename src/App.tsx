@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
-import { CatalogView, FALLBACK_SEED_ANIME } from './components/CatalogView';
+import { CatalogView } from './components/CatalogView';
 import { AnimeDetailModal } from './components/AnimeDetailModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { RouletteModal } from './components/RouletteModal';
@@ -17,6 +17,7 @@ import { FeedbackSection } from './components/FeedbackSection';
 import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown } from 'lucide-react';
 import { cloudflareApi } from './services/cloudflareApi';
 import { getCloudflareUrl, CLOUDFLARE_API_URL } from './config/cloudflare';
+import { AniDubLogo } from './components/AniDubLogo';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -58,7 +59,7 @@ export default function App() {
   const [selectedAnimeId, setSelectedAnimeId] = useState<number | null>(null);
   const [isRouletteOpen, setIsRouletteOpen] = useState(false);
   const [isCollectionOpen, setIsCollectionOpen] = useState(false);
-  const [catalogList, setCatalogList] = useState<any[]>(FALLBACK_SEED_ANIME);
+  const [catalogList, setCatalogList] = useState<any[]>([]);
 
 
   // Admin Authentication State
@@ -88,13 +89,13 @@ export default function App() {
           item.status !== 'pending' && 
           item.submissionStatus !== 'pending'
         );
-        setCatalogList(approvedOnly.length > 0 ? approvedOnly : FALLBACK_SEED_ANIME);
+        setCatalogList(approvedOnly);
       } else {
-        setCatalogList(FALLBACK_SEED_ANIME);
+        setCatalogList([]);
       }
     } catch (err: any) {
       console.warn('[Catalog API Notice]:', err?.message || err);
-      setCatalogList(FALLBACK_SEED_ANIME);
+      setCatalogList([]);
     } finally {
       setIsCatalogLoading(false);
     }
@@ -331,8 +332,8 @@ export default function App() {
                 image: newCover,
                 cover_image: newCover,
                 poster: newCover,
-                posterUrl: newCover,
-                status: updatedAnime.status || updatedAnime.airing_status || 'Ongoing'
+                status: updatedAnime.status || updatedAnime.airing_status || (updatedAnime.type === 'Movie' ? 'Completed' : 'Airing'),
+                airing_status: updatedAnime.airing_status || updatedAnime.status || (updatedAnime.type === 'Movie' ? 'Completed' : 'Airing')
               };
 
               setCatalogList(prev => {
@@ -540,12 +541,8 @@ export default function App() {
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
           <div className="w-full max-w-sm bg-[#121829] border border-primary-theme rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 relative">
-            <div className="text-center mb-6">
-              <img 
-                src="/logo.png" 
-                alt="ANIDUB INDIA" 
-                className="h-10 w-auto object-contain mx-auto mb-3"
-              />
+            <div className="text-center mb-6 flex flex-col items-center">
+              <AniDubLogo variant="stacked" size="sm" className="mb-3" />
               <h3 className="text-lg font-black text-white">Stealth Admin Access</h3>
               <p className="text-xs text-neutral-400 mt-1">Enter secure passphrase to unlock Anidub Dashboard</p>
             </div>

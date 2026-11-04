@@ -134,6 +134,48 @@ export default function Profile({
 
   const savedAnimeList: Anime[] = catalogList.filter((anime) => watchlist.includes(anime.id));
 
+  // Dynamically compute preferred regional audio from real watchlist entries
+  const preferredAudio = React.useMemo(() => {
+    if (savedAnimeList.length === 0) return 'None saved yet';
+    const langTally: Record<string, number> = {};
+    savedAnimeList.forEach(anime => {
+      const langs = (anime.languages || '').split(/[,/|•+]+/).map((s: string) => s.trim()).filter(Boolean);
+      langs.forEach((l: string) => {
+        const clean = l.replace(/Dub/i, '').trim();
+        if (clean && !['Japanese', 'English', 'Romaji', 'Korean', 'Chinese'].includes(clean)) {
+          langTally[clean] = (langTally[clean] || 0) + 1;
+        }
+      });
+    });
+    const sorted = Object.entries(langTally).sort((a, b) => b[1] - a[1]);
+    if (sorted.length === 0) return 'Regional Dubs';
+    return sorted.slice(0, 2).map(([lang]) => lang).join(' / ');
+  }, [savedAnimeList]);
+
+  // Dynamically compute Anime DNA from real genres in saved anime
+  const animeDna = React.useMemo(() => {
+    if (savedAnimeList.length === 0) return 'New Explorer';
+    const genreTally: Record<string, number> = {};
+    savedAnimeList.forEach(anime => {
+      const genres = (anime.genres || '').split(/[,/|]+/).map((s: string) => s.trim()).filter(Boolean);
+      genres.forEach((g: string) => {
+        if (g) genreTally[g] = (genreTally[g] || 0) + 1;
+      });
+    });
+    const sorted = Object.entries(genreTally).sort((a, b) => b[1] - a[1]);
+    if (sorted.length === 0) return 'Anime Enthusiast';
+    return `${sorted[0][0]} Specialist`;
+  }, [savedAnimeList]);
+
+  // Dynamic dub tier based on real saves/contributions
+  const dubTier = React.useMemo(() => {
+    const count = savedAnimeList.length;
+    if (count >= 10) return 'Master Curator';
+    if (count >= 5) return 'Senior Enthusiast';
+    if (count >= 1) return 'Active Voyager';
+    return 'Community Member';
+  }, [savedAnimeList.length]);
+
   const handleShareProfile = () => {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(window.location.href);
@@ -254,7 +296,7 @@ export default function Profile({
 
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold shadow-sm">
                   <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Regional Dub Rank #1</span>
+                  <span>{dubTier}</span>
                 </span>
 
                 {isSignedIn && (
@@ -322,15 +364,15 @@ export default function Profile({
             </div>
             <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-3 text-center">
               <p className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Dub Ranking</p>
-              <p className="text-lg sm:text-xl font-heading font-black text-amber-400 mt-0.5">#1 Contributor</p>
+              <p className="text-sm sm:text-base font-heading font-black text-amber-400 mt-1 truncate">{dubTier}</p>
             </div>
             <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-3 text-center">
               <p className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Preferred Audio</p>
-              <p className="text-xs sm:text-sm font-heading font-bold text-emerald-400 mt-1 truncate">Tamil / Hindi</p>
+              <p className="text-xs sm:text-sm font-heading font-bold text-emerald-400 mt-1 truncate">{preferredAudio}</p>
             </div>
             <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-3 text-center">
               <p className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Anime DNA</p>
-              <p className="text-xs sm:text-sm font-heading font-bold text-pink-400 mt-1 truncate">Shonen Pioneer</p>
+              <p className="text-xs sm:text-sm font-heading font-bold text-pink-400 mt-1 truncate">{animeDna}</p>
             </div>
           </div>
 
@@ -417,7 +459,7 @@ export default function Profile({
                 <div className="flex items-center gap-3">
                   <h3 className="text-xl font-heading font-black text-white">Edit Profile & Avatar</h3>
                   <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[10px] font-bold tracking-wider uppercase">
-                    100+ AI Characters
+                    {RICH_ANIME_AVATARS.length} Anime Characters
                   </span>
                 </div>
                 <p className="text-xs text-neutral-400">
@@ -475,7 +517,7 @@ export default function Profile({
                       {modalInputName.trim() || displayName}
                     </h4>
                     <p className="text-[11px] text-purple-300 font-medium">
-                      Active Regional Enthusiast • Tamil (தமிழ்)
+                      Active Regional Enthusiast • {preferredAudio}
                     </p>
                   </div>
                 </div>

@@ -55,7 +55,7 @@ test('calculateCatalogStats computes accurate dynamic values', () => {
 
   const stats = calculateCatalogStats(sampleAnime);
   assert.equal(stats.totalAnime, 2);
-  assert.equal(stats.totalVotes, 50); // 10+5 + 20+15 = 50
+  assert.equal(stats.totalVotes, 30); // 10 + 20 = 30 (likes excluded)
   assert.equal(stats.totalLanguages, 3);
   assert.deepEqual(stats.languagesList, ['Hindi', 'Tamil', 'Telugu']);
   assert.equal(stats.languagesString, 'Hindi • Tamil • Telugu');

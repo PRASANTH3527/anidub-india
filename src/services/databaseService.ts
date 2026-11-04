@@ -182,29 +182,18 @@ class DatabaseService {
       return { popularity: data.popularity || 0 };
     } catch (err) {
       console.error('upvoteAnime error:', err);
+      this.notifyListeners();
+      return { popularity: 0 };
     }
-    this.notifyListeners();
-    return { popularity: 1250 };
   }
 
   public async addReview(reviewData: Omit<DubReview, 'id' | 'date'>): Promise<DubReview> {
-    try {
-      const data = await cloudflareApi.submitReview(reviewData.anime_id, reviewData);
-      if (data.success) {
-        this.notifyListeners();
-        return data as any;
-      }
-    } catch (err) {
-      console.error('addReview error:', err);
+    const data = await cloudflareApi.submitReview(reviewData.anime_id, reviewData);
+    if (data.success) {
+      this.notifyListeners();
+      return data as any;
     }
-    const fallbackReview: DubReview = {
-      id: Date.now(),
-      ...reviewData,
-      date: 'Just now',
-      likes: 1
-    };
-    this.notifyListeners();
-    return fallbackReview;
+    throw new Error((data as any).error || (data as any).message || 'Failed to submit review');
   }
 
   public async getReviewsForAnime(animeId: number): Promise<DubReview[]> {

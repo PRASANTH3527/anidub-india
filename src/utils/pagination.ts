@@ -102,9 +102,17 @@ export function filterAndSortCatalog<T extends {
 
   // Status filter
   if (options.status && options.status !== 'All') {
-    filtered = filtered.filter(item => 
-      item.status.toLowerCase() === options.status?.toLowerCase()
-    );
+    const targetStatus = options.status.toLowerCase();
+    filtered = filtered.filter(item => {
+      const itemStatus = (item.status || (item as any).airing_status || '').toLowerCase();
+      if (targetStatus === 'airing') {
+        return itemStatus === 'airing' || itemStatus === 'ongoing' || itemStatus.includes('simulcast');
+      }
+      if (targetStatus === 'completed') {
+        return itemStatus.includes('complete') || itemStatus.includes('finished');
+      }
+      return itemStatus === targetStatus;
+    });
   }
 
   // Search filter (ignores secret admin commands starting with /admin)

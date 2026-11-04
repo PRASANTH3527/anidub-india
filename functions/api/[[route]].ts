@@ -17,80 +17,7 @@ type PagesFunction<T = any> = (context: { request: Request; env: T; params?: any
 const DEFAULT_IMGBB_KEY = 'Ee6b4e37ae9c228c29b8448483b6591b';
 const D1_DATABASE_ID = '75f053ab-5b44-4d48-abf8-b3a357a89426';
 
-const SEED_ANIME: any[] = [
-  {
-    id: 1,
-    title: 'Solo Leveling',
-    slug: 'solo-leveling',
-    synopsis: 'In a world where hunters must battle deadly monsters to protect mankind, Sung Jinwoo, the weakest hunter of them all, finds himself in an endless struggle for survival. After a mysterious incident in a high-rank dungeon, he gains the ability to level up.',
-    cover_image: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800',
-    banner_image: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800',
-    rating: 8.7,
-    episodes_count: 12,
-    status: 'Completed',
-    season: 'Winter',
-    year: 2024,
-    genres: 'Action, Fantasy, Adventure',
-    popularity: 95000,
-    languages: 'Hindi, Tamil, Telugu, English, Japanese',
-    platform: 'Crunchyroll',
-    type: 'TV Series'
-  },
-  {
-    id: 2,
-    title: 'Demon Slayer: Kimetsu no Yaiba',
-    slug: 'demon-slayer',
-    synopsis: 'It is the Taisho Period in Japan. Tanjiro, a kindhearted boy who sells charcoal for a living, finds his family slaughtered by a demon. To make matters worse, his younger sister Nezuko, the sole survivor, has been transformed into a demon herself.',
-    cover_image: 'https://cdn.myanimelist.net/images/anime/1286/99889.jpg',
-    banner_image: 'https://cdn.myanimelist.net/images/anime/1286/99889.jpg',
-    rating: 8.9,
-    episodes_count: 26,
-    status: 'Completed',
-    season: 'Spring',
-    year: 2019,
-    genres: 'Action, Fantasy, Supernatural',
-    popularity: 120000,
-    languages: 'Hindi, Tamil, Telugu, English, Japanese',
-    platform: 'Netflix',
-    type: 'TV Series'
-  },
-  {
-    id: 3,
-    title: 'Naruto Shippuden',
-    slug: 'naruto-shippuden',
-    synopsis: 'It has been two and a half years since Naruto Uzumaki left Konohagakure, the Hidden Leaf Village, for intense training following events which fueled his desire to be stronger. Now Akatsuki, the mysterious organization of elite rogue ninja, is closing in on their grand plan.',
-    cover_image: 'https://cdn.myanimelist.net/images/anime/1565/111305.jpg',
-    banner_image: 'https://cdn.myanimelist.net/images/anime/1565/111305.jpg',
-    rating: 8.3,
-    episodes_count: 500,
-    status: 'Completed',
-    season: 'Winter',
-    year: 2007,
-    genres: 'Action, Adventure, Shonen',
-    popularity: 88000,
-    languages: 'Hindi, Tamil, Telugu, Japanese',
-    platform: 'Sony YAY!',
-    type: 'TV Series'
-  },
-  {
-    id: 4,
-    title: 'Jujutsu Kaisen',
-    slug: 'jujutsu-kaisen',
-    synopsis: 'Yuji Itadori is a boy with tremendous physical strength, though he lives a completely ordinary high school life. One day, to save a classmate who has been attacked by curses, he eats the finger of Ryomen Sukuna, taking the curse into his own soul.',
-    cover_image: 'https://cdn.myanimelist.net/images/anime/1171/109222.jpg',
-    banner_image: 'https://cdn.myanimelist.net/images/anime/1171/109222.jpg',
-    rating: 8.8,
-    episodes_count: 24,
-    status: 'Completed',
-    season: 'Fall',
-    year: 2020,
-    genres: 'Action, Supernatural, School',
-    popularity: 110000,
-    languages: 'Hindi, Tamil, Telugu, Japanese',
-    platform: 'Crunchyroll',
-    type: 'TV Series'
-  }
-];
+
 
 function escapeTelegramHtml(text: any): string {
   if (text === null || text === undefined) return '';
@@ -300,18 +227,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           }
         } catch (dbErr) {
           console.error("D1 Catalog Query Error:", dbErr);
-          // Fall through to SEED_ANIME
         }
       }
 
-      // Fallback if no DB or empty results
       return jsonResponse({
-        data: SEED_ANIME.slice(offset, offset + limit),
+        data: [],
         pagination: { 
           page, 
           limit, 
-          total: SEED_ANIME.length, 
-          totalPages: Math.ceil(SEED_ANIME.length / limit) 
+          total: 0, 
+          totalPages: 1 
         }
       });
     } catch (err: any) {
@@ -323,42 +248,77 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/anime' && method === 'POST') {
     try {
       const body: any = await request.json();
+      let createdId: number | null = null;
+      const incomingStatus = (body.status || body.airing_status || '').trim();
+      const resolvedType = body.type || body.Type || 'TV Series';
+      const finalStatus = (incomingStatus && incomingStatus.toLowerCase() !== 'pending')
+        ? incomingStatus
+        : (resolvedType === 'Movie' ? 'Completed' : 'Airing');
+      const finalSubmissionStatus = body.submissionStatus || 'approved';
+
       if (env.DB) {
         const slug = body.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        await env.DB.prepare(`
-          INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, popularity)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          body.title,
-          slug,
-          body.synopsis || '',
-          body.cover_image,
-          body.banner_image,
-          parseFloat(body.rating) || 8.5,
-          parseInt(body.episodes_count) || 12,
-          body.status || 'Airing',
-          body.season || 'Spring',
-          parseInt(body.year) || 2026,
-          body.genres || 'Action',
-          50000
-        ).run();
+        try {
+          const insertRes = await env.DB.prepare(`
+            INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            body.title,
+            slug,
+            body.synopsis || '',
+            body.cover_image,
+            body.banner_image || body.cover_image,
+            parseFloat(body.rating) || 8.5,
+            parseInt(body.episodes_count) || 12,
+            finalStatus,
+            finalSubmissionStatus,
+            body.season || 'Spring',
+            parseInt(body.year) || 2026,
+            body.genres || 'Action',
+            0,
+            body.languages || 'Tamil, Telugu, Hindi',
+            body.platform || 'Crunchyroll',
+            resolvedType
+          ).run();
+          createdId = insertRes.meta?.last_row_id || null;
+        } catch {
+          const insertRes = await env.DB.prepare(`
+            INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, season, year, genres, popularity)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            body.title,
+            slug,
+            body.synopsis || '',
+            body.cover_image,
+            body.banner_image || body.cover_image,
+            parseFloat(body.rating) || 8.5,
+            parseInt(body.episodes_count) || 12,
+            finalStatus,
+            body.season || 'Spring',
+            parseInt(body.year) || 2026,
+            body.genres || 'Action',
+            0
+          ).run();
+          createdId = insertRes.meta?.last_row_id || null;
+        }
       }
 
       const tgMsg = `🔥 *NEW ANIME / DUB SUBMISSION ADDED*\n\n` +
         `📌 *Title:* ${body.title}\n` +
         `⭐ *Rating:* ${body.rating || 8.5}/10\n` +
+        `📊 *Status:* ${finalStatus}\n` +
         `🎙 *Languages:* ${body.languages || 'Tamil, Telugu, Hindi'}\n` +
         `📺 *Platform:* ${body.platform || 'Crunchyroll'}\n\n` +
         `💬 _"${body.synopsis?.slice(0, 120) || ''}"_`;
       await sendTelegramAlert(env, tgMsg);
 
-      return jsonResponse({ success: true }, 201);
+      return jsonResponse({ success: true, animeId: createdId, id: createdId, status: finalStatus }, 201);
     } catch (err: any) {
       return jsonResponse({ error: err.message }, 500);
     }
   }
 
-  // 5. GET /api/anime/:id
+  // 5. GET /api/anime/:id, DELETE /api/anime/:id, PUT /api/anime/:id
   const animeIdMatch = path.match(/^\/api\/anime\/([0-9a-zA-Z_-]+)$/);
   if (animeIdMatch) {
     const id = animeIdMatch[1];
@@ -376,33 +336,39 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             });
           }
         }
-      } catch {}
+      } catch (err: any) {
+        return jsonResponse({ error: err.message }, 500);
+      }
 
-      // Fallback
-      const found = SEED_ANIME.find(a => String(a.id) === id || a.slug === id) || SEED_ANIME[0];
-      const episodes = Array.from({ length: Math.min(found.episodes_count, 6) }, (_, i) => ({
-        id: i + 1,
-        anime_id: found.id,
-        episode_number: i + 1,
-        title: `Episode ${i + 1}: Awakening of the Storm`,
-        duration: '24m',
-        thumbnail_url: found.cover_image,
-        video_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        synopsis: 'The epic broadcast episode streaming in 1080p via Cloudflare Pages.'
-      }));
-      return jsonResponse({
-        ...found,
-        episodes,
-        reviews: [
-          {
-            id: 1,
-            user_name: 'Kaito_Cloud',
-            user_avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-            rating: 10,
-            comment: 'Streamed directly through Cloudflare D1 with ImgBB posters!'
-          }
-        ]
-      });
+      return jsonResponse({ error: "Anime not found" }, 404);
+    }
+
+    if ((method === 'PUT' || method === 'PATCH') && env.DB) {
+      try {
+        const body: any = await request.json().catch(() => ({}));
+        const incomingStatus = (body.status || body.airing_status || '').trim();
+        if (incomingStatus) {
+          await env.DB.prepare("UPDATE anime SET status = ? WHERE id = ? OR slug = ?").bind(incomingStatus, id, id).run();
+        }
+        if (body.title) {
+          await env.DB.prepare("UPDATE anime SET title = ? WHERE id = ? OR slug = ?").bind(body.title, id, id).run();
+        }
+        if (body.rating !== undefined) {
+          await env.DB.prepare("UPDATE anime SET rating = ? WHERE id = ? OR slug = ?").bind(parseFloat(body.rating) || 8.5, id, id).run();
+        }
+        if (body.cover_image) {
+          await env.DB.prepare("UPDATE anime SET cover_image = ? WHERE id = ? OR slug = ?").bind(body.cover_image, id, id).run();
+        }
+        if (body.type || body.Type) {
+          await env.DB.prepare("UPDATE anime SET type = ? WHERE id = ? OR slug = ?").bind(body.type || body.Type, id, id).run();
+        }
+        if (body.submissionStatus) {
+          await env.DB.prepare("UPDATE anime SET submissionStatus = ? WHERE id = ? OR slug = ?").bind(body.submissionStatus, id, id).run();
+        }
+        return jsonResponse({ success: true, id, status: incomingStatus });
+      } catch (err: any) {
+        return jsonResponse({ error: err.message }, 500);
+      }
     }
 
     if (method === 'DELETE' && env.DB) {
@@ -604,7 +570,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           if (list.results?.length) return jsonResponse({ data: list.results });
         }
       } catch {}
-      return jsonResponse({ data: [SEED_ANIME[0], SEED_ANIME[1]] });
+      return jsonResponse({ data: [] });
     }
     if (method === 'POST') {
       return jsonResponse({ success: true, watchlisted: true });
@@ -648,7 +614,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const queryRes = await env.DB.prepare(body.sql).all();
         return jsonResponse({ success: true, results: queryRes.results || [], latencyMs: 14 });
       }
-      return jsonResponse({ success: true, results: SEED_ANIME.slice(0, 5), latencyMs: 10 });
+      return jsonResponse({ success: true, results: [], latencyMs: 10 });
     } catch (err: any) {
       return jsonResponse({ error: err.message }, 400);
     }
@@ -746,11 +712,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const cover_image = row.cover_image || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
         const banner_image = row.banner_image || row['Banner Image'] || cover_image;
 
+        const rawStatus = (row.status || row.airing_status || row.state || row.completion || row.status_type || '').toString().trim();
+        const resolvedStatus = rawStatus 
+          ? (rawStatus.toLowerCase() === 'completed' ? 'Completed' : rawStatus.toLowerCase() === 'upcoming' ? 'Upcoming' : rawStatus.toLowerCase() === 'airing' ? 'Airing' : rawStatus.toLowerCase() === 'ongoing' ? 'Ongoing' : rawStatus)
+          : 'Airing';
+
         if (env.DB) {
           await env.DB.prepare(
             `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 'Spring', ?, ?, 0, ?, ?, 'TV Series')`
-          ).bind(title, slug, synopsis, cover_image, banner_image, rating, 12, year, genres, languages, platform).run();
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Spring', ?, ?, 0, ?, ?, 'TV Series')`
+          ).bind(title, slug, synopsis, cover_image, banner_image, rating, 12, resolvedStatus, 'approved', year, genres, languages, platform).run();
         }
         insertedCount++;
       }
@@ -765,10 +736,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const approveMatch = path.match(/^\/api\/admin\/approve\/([0-9a-zA-Z_-]+)$/);
   if (approveMatch && method === 'POST') {
     const id = approveMatch[1];
+    const body: any = await request.json().catch(() => ({}));
+    const targetStatus = (body.status || body.airing_status || '').trim() || 'Completed';
     if (env.DB) {
-      await env.DB.prepare("UPDATE anime SET status = 'Ongoing', submissionStatus = 'approved' WHERE id = ?").bind(id).run();
+      await env.DB.prepare("UPDATE anime SET status = ?, submissionStatus = 'approved' WHERE id = ?").bind(targetStatus, id).run();
     }
-    return jsonResponse({ success: true, id, submissionStatus: 'approved' });
+    return jsonResponse({ success: true, id, status: targetStatus, submissionStatus: 'approved' });
   }
 
   const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)$/);

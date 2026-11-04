@@ -46,10 +46,9 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
   const targetVotesCount = (animeList && animeList.length > 0 && totalVotes === 0)
     ? animeList.reduce((acc, curr) => {
         const popularity = Number(curr.popularity) || 0;
-        const likesCount = Number(curr.likesCount) || 0;
         const upvotes = Number(curr.upvotes) || 0;
-        const likes = Number(curr.likes) || 0;
-        return acc + (upvotes || popularity) + (likes || likesCount);
+        const effectiveUpvotes = upvotes !== undefined && upvotes !== null && upvotes > 0 ? Number(upvotes) : popularity;
+        return acc + Math.max(0, effectiveUpvotes);
       }, 0)
     : totalVotes;
 

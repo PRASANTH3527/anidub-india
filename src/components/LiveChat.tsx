@@ -17,6 +17,7 @@ import { CLOUDFLARE_API_URL, getCloudflareUrl, getCloudflareWsUrl } from '../con
 import { cloudflareApi } from '../services/cloudflareApi';
 import { generateRandomUsername } from '../utils/randomUser';
 import { formatRelativeTime } from '../utils/timestamps';
+import { useUser } from '@clerk/clerk-react';
 
 export interface ChatMessage {
   id: string | number;
@@ -31,35 +32,13 @@ export interface ChatMessage {
 
 const QUICK_REACTIONS = ['🔥', '❤️', '⚡', '🍿', '😭', '✨', '💯', '🎌'];
 
-const ANIME_CHARACTERS = [
-  'Tanjiro', 'Nezuko', 'Zenitsu', 'Inosuke', 'Giyu', 'Rengoku', 'Tengen', 'Muzan', 'Akaza', 'Shinobu',
-  'Goku', 'Vegeta', 'Gohan', 'Piccolo', 'Trunks', 'Frieza', 'Beerus', 'Bulma', 'Krillin', 'Broly',
-  'Luffy', 'Zoro', 'Sanji', 'Nami', 'Robin', 'Chopper', 'Franky', 'Brook', 'Jinbe', 'Shanks',
-  'Naruto', 'Sasuke', 'Kakashi', 'Itachi', 'Madara', 'Minato', 'Hinata', 'Jiraiya', 'Gaara', 'Shikamaru',
-  'Gojo', 'Sukuna', 'Yuji', 'Megumi', 'Nobara', 'Nanami', 'Toji', 'Geto', 'Maki', 'Inumaki',
-  'Eren', 'Mikasa', 'Armin', 'Levi', 'Erwin', 'Hange', 'Reiner', 'Zeke', 'Jean', 'Sasha',
-  'Denji', 'Makima', 'Power', 'Aki', 'Himeno', 'Kobeni', 'Kishibe', 'Quanxi', 'Reze', 'Kishibe',
-  'Asta', 'Yuno', 'Noelle', 'Yami', 'Julius', 'Magna', 'Luck', 'Charmy', 'Finral', 'Gauche',
-  'Bojji', 'Kage', 'Daida', 'Hiling', 'Domas', 'Bein', 'Ouken', 'Miranja', 'Desha', 'Seyn'
-];
-
-const INDIAN_REGIONS = [
-  'Delhi', 'Chennai', 'Mumbai', 'Bengaluru', 'Kolkata', 'Hyderabad', 'Kerala', 'Pune',
-  'Kolkata', 'Ahmedabad', 'Jaipur', 'Lucknow', 'Patna', 'Varanasi', 'Chandigarh', 'Goa',
-  'Surat', 'Indore', 'Bhopal', 'Visakhapatnam', 'Coimbatore', 'Madurai', 'Mysuru', 'Mangaluru',
-  'Kochi', 'Thiruvananthapuram', 'Kozhikode', 'Thrissur', 'Guwahati', 'Shillong', 'Imphal', 'Aizawl',
-  'Bhubaneswar', 'Cuttack', 'Rourkela', 'Puri', 'Nagpur', 'Nashik', 'Aurangabad', 'Solapur',
-  'Vadodara', 'Rajkot', 'Surat', 'Gandhinagar', 'Jodhpur', 'Udaipur', 'Ajmer', 'Kota',
-  'Kanpur', 'Agra', 'Meerut', 'Prayagraj', 'Noida', 'Gurugram', 'Dehradun', 'Haridwar',
-  'Srinagar', 'Jammu', 'Leh', 'Amritsar', 'Ludhiana', 'Jalandhar', 'Patiala'
-];
-
 export interface LiveChatProps {
   className?: string;
   defaultAnimeTitle?: string;
 }
 
 export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle }) => {
+  const { user, isSignedIn } = useUser();
   // 1. Initial State loaded from LocalStorage
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
@@ -71,21 +50,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         }
       }
     } catch {}
-    return [
-      {
-        id: 'welcome_init',
-        user: 'AniDub_Bot',
-        text: 'Welcome to the Live Indian Anime Dub Community! Stream officially in Hindi, Tamil, Telugu, Malayalam & Kannada.',
-        timestamp: 'Just now',
-        isSelf: false
-      }
-    ];
+    return [];
   });
 
   const [inputMessage, setInputMessage] = useState('');
   const [guestName, setGuestName] = useState(() => {
     return generateRandomUsername();
   });
+  const currentUserName = (isSignedIn && (user?.fullName || user?.username || user?.firstName)) || guestName;
   const [autoScroll, setAutoScroll] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
@@ -149,7 +121,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       user: msg.user || 'Anonymous Fan',
       text: msg.text || msg.comment || '',
       timestamp: msg.timestamp || 'Just now',
-      isSelf: msg.user === guestName || Boolean(msg.isSelf),
+      isSelf: msg.user === currentUserName || Boolean(msg.isSelf),
       isReview: Boolean(msg.isReview || msg.rating),
       rating: msg.rating !== undefined ? Number(msg.rating) : null,
       language: msg.language || null
@@ -166,7 +138,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     }
 
     return result.slice(-150); // Keep last 150 messages
-  }, [guestName]);
+  }, [currentUserName]);
 
   // 2. Fetch existing chat & review history from Backend / D1 Database
   const fetchChatHistory = useCallback(async () => {
@@ -269,7 +241,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                 user: data.user || 'Anonymous Fan',
                 text: data.text || data.comment,
                 timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                isSelf: data.user === guestName,
+                isSelf: data.user === currentUserName,
                 isReview: Boolean(data.isReview || data.rating),
                 rating: data.rating !== undefined ? Number(data.rating) : null,
                 language: data.language || null
@@ -318,7 +290,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         clearTimeout(reconnectTimerRef.current);
       }
     };
-  }, [reconnectAttempts, guestName, mergeMessageLists]);
+  }, [reconnectAttempts, currentUserName, mergeMessageLists]);
 
   // 4. Send Message & Review: WebSocket + Direct REST Persistence
   const sendMessage = async (
@@ -329,7 +301,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
     const payload: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      user: guestName.trim() || 'AnimeFan_IN',
+      user: currentUserName.trim() || 'AnimeFan_IN',
       text: text.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isSelf: true,

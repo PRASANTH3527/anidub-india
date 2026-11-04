@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, X, ShieldAlert, ArrowRight } from 'lucide-react';
 import { cloudflareApi } from '../services/cloudflareApi';
+import { AniDubLogo } from './AniDubLogo';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -57,11 +58,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
         </button>
 
         <div className="flex flex-col items-center text-center space-y-4 mb-6 mt-2">
-          <img 
-            src="/logo.png" 
-            alt="ANIDUB INDIA" 
-            className="h-12 w-auto object-contain mb-1"
-          />
+          <AniDubLogo variant="stacked" size="sm" className="mb-1" />
           <div>
             <h3 className="text-xl font-bold text-white font-['Space_Grotesk',sans-serif]">
               Restricted Admin Access

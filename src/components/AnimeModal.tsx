@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Share2, Bookmark, Star, Tv, ExternalLink, Calendar, Building2, Languages, Film, Sparkles, Check } from 'lucide-react';
 import { Anime } from './CatalogView';
+import { AniDubLogo } from './AniDubLogo';
 
 export interface AnimeModalProps {
   anime: Anime;
@@ -56,7 +57,7 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
 
           {/* CLOSE & ACTION BUTTONS */}
           <div className="absolute top-4 left-4 z-20 flex items-center gap-3">
-            <img src="/logo.png" alt="ANIDUB INDIA" className="h-6 sm:h-8 w-auto object-contain brightness-0 invert opacity-80" />
+            <AniDubLogo variant="horizontal" size="sm" className="brightness-0 invert opacity-90" />
           </div>
 
           <div className="absolute top-4 right-4 z-20 flex items-center gap-2">

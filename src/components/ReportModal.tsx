@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Flag, CheckCircle2, AlertTriangle, Send } from 'lucide-react';
 import { cloudflareApi } from '../services/cloudflareApi';
+import { AniDubLogo } from './AniDubLogo';
 
 export interface ReportModalProps {
   animeTitle: string;
@@ -51,11 +52,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
         {/* HEADER */}
         <div className="flex items-center justify-between pb-4 border-b border-neutral-800">
           <div className="flex items-center gap-3">
-            <img 
-              src="/logo.png" 
-              alt="ANIDUB" 
-              className="h-8 w-auto object-contain shrink-0 drop-shadow-md"
-            />
+            <AniDubLogo variant="horizontal" size="sm" className="shrink-0 drop-shadow-md" />
             <div>
               <h2 className="font-heading font-black text-white text-base sm:text-lg tracking-tight">
                 Report Issue

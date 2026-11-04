@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { 
+import {
   X, 
   Film, 
   Sparkles, 
@@ -13,6 +13,7 @@ import {
   Send,
   Tv
 } from 'lucide-react';
+import { AniDubLogo } from './AniDubLogo';
 import { dbService } from '../services/databaseService';
 
 export interface SubmitDubModalProps {
@@ -30,14 +31,14 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
 
   const [title, setTitle] = useState('');
   const [synopsis, setSynopsis] = useState('');
-  const [coverImage, setCoverImage] = useState('https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80');
-  const [bannerImage, setBannerImage] = useState('https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1600&auto=format&fit=crop&q=80');
-  const [rating, setRating] = useState('8.5');
-  const [episodesCount, setEpisodesCount] = useState('12');
+  const [coverImage, setCoverImage] = useState('');
+  const [bannerImage, setBannerImage] = useState('');
+  const [rating, setRating] = useState('');
+  const [episodesCount, setEpisodesCount] = useState('');
   const [status, setStatus] = useState<'Airing' | 'Completed'>('Airing');
   const [platform, setPlatform] = useState('Crunchyroll');
-  const [selectedLangs, setSelectedLangs] = useState<string[]>(['Hi', 'Ta', 'Te']);
-  const [selectedGenres, setSelectedGenres] = useState<string[]>(['Action', 'Shonen', 'Fantasy']);
+  const [selectedLangs, setSelectedLangs] = useState<string[]>([]);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
 
   const availableGenres = [
     'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Isekai', 
@@ -109,11 +110,7 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
         {/* HEADER */}
         <div className="p-5 border-b border-neutral-800 flex items-center justify-between bg-gradient-to-r from-[var(--primary-badge)]/40 via-transparent to-transparent shrink-0">
           <div className="flex items-center gap-3">
-            <img 
-              src="/logo.png" 
-              alt="ANIDUB" 
-              className="h-9 w-auto object-contain shrink-0 drop-shadow-md"
-            />
+            <AniDubLogo variant="horizontal" size="sm" className="shrink-0 drop-shadow-md" />
             <div>
               <h2 className="font-heading font-black text-white text-base sm:text-lg flex items-center gap-1.5">
                 <span>Submit Official Indian Dub</span>

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 280" width="320" height="280" fill="none">
+  <!-- ICON CENTERED ON TOP -->
+  <g transform="translate(112, 24)">
+    <!-- Orange Speech Bubble with Tail -->
+    <path d="M 18,2 C 7,2 0,9 0,20 L 0,34 C 0,45 7,52 18,52 L 19,52 L 11,66 C 10,68 12,71 15,69 L 30,53 C 32,52 34,52 36,52 L 56,52 C 67,52 74,45 74,34 L 74,20 C 74,9 67,2 56,2 Z" 
+          fill="#FF6A00" />
+    
+    <!-- Play Triangle -->
+    <polygon points="30,17 30,39 49,28" fill="#0B0F17" />
+    
+    <!-- Inner Sound Arc (White) -->
+    <path d="M 82,18 C 88,24 88,32 82,38" 
+          stroke="#FFFFFF" 
+          stroke-width="5.5" 
+          stroke-linecap="round" />
+    
+    <!-- Outer Sound Arc (Vivid Green) -->
+    <path d="M 93,10 C 104,20 104,36 93,46" 
+          stroke="#22C55E" 
+          stroke-width="5.5" 
+          stroke-linecap="round" />
+  </g>
+
+  <!-- TYPOGRAPHY CENTERED BELOW -->
+  <!-- ANIDUB Main Header -->
+  <g transform="translate(160, 180)">
+    <text text-anchor="middle" font-family="'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="52" letter-spacing="-1px">
+      <tspan fill="#FFFFFF">ANI</tspan><tspan fill="#FF6A00">DUB</tspan>
+    </text>
+
+    <!-- INDIA Sub-header with matching right rule -->
+    <g transform="translate(-112, 28)">
+      <text x="0" y="0" font-family="'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="13.5" fill="#FFFFFF" letter-spacing="6.5px">INDIA</text>
+      <line x1="78" y1="-4.5" x2="224" y2="-4.5" stroke="#4B5563" stroke-width="2" stroke-linecap="round" />
+    </g>
+  </g>
+</svg>

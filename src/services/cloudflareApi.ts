@@ -76,7 +76,6 @@ class CloudflareApiService {
                      text.includes('Cookie check');
 
       if (isHtml) {
-        // Never mock mutations: return clean JSON error response
         if (options.method && options.method !== 'GET') {
           return new Response(JSON.stringify({ 
             success: false, 
@@ -86,9 +85,11 @@ class CloudflareApiService {
             headers: { 'Content-Type': 'application/json' }
           });
         }
-        // For GET requests, fall back to valid mock JSON so the application never breaks
-        console.warn(`[smartFetch] Intercepted non-JSON response from ${url}, serving cached fallback JSON.`);
-        return this.getMockResponse(path);
+        console.warn(`[smartFetch] Intercepted non-JSON response from ${url}. Returning empty JSON.`);
+        return new Response(JSON.stringify({ success: false, data: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
 
       // If response is OK and somehow text/plain, try returning it
@@ -104,38 +105,11 @@ class CloudflareApiService {
           headers: { 'Content-Type': 'application/json' }
         });
       }
-      return this.getMockResponse(path);
+      return new Response(JSON.stringify({ success: false, data: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
-  }
-
-  private getMockResponse(path: string): Response {
-    let data: any = { success: true };
-    if (path.includes('/api/anime') && !path.includes('/vote-status') && !path.includes('/reviews')) {
-      data = {
-        data: [
-          { id: 1, title: 'Solo Leveling', slug: 'solo-leveling', synopsis: 'In a world of hunters...', cover_image: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800', rating: 8.7, year: 2024, genres: 'Action, Fantasy', platform: 'Crunchyroll', popularity: 95000 },
-          { id: 2, title: 'Demon Slayer', slug: 'demon-slayer', synopsis: 'Family slaughtered...', cover_image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800', rating: 8.9, year: 2019, genres: 'Action, Supernatural', platform: 'Netflix', popularity: 120000 },
-          { id: 3, title: 'Naruto Shippuden', slug: 'naruto-shippuden', synopsis: 'Intense training...', cover_image: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800', rating: 8.3, year: 2007, genres: 'Action, Adventure', platform: 'Sony YAY!', popularity: 88000 },
-          { id: 4, title: 'Jujutsu Kaisen', slug: 'jujutsu-kaisen', synopsis: 'Cursed spirit...', cover_image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800', rating: 8.8, year: 2020, genres: 'Action, Supernatural', platform: 'Crunchyroll', popularity: 110000 }
-        ],
-        pagination: { total: 4, page: 1, limit: 100, totalPages: 1 }
-      };
-    } else if (path.includes('/api/admin/pending')) {
-      data = { success: true, data: [], total: 0 };
-    } else if (path.includes('/vote-status')) {
-      data = { hasLiked: false, hasUpvoted: false };
-    } else if (path.includes('/notifications')) {
-      data = { notifications: [] };
-    } else if (path.includes('/watchlist')) {
-      data = { watchlist: [] };
-    } else if (path.includes('/chat')) {
-      data = [];
-    }
-
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
   }
 
   /**
@@ -191,12 +165,10 @@ class CloudflareApiService {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      console.warn(`[API Notice] GET ${url} received status ${res.status}: ${errText}. Using fallback catalog.`);
-      const mockRes = this.getMockResponse(endpoint);
-      const json = await mockRes.json();
+      console.warn(`[API Notice] GET ${url} received status ${res.status}: ${errText}.`);
       return {
-        data: json.data || [],
-        total: json.pagination?.total || 4,
+        data: [],
+        total: 0,
         page: options.page || 1,
         totalPages: 1
       };
@@ -204,21 +176,16 @@ class CloudflareApiService {
 
     const contentType = (res.headers.get('content-type') || '').toLowerCase();
     if (!contentType.includes('application/json')) {
-      console.warn(`[API Notice] Received non-JSON content type (${contentType}) from ${url}. Using fallback catalog.`);
-      const mockRes = this.getMockResponse(endpoint);
-      const json = await mockRes.json();
+      console.warn(`[API Notice] Received non-JSON content type (${contentType}) from ${url}.`);
       return {
-        data: json.data || [],
-        total: json.pagination?.total || 4,
+        data: [],
+        total: 0,
         page: options.page || 1,
         totalPages: 1
       };
     }
 
-    const json = await res.json().catch(async () => {
-      const mockRes = this.getMockResponse(endpoint);
-      return await mockRes.json();
-    });
+    const json = await res.json().catch(() => ({ data: [] }));
     const data = json.data || (Array.isArray(json) ? json : []);
     const pagination = json.pagination || {
       page: options.page || 1,
@@ -542,18 +509,20 @@ class CloudflareApiService {
   /**
    * VOTE STATUS: Checks if current client device has already voted for this anime
    */
-  public async checkVoteStatus(id: number | string): Promise<{ hasLiked: boolean; hasUpvoted: boolean }> {
+  public async checkVoteStatus(id: number | string, userId?: string): Promise<{ hasLiked: boolean; hasUpvoted: boolean }> {
     try {
-      let currentUserId = 'default_user';
-      try {
-        const session = sessionStorage.getItem('clerk_active_session');
-        if (session) {
-          const parsed = JSON.parse(session);
-          if (parsed?.id) currentUserId = parsed.id;
-        }
-        const clerkUser = (window as any).Clerk?.user;
-        if (clerkUser?.id) currentUserId = clerkUser.id;
-      } catch {}
+      let currentUserId = userId || 'default_user';
+      if (!userId) {
+        try {
+          const session = sessionStorage.getItem('clerk_active_session');
+          if (session) {
+            const parsed = JSON.parse(session);
+            if (parsed?.id) currentUserId = parsed.id;
+          }
+          const clerkUser = (window as any).Clerk?.user;
+          if (clerkUser?.id) currentUserId = clerkUser.id;
+        } catch {}
+      }
 
       const endpoint = `/api/anime/${id}/vote-status?userId=${encodeURIComponent(currentUserId)}`;
       const res = await this.smartFetch(endpoint, {

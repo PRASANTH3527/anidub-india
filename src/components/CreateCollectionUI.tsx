@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { 
+import {
   ArrowLeft, 
   Layers, 
   Check, 
@@ -14,6 +14,7 @@ import {
   X,
   Plus
 } from 'lucide-react';
+import { AniDubLogo } from './AniDubLogo';
 import { Anime } from './CatalogView';
 
 export interface CreateCollectionUIProps {
@@ -109,11 +110,7 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
           </button>
 
           <div className="flex items-center gap-3.5">
-            <img 
-              src="/logo.png" 
-              alt="ANIDUB" 
-              className="h-10 sm:h-12 w-auto object-contain shrink-0 drop-shadow-lg"
-            />
+            <AniDubLogo variant="horizontal" size="md" className="shrink-0 drop-shadow-lg" />
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">

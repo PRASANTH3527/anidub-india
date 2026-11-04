@@ -1,5 +1,6 @@
 import React from 'react';
 import { Play, Star, Calendar, Tv, Sparkles, CloudLightning } from 'lucide-react';
+import { AniDubLogo } from './AniDubLogo';
 
 interface Anime {
   id: number;
@@ -46,11 +47,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ anime, onSelectAnime, on
 
       {/* Brand Watermark Overlay */}
       <div className="absolute top-4 right-4 md:top-6 md:right-6 z-20 pointer-events-none select-none">
-        <img 
-          src="/logo.png" 
-          alt="" 
-          className="h-6 sm:h-8 md:h-10 w-auto object-contain opacity-50 drop-shadow-2xl"
-        />
+        <AniDubLogo variant="horizontal" size="sm" className="opacity-70 drop-shadow-2xl" />
       </div>
 
 

@@ -151,12 +151,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     ]
   );
 
-  const [airingStatus, setAiringStatus] = useState<'Ongoing' | 'Completed'>(() => {
+  const [airingStatus, setAiringStatus] = useState<string>(() => {
     const raw = initialData?.status || (initialData as any)?.airing_status;
     if (raw && typeof raw === 'string') {
       const lower = raw.trim().toLowerCase();
       if (lower === 'completed' || lower === 'finished' || lower.includes('complete')) return 'Completed';
-      if (lower === 'ongoing' || lower === 'airing' || lower.includes('ongoing') || lower.includes('airing')) return 'Ongoing';
+      if (lower === 'airing') return 'Airing';
+      if (lower === 'ongoing' || lower.includes('ongoing')) return 'Ongoing';
+      if (lower === 'upcoming' || lower.includes('upcoming')) return 'Upcoming';
     }
     const rawType = (initialData as any)?.type || (initialData as any)?.Type;
     if (rawType && typeof rawType === 'string' && rawType.toLowerCase().includes('movie')) {
@@ -425,6 +427,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       const parsedYear = releaseYear ? Number(releaseYear) : 2025;
       const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
+      const isAdminTokenPresent = Boolean(typeof window !== 'undefined' && (localStorage.getItem('cf_admin_token') || localStorage.getItem('admin_token')));
+      const resolvedSubmissionStatus = (mode === 'edit' || isAdminTokenPresent) ? 'approved' : 'pending';
+
       const payload = {
         title: title.trim(),
         slug,
@@ -435,7 +440,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         episodes_count: totalEpisodes || 12,
         airing_status: airingStatus,
         status: airingStatus,
-        submissionStatus: mode === 'edit' ? 'approved' : 'pending',
+        submissionStatus: resolvedSubmissionStatus,
         languages: derivedGlobalDubs.join(', '),
         platform: streamingPartners[0]?.name || 'Crunchyroll',
         watch_url: streamingPartners[0]?.url || '',
@@ -449,15 +454,16 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         studio: studio || 'Unknown Studio'
       };
 
+      let savedResult: any = null;
       if (mode === 'edit' && initialData?.id) {
-        await cloudflareApi.updateAnime(initialData.id, payload);
+        savedResult = await cloudflareApi.updateAnime(initialData.id, payload);
       } else {
-        await cloudflareApi.createAnime(payload);
+        savedResult = await cloudflareApi.createAnime(payload);
       }
 
       const fullUpdatedItem = {
         ...payload,
-        id: initialData?.id,
+        id: initialData?.id || savedResult?.animeId || savedResult?.id,
         synopsis: synopsis.trim(),
         status: airingStatus,
         airing_status: airingStatus,
@@ -804,14 +810,16 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                     <select
                       value={airingStatus}
                       onChange={(e) => {
-                        const newStatus = e.target.value as 'Ongoing' | 'Completed';
+                        const newStatus = e.target.value;
                         setAiringStatus(newStatus);
                         setFormData((prev: any) => ({ ...prev, status: newStatus, airing_status: newStatus }));
                       }}
                       className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
                     >
-                      <option value="Ongoing">Ongoing (Simulcast)</option>
                       <option value="Completed">Completed</option>
+                      <option value="Airing">Airing</option>
+                      <option value="Ongoing">Ongoing (Simulcast)</option>
+                      <option value="Upcoming">Upcoming</option>
                     </select>
                   </div>
 

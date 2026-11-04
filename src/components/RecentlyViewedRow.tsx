@@ -33,7 +33,7 @@ export interface RecentlyViewedRowProps {
 }
 
 const parseLanguageBadges = (raw?: string): string[] => {
-  if (!raw) return ['Hin', 'Tam'];
+  if (!raw) return [];
   return raw
     .split(/[,/| ]+/)
     .map(s => s.trim())
