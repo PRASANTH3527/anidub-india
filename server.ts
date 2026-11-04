@@ -1317,10 +1317,17 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       const platform = (row.platform || row.Platform || 'Crunchyroll').toString().trim();
       const languages = (row.languages || row.Languages || 'Tamil, Hindi').toString().trim();
       const episodes_count = parseInt(row.episodes_count || row.episodes || 12, 10) || 12;
-      const rawStatus = (row.status || row.airing_status || row.state || row.completion || row.status_type || '').toString().trim();
-      const resolvedStatus = rawStatus 
-        ? (rawStatus.toLowerCase() === 'completed' ? 'Completed' : rawStatus.toLowerCase() === 'upcoming' ? 'Upcoming' : rawStatus.toLowerCase() === 'airing' ? 'Airing' : rawStatus.toLowerCase() === 'ongoing' ? 'Ongoing' : rawStatus)
-        : 'Airing';
+      const rawStatus = (row.status || row.airing_status || row.state || row.completion || row.status_type || '').toString().trim().toLowerCase();
+      let resolvedStatus = 'Airing';
+      if (['complete', 'completed', 'finished', 'ended'].includes(rawStatus)) {
+        resolvedStatus = 'Completed';
+      } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(rawStatus)) {
+        resolvedStatus = 'Upcoming';
+      } else if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(rawStatus)) {
+        resolvedStatus = 'Airing';
+      } else if (rawStatus) {
+        resolvedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+      }
 
       const cover_image = row.cover_image || row.poster || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
       const banner_image = row.banner_image || row['Banner Image'] || cover_image;

@@ -319,7 +319,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   // 5. GET /api/anime/:id, DELETE /api/anime/:id, PUT /api/anime/:id
-  const animeIdMatch = path.match(/^\/api\/anime\/([0-9a-zA-Z_-]+)$/);
+  const animeIdMatch = path.match(/^\/api\/anime\/([0-9a-zA-Z_-]+)\/?$/);
   if (animeIdMatch) {
     const id = animeIdMatch[1];
     if (method === 'GET') {
@@ -347,24 +347,46 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       try {
         const body: any = await request.json().catch(() => ({}));
         const incomingStatus = (body.status || body.airing_status || '').trim();
-        if (incomingStatus) {
-          await env.DB.prepare("UPDATE anime SET status = ? WHERE id = ? OR slug = ?").bind(incomingStatus, id, id).run();
-        }
-        if (body.title) {
-          await env.DB.prepare("UPDATE anime SET title = ? WHERE id = ? OR slug = ?").bind(body.title, id, id).run();
-        }
-        if (body.rating !== undefined) {
-          await env.DB.prepare("UPDATE anime SET rating = ? WHERE id = ? OR slug = ?").bind(parseFloat(body.rating) || 8.5, id, id).run();
-        }
-        if (body.cover_image) {
-          await env.DB.prepare("UPDATE anime SET cover_image = ? WHERE id = ? OR slug = ?").bind(body.cover_image, id, id).run();
-        }
-        if (body.type || body.Type) {
-          await env.DB.prepare("UPDATE anime SET type = ? WHERE id = ? OR slug = ?").bind(body.type || body.Type, id, id).run();
-        }
-        if (body.submissionStatus) {
-          await env.DB.prepare("UPDATE anime SET submissionStatus = ? WHERE id = ? OR slug = ?").bind(body.submissionStatus, id, id).run();
-        }
+        const resolvedType = body.type || body.Type || null;
+
+        await env.DB.prepare(
+          `UPDATE anime SET 
+            title = COALESCE(?, title),
+            synopsis = COALESCE(?, synopsis),
+            cover_image = COALESCE(?, cover_image),
+            banner_image = COALESCE(?, banner_image),
+            rating = COALESCE(?, rating),
+            episodes_count = COALESCE(?, episodes_count),
+            status = COALESCE(?, status),
+            submissionStatus = COALESCE(?, submissionStatus),
+            season = COALESCE(?, season),
+            year = COALESCE(?, year),
+            genres = COALESCE(?, genres),
+            languages = COALESCE(?, languages),
+            platform = COALESCE(?, platform),
+            type = COALESCE(?, type),
+            studio = COALESCE(?, studio)
+          WHERE id = ? OR slug = ?`
+        ).bind(
+          body.title || null,
+          body.synopsis || null,
+          body.cover_image || null,
+          body.banner_image || null,
+          body.rating !== undefined ? parseFloat(body.rating) : null,
+          body.episodes_count !== undefined ? parseInt(body.episodes_count) : null,
+          incomingStatus || null,
+          body.submissionStatus || null,
+          body.season || null,
+          body.year !== undefined ? parseInt(body.year) : null,
+          body.genres || null,
+          body.languages || null,
+          body.platform || null,
+          resolvedType,
+          body.studio || null,
+          id,
+          id
+        ).run();
+
         return jsonResponse({ success: true, id, status: incomingStatus });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
@@ -378,7 +400,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   // 6. Specific Anime Sub-Routes (/api/anime/:id/(reviews|like|vote|vote-status))
-  const animeSubMatch = path.match(/^\/api\/anime\/([0-9a-zA-Z_-]+)\/(reviews|like|likes|vote|upvote|vote-status)$/);
+  const animeSubMatch = path.match(/^\/api\/anime\/([0-9a-zA-Z_-]+)\/(reviews|like|likes|vote|upvote|vote-status)\/?$/);
   if (animeSubMatch) {
     const id = animeSubMatch[1];
     const sub = animeSubMatch[2];
@@ -712,10 +734,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const cover_image = row.cover_image || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
         const banner_image = row.banner_image || row['Banner Image'] || cover_image;
 
-        const rawStatus = (row.status || row.airing_status || row.state || row.completion || row.status_type || '').toString().trim();
-        const resolvedStatus = rawStatus 
-          ? (rawStatus.toLowerCase() === 'completed' ? 'Completed' : rawStatus.toLowerCase() === 'upcoming' ? 'Upcoming' : rawStatus.toLowerCase() === 'airing' ? 'Airing' : rawStatus.toLowerCase() === 'ongoing' ? 'Ongoing' : rawStatus)
-          : 'Airing';
+        const rawStatus = (row.status || row.airing_status || row.state || row.completion || row.status_type || '').toString().trim().toLowerCase();
+        let resolvedStatus = 'Airing';
+        if (['complete', 'completed', 'finished', 'ended'].includes(rawStatus)) {
+          resolvedStatus = 'Completed';
+        } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(rawStatus)) {
+          resolvedStatus = 'Upcoming';
+        } else if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(rawStatus)) {
+          resolvedStatus = 'Airing';
+        } else if (rawStatus) {
+          resolvedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+        }
 
         if (env.DB) {
           await env.DB.prepare(
@@ -733,7 +762,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   // 10e. POST /api/admin/approve/:id & /api/admin/reject/:id
-  const approveMatch = path.match(/^\/api\/admin\/approve\/([0-9a-zA-Z_-]+)$/);
+  const approveMatch = path.match(/^\/api\/admin\/approve\/([0-9a-zA-Z_-]+)\/?$/);
   if (approveMatch && method === 'POST') {
     const id = approveMatch[1];
     const body: any = await request.json().catch(() => ({}));
@@ -744,7 +773,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return jsonResponse({ success: true, id, status: targetStatus, submissionStatus: 'approved' });
   }
 
-  const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)$/);
+  const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)\/?$/);
   if (rejectMatch && method === 'POST') {
     const id = rejectMatch[1];
     if (env.DB) {

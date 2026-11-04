@@ -155,16 +155,17 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     const raw = initialData?.status || (initialData as any)?.airing_status;
     if (raw && typeof raw === 'string') {
       const lower = raw.trim().toLowerCase();
-      if (lower === 'completed' || lower === 'finished' || lower.includes('complete')) return 'Completed';
-      if (lower === 'airing') return 'Airing';
-      if (lower === 'ongoing' || lower.includes('ongoing')) return 'Ongoing';
-      if (lower === 'upcoming' || lower.includes('upcoming')) return 'Upcoming';
+      if (['complete', 'completed', 'finished', 'ended'].includes(lower) || lower.includes('complete')) return 'Completed';
+      if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(lower) || lower.includes('upcoming')) return 'Upcoming';
+      if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(lower) || lower.includes('airing')) return 'Airing';
+      if (['ongoing'].includes(lower) || lower.includes('ongoing')) return 'Ongoing';
+      return raw.charAt(0).toUpperCase() + raw.slice(1);
     }
     const rawType = (initialData as any)?.type || (initialData as any)?.Type;
     if (rawType && typeof rawType === 'string' && rawType.toLowerCase().includes('movie')) {
       return 'Completed';
     }
-    return 'Completed';
+    return 'Airing';
   });
   const [releaseDay, setReleaseDay] = useState<string>('Saturday');
 
@@ -196,20 +197,22 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       // State Initialization: When the Edit Modal opens and sets its state, make sure the type property is explicitly included
       const anime = initialData as any;
       const rawStatus = initDataAny?.status || (initialData as any)?.status || (initialData as any)?.airing_status;
-      let resolvedStatus: 'Ongoing' | 'Completed' = 'Completed';
+      let resolvedStatus = 'Airing';
       if (rawStatus && typeof rawStatus === 'string') {
         const s = rawStatus.trim().toLowerCase();
-        if (s === 'completed' || s === 'finished' || s.includes('complete') || s.includes('finish')) {
+        if (['complete', 'completed', 'finished', 'ended'].includes(s) || s.includes('complete')) {
           resolvedStatus = 'Completed';
-        } else if (cleanType === 'Movie') {
-          resolvedStatus = s.includes('ongoing') || s.includes('airing') ? 'Ongoing' : 'Completed';
-        } else if (s === 'ongoing' || s === 'airing' || s.includes('ongoing') || s.includes('airing')) {
+        } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(s) || s.includes('upcoming')) {
+          resolvedStatus = 'Upcoming';
+        } else if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(s) || s.includes('airing')) {
+          resolvedStatus = 'Airing';
+        } else if (['ongoing'].includes(s) || s.includes('ongoing')) {
           resolvedStatus = 'Ongoing';
         } else {
-          resolvedStatus = 'Completed';
+          resolvedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
         }
       } else {
-        resolvedStatus = cleanType === 'Movie' ? 'Completed' : 'Ongoing';
+        resolvedStatus = cleanType === 'Movie' ? 'Completed' : 'Airing';
       }
 
       setFormData({ 

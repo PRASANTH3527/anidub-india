@@ -545,8 +545,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             throw new Error('CSV parsing failed: Check header format');
           }
 
+          const cleanedRows = parsedRows.map((row: any) => {
+            const rawStatus = (row.status || row.Status || row.airing_status || row.Airing_Status || row.state || row.completion || row.status_type || '').toString().trim().toLowerCase();
+            let resolvedStatus = 'Airing';
+            if (['complete', 'completed', 'finished', 'ended'].includes(rawStatus) || rawStatus.includes('complete')) {
+              resolvedStatus = 'Completed';
+            } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(rawStatus) || rawStatus.includes('upcoming')) {
+              resolvedStatus = 'Upcoming';
+            } else if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(rawStatus) || rawStatus.includes('airing')) {
+              resolvedStatus = 'Airing';
+            } else if (rawStatus.includes('ongoing')) {
+              resolvedStatus = 'Ongoing';
+            } else if (rawStatus) {
+              resolvedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+            }
+            return {
+              ...row,
+              status: resolvedStatus
+            };
+          });
+
           addTerminalLog('CSV', 'Uploading parsed CSV rows to Cloudflare D1 moderation queue...');
-          const res = await cloudflareApi.uploadCSV({ animeList: parsedRows });
+          const res = await cloudflareApi.uploadCSV({ animeList: cleanedRows });
           
           const count = res.count || parsedRows.length;
           const skipped = res.skipped || 0;
