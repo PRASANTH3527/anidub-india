@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS anime (
   type TEXT DEFAULT 'TV Series',
   studio TEXT DEFAULT 'Unknown Studio',
   submissionStatus TEXT DEFAULT 'approved',
+  approval_status TEXT DEFAULT 'approved',
+  is_published INTEGER DEFAULT 0,
   episodes_per_season TEXT DEFAULT '',
   mixedEntries TEXT DEFAULT '',
   watch_url TEXT DEFAULT '',
@@ -144,7 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at
 INSERT OR IGNORE INTO anime (
   id, title, slug, synopsis, cover_image, banner_image, 
   rating, episodes_count, status, season, year, genres, 
-  popularity, languages, platform, type, studio, submissionStatus
+  popularity, languages, platform, type, studio, submissionStatus, approval_status, is_published
 ) VALUES 
 (
   1, 
@@ -154,7 +156,7 @@ INSERT OR IGNORE INTO anime (
   'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800', 
   'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800', 
   8.7, 12, 'Completed', 'Winter', 2024, 'Action, Fantasy, Adventure', 
-  95000, 'Hindi, Tamil, Telugu, English, Japanese', 'Crunchyroll', 'TV Series', 'A-1 Pictures', 'approved'
+  95000, 'Hindi, Tamil, Telugu, English, Japanese', 'Crunchyroll', 'TV Series', 'A-1 Pictures', 'approved', 'approved', 1
 ),
 (
   2, 
@@ -164,7 +166,7 @@ INSERT OR IGNORE INTO anime (
   'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800', 
   'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800', 
   8.9, 26, 'Completed', 'Spring', 2019, 'Action, Supernatural', 
-  120000, 'Hindi, Tamil, Telugu, English', 'Netflix', 'TV Series', 'ufotable', 'approved'
+  120000, 'Hindi, Tamil, Telugu, English', 'Netflix', 'TV Series', 'ufotable', 'approved', 'approved', 1
 ),
 (
   3, 
@@ -174,7 +176,7 @@ INSERT OR IGNORE INTO anime (
   'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800', 
   'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800', 
   8.3, 500, 'Completed', 'Winter', 2007, 'Action, Adventure', 
-  88000, 'Hindi, Tamil', 'Sony YAY!', 'TV Series', 'Studio Pierrot', 'approved'
+  88000, 'Hindi, Tamil', 'Sony YAY!', 'TV Series', 'Studio Pierrot', 'approved', 'approved', 1
 ),
 (
   4, 
@@ -184,5 +186,5 @@ INSERT OR IGNORE INTO anime (
   'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800', 
   'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800', 
   8.8, 24, 'Completed', 'Fall', 2020, 'Action, Supernatural', 
-  110000, 'Hindi, Tamil, Telugu, English', 'Crunchyroll', 'TV Series', 'MAPPA', 'approved'
+  110000, 'Hindi, Tamil, Telugu, English', 'Crunchyroll', 'TV Series', 'MAPPA', 'approved', 'approved', 1
 );

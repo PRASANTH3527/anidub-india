@@ -689,13 +689,17 @@ class CloudflareApiService {
    */
   public async sendChatMessage(payload: any): Promise<{ success: boolean; message?: any; error?: string }> {
     try {
+      const headers: Record<string, string> = {
+        ...this.getHeaders(false),
+        ...(payload.clerk_user_id ? { 'x-clerk-user-id': String(payload.clerk_user_id) } : {})
+      };
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
         method: 'POST',
-        headers: this.getHeaders(false),
+        headers,
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success !== false) {
         return { success: true, message: data };
       }
       return { success: false, error: data.error || 'Failed to send message' };

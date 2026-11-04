@@ -546,23 +546,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }
 
           const cleanedRows = parsedRows.map((row: any) => {
-            const rawStatus = (row.status || row.Status || row.airing_status || row.Airing_Status || row.state || row.completion || row.status_type || '').toString().trim().toLowerCase();
-            let resolvedStatus = 'Airing';
-            if (['complete', 'completed', 'finished', 'ended'].includes(rawStatus) || rawStatus.includes('complete')) {
-              resolvedStatus = 'Completed';
-            } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(rawStatus) || rawStatus.includes('upcoming')) {
-              resolvedStatus = 'Upcoming';
-            } else if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(rawStatus) || rawStatus.includes('airing')) {
-              resolvedStatus = 'Airing';
-            } else if (rawStatus.includes('ongoing')) {
-              resolvedStatus = 'Ongoing';
-            } else if (rawStatus) {
-              resolvedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+            // Aggressive case-insensitive studio mapping
+            let mappedStudio = '';
+            if (row.Studio !== undefined && row.Studio !== null && String(row.Studio).trim() !== '') {
+              mappedStudio = String(row.Studio).trim();
+            } else if (row.studio !== undefined && row.studio !== null && String(row.studio).trim() !== '') {
+              mappedStudio = String(row.studio).trim();
+            } else if (row.STUDIO !== undefined && row.STUDIO !== null && String(row.STUDIO).trim() !== '') {
+              mappedStudio = String(row.STUDIO).trim();
+            } else if (row['Studio Name'] || row['studio_name'] || row['Studio_Name'] || row.studio_name) {
+              mappedStudio = String(row['Studio Name'] || row['studio_name'] || row['Studio_Name'] || row.studio_name).trim();
+            } else if (row.animation_studio || row.Animation_Studio || row.AnimationStudio || row['Animation Studio'] || row.animationstudio) {
+              mappedStudio = String(row.animation_studio || row.Animation_Studio || row.AnimationStudio || row['Animation Studio'] || row.animationstudio).trim();
+            } else {
+              const studioKey = Object.keys(row).find(k => {
+                const clean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+                return clean === 'studio' || clean.includes('studio') || clean.includes('animationstudio');
+              });
+              if (studioKey && row[studioKey]) {
+                mappedStudio = String(row[studioKey]).trim();
+              }
             }
+
+            const rawStatus = (row.status || row.Status || row.airing_status || row.Airing_Status || row.state || row.completion || row.status_type || '').toString().trim().toLowerCase();
+            let resolvedAiringStatus = 'Airing';
+            if (['complete', 'completed', 'finished', 'ended'].includes(rawStatus) || rawStatus.includes('complete')) {
+              resolvedAiringStatus = 'Completed';
+            } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(rawStatus) || rawStatus.includes('upcoming')) {
+              resolvedAiringStatus = 'Upcoming';
+            } else if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(rawStatus) || rawStatus.includes('airing')) {
+              resolvedAiringStatus = 'Airing';
+            } else if (rawStatus.includes('ongoing')) {
+              resolvedAiringStatus = 'Ongoing';
+            } else if (rawStatus) {
+              resolvedAiringStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+            }
+
             return {
               ...row,
-              status: resolvedStatus,
-              studio: row.studio || row.animation_studio || row.animationstudio || 'Unknown Studio'
+              studio: mappedStudio || 'Unknown Studio',
+              Studio: mappedStudio || 'Unknown Studio',
+              // Forcefully set is_published to false and status to pending for ALL CSV uploads
+              status: 'pending',
+              submissionStatus: 'pending',
+              approval_status: 'pending',
+              is_published: false,
+              airing_status: resolvedAiringStatus
             };
           });
 

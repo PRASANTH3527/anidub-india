@@ -62,7 +62,7 @@ const parseLanguageBadges = (raw?: string): string[] => {
     .slice(0, 3);
 };
 
-export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
+const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
   items,
   onSelectAnime,
   onClear,
@@ -230,7 +230,9 @@ export const RecentlyViewedRow: React.FC<RecentlyViewedRowProps> = ({
           );
         })}
       </div>
-
     </div>
   );
 };
+
+export const RecentlyViewedRow = React.memo(RecentlyViewedRowComponent);
+export default RecentlyViewedRow;

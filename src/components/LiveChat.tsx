@@ -337,8 +337,8 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   const sendMessage = async (
     text: string, 
     extra: { isReview?: boolean; rating?: number | null; language?: string | null } = {}
-  ) => {
-    if (!text.trim()) return;
+  ): Promise<boolean> => {
+    if (!text.trim()) return false;
 
     const payload: ChatMessage & { clerk_user_id?: string } = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -352,72 +352,81 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       clerk_user_id: user?.id || localStorage.getItem('anidub_device_fp') || 'guest'
     };
 
-    // 1) Instantly update local state & LocalStorage
-    setMessages(prev => {
-      const merged = mergeMessageLists(prev, [payload]);
-      try {
-        localStorage.setItem('cf_community_chat', JSON.stringify(merged));
-      } catch {}
-      return merged;
-    });
-
-    // 2) Broadcast over WebSocket if open
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      try {
-        wsRef.current.send(JSON.stringify(payload));
-      } catch (err) {
-        console.error('WebSocket send error:', err);
-      }
-    }
-
-    // 3) Persist to Backend D1 / SQLite Database via HTTP POST
+    // 1) Persist to Backend D1 / SQLite Database via HTTP POST with impersonation validation
     try {
       const resp = await cloudflareApi.sendChatMessage(payload);
       if (!resp.success) {
         throw new Error(resp.error || 'Failed to post message');
       }
+
+      // 2) Update local state & LocalStorage once verified by database
+      setMessages(prev => {
+        const merged = mergeMessageLists(prev, [payload]);
+        try {
+          localStorage.setItem('cf_community_chat', JSON.stringify(merged));
+        } catch {}
+        return merged;
+      });
+
+      // 3) Broadcast over WebSocket if open
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify(payload));
+        } catch (err) {
+          console.error('WebSocket send error:', err);
+        }
+      }
+
+      setChatError(null);
+      return true;
     } catch (err: any) {
       console.warn('Network persistence note:', err);
       const errMsg = err.message || '';
-      if (errMsg.includes('already claimed') || errMsg.includes('taken')) {
+      if (errMsg.includes('already claimed') || errMsg.includes('claimed by another') || errMsg.includes('taken')) {
         setChatError('Name taken, please choose another or use Randomize');
       } else {
         setChatError(errMsg || 'Failed to post message');
       }
-      setTimeout(() => setChatError(null), 6000);
+      setTimeout(() => setChatError(null), 8000);
+      return false;
     }
   };
 
-  const handleSendMessageSubmit = (e: React.FormEvent) => {
+  const handleSendMessageSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMessage.trim()) return;
+    const trimmed = inputMessage.trim();
+    if (!trimmed) return;
 
+    let success = false;
     if (mode === 'review') {
-      sendMessage(inputMessage.trim(), {
+      success = await sendMessage(trimmed, {
         isReview: true,
         rating: reviewRating,
         language: reviewLang
       });
     } else {
-      sendMessage(inputMessage.trim());
+      success = await sendMessage(trimmed);
     }
 
-    setInputMessage('');
+    if (success) {
+      setInputMessage('');
 
-    // Ensure user's new message is scrolled into view within the container
-    if (chatContainerRef.current) {
-      setTimeout(() => {
-        if (chatContainerRef.current) {
-          chatContainerRef.current.scrollTo({
-            top: chatContainerRef.current.scrollHeight,
-            behavior: 'smooth'
-          });
-        }
-      }, 50);
+      // Ensure user's new message is scrolled into view within the container
+      if (chatContainerRef.current) {
+        setTimeout(() => {
+          if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTo({
+              top: chatContainerRef.current.scrollHeight,
+              behavior: 'smooth'
+            });
+          }
+        }, 50);
+      }
     }
   };
 
   const handleRandomizeName = () => {
+    setChatError(null);
     const char = ANIME_CHARACTERS[Math.floor(Math.random() * ANIME_CHARACTERS.length)];
     const suffix = getClerkSuffix(user?.id);
     const chosen = `${char}_${suffix}`;
@@ -617,9 +626,18 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
         {/* Input Form */}
         {chatError && (
-          <div className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-[11px] font-medium flex items-center gap-2">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            {chatError}
+          <div className="px-3.5 py-2.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs font-semibold flex items-center justify-between gap-2 shadow-lg animate-pulse">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <span>{chatError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRandomizeName}
+              className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-white text-[11px] font-bold tracking-wide uppercase transition-all shrink-0 cursor-pointer"
+            >
+              🎲 Randomize
+            </button>
           </div>
         )}
         <form onSubmit={handleSendMessageSubmit} className="space-y-3">
@@ -632,10 +650,13 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
               type="text"
               value={guestName}
               onChange={(e) => {
+                setChatError(null);
                 setGuestName(e.target.value);
                 localStorage.setItem('anidub_guest_chat_name', e.target.value);
               }}
-              className="bg-black/50 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-purple-400 w-36 sm:w-44 shadow-inner"
+              className={`bg-black/50 border rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none w-36 sm:w-44 shadow-inner transition-colors ${
+                chatError ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-white/10 focus:border-purple-400'
+              }`}
               placeholder="Your nickname"
             />
             <button

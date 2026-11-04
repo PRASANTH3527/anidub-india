@@ -73,12 +73,13 @@ async function sendTelegramAlert(env: Env, text: string, photoUrl?: string) {
   }
 }
 
-function jsonResponse(data: any, status = 200, request?: Request) {
+function jsonResponse(data: any, status = 200, request?: Request, extraHeaders?: Record<string, string>) {
   const origin = request ? (request.headers.get("Origin") || request.headers.get("origin") || "*") : "*";
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token, x-device-id'
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token, x-device-id',
+    ...(extraHeaders || {})
   };
 
   if (origin !== "*") {
@@ -196,6 +197,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         try {
           let whereClauses: string[] = [];
           let params: any[] = [];
+
+          const includePending = url.searchParams.get('includePending') === 'true';
+          if (!includePending) {
+            whereClauses.push("(is_published = 1 OR is_published = true) AND status != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL)");
+          }
+
           if (genre && genre !== 'All') {
             whereClauses.push("genres LIKE ?");
             params.push(`%${genre}%`);
@@ -223,6 +230,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             return jsonResponse({
               data: dataRes.results || [],
               pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 }
+            }, 200, request, {
+              'Cache-Control': 'public, max-age=60, s-maxage=120, stale-while-revalidate=300'
             });
           }
         } catch (dbErr) {
@@ -238,6 +247,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           total: 0, 
           totalPages: 1 
         }
+      }, 200, request, {
+        'Cache-Control': 'public, max-age=60, s-maxage=120, stale-while-revalidate=300'
       });
     } catch (err: any) {
       return jsonResponse({ error: err.message }, 500);
@@ -333,6 +344,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               ...anime,
               episodes: episodes.results || [],
               reviews: reviews.results || []
+            }, 200, request, {
+              'Cache-Control': 'public, max-age=60, s-maxage=120, stale-while-revalidate=300'
             });
           }
         }
@@ -642,6 +655,136 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
+  // 9b. GET /api/chat & POST /api/chat (Live Community Chat with Clerk Username Impersonation Check)
+  if (path === '/api/chat' || path === '/api/chat/messages') {
+    if (method === 'GET') {
+      try {
+        if (env.DB) {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS chat_messages (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user TEXT NOT NULL,
+              text TEXT NOT NULL,
+              timestamp TEXT NOT NULL,
+              rating REAL,
+              language TEXT,
+              isReview INTEGER DEFAULT 0,
+              clerk_user_id TEXT,
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+          `).run().catch(() => {});
+
+          const res = await env.DB.prepare(
+            "SELECT id, user, text, timestamp, rating, language, isReview, clerk_user_id, created_at FROM chat_messages ORDER BY id ASC LIMIT 150"
+          ).all();
+          const list = (res.results || []).map((m: any) => ({
+            ...m,
+            isReview: Boolean(m.isReview)
+          }));
+          return jsonResponse({ success: true, count: list.length, messages: list, data: list });
+        }
+        return jsonResponse({ success: true, count: 0, messages: [], data: [] });
+      } catch (err: any) {
+        return jsonResponse({ error: err.message, messages: [] }, 500);
+      }
+    }
+
+    if (method === 'POST') {
+      try {
+        const body: any = await request.json().catch(() => ({}));
+        const { user, text, timestamp, rating, language, isReview, clerk_user_id } = body;
+        if (!text || !String(text).trim()) {
+          return jsonResponse({ error: "Missing message text" }, 400);
+        }
+
+        const cleanUser = String(user || 'Anonymous Fan').trim().slice(0, 50);
+        const cleanClerkId = String(
+          clerk_user_id || 
+          request.headers.get('x-clerk-user-id') || 
+          request.headers.get('authorization') || 
+          'guest'
+        ).trim();
+        const cleanText = String(text).slice(0, 1000);
+        const cleanTimestamp = String(timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        const cleanRating = rating !== undefined && rating !== null ? Number(rating) : null;
+        const cleanLanguage = language ? String(language).slice(0, 30) : null;
+        const cleanIsReview = isReview ? 1 : 0;
+
+        if (env.DB) {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS chat_messages (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user TEXT NOT NULL,
+              text TEXT NOT NULL,
+              timestamp TEXT NOT NULL,
+              rating REAL,
+              language TEXT,
+              isReview INTEGER DEFAULT 0,
+              clerk_user_id TEXT,
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+          `).run().catch(() => {});
+          try {
+            await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN clerk_user_id TEXT").run().catch(() => {});
+          } catch {}
+
+          // 1. Check if this exact username has been claimed by someone else in the database
+          const checkRes = await env.DB.prepare(
+            "SELECT DISTINCT clerk_user_id FROM chat_messages WHERE LOWER(TRIM(user)) = LOWER(?) AND clerk_user_id IS NOT NULL AND clerk_user_id != ''"
+          ).bind(cleanUser).all();
+
+          const existingOwners = checkRes.results || [];
+          const claimedByOther = existingOwners.some((row: any) => 
+            row.clerk_user_id && String(row.clerk_user_id).trim() !== cleanClerkId
+          );
+
+          if (claimedByOther) {
+            return jsonResponse({
+              success: false,
+              error: "This username is already claimed by another user."
+            }, 400);
+          }
+
+          const insertRes = await env.DB.prepare(
+            "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview, clerk_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+          ).bind(cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId).run();
+
+          const insertedId = insertRes.meta?.last_row_id || Date.now();
+
+          return jsonResponse({
+            success: true,
+            message: {
+              id: insertedId,
+              user: cleanUser,
+              text: cleanText,
+              timestamp: cleanTimestamp,
+              rating: cleanRating,
+              language: cleanLanguage,
+              isReview: Boolean(cleanIsReview),
+              clerk_user_id: cleanClerkId
+            }
+          }, 201);
+        }
+
+        return jsonResponse({
+          success: true,
+          message: {
+            id: Date.now(),
+            user: cleanUser,
+            text: cleanText,
+            timestamp: cleanTimestamp,
+            rating: cleanRating,
+            language: cleanLanguage,
+            isReview: Boolean(cleanIsReview),
+            clerk_user_id: cleanClerkId
+          }
+        });
+      } catch (err: any) {
+        return jsonResponse({ error: err.message }, 500);
+      }
+    }
+  }
+
   // 10. POST /api/feedback
   if (path === '/api/feedback' && method === 'POST') {
     try {
@@ -746,11 +889,43 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           resolvedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
         }
 
+        let studio = '';
+        if (row.Studio !== undefined && row.Studio !== null && String(row.Studio).trim() !== '') {
+          studio = String(row.Studio).trim();
+        } else if (row.studio !== undefined && row.studio !== null && String(row.studio).trim() !== '') {
+          studio = String(row.studio).trim();
+        } else if (row.STUDIO !== undefined && row.STUDIO !== null && String(row.STUDIO).trim() !== '') {
+          studio = String(row.STUDIO).trim();
+        } else if (row['Studio Name'] || row['studio_name'] || row['Studio_Name'] || row.studio_name) {
+          studio = String(row['Studio Name'] || row['studio_name'] || row['Studio_Name'] || row.studio_name).trim();
+        } else if (row.animation_studio || row.Animation_Studio || row.AnimationStudio || row['Animation Studio'] || row.animationstudio) {
+          studio = String(row.animation_studio || row.Animation_Studio || row.AnimationStudio || row['Animation Studio'] || row.animationstudio).trim();
+        } else {
+          const studioKey = Object.keys(row).find(k => {
+            const clean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return clean === 'studio' || clean.includes('studio') || clean.includes('animationstudio');
+          });
+          if (studioKey && row[studioKey]) {
+            studio = String(row[studioKey]).trim();
+          }
+        }
+        if (!studio) studio = 'Unknown Studio';
+
+        const resolvedType = (row.type || row.Type || 'TV Series').toString().trim();
+        const episodesCount = parseInt(row.episodes_count || row.episodes || '12', 10) || 12;
+
         if (env.DB) {
-          await env.DB.prepare(
-            `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Spring', ?, ?, 0, ?, ?, 'TV Series')`
-          ).bind(title, slug, synopsis, cover_image, banner_image, rating, 12, resolvedStatus, 'approved', year, genres, languages, platform).run();
+          try {
+            await env.DB.prepare(
+              `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?)`
+            ).bind(title, slug, synopsis, cover_image, banner_image, rating, episodesCount, year, genres, languages, platform, resolvedType, studio, String(episodesCount)).run();
+          } catch {
+            await env.DB.prepare(
+              `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, is_published, season, year, genres, popularity, languages, platform, type, studio)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?)`
+            ).bind(title, slug, synopsis, cover_image, banner_image, rating, episodesCount, year, genres, languages, platform, resolvedType, studio).run();
+          }
         }
         insertedCount++;
       }
@@ -768,9 +943,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     const body: any = await request.json().catch(() => ({}));
     const targetStatus = (body.status || body.airing_status || '').trim() || 'Completed';
     if (env.DB) {
-      await env.DB.prepare("UPDATE anime SET status = ?, submissionStatus = 'approved' WHERE id = ?").bind(targetStatus, id).run();
+      await env.DB.prepare("UPDATE anime SET status = ?, submissionStatus = 'approved', approval_status = 'approved', is_published = 1 WHERE id = ?").bind(targetStatus, id).run();
     }
-    return jsonResponse({ success: true, id, status: targetStatus, submissionStatus: 'approved' });
+    return jsonResponse({ success: true, id, status: targetStatus, submissionStatus: 'approved', approval_status: 'approved', is_published: 1 });
   }
 
   const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)\/?$/);

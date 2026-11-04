@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { 
   MessageSquare, 
   Radio, 
@@ -9,9 +9,11 @@ import {
   Volume2, 
   Flame, 
   Database,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
-import { LiveChat } from './LiveChat';
+
+const LiveChat = React.lazy(() => import('./LiveChat').then(m => ({ default: m.LiveChat })));
 
 interface CommunityChatViewProps {
   onNavigateToCatalog: () => void;
@@ -68,7 +70,14 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
         
         {/* LEFT / CENTER: FULL LIVE CHAT COMPONENT */}
         <div className="lg:col-span-8 space-y-4">
-          <LiveChat className="w-full" />
+          <Suspense fallback={
+            <div className="min-h-[420px] rounded-3xl bg-white/[0.03] border border-white/10 flex flex-col items-center justify-center p-8 space-y-3">
+              <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+              <span className="text-xs text-neutral-400 font-medium">Connecting to Live Community Chat...</span>
+            </div>
+          }>
+            <LiveChat className="w-full" />
+          </Suspense>
         </div>
 
         {/* RIGHT: DUB CHANNELS, TOPICS & RULES SIDEBAR */}

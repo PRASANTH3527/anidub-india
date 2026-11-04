@@ -65,7 +65,7 @@ export const ParallaxCard: React.FC<{ children: React.ReactNode; className?: str
   );
 };
 
-export const AnimeCard: React.FC<AnimeCardProps> = ({
+const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   anime,
   onSelect,
   index = 0,
@@ -378,6 +378,10 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
           <img
             src={getCleanCover()}
             alt={anime.title}
+            loading="lazy"
+            decoding="async"
+            width={300}
+            height={420}
             onError={(e) => {
               e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
             }}
@@ -640,3 +644,5 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
     </ParallaxCard>
   );
 };
+
+export const AnimeCard = React.memo(AnimeCardComponent);

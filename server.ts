@@ -316,6 +316,18 @@ function runMigrations() {
       year INTEGER DEFAULT 2026,
       genres TEXT NOT NULL,
       popularity INTEGER DEFAULT 0,
+      languages TEXT DEFAULT 'HIN,TAM,TEL',
+      platform TEXT DEFAULT 'Crunchyroll',
+      type TEXT DEFAULT 'TV Series',
+      studio TEXT DEFAULT 'Unknown Studio',
+      submissionStatus TEXT DEFAULT 'pending',
+      approval_status TEXT DEFAULT 'pending',
+      is_published INTEGER DEFAULT 0,
+      episodes_per_season TEXT DEFAULT '',
+      mixedEntries TEXT DEFAULT '',
+      likesCount INTEGER DEFAULT 0,
+      likes INTEGER DEFAULT 0,
+      upvotes INTEGER DEFAULT 0,
       watch_url TEXT DEFAULT '',
       platforms_data TEXT DEFAULT '',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -326,12 +338,20 @@ function runMigrations() {
   try { db.run("ALTER TABLE anime ADD COLUMN platform TEXT DEFAULT 'Crunchyroll';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN type TEXT DEFAULT 'TV Series';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN studio TEXT DEFAULT 'Unknown Studio';"); } catch (e) {}
-  try { db.run("ALTER TABLE anime ADD COLUMN submissionStatus TEXT DEFAULT 'approved';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN submissionStatus TEXT DEFAULT 'pending';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN approval_status TEXT DEFAULT 'pending';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN is_published INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT '';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN mixedEntries TEXT DEFAULT '';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN likesCount INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN likes INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN upvotes INTEGER DEFAULT 0;"); } catch (e) {}
+  try {
+    db.run("UPDATE anime SET is_published = 1, approval_status = 'approved', submissionStatus = 'approved' WHERE (status != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL)) AND (is_published IS NULL OR is_published = 0);");
+  } catch (e) {}
+  try {
+    db.run("UPDATE anime SET is_published = 0 WHERE status = 'pending' OR submissionStatus = 'pending' OR approval_status = 'pending';");
+  } catch (e) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS episodes (
@@ -677,7 +697,7 @@ app.get('/api/anime', (req, res) => {
 
     const includePending = req.query.includePending === 'true';
     if (!includePending) {
-      whereClauses.push("(status != 'pending' AND (submissionStatus IS NULL OR submissionStatus != 'pending'))");
+      whereClauses.push("(is_published = 1 OR is_published = true) AND status != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL)");
     }
 
     if (genre && genre !== 'All') {
@@ -722,6 +742,7 @@ app.get('/api/anime', (req, res) => {
     }
     dataStmt.free();
 
+    res.set('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=300');
     res.json({
       data: animeList,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 }
@@ -779,6 +800,7 @@ app.get('/api/anime/:id', (req, res) => {
     const isWatchlisted = wlStmt.step();
     wlStmt.free();
 
+    res.set('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=300');
     res.json({ ...anime, episodes, reviews, isWatchlisted });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1225,7 +1247,7 @@ app.post('/api/admin/approve/:id', requireAdminAuth, async (req, res) => {
     const animeId = req.params.id;
     const bodyStatus = req.body?.status || req.body?.airing_status;
     if (bodyStatus) {
-      db.run("UPDATE anime SET status = ?, submissionStatus = 'approved', popularity = 0, likesCount = 0 WHERE id = ?", [bodyStatus, animeId]);
+      db.run("UPDATE anime SET status = ?, submissionStatus = 'approved', approval_status = 'approved', is_published = 1, popularity = 0, likesCount = 0 WHERE id = ?", [bodyStatus, animeId]);
     } else {
       db.run(`UPDATE anime SET 
         status = CASE 
@@ -1234,6 +1256,8 @@ app.post('/api/admin/approve/:id', requireAdminAuth, async (req, res) => {
           ELSE status 
         END,
         submissionStatus = 'approved',
+        approval_status = 'approved',
+        is_published = 1,
         popularity = 0,
         likesCount = 0
         WHERE id = ?`, [animeId]);
@@ -1338,9 +1362,31 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       const cover_image = row.cover_image || row.poster || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
       const banner_image = row.banner_image || row['Banner Image'] || cover_image;
 
+      let studio = '';
+      if (row.Studio !== undefined && row.Studio !== null && String(row.Studio).trim() !== '') {
+        studio = String(row.Studio).trim();
+      } else if (row.studio !== undefined && row.studio !== null && String(row.studio).trim() !== '') {
+        studio = String(row.studio).trim();
+      } else if (row.STUDIO !== undefined && row.STUDIO !== null && String(row.STUDIO).trim() !== '') {
+        studio = String(row.STUDIO).trim();
+      } else if (row['Studio Name'] || row['studio_name'] || row['Studio_Name'] || row.studio_name) {
+        studio = String(row['Studio Name'] || row['studio_name'] || row['Studio_Name'] || row.studio_name).trim();
+      } else if (row.animation_studio || row.Animation_Studio || row.AnimationStudio || row['Animation Studio'] || row.animationstudio) {
+        studio = String(row.animation_studio || row.Animation_Studio || row.AnimationStudio || row['Animation Studio'] || row.animationstudio).trim();
+      } else {
+        const studioKey = Object.keys(row).find(k => {
+          const clean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return clean === 'studio' || clean.includes('studio') || clean.includes('animationstudio');
+        });
+        if (studioKey && row[studioKey]) {
+          studio = String(row[studioKey]).trim();
+        }
+      }
+      if (!studio) studio = 'Unknown Studio';
+
       db.run(
-        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, resolvedStatus, 'approved', 'Spring', year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, resolvedType, 'Unknown Studio', String(episodes_count)]
+        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, resolvedType, studio, String(episodes_count)]
       );
       insertedCount++;
     }
@@ -1498,7 +1544,7 @@ app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
     const { user, text, timestamp, rating, language, isReview, clerk_user_id } = req.body;
     if (!text || !String(text).trim()) return res.status(400).json({ error: "Missing message text" });
 
-    const cleanUser = String(user || 'Anonymous Fan').slice(0, 50);
+    const cleanUser = String(user || 'Anonymous Fan').trim().slice(0, 50);
     const cleanClerkId = String(clerk_user_id || req.headers['x-clerk-user-id'] || req.headers['authorization'] || 'guest').trim();
     const cleanText = String(text).slice(0, 1000);
     const cleanTimestamp = String(timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -1508,7 +1554,7 @@ app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
 
     // Check if username is already claimed by another user
     try {
-      const checkStmt = db.prepare("SELECT DISTINCT clerk_user_id FROM chat_messages WHERE LOWER(user) = LOWER(?) AND clerk_user_id IS NOT NULL AND clerk_user_id != ''");
+      const checkStmt = db.prepare("SELECT DISTINCT clerk_user_id FROM chat_messages WHERE LOWER(TRIM(user)) = LOWER(?) AND clerk_user_id IS NOT NULL AND clerk_user_id != ''");
       checkStmt.bind([cleanUser]);
       let claimedByOther = false;
       while (checkStmt.step()) {
@@ -1521,7 +1567,7 @@ app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
       checkStmt.free();
 
       if (claimedByOther) {
-        return res.status(400).json({ error: "This username is already claimed by another user." });
+        return res.status(400).json({ success: false, error: "This username is already claimed by another user." });
       }
     } catch (chkErr) {
       console.warn('Username check warning:', chkErr);

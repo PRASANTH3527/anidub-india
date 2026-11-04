@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Star, 
   Tv, 
@@ -101,7 +101,7 @@ const SORTS = [
   { label: '🔤 Title (A-Z)', value: 'title' }
 ];
 
-export const CatalogView: React.FC<CatalogViewProps> = ({
+const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   catalogList,
   onSelectAnime,
   searchQuery,
@@ -127,7 +127,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     }
   }, [catalogList]);
 
-  const handleLike = (animeId: number, liked?: boolean, newCount?: number) => {
+  const handleLike = useCallback((animeId: number, liked?: boolean, newCount?: number) => {
     setRawAnimeList(prev => prev.map(a => {
       if (a.id === animeId || String(a.id) === String(animeId)) {
         return { ...a, likesCount: newCount !== undefined ? newCount : (Number(a.likesCount) || 0) + (liked ? 1 : -1) };
@@ -135,9 +135,9 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
       return a;
     }));
     if (onToggleLike) onToggleLike(animeId, Boolean(liked), newCount ?? 0);
-  };
+  }, [onToggleLike]);
 
-  const handleUpvote = (animeId: number, upvoted?: boolean, newCount?: number) => {
+  const handleUpvote = useCallback((animeId: number, upvoted?: boolean, newCount?: number) => {
     setRawAnimeList(prev => prev.map(a => {
       if (a.id === animeId || String(a.id) === String(animeId)) {
         return { ...a, popularity: newCount !== undefined ? newCount : (Number(a.popularity) || 0) + (upvoted ? 1 : -1) };
@@ -145,7 +145,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
       return a;
     }));
     if (onToggleUpvote) onToggleUpvote(animeId, Boolean(upvoted), newCount ?? 0);
-  };
+  }, [onToggleUpvote]);
 
   // Filter States
   const [selectedLanguage, setSelectedLanguage] = useState('All');
@@ -161,11 +161,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    fetchCatalogFromBackend();
-  }, []);
-
-  const fetchCatalogFromBackend = async () => {
+  const fetchCatalogFromBackend = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
@@ -193,19 +189,27 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const currentAnimeList = (catalogList && catalogList.length > 0) ? catalogList : rawAnimeList;
+  useEffect(() => {
+    fetchCatalogFromBackend();
+  }, [fetchCatalogFromBackend]);
 
-  const filteredList = filterAndSortCatalog(currentAnimeList, {
-    language: selectedLanguage,
-    genre: selectedGenre === 'All Genres' ? 'All' : selectedGenre,
-    platform: selectedPlatform === 'All Platforms' ? 'All' : selectedPlatform,
-    type: selectedType === 'All Types' ? 'All' : selectedType,
-    status: selectedStatus === 'All Status' ? 'All' : selectedStatus,
-    search: searchQuery,
-    sort: selectedSort
-  });
+  const currentAnimeList = useMemo(() => {
+    return (catalogList && catalogList.length > 0) ? catalogList : rawAnimeList;
+  }, [catalogList, rawAnimeList]);
+
+  const filteredList = useMemo(() => {
+    return filterAndSortCatalog(currentAnimeList, {
+      language: selectedLanguage,
+      genre: selectedGenre === 'All Genres' ? 'All' : selectedGenre,
+      platform: selectedPlatform === 'All Platforms' ? 'All' : selectedPlatform,
+      type: selectedType === 'All Types' ? 'All' : selectedType,
+      status: selectedStatus === 'All Status' ? 'All' : selectedStatus,
+      search: searchQuery,
+      sort: selectedSort
+    });
+  }, [currentAnimeList, selectedLanguage, selectedGenre, selectedPlatform, selectedType, selectedStatus, searchQuery, selectedSort]);
 
   // Reset visibleCount on filter or search change
   useEffect(() => {
@@ -240,7 +244,9 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     };
   }, [visibleCount, filteredList.length, isLoadingMore]);
 
-  const displayedAnime = filteredList.slice(0, visibleCount);
+  const displayedAnime = useMemo(() => {
+    return filteredList.slice(0, visibleCount);
+  }, [filteredList, visibleCount]);
 
   return (
     <div className="w-full max-w-[420px] mx-auto px-[11px] overflow-x-hidden font-['Inter',sans-serif] text-slate-100 pb-10">
@@ -499,3 +505,5 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     </div>
   );
 };
+
+export const CatalogView = React.memo(CatalogViewComponent);

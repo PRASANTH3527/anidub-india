@@ -1,23 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
 import { CatalogView } from './components/CatalogView';
-import { AnimeDetailModal } from './components/AnimeDetailModal';
-import { AdminDashboard } from './components/AdminDashboard';
-import { RouletteModal } from './components/RouletteModal';
-import { CreateCollectionModal } from './components/CreateCollectionModal';
-import { WeeklyScheduleView } from './components/WeeklyScheduleView';
-import { DubInfoModal } from './components/DubInfoModal';
-import { WatchlistView } from './components/WatchlistView';
-import { ProfileView } from './components/ProfileView';
-import { AnimeTierListMaker } from './components/AnimeTierListMaker';
-import { RecommendationSystem } from './components/RecommendationSystem';
-import { CommunityChatView } from './components/CommunityChatView';
 import { FeedbackSection } from './components/FeedbackSection';
-import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown } from 'lucide-react';
+import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown, Loader2 } from 'lucide-react';
 import { cloudflareApi } from './services/cloudflareApi';
 import { getCloudflareUrl, CLOUDFLARE_API_URL } from './config/cloudflare';
 import { AniDubLogo } from './components/AniDubLogo';
+
+// Code-split heavy, non-critical views and modals using React.lazy
+const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const AnimeDetailModal = React.lazy(() => import('./components/AnimeDetailModal').then(m => ({ default: m.AnimeDetailModal })));
+const RouletteModal = React.lazy(() => import('./components/RouletteModal').then(m => ({ default: m.RouletteModal })));
+const CreateCollectionModal = React.lazy(() => import('./components/CreateCollectionModal').then(m => ({ default: m.CreateCollectionModal })));
+const DubInfoModal = React.lazy(() => import('./components/DubInfoModal').then(m => ({ default: m.DubInfoModal })));
+const WatchlistView = React.lazy(() => import('./components/WatchlistView').then(m => ({ default: m.WatchlistView })));
+const WeeklyScheduleView = React.lazy(() => import('./components/WeeklyScheduleView').then(m => ({ default: m.WeeklyScheduleView })));
+const ProfileView = React.lazy(() => import('./components/ProfileView').then(m => ({ default: m.ProfileView })));
+const AnimeTierListMaker = React.lazy(() => import('./components/AnimeTierListMaker').then(m => ({ default: m.AnimeTierListMaker })));
+const RecommendationSystem = React.lazy(() => import('./components/RecommendationSystem').then(m => ({ default: m.RecommendationSystem })));
+const CommunityChatView = React.lazy(() => import('./components/CommunityChatView').then(m => ({ default: m.CommunityChatView })));
+
+const ViewLoadingFallback = () => (
+  <div className="w-full min-h-[50vh] flex flex-col items-center justify-center p-8 space-y-3">
+    <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+    <span className="text-xs text-neutral-400 font-medium tracking-wide">Loading view...</span>
+  </div>
+);
+
+const ModalLoadingFallback = () => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm">
+    <Loader2 className="w-10 h-10 text-purple-400 animate-spin" />
+  </div>
+);
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -114,7 +129,7 @@ export default function App() {
     } catch {}
   }, [watchlist]);
 
-  const addToRecentlyViewed = (anime: any) => {
+  const addToRecentlyViewed = useCallback((anime: any) => {
     setRecentlyViewed(prev => {
       const filtered = prev.filter(item => item.id !== anime.id);
       const updated = [anime, ...filtered].slice(0, 10);
@@ -123,16 +138,16 @@ export default function App() {
       } catch {}
       return updated;
     });
-  };
+  }, []);
 
-  const handleClearRecentlyViewed = () => {
+  const handleClearRecentlyViewed = useCallback(() => {
     setRecentlyViewed([]);
     try {
       localStorage.removeItem('cf_anime_recently_viewed');
     } catch {}
-  };
+  }, []);
 
-  const handleRemoveRecentlyViewedItem = (animeId: number) => {
+  const handleRemoveRecentlyViewedItem = useCallback((animeId: number) => {
     setRecentlyViewed(prev => {
       const updated = prev.filter(item => item.id !== animeId);
       try {
@@ -140,9 +155,9 @@ export default function App() {
       } catch {}
       return updated;
     });
-  };
+  }, []);
 
-  const handleToggleWatchlist = async (animeId: number) => {
+  const handleToggleWatchlist = useCallback(async (animeId: number) => {
     const idNum = Number(animeId);
     try {
       const data = await cloudflareApi.toggleWatchlist(idNum);
@@ -161,7 +176,7 @@ export default function App() {
           : [...normalized, idNum];
       });
     }
-  };
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('cf_admin_token');
@@ -265,23 +280,23 @@ export default function App() {
     }
   }, [catalogList, isCatalogLoading]);
 
-  const handleToggleLike = (animeId: number, _liked: boolean, count: number) => {
+  const handleToggleLike = useCallback((animeId: number, _liked: boolean, count: number) => {
     setCatalogList(prev => prev.map(a => {
       if (a.id === animeId || String(a.id) === String(animeId)) {
         return { ...a, likesCount: count };
       }
       return a;
     }));
-  };
+  }, []);
 
-  const handleToggleUpvote = (animeId: number, _upvoted: boolean, count: number) => {
+  const handleToggleUpvote = useCallback((animeId: number, _upvoted: boolean, count: number) => {
     setCatalogList(prev => prev.map(a => {
       if (a.id === animeId || String(a.id) === String(animeId)) {
         return { ...a, popularity: count };
       }
       return a;
     }));
-  };
+  }, []);
 
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-primary-theme selection:text-white transition-colors duration-300 box-border">
@@ -324,51 +339,53 @@ export default function App() {
 
       {/* 2. ADMIN DASHBOARD (When active in admin mode) */}
       {activeTab === 'admin' && isAdminAuthenticated && (
-        <AdminDashboard
-          catalogList={catalogList}
-          onAnimeCreated={(updatedAnime?: any, deletedId?: string | number) => {
-            if (deletedId !== undefined && deletedId !== null) {
-              setCatalogList(prev => prev.filter(a => String(a.id) !== String(deletedId)));
-              setRecentlyViewed(prev => prev.filter(a => String(a.id) !== String(deletedId)));
-              return;
-            }
-            if (updatedAnime) {
-              const targetId = updatedAnime.id;
-              const newCover = updatedAnime.posterUrl || updatedAnime.image || updatedAnime.cover_image || updatedAnime.poster;
-              const normalizedItem = {
-                ...updatedAnime,
-                image: newCover,
-                cover_image: newCover,
-                poster: newCover,
-                status: updatedAnime.status || updatedAnime.airing_status || (updatedAnime.type === 'Movie' ? 'Completed' : 'Airing'),
-                airing_status: updatedAnime.airing_status || updatedAnime.status || (updatedAnime.type === 'Movie' ? 'Completed' : 'Airing')
-              };
+        <Suspense fallback={<ViewLoadingFallback />}>
+          <AdminDashboard
+            catalogList={catalogList}
+            onAnimeCreated={(updatedAnime?: any, deletedId?: string | number) => {
+              if (deletedId !== undefined && deletedId !== null) {
+                setCatalogList(prev => prev.filter(a => String(a.id) !== String(deletedId)));
+                setRecentlyViewed(prev => prev.filter(a => String(a.id) !== String(deletedId)));
+                return;
+              }
+              if (updatedAnime) {
+                const targetId = updatedAnime.id;
+                const newCover = updatedAnime.posterUrl || updatedAnime.image || updatedAnime.cover_image || updatedAnime.poster;
+                const normalizedItem = {
+                  ...updatedAnime,
+                  image: newCover,
+                  cover_image: newCover,
+                  poster: newCover,
+                  status: updatedAnime.status || updatedAnime.airing_status || (updatedAnime.type === 'Movie' ? 'Completed' : 'Airing'),
+                  airing_status: updatedAnime.airing_status || updatedAnime.status || (updatedAnime.type === 'Movie' ? 'Completed' : 'Airing')
+                };
 
-              setCatalogList(prev => {
-                const exists = prev.some(a => a.id === targetId || String(a.id) === String(targetId));
-                if (exists) {
-                  return prev.map(a => (a.id === targetId || String(a.id) === String(targetId)) ? { ...a, ...normalizedItem } : a);
-                } else {
-                  return [normalizedItem, ...prev];
-                }
-              });
+                setCatalogList(prev => {
+                  const exists = prev.some(a => a.id === targetId || String(a.id) === String(targetId));
+                  if (exists) {
+                    return prev.map(a => (a.id === targetId || String(a.id) === String(targetId)) ? { ...a, ...normalizedItem } : a);
+                  } else {
+                    return [normalizedItem, ...prev];
+                  }
+                });
 
-              setRecentlyViewed(prev => {
-                const exists = prev.some(a => a.id === targetId || String(a.id) === String(targetId));
-                if (exists) {
-                  return prev.map(a => (a.id === targetId || String(a.id) === String(targetId)) ? { ...a, ...normalizedItem } : a);
-                } else {
-                  return [normalizedItem, ...prev];
-                }
-              });
-            } else {
-              // Fallback refetch if no payload
-              fetchCatalogList();
-            }
-          }}
-          onLogout={handleAdminLogout}
-          onNavigateHome={() => setActiveTab('home')}
-        />
+                setRecentlyViewed(prev => {
+                  const exists = prev.some(a => a.id === targetId || String(a.id) === String(targetId));
+                  if (exists) {
+                    return prev.map(a => (a.id === targetId || String(a.id) === String(targetId)) ? { ...a, ...normalizedItem } : a);
+                  } else {
+                    return [normalizedItem, ...prev];
+                  }
+                });
+              } else {
+                // Fallback refetch if no payload
+                fetchCatalogList();
+              }
+            }}
+            onLogout={handleAdminLogout}
+            onNavigateHome={() => setActiveTab('home')}
+          />
+        </Suspense>
       )}
 
       {/* 3. MAIN CONTENT VIEWS */}
@@ -411,84 +428,96 @@ export default function App() {
 
         {/* INTERACTIVE RECOMMENDATION SYSTEM (FOR YOU / MATCHMAKER) */}
         {(activeTab === 'recommendations' || ((activeTab === 'home' || activeTab === 'catalog') && feedView === 'foryou')) && (
-          <RecommendationSystem
-            catalogList={catalogList}
-            onSelectAnime={(anime) => {
-              setSelectedAnimeId(anime.id);
-              addToRecentlyViewed(anime);
-            }}
-            watchlist={watchlist}
-            onToggleWatchlist={handleToggleWatchlist}
-            onNavigateCatalog={() => {
-              setActiveTab('home');
-              setFeedView('library');
-            }}
-          />
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <RecommendationSystem
+              catalogList={catalogList}
+              onSelectAnime={(anime) => {
+                setSelectedAnimeId(anime.id);
+                addToRecentlyViewed(anime);
+              }}
+              watchlist={watchlist}
+              onToggleWatchlist={handleToggleWatchlist}
+              onNavigateCatalog={() => {
+                setActiveTab('home');
+                setFeedView('library');
+              }}
+            />
+          </Suspense>
         )}
 
         {/* WATCHLIST VIEW */}
         {activeTab === 'watchlist' && (
-          <WatchlistView
-            watchlist={realSavedWatchlist}
-            onSelectAnime={(anime) => {
-              setSelectedAnimeId(anime.id);
-              addToRecentlyViewed(anime);
-            }}
-            onToggleWatchlist={handleToggleWatchlist}
-            onNavigateToCatalog={() => setActiveTab('home')}
-          />
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <WatchlistView
+              watchlist={realSavedWatchlist}
+              onSelectAnime={(anime) => {
+                setSelectedAnimeId(anime.id);
+                addToRecentlyViewed(anime);
+              }}
+              onToggleWatchlist={handleToggleWatchlist}
+              onNavigateToCatalog={() => setActiveTab('home')}
+            />
+          </Suspense>
         )}
 
         {/* WEEKLY SIMULCAST SCHEDULE VIEW */}
         {activeTab === 'schedule' && (
-          <WeeklyScheduleView
-            onSelectAnime={(anime) => {
-              setSelectedAnimeId(anime.id);
-              addToRecentlyViewed(anime);
-            }}
-            watchlist={watchlist}
-            onToggleWatchlist={handleToggleWatchlist}
-            onOpenSubmitDubModal={() => setIsDubModalOpen(true)}
-            catalogList={catalogList}
-          />
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <WeeklyScheduleView
+              onSelectAnime={(anime) => {
+                setSelectedAnimeId(anime.id);
+                addToRecentlyViewed(anime);
+              }}
+              watchlist={watchlist}
+              onToggleWatchlist={handleToggleWatchlist}
+              onOpenSubmitDubModal={() => setIsDubModalOpen(true)}
+              catalogList={catalogList}
+            />
+          </Suspense>
         )}
 
         {/* PROFILE VIEW */}
         {activeTab === 'profile' && (
-          <ProfileView
-            watchlist={watchlist}
-            catalogList={catalogList}
-            onSelectAnime={(anime) => {
-              setSelectedAnimeId(anime.id);
-              addToRecentlyViewed(anime);
-            }}
-            onToggleWatchlist={handleToggleWatchlist}
-            onOpenCreateCollection={() => setIsCollectionOpen(true)}
-            onNavigateToCatalog={() => setActiveTab('home')}
-          />
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <ProfileView
+              watchlist={watchlist}
+              catalogList={catalogList}
+              onSelectAnime={(anime) => {
+                setSelectedAnimeId(anime.id);
+                addToRecentlyViewed(anime);
+              }}
+              onToggleWatchlist={handleToggleWatchlist}
+              onOpenCreateCollection={() => setIsCollectionOpen(true)}
+              onNavigateToCatalog={() => setActiveTab('home')}
+            />
+          </Suspense>
         )}
 
         {/* TIER LIST MAKER VIEW */}
         {activeTab === 'tierlist' && (
-          <AnimeTierListMaker
-            catalogList={catalogList}
-            onSelectAnime={(anime) => {
-              setSelectedAnimeId(anime.id);
-              addToRecentlyViewed(anime);
-            }}
-            onNavigateHome={() => setActiveTab('home')}
-          />
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <AnimeTierListMaker
+              catalogList={catalogList}
+              onSelectAnime={(anime) => {
+                setSelectedAnimeId(anime.id);
+                addToRecentlyViewed(anime);
+              }}
+              onNavigateHome={() => setActiveTab('home')}
+            />
+          </Suspense>
         )}
 
         {/* LIVE COMMUNITY CHAT VIEW */}
         {activeTab === 'chat' && (
-          <CommunityChatView
-            onNavigateToCatalog={() => setActiveTab('home')}
-            onSelectAnime={(anime) => {
-              setSelectedAnimeId(anime.id);
-              addToRecentlyViewed(anime);
-            }}
-          />
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <CommunityChatView
+              onNavigateToCatalog={() => setActiveTab('home')}
+              onSelectAnime={(anime) => {
+                setSelectedAnimeId(anime.id);
+                addToRecentlyViewed(anime);
+              }}
+            />
+          </Suspense>
         )}
       </main>
 
@@ -502,47 +531,55 @@ export default function App() {
       <AnimatePresence>
         {/* 1. Anime Detail Modal */}
         {selectedAnimeId !== null && (
-          <AnimeDetailModal
-            key="anime-detail-modal"
-            animeId={selectedAnimeId}
-            onClose={() => setSelectedAnimeId(null)}
-            watchlist={watchlist}
-            onToggleWatchlist={handleToggleWatchlist}
-          />
+          <Suspense fallback={<ModalLoadingFallback />}>
+            <AnimeDetailModal
+              key="anime-detail-modal"
+              animeId={selectedAnimeId}
+              onClose={() => setSelectedAnimeId(null)}
+              watchlist={watchlist}
+              onToggleWatchlist={handleToggleWatchlist}
+            />
+          </Suspense>
         )}
 
         {/* 2. Surprise Me Roulette Modal */}
         {isRouletteOpen && (
-          <RouletteModal
-            key="roulette-modal"
-            animeList={catalogList}
-            onClose={() => setIsRouletteOpen(false)}
-            onSelectAnime={(anime) => {
-              setSelectedAnimeId(anime.id);
-              addToRecentlyViewed(anime);
-            }}
-          />
+          <Suspense fallback={<ModalLoadingFallback />}>
+            <RouletteModal
+              key="roulette-modal"
+              animeList={catalogList}
+              onClose={() => setIsRouletteOpen(false)}
+              onSelectAnime={(anime) => {
+                setSelectedAnimeId(anime.id);
+                addToRecentlyViewed(anime);
+              }}
+            />
+          </Suspense>
         )}
 
         {/* 3. Shareable Custom Collection Modal */}
         {isCollectionOpen && (
-          <CreateCollectionModal
-            key="collection-modal"
-            animeList={catalogList}
-            onClose={() => setIsCollectionOpen(false)}
-          />
+          <Suspense fallback={<ModalLoadingFallback />}>
+            <CreateCollectionModal
+              key="collection-modal"
+              animeList={catalogList}
+              onClose={() => setIsCollectionOpen(false)}
+            />
+          </Suspense>
         )}
 
         {/* 4. Submit Dub Info Modal */}
         {isDubModalOpen && (
-          <DubInfoModal
-            key="dub-info-modal"
-            isOpen={isDubModalOpen}
-            onClose={() => setIsDubModalOpen(false)}
-            onSubmit={() => {
-              setIsDubModalOpen(false);
-            }}
-          />
+          <Suspense fallback={<ModalLoadingFallback />}>
+            <DubInfoModal
+              key="dub-info-modal"
+              isOpen={isDubModalOpen}
+              onClose={() => setIsDubModalOpen(false)}
+              onSubmit={() => {
+                setIsDubModalOpen(false);
+              }}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
 
