@@ -572,7 +572,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }
             }
 
-            const rawStatus = (row.status || row.Status || row.airing_status || row.Airing_Status || row.state || row.completion || row.status_type || '').toString().trim().toLowerCase();
+            const rawStatus = (row.status || row.Status || row.release_status || row['release status'] || row['Release Status'] || row.airing_status || row.Airing_Status || row.state || row.completion || row.status_type || '').toString().trim().toLowerCase();
             let resolvedAiringStatus = 'Airing';
             if (['complete', 'completed', 'completet', 'finished', 'ended'].some(k => rawStatus.includes(k))) {
               resolvedAiringStatus = 'Completed';
