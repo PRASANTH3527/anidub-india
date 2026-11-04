@@ -11,7 +11,10 @@ import {
   AlertCircle,
   Star,
   ShieldCheck,
-  Volume2
+  Volume2,
+  Hash,
+  ArrowDown,
+  Smile
 } from 'lucide-react';
 import { CLOUDFLARE_API_URL, getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
 import { cloudflareApi } from '../services/cloudflareApi';
@@ -31,6 +34,50 @@ export interface ChatMessage {
 }
 
 const QUICK_REACTIONS = ['🔥', '❤️', '⚡', '🍿', '😭', '✨', '💯', '🎌'];
+
+// Distinct, recognizable username colors (Twitch & Discord style)
+const USER_COLORS = [
+  'text-purple-400',
+  'text-sky-400',
+  'text-pink-400',
+  'text-amber-400',
+  'text-emerald-400',
+  'text-rose-400',
+  'text-indigo-400',
+  'text-teal-400',
+  'text-orange-400',
+  'text-cyan-400',
+  'text-violet-400',
+  'text-yellow-400'
+];
+
+const getUsernameColor = (name: string): string => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash) + name.charCodeAt(i);
+    hash |= 0;
+  }
+  return USER_COLORS[Math.abs(hash) % USER_COLORS.length];
+};
+
+const AVATAR_GRADIENTS = [
+  'from-purple-600 to-indigo-600',
+  'from-blue-600 to-cyan-600',
+  'from-emerald-600 to-teal-600',
+  'from-rose-600 to-pink-600',
+  'from-amber-600 to-orange-600',
+  'from-violet-600 to-fuchsia-600'
+];
+
+const getAvatarGradient = (name: string, isReview?: boolean): string => {
+  if (isReview) return 'from-amber-500 to-orange-600';
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash) + name.charCodeAt(i);
+    hash |= 0;
+  }
+  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
+};
 
 export interface LiveChatProps {
   className?: string;
@@ -444,238 +491,242 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   };
 
   return (
-    <div className={`bg-white/[0.05] backdrop-blur-3xl border border-white/10 rounded-3xl p-5 sm:p-7 shadow-[0_20px_50px_rgba(0,0,0,0.5)] space-y-5 font-sans text-white ${className || ''}`}>
+    <div className={`bg-[#0c101c]/90 backdrop-blur-2xl border border-white/[0.08] rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col font-sans text-white overflow-hidden transition-all ${className || ''}`}>
       
-      {/* 1. HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className={`w-2.5 h-2.5 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)] animate-pulse' : 'bg-amber-400'}`} />
-            <MessageSquare className="w-5 h-5 text-purple-400" />
-            <h3 className="text-lg font-black text-white tracking-wide">
-              Live Community Chat & Reviews
-            </h3>
+      {/* 1. CHANNEL HEADER BAR (Discord / Twitch Style) */}
+      <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 sm:px-4 sm:py-3 border-b border-white/[0.06] bg-black/25">
+        {/* Left: Channel Info */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+            <Hash className="w-4 h-4 stroke-[2.5]" />
           </div>
-          <p className="text-xs text-neutral-300/80">
-            Real-time chat with anime fans across India. All messages and dub reviews are synchronized instantly.
-          </p>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs sm:text-sm font-black text-white tracking-wide truncate">
+              live-chat
+            </span>
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${connectionStatus === 'connected' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse' : 'bg-amber-400'}`} />
+            <span className="text-[11px] text-neutral-400 font-medium hidden sm:inline shrink-0">
+              · {messages.length} messages
+            </span>
+          </div>
         </div>
 
-        {/* Right Connection & Sync Indicators */}
-        <div className="flex items-center gap-2 self-start sm:self-center">
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full backdrop-blur-md border text-xs font-semibold ${
-            connectionStatus === 'connected' 
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
-              : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-          }`}>
-            <Radio className="w-3.5 h-3.5 animate-pulse" />
-            <span className="capitalize">{connectionStatus}</span>
+        {/* Right: Controls & Mode Switcher */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Mode Switcher: Chat vs Dub Review */}
+          <div className="flex items-center p-0.5 rounded-lg bg-white/[0.05] border border-white/10 text-xs">
+            <button
+              type="button"
+              onClick={() => setMode('chat')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                mode === 'chat'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              💬 Chat
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('review')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                mode === 'review'
+                  ? 'bg-gradient-to-r from-amber-500 to-pink-500 text-white shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              <Star className="w-3 h-3 fill-current" />
+              <span>Review</span>
+            </button>
           </div>
 
+          {/* Auto-scroll Button */}
+          <button
+            type="button"
+            onClick={() => {
+              const next = !autoScroll;
+              setAutoScroll(next);
+              if (next) scrollToBottom(true);
+            }}
+            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+              autoScroll 
+                ? 'bg-purple-500/10 border-purple-500/30 text-purple-300' 
+                : 'bg-white/5 border-white/10 text-neutral-500 hover:text-neutral-300'
+            }`}
+            title={autoScroll ? 'Auto-scroll enabled (click to pause)' : 'Auto-scroll paused (click to resume)'}
+            aria-label="Toggle auto-scroll"
+          >
+            <ArrowDown className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Refresh / Sync Button */}
           <button
             type="button"
             onClick={fetchChatHistory}
             disabled={isSyncing}
-            title="Refresh & sync history"
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-400 hover:text-white transition-all cursor-pointer disabled:opacity-50"
+            title="Refresh chat history"
+            aria-label="Refresh chat history"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-purple-400' : ''}`} />
           </button>
+
+          {/* Connection Status Pill */}
+          <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+            connectionStatus === 'connected' 
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+              : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+          }`}>
+            <Radio className="w-3 h-3 animate-pulse" />
+            <span className="capitalize">{connectionStatus}</span>
+          </div>
         </div>
       </div>
 
-      {/* Sync Status Banner */}
+      {/* Sync Status Toast */}
       {syncStatus && (
-        <div className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl flex items-center gap-2 animate-in fade-in duration-200">
-          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+        <div className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border-b border-emerald-500/20 px-3.5 py-1 flex items-center gap-1.5 animate-in fade-in duration-200">
+          <CheckCircle2 className="w-3 h-3 shrink-0" />
           <span>{syncStatus} — connected and synchronized.</span>
         </div>
       )}
 
-      {/* Mode Switcher: Live Chat vs Dub Review */}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setMode('chat')}
-          className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
-            mode === 'chat'
-              ? 'bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.5)] border border-purple-400/40'
-              : 'bg-white/5 hover:bg-white/10 text-neutral-300 border border-white/10'
-          }`}
-        >
-          💬 Live Chat
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('review')}
-          className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-            mode === 'review'
-              ? 'bg-gradient-to-r from-amber-500 to-pink-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)] border border-amber-400/40'
-              : 'bg-white/5 hover:bg-white/10 text-neutral-300 border border-white/10'
-          }`}
-        >
-          <Star className="w-3.5 h-3.5 fill-current" />
-          <span>⭐ Post Dub Review</span>
-        </button>
-      </div>
-
-      {/* 2. SCROLLABLE MESSAGE STREAM */}
+      {/* 2. CONTINUOUS STREAM MESSAGE FEED (Discord / Twitch Style) */}
       <div 
         ref={chatContainerRef}
-        className="h-80 sm:h-96 overflow-y-auto overscroll-contain pr-2 space-y-4 rounded-2xl bg-black/40 border border-white/10 p-4 scrollbar-thin scrollbar-thumb-purple-600/50"
+        className="h-[390px] sm:h-[450px] md:h-[490px] overflow-y-auto overscroll-contain px-3 py-2 sm:px-4 sm:py-3 space-y-1 sm:space-y-1.5 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20"
       >
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-neutral-400">
-            <div className="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-500/30 flex items-center justify-center text-purple-400 shadow-lg">
-              <Sparkles className="w-6 h-6" />
+          <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-neutral-400 p-6">
+            <div className="w-10 h-10 rounded-xl bg-purple-950/60 border border-purple-500/30 flex items-center justify-center text-purple-400 shadow-lg">
+              <Sparkles className="w-5 h-5" />
             </div>
-            <h4 className="text-sm font-bold text-white">No messages yet</h4>
-            <p className="text-xs max-w-xs">Be the first to spark a conversation or review in the live chat!</p>
+            <h4 className="text-xs font-bold text-white">Welcome to Live Chat!</h4>
+            <p className="text-[11px] max-w-xs text-neutral-400">Say hello or share your favorite regional dub reactions.</p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div key={msg.id} className="flex items-start gap-3.5 group animate-in fade-in duration-200">
-              {/* Gradient Avatar */}
-              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center text-white text-xs font-black shrink-0 shadow-md ${
-                msg.isReview 
-                  ? 'bg-gradient-to-tr from-amber-500 via-orange-500 to-pink-500' 
-                  : 'bg-gradient-to-tr from-purple-600 via-indigo-600 to-pink-500'
-              }`}>
-                {getInitials(msg.user)}
-              </div>
+          messages.map((msg) => {
+            const userColor = getUsernameColor(msg.user);
+            const avatarGrad = getAvatarGradient(msg.user, msg.isReview);
 
-              {/* Message Details */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-bold text-white tracking-wide">
-                    {msg.user}
-                  </span>
-                  {msg.isSelf && (
-                    <span className="bg-purple-950/80 text-purple-300 border border-purple-500/40 text-[9px] font-black px-1.5 py-0.5 rounded-md">
-                      You
-                    </span>
-                  )}
-                  {msg.isReview && (
-                    <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                      <Star className="w-2.5 h-2.5 fill-amber-300" />
-                      <span>{msg.rating ? `${msg.rating}/10` : 'Dub Review'}</span>
-                    </span>
-                  )}
-                  {msg.language && (
-                    <span className="bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
-                      {msg.language}
-                    </span>
-                  )}
-                  <span className="text-[10px] text-neutral-400">
-                    {msg.timestamp}
-                  </span>
+            return (
+              <div 
+                key={msg.id} 
+                className="flex items-start gap-2.5 px-2 py-1 -mx-1.5 rounded-lg hover:bg-white/[0.03] transition-colors group"
+              >
+                {/* Compact Circular Avatar */}
+                <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white text-[11px] font-black shrink-0 shadow-sm bg-gradient-to-tr ${avatarGrad} ring-1 ring-white/10 mt-0.5`}>
+                  {getInitials(msg.user)}
                 </div>
 
-                <div className={`mt-1.5 p-3.5 rounded-2xl text-xs leading-relaxed max-w-2xl break-words shadow-inner ${
-                  msg.isReview
-                    ? 'bg-gradient-to-r from-amber-950/30 to-purple-950/30 border border-amber-500/30 text-amber-100'
-                    : 'bg-white/[0.04] border border-white/10 text-neutral-200'
-                }`}>
-                  {msg.text}
+                {/* Message Content */}
+                <div className="flex-1 min-w-0">
+                  {/* Sender Header Line */}
+                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                    <span className={`text-xs font-bold ${userColor} hover:underline cursor-pointer tracking-tight`}>
+                      {msg.user}
+                    </span>
+
+                    {msg.isSelf && (
+                      <span className="text-[9px] font-bold text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1 py-0.2 rounded">
+                        YOU
+                      </span>
+                    )}
+
+                    {msg.isReview && (
+                      <span className="text-[10px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
+                        <Star className="w-2.5 h-2.5 fill-amber-300" />
+                        <span>{msg.rating ? `${msg.rating}/10` : 'Dub Review'}</span>
+                      </span>
+                    )}
+
+                    {msg.language && (
+                      <span className="text-[9px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.2 rounded">
+                        {msg.language}
+                      </span>
+                    )}
+
+                    <span className="text-[10px] text-neutral-500 font-mono ml-auto sm:ml-1 select-none">
+                      {msg.timestamp}
+                    </span>
+                  </div>
+
+                  {/* Message Body (Clean Text, No Bulky Boxes) */}
+                  {msg.isReview ? (
+                    <div className="mt-0.5 text-xs text-amber-100/90 leading-relaxed border-l-2 border-amber-500/60 pl-2.5 py-0.5 bg-amber-500/[0.04] rounded-r break-words">
+                      {msg.text}
+                    </div>
+                  ) : (
+                    <p className="mt-0.5 text-xs sm:text-[13px] text-neutral-200 leading-snug break-words select-text">
+                      {msg.text}
+                    </p>
+                  )}
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* 3. CONTROLS & INPUT FORM */}
-      <div className="space-y-3.5">
-        {/* Auto-scroll toggle bar */}
-        <div className="flex items-center justify-between text-xs text-neutral-400 px-1">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input 
-              type="checkbox"
-              checked={autoScroll}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setAutoScroll(checked);
-                if (checked) {
-                  scrollToBottom(true);
-                }
-              }}
-              className="accent-purple-500 rounded cursor-pointer"
-            />
-            <span>Auto-scroll to latest messages</span>
-          </label>
-          <span className="text-[11px] text-purple-300/80 font-medium">
-            {messages.length} messages
-          </span>
-        </div>
-
-        {/* Quick Reactions Bar */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          <span className="text-xs text-neutral-400 font-semibold shrink-0 mr-1">
-            Quick React:
-          </span>
-          {QUICK_REACTIONS.map((emoji) => (
-            <button
-              key={emoji}
-              type="button"
-              onClick={() => handleReactionClick(emoji)}
-              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs transition-all cursor-pointer shrink-0 active:scale-95"
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-
-        {/* Input Form */}
+      {/* 3. COMPACT CONTROLS & STREAMLINED PILL INPUT */}
+      <div className="p-2.5 sm:p-3 border-t border-white/[0.06] bg-black/30 space-y-2">
+        {/* Error Warning */}
         {chatError && (
-          <div className="px-3.5 py-2.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs font-semibold flex items-center justify-between gap-2 shadow-lg animate-pulse">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-              <span>{chatError}</span>
+          <div className="px-3 py-1.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center justify-between gap-2 shadow-sm animate-in fade-in duration-200">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              <span className="truncate">{chatError}</span>
             </div>
             <button
               type="button"
               onClick={handleRandomizeName}
-              className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-white text-[11px] font-bold tracking-wide uppercase transition-all shrink-0 cursor-pointer"
+              className="px-2 py-0.5 rounded-md bg-rose-500/25 hover:bg-rose-500/35 text-white text-[10px] font-bold tracking-wide uppercase transition-all shrink-0 cursor-pointer"
             >
               🎲 Randomize
             </button>
           </div>
         )}
-        <form onSubmit={handleSendMessageSubmit} className="space-y-3">
-          {/* Top row: Nickname & Dub Review Options */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-neutral-400 font-semibold whitespace-nowrap">
+
+        {/* Compact Micro-Controls: User Name & Quick Emojis */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          {/* Left: Nickname & Dub Review Options */}
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            <span className="text-[11px] text-neutral-400 font-medium shrink-0">
               Posting as:
             </span>
-            <input 
-              type="text"
-              value={guestName}
-              onChange={(e) => {
-                setChatError(null);
-                setGuestName(e.target.value);
-                localStorage.setItem('anidub_guest_chat_name', e.target.value);
-              }}
-              className={`bg-black/50 border rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none w-36 sm:w-44 shadow-inner transition-colors ${
-                chatError ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-white/10 focus:border-purple-400'
-              }`}
-              placeholder="Your nickname"
-            />
+            <div className="relative flex items-center">
+              <input 
+                type="text"
+                value={guestName}
+                onChange={(e) => {
+                  setChatError(null);
+                  setGuestName(e.target.value);
+                  localStorage.setItem('anidub_guest_chat_name', e.target.value);
+                }}
+                className={`bg-white/[0.06] hover:bg-white/[0.1] border rounded-lg px-2 py-0.5 text-xs text-purple-300 focus:text-white font-semibold focus:outline-none w-28 sm:w-36 transition-colors ${
+                  chatError ? 'border-rose-500/80 ring-1 ring-rose-500/50' : 'border-white/10 focus:border-purple-400'
+                }`}
+                placeholder="Nickname"
+                title="Click to edit nickname"
+              />
+            </div>
             <button
               type="button"
               onClick={handleRandomizeName}
-              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-neutral-200 text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 active:scale-95"
-              title="Generate random anime fan nickname"
+              className="p-1 rounded-md bg-white/[0.06] hover:bg-white/15 border border-white/10 text-amber-400 hover:text-amber-300 transition-transform active:scale-90 cursor-pointer"
+              title="Randomize username"
+              aria-label="Randomize username"
             >
-              <Dices className="w-3.5 h-3.5 text-amber-400" />
-              <span>Randomize</span>
+              <Dices className="w-3.5 h-3.5" />
             </button>
 
-            {/* If in Review Mode, show language dropdown & rating selector */}
+            {/* If in Review Mode, show compact language & rating selects */}
             {mode === 'review' && (
-              <div className="flex items-center gap-2 flex-wrap ml-auto">
+              <div className="flex items-center gap-1 shrink-0 ml-1">
                 <select
                   value={reviewLang}
                   onChange={(e) => setReviewLang(e.target.value)}
-                  className="bg-black/60 border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-amber-300 focus:outline-none"
+                  className="bg-black/60 border border-amber-500/30 rounded-lg px-2 py-0.5 text-[11px] text-amber-300 font-semibold focus:outline-none cursor-pointer"
                 >
                   <option value="Tamil Dub">Tamil Dub</option>
                   <option value="Telugu Dub">Telugu Dub</option>
@@ -684,12 +735,12 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                   <option value="Kannada Dub">Kannada Dub</option>
                 </select>
 
-                <div className="flex items-center gap-1 bg-black/60 border border-amber-500/40 px-3 py-2 rounded-xl">
-                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <div className="flex items-center gap-0.5 bg-black/60 border border-amber-500/30 px-1.5 py-0.5 rounded-lg">
+                  <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 shrink-0" />
                   <select
                     value={reviewRating}
                     onChange={(e) => setReviewRating(parseFloat(e.target.value))}
-                    className="bg-transparent text-xs text-amber-400 font-bold focus:outline-none cursor-pointer"
+                    className="bg-transparent text-[11px] text-amber-400 font-bold focus:outline-none cursor-pointer"
                   >
                     {[10, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.0, 5.0].map(r => (
                       <option key={`chat_rating_${r}`} value={r} className="bg-neutral-900 text-white">{r}/10</option>
@@ -700,32 +751,66 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             )}
           </div>
 
-          {/* Message Input & Glowing Send Button */}
-          <div className="flex gap-2.5">
+          {/* Right: Quick React Emojis */}
+          <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar shrink-0 ml-auto">
+            {QUICK_REACTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => handleReactionClick(emoji)}
+                className="px-1.5 py-0.5 rounded-md hover:bg-white/10 text-xs transition-transform active:scale-90 cursor-pointer shrink-0"
+                title={`React ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Streamlined Single Horizontal Pill Row Input */}
+        <form onSubmit={handleSendMessageSubmit} className="relative">
+          <div className={`relative flex items-center bg-[#131929] hover:bg-[#161d30] focus-within:bg-[#161d30] border rounded-full px-3 py-1 sm:px-4 sm:py-1.5 transition-all shadow-inner ${
+            mode === 'review'
+              ? 'border-amber-500/40 focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-500/20'
+              : 'border-white/10 focus-within:border-purple-500/60 focus-within:ring-2 focus-within:ring-purple-500/20'
+          }`}>
+            {/* Left Indicator Icon */}
+            <div className="text-neutral-400 shrink-0 mr-2">
+              {mode === 'review' ? (
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+              ) : (
+                <Smile className="w-3.5 h-3.5 text-purple-400" />
+              )}
+            </div>
+
+            {/* Input Field */}
             <input 
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               placeholder={
                 mode === 'review'
-                  ? `Write your ${reviewLang} review & voice acting feedback...`
+                  ? `Write your ${reviewLang} review & voice cast feedback...`
                   : defaultAnimeTitle 
                     ? `Chat live about ${defaultAnimeTitle}...`
-                    : "Send a live message to the community..."
+                    : "Send a message..."
               }
-              className="flex-1 bg-black/50 border border-white/10 rounded-2xl px-4 py-3 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400 shadow-inner"
+              className="flex-1 bg-transparent text-xs sm:text-[13px] text-white placeholder-neutral-500 focus:outline-none min-w-0 py-1"
             />
+
+            {/* Embedded Circular Send Button */}
             <button
               type="submit"
               disabled={!inputMessage.trim()}
-              className={`text-white px-6 py-3 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 active:scale-95 ${
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0 transition-transform active:scale-90 cursor-pointer disabled:opacity-30 disabled:pointer-events-none shadow-md ${
                 mode === 'review'
-                  ? 'bg-gradient-to-r from-amber-500 to-pink-600 hover:from-amber-400 hover:to-pink-500 shadow-[0_0_20px_rgba(245,158,11,0.4)]'
-                  : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 shadow-[0_0_20px_rgba(168,85,247,0.4)]'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-amber-500/30'
+                  : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-purple-600/30'
               }`}
+              title={mode === 'review' ? 'Post Dub Review' : 'Send message'}
+              aria-label={mode === 'review' ? 'Post Dub Review' : 'Send message'}
             >
-              <Send className="w-4 h-4 fill-white" />
-              <span>{mode === 'review' ? 'Post Review' : 'Send'}</span>
+              <Send className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-current ml-0.5" />
             </button>
           </div>
         </form>

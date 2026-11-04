@@ -725,11 +725,25 @@ export default {
                   `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season)
                    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?)`
                 ).bind(title, slug, synopsis, cover_image, banner_image, rating, episodesCount, year, genres, languages, platform, resolvedType, studio, String(episodesCount)).run();
-              } catch {
-                await env.DB.prepare(
-                  `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, is_published, season, year, genres, popularity, languages, platform, type, studio)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?)`
-                ).bind(title, slug, synopsis, cover_image, banner_image, rating, episodesCount, year, genres, languages, platform, resolvedType, studio).run();
+              } catch (firstErr) {
+                // Auto-heal missing D1 columns if migrations have not been applied yet
+                try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN is_published INTEGER DEFAULT 0").run(); } catch (e) {}
+                try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN studio TEXT DEFAULT 'Unknown Studio'").run(); } catch (e) {}
+                try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN approval_status TEXT DEFAULT 'pending'").run(); } catch (e) {}
+                try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN submissionStatus TEXT DEFAULT 'pending'").run(); } catch (e) {}
+                try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT ''").run(); } catch (e) {}
+
+                try {
+                  await env.DB.prepare(
+                    `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?)`
+                  ).bind(title, slug, synopsis, cover_image, banner_image, rating, episodesCount, year, genres, languages, platform, resolvedType, studio, String(episodesCount)).run();
+                } catch {
+                  await env.DB.prepare(
+                    `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, is_published, season, year, genres, popularity, languages, platform, type, studio)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?)`
+                  ).bind(title, slug, synopsis, cover_image, banner_image, rating, episodesCount, year, genres, languages, platform, resolvedType, studio).run();
+                }
               }
             }
             insertedCount++;

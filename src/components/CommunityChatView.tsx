@@ -24,30 +24,30 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
   onNavigateToCatalog
 }) => {
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-in fade-in duration-300">
+    <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6 animate-in fade-in duration-300">
       
       {/* 1. HEADER BANNER */}
-      <div className="bg-[#121829] border border-purple-500/30 rounded-3xl p-5 sm:p-7 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-5 relative overflow-hidden">
+      <div className="bg-[#0c101c]/80 border border-white/[0.08] rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden backdrop-blur-xl">
         {/* Subtle background glow */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-        <div className="absolute bottom-0 left-1/3 w-60 h-60 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-72 h-72 bg-purple-600/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16" />
+        <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex items-start sm:items-center gap-4 relative z-10">
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-purple-900/40 shrink-0 ring-2 ring-purple-400/30">
-            <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7" />
+        <div className="flex items-center gap-3.5 relative z-10 min-w-0">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center text-white shadow-md shadow-purple-900/40 shrink-0 ring-1 ring-purple-400/30">
+            <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <div>
-            <div className="flex items-center flex-wrap gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+          <div className="min-w-0">
+            <div className="flex items-center flex-wrap gap-2">
+              <h1 className="text-lg sm:text-xl font-black text-white tracking-tight">
                 Live Community Chat
               </h1>
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 <span>Global Room</span>
               </div>
             </div>
-            <p className="text-xs text-neutral-300 mt-1.5 max-w-2xl leading-relaxed">
-              Connect and chat in real-time with Indian anime fans discussing Hindi, Tamil, Telugu, Malayalam & Kannada dubs. Share instant dub reviews, cast reactions, and simulcast announcements!
+            <p className="text-xs text-neutral-400 mt-0.5 max-w-2xl leading-relaxed truncate sm:whitespace-normal">
+              Live chatter and dub reactions for Hindi, Tamil, Telugu, Malayalam & Kannada anime.
             </p>
           </div>
         </div>
@@ -57,7 +57,7 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
           <button
             type="button"
             onClick={onNavigateToCatalog}
-            className="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/10 text-white text-xs font-bold inline-flex items-center gap-2 transition-all cursor-pointer hover:border-purple-400/40 shadow-md"
+            className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-semibold inline-flex items-center gap-2 transition-all cursor-pointer hover:border-purple-400/40 shadow-sm active:scale-95"
           >
             <Compass className="w-4 h-4 text-purple-400" />
             <span>Explore Catalog</span>
