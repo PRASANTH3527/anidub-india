@@ -153,8 +153,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
   const [releaseStatus, setReleaseStatus] = useState<string>(() => {
     const anime = (initialData || {}) as any;
-    const raw = anime.airing_status || anime.airingStatus || anime.status || (anime.status === 'Completed' ? 'Completed' : 'Airing');
-    if (raw && typeof raw === 'string') {
+    const raw = anime.airing_status || anime.airingStatus || (anime.status !== 'pending' ? anime.status : null) || anime.status;
+    if (raw && typeof raw === 'string' && raw.trim().toLowerCase() !== 'pending') {
       const lower = raw.trim().toLowerCase();
       if (['complete', 'completed', 'finished', 'ended'].includes(lower) || lower.includes('complete')) return 'Completed';
       if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(lower) || lower.includes('upcoming')) return 'Upcoming';
@@ -162,7 +162,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       if (['ongoing'].includes(lower) || lower.includes('ongoing')) return 'Ongoing';
       return raw.charAt(0).toUpperCase() + raw.slice(1);
     }
-    return anime.status === 'Completed' ? 'Completed' : 'Airing';
+    return 'Airing';
   });
   const [releaseDay, setReleaseDay] = useState<string>('Saturday');
 
@@ -193,9 +193,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       // State Initialization: When the Edit Modal opens and sets its state, make sure the type property is explicitly included
       const anime = initialData as any;
-      const rawStatus = initDataAny?.airing_status || initDataAny?.airingStatus || initDataAny?.status || (initialData as any)?.airing_status || (initialData as any)?.status;
+      const rawStatus = initDataAny?.airing_status || initDataAny?.airingStatus || (initDataAny?.status !== 'pending' ? initDataAny?.status : null) || initDataAny?.status;
       let resolvedStatus = 'Airing';
-      if (rawStatus && typeof rawStatus === 'string') {
+      if (rawStatus && typeof rawStatus === 'string' && rawStatus.trim().toLowerCase() !== 'pending') {
         const s = rawStatus.trim().toLowerCase();
         if (['complete', 'completed', 'finished', 'ended'].includes(s) || s.includes('complete')) {
           resolvedStatus = 'Completed';

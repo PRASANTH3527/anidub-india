@@ -1355,14 +1355,18 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       const episodes_count = parseInt(row.episodes_count || row.episodes || 12, 10) || 12;
       const rawStatus = (row.Status || row.status || row.airing_status || row.state || row.completion || row.status_type || '').toString().trim().toLowerCase();
       let resolvedAiringStatus = 'Airing';
-      if (['complete', 'completed', 'finished', 'ended'].includes(rawStatus)) {
+      if (['complete', 'completed', 'completet', 'finished', 'ended'].some(k => rawStatus.includes(k))) {
         resolvedAiringStatus = 'Completed';
-      } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(rawStatus)) {
+      } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].some(k => rawStatus.includes(k))) {
         resolvedAiringStatus = 'Upcoming';
-      } else if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(rawStatus)) {
+      } else if (['ongoing', 'simulcast', 'current'].some(k => rawStatus.includes(k))) {
+        resolvedAiringStatus = 'Ongoing';
+      } else if (['airing', 'airing now'].some(k => rawStatus.includes(k))) {
         resolvedAiringStatus = 'Airing';
       } else if (rawStatus) {
         resolvedAiringStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+      } else {
+        resolvedAiringStatus = resolvedType === 'Movie' ? 'Completed' : 'Airing';
       }
 
       const cover_image = row.cover_image || row.poster || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';

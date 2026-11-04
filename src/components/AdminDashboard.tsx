@@ -502,22 +502,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleOpenEditModal = (anime: any) => {
     setModalMode('edit');
     const resolvedType = anime.type || anime.Type || 'TV Series';
-    const rawStatus = anime.status || anime.airing_status;
-    let resolvedStatus = 'Ongoing';
-    if (rawStatus && typeof rawStatus === 'string') {
+    const rawStatus = anime.airing_status || (anime.status !== 'pending' ? anime.status : null) || anime.status;
+    let resolvedStatus = 'Airing';
+    if (rawStatus && typeof rawStatus === 'string' && rawStatus.trim().toLowerCase() !== 'pending') {
       const s = rawStatus.trim().toLowerCase();
-      if (s === 'completed' || s === 'finished' || s.includes('complete')) resolvedStatus = 'Completed';
-      else if (s === 'ongoing' || s === 'airing' || s.includes('ongoing') || s.includes('airing')) resolvedStatus = 'Ongoing';
-      else resolvedStatus = resolvedType === 'Movie' ? 'Completed' : 'Ongoing';
+      if (['complete', 'completed', 'finished', 'ended'].includes(s) || s.includes('complete')) resolvedStatus = 'Completed';
+      else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(s) || s.includes('upcoming')) resolvedStatus = 'Upcoming';
+      else if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(s) || s.includes('airing')) resolvedStatus = 'Airing';
+      else if (s.includes('ongoing')) resolvedStatus = 'Ongoing';
+      else resolvedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
     } else {
-      resolvedStatus = resolvedType === 'Movie' ? 'Completed' : 'Ongoing';
+      resolvedStatus = resolvedType === 'Movie' ? 'Completed' : 'Airing';
     }
 
     const payloadState = {
       ...anime,
       type: resolvedType,
       Type: resolvedType,
-      status: resolvedStatus,
+      status: anime.status || resolvedStatus,
       airing_status: resolvedStatus
     };
     setFormData(payloadState);
@@ -572,16 +574,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             const rawStatus = (row.status || row.Status || row.airing_status || row.Airing_Status || row.state || row.completion || row.status_type || '').toString().trim().toLowerCase();
             let resolvedAiringStatus = 'Airing';
-            if (['complete', 'completed', 'finished', 'ended'].includes(rawStatus) || rawStatus.includes('complete')) {
+            if (['complete', 'completed', 'completet', 'finished', 'ended'].some(k => rawStatus.includes(k))) {
               resolvedAiringStatus = 'Completed';
-            } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(rawStatus) || rawStatus.includes('upcoming')) {
+            } else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].some(k => rawStatus.includes(k))) {
               resolvedAiringStatus = 'Upcoming';
-            } else if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(rawStatus) || rawStatus.includes('airing')) {
-              resolvedAiringStatus = 'Airing';
-            } else if (rawStatus.includes('ongoing')) {
+            } else if (['ongoing', 'simulcast', 'current'].some(k => rawStatus.includes(k))) {
               resolvedAiringStatus = 'Ongoing';
+            } else if (['airing', 'airing now'].some(k => rawStatus.includes(k))) {
+              resolvedAiringStatus = 'Airing';
             } else if (rawStatus) {
               resolvedAiringStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+            } else {
+              const rowType = (row.type || row.Type || '').toString().toLowerCase();
+              resolvedAiringStatus = rowType.includes('movie') ? 'Completed' : 'Airing';
             }
 
             return {
