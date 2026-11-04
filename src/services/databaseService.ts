@@ -79,8 +79,7 @@ class DatabaseService {
       const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
       const rawItems = data || [];
       const items = rawItems.filter((item: any) => 
-        item.status !== 'pending' && 
-        item.submissionStatus !== 'pending'
+        (item.submissionStatus === 'approved' || item.approval_status === 'approved' || item.is_published === 1)
       );
       this.cache = items;
       this.cacheTimestamp = now;
@@ -208,8 +207,10 @@ class DatabaseService {
   public async submitDubInfo(animeData: any): Promise<any> {
     const payload = {
       ...animeData,
-      status: 'pending',
-      submissionStatus: 'pending'
+      status: animeData.status || (animeData.type === 'Movie' ? 'Completed' : 'Airing'),
+      airing_status: animeData.status || (animeData.type === 'Movie' ? 'Completed' : 'Airing'),
+      submissionStatus: 'pending',
+      approval_status: 'pending'
     };
     const data = await cloudflareApi.createAnime(payload);
     this.notifyListeners();

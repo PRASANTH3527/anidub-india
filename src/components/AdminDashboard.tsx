@@ -542,7 +542,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       complete: async (results) => {
         try {
           const parsedRows = (results.data || []) as any[];
-          console.log("Parsed CSV Data:", parsedRows);
+          console.log("[Frontend] Parsed CSV Rows:", parsedRows);
           addTerminalLog('CSV', `Parsed ${parsedRows.length} rows from CSV`);
 
           if (parsedRows.length === 0) {
@@ -550,21 +550,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }
 
           const cleanedRows = parsedRows.map((row: any) => {
-            const mappedStudio = String(row.Studio || row.studio || row.STUDIO || row['Studio Name'] || 'Unknown Studio').trim();
-            let rawStatus = (row.Status || row.status || row.STATUS || row['Release Status'] || row.airing_status || 'Airing').toString().trim();
-            let cleanStatus = rawStatus.toLowerCase() === 'completed' ? 'Completed' : 'Airing';
-            const resolvedStatus = cleanStatus;
+            const mappedStudio = String(row.studio || row.studio_name || row.studio_info || 'Unknown Studio').trim();
+            const rawStatus = (row.status || row.airing_status || row.release_status || 'Airing').toString().trim();
+            const cleanStatus = rawStatus.toLowerCase() === 'completed' ? 'Completed' : 'Airing';
 
             return {
               ...row,
               studio: mappedStudio,
-              Studio: mappedStudio,
-              status: resolvedStatus,
+              status: cleanStatus,
+              airing_status: cleanStatus,
               approval_status: 'pending',
               submissionStatus: 'pending',
               is_published: 0
             };
           });
+          
+          console.log("[Frontend] Cleaned CSV Rows:", cleanedRows);
 
           addTerminalLog('CSV', 'Uploading parsed CSV rows to Cloudflare D1 moderation queue...');
           const res = await cloudflareApi.uploadCSV({ animeList: cleanedRows });
@@ -1019,7 +1020,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const targetId = editedData.id || editingAnime?.id;
     const resolvedImage = editedData.posterUrl || editedData.image || editedData.cover_image || editedData.poster;
     const resolvedType = editedData.type || editedData.Type || editingAnime?.type || 'TV Series';
-    const resolvedStatus = editedData.status || editedData.airing_status || (resolvedType === 'Movie' ? 'Completed' : 'Ongoing');
+    const resolvedStatus = editedData.status || editedData.airing_status || (resolvedType === 'Movie' ? 'Completed' : 'Airing');
 
     const fullEditedData = {
       ...editedData,

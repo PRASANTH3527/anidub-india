@@ -108,8 +108,7 @@ export default function App() {
       const data = response?.data;
       if (data && Array.isArray(data) && data.length > 0) {
         const approvedOnly = data.filter((item: any) => 
-          item.status !== 'pending' && 
-          item.submissionStatus !== 'pending'
+          (item.submissionStatus === 'approved' || item.approval_status === 'approved' || item.is_published === 1)
         );
         setCatalogList(approvedOnly);
       } else {

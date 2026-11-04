@@ -153,7 +153,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
   const [status, setStatus] = useState<string>(() => {
     const anime = (initialData || {}) as any;
-    return anime.status === 'Completed' ? 'Completed' : 'Airing';
+    const initialValue = anime.status === 'Completed' ? 'Completed' : 'Airing';
+    console.log(`[DubInfoModal] Initializing status state: ${initialValue} (raw: ${anime.status})`);
+    return initialValue;
   });
   const [releaseDay, setReleaseDay] = useState<string>('Saturday');
 
@@ -193,6 +195,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         status: initialStatus,
         airing_status: initialStatus
       });
+      console.log(`[DubInfoModal] useEffect triggered. Setting status to: ${initialStatus}`);
 
       if (initDataAny?.mixedEntries && Array.isArray(initDataAny.mixedEntries)) {
         const mapped = initDataAny.mixedEntries.map((e: any, idx: number) => ({
@@ -427,6 +430,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         upvotes: 0,
         studio: studio || 'Unknown Studio'
       };
+
+      console.log("[DubInfoModal] Submitting payload:", payload);
 
       let savedResult: any = null;
       if (mode === 'edit' && initialData?.id) {
@@ -1014,7 +1019,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                     <span>Strict Moderation Gate</span>
                   </div>
                   <p className="text-[11px] text-neutral-300 leading-relaxed">
-                    This submission will be saved with <span className="text-amber-400 font-bold">status: "pending"</span>. It will <span className="text-rose-400 font-bold">NEVER</span> appear on the public website until approved by the admin.
+                    This submission will be saved with <span className="text-amber-400 font-bold">approval status: "pending"</span>. It will <span className="text-rose-400 font-bold">NEVER</span> appear on the public website until approved by the admin.
                   </p>
                 </div>
 

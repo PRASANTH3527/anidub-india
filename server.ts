@@ -1066,7 +1066,7 @@ app.post('/api/anime', (req, res) => {
     persistD1();
     logCloudflareEvent('D1', 'POST /api/anime', 201, Date.now() - start, `Created anime: ${title} (ID: ${animeId}, Status: ${finalStatus})`);
 
-    if (finalStatus !== 'pending') {
+    if (finalSubmissionStatus === 'approved') {
       sendTelegramNotification({
         title,
         synopsis: synopsis || 'An exciting new anime streaming exclusively on Cloudflare Pages.',
@@ -1122,7 +1122,8 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
       const banner_image = item.banner_image || cover_image;
       const rating = parseFloat(item.rating || item.score) || 8.5;
       const episodes_count = parseInt(item.episodes_count || item.episodes) || 12;
-      const status = item.status || 'pending';
+      const rawStatus = (item.status || item.airing_status || item.release_status || (normalizeAnimeType(item.type || item.Type || 'TV Series') === 'Movie' ? 'Completed' : 'Airing')).toString().trim();
+      const status = rawStatus.toLowerCase() === 'completed' ? 'Completed' : 'Airing';
       const season = item.season || 'Spring';
       const year = parseInt(item.year) || 2026;
       const genres = item.genres || item.genre || 'Action,Fantasy';
@@ -1232,6 +1233,8 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
       ]
     );
 
+    console.log(`[Backend] UPDATED Anime ID ${id}: status=${resolvedStatus}, airing_status=${resolvedStatus}`);
+
     persistD1();
     logCloudflareEvent('D1', `PUT /api/anime/${id}`, 200, Date.now() - start, `Updated anime ID ${id}`);
     res.json({ success: true, id, status: resolvedStatus, airing_status: resolvedStatus });
@@ -1318,7 +1321,7 @@ app.post('/api/admin/reject/:id', requireAdminAuth, (req, res) => {
 // GET /api/admin/pending
 app.get('/api/admin/pending', requireAdminAuth, (req, res) => {
   try {
-    const stmt = db.prepare("SELECT * FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' ORDER BY id DESC");
+    const stmt = db.prepare("SELECT * FROM anime WHERE approval_status = 'pending' OR submissionStatus = 'pending' ORDER BY id DESC");
     const pendingItems: any[] = [];
     while (stmt.step()) {
       pendingItems.push(stmt.getAsObject());
@@ -1375,6 +1378,7 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
         `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?)`,
         [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, resolvedStatus, resolvedStatus, year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, resolvedType, studio, String(episodes_count)]
       );
+      console.log(`[Backend] IMPORTED Anime: title="${title}", status=${resolvedStatus}, airing_status=${resolvedStatus}`);
       insertedCount++;
     }
 
