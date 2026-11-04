@@ -380,9 +380,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     addTerminalLog('EDGE', `Approving #${itemId} (${item.title || 'Untitled'}) -> Promoting to Live`);
     try {
       const rawType = item.type || item.Type || 'TV Series';
-      const targetStatus = (item.status && item.status.toLowerCase() !== 'pending')
-        ? item.status
-        : (rawType === 'Movie' ? 'Completed' : 'Ongoing');
+      const targetStatus = (item.airing_status && item.airing_status.toLowerCase() !== 'pending')
+        ? item.airing_status
+        : ((item.status && item.status.toLowerCase() !== 'pending')
+            ? item.status
+            : (rawType === 'Movie' ? 'Completed' : 'Airing'));
 
       await cloudflareApi.approveAnime(itemId, targetStatus);
       setPendingItems(prev => {
@@ -586,8 +588,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ...row,
               studio: mappedStudio || 'Unknown Studio',
               Studio: mappedStudio || 'Unknown Studio',
-              // Forcefully set is_published to false and status to pending for ALL CSV uploads
-              status: 'pending',
               submissionStatus: 'pending',
               approval_status: 'pending',
               is_published: false,

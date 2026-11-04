@@ -1248,15 +1248,15 @@ app.delete('/api/anime/:id', requireAdminAuth, (req, res) => {
 app.post('/api/admin/approve/:id', requireAdminAuth, async (req, res) => {
   try {
     const animeId = req.params.id;
-    const bodyStatus = req.body?.status || req.body?.airing_status;
+    const bodyStatus = req.body?.airing_status || req.body?.status;
     if (bodyStatus) {
-      db.run("UPDATE anime SET status = ?, submissionStatus = 'approved', approval_status = 'approved', is_published = 1, popularity = 0, likesCount = 0 WHERE id = ?", [bodyStatus, animeId]);
+      db.run("UPDATE anime SET airing_status = ?, status = ?, submissionStatus = 'approved', approval_status = 'approved', is_published = 1, popularity = 0, likesCount = 0 WHERE id = ?", [bodyStatus, bodyStatus, animeId]);
     } else {
       db.run(`UPDATE anime SET 
-        status = CASE 
-          WHEN status IS NULL OR status = '' OR LOWER(status) = 'pending' THEN 
-            (CASE WHEN type = 'Movie' THEN 'Completed' ELSE 'Ongoing' END)
-          ELSE status 
+        airing_status = CASE 
+          WHEN airing_status IS NULL OR airing_status = '' OR LOWER(airing_status) = 'pending' THEN 
+            (CASE WHEN type = 'Movie' THEN 'Completed' ELSE 'Airing' END)
+          ELSE airing_status 
         END,
         submissionStatus = 'approved',
         approval_status = 'approved',
