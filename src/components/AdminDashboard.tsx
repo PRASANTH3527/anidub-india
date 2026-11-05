@@ -515,11 +515,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       resolvedStatus = resolvedType === 'Movie' ? 'Completed' : 'Airing';
     }
 
+    const finalStatus = (anime.status && anime.status.toLowerCase() !== 'pending') ? anime.status : resolvedStatus;
+
     const payloadState = {
       ...anime,
       type: resolvedType,
       Type: resolvedType,
-      status: anime.status || resolvedStatus,
+      status: finalStatus,
       airing_status: resolvedStatus
     };
     setFormData(payloadState);
@@ -550,18 +552,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }
 
           const cleanedRows = parsedRows.map((row: any) => {
+            // Bulletproof mapping: ensure status and airing_status are strictly 'Airing' or 'Completed'
             const mappedStudio = String(row.studio || row.studio_name || row.studio_info || 'Unknown Studio').trim();
-            const rawStatus = (row.status || row.airing_status || row.release_status || 'Airing').toString().trim();
-            const cleanStatus = rawStatus.toLowerCase() === 'completed' ? 'Completed' : 'Airing';
+            const rawStatusStr = (row.status || row.airing_status || row.release_status || 'Airing').toString().trim();
+            const cleanStatus = rawStatusStr.toLowerCase() === 'completed' ? 'Completed' : 'Airing';
 
             return {
-              ...row,
+              title: (row.title || row.name || '').trim(),
+              slug: (row.title || row.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+              synopsis: (row.synopsis || row.description || '').trim(),
+              cover_image: (row.cover_image || row.poster || row.poster_url || '').trim(),
               studio: mappedStudio,
               status: cleanStatus,
               airing_status: cleanStatus,
               approval_status: 'pending',
               submissionStatus: 'pending',
-              is_published: 0
+              is_published: 0,
+              year: parseInt(row.year || row.release_year || new Date().getFullYear()),
+              genres: row.genres || row.genre || 'Action',
+              rating: parseFloat(row.rating || row.ratings || 8.5),
+              languages: row.languages || 'Tamil, Hindi',
+              platform: row.platform || row.streaming_partners || 'Crunchyroll',
+              episodes_count: parseInt(row.episodes_count || row.episodes || 12)
             };
           });
           
@@ -1020,7 +1032,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const targetId = editedData.id || editingAnime?.id;
     const resolvedImage = editedData.posterUrl || editedData.image || editedData.cover_image || editedData.poster;
     const resolvedType = editedData.type || editedData.Type || editingAnime?.type || 'TV Series';
-    const resolvedStatus = editedData.status || editedData.airing_status || (resolvedType === 'Movie' ? 'Completed' : 'Airing');
+    const rawStatus = editedData.status || editedData.airing_status || (resolvedType === 'Movie' ? 'Completed' : 'Airing');
+    const resolvedStatus = rawStatus.toLowerCase() === 'pending' ? (resolvedType === 'Movie' ? 'Completed' : 'Airing') : rawStatus;
 
     const fullEditedData = {
       ...editedData,
