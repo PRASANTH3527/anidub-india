@@ -1404,18 +1404,18 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
           synopsis, 
           poster, 
           poster, 
-          parseFloat(row.rating || row['Rating'] || 8.5) || 8.5,
-          parseInt(row.episodes_count || row['Episodes'] || 12, 10) || 12,
+          parseFloat(row.rating || row['Ratings'] || row['Rating'] || 8.5) || 8.5,
+          parseInt(row.episodes_count || row.episodes || row['Episodes'] || 12, 10) || 12,
           finalStatus, 
           finalStatus, 
           parseInt(row.year || row['Release Year'] || row['Year'] || 2024, 10) || 2024,
-          (row.genres || row['Genres'] || 'Action').toString(),
+          Array.isArray(row.genres) ? row.genres.join(', ') : (typeof row.genres === 'string' && row.genres.includes('|') ? row.genres.split('|').map((g: string) => g.trim()).join(', ') : (row.genres || row['Genres'] || 'Action').toString()),
           Math.floor(Math.random() * 50000) + 20000,
-          (row.languages || row['Languages'] || 'Tamil, Hindi').toString(),
+          Array.isArray(row.languages) ? row.languages.join(', ') : (typeof row.languages === 'string' && row.languages.includes('|') ? row.languages.split('|').map((l: string) => l.trim()).join(', ') : (row.languages || row['Languages'] || 'Tamil, Hindi').toString()),
           (row.platform || row['Platform'] || 'Crunchyroll').toString(),
           (row.type || row['Type'] || 'TV Series').toString(),
           (row.studio || row['Studio'] || 'Unknown Studio').toString(),
-          String(row.episodes_count || row['Episodes'] || 12)
+          String(row.episodes_count || row.episodes || row['Episodes'] || 12)
         ]
       );
       
@@ -1985,9 +1985,12 @@ app.post('/api/ai/generate-poster', async (req, res) => {
 // Start Server with Vite Middleware
 async function startServer() {
   await initD1();
-  const PORT = 3000;
 
-  const isProduction = process.env.NODE_ENV === 'production' || fs.existsSync(path.join(process.cwd(), 'dist'));
+  const portArgIdx = process.argv.indexOf('--port');
+  const cliPort = portArgIdx !== -1 && process.argv[portArgIdx + 1] ? parseInt(process.argv[portArgIdx + 1], 10) : null;
+  const PORT = cliPort || (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
+
+  const isProduction = process.env.NODE_ENV === 'production';
 
   if (!isProduction) {
     const vite = await createViteServer({
@@ -1997,20 +2000,47 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Cloudflare Anime Hub server running on port ${PORT}`);
   });
 
-  const wss = new WebSocketServer({ server, path: '/ws' });
-  wss.on('connection', (ws) => {
-    ws.send(JSON.stringify({ type: 'connected', message: 'WebSocket connected' }));
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`[Server Notice] Port ${PORT} already in use. Retrying or binding gracefully.`);
+    } else {
+      console.error('[Server Error]:', err);
+    }
   });
+
+  try {
+    const wss = new WebSocketServer({ server, path: '/ws' });
+    wss.on('connection', (ws) => {
+      ws.send(JSON.stringify({ type: 'connected', message: 'WebSocket connected' }));
+    });
+    wss.on('error', (err) => {
+      console.warn('[WebSocket Warning]:', err.message);
+    });
+  } catch (wsErr: any) {
+    console.warn('[WebSocket Init Warning]:', wsErr.message);
+  }
 }
 
-startServer();
+process.on('uncaughtException', (err) => {
+  console.error('[Process Uncaught Exception]:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Process Unhandled Rejection]:', reason);
+});
+
+startServer().catch((err) => {
+  console.error('[Failed to start server]:', err);
+});

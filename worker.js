@@ -686,11 +686,11 @@ export default {
             const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
             const slug = `${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
             const synopsis = (row.synopsis || row.Synopsis || row.description || row.Description || 'Exciting anime series').toString().trim();
-            const year = parseInt(row.year || row.Year || '2024', 10) || 2024;
-            const rating = parseFloat(row.rating || row.Ratings || '8.5') || 8.5;
-            const genres = (row.genres || row.Genres || 'Action, Fantasy').toString().trim();
+            const year = parseInt(row.year || row['Release Year'] || row.Year || '2024', 10) || 2024;
+            const rating = parseFloat(row.rating || row.Ratings || row.Rating || '8.5') || 8.5;
+            const genres = Array.isArray(row.genres) ? row.genres.join(', ') : (typeof row.genres === 'string' && row.genres.includes('|') ? row.genres.split('|').map((g) => g.trim()).join(', ') : (row.genres || row.Genres || 'Action, Fantasy')).toString().trim();
             const platform = (row.platform || row.Platform || 'Crunchyroll').toString().trim();
-            const languages = (row.languages || row.Languages || 'Tamil, Hindi').toString().trim();
+            const languages = Array.isArray(row.languages) ? row.languages.join(', ') : (typeof row.languages === 'string' && row.languages.includes('|') ? row.languages.split('|').map((l) => l.trim()).join(', ') : (row.languages || row.Languages || 'Tamil, Hindi')).toString().trim();
             const cover_image = row.cover_image || row.poster_url || row['Poster'] || row['Poster URL'] || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
             const banner_image = row.banner_image || row['Banner Image'] || cover_image;
 

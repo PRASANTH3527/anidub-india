@@ -9,8 +9,8 @@ export default defineConfig(() => {
     resolve: {
       dedupe: ['react', 'react-dom'],
       alias: {
-        '@': path.resolve(__dirname, '.'),
-        '@clerk/clerk-react': path.resolve(__dirname, 'src/lib/clerk.tsx'),
+        '@': path.resolve(import.meta.dirname, '.'),
+        '@clerk/clerk-react': path.resolve(import.meta.dirname, 'src/lib/clerk.tsx'),
       },
     },
     server: {

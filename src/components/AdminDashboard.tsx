@@ -549,70 +549,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       addTerminalLog('CSV', `Detected headers: [${(parseResults.meta.fields || []).join(', ')}]`);
 
-      // 3. STRICT HEADER EXTRACTION LOOP (Zero column shifts, handles quoted commas perfectly)
+      // 3. STRICT HEADER EXTRACTION LOOP (Pipe separator for Languages and Genres, Cover Image strictly to poster_url)
       const cleanedRows = rawRows.map((row: any) => {
-        // Case-insensitive exact header lookup helper
-        const getExactHeader = (target: string): string => {
-          const key = Object.keys(row).find(k => k.trim().toLowerCase() === target.toLowerCase());
-          return key !== undefined && row[key] !== undefined && row[key] !== null ? String(row[key]).trim() : '';
+        const parsedRow = {
+          title: row['Title'] || '',
+          poster_url: row['Cover Image'] || '', 
+          year: parseInt(row['Release Year']) || null,
+          languages: typeof row['Languages'] === 'string' ? row['Languages'].split('|').map((l: string) => l.trim()).filter(Boolean) : [],
+          genres: typeof row['Genres'] === 'string' ? row['Genres'].split('|').map((g: string) => g.trim()).filter(Boolean) : [],
+          studio: row['Studio'] || '',
+          type: row['Type'] || 'TV Series',
+          status: String(row['Status'] || '').toLowerCase().includes('complete') ? 'Completed' : 'Airing',
+          episodes: parseInt(row['Episodes']) || null,
+          platform: row['Platform'] || '', 
+          rating: parseFloat(row['Ratings']) || null,
+          synopsis: row['Synopsis'] || '',
+          approval_status: 'pending',
+          is_published: false
         };
 
-        // Guarantee #1: Synopsis ONLY gets data from 'Synopsis' header
-        const synopsisVal = getExactHeader('Synopsis');
-
-        // Guarantee #2: Status ONLY gets data from 'Status' header and strictly parses Airing or Completed
-        const statusRaw = getExactHeader('Status').toLowerCase();
-        const cleanStatus = statusRaw.includes('complete') ? 'Completed' : 'Airing';
-
-        // Title strictly from 'Title'
-        const titleVal = getExactHeader('Title') || 'Untitled Anime';
-
-        // Poster strictly from 'Poster' or visual header
-        const posterVal = getExactHeader('Poster') || getExactHeader('Poster URL') || getExactHeader('Cover Image') || '';
-
-        // Languages strictly from 'Languages'
-        const rawLanguages = getExactHeader('Languages');
-        const languagesArray = rawLanguages 
-          ? rawLanguages.split(',').map((l: string) => l.trim()).filter(Boolean)
-          : [];
-
-        // Genres strictly from 'Genres'
-        const genresVal = getExactHeader('Genres') || 'Action, Fantasy';
-
-        // Studio strictly from 'Studio'
-        const studioVal = getExactHeader('Studio') || 'Unknown Studio';
-
-        // Year strictly from 'Year' or 'Release Year'
-        const yearParsed = parseInt(getExactHeader('Year') || getExactHeader('Release Year') || '2024', 10) || 2024;
-
-        // Rating strictly from 'Rating'
-        const ratingParsed = parseFloat(getExactHeader('Rating') || '8.5') || 8.5;
-
-        // Type strictly from 'Type'
-        const typeVal = getExactHeader('Type') || 'TV Series';
-
-        // Episodes strictly from 'Episodes'
-        const episodesCount = parseInt(getExactHeader('Episodes') || '12', 10) || 12;
-
         return {
-          title: titleVal,
-          slug: titleVal.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-          synopsis: synopsisVal,
-          cover_image: posterVal,
-          poster_url: posterVal,
-          status: cleanStatus,
-          airing_status: cleanStatus,
-          approval_status: 'pending',
+          ...parsedRow,
+          cover_image: parsedRow.poster_url,
+          airing_status: parsedRow.status,
           submissionStatus: 'pending',
-          is_published: 0,
-          type: typeVal,
-          year: yearParsed,
-          rating: ratingParsed,
-          genres: genresVal,
-          languages: languagesArray.join(', '),
-          platform: getExactHeader('Platform') || getExactHeader('Streaming Partners') || 'Crunchyroll',
-          episodes_count: episodesCount,
-          studio: studioVal
+          episodes_count: parsedRow.episodes || 12,
+          slug: (parsedRow.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
         };
       });
 
@@ -681,10 +643,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleDownloadTemplate = () => {
-    const templateContent = 'Title,Synopsis,Poster,Type,Status,Languages,Genres,Studio,Year,Rating\n' +
-      'Solo Leveling,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.",https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,TV Series,Completed,"Tamil, Telugu, Hindi","Action, Fantasy",A-1 Pictures,2024,8.5\n' +
-      'Demon Slayer: Hashira Training,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.",https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,TV Series,Airing,"Tamil, Hindi","Action, Supernatural",Ufotable,2024,8.9\n' +
-      'Dr. Stone,"After a blinding green light strikes the Earth, humanity is turned to stone.",https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,TV Series,Completed,"Tamil, Telugu, Malayalam","Sci-Fi, Adventure",TMS Entertainment,2019,8.1\n';
+    const templateContent = 'Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,Platform,Ratings,Synopsis\n' +
+      'Solo Leveling,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Crunchyroll,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up."\n' +
+      'Demon Slayer: Hashira Training,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come."\n' +
+      'Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone."\n';
     const blob = new Blob([templateContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
