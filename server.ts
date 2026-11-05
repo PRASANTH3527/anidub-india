@@ -941,13 +941,8 @@ app.post('/api/anime', (req, res) => {
     const resolvedType = normalizeAnimeType(type || Type || 'TV Series');
     
     // Explicitly preserve the airing status chosen by the admin/user (e.g. 'Completed', 'Airing', 'Ongoing', 'Upcoming')
-    const incomingStatus = (status || airing_status || '').toString().trim();
-    const finalStatus = (incomingStatus && incomingStatus.toLowerCase() !== 'pending')
-      ? incomingStatus
-      : (isAdmin ? (resolvedType === 'Movie' ? 'Completed' : 'Airing') : 'Completed');
-    
-    // Ensure finalStatus is never actually 'pending' even if logic somehow fails
-    const sanitizedStatus = finalStatus.toLowerCase() === 'pending' ? (resolvedType === 'Movie' ? 'Completed' : 'Airing') : finalStatus;
+    const rawStatusStr = (status || airing_status || '').toString().trim().toLowerCase();
+    const sanitizedStatus = rawStatusStr.includes('complete') ? 'Completed' : (resolvedType === 'Movie' ? 'Completed' : 'Airing');
 
     const finalSubmissionStatus = (isAdmin || submissionStatus === 'approved') ? 'approved' : (submissionStatus || 'pending');
     const finalApprovalStatus = finalSubmissionStatus;
@@ -1068,7 +1063,7 @@ app.post('/api/anime', (req, res) => {
     }
 
     persistD1();
-    logCloudflareEvent('D1', 'POST /api/anime', 201, Date.now() - start, `Created anime: ${title} (ID: ${animeId}, Status: ${finalStatus})`);
+    logCloudflareEvent('D1', 'POST /api/anime', 201, Date.now() - start, `Created anime: ${title} (ID: ${animeId}, Status: ${sanitizedStatus})`);
 
     if (finalSubmissionStatus === 'approved') {
       sendTelegramNotification({
@@ -1195,8 +1190,8 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
     const id = req.params.id;
     const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, season, year, genres, studio, type, Type, languages, platform, imdbID, imdb_id } = req.body;
     const resolvedImdbId = imdbID || imdb_id;
-    const rawStatus = (status || airing_status || 'Airing').toString().trim();
-    const resolvedStatus = rawStatus.toLowerCase() === 'pending' ? 'Airing' : rawStatus;
+    const rawStatusStr = (status || airing_status || '').toString().trim().toLowerCase();
+    const resolvedStatus = rawStatusStr.includes('complete') ? 'Completed' : 'Airing';
     const resolvedType = (type || Type) ? normalizeAnimeType(type || Type) : null;
 
     db.run(
@@ -1278,14 +1273,12 @@ app.post('/api/admin/approve/:id', requireAdminAuth, async (req, res) => {
     } else {
       db.run(`UPDATE anime SET 
         airing_status = CASE 
-          WHEN airing_status IS NULL OR airing_status = '' OR LOWER(airing_status) = 'pending' THEN 
-            (CASE WHEN type = 'Movie' THEN 'Completed' ELSE 'Airing' END)
-          ELSE airing_status 
+          WHEN LOWER(airing_status) LIKE '%complete%' THEN 'Completed'
+          ELSE 'Airing'
         END,
         status = CASE 
-          WHEN status IS NULL OR status = '' OR LOWER(status) = 'pending' THEN 
-            (CASE WHEN type = 'Movie' THEN 'Completed' ELSE 'Airing' END)
-          ELSE status 
+          WHEN LOWER(status) LIKE '%complete%' THEN 'Completed'
+          ELSE 'Airing'
         END,
         submissionStatus = 'approved',
         approval_status = 'approved',
@@ -1382,8 +1375,8 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       const resolvedType = normalizeAnimeType(row.type || row.Type || 'TV Series');
       
       // EXPLICIT STATUS ENFORCEMENT: Never allow 'pending' in the status field
-      const rawStatusIn = (row.status || row.Status || row.airing_status || 'Airing').toString().trim();
-      const finalStatus = rawStatusIn.toLowerCase() === 'completed' ? 'Completed' : 'Airing';
+      const rawStatusIn = String(row.status || row.Status || row.airing_status || row.release_status || row.STATUS || row['Release Status'] || row['release_status'] || '').trim().toLowerCase();
+      const finalStatus = rawStatusIn.includes('complete') ? 'Completed' : 'Airing';
 
       const cover_image = (row.cover_image || row.poster || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800').trim();
       const banner_image = cover_image;

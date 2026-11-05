@@ -186,7 +186,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       // State Initialization: When the Edit Modal opens and sets its state, make sure the type property is explicitly included
       const anime = initialData as any;
-      const initialStatus = initDataAny?.status === 'Completed' ? 'Completed' : 'Airing';
+      const rawStatusStr = String(initDataAny?.status || initDataAny?.airing_status || '').trim().toLowerCase();
+      const initialStatus = rawStatusStr.includes('complete') ? 'Completed' : (cleanType === 'Movie' ? 'Completed' : 'Airing');
       setStatusState(initialStatus);
 
       setFormData({ 

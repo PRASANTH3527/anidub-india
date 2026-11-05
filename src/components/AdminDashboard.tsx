@@ -380,11 +380,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     addTerminalLog('EDGE', `Approving #${itemId} (${item.title || 'Untitled'}) -> Promoting to Live`);
     try {
       const rawType = item.type || item.Type || 'TV Series';
-      const targetStatus = (item.airing_status && item.airing_status.toLowerCase() !== 'pending')
-        ? item.airing_status
-        : ((item.status && item.status.toLowerCase() !== 'pending')
-            ? item.status
-            : (rawType === 'Movie' ? 'Completed' : 'Airing'));
+      const rawStatusIn = String(item.status || item.airing_status || '').trim().toLowerCase();
+      const targetStatus = rawStatusIn.includes('complete') ? 'Completed' : (rawType === 'Movie' ? 'Completed' : 'Airing');
 
       await cloudflareApi.approveAnime(itemId, targetStatus);
       setPendingItems(prev => {
@@ -502,20 +499,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleOpenEditModal = (anime: any) => {
     setModalMode('edit');
     const resolvedType = anime.type || anime.Type || 'TV Series';
-    const rawStatus = anime.airing_status || (anime.status !== 'pending' ? anime.status : null) || anime.status;
-    let resolvedStatus = 'Airing';
-    if (rawStatus && typeof rawStatus === 'string' && rawStatus.trim().toLowerCase() !== 'pending') {
-      const s = rawStatus.trim().toLowerCase();
-      if (['complete', 'completed', 'finished', 'ended'].includes(s) || s.includes('complete')) resolvedStatus = 'Completed';
-      else if (['upcoming', 'not yet aired', 'unreleased', 'soon'].includes(s) || s.includes('upcoming')) resolvedStatus = 'Upcoming';
-      else if (['ongoing', 'airing', 'simulcast', 'current', 'airing now'].includes(s) || s.includes('airing')) resolvedStatus = 'Airing';
-      else if (s.includes('ongoing')) resolvedStatus = 'Ongoing';
-      else resolvedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
-    } else {
-      resolvedStatus = resolvedType === 'Movie' ? 'Completed' : 'Airing';
-    }
-
-    const finalStatus = (anime.status && anime.status.toLowerCase() !== 'pending') ? anime.status : resolvedStatus;
+    const rawStatusStr = String(anime.status || anime.airing_status || '').trim().toLowerCase();
+    const resolvedStatus = rawStatusStr.includes('complete') ? 'Completed' : (resolvedType === 'Movie' ? 'Completed' : 'Airing');
+    const finalStatus = resolvedStatus;
 
     const payloadState = {
       ...anime,
@@ -554,8 +540,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           const cleanedRows = parsedRows.map((row: any) => {
             // Bulletproof mapping: ensure status and airing_status are strictly 'Airing' or 'Completed'
             const mappedStudio = String(row.studio || row.studio_name || row.studio_info || 'Unknown Studio').trim();
-            const rawStatusStr = (row.status || row.airing_status || row.release_status || 'Airing').toString().trim();
-            const cleanStatus = rawStatusStr.toLowerCase() === 'completed' ? 'Completed' : 'Airing';
+            const rawStatus = String(row.status || row.airing_status || row.release_status || row.Status || row.STATUS || row['Release Status'] || row['release_status'] || '').trim().toLowerCase();
+            const cleanStatus = rawStatus.includes('complete') ? 'Completed' : 'Airing';
 
             return {
               title: (row.title || row.name || '').trim(),
@@ -1032,8 +1018,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const targetId = editedData.id || editingAnime?.id;
     const resolvedImage = editedData.posterUrl || editedData.image || editedData.cover_image || editedData.poster;
     const resolvedType = editedData.type || editedData.Type || editingAnime?.type || 'TV Series';
-    const rawStatus = editedData.status || editedData.airing_status || (resolvedType === 'Movie' ? 'Completed' : 'Airing');
-    const resolvedStatus = rawStatus.toLowerCase() === 'pending' ? (resolvedType === 'Movie' ? 'Completed' : 'Airing') : rawStatus;
+    const rawStatusStr = String(editedData.status || editedData.airing_status || '').trim().toLowerCase();
+    const resolvedStatus = rawStatusStr.includes('complete') ? 'Completed' : (resolvedType === 'Movie' ? 'Completed' : 'Airing');
 
     const fullEditedData = {
       ...editedData,
