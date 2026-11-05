@@ -1360,25 +1360,24 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
 
     let insertedCount = 0;
     for (const row of rows) {
-      const title = (row.title || row.Title || row.name || row.Name || '').toString().trim();
+      const title = (row.Title || row.title || row.Name || row.name || '').toString().trim();
       if (!title) continue;
 
       const slug = (row.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')) + '-' + Math.random().toString(36).substring(2, 5);
-      const synopsis = (row.synopsis || row.Synopsis || row.description || row.Description || 'Follow this thrilling dubbed adventure.').toString().trim();
-      const year = parseInt(row.year || row.Year || new Date().getFullYear(), 10) || new Date().getFullYear();
-      const rating = parseFloat(row.rating || row.Ratings || 8.5) || 8.5;
-      const genres = (row.genres || row.Genres || 'Action,Fantasy').toString().trim();
-      const platform = (row.platform || row.Platform || 'Crunchyroll').toString().trim();
-      const languages = (row.languages || row.Languages || 'Tamil, Hindi').toString().trim();
-      const episodes_count = parseInt(row.episodes_count || row.episodes || 12, 10) || 12;
-      const studio = String(row.studio || row.Studio || 'Unknown Studio').trim();
-      const resolvedType = normalizeAnimeType(row.type || row.Type || 'TV Series');
+      const synopsis = (row.Synopsis || row.synopsis || row.Description || row.description || 'Follow this thrilling dubbed adventure.').toString().trim();
+      const year = parseInt(row['Release Year'] || row.Year || row.year || new Date().getFullYear(), 10) || new Date().getFullYear();
+      const rating = parseFloat(row.Rating || row.rating || row.Ratings || 8.5) || 8.5;
+      const genres = (row.Genres || row.genres || row.genre || 'Action,Fantasy').toString().trim();
+      const platform = (row.Platform || row.platform || row['Streaming Partners'] || 'Crunchyroll').toString().trim();
+      const languages = (row.Languages || row.languages || 'Tamil, Hindi').toString().trim();
+      const episodes_count = parseInt(row.Episodes || row.episodes || row.episodes_count || 12, 10) || 12;
+      const studio = String(row.Studio || row.studio || 'Unknown Studio').trim();
+      const resolvedType = normalizeAnimeType(row.Type || row.type || 'TV Series');
       
-      // EXPLICIT STATUS ENFORCEMENT: Never allow 'pending' in the status field
-      const rawStatusIn = String(row.status || row.Status || row.airing_status || row.release_status || row.STATUS || row['Release Status'] || row['release_status'] || '').trim().toLowerCase();
+      const rawStatusIn = String(row.Status || row.status || row['Release Status'] || row.airing_status || '').toLowerCase();
       const finalStatus = rawStatusIn.includes('complete') ? 'Completed' : 'Airing';
 
-      const cover_image = (row.cover_image || row.poster || row['Cover Image'] || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800').trim();
+      const cover_image = (row.Poster || row['Poster URL'] || row['Cover Image'] || row.cover_image || row.poster || row.poster_url || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800').trim();
       const banner_image = cover_image;
 
       console.log(`[Backend] CSV Import Processing: title="${title}", rawStatusIn="${rawStatusIn}", finalStatus="${finalStatus}"`);

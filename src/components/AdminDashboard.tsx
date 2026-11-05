@@ -525,7 +525,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h) => h.toLowerCase().replace(/[^a-z0-9]/g, '_').trim(),
       transform: (v) => (typeof v === 'string' ? v.trim() : v),
       complete: async (results) => {
         try {
@@ -538,28 +537,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }
 
           const cleanedRows = parsedRows.map((row: any) => {
-            // Bulletproof mapping: ensure status and airing_status are strictly 'Airing' or 'Completed'
-            const mappedStudio = String(row.studio || row.studio_name || row.studio_info || 'Unknown Studio').trim();
-            const rawStatus = String(row.status || row.airing_status || row.release_status || row.Status || row.STATUS || row['Release Status'] || row['release_status'] || '').trim().toLowerCase();
+            // STRICT MAPPING: Extract values using precise CSV header names
+            const rawStatus = String(row.Status || row.status || row['Release Status'] || '').toLowerCase();
             const cleanStatus = rawStatus.includes('complete') ? 'Completed' : 'Airing';
+            
+            // Languages must be parsed into an array (or clean string)
+            const rawLangs = row.Languages || row.languages || 'Tamil, Hindi';
+            const cleanLangs = typeof rawLangs === 'string' 
+              ? rawLangs.split(',').map(l => l.trim()).filter(Boolean)
+              : (Array.isArray(rawLangs) ? rawLangs : ['Tamil', 'Hindi']);
+
+            // Bulletproof Poster URL mapping
+            const poster = (row.Poster || row['Poster URL'] || row['Cover Image'] || row.cover_image || row.poster || row.poster_url || '').trim();
 
             return {
-              title: (row.title || row.name || '').trim(),
-              slug: (row.title || row.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-              synopsis: (row.synopsis || row.description || '').trim(),
-              cover_image: (row.cover_image || row.poster || row.poster_url || '').trim(),
-              studio: mappedStudio,
+              title: (row.Title || row.title || row.Name || row.name || '').trim(),
+              slug: (row.Title || row.title || row.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+              synopsis: (row.Synopsis || row.synopsis || row.Description || row.description || '').trim(),
+              cover_image: poster,
+              studio: (row.Studio || row.studio || 'Unknown Studio').trim(),
               status: cleanStatus,
               airing_status: cleanStatus,
               approval_status: 'pending',
               submissionStatus: 'pending',
               is_published: 0,
-              year: parseInt(row.year || row.release_year || new Date().getFullYear()),
-              genres: row.genres || row.genre || 'Action',
-              rating: parseFloat(row.rating || row.ratings || 8.5),
-              languages: row.languages || 'Tamil, Hindi',
-              platform: row.platform || row.streaming_partners || 'Crunchyroll',
-              episodes_count: parseInt(row.episodes_count || row.episodes || 12)
+              year: parseInt(row['Release Year'] || row.year || row.release_year || new Date().getFullYear()),
+              genres: row.Genres || row.genres || row.genre || 'Action',
+              rating: parseFloat(row.Rating || row.rating || row.ratings || 8.5),
+              languages: cleanLangs.join(', '),
+              platform: row.Platform || row.platform || row['Streaming Partners'] || row.streaming_partners || 'Crunchyroll',
+              episodes_count: parseInt(row.Episodes || row.episodes || row.episodes_count || 12)
             };
           });
           
