@@ -515,102 +515,140 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsDubModalOpen(true);
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setIsImporting(true);
-    addTerminalLog('CSV', `Initializing Strict Header Parser for: ${file.name}`);
+    addTerminalLog('CSV', `Loading raw CSV file: ${file.name} (${file.size} bytes)`);
 
-    // COMPLETELY NEW ROBUST PARSER - REWRITTEN FROM SCRATCH
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      quoteChar: '"',
-      escapeChar: '"',
-      transform: (val) => (typeof val === 'string' ? val.trim() : val),
-      complete: async (results) => {
-        try {
-          const rawData = results.data as any[];
-          if (!rawData || rawData.length === 0) {
-            throw new Error('CSV is empty or could not be parsed. Check your headers.');
-          }
+    try {
+      // 1. Read raw text directly to strip any potential UTF-8 BOM (\uFEFF)
+      const rawText = await file.text();
+      const cleanText = rawText.replace(/^\uFEFF/, '').trim();
 
-          addTerminalLog('CSV', `Headers detected: ${Object.keys(rawData[0]).join(', ')}`);
-
-          const cleanedRows = rawData.map((row: any) => {
-            // 1. STRICT STATUS MAPPING (Release State)
-            const rawStatus = String(row['Status'] || '').toLowerCase();
-            const cleanStatus = rawStatus.includes('complete') ? 'Completed' : 'Airing';
-
-            // 2. STRICT SYNOPSIS MAPPING (Plots)
-            const synopsis = (row['Synopsis'] || row['Description'] || '').toString();
-
-            // 3. STRICT LANGUAGE MAPPING (Audio Tracks)
-            const rawLangs = row['Languages'] || row['languages'] || '';
-            const languagesArray = typeof rawLangs === 'string' 
-              ? rawLangs.split(',').map(l => l.trim()).filter(Boolean)
-              : [];
-
-            // 4. STRICT POSTER MAPPING (Visuals)
-            const poster = (row['Poster'] || row['Poster URL'] || row['Cover Image'] || '').toString();
-
-            // CONSTRUCT FINAL CLEAN PAYLOAD
-            return {
-              title: (row['Title'] || row['Name'] || 'Untitled Anime').toString(),
-              slug: (row['Title'] || row['Name'] || 'untitled').toString().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-              synopsis: synopsis,
-              cover_image: poster,
-              status: cleanStatus,
-              airing_status: cleanStatus,
-              approval_status: 'pending',
-              is_published: 0,
-              type: (row['Type'] || 'TV Series').toString(),
-              year: parseInt(row['Release Year'] || row['Year'] || new Date().getFullYear(), 10) || new Date().getFullYear(),
-              rating: parseFloat(row['Rating'] || '8.5') || 8.5,
-              genres: (row['Genres'] || row['Genre'] || 'Action').toString(),
-              languages: languagesArray.join(', '),
-              platform: (row['Platform'] || row['Streaming Partners'] || 'Crunchyroll').toString(),
-              episodes_count: parseInt(row['Episodes'] || row['Episodes Count'] || '12', 10) || 12,
-              studio: (row['Studio'] || 'Unknown Studio').toString()
-            };
-          });
-
-          addTerminalLog('CSV', `Cleaned ${cleanedRows.length} rows using absolute header mapping.`);
-          console.log('[CSV REWRITE] Cleaned Rows:', cleanedRows);
-
-          const res = await cloudflareApi.uploadCSV({ animeList: cleanedRows });
-          const count = res.count || cleanedRows.length;
-          const feedbackMsg = `Successfully synchronized ${count} entries to moderation.`;
-          
-          setImportedCount(count);
-          setShowImportToast(true);
-          setSuccessMsg(feedbackMsg);
-          addTerminalLog('OK', feedbackMsg);
-
-          await fetchAnime();
-          await fetchPendingItems();
-          if (onAnimeCreated) onAnimeCreated();
-
-          setTimeout(() => {
-            setShowImportToast(false);
-            setSuccessMsg('');
-          }, 6000);
-
-        } catch (err: any) {
-          console.error('CRITICAL CSV ERROR:', err);
-          setSuccessMsg(`Import Failed: ${err.message}`);
-          addTerminalLog('ERR', `[FATAL] ${err.message}`);
-        } finally {
-          setIsImporting(false);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-      },
-      error: (error) => {
-        addTerminalLog('ERR', `PapaParse Fatal: ${error.message}`);
-        setIsImporting(false);
+      if (!cleanText) {
+        throw new Error('CSV file is empty');
       }
-    });
+
+      // 2. Parse using PapaParse with strict header parsing and proper RFC 4180 quote support
+      const parseResults = Papa.parse(cleanText, {
+        header: true,
+        skipEmptyLines: 'greedy',
+        transformHeader: (header: string) => header.trim()
+      });
+
+      if (parseResults.errors && parseResults.errors.length > 0) {
+        console.warn('[CSV Parse Warnings/Errors]:', parseResults.errors);
+      }
+
+      const rawRows = (parseResults.data || []) as any[];
+      if (rawRows.length === 0) {
+        throw new Error('No data rows found in CSV. Please verify column headers.');
+      }
+
+      addTerminalLog('CSV', `Detected headers: [${(parseResults.meta.fields || []).join(', ')}]`);
+
+      // 3. STRICT HEADER EXTRACTION LOOP (Zero column shifts, handles quoted commas perfectly)
+      const cleanedRows = rawRows.map((row: any) => {
+        // Case-insensitive exact header lookup helper
+        const getExactHeader = (target: string): string => {
+          const key = Object.keys(row).find(k => k.trim().toLowerCase() === target.toLowerCase());
+          return key !== undefined && row[key] !== undefined && row[key] !== null ? String(row[key]).trim() : '';
+        };
+
+        // Guarantee #1: Synopsis ONLY gets data from 'Synopsis' header
+        const synopsisVal = getExactHeader('Synopsis');
+
+        // Guarantee #2: Status ONLY gets data from 'Status' header and strictly parses Airing or Completed
+        const statusRaw = getExactHeader('Status').toLowerCase();
+        const cleanStatus = statusRaw.includes('complete') ? 'Completed' : 'Airing';
+
+        // Title strictly from 'Title'
+        const titleVal = getExactHeader('Title') || 'Untitled Anime';
+
+        // Poster strictly from 'Poster' or visual header
+        const posterVal = getExactHeader('Poster') || getExactHeader('Poster URL') || getExactHeader('Cover Image') || '';
+
+        // Languages strictly from 'Languages'
+        const rawLanguages = getExactHeader('Languages');
+        const languagesArray = rawLanguages 
+          ? rawLanguages.split(',').map((l: string) => l.trim()).filter(Boolean)
+          : [];
+
+        // Genres strictly from 'Genres'
+        const genresVal = getExactHeader('Genres') || 'Action, Fantasy';
+
+        // Studio strictly from 'Studio'
+        const studioVal = getExactHeader('Studio') || 'Unknown Studio';
+
+        // Year strictly from 'Year' or 'Release Year'
+        const yearParsed = parseInt(getExactHeader('Year') || getExactHeader('Release Year') || '2024', 10) || 2024;
+
+        // Rating strictly from 'Rating'
+        const ratingParsed = parseFloat(getExactHeader('Rating') || '8.5') || 8.5;
+
+        // Type strictly from 'Type'
+        const typeVal = getExactHeader('Type') || 'TV Series';
+
+        // Episodes strictly from 'Episodes'
+        const episodesCount = parseInt(getExactHeader('Episodes') || '12', 10) || 12;
+
+        return {
+          title: titleVal,
+          slug: titleVal.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+          synopsis: synopsisVal,
+          cover_image: posterVal,
+          poster_url: posterVal,
+          status: cleanStatus,
+          airing_status: cleanStatus,
+          approval_status: 'pending',
+          submissionStatus: 'pending',
+          is_published: 0,
+          type: typeVal,
+          year: yearParsed,
+          rating: ratingParsed,
+          genres: genresVal,
+          languages: languagesArray.join(', '),
+          platform: getExactHeader('Platform') || getExactHeader('Streaming Partners') || 'Crunchyroll',
+          episodes_count: episodesCount,
+          studio: studioVal
+        };
+      });
+
+      addTerminalLog('CSV', `Cleaned ${cleanedRows.length} rows with 100% strict header mapping.`);
+      console.log('[REWRITTEN CSV PARSER OUTPUT]:', cleanedRows);
+
+      // 4. Send clean rows to backend
+      const res = await cloudflareApi.uploadCSV({ animeList: cleanedRows });
+      const count = res.count || cleanedRows.length;
+      const feedbackMsg = `Successfully imported ${count} anime titles into moderation queue!`;
+
+      setImportedCount(count);
+      setShowImportToast(true);
+      setSuccessMsg(feedbackMsg);
+      addTerminalLog('OK', feedbackMsg);
+
+      await fetchAnime();
+      await fetchPendingItems();
+      if (onAnimeCreated) onAnimeCreated();
+
+      setTimeout(() => {
+        setShowImportToast(false);
+        setSuccessMsg('');
+      }, 6000);
+
+    } catch (err: any) {
+      console.error('[CSV Import Error]:', err);
+      const errMsg = err.message || 'CSV parsing error';
+      setUploadError(errMsg);
+      setSuccessMsg(`CSV Import Failed: ${errMsg}`);
+      addTerminalLog('ERR', `[IMPORT ERROR] ${errMsg}`);
+      setTimeout(() => setSuccessMsg(''), 6000);
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleExportCsv = () => {
@@ -643,9 +681,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleDownloadTemplate = () => {
-    const headers = 'Title,Type,Status,Studio,Release Year,Rating,Genres,Synopsis,Streaming Partners,Languages,Episodes,Cover Image\n';
-    const example = '"Demon Slayer: Kimetsu no Yaiba","TV Series","Airing","Ufotable",2024,8.9,"Action, Supernatural","Tanjiro Kamado, a kindhearted boy whose family was slaughtered by demons, joins the Demon Slayer Corps to find a cure for his sister Nezuko and avenge his family.","Crunchyroll","Hindi, Tamil, Telugu","26|11|11","https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80"\n';
-    const blob = new Blob([headers + example], { type: 'text/csv' });
+    const templateContent = 'Title,Synopsis,Poster,Type,Status,Languages,Genres,Studio,Year,Rating\n' +
+      'Solo Leveling,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.",https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,TV Series,Completed,"Tamil, Telugu, Hindi","Action, Fantasy",A-1 Pictures,2024,8.5\n' +
+      'Demon Slayer: Hashira Training,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.",https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,TV Series,Airing,"Tamil, Hindi","Action, Supernatural",Ufotable,2024,8.9\n' +
+      'Dr. Stone,"After a blinding green light strikes the Earth, humanity is turned to stone.",https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,TV Series,Completed,"Tamil, Telugu, Malayalam","Sci-Fi, Adventure",TMS Entertainment,2019,8.1\n';
+    const blob = new Blob([templateContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;

@@ -13,6 +13,7 @@ import {
   formatTelegramNotificationHtml, 
   NotificationPayload 
 } from './src/utils/notifications.js';
+import Papa from 'papaparse';
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -1352,6 +1353,22 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       rows = body.animeList;
     } else if (Array.isArray(body?.data)) {
       rows = body.data;
+    } else if (typeof body?.csvText === 'string') {
+      const parsed = Papa.parse(body.csvText, {
+        header: true,
+        skipEmptyLines: true,
+        quoteChar: '"',
+        escapeChar: '"'
+      });
+      rows = parsed.data || [];
+    } else if (typeof body === 'string') {
+      const parsed = Papa.parse(body, {
+        header: true,
+        skipEmptyLines: true,
+        quoteChar: '"',
+        escapeChar: '"'
+      });
+      rows = parsed.data || [];
     }
 
     if (!rows || rows.length === 0) {
@@ -1391,7 +1408,7 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
           parseInt(row.episodes_count || row['Episodes'] || 12, 10) || 12,
           finalStatus, 
           finalStatus, 
-          parseInt(row.year || row['Release Year'] || 2024, 10) || 2024,
+          parseInt(row.year || row['Release Year'] || row['Year'] || 2024, 10) || 2024,
           (row.genres || row['Genres'] || 'Action').toString(),
           Math.floor(Math.random() * 50000) + 20000,
           (row.languages || row['Languages'] || 'Tamil, Hindi').toString(),
