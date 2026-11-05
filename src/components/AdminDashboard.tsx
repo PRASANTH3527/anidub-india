@@ -520,65 +520,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!file) return;
 
     setIsImporting(true);
-    addTerminalLog('CSV', `Reading CSV file: ${file.name} (${file.size} bytes)`);
+    addTerminalLog('CSV', `Initializing Strict Header Parser for: ${file.name}`);
 
+    // COMPLETELY NEW ROBUST PARSER - REWRITTEN FROM SCRATCH
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      transform: (v) => (typeof v === 'string' ? v.trim() : v),
+      quoteChar: '"',
+      escapeChar: '"',
+      transform: (val) => (typeof val === 'string' ? val.trim() : val),
       complete: async (results) => {
         try {
-          const parsedRows = (results.data || []) as any[];
-          console.log("[Frontend] Parsed CSV Rows:", parsedRows);
-          addTerminalLog('CSV', `Parsed ${parsedRows.length} rows from CSV`);
-
-          if (parsedRows.length === 0) {
-            throw new Error('CSV parsing failed: Check header format');
+          const rawData = results.data as any[];
+          if (!rawData || rawData.length === 0) {
+            throw new Error('CSV is empty or could not be parsed. Check your headers.');
           }
 
-          const cleanedRows = parsedRows.map((row: any) => {
-            // BRAND NEW EXPLICIT HARDCODED MAPPING
-            const parsedRow = {
-              title: row['Title'] || row.title || 'Unknown Title',
-              poster_url: row['Poster'] || row['Poster URL'] || row.poster_url || '', // Stops language data from leaking here
-              cover_image: row['Poster'] || row['Poster URL'] || row.poster_url || '', // Backend fallback
-              type: row['Type'] || row.type || 'TV Series',
-              status: String(row['Status'] || row.status || '').toLowerCase().includes('complete') ? 'Completed' : 'Airing', // Strictly outputs only Airing or Completed
-              airing_status: String(row['Status'] || row.status || '').toLowerCase().includes('complete') ? 'Completed' : 'Airing',
-              languages: typeof (row['Languages'] || row.languages) === 'string' ? (row['Languages'] || row.languages).split(',').map((l: string) => l.trim()) : [],
-              approval_status: 'pending', // Strictly for moderation
-              submissionStatus: 'pending',
-              is_published: false,
-              // Including essential fields for the DB to avoid empty entries
-              synopsis: row['Synopsis'] || row.synopsis || row['Description'] || row.description || '',
-              year: parseInt(row['Release Year'] || row.year || new Date().getFullYear(), 10),
-              genres: row['Genres'] || row.genres || 'Action',
-              rating: parseFloat(row['Rating'] || row.rating || 8.5),
-              studio: row['Studio'] || row.studio || 'Unknown Studio',
-              episodes_count: parseInt(row['Episodes'] || row.episodes || 12, 10),
-              platform: row['Platform'] || row.platform || row['Streaming Partners'] || 'Crunchyroll'
+          addTerminalLog('CSV', `Headers detected: ${Object.keys(rawData[0]).join(', ')}`);
+
+          const cleanedRows = rawData.map((row: any) => {
+            // 1. STRICT STATUS MAPPING (Release State)
+            const rawStatus = String(row['Status'] || '').toLowerCase();
+            const cleanStatus = rawStatus.includes('complete') ? 'Completed' : 'Airing';
+
+            // 2. STRICT SYNOPSIS MAPPING (Plots)
+            const synopsis = (row['Synopsis'] || row['Description'] || '').toString();
+
+            // 3. STRICT LANGUAGE MAPPING (Audio Tracks)
+            const rawLangs = row['Languages'] || row['languages'] || '';
+            const languagesArray = typeof rawLangs === 'string' 
+              ? rawLangs.split(',').map(l => l.trim()).filter(Boolean)
+              : [];
+
+            // 4. STRICT POSTER MAPPING (Visuals)
+            const poster = (row['Poster'] || row['Poster URL'] || row['Cover Image'] || '').toString();
+
+            // CONSTRUCT FINAL CLEAN PAYLOAD
+            return {
+              title: (row['Title'] || row['Name'] || 'Untitled Anime').toString(),
+              slug: (row['Title'] || row['Name'] || 'untitled').toString().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+              synopsis: synopsis,
+              cover_image: poster,
+              status: cleanStatus,
+              airing_status: cleanStatus,
+              approval_status: 'pending',
+              is_published: 0,
+              type: (row['Type'] || 'TV Series').toString(),
+              year: parseInt(row['Release Year'] || row['Year'] || new Date().getFullYear(), 10) || new Date().getFullYear(),
+              rating: parseFloat(row['Rating'] || '8.5') || 8.5,
+              genres: (row['Genres'] || row['Genre'] || 'Action').toString(),
+              languages: languagesArray.join(', '),
+              platform: (row['Platform'] || row['Streaming Partners'] || 'Crunchyroll').toString(),
+              episodes_count: parseInt(row['Episodes'] || row['Episodes Count'] || '12', 10) || 12,
+              studio: (row['Studio'] || 'Unknown Studio').toString()
             };
-
-            return parsedRow;
           });
-          
-          console.log("[Frontend] Cleaned CSV Rows:", cleanedRows);
 
-          addTerminalLog('CSV', 'Uploading parsed CSV rows to Cloudflare D1 moderation queue...');
+          addTerminalLog('CSV', `Cleaned ${cleanedRows.length} rows using absolute header mapping.`);
+          console.log('[CSV REWRITE] Cleaned Rows:', cleanedRows);
+
           const res = await cloudflareApi.uploadCSV({ animeList: cleanedRows });
-          
-          const count = res.count || parsedRows.length;
-          const skipped = res.skipped || 0;
-          const feedbackMsg = `Successfully synchronized ${count} anime entries to moderation queue! (Skipped duplicates: ${skipped})`;
+          const count = res.count || cleanedRows.length;
+          const feedbackMsg = `Successfully synchronized ${count} entries to moderation.`;
           
           setImportedCount(count);
           setShowImportToast(true);
           setSuccessMsg(feedbackMsg);
           addTerminalLog('OK', feedbackMsg);
-
-          if (typeof onToast === 'function') {
-            onToast(feedbackMsg);
-          }
 
           await fetchAnime();
           await fetchPendingItems();
@@ -588,26 +596,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             setShowImportToast(false);
             setSuccessMsg('');
           }, 6000);
+
         } catch (err: any) {
-          console.error('CSV Import Error:', err);
-          const errMsg = err.message || 'CSV parsing failed: Check header format';
-          setUploadError(errMsg);
-          setSuccessMsg(`CSV Import Failed: ${errMsg}`);
-          addTerminalLog('ERR', `[ERROR] CSV Import failed: ${errMsg}`);
-          setTimeout(() => setSuccessMsg(''), 6000);
+          console.error('CRITICAL CSV ERROR:', err);
+          setSuccessMsg(`Import Failed: ${err.message}`);
+          addTerminalLog('ERR', `[FATAL] ${err.message}`);
         } finally {
           setIsImporting(false);
           if (fileInputRef.current) fileInputRef.current.value = '';
         }
       },
-      error: (error: any) => {
-        console.error('PapaParse Error:', error);
-        const errMsg = 'CSV parsing failed: Check header format';
-        setUploadError(errMsg);
-        setSuccessMsg(errMsg);
-        addTerminalLog('ERR', `[ERROR] ${errMsg}`);
+      error: (error) => {
+        addTerminalLog('ERR', `PapaParse Fatal: ${error.message}`);
         setIsImporting(false);
-        setTimeout(() => setSuccessMsg(''), 5000);
       }
     });
   };

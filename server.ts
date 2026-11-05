@@ -1360,34 +1360,48 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
 
     let insertedCount = 0;
     for (const row of rows) {
-      const title = (row.Title || row.title || row.Name || row.name || '').toString().trim();
+      // 1. ABSOLUTE HEADER EXTRACTION
+      const title = (row.title || row['Title'] || row.Name || '').toString().trim();
       if (!title) continue;
 
-      const slug = (row.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')) + '-' + Math.random().toString(36).substring(2, 5);
-      const synopsis = (row.Synopsis || row.synopsis || row.Description || row.description || 'Follow this thrilling dubbed adventure.').toString().trim();
-      const year = parseInt(row['Release Year'] || row.Year || row.year || new Date().getFullYear(), 10) || new Date().getFullYear();
-      const rating = parseFloat(row.Rating || row.rating || row.Ratings || 8.5) || 8.5;
-      const genres = (row.Genres || row.genres || row.genre || 'Action,Fantasy').toString().trim();
-      const platform = (row.Platform || row.platform || row['Streaming Partners'] || 'Crunchyroll').toString().trim();
-      const languages = (row.Languages || row.languages || 'Tamil, Hindi').toString().trim();
-      const episodes_count = parseInt(row.Episodes || row.episodes || row.episodes_count || 12, 10) || 12;
-      const studio = String(row.Studio || row.studio || 'Unknown Studio').trim();
-      const resolvedType = normalizeAnimeType(row.Type || row.type || 'TV Series');
+      const rawStatus = String(row.status || row['Status'] || '').toLowerCase();
+      const finalStatus = rawStatus.includes('complete') ? 'Completed' : 'Airing';
+
+      const synopsis = (row.synopsis || row['Synopsis'] || row.Description || '').toString().trim();
+      const poster = (row.cover_image || row.poster_url || row['Poster'] || row['Poster URL'] || row['Cover Image'] || '').toString().trim();
       
-      const rawStatusIn = String(row.Status || row.status || row['Release Status'] || row.airing_status || '').toLowerCase();
-      const finalStatus = rawStatusIn.includes('complete') ? 'Completed' : 'Airing';
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Math.random().toString(36).substring(2, 5);
 
-      const cover_image = (row.Poster || row['Poster URL'] || row['Cover Image'] || row.cover_image || row.poster || row.poster_url || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800').trim();
-      const banner_image = cover_image;
-
-      console.log(`[Backend] CSV Import Processing: title="${title}", rawStatusIn="${rawStatusIn}", finalStatus="${finalStatus}"`);
-
+      // 2. DB INSERT WITH SANITIZED VALUES
       db.run(
-        `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, finalStatus, finalStatus, year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, resolvedType, studio, String(episodes_count)]
+        `INSERT INTO anime (
+          title, slug, synopsis, cover_image, banner_image, 
+          rating, episodes_count, status, airing_status, 
+          submissionStatus, approval_status, is_published, 
+          season, year, genres, popularity, languages, 
+          platform, type, studio, episodes_per_season
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          title, 
+          slug, 
+          synopsis, 
+          poster, 
+          poster, 
+          parseFloat(row.rating || row['Rating'] || 8.5) || 8.5,
+          parseInt(row.episodes_count || row['Episodes'] || 12, 10) || 12,
+          finalStatus, 
+          finalStatus, 
+          parseInt(row.year || row['Release Year'] || 2024, 10) || 2024,
+          (row.genres || row['Genres'] || 'Action').toString(),
+          Math.floor(Math.random() * 50000) + 20000,
+          (row.languages || row['Languages'] || 'Tamil, Hindi').toString(),
+          (row.platform || row['Platform'] || 'Crunchyroll').toString(),
+          (row.type || row['Type'] || 'TV Series').toString(),
+          (row.studio || row['Studio'] || 'Unknown Studio').toString(),
+          String(row.episodes_count || row['Episodes'] || 12)
+        ]
       );
       
-      console.log(`[Backend] DB Insert successful for "${title}" with status "${finalStatus}"`);
       insertedCount++;
     }
 
