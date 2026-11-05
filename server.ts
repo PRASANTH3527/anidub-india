@@ -741,7 +741,13 @@ app.get('/api/anime', (req, res) => {
     while (dataStmt.step()) {
       const row: any = dataStmt.getAsObject();
       if (row.mixedEntries) {
-        try { row.mixedEntries = JSON.parse(row.mixedEntries); } catch { row.mixedEntries = []; }
+        try { 
+          row.mixedEntries = JSON.parse(row.mixedEntries); 
+          row.mixed_entries = row.mixedEntries;
+        } catch { 
+          row.mixedEntries = []; 
+          row.mixed_entries = [];
+        }
       }
       animeList.push(row);
     }
@@ -769,7 +775,13 @@ app.get('/api/anime/:id', (req, res) => {
     }
     const anime: any = stmt.getAsObject();
     if (anime.mixedEntries) {
-      try { anime.mixedEntries = JSON.parse(anime.mixedEntries); } catch { anime.mixedEntries = []; }
+      try { 
+        anime.mixedEntries = JSON.parse(anime.mixedEntries); 
+        anime.mixed_entries = anime.mixedEntries;
+      } catch { 
+        anime.mixedEntries = []; 
+        anime.mixed_entries = [];
+      }
     }
     stmt.free();
 
@@ -1331,7 +1343,17 @@ app.get('/api/admin/pending', requireAdminAuth, (req, res) => {
     const stmt = db.prepare("SELECT * FROM anime WHERE approval_status = 'pending' OR submissionStatus = 'pending' ORDER BY id DESC");
     const pendingItems: any[] = [];
     while (stmt.step()) {
-      pendingItems.push(stmt.getAsObject());
+      const item: any = stmt.getAsObject();
+      if (item.mixedEntries) {
+        try {
+          item.mixedEntries = JSON.parse(item.mixedEntries);
+          item.mixed_entries = item.mixedEntries;
+        } catch {
+          item.mixedEntries = [];
+          item.mixed_entries = [];
+        }
+      }
+      pendingItems.push(item);
     }
     stmt.free();
     res.json({ success: true, data: pendingItems, total: pendingItems.length });
@@ -1389,6 +1411,28 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       
       const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Math.random().toString(36).substring(2, 5);
 
+      // 1b. Mixed Entries / Seasons Handling
+      let mixedEntriesRaw = row.mixed_entries || row.mixedEntries;
+      if (!mixedEntriesRaw && typeof row['Seasons'] === 'string') {
+        mixedEntriesRaw = row['Seasons'].split('|').map((entry: string) => {
+          const [name, eps] = entry.split(':');
+          return {
+            type: 'Season',
+            name: name ? name.trim() : '',
+            episodes: parseInt(eps) || null
+          };
+        }).filter((e: any) => e.name !== '');
+      }
+
+      const mixedEntriesJson = Array.isArray(mixedEntriesRaw) 
+        ? JSON.stringify(mixedEntriesRaw) 
+        : (typeof mixedEntriesRaw === 'string' ? mixedEntriesRaw : '');
+
+      const epCount = parseInt(row.episodes_count || row.episodes || row['Episodes'] || 12, 10) || 12;
+      const episodesPerSeason = Array.isArray(mixedEntriesRaw) && mixedEntriesRaw.length > 0
+        ? mixedEntriesRaw.map((e: any) => e.episodes || 12).join('|')
+        : (row.episodes_per_season ? String(row.episodes_per_season) : String(epCount));
+
       // 2. DB INSERT WITH SANITIZED VALUES
       db.run(
         `INSERT INTO anime (
@@ -1396,8 +1440,8 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
           rating, episodes_count, status, airing_status, 
           submissionStatus, approval_status, is_published, 
           season, year, genres, popularity, languages, 
-          platform, type, studio, episodes_per_season
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          platform, type, studio, episodes_per_season, mixedEntries
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           title, 
           slug, 
@@ -1405,7 +1449,7 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
           poster, 
           poster, 
           parseFloat(row.rating || row['Ratings'] || row['Rating'] || 8.5) || 8.5,
-          parseInt(row.episodes_count || row.episodes || row['Episodes'] || 12, 10) || 12,
+          epCount,
           finalStatus, 
           finalStatus, 
           parseInt(row.year || row['Release Year'] || row['Year'] || 2024, 10) || 2024,
@@ -1415,7 +1459,8 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
           (row.platform || row['Platform'] || 'Crunchyroll').toString(),
           (row.type || row['Type'] || 'TV Series').toString(),
           (row.studio || row['Studio'] || 'Unknown Studio').toString(),
-          String(row.episodes_count || row.episodes || row['Episodes'] || 12)
+          episodesPerSeason,
+          mixedEntriesJson
         ]
       );
       

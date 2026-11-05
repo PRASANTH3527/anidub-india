@@ -903,14 +903,34 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         if (!studio) studio = 'Unknown Studio';
 
         const resolvedType = (row.type || row.Type || 'TV Series').toString().trim();
-        const episodesCount = parseInt(row.episodes_count || row.episodes || '12', 10) || 12;
+        const epCount = parseInt(row.episodes_count || row.episodes || '12', 10) || 12;
+
+        let mixedEntriesRaw = row.mixed_entries || row.mixedEntries;
+        if (!mixedEntriesRaw && typeof row['Seasons'] === 'string') {
+          mixedEntriesRaw = row['Seasons'].split('|').map((entry: string) => {
+            const [name, eps] = entry.split(':');
+            return {
+              type: 'Season',
+              name: name ? name.trim() : '',
+              episodes: parseInt(eps) || null
+            };
+          }).filter((e: any) => e.name !== '');
+        }
+
+        const mixedEntriesJson = Array.isArray(mixedEntriesRaw) 
+          ? JSON.stringify(mixedEntriesRaw) 
+          : (typeof mixedEntriesRaw === 'string' ? mixedEntriesRaw : '');
+
+        const episodesPerSeason = Array.isArray(mixedEntriesRaw) && mixedEntriesRaw.length > 0
+          ? mixedEntriesRaw.map((e: any) => e.episodes || 12).join('|')
+          : (row.episodes_per_season ? String(row.episodes_per_season) : String(epCount));
 
         if (env.DB) {
           try {
             await env.DB.prepare(
-              `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?)`
-            ).bind(title, slug, synopsis, cover_image, banner_image, rating, episodesCount, resolvedStatus, resolvedStatus, year, genres, languages, platform, resolvedType, studio, String(episodesCount)).run();
+              `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?, ?)`
+            ).bind(title, slug, synopsis, cover_image, banner_image, rating, epCount, resolvedStatus, resolvedStatus, year, genres, languages, platform, resolvedType, studio, episodesPerSeason, mixedEntriesJson).run();
           } catch (firstErr: any) {
             // Auto-heal missing D1 columns if migrations have not been applied yet
             try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN is_published INTEGER DEFAULT 0").run(); } catch {}
@@ -918,17 +938,18 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN approval_status TEXT DEFAULT 'pending'").run(); } catch {}
             try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN submissionStatus TEXT DEFAULT 'pending'").run(); } catch {}
             try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT ''").run(); } catch {}
+            try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN mixedEntries TEXT DEFAULT ''").run(); } catch {}
 
             try {
               await env.DB.prepare(
-                `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?)`
-              ).bind(title, slug, synopsis, cover_image, banner_image, rating, episodesCount, resolvedStatus, resolvedStatus, year, genres, languages, platform, resolvedType, studio, String(episodesCount)).run();
+                `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?, ?)`
+              ).bind(title, slug, synopsis, cover_image, banner_image, rating, epCount, resolvedStatus, resolvedStatus, year, genres, languages, platform, resolvedType, studio, episodesPerSeason, mixedEntriesJson).run();
             } catch {
               await env.DB.prepare(
                 `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, is_published, season, year, genres, popularity, languages, platform, type, studio)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?)`
-              ).bind(title, slug, synopsis, cover_image, banner_image, rating, episodesCount, resolvedStatus, year, genres, languages, platform, resolvedType, studio).run();
+              ).bind(title, slug, synopsis, cover_image, banner_image, rating, epCount, resolvedStatus, year, genres, languages, platform, resolvedType, studio).run();
             }
           }
         }

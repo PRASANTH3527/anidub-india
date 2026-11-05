@@ -565,7 +565,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           rating: parseFloat(row['Ratings']) || null,
           synopsis: row['Synopsis'] || '',
           approval_status: 'pending',
-          is_published: false
+          is_published: false,
+          mixed_entries: typeof row['Seasons'] === 'string' 
+            ? row['Seasons'].split('|').map((entry: string) => {
+                const [name, eps] = entry.split(':');
+                return {
+                  type: 'Season', // or dynamically extract if needed
+                  name: name ? name.trim() : '',
+                  episodes: parseInt(eps) || null
+                };
+              }).filter((e: any) => e.name !== '')
+            : []
         };
 
         return {
@@ -574,6 +584,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           airing_status: parsedRow.status,
           submissionStatus: 'pending',
           episodes_count: parsedRow.episodes || 12,
+          mixed_entries: parsedRow.mixed_entries,
+          mixedEntries: parsedRow.mixed_entries,
+          episodes_per_season: parsedRow.mixed_entries.length > 0
+            ? parsedRow.mixed_entries.map((m: any) => m.episodes || 12).join('|')
+            : String(parsedRow.episodes || 12),
           slug: (parsedRow.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
         };
       });
@@ -643,10 +658,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleDownloadTemplate = () => {
-    const templateContent = 'Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,Platform,Ratings,Synopsis\n' +
-      'Solo Leveling,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Crunchyroll,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up."\n' +
-      'Demon Slayer: Hashira Training,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come."\n' +
-      'Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone."\n';
+    const templateContent = 'Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,Platform,Ratings,Synopsis,Seasons\n' +
+      'Solo Leveling,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Crunchyroll,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"\n' +
+      'Demon Slayer: Hashira Training,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"\n' +
+      'Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"\n';
     const blob = new Blob([templateContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

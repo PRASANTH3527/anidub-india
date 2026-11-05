@@ -93,15 +93,21 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     episodes: string;
     languages: DubLanguage[];
   }[]>(
-    initDataAny?.mixedEntries && Array.isArray(initDataAny.mixedEntries)
-      ? initDataAny.mixedEntries.map((e: any, idx: number) => ({
+    (() => {
+      const entries = initDataAny?.mixedEntries || initDataAny?.mixed_entries;
+      const list = typeof entries === 'string' ? (() => { try { return JSON.parse(entries); } catch { return null; } })() : entries;
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map((e: any, idx: number) => ({
           id: e.id || idx + 1,
           entryType: e.entryType || e.type || 'Season',
-          seasonNumber: e.seasonNumber || e.number || String(idx + 1),
+          seasonNumber: e.seasonNumber || e.name || e.label || e.number || String(idx + 1),
           episodes: String(e.episodes || e.episodeCount || 12),
           languages: e.languages || ['Tamil', 'Hindi']
-        }))
-      : initialData ? [
+        }));
+      }
+      return null;
+    })() ||
+      (initialData ? [
           {
             id: Date.now() + 1,
             entryType: 'Season',
@@ -119,7 +125,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
             episodes: '12',
             languages: ['Tamil', 'Hindi']
           }
-        ]
+        ])
   );
 
   const seasonDetails = mixedEntries.map(entry => ({
@@ -198,11 +204,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       });
       console.log(`[DubInfoModal] useEffect triggered. Setting status to: ${initialStatus}`);
 
-      if (initDataAny?.mixedEntries && Array.isArray(initDataAny.mixedEntries)) {
-        const mapped = initDataAny.mixedEntries.map((e: any, idx: number) => ({
+      const rawEntries = initDataAny?.mixedEntries || initDataAny?.mixed_entries;
+      const parsedEntries = typeof rawEntries === 'string' ? (() => { try { return JSON.parse(rawEntries); } catch { return null; } })() : rawEntries;
+      if (Array.isArray(parsedEntries) && parsedEntries.length > 0) {
+        const mapped = parsedEntries.map((e: any, idx: number) => ({
           id: e.id || `entry-${Date.now()}-${idx}`,
           entryType: e.entryType || e.type || 'Season',
-          seasonNumber: e.seasonNumber || e.number || String(idx + 1),
+          seasonNumber: e.seasonNumber || e.name || e.label || e.number || String(idx + 1),
           episodes: String(e.episodes || e.episodeCount || 12),
           languages: e.languages || ['Tamil', 'Hindi']
         }));
