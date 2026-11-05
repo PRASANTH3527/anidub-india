@@ -537,37 +537,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }
 
           const cleanedRows = parsedRows.map((row: any) => {
-            // STRICT MAPPING: Extract values using precise CSV header names
-            const rawStatus = String(row.Status || row.status || row['Release Status'] || '').toLowerCase();
-            const cleanStatus = rawStatus.includes('complete') ? 'Completed' : 'Airing';
-            
-            // Languages must be parsed into an array (or clean string)
-            const rawLangs = row.Languages || row.languages || 'Tamil, Hindi';
-            const cleanLangs = typeof rawLangs === 'string' 
-              ? rawLangs.split(',').map(l => l.trim()).filter(Boolean)
-              : (Array.isArray(rawLangs) ? rawLangs : ['Tamil', 'Hindi']);
-
-            // Bulletproof Poster URL mapping
-            const poster = (row.Poster || row['Poster URL'] || row['Cover Image'] || row.cover_image || row.poster || row.poster_url || '').trim();
-
-            return {
-              title: (row.Title || row.title || row.Name || row.name || '').trim(),
-              slug: (row.Title || row.title || row.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-              synopsis: (row.Synopsis || row.synopsis || row.Description || row.description || '').trim(),
-              cover_image: poster,
-              studio: (row.Studio || row.studio || 'Unknown Studio').trim(),
-              status: cleanStatus,
-              airing_status: cleanStatus,
-              approval_status: 'pending',
+            // BRAND NEW EXPLICIT HARDCODED MAPPING
+            const parsedRow = {
+              title: row['Title'] || row.title || 'Unknown Title',
+              poster_url: row['Poster'] || row['Poster URL'] || row.poster_url || '', // Stops language data from leaking here
+              cover_image: row['Poster'] || row['Poster URL'] || row.poster_url || '', // Backend fallback
+              type: row['Type'] || row.type || 'TV Series',
+              status: String(row['Status'] || row.status || '').toLowerCase().includes('complete') ? 'Completed' : 'Airing', // Strictly outputs only Airing or Completed
+              airing_status: String(row['Status'] || row.status || '').toLowerCase().includes('complete') ? 'Completed' : 'Airing',
+              languages: typeof (row['Languages'] || row.languages) === 'string' ? (row['Languages'] || row.languages).split(',').map((l: string) => l.trim()) : [],
+              approval_status: 'pending', // Strictly for moderation
               submissionStatus: 'pending',
-              is_published: 0,
-              year: parseInt(row['Release Year'] || row.year || row.release_year || new Date().getFullYear()),
-              genres: row.Genres || row.genres || row.genre || 'Action',
-              rating: parseFloat(row.Rating || row.rating || row.ratings || 8.5),
-              languages: cleanLangs.join(', '),
-              platform: row.Platform || row.platform || row['Streaming Partners'] || row.streaming_partners || 'Crunchyroll',
-              episodes_count: parseInt(row.Episodes || row.episodes || row.episodes_count || 12)
+              is_published: false,
+              // Including essential fields for the DB to avoid empty entries
+              synopsis: row['Synopsis'] || row.synopsis || row['Description'] || row.description || '',
+              year: parseInt(row['Release Year'] || row.year || new Date().getFullYear(), 10),
+              genres: row['Genres'] || row.genres || 'Action',
+              rating: parseFloat(row['Rating'] || row.rating || 8.5),
+              studio: row['Studio'] || row.studio || 'Unknown Studio',
+              episodes_count: parseInt(row['Episodes'] || row.episodes || 12, 10),
+              platform: row['Platform'] || row.platform || row['Streaming Partners'] || 'Crunchyroll'
             };
+
+            return parsedRow;
           });
           
           console.log("[Frontend] Cleaned CSV Rows:", cleanedRows);
