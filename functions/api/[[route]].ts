@@ -78,7 +78,7 @@ function jsonResponse(data: any, status = 200, request?: Request, extraHeaders?:
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token, x-device-id',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token, x-device-id, x-user-id',
     ...(extraHeaders || {})
   };
 

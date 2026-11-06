@@ -22,6 +22,14 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  // Safe top-level toast hook access
+  let toast: any = null;
+  try {
+    toast = useToast();
+  } catch {
+    toast = null;
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageFile = (file: File) => {
@@ -117,10 +125,9 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
       setMessage('');
       handleRemoveImage();
 
-      try {
-        const toast = useToast();
+      if (toast?.success) {
         toast.success('Feedback Submitted!', 'Thank you for helping us improve regional anime dubs.');
-      } catch {}
+      }
 
       setTimeout(() => setSubmitted(false), 4000);
     } catch (err) {

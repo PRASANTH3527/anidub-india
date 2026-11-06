@@ -62,6 +62,30 @@ export const CLOUDFLARE_ENDPOINTS = {
  */
 export function getCloudflareUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
+
+  // If in browser, check if an admin manual override is set in localStorage
+  if (typeof window !== 'undefined') {
+    let manualOverride = '';
+    try {
+      manualOverride = localStorage.getItem('cf_api_url_override') || '';
+    } catch {}
+
+    if (manualOverride && manualOverride.trim() !== '') {
+      try {
+        const cleanBase = manualOverride.trim().replace(/\/+$/, '');
+        const fullUrl = `${cleanBase}${cleanPath}`;
+        new URL(fullUrl);
+        return fullUrl;
+      } catch {}
+    }
+
+    // On local dev or AI Studio preview container, route via same-origin relative paths to server.ts
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host.includes('.run.app')) {
+      return cleanPath;
+    }
+  }
+
   if (!CLOUDFLARE_API_URL || CLOUDFLARE_API_URL.trim() === '') {
     return cleanPath;
   }
@@ -82,9 +106,17 @@ export function getCloudflareUrl(path: string): string {
  */
 export function getCloudflareWsUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host.includes('.run.app')) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${protocol}//${window.location.host}${cleanPath}`;
+    }
+  }
   if (!CLOUDFLARE_API_URL || CLOUDFLARE_API_URL.trim() === '') {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}${cleanPath}`;
+    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
+    return `${protocol}//${host}${cleanPath}`;
   }
   const cleanBase = CLOUDFLARE_API_URL.replace(/\/+$/, '').replace(/^http/, 'ws');
   return `${cleanBase}${cleanPath}`;

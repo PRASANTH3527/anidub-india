@@ -159,7 +159,7 @@ function getCorsHeaders(request) {
   
   const headers = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, x-device-id, x-requested-with, Accept, Origin, Cache-Control, Pragma",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, x-device-id, x-user-id, x-requested-with, Accept, Origin, Cache-Control, Pragma",
     "Access-Control-Expose-Headers": "Content-Length, Content-Type, Set-Cookie",
     "Vary": "Origin"
   };

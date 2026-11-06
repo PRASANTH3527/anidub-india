@@ -27,7 +27,7 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
   }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-token, x-device-id, Accept, Origin, Cache-Control, Pragma, X-Requested-With');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-token, x-device-id, x-user-id, Accept, Origin, Cache-Control, Pragma, X-Requested-With');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -352,10 +352,8 @@ function runMigrations() {
   try { db.run("UPDATE anime SET status = 'Completed' WHERE status = 'pending' OR status IS NULL OR status = '';"); } catch (e) {}
   try { db.run("UPDATE anime SET airing_status = status WHERE airing_status = 'pending' OR airing_status != status OR airing_status IS NULL OR airing_status = '';"); } catch (e) {}
   try {
-    db.run("UPDATE anime SET is_published = 1, approval_status = 'approved', submissionStatus = 'approved' WHERE (approval_status = 'approved' OR submissionStatus = 'approved') AND (is_published IS NULL OR is_published = 0);");
-  } catch (e) {}
-  try {
-    db.run("UPDATE anime SET is_published = 0 WHERE submissionStatus = 'pending' OR approval_status = 'pending';");
+    db.run("UPDATE anime SET is_published = 1, approval_status = 'approved', submissionStatus = 'approved' WHERE approval_status = 'approved' OR submissionStatus = 'approved';");
+    db.run("UPDATE anime SET is_published = 0, approval_status = 'pending', submissionStatus = 'pending' WHERE (submissionStatus = 'pending' OR approval_status = 'pending') AND submissionStatus != 'approved' AND approval_status != 'approved';");
   } catch (e) {}
 
   db.run(`
@@ -549,7 +547,7 @@ function runMigrations() {
 
       for (const anime of seedAnimeList) {
         db.run(
-          `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 'approved', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             anime.title,
             anime.slug,
@@ -559,7 +557,7 @@ function runMigrations() {
             anime.rating,
             anime.episodes_count,
             anime.status,
-            'approved',
+            anime.status,
             anime.season,
             anime.year,
             anime.genres,
