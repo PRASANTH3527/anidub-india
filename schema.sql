@@ -136,6 +136,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   rating REAL,
   language TEXT,
   isReview INTEGER DEFAULT 0,
+  clerk_user_id TEXT,
+  avatar TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 

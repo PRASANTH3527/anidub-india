@@ -670,17 +670,44 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               language TEXT,
               isReview INTEGER DEFAULT 0,
               clerk_user_id TEXT,
+              avatar TEXT,
               created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
           `).run().catch(() => {});
 
-          const res = await env.DB.prepare(
-            "SELECT id, user, text, timestamp, rating, language, isReview, clerk_user_id, created_at FROM chat_messages ORDER BY id ASC LIMIT 150"
-          ).all();
-          const list = (res.results || []).map((m: any) => ({
-            ...m,
-            isReview: Boolean(m.isReview)
-          }));
+          // Auto-migrate any potentially missing columns on existing D1 databases
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN rating REAL").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN language TEXT").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN isReview INTEGER DEFAULT 0").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN clerk_user_id TEXT").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN avatar TEXT").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP").run().catch(() => {});
+
+          let list: any[] = [];
+          try {
+            const res = await env.DB.prepare(
+              "SELECT id, user, text, timestamp, rating, language, isReview, clerk_user_id, created_at FROM chat_messages ORDER BY id ASC LIMIT 150"
+            ).all();
+            list = (res.results || []).map((m: any) => ({
+              ...m,
+              isReview: Boolean(m.isReview)
+            }));
+          } catch {
+            // Graceful fallback if any column is still missing
+            const fallbackRes = await env.DB.prepare("SELECT * FROM chat_messages ORDER BY id ASC LIMIT 150").all().catch(() => ({ results: [] }));
+            list = (fallbackRes.results || []).map((m: any) => ({
+              id: m.id,
+              user: m.user || m.username || 'Anonymous Fan',
+              text: m.text || m.message || '',
+              timestamp: m.timestamp || new Date().toISOString(),
+              rating: m.rating !== undefined ? m.rating : null,
+              language: m.language || m.dub_language || null,
+              isReview: Boolean(m.isReview || m.is_review),
+              clerk_user_id: m.clerk_user_id || null,
+              created_at: m.created_at || null
+            }));
+          }
+
           return jsonResponse({ success: true, count: list.length, messages: list, data: list });
         }
         return jsonResponse({ success: true, count: 0, messages: [], data: [] });
@@ -692,23 +719,28 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (method === 'POST') {
       try {
         const body: any = await request.json().catch(() => ({}));
-        const { user, text, timestamp, rating, language, isReview, clerk_user_id } = body;
-        if (!text || !String(text).trim()) {
+        const { user, username, user_name, text, message, comment, timestamp, rating, language, dub_language, dubLanguage, isReview, is_review, clerk_user_id, userId, user_id, avatar, user_avatar, avatar_url } = body;
+        
+        const rawText = text || message || comment;
+        if (!rawText || !String(rawText).trim()) {
           return jsonResponse({ error: "Missing message text" }, 400);
         }
 
-        const cleanUser = String(user || 'Anonymous Fan').trim().slice(0, 50);
+        const cleanUser = String(user || username || user_name || 'Anonymous Fan').trim().slice(0, 50);
         const cleanClerkId = String(
           clerk_user_id || 
+          userId || 
+          user_id || 
           request.headers.get('x-clerk-user-id') || 
           request.headers.get('authorization') || 
           'guest'
         ).trim();
-        const cleanText = String(text).slice(0, 1000);
+        const cleanText = String(rawText).slice(0, 1000);
         const cleanTimestamp = String(timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        const cleanRating = rating !== undefined && rating !== null ? Number(rating) : null;
-        const cleanLanguage = language ? String(language).slice(0, 30) : null;
-        const cleanIsReview = isReview ? 1 : 0;
+        const cleanRating = rating !== undefined && rating !== null && !isNaN(Number(rating)) ? Number(rating) : null;
+        const cleanLanguage = (language || dub_language || dubLanguage) ? String(language || dub_language || dubLanguage).slice(0, 30) : null;
+        const cleanIsReview = Boolean(isReview || is_review || cleanRating) ? 1 : 0;
+        const cleanAvatar = (avatar || user_avatar || avatar_url) ? String(avatar || user_avatar || avatar_url).slice(0, 500) : null;
 
         if (env.DB) {
           await env.DB.prepare(`
@@ -721,35 +753,57 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               language TEXT,
               isReview INTEGER DEFAULT 0,
               clerk_user_id TEXT,
+              avatar TEXT,
               created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
           `).run().catch(() => {});
+
+          // Auto-migrate columns silently
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN rating REAL").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN language TEXT").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN isReview INTEGER DEFAULT 0").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN clerk_user_id TEXT").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN avatar TEXT").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP").run().catch(() => {});
+
+          // 1. Check if this exact username has been claimed by someone else in the database (safe check)
           try {
-            await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN clerk_user_id TEXT").run().catch(() => {});
-          } catch {}
+            const checkRes = await env.DB.prepare(
+              "SELECT DISTINCT clerk_user_id FROM chat_messages WHERE LOWER(TRIM(user)) = LOWER(?) AND clerk_user_id IS NOT NULL AND clerk_user_id != ''"
+            ).bind(cleanUser).all();
 
-          // 1. Check if this exact username has been claimed by someone else in the database
-          const checkRes = await env.DB.prepare(
-            "SELECT DISTINCT clerk_user_id FROM chat_messages WHERE LOWER(TRIM(user)) = LOWER(?) AND clerk_user_id IS NOT NULL AND clerk_user_id != ''"
-          ).bind(cleanUser).all();
+            const existingOwners = checkRes.results || [];
+            const claimedByOther = existingOwners.some((row: any) => 
+              row.clerk_user_id && String(row.clerk_user_id).trim() !== cleanClerkId
+            );
 
-          const existingOwners = checkRes.results || [];
-          const claimedByOther = existingOwners.some((row: any) => 
-            row.clerk_user_id && String(row.clerk_user_id).trim() !== cleanClerkId
-          );
-
-          if (claimedByOther) {
-            return jsonResponse({
-              success: false,
-              error: "This username is already claimed by another user."
-            }, 400);
+            if (claimedByOther) {
+              return jsonResponse({
+                success: false,
+                error: "This username is already claimed by another user."
+              }, 400);
+            }
+          } catch {
+            // Ignore if clerk_user_id check cannot run
           }
 
-          const insertRes = await env.DB.prepare(
-            "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview, clerk_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
-          ).bind(cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId).run();
-
-          const insertedId = insertRes.meta?.last_row_id || Date.now();
+          let insertedId: any = Date.now();
+          try {
+            const insertRes = await env.DB.prepare(
+              "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview, clerk_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            ).bind(cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId).run();
+            insertedId = insertRes.meta?.last_row_id || Date.now();
+          } catch {
+            // Graceful fallback to legacy 3-column insertion if D1 schema has missing columns
+            try {
+              const fallbackInsert = await env.DB.prepare(
+                "INSERT INTO chat_messages (user, text, timestamp) VALUES (?, ?, ?)"
+              ).bind(cleanUser, cleanText, cleanTimestamp).run();
+              insertedId = fallbackInsert.meta?.last_row_id || Date.now();
+            } catch (fbErr: any) {
+              return jsonResponse({ error: fbErr.message || 'Database insert failed' }, 500);
+            }
+          }
 
           return jsonResponse({
             success: true,
@@ -761,7 +815,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               rating: cleanRating,
               language: cleanLanguage,
               isReview: Boolean(cleanIsReview),
-              clerk_user_id: cleanClerkId
+              clerk_user_id: cleanClerkId,
+              avatar: cleanAvatar
             }
           }, 201);
         }

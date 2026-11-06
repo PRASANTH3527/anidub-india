@@ -445,7 +445,22 @@ function runMigrations() {
   `);
 
   try {
+    db.run("ALTER TABLE chat_messages ADD COLUMN rating REAL;");
+  } catch {}
+  try {
+    db.run("ALTER TABLE chat_messages ADD COLUMN language TEXT;");
+  } catch {}
+  try {
+    db.run("ALTER TABLE chat_messages ADD COLUMN isReview INTEGER DEFAULT 0;");
+  } catch {}
+  try {
     db.run("ALTER TABLE chat_messages ADD COLUMN clerk_user_id TEXT;");
+  } catch {}
+  try {
+    db.run("ALTER TABLE chat_messages ADD COLUMN avatar TEXT;");
+  } catch {}
+  try {
+    db.run("ALTER TABLE chat_messages ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP;");
   } catch {}
 
   // Ensure default user exists
@@ -1592,21 +1607,47 @@ app.put('/api/user/profile', (req, res) => {
 // Chat messages
 app.get(['/api/chat', '/api/chat/messages'], (req, res) => {
   try {
-    const stmt = db.prepare("SELECT id, user, text, timestamp, rating, language, isReview, created_at FROM chat_messages ORDER BY id ASC LIMIT 150");
-    const list = [];
-    while (stmt.step()) {
-      const row: any = stmt.getAsObject();
-      list.push({
-        id: row.id,
-        user: row.user,
-        text: row.text,
-        timestamp: row.timestamp,
-        rating: row.rating,
-        language: row.language,
-        isReview: Boolean(row.isReview)
-      });
+    let list: any[] = [];
+    try {
+      const stmt = db.prepare("SELECT id, user, text, timestamp, rating, language, isReview, clerk_user_id, created_at FROM chat_messages ORDER BY id ASC LIMIT 150");
+      while (stmt.step()) {
+        const row: any = stmt.getAsObject();
+        list.push({
+          id: row.id,
+          user: row.user,
+          text: row.text,
+          timestamp: row.timestamp,
+          rating: row.rating,
+          language: row.language,
+          isReview: Boolean(row.isReview),
+          clerk_user_id: row.clerk_user_id || null,
+          created_at: row.created_at || null
+        });
+      }
+      stmt.free();
+    } catch {
+      // Fallback if specific columns are not yet present in local/remote SQLite
+      try {
+        const stmt = db.prepare("SELECT * FROM chat_messages ORDER BY id ASC LIMIT 150");
+        while (stmt.step()) {
+          const row: any = stmt.getAsObject();
+          list.push({
+            id: row.id,
+            user: row.user || row.username || 'Anonymous Fan',
+            text: row.text || row.message || '',
+            timestamp: row.timestamp || new Date().toISOString(),
+            rating: row.rating !== undefined ? row.rating : null,
+            language: row.language || row.dub_language || null,
+            isReview: Boolean(row.isReview || row.is_review),
+            clerk_user_id: row.clerk_user_id || null,
+            created_at: row.created_at || null
+          });
+        }
+        stmt.free();
+      } catch (fbErr: any) {
+        console.warn('Fallback chat fetch error:', fbErr);
+      }
     }
-    stmt.free();
     res.json({ success: true, count: list.length, messages: list, data: list });
   } catch (err: any) {
     res.status(500).json({ error: err.message, messages: [] });
@@ -1615,18 +1656,21 @@ app.get(['/api/chat', '/api/chat/messages'], (req, res) => {
 
 app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
   try {
-    const { user, text, timestamp, rating, language, isReview, clerk_user_id } = req.body;
-    if (!text || !String(text).trim()) return res.status(400).json({ error: "Missing message text" });
+    const { user, username, user_name, text, message, comment, timestamp, rating, language, dub_language, dubLanguage, isReview, is_review, clerk_user_id, userId, user_id, avatar, user_avatar, avatar_url } = req.body;
+    
+    const rawText = text || message || comment;
+    if (!rawText || !String(rawText).trim()) return res.status(400).json({ error: "Missing message text" });
 
-    const cleanUser = String(user || 'Anonymous Fan').trim().slice(0, 50);
-    const cleanClerkId = String(clerk_user_id || req.headers['x-clerk-user-id'] || req.headers['authorization'] || 'guest').trim();
-    const cleanText = String(text).slice(0, 1000);
+    const cleanUser = String(user || username || user_name || 'Anonymous Fan').trim().slice(0, 50);
+    const cleanClerkId = String(clerk_user_id || userId || user_id || req.headers['x-clerk-user-id'] || req.headers['authorization'] || 'guest').trim();
+    const cleanText = String(rawText).slice(0, 1000);
     const cleanTimestamp = String(timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-    const cleanRating = rating !== undefined ? Number(rating) : null;
-    const cleanLanguage = language ? String(language).slice(0, 30) : null;
-    const cleanIsReview = isReview ? 1 : 0;
+    const cleanRating = rating !== undefined && rating !== null && !isNaN(Number(rating)) ? Number(rating) : null;
+    const cleanLanguage = (language || dub_language || dubLanguage) ? String(language || dub_language || dubLanguage).slice(0, 30) : null;
+    const cleanIsReview = Boolean(isReview || is_review || cleanRating) ? 1 : 0;
+    const cleanAvatar = (avatar || user_avatar || avatar_url) ? String(avatar || user_avatar || avatar_url).slice(0, 500) : null;
 
-    // Check if username is already claimed by another user
+    // Check if username is already claimed by another user (safe check)
     try {
       const checkStmt = db.prepare("SELECT DISTINCT clerk_user_id FROM chat_messages WHERE LOWER(TRIM(user)) = LOWER(?) AND clerk_user_id IS NOT NULL AND clerk_user_id != ''");
       checkStmt.bind([cleanUser]);
@@ -1647,18 +1691,36 @@ app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
       console.warn('Username check warning:', chkErr);
     }
 
-    db.run(
-      "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview, clerk_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId]
-    );
-    persistD1();
-
-    const stmt = db.prepare("SELECT last_insert_rowid() as id");
     let insertedId: any = Date.now();
-    if (stmt.step()) {
-      insertedId = stmt.getAsObject().id;
+    try {
+      db.run(
+        "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview, clerk_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId]
+      );
+      persistD1();
+
+      const stmt = db.prepare("SELECT last_insert_rowid() as id");
+      if (stmt.step()) {
+        insertedId = stmt.getAsObject().id;
+      }
+      stmt.free();
+    } catch (insertErr) {
+      console.warn('Full chat insert failed, falling back to minimal columns:', insertErr);
+      try {
+        db.run(
+          "INSERT INTO chat_messages (user, text, timestamp) VALUES (?, ?, ?)",
+          [cleanUser, cleanText, cleanTimestamp]
+        );
+        persistD1();
+        const stmt = db.prepare("SELECT last_insert_rowid() as id");
+        if (stmt.step()) {
+          insertedId = stmt.getAsObject().id;
+        }
+        stmt.free();
+      } catch (fbErr: any) {
+        return res.status(500).json({ error: fbErr.message || 'Database insert failed' });
+      }
     }
-    stmt.free();
 
     res.json({
       success: true,
@@ -1669,7 +1731,9 @@ app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
         timestamp: cleanTimestamp,
         rating: cleanRating,
         language: cleanLanguage,
-        isReview: Boolean(cleanIsReview)
+        isReview: Boolean(cleanIsReview),
+        clerk_user_id: cleanClerkId,
+        avatar: cleanAvatar
       }
     });
   } catch (err: any) {

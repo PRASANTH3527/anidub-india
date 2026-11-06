@@ -101,9 +101,27 @@ export class ChatRoom {
 
     try {
       if (this.env.DB) {
-        const { results } = await this.env.DB.prepare(
-          "SELECT id, user, text, timestamp, rating, language, isReview FROM chat_messages ORDER BY id DESC LIMIT 60"
-        ).all();
+        // Auto-migrate potentially missing columns
+        await this.env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN rating REAL").run().catch(() => {});
+        await this.env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN language TEXT").run().catch(() => {});
+        await this.env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN isReview INTEGER DEFAULT 0").run().catch(() => {});
+        await this.env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN clerk_user_id TEXT").run().catch(() => {});
+        await this.env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN avatar TEXT").run().catch(() => {});
+        await this.env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP").run().catch(() => {});
+
+        let results = [];
+        try {
+          const res = await this.env.DB.prepare(
+            "SELECT id, user, text, timestamp, rating, language, isReview, clerk_user_id FROM chat_messages ORDER BY id DESC LIMIT 60"
+          ).all();
+          results = res.results || [];
+        } catch {
+          const fallback = await this.env.DB.prepare(
+            "SELECT * FROM chat_messages ORDER BY id DESC LIMIT 60"
+          ).all().catch(() => ({ results: [] }));
+          results = fallback.results || [];
+        }
+
         if (results && results.length > 0) {
           const chronological = results.reverse();
           for (const msg of chronological) {
@@ -120,18 +138,26 @@ export class ChatRoom {
         const data = JSON.parse(msg.data);
         const chatMsg = {
           id: data.id || `msg_${Date.now()}_${Math.random()}`,
-          user: String(data.user || "Anonymous Fan").slice(0, 50),
-          text: String(data.text || "").slice(0, 1000),
+          user: String(data.user || data.username || data.user_name || "Anonymous Fan").slice(0, 50),
+          text: String(data.text || data.message || data.comment || "").slice(0, 1000),
           timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          rating: data.rating !== undefined && data.rating !== null ? Number(data.rating) : null,
-          language: data.language ? String(data.language).slice(0, 30) : null,
-          isReview: data.isReview ? 1 : 0
+          rating: data.rating !== undefined && data.rating !== null && !isNaN(Number(data.rating)) ? Number(data.rating) : null,
+          language: (data.language || data.dub_language) ? String(data.language || data.dub_language).slice(0, 30) : null,
+          isReview: Boolean(data.isReview || data.is_review || data.rating) ? 1 : 0,
+          clerk_user_id: String(data.clerk_user_id || data.userId || "guest").slice(0, 100)
         };
 
         if (this.env.DB) {
-          await this.env.DB.prepare(
-            "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview) VALUES (?, ?, ?, ?, ?, ?)"
-          ).bind(chatMsg.user, chatMsg.text, chatMsg.timestamp, chatMsg.rating, chatMsg.language, chatMsg.isReview).run();
+          try {
+            await this.env.DB.prepare(
+              "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview, clerk_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            ).bind(chatMsg.user, chatMsg.text, chatMsg.timestamp, chatMsg.rating, chatMsg.language, chatMsg.isReview, chatMsg.clerk_user_id).run();
+          } catch {
+            // Graceful fallback to 3-column insert
+            await this.env.DB.prepare(
+              "INSERT INTO chat_messages (user, text, timestamp) VALUES (?, ?, ?)"
+            ).bind(chatMsg.user, chatMsg.text, chatMsg.timestamp).run().catch(() => {});
+          }
         }
 
         this.broadcast(chatMsg);
@@ -328,18 +354,56 @@ export default {
       if (path === "/api/chat") {
         if (method === "GET") {
           if (env.DB) {
-            const { results } = await env.DB.prepare("SELECT * FROM chat_messages ORDER BY id DESC LIMIT 50").all();
-            return jsonResponse(results || [], 200, request);
+            let results = [];
+            try {
+              const res = await env.DB.prepare("SELECT id, user, text, timestamp, rating, language, isReview, clerk_user_id, created_at FROM chat_messages ORDER BY id ASC LIMIT 150").all();
+              results = res.results || [];
+            } catch {
+              const res = await env.DB.prepare("SELECT * FROM chat_messages ORDER BY id ASC LIMIT 150").all().catch(() => ({ results: [] }));
+              results = res.results || [];
+            }
+            return jsonResponse(results, 200, request);
           }
           return jsonResponse([], 200, request);
         }
         if (method === "POST") {
-          const body = await request.json();
-          if (env.DB) {
-            await env.DB.prepare("INSERT INTO chat_messages (user, text, timestamp) VALUES (?, ?, ?)")
-              .bind(body.user || 'Anon', body.text || '', new Date().toISOString()).run();
+          const body = await request.json().catch(() => ({}));
+          const cleanUser = String(body.user || body.username || body.user_name || 'Anonymous Fan').slice(0, 50);
+          const cleanText = String(body.text || body.message || body.comment || '').slice(0, 1000);
+          const cleanTimestamp = body.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const cleanRating = body.rating !== undefined && body.rating !== null && !isNaN(Number(body.rating)) ? Number(body.rating) : null;
+          const cleanLanguage = (body.language || body.dub_language) ? String(body.language || body.dub_language).slice(0, 30) : null;
+          const cleanIsReview = Boolean(body.isReview || body.is_review || cleanRating) ? 1 : 0;
+          const cleanClerkId = String(body.clerk_user_id || body.userId || 'guest').slice(0, 100);
+
+          if (!cleanText.trim()) {
+            return jsonResponse({ error: "Missing message text" }, 400, request);
           }
-          return jsonResponse({ success: true }, 201, request);
+
+          if (env.DB) {
+            try {
+              await env.DB.prepare(
+                "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview, clerk_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+              ).bind(cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId).run();
+            } catch {
+              await env.DB.prepare(
+                "INSERT INTO chat_messages (user, text, timestamp) VALUES (?, ?, ?)"
+              ).bind(cleanUser, cleanText, cleanTimestamp).run().catch(() => {});
+            }
+          }
+          return jsonResponse({ 
+            success: true, 
+            message: {
+              id: Date.now(),
+              user: cleanUser,
+              text: cleanText,
+              timestamp: cleanTimestamp,
+              rating: cleanRating,
+              language: cleanLanguage,
+              isReview: Boolean(cleanIsReview),
+              clerk_user_id: cleanClerkId
+            }
+          }, 201, request);
         }
       }
 
