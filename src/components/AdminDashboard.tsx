@@ -1073,7 +1073,11 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
       cover_image: editedData.posterUrl || editedData.cover_image || resolvedImage,
       poster: editedData.posterUrl || editedData.poster || resolvedImage,
       posterUrl: editedData.posterUrl || resolvedImage,
-      poster_url: editedData.posterUrl || resolvedImage
+      poster_url: editedData.posterUrl || resolvedImage,
+      streaming_partners: editedData.streaming_partners || editedData.platforms_data || editingAnime?.streaming_partners || editingAnime?.platforms_data || [],
+      platforms_data: editedData.platforms_data || editedData.streaming_partners || editingAnime?.platforms_data || editingAnime?.streaming_partners || [],
+      watch_url: editedData.watch_url !== undefined ? editedData.watch_url : (editingAnime?.watch_url || ''),
+      platform: editedData.platform || editingAnime?.platform || 'Crunchyroll'
     };
 
     // Update animes array state mapping over the items or prepending new item

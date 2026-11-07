@@ -349,6 +349,11 @@ function runMigrations() {
   try { db.run("ALTER TABLE anime ADD COLUMN likes INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN upvotes INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN airing_status TEXT DEFAULT 'Airing';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN watch_url TEXT DEFAULT '';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN platforms_data TEXT DEFAULT '';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN streaming_partners TEXT DEFAULT '';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN imdbID TEXT DEFAULT '';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN imdb_id TEXT DEFAULT '';"); } catch (e) {}
   try { db.run("UPDATE anime SET status = 'Completed' WHERE status = 'pending' OR status IS NULL OR status = '';"); } catch (e) {}
   try { db.run("UPDATE anime SET airing_status = status WHERE airing_status = 'pending' OR airing_status != status OR airing_status IS NULL OR airing_status = '';"); } catch (e) {}
   try {
@@ -762,6 +767,15 @@ app.get('/api/anime', (req, res) => {
           row.mixed_entries = [];
         }
       }
+      if (row.platforms_data) {
+        try {
+          row.streaming_partners = typeof row.platforms_data === 'string' ? JSON.parse(row.platforms_data) : row.platforms_data;
+        } catch {
+          row.streaming_partners = [];
+        }
+      } else {
+        row.streaming_partners = [];
+      }
       animeList.push(row);
     }
     dataStmt.free();
@@ -795,6 +809,15 @@ app.get('/api/anime/:id', (req, res) => {
         anime.mixedEntries = []; 
         anime.mixed_entries = [];
       }
+    }
+    if (anime.platforms_data) {
+      try {
+        anime.streaming_partners = typeof anime.platforms_data === 'string' ? JSON.parse(anime.platforms_data) : anime.platforms_data;
+      } catch {
+        anime.streaming_partners = [];
+      }
+    } else {
+      anime.streaming_partners = [];
     }
     stmt.free();
 
@@ -1214,11 +1237,35 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
   const start = Date.now();
   try {
     const id = req.params.id;
-    const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, season, year, genres, studio, type, Type, languages, platform, imdbID, imdb_id } = req.body;
+    const { 
+      title, synopsis, cover_image, banner_image, rating, episodes_count, 
+      status, airing_status, submissionStatus, season, year, genres, studio, 
+      type, Type, languages, platform, imdbID, imdb_id,
+      streaming_partners, streamingPartners, platforms_data, platformsData, watch_url, watchUrl
+    } = req.body;
     const resolvedImdbId = imdbID || imdb_id;
     const rawStatusStr = (status || airing_status || '').toString().trim().toLowerCase();
     const resolvedStatus = rawStatusStr.includes('complete') ? 'Completed' : 'Airing';
     const resolvedType = (type || Type) ? normalizeAnimeType(type || Type) : null;
+
+    // Robust extraction of streaming partners
+    const rawPartners = streaming_partners !== undefined 
+      ? streaming_partners 
+      : (streamingPartners !== undefined 
+        ? streamingPartners 
+        : (platforms_data !== undefined ? platforms_data : (platformsData !== undefined ? platformsData : null)));
+    
+    const partnersJson = rawPartners !== null 
+      ? (typeof rawPartners === 'string' ? rawPartners : JSON.stringify(rawPartners)) 
+      : null;
+
+    let resolvedWatchUrl = watch_url !== undefined 
+      ? String(watch_url) 
+      : (watchUrl !== undefined ? String(watchUrl) : null);
+    
+    if (resolvedWatchUrl === null && Array.isArray(rawPartners) && rawPartners.length > 0) {
+      resolvedWatchUrl = rawPartners.find((p: any) => p.url?.trim())?.url || rawPartners[0].url || '';
+    }
 
     db.run(
       `UPDATE anime SET 
@@ -1237,7 +1284,9 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         type = COALESCE(?, type),
         languages = COALESCE(?, languages),
         platform = COALESCE(?, platform),
-        imdbID = COALESCE(?, imdbID)
+        imdbID = COALESCE(?, imdbID),
+        platforms_data = CASE WHEN ? IS NOT NULL THEN ? ELSE platforms_data END,
+        watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END
       WHERE id = ?`,
       [
         title || null,
@@ -1256,15 +1305,27 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         languages || null,
         platform || null,
         resolvedImdbId || null,
+        partnersJson,
+        partnersJson,
+        resolvedWatchUrl,
+        resolvedWatchUrl,
         id
       ]
     );
 
-    console.log(`[Backend] UPDATED Anime ID ${id}: status=${resolvedStatus}, airing_status=${resolvedStatus}`);
+    console.log(`[Backend] UPDATED Anime ID ${id}: status=${resolvedStatus}, platforms_data=${partnersJson ? partnersJson.slice(0, 80) : 'unchanged'}`);
 
     persistD1();
     logCloudflareEvent('D1', `PUT /api/anime/${id}`, 200, Date.now() - start, `Updated anime ID ${id}`);
-    res.json({ success: true, id, status: resolvedStatus, airing_status: resolvedStatus });
+    res.json({ 
+      success: true, 
+      id, 
+      status: resolvedStatus, 
+      airing_status: resolvedStatus,
+      platforms_data: partnersJson,
+      streaming_partners: rawPartners,
+      watch_url: resolvedWatchUrl 
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

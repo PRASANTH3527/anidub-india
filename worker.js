@@ -681,17 +681,91 @@ export default {
         }
       }
 
-      // 12. Individual Anime GET/DELETE
+      // 12. Individual Anime GET/PUT/PATCH/DELETE
       const animeMatch = path.match(/^\/api\/anime\/([0-9a-zA-Z_-]+)$/);
       if (animeMatch) {
         const id = animeMatch[1];
         if (method === "GET") {
           if (env.DB) {
             const anime = await env.DB.prepare("SELECT * FROM anime WHERE id = ? OR slug = ?").bind(id, id).first();
-            if (anime) return jsonResponse(anime, 200, request);
+            if (anime) {
+              const platformRaw = anime.streaming_partners || anime.platforms_data;
+              if (platformRaw && typeof platformRaw === 'string') {
+                try {
+                  anime.streaming_partners = JSON.parse(platformRaw);
+                  anime.platforms_data = anime.streaming_partners;
+                } catch {
+                  anime.streaming_partners = [];
+                }
+              }
+              return jsonResponse(anime, 200, request);
+            }
           }
           const fallback = SEED_ANIME.find(a => String(a.id) === id || a.slug === id);
           return fallback ? jsonResponse(fallback, 200, request) : jsonResponse({ error: "Not found" }, 404, request);
+        }
+        if (method === "PUT" || method === "PATCH") {
+          try {
+            const body = await request.json().catch(() => ({}));
+            let platformsDataStr = null;
+            const rawPlatforms = body.streaming_partners !== undefined ? body.streaming_partners : (body.streamingPartners !== undefined ? body.streamingPartners : (body.platforms_data !== undefined ? body.platforms_data : body.platformsData));
+            if (rawPlatforms !== undefined) {
+              platformsDataStr = typeof rawPlatforms === 'string' ? rawPlatforms : JSON.stringify(rawPlatforms);
+            }
+            const watchUrl = body.watch_url !== undefined ? body.watch_url : body.watchUrl;
+
+            if (env.DB) {
+              await env.DB.prepare("ALTER TABLE anime ADD COLUMN platforms_data TEXT DEFAULT ''").run().catch(() => {});
+              await env.DB.prepare("ALTER TABLE anime ADD COLUMN streaming_partners TEXT DEFAULT ''").run().catch(() => {});
+              await env.DB.prepare("ALTER TABLE anime ADD COLUMN watch_url TEXT DEFAULT ''").run().catch(() => {});
+
+              await env.DB.prepare(`
+                UPDATE anime SET
+                  title = COALESCE(?, title),
+                  synopsis = COALESCE(?, synopsis),
+                  cover_image = COALESCE(?, cover_image),
+                  banner_image = COALESCE(?, banner_image),
+                  rating = COALESCE(?, rating),
+                  episodes_count = COALESCE(?, episodes_count),
+                  status = COALESCE(?, status),
+                  year = COALESCE(?, year),
+                  genres = COALESCE(?, genres),
+                  languages = COALESCE(?, languages),
+                  platform = COALESCE(?, platform),
+                  studio = COALESCE(?, studio),
+                  type = COALESCE(?, type),
+                  platforms_data = CASE WHEN ? IS NOT NULL THEN ? ELSE platforms_data END,
+                  streaming_partners = CASE WHEN ? IS NOT NULL THEN ? ELSE streaming_partners END,
+                  watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END
+                WHERE id = ? OR slug = ?
+              `).bind(
+                body.title ?? null,
+                body.synopsis ?? null,
+                body.cover_image ?? body.poster_url ?? null,
+                body.banner_image ?? null,
+                body.rating !== undefined ? Number(body.rating) : null,
+                body.episodes_count !== undefined ? Number(body.episodes_count) : null,
+                body.status ?? null,
+                body.year !== undefined ? Number(body.year) : null,
+                Array.isArray(body.genres) ? body.genres.join(', ') : (body.genres ?? null),
+                Array.isArray(body.languages) ? body.languages.join(', ') : (body.languages ?? null),
+                body.platform ?? null,
+                body.studio ?? null,
+                body.type ?? null,
+                platformsDataStr, platformsDataStr,
+                platformsDataStr, platformsDataStr,
+                watchUrl ?? null, watchUrl ?? null,
+                id, id
+              ).run();
+
+              const updated = await env.DB.prepare("SELECT * FROM anime WHERE id = ? OR slug = ?").bind(id, id).first();
+              return jsonResponse({ success: true, id, data: updated }, 200, request);
+            }
+            return jsonResponse({ success: true, id, data: body }, 200, request);
+          } catch (updateErr) {
+            console.error("Worker UPDATE error:", updateErr);
+            return jsonResponse({ success: false, error: updateErr.message }, 500, request);
+          }
         }
         if (method === "DELETE") {
           try {

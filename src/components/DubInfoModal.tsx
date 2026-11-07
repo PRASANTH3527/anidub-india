@@ -138,24 +138,51 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   const [currentSeason, setCurrentSeason] = useState<string>(initialData?.release_season || initDataAny?.season || '');
   const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number | ''>(initialData?.episodes_count || '');
 
+  // Helper to safely parse and reconstruct streaming partners from initialData
+  const parseStreamingPartners = (data: any) => {
+    if (!data) return [{ name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] as DubLanguage[] }];
+    const raw = data.streaming_partners || data.streamingPartners || data.platforms_data || data.platformsData;
+    let list: any[] = [];
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) list = parsed;
+      } catch (e) {
+        console.warn('Failed to parse streaming partners JSON:', e);
+      }
+    } else if (Array.isArray(raw)) {
+      list = raw;
+    }
+
+    if (list.length > 0) {
+      return list.map((item: any) => ({
+        name: item.name || item.platform || 'Crunchyroll',
+        url: item.url || item.watch_url || item.link || '',
+        languages: (Array.isArray(item.languages) 
+          ? item.languages 
+          : (typeof item.languages === 'string' ? item.languages.split(',').map((s: string) => s.trim()) : ['Tamil', 'Hindi'])) as DubLanguage[]
+      }));
+    }
+
+    const defaultPlat = data.platform || 'Crunchyroll';
+    const defaultUrl = data.watch_url || data.watchUrl || '';
+    const defaultLangs = (Array.isArray(data.languages) 
+      ? data.languages 
+      : (data.languages || 'Tamil, Hindi').split(',').map((s: string) => s.trim())) as DubLanguage[];
+
+    return [{
+      name: defaultPlat,
+      url: defaultUrl,
+      languages: defaultLangs
+    }];
+  };
+
   // Multi-Platform Links
   const [streamingPartners, setStreamingPartners] = useState<{ 
     name: string; 
     url: string;
     languages: DubLanguage[];
-  }[]>(
-    initialData ? [
-      { 
-        name: initialData.platform || 'Crunchyroll', 
-        url: '', 
-        languages: (Array.isArray(initialData.languages) 
-          ? initialData.languages 
-          : (initialData.languages || 'Tamil, Hindi').split(',').map((s: string) => s.trim())) as DubLanguage[]
-      }
-    ] : [
-      { name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] }
-    ]
-  );
+  }[]>(() => parseStreamingPartners(initialData));
 
   const [statusState, setStatusState] = useState<string>(() => {
     const anime = (initialData || {}) as any;
@@ -252,6 +279,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
           }
         }
       }
+
+      // Re-populate streaming partners from initialData
+      setStreamingPartners(parseStreamingPartners(initialData));
     }
   }, [initialData]);
 
@@ -312,9 +342,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   };
 
   const updateStreamingPartner = (index: number, field: 'name' | 'url' | 'languages', value: any) => {
-    const updated = [...streamingPartners];
-    updated[index] = { ...updated[index], [field]: value };
-    setStreamingPartners(updated);
+    setStreamingPartners(prev => {
+      const updated = [...prev];
+      if (updated[index]) {
+        updated[index] = { ...updated[index], [field]: value };
+      }
+      return updated;
+    });
   };
 
   const addEntry = () => {
@@ -429,8 +463,17 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         submissionStatus: resolvedSubmissionStatus,
         languages: derivedGlobalDubs.join(', '),
         platform: streamingPartners[0]?.name || 'Crunchyroll',
-        watch_url: streamingPartners[0]?.url || '',
-        platforms_data: streamingPartners,
+        watch_url: (streamingPartners.find(p => p.url?.trim())?.url || streamingPartners[0]?.url || '').trim(),
+        streaming_partners: streamingPartners.map(p => ({
+          name: p.name || 'Crunchyroll',
+          url: (p.url || '').trim(),
+          languages: p.languages || derivedGlobalDubs
+        })),
+        platforms_data: streamingPartners.map(p => ({
+          name: p.name || 'Crunchyroll',
+          url: (p.url || '').trim(),
+          languages: p.languages || derivedGlobalDubs
+        })),
         type: formData.type || type || 'TV Series',
         season: 'Spring',
         year: parsedYear,
@@ -440,7 +483,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         studio: studio || 'Unknown Studio'
       };
 
-      console.log("[DubInfoModal] Submitting payload:", payload);
+      console.log("[DubInfoModal] Submitting payload with streaming_partners:", payload);
 
       let savedResult: any = null;
       if (mode === 'edit' && initialData?.id) {
@@ -452,6 +495,10 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       const fullUpdatedItem = {
         ...payload,
         id: initialData?.id || savedResult?.animeId || savedResult?.id,
+        streaming_partners: payload.streaming_partners,
+        platforms_data: payload.platforms_data,
+        watch_url: payload.watch_url,
+        platform: payload.platform,
         synopsis: synopsis.trim(),
         status: statusState,
         cover_image: defaultCover,
@@ -769,9 +816,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                 </div>
 
                 {/* 3-Column Grid (Type, Status, Release Day) */}
-                <div className="text-red-500 font-bold p-2 mb-4 bg-red-900/20 border border-red-500 rounded text-[10px]">
-                  DEBUG DB STATUS: {(initialData as any)?.status} | DEBUG APPROVAL: {(initialData as any)?.approval_status}
-                </div>
 
                 <div className={`grid grid-cols-1 ${statusState === 'Ongoing' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
                   <div>

@@ -31,6 +31,8 @@ export interface AnimePayload {
   episodes_per_season?: string;
   mixedEntries?: any[];
   streamingPartners?: any[];
+  streaming_partners?: any[];
+  platforms_data?: any;
   [key: string]: any;
 }
 

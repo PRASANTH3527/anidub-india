@@ -338,10 +338,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         if (env.DB) {
           const anime = await env.DB.prepare("SELECT * FROM anime WHERE id = ? OR slug = ?").bind(id, id).first();
           if (anime) {
+            let streamingPartners: any[] = [];
+            if (anime.platforms_data) {
+              try {
+                streamingPartners = typeof anime.platforms_data === 'string' ? JSON.parse(anime.platforms_data) : anime.platforms_data;
+              } catch {}
+            }
             const episodes = await env.DB.prepare("SELECT * FROM episodes WHERE anime_id = ? ORDER BY episode_number ASC").bind(anime.id).all();
             const reviews = await env.DB.prepare("SELECT * FROM reviews WHERE anime_id = ? ORDER BY id DESC").bind(anime.id).all();
             return jsonResponse({
               ...anime,
+              streaming_partners: streamingPartners,
               episodes: episodes.results || [],
               reviews: reviews.results || []
             }, 200, request, {
@@ -362,6 +369,21 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const incomingStatus = (body.status || body.airing_status || '').trim();
         const resolvedType = body.type || body.Type || null;
 
+        // Auto-migrate platforms_data and watch_url if not yet in D1 schema
+        await env.DB.prepare("ALTER TABLE anime ADD COLUMN watch_url TEXT DEFAULT ''").run().catch(() => {});
+        await env.DB.prepare("ALTER TABLE anime ADD COLUMN platforms_data TEXT DEFAULT ''").run().catch(() => {});
+        await env.DB.prepare("ALTER TABLE anime ADD COLUMN streaming_partners TEXT DEFAULT ''").run().catch(() => {});
+
+        const rawPartners = body.streaming_partners !== undefined ? body.streaming_partners : body.platforms_data;
+        const partnersJson = rawPartners !== undefined && rawPartners !== null
+          ? (typeof rawPartners === 'string' ? rawPartners : JSON.stringify(rawPartners))
+          : null;
+
+        let resolvedWatchUrl = body.watch_url !== undefined ? String(body.watch_url) : null;
+        if (!resolvedWatchUrl && Array.isArray(rawPartners) && rawPartners.length > 0) {
+          resolvedWatchUrl = rawPartners.find((p: any) => p.url?.trim())?.url || rawPartners[0].url || '';
+        }
+
         await env.DB.prepare(
           `UPDATE anime SET 
             title = COALESCE(?, title),
@@ -378,7 +400,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             languages = COALESCE(?, languages),
             platform = COALESCE(?, platform),
             type = COALESCE(?, type),
-            studio = COALESCE(?, studio)
+            studio = COALESCE(?, studio),
+            platforms_data = CASE WHEN ? IS NOT NULL THEN ? ELSE platforms_data END,
+            watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END
           WHERE id = ? OR slug = ?`
         ).bind(
           body.title || null,
@@ -396,11 +420,22 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           body.platform || null,
           resolvedType,
           body.studio || null,
+          partnersJson,
+          partnersJson,
+          resolvedWatchUrl,
+          resolvedWatchUrl,
           id,
           id
         ).run();
 
-        return jsonResponse({ success: true, id, status: incomingStatus });
+        return jsonResponse({ 
+          success: true, 
+          id, 
+          status: incomingStatus,
+          platforms_data: partnersJson,
+          streaming_partners: rawPartners,
+          watch_url: resolvedWatchUrl
+        });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
       }
