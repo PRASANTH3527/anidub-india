@@ -10,11 +10,7 @@ import {
   Layers, 
   Trophy,
   Cloud,
-  Globe, 
-  Sun,
-  Moon,
   Plus,
-  Check,
   X,
   User,
   MessageSquare,
@@ -26,7 +22,6 @@ import { useToast } from './Toast';
 import { MicPermissionBottomSheet } from './MicPermissionBottomSheet';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { AniDubLogo } from './AniDubLogo';
-import { LANGUAGES } from '../utils/translations';
 
 interface NavbarProps {
   activeTab: string;
@@ -65,8 +60,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const { user } = useUser();
-  const [isLangOpen, setIsLangOpen] = useState(false);
-  const selectedLang = currentLang;
   const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
@@ -497,59 +490,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Cloud className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
             <span>Sync</span>
-          </motion.button>
-
-
-          {/* Language Switcher */}
-          <div className="relative">
-            <motion.button
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-              onClick={() => setIsLangOpen(!isLangOpen)}
-              className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-neutral-800/70 border border-neutral-700/40 text-neutral-200 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer"
-              title="Change Language"
-            >
-              <Globe className="w-4 h-4 text-purple-400 shrink-0" />
-              <span className="hidden sm:inline">{LANGUAGES.find(l => l.code === selectedLang)?.native || 'English'}</span>
-            </motion.button>
-
-            {isLangOpen && (
-              <div className="absolute right-0 top-full mt-2 w-44 bg-[#121829] border border-neutral-800/90 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 px-2.5 py-1">
-                  Audio & Display
-                </div>
-                {LANGUAGES.map((lang) => (
-                  <button
-                    key={lang.code}
-                    onClick={() => {
-                      if (setCurrentLang) setCurrentLang(lang.code);
-                      setIsLangOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
-                      selectedLang === lang.code
-                        ? 'bg-purple-950/80 text-purple-300 font-bold border border-purple-500/30 shadow-inner'
-                        : 'text-neutral-300 hover:bg-neutral-800/60 hover:text-white'
-                    }`}
-                  >
-                    <span>{lang.native}</span>
-                    {selectedLang === lang.code && <Check className="w-3.5 h-3.5 text-purple-400" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Sun / Moon Theme Toggle */}
-          <motion.button
-            whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className="p-1.5 sm:p-2 rounded-xl bg-neutral-800/70 border border-neutral-700/40 text-neutral-300 hover:text-white transition-colors cursor-pointer"
-            title="Toggle Visual Theme"
-          >
-            {isDarkMode ? (
-              <Sun className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400" />
-            ) : (
-              <Moon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-indigo-300" />
-            )}
           </motion.button>
 
           {/* Admin Console Access - Stealth: Only visible once admin is unlocked/authenticated */}
