@@ -1077,7 +1077,10 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
       streaming_partners: editedData.streaming_partners || editedData.platforms_data || editingAnime?.streaming_partners || editingAnime?.platforms_data || [],
       platforms_data: editedData.platforms_data || editedData.streaming_partners || editingAnime?.platforms_data || editingAnime?.streaming_partners || [],
       watch_url: editedData.watch_url !== undefined ? editedData.watch_url : (editingAnime?.watch_url || ''),
-      platform: editedData.platform || editingAnime?.platform || 'Crunchyroll'
+      platform: editedData.platform || editingAnime?.platform || 'Crunchyroll',
+      mixed_entries: editedData.mixed_entries !== undefined ? editedData.mixed_entries : (editedData.mixedEntries !== undefined ? editedData.mixedEntries : (editingAnime?.mixed_entries || editingAnime?.mixedEntries || [])),
+      mixedEntries: editedData.mixedEntries !== undefined ? editedData.mixedEntries : (editedData.mixed_entries !== undefined ? editedData.mixed_entries : (editingAnime?.mixedEntries || editingAnime?.mixed_entries || [])),
+      episodes_per_season: editedData.episodes_per_season !== undefined ? editedData.episodes_per_season : (editingAnime?.episodes_per_season || '')
     };
 
     // Update animes array state mapping over the items or prepending new item

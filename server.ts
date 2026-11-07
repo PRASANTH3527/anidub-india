@@ -345,6 +345,7 @@ function runMigrations() {
   try { db.run("ALTER TABLE anime ADD COLUMN is_published INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT '';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN mixedEntries TEXT DEFAULT '';"); } catch (e) {}
+  try { db.run("ALTER TABLE anime ADD COLUMN mixed_entries TEXT DEFAULT '';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN likesCount INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN likes INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN upvotes INTEGER DEFAULT 0;"); } catch (e) {}
@@ -758,14 +759,19 @@ app.get('/api/anime', (req, res) => {
     const animeList = [];
     while (dataStmt.step()) {
       const row: any = dataStmt.getAsObject();
-      if (row.mixedEntries) {
+      const rawMixed = row.mixed_entries || row.mixedEntries;
+      if (rawMixed) {
         try { 
-          row.mixedEntries = JSON.parse(row.mixedEntries); 
-          row.mixed_entries = row.mixedEntries;
+          const parsed = typeof rawMixed === 'string' ? JSON.parse(rawMixed) : rawMixed;
+          row.mixedEntries = parsed; 
+          row.mixed_entries = parsed;
         } catch { 
           row.mixedEntries = []; 
           row.mixed_entries = [];
         }
+      } else {
+        row.mixedEntries = [];
+        row.mixed_entries = [];
       }
       if (row.platforms_data) {
         try {
@@ -801,14 +807,19 @@ app.get('/api/anime/:id', (req, res) => {
       return res.status(404).json({ error: "Anime not found" });
     }
     const anime: any = stmt.getAsObject();
-    if (anime.mixedEntries) {
+    const rawAnimeMixed = anime.mixed_entries || anime.mixedEntries;
+    if (rawAnimeMixed) {
       try { 
-        anime.mixedEntries = JSON.parse(anime.mixedEntries); 
-        anime.mixed_entries = anime.mixedEntries;
+        const parsed = typeof rawAnimeMixed === 'string' ? JSON.parse(rawAnimeMixed) : rawAnimeMixed;
+        anime.mixedEntries = parsed; 
+        anime.mixed_entries = parsed;
       } catch { 
         anime.mixedEntries = []; 
         anime.mixed_entries = [];
       }
+    } else {
+      anime.mixedEntries = [];
+      anime.mixed_entries = [];
     }
     if (anime.platforms_data) {
       try {
@@ -1241,7 +1252,8 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
       title, synopsis, cover_image, banner_image, rating, episodes_count, 
       status, airing_status, submissionStatus, season, year, genres, studio, 
       type, Type, languages, platform, imdbID, imdb_id,
-      streaming_partners, streamingPartners, platforms_data, platformsData, watch_url, watchUrl
+      streaming_partners, streamingPartners, platforms_data, platformsData, watch_url, watchUrl,
+      mixed_entries, mixedEntries, episodes_per_season
     } = req.body;
     const resolvedImdbId = imdbID || imdb_id;
     const rawStatusStr = (status || airing_status || '').toString().trim().toLowerCase();
@@ -1267,6 +1279,19 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
       resolvedWatchUrl = rawPartners.find((p: any) => p.url?.trim())?.url || rawPartners[0].url || '';
     }
 
+    // Robust extraction of mixed entries (Seasons, OVAs, Movies)
+    const rawMixed = mixed_entries !== undefined 
+      ? mixed_entries 
+      : (mixedEntries !== undefined ? mixedEntries : null);
+
+    const mixedJson = rawMixed !== null 
+      ? (typeof rawMixed === 'string' ? rawMixed : JSON.stringify(rawMixed)) 
+      : null;
+
+    let resolvedEpisodesPerSeason = episodes_per_season !== undefined 
+      ? String(episodes_per_season) 
+      : (Array.isArray(rawMixed) ? rawMixed.map((m: any) => m.episodes || m.episodeCount || 0).join('|') : null);
+
     db.run(
       `UPDATE anime SET 
         title = COALESCE(?, title),
@@ -1286,7 +1311,10 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         platform = COALESCE(?, platform),
         imdbID = COALESCE(?, imdbID),
         platforms_data = CASE WHEN ? IS NOT NULL THEN ? ELSE platforms_data END,
-        watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END
+        watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END,
+        mixedEntries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixedEntries END,
+        mixed_entries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixed_entries END,
+        episodes_per_season = CASE WHEN ? IS NOT NULL THEN ? ELSE episodes_per_season END
       WHERE id = ?`,
       [
         title || null,
@@ -1309,11 +1337,17 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         partnersJson,
         resolvedWatchUrl,
         resolvedWatchUrl,
+        mixedJson,
+        mixedJson,
+        mixedJson,
+        mixedJson,
+        resolvedEpisodesPerSeason,
+        resolvedEpisodesPerSeason,
         id
       ]
     );
 
-    console.log(`[Backend] UPDATED Anime ID ${id}: status=${resolvedStatus}, platforms_data=${partnersJson ? partnersJson.slice(0, 80) : 'unchanged'}`);
+    console.log(`[Backend] UPDATED Anime ID ${id}: status=${resolvedStatus}, mixed_entries=${mixedJson ? mixedJson.slice(0, 80) : 'unchanged'}`);
 
     persistD1();
     logCloudflareEvent('D1', `PUT /api/anime/${id}`, 200, Date.now() - start, `Updated anime ID ${id}`);
@@ -1324,7 +1358,10 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
       airing_status: resolvedStatus,
       platforms_data: partnersJson,
       streaming_partners: rawPartners,
-      watch_url: resolvedWatchUrl 
+      watch_url: resolvedWatchUrl,
+      mixed_entries: rawMixed,
+      mixedEntries: rawMixed,
+      episodes_per_season: resolvedEpisodesPerSeason
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

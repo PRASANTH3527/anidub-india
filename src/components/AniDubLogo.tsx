@@ -6,6 +6,7 @@ export interface AniDubLogoProps {
   className?: string;
   showSubtitle?: boolean;
   animated?: boolean;
+  hideTrailingLine?: boolean;
 }
 
 export const AniDubLogo: React.FC<AniDubLogoProps> = ({
@@ -14,6 +15,7 @@ export const AniDubLogo: React.FC<AniDubLogoProps> = ({
   className = '',
   showSubtitle = true,
   animated = false,
+  hideTrailingLine = false,
 }) => {
   // Height sizing presets
   const heightClasses = {
@@ -167,6 +169,7 @@ export const AniDubLogo: React.FC<AniDubLogoProps> = ({
       viewBox="0 0 320 72"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      preserveAspectRatio="xMinYMid meet"
       className={`${selectedHeight} w-auto object-contain select-none shrink-0 ${className}`}
       aria-label="ANIDUB INDIA Logo"
       role="img"
@@ -221,15 +224,17 @@ export const AniDubLogo: React.FC<AniDubLogoProps> = ({
             >
               INDIA
             </text>
-            <line
-              x1="68"
-              y1="56.5"
-              x2="194"
-              y2="56.5"
-              stroke="#4B5563"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
+            {!hideTrailingLine && (
+              <line
+                x1="68"
+                y1="56.5"
+                x2="194"
+                y2="56.5"
+                stroke="#4B5563"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            )}
           </>
         )}
       </g>

@@ -230,7 +230,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="sticky top-0 z-40 w-full max-w-full bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 transition-colors box-border select-none">
       <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1 sm:gap-3">
         
-        {/* LEFT: BRAND LOGO (Professional Vector Lockup) */}
+        {/* LEFT: BRAND LOGO (Strictly cropped to Icon and ANIDUB INDIA) */}
         <motion.div 
           onClick={handleLogoClick}
           initial={shouldReduceMotion ? false : { opacity: 0, y: -12 }}
@@ -240,11 +240,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="flex items-center cursor-pointer select-none group shrink-0"
           title="ANIDUB INDIA - Home"
         >
-          <AniDubLogo
-            variant="horizontal"
-            size="sm"
-            className="transition-transform duration-300 group-hover:scale-105"
-          />
+          <div className="w-[110px] sm:w-[125px] h-8 overflow-hidden flex items-center shrink-0">
+            <AniDubLogo
+              variant="horizontal"
+              size="sm"
+              hideTrailingLine={true}
+              className="h-full w-auto max-w-none object-left object-cover transition-transform duration-300 group-hover:scale-105 shrink-0"
+            />
+          </div>
         </motion.div>
 
         {/* CENTER SCROLLABLE NAVIGATION ICONS */}

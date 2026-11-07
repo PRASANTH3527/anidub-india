@@ -698,6 +698,16 @@ export default {
                   anime.streaming_partners = [];
                 }
               }
+              const mixedRaw = anime.mixed_entries || anime.mixedEntries;
+              if (mixedRaw && typeof mixedRaw === 'string') {
+                try {
+                  anime.mixed_entries = JSON.parse(mixedRaw);
+                  anime.mixedEntries = anime.mixed_entries;
+                } catch {
+                  anime.mixed_entries = [];
+                  anime.mixedEntries = [];
+                }
+              }
               return jsonResponse(anime, 200, request);
             }
           }
@@ -714,10 +724,22 @@ export default {
             }
             const watchUrl = body.watch_url !== undefined ? body.watch_url : body.watchUrl;
 
+            const rawMixed = body.mixed_entries !== undefined ? body.mixed_entries : (body.mixedEntries !== undefined ? body.mixedEntries : null);
+            let mixedDataStr = null;
+            if (rawMixed !== null) {
+              mixedDataStr = typeof rawMixed === 'string' ? rawMixed : JSON.stringify(rawMixed);
+            }
+            const episodesPerSeason = body.episodes_per_season !== undefined 
+              ? String(body.episodes_per_season) 
+              : (Array.isArray(rawMixed) ? rawMixed.map(m => m.episodes || m.episodeCount || 0).join('|') : null);
+
             if (env.DB) {
               await env.DB.prepare("ALTER TABLE anime ADD COLUMN platforms_data TEXT DEFAULT ''").run().catch(() => {});
               await env.DB.prepare("ALTER TABLE anime ADD COLUMN streaming_partners TEXT DEFAULT ''").run().catch(() => {});
               await env.DB.prepare("ALTER TABLE anime ADD COLUMN watch_url TEXT DEFAULT ''").run().catch(() => {});
+              await env.DB.prepare("ALTER TABLE anime ADD COLUMN mixedEntries TEXT DEFAULT ''").run().catch(() => {});
+              await env.DB.prepare("ALTER TABLE anime ADD COLUMN mixed_entries TEXT DEFAULT ''").run().catch(() => {});
+              await env.DB.prepare("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT ''").run().catch(() => {});
 
               await env.DB.prepare(`
                 UPDATE anime SET
@@ -736,7 +758,10 @@ export default {
                   type = COALESCE(?, type),
                   platforms_data = CASE WHEN ? IS NOT NULL THEN ? ELSE platforms_data END,
                   streaming_partners = CASE WHEN ? IS NOT NULL THEN ? ELSE streaming_partners END,
-                  watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END
+                  watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END,
+                  mixedEntries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixedEntries END,
+                  mixed_entries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixed_entries END,
+                  episodes_per_season = CASE WHEN ? IS NOT NULL THEN ? ELSE episodes_per_season END
                 WHERE id = ? OR slug = ?
               `).bind(
                 body.title ?? null,
@@ -755,6 +780,9 @@ export default {
                 platformsDataStr, platformsDataStr,
                 platformsDataStr, platformsDataStr,
                 watchUrl ?? null, watchUrl ?? null,
+                mixedDataStr, mixedDataStr,
+                mixedDataStr, mixedDataStr,
+                episodesPerSeason ?? null, episodesPerSeason ?? null,
                 id, id
               ).run();
 

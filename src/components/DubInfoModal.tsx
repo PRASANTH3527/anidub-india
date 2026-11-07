@@ -85,6 +85,73 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       : ['Action', 'Fantasy']
   );
   
+  // Helper to safely parse and reconstruct mixed entries / seasons from initialData
+  const parseMixedEntries = (data: any) => {
+    if (!data) return [
+      {
+        id: Date.now() + 1,
+        entryType: 'Season',
+        seasonNumber: '1',
+        episodes: '12',
+        languages: ['Tamil', 'Hindi'] as DubLanguage[]
+      }
+    ];
+
+    const entries = data.mixed_entries || data.mixedEntries;
+    let list: any[] = [];
+    if (typeof entries === 'string' && entries.trim()) {
+      try {
+        const parsed = JSON.parse(entries);
+        if (Array.isArray(parsed)) list = parsed;
+      } catch (e) {
+        console.warn('Failed to parse mixed_entries JSON:', e);
+      }
+    } else if (Array.isArray(entries)) {
+      list = entries;
+    }
+
+    if (list.length > 0) {
+      return list.map((e: any, idx: number) => ({
+        id: e.id || `entry-${Date.now()}-${idx}`,
+        entryType: e.entryType || e.type || 'Season',
+        seasonNumber: e.seasonNumber || e.label || e.name || e.number || String(idx + 1),
+        episodes: String(e.episodes !== undefined && e.episodes !== null ? e.episodes : (e.episodeCount !== undefined ? e.episodeCount : 12)),
+        languages: (Array.isArray(e.languages) 
+          ? e.languages 
+          : (typeof e.languages === 'string' ? e.languages.split(',').map((s: string) => s.trim()) : ['Tamil', 'Hindi'])) as DubLanguage[]
+      }));
+    }
+
+    const defaultLangs = (Array.isArray(data.languages) 
+      ? data.languages 
+      : (data.languages || 'Tamil, Hindi').split(',').map((s: string) => s.trim())) as DubLanguage[];
+    const rawEp = data.episodes_per_season || data.Episodes || data.episodes || data.episodes_count;
+
+    if (rawEp) {
+      const epStr = String(rawEp);
+      const episodesArray = epStr.split('|').map((ep: string) => ep.trim()).filter(Boolean);
+      if (episodesArray.length > 0) {
+        return episodesArray.map((epCount: string, idx: number) => ({
+          id: Date.now() + Math.random() + idx,
+          entryType: 'Season',
+          seasonNumber: String(idx + 1),
+          episodes: String(epCount),
+          languages: defaultLangs
+        }));
+      }
+    }
+
+    return [
+      {
+        id: Date.now() + 2,
+        entryType: 'Season',
+        seasonNumber: data.release_season || data.season || '1',
+        episodes: String(rawEp || data.episodes_count || 12),
+        languages: defaultLangs
+      }
+    ];
+  };
+
   // Advanced Progress Tracking (Mixed Entries)
   const [mixedEntries, setMixedEntries] = useState<{
     id: number | string;
@@ -92,41 +159,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     seasonNumber: string;
     episodes: string;
     languages: DubLanguage[];
-  }[]>(
-    (() => {
-      const entries = initDataAny?.mixedEntries || initDataAny?.mixed_entries;
-      const list = typeof entries === 'string' ? (() => { try { return JSON.parse(entries); } catch { return null; } })() : entries;
-      if (Array.isArray(list) && list.length > 0) {
-        return list.map((e: any, idx: number) => ({
-          id: e.id || idx + 1,
-          entryType: e.entryType || e.type || 'Season',
-          seasonNumber: e.seasonNumber || e.name || e.label || e.number || String(idx + 1),
-          episodes: String(e.episodes || e.episodeCount || 12),
-          languages: e.languages || ['Tamil', 'Hindi']
-        }));
-      }
-      return null;
-    })() ||
-      (initialData ? [
-          {
-            id: Date.now() + 1,
-            entryType: 'Season',
-            seasonNumber: initialData.release_season || initDataAny?.season || '1',
-            episodes: String(initialData.episodes_count || 12),
-            languages: (Array.isArray(initialData.languages) 
-              ? initialData.languages 
-              : (initialData.languages || 'Tamil, Hindi').split(',').map((s: string) => s.trim())) as DubLanguage[]
-          }
-        ] : [
-          {
-            id: Date.now() + 2,
-            entryType: 'Season',
-            seasonNumber: '1',
-            episodes: '12',
-            languages: ['Tamil', 'Hindi']
-          }
-        ])
-  );
+  }[]>(() => parseMixedEntries(initialData));
 
   const seasonDetails = mixedEntries.map(entry => ({
     type: (entry.entryType as any) || 'Season',
@@ -231,53 +264,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       });
       console.log(`[DubInfoModal] useEffect triggered. Setting status to: ${initialStatus}`);
 
-      const rawEntries = initDataAny?.mixedEntries || initDataAny?.mixed_entries;
-      const parsedEntries = typeof rawEntries === 'string' ? (() => { try { return JSON.parse(rawEntries); } catch { return null; } })() : rawEntries;
-      if (Array.isArray(parsedEntries) && parsedEntries.length > 0) {
-        const mapped = parsedEntries.map((e: any, idx: number) => ({
-          id: e.id || `entry-${Date.now()}-${idx}`,
-          entryType: e.entryType || e.type || 'Season',
-          seasonNumber: e.seasonNumber || e.name || e.label || e.number || String(idx + 1),
-          episodes: String(e.episodes || e.episodeCount || 12),
-          languages: e.languages || ['Tamil', 'Hindi']
-        }));
-        setMixedEntries(mapped);
-        setCurrentSeason(String(mapped.length));
-        const last = mapped[mapped.length - 1];
-        if (last && last.episodes) {
-          setCurrentlyAiringEpisode(Number(last.episodes) || 12);
-        }
-      } else {
-        const rawEp = initDataAny?.episodes_per_season || initDataAny?.Episodes || initDataAny?.episodes || initialData.episodes_count;
-        if (rawEp) {
-          const epStr = String(rawEp);
-          const mappedLangs = (Array.isArray(initialData.languages) 
-            ? initialData.languages 
-            : (initialData.languages || 'Tamil, Hindi').split(',').map((s: string) => s.trim())) as DubLanguage[];
-          const episodesArray = epStr.split('|').map((ep: string) => ep.trim()).filter(Boolean);
-          if (episodesArray.length > 0) {
-            const parsedSeasons = episodesArray.map((epCount: string, idx: number) => ({
-              id: Date.now() + Math.random() + idx,
-              entryType: 'Season',
-              seasonNumber: String(idx + 1),
-              episodes: String(epCount),
-              languages: mappedLangs
-            }));
-            setMixedEntries(parsedSeasons);
-            setCurrentSeason(String(episodesArray.length));
-            setCurrentlyAiringEpisode(Number(episodesArray[episodesArray.length - 1]) || 12);
-          } else {
-            setMixedEntries([{
-              id: Date.now() + 3,
-              entryType: 'Season',
-              seasonNumber: initialData.release_season || initDataAny?.season || '1',
-              episodes: String(rawEp),
-              languages: mappedLangs
-            }]);
-            setCurrentSeason('1');
-            setCurrentlyAiringEpisode(Number(rawEp) || 12);
-          }
-        }
+      // Re-populate mixed entries / seasons from initialData
+      const parsedMixed = parseMixedEntries(initialData);
+      setMixedEntries(parsedMixed);
+      setCurrentSeason(String(parsedMixed.length));
+      const last = parsedMixed[parsedMixed.length - 1];
+      if (last && last.episodes) {
+        setCurrentlyAiringEpisode(Number(last.episodes) || 12);
       }
 
       // Re-populate streaming partners from initialData
@@ -352,38 +345,46 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   };
 
   const addEntry = () => {
-    const lastEntry = mixedEntries[mixedEntries.length - 1];
-    let nextNum = '1';
-    if (lastEntry && !isNaN(parseInt(lastEntry.seasonNumber))) {
-      nextNum = (parseInt(lastEntry.seasonNumber) + 1).toString();
-    }
-    setMixedEntries([...mixedEntries, {
-      id: Date.now() + Math.random(),
-      entryType: 'Season',
-      seasonNumber: nextNum,
-      episodes: '12',
-      languages: lastEntry?.languages || ['Tamil']
-    }]);
+    setMixedEntries(prev => {
+      const lastEntry = prev[prev.length - 1];
+      let nextNum = '1';
+      if (lastEntry && !isNaN(parseInt(lastEntry.seasonNumber))) {
+        nextNum = (parseInt(lastEntry.seasonNumber) + 1).toString();
+      }
+      return [...prev, {
+        id: Date.now() + Math.random(),
+        entryType: 'Season',
+        seasonNumber: nextNum,
+        episodes: '12',
+        languages: lastEntry?.languages || ['Tamil']
+      }];
+    });
   };
 
   const removeEntry = (index: number) => {
-    if (mixedEntries.length > 1) {
-      setMixedEntries(mixedEntries.filter((_, i) => i !== index));
-    }
+    setMixedEntries(prev => {
+      if (prev.length > 1) {
+        return prev.filter((_, i) => i !== index);
+      }
+      return prev;
+    });
   };
 
   const updateEntryField = (index: number, field: string, value: any) => {
-    const updated = [...mixedEntries];
-    if (field === 'episodeCount' || field === 'episodes') {
-      updated[index] = { ...updated[index], episodes: String(value) };
-    } else if (field === 'label' || field === 'number' || field === 'seasonNumber') {
-      updated[index] = { ...updated[index], seasonNumber: String(value) };
-    } else if (field === 'type' || field === 'entryType') {
-      updated[index] = { ...updated[index], entryType: value };
-    } else if (field === 'languages') {
-      updated[index] = { ...updated[index], languages: value };
-    }
-    setMixedEntries(updated);
+    setMixedEntries(prev => {
+      const updated = [...prev];
+      if (!updated[index]) return prev;
+      if (field === 'episodeCount' || field === 'episodes') {
+        updated[index] = { ...updated[index], episodes: String(value) };
+      } else if (field === 'label' || field === 'number' || field === 'seasonNumber') {
+        updated[index] = { ...updated[index], seasonNumber: String(value) };
+      } else if (field === 'type' || field === 'entryType') {
+        updated[index] = { ...updated[index], entryType: value };
+      } else if (field === 'languages') {
+        updated[index] = { ...updated[index], languages: value };
+      }
+      return updated;
+    });
   };
 
   const toggleLangForEntry = (entryIdx: number, lang: DubLanguage) => {
@@ -450,6 +451,21 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       const isAdminTokenPresent = Boolean(typeof window !== 'undefined' && (localStorage.getItem('cf_admin_token') || localStorage.getItem('admin_token')));
       const resolvedSubmissionStatus = (mode === 'edit' || isAdminTokenPresent) ? 'approved' : 'pending';
 
+      const formattedMixedEntries = mixedEntries.map(entry => ({
+        id: entry.id,
+        type: entry.entryType || 'Season',
+        entryType: entry.entryType || 'Season',
+        name: entry.seasonNumber 
+          ? (/^(season|ova|movie|ona|special)/i.test(entry.seasonNumber.trim()) ? entry.seasonNumber.trim() : `${entry.entryType || 'Season'} ${entry.seasonNumber.trim()}`)
+          : `${entry.entryType || 'Season'} 1`,
+        seasonNumber: entry.seasonNumber || '1',
+        label: entry.seasonNumber || '1',
+        episodes: Number(entry.episodes) || 0,
+        episodeCount: Number(entry.episodes) || 0,
+        languages: entry.languages || derivedGlobalDubs
+      }));
+      const episodesPerSeasonStr = mixedEntries.map(e => e.episodes || 0).join('|');
+
       const payload = {
         title: title.trim(),
         slug,
@@ -474,6 +490,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
           url: (p.url || '').trim(),
           languages: p.languages || derivedGlobalDubs
         })),
+        mixed_entries: formattedMixedEntries,
+        mixedEntries: formattedMixedEntries,
+        episodes_per_season: episodesPerSeasonStr,
         type: formData.type || type || 'TV Series',
         season: 'Spring',
         year: parsedYear,
@@ -483,7 +502,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         studio: studio || 'Unknown Studio'
       };
 
-      console.log("[DubInfoModal] Submitting payload with streaming_partners:", payload);
+      console.log("[DubInfoModal] Submitting payload with mixed_entries:", payload);
 
       let savedResult: any = null;
       if (mode === 'edit' && initialData?.id) {
@@ -497,6 +516,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         id: initialData?.id || savedResult?.animeId || savedResult?.id,
         streaming_partners: payload.streaming_partners,
         platforms_data: payload.platforms_data,
+        mixed_entries: formattedMixedEntries,
+        mixedEntries: formattedMixedEntries,
+        episodes_per_season: episodesPerSeasonStr,
         watch_url: payload.watch_url,
         platform: payload.platform,
         synopsis: synopsis.trim(),
@@ -536,7 +558,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         image: defaultCover,
         poster: defaultCover,
         posterUrl: defaultCover,
-        poster_url: defaultCover
+        poster_url: defaultCover,
+        mixed_entries: mixedEntries,
+        mixedEntries: mixedEntries
       };
       onSubmit(fallbackItem);
       setIsSuccess(true);

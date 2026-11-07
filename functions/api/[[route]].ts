@@ -339,9 +339,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           const anime = await env.DB.prepare("SELECT * FROM anime WHERE id = ? OR slug = ?").bind(id, id).first();
           if (anime) {
             let streamingPartners: any[] = [];
-            if (anime.platforms_data) {
+            const rawP = anime.streaming_partners || anime.platforms_data;
+            if (rawP) {
               try {
-                streamingPartners = typeof anime.platforms_data === 'string' ? JSON.parse(anime.platforms_data) : anime.platforms_data;
+                streamingPartners = typeof rawP === 'string' ? JSON.parse(rawP) : rawP;
+              } catch {}
+            }
+            let mixedEntries: any[] = [];
+            const rawMixed = anime.mixed_entries || anime.mixedEntries;
+            if (rawMixed) {
+              try {
+                mixedEntries = typeof rawMixed === 'string' ? JSON.parse(rawMixed) : rawMixed;
               } catch {}
             }
             const episodes = await env.DB.prepare("SELECT * FROM episodes WHERE anime_id = ? ORDER BY episode_number ASC").bind(anime.id).all();
@@ -349,6 +357,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             return jsonResponse({
               ...anime,
               streaming_partners: streamingPartners,
+              platforms_data: streamingPartners,
+              mixed_entries: mixedEntries,
+              mixedEntries: mixedEntries,
               episodes: episodes.results || [],
               reviews: reviews.results || []
             }, 200, request, {
@@ -369,10 +380,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const incomingStatus = (body.status || body.airing_status || '').trim();
         const resolvedType = body.type || body.Type || null;
 
-        // Auto-migrate platforms_data and watch_url if not yet in D1 schema
+        // Auto-migrate platforms_data, watch_url, mixedEntries, mixed_entries if not yet in D1 schema
         await env.DB.prepare("ALTER TABLE anime ADD COLUMN watch_url TEXT DEFAULT ''").run().catch(() => {});
         await env.DB.prepare("ALTER TABLE anime ADD COLUMN platforms_data TEXT DEFAULT ''").run().catch(() => {});
         await env.DB.prepare("ALTER TABLE anime ADD COLUMN streaming_partners TEXT DEFAULT ''").run().catch(() => {});
+        await env.DB.prepare("ALTER TABLE anime ADD COLUMN mixedEntries TEXT DEFAULT ''").run().catch(() => {});
+        await env.DB.prepare("ALTER TABLE anime ADD COLUMN mixed_entries TEXT DEFAULT ''").run().catch(() => {});
+        await env.DB.prepare("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT ''").run().catch(() => {});
 
         const rawPartners = body.streaming_partners !== undefined ? body.streaming_partners : body.platforms_data;
         const partnersJson = rawPartners !== undefined && rawPartners !== null
@@ -383,6 +397,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         if (!resolvedWatchUrl && Array.isArray(rawPartners) && rawPartners.length > 0) {
           resolvedWatchUrl = rawPartners.find((p: any) => p.url?.trim())?.url || rawPartners[0].url || '';
         }
+
+        const rawMixed = body.mixed_entries !== undefined 
+          ? body.mixed_entries 
+          : (body.mixedEntries !== undefined ? body.mixedEntries : null);
+        const mixedJson = rawMixed !== undefined && rawMixed !== null
+          ? (typeof rawMixed === 'string' ? rawMixed : JSON.stringify(rawMixed))
+          : null;
+        const episodesPerSeasonStr = body.episodes_per_season !== undefined
+          ? String(body.episodes_per_season)
+          : (Array.isArray(rawMixed) ? rawMixed.map((m: any) => m.episodes || m.episodeCount || 0).join('|') : null);
 
         await env.DB.prepare(
           `UPDATE anime SET 
@@ -402,7 +426,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             type = COALESCE(?, type),
             studio = COALESCE(?, studio),
             platforms_data = CASE WHEN ? IS NOT NULL THEN ? ELSE platforms_data END,
-            watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END
+            watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END,
+            mixedEntries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixedEntries END,
+            mixed_entries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixed_entries END,
+            episodes_per_season = CASE WHEN ? IS NOT NULL THEN ? ELSE episodes_per_season END
           WHERE id = ? OR slug = ?`
         ).bind(
           body.title || null,
@@ -424,6 +451,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           partnersJson,
           resolvedWatchUrl,
           resolvedWatchUrl,
+          mixedJson,
+          mixedJson,
+          mixedJson,
+          mixedJson,
+          episodesPerSeasonStr,
+          episodesPerSeasonStr,
           id,
           id
         ).run();
@@ -434,7 +467,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           status: incomingStatus,
           platforms_data: partnersJson,
           streaming_partners: rawPartners,
-          watch_url: resolvedWatchUrl
+          watch_url: resolvedWatchUrl,
+          mixed_entries: rawMixed,
+          mixedEntries: rawMixed,
+          episodes_per_season: episodesPerSeasonStr
         });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
