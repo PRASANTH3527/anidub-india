@@ -39,19 +39,65 @@ export interface ProfileProps {
   onNavigateToCatalog?: () => void;
 }
 
-const DEFAULT_AVATAR = 'https://s4.anilist.co/file/anilistcdn/character/large/b127691-9zqh1xpIubn7.png'; // Roronoa Zoro
+const DEFAULT_AVATAR = 'https://s4.anilist.co/file/anilistcdn/character/large/b62-S7oAeA9WInjV.png'; // Roronoa Zoro
+
+const AVATAR_CATEGORIES = [
+  'All', 
+  'Hunters', 
+  'Swordsmen', 
+  'Sorcerers', 
+  'Ninjas', 
+  'Shonen', 
+  'Titans', 
+  'Saiyans', 
+  'Strategy', 
+  'Dark Fantasy'
+];
 
 const RICH_ANIME_AVATARS = [
-  { name: 'Roronoa Zoro', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127691-9zqh1xpIubn7.png' },
-  { name: 'Satoru Gojo', category: 'Sorcerers', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127993-GfBvW5ZeqjT9.png' },
-  { name: 'Monkey D. Luffy', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40-IkgdgnvQ1mP4.png' },
-  { name: 'Naruto Uzumaki', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b17-w0BN68565b97.png' },
-  { name: 'Tanjiro Kamado', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b129130-i4rL6F6qXmU5.png' },
-  { name: 'Eren Yeager', category: 'Titans', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40882-p7gT1dZkXk2N.png' },
-  { name: 'Sasuke Uchiha', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b13-5vXm9z08i8g7.png' },
-  { name: 'Killua Zoldyck', category: 'Assassins', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b27-vYg7k674g970.png' },
-  { name: 'Goku', category: 'Saiyans', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40-7gT1dZkXk2N.png' },
-  { name: 'Sukuna', category: 'Sorcerers', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b183415-81X8f8888b.png' },
+  // Hunters
+  { name: 'Sung Jin-woo', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b129928-BCEjVaP0AQSw.png' },
+  { name: 'Killua Zoldyck', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b27-Z5O02kQUydpT.jpg' },
+  { name: 'Gon Freecss', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b30-lyFExKyDhefc.jpg' },
+  { name: 'Kurapika', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b28-ivA7UGnfE40a.png' },
+
+  // Swordsmen
+  { name: 'Roronoa Zoro', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b62-S7oAeA9WInjV.png' },
+  { name: 'Levi Ackerman', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b45627-CR68RyZmddGG.png' },
+  { name: 'Tanjiro Kamado', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b126071-BTNEc1nRIv68.png' },
+  { name: 'Zenitsu Agatsuma', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b129131-FZrQ7lSlxmEr.png' },
+  { name: 'Ichigo Kurosaki', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b5-a7bkJgjhhigE.png' },
+
+  // Sorcerers
+  { name: 'Satoru Gojo', category: 'Sorcerers', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127691-9zqh1xpIubn7.png' },
+  { name: 'Yuji Itadori', category: 'Sorcerers', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127212-FVm2tD0erQ5B.png' },
+  { name: 'Megumi Fushiguro', category: 'Sorcerers', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b126635-L0y3I92JSUkN.png' },
+  { name: 'Sukuna', category: 'Sorcerers', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b133701-rCQuDpHr3UZL.png' },
+
+  // Ninjas
+  { name: 'Itachi Uchiha', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b14-9Kb1E5oel1ke.png' },
+  { name: 'Kakashi Hatake', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b85-mkVBh2yjxjmx.png' },
+  { name: 'Naruto Uzumaki', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b17-phjcWCkRuIhu.png' },
+  { name: 'Sasuke Uchiha', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b13-SISLEw1oAD7a.png' },
+
+  // Shonen
+  { name: 'Monkey D. Luffy', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40-MNypXsxSRb1R.png' },
+  { name: 'Nezuko Kamado', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127518-NRlq1CQ1v1ro.png' },
+  { name: 'Saitama', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b73935-ON5d0mAcrItd.jpg' },
+  { name: 'Edward Elric', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b11-TA5Nuk7EDUZG.jpg' },
+
+  // Titans
+  { name: 'Eren Yeager', category: 'Titans', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40882-dsj7IP943WFF.jpg' },
+  { name: 'Mikasa Ackerman', category: 'Titans', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40881-F3gr1PkreDvj.png' },
+
+  // Saiyans
+  { name: 'Goku', category: 'Saiyans', url: 'https://s4.anilist.co/file/anilistcdn/character/large/246-wsRRr6z1kii8.png' },
+  { name: 'Vegeta', category: 'Saiyans', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b913-NIFkKazWM8VO.png' },
+
+  // Strategy & Dark Fantasy
+  { name: 'Light Yagami', category: 'Strategy', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b80-26EhwSsSqQ50.png' },
+  { name: 'L Lawliet', category: 'Strategy', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b71-1W4panC53vfs.png' },
+  { name: 'Ken Kaneki', category: 'Dark Fantasy', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b87275-mb13EWZBdbh3.png' },
 ];
 
 export default function Profile({
@@ -555,7 +601,7 @@ export default function Profile({
 
                   {/* Category Pills */}
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                    {['All', 'Shonen', 'Ninjas', 'Sorcerers', 'Saiyans', 'Titans', 'Assassins'].map((cat) => (
+                    {AVATAR_CATEGORIES.map((cat) => (
                       <button
                         key={cat}
                         type="button"
@@ -577,7 +623,7 @@ export default function Profile({
                   <label className="text-xs font-bold text-neutral-200">
                     Character Library ({filteredAvatars.length})
                   </label>
-                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-56 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-72 sm:max-h-80 overflow-y-auto pr-1">
                     
                     {/* CUSTOM UPLOAD PLACEHOLDER */}
                     <button
