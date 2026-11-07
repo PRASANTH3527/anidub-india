@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { useUser } from '@clerk/clerk-react';
 import { 
   Compass, 
@@ -60,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const { user } = useUser();
-  const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
     if (saved) return saved === 'dark';
@@ -96,7 +96,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       ) {
         e.preventDefault();
         setSearchQuery('');
-        setIsMobileSearchExpanded(false);
+        setIsSearchOpen(false);
         onUnlockAdmin();
         return;
       }
@@ -221,9 +221,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 w-full max-w-full bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 transition-colors box-border select-none">
-      <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1 sm:gap-3">
+      <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
         
-        {/* LEFT: BRAND LOGO (Strictly cropped to Icon and ANIDUB INDIA) */}
+        {/* LEFT: BRAND LOGO (Natural width, transparent, no empty box or spacing artifacts) */}
         <motion.div 
           onClick={handleLogoClick}
           initial={shouldReduceMotion ? false : { opacity: 0, y: -12 }}
@@ -233,40 +233,72 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="flex items-center cursor-pointer select-none group shrink-0"
           title="ANIDUB INDIA - Home"
         >
-          <div className="w-[110px] sm:w-[125px] h-8 overflow-hidden flex items-center shrink-0">
-            <AniDubLogo
-              variant="horizontal"
-              size="sm"
-              hideTrailingLine={true}
-              className="h-full w-auto max-w-none object-left object-cover transition-transform duration-300 group-hover:scale-105 shrink-0"
-            />
-          </div>
+          <AniDubLogo
+            variant="horizontal"
+            size="sm"
+            hideTrailingLine={true}
+            className="h-7 sm:h-8 w-auto object-contain select-none shrink-0"
+          />
         </motion.div>
 
-        {/* CENTER SCROLLABLE NAVIGATION ICONS */}
-        <nav className="flex items-center gap-1 sm:gap-1.5 flex-grow overflow-x-auto no-scrollbar py-1 justify-center sm:justify-start">
+        {/* EXPANDED INLINE SEARCH (Fills remaining space with flex-1, never squashes the fixed logo) */}
+        {isSearchOpen ? (
+          <div className="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 ml-1 sm:ml-2">
+            <div className="relative flex-1 flex items-center min-w-0">
+              <Search className="w-4 h-4 text-neutral-400 absolute left-3 pointer-events-none shrink-0" />
+              <input
+                type="text"
+                autoFocus
+                placeholder={isListening ? "Listening..." : "Search anime by title, voice actor, or studio..."}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  handleSearchKeyDown(e);
+                  if (e.key === 'Escape') setIsSearchOpen(false);
+                }}
+                className={`w-full bg-[#131926] border rounded-xl pl-9 pr-14 py-1.5 text-xs text-white placeholder-neutral-500 outline-none transition-colors ${
+                  isListening 
+                    ? 'border-purple-500/80 ring-4 ring-purple-500/20 bg-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.4)] animate-pulse placeholder-purple-300' 
+                    : 'border-neutral-700/80 focus:border-purple-500'
+                }`}
+              />
+              <div className="absolute right-2 flex items-center gap-1">
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="text-neutral-400 hover:text-white p-0.5"
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleVoiceSearch}
+                  className={`p-1 rounded-lg transition-all cursor-pointer ${
+                    isListening
+                      ? 'bg-purple-600 text-white animate-pulse shadow-lg ring-2 ring-purple-400'
+                      : 'text-neutral-400 hover:text-purple-300 hover:bg-white/5'
+                  }`}
+                  title={isListening ? 'Listening for voice input...' : 'Search by Voice'}
+                >
+                  <Mic className={`w-3.5 h-3.5 ${isListening ? 'animate-bounce text-white' : ''}`} />
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsSearchOpen(false)}
+              className="p-1.5 sm:p-2 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800/60 transition-colors cursor-pointer shrink-0"
+              title="Close Search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* CENTER SCROLLABLE NAVIGATION ICONS */}
+            <nav className="flex items-center gap-1 sm:gap-1.5 flex-grow overflow-x-auto no-scrollbar py-1 justify-start">
           
-          {/* 0. Home Screen / Hero Button */}
-          <motion.button
-            whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-            onClick={() => {
-              setActiveTab('home');
-              if (setFeedView) setFeedView('library');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            title="Home Screen & Featured Feed"
-            className={`w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-              activeTab === 'home' && feedView === 'library'
-                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-            }`}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 sm:w-5 sm:h-5">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-          </motion.button>
-
           {/* 1. Compass (Directory) */}
           <motion.button
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
@@ -284,13 +316,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Compass className="w-4 h-4 sm:w-5 sm:h-5" />
           </motion.button>
 
-          {/* 2. Search (Mobile Search Drawer Trigger) */}
+          {/* 2. Search (Quick Search Trigger) */}
           <motion.button
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-            onClick={() => setIsMobileSearchExpanded(!isMobileSearchExpanded)}
+            onClick={() => setIsSearchOpen(!isSearchOpen)}
             title="Quick Search"
             className={`w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-              isMobileSearchExpanded
+              isSearchOpen
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
             }`}
@@ -509,67 +541,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               <ShieldCheck className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400" />
             </motion.button>
           )}
-        </div>
-      </div>
-
-      {/* MOBILE EXPANDABLE SEARCH DRAWER */}
-      <AnimatePresence>
-        {isMobileSearchExpanded && (
-          <motion.div 
-            initial={shouldReduceMotion ? false : { opacity: 0, height: 0, y: -8 }}
-            animate={{ opacity: 1, height: "auto", y: 0 }}
-            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, height: 0, y: -8 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="w-full px-3 py-2 border-t border-neutral-800/60 bg-[#0d121e]/98 flex items-center gap-2 overflow-hidden"
-          >
-            <div className="relative flex-1 flex items-center">
-              <Search className="w-4 h-4 text-neutral-400 absolute left-3 pointer-events-none" />
-              <input
-                type="text"
-                autoFocus
-                placeholder={isListening ? "Listening..." : "Search anime by title, voice actor, or studio..."}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
-                className={`w-full bg-[#131926] border rounded-xl pl-9 pr-14 py-2 text-xs text-white placeholder-neutral-500 outline-none transition-colors ${
-                  isListening 
-                    ? 'border-purple-500/80 ring-4 ring-purple-500/20 bg-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.4)] animate-pulse placeholder-purple-300' 
-                    : 'border-neutral-700/80 focus:border-purple-500'
-                }`}
-              />
-              <div className="absolute right-2 flex items-center gap-1">
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="text-neutral-400 hover:text-white"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleVoiceSearch}
-                  className={`p-1 rounded-lg transition-all cursor-pointer ${
-                    isListening
-                      ? 'bg-purple-600 text-white animate-pulse shadow-lg ring-2 ring-purple-400'
-                      : 'text-neutral-400 hover:text-purple-300 hover:bg-white/5'
-                  }`}
-                  title={isListening ? 'Listening for voice input...' : 'Search by Voice'}
-                >
-                  <Mic className={`w-3.5 h-3.5 ${isListening ? 'animate-bounce text-white' : ''}`} />
-                </button>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsMobileSearchExpanded(false)}
-              className="p-2 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800/60 transition-colors cursor-pointer"
-              title="Close Search"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </>
+      )}
+    </div>
 
       {/* PERMISSION BOTTOM SHEET */}
       <MicPermissionBottomSheet 

@@ -164,9 +164,10 @@ export const AniDubLogo: React.FC<AniDubLogoProps> = ({
 
   // 3. HORIZONTAL VARIANT (Icon on Left, ANIDUB & INDIA on Right)
   // Perfectly balanced for Navbars and compact headers
+  const viewBoxWidth = hideTrailingLine ? 275 : 320;
   return (
     <svg
-      viewBox="0 0 320 72"
+      viewBox={`0 0 ${viewBoxWidth} 72`}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       preserveAspectRatio="xMinYMid meet"

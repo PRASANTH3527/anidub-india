@@ -803,6 +803,25 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
           </div>
         )}
 
+        {/* Active Username Indicator directly above Chat Input Box */}
+        <div className="text-xs text-gray-400 mb-1 flex items-center justify-between px-1 select-none">
+          <div className="flex items-center gap-1">
+            <span>👤 Chatting as:</span>
+            <strong className="text-white font-semibold tracking-wide">
+              {guestName}
+            </strong>
+          </div>
+          <button
+            type="button"
+            onClick={handleRandomizeName}
+            className="text-[11px] text-neutral-400 hover:text-amber-300 transition-colors flex items-center gap-1 cursor-pointer"
+            title="Generate a new randomized nickname"
+          >
+            <Dices className="w-3 h-3 text-amber-400/80" />
+            <span className="hover:underline">Randomize</span>
+          </button>
+        </div>
+
         {/* Sleek, Single Pill Input with Integrated Smiley and Send Button */}
         <form onSubmit={handleSendMessageSubmit} className="relative">
           <div className={`relative flex items-center bg-white/[0.04] hover:bg-white/[0.06] focus-within:bg-[#111624] border rounded-full px-2.5 sm:px-3 py-1 sm:py-1.5 transition-all shadow-inner ${
