@@ -208,11 +208,16 @@ class CloudflareApiService {
   /**
    * READ: Fetches single anime details by ID or slug from Cloudflare Worker / D1
    */
-  public async getAnimeById(id: number | string): Promise<any> {
-    const endpoint = CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id);
+  public async getAnimeById(id: number | string, userId?: string): Promise<any> {
+    const qs = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+    const endpoint = `${CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id)}${qs}`;
+    const headers = this.getHeaders();
+    if (userId) {
+      headers['x-user-id'] = userId;
+    }
     const res = await this.smartFetch(endpoint, {
       method: 'GET',
-      headers: this.getHeaders()
+      headers
     });
 
     if (!res.ok) {
@@ -713,17 +718,89 @@ class CloudflareApiService {
   }
 
   /**
-   * RATE: Submits a star rating for an anime
+   * RATE: Submits a 10-point community rating for an anime via /api/rate (UPSERT)
    */
-  public async rateAnime(id: number | string, rating: number): Promise<{ success: boolean; rating: number }> {
+  public async submitCommunityRating(
+    id: number | string,
+    rating: number,
+    userId: string,
+    username?: string
+  ): Promise<{ success: boolean; communityRating: number; totalVotes: number; userRating: number }> {
     try {
-      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.RATE(id), {
+      const headers = {
+        ...this.getHeaders(false),
+        'x-user-id': userId
+      };
+      const res = await this.smartFetch('/api/rate', {
         method: 'POST',
-        headers: this.getHeaders(false),
-        body: JSON.stringify({ rating })
+        headers,
+        body: JSON.stringify({
+          anime_id: Number(id),
+          rating,
+          user_id: userId,
+          username
+        })
       });
       if (res.ok) {
         return await res.json();
+      }
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to submit community rating');
+    } catch (err: any) {
+      console.error('Community rating error:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * GET COMMUNITY RATING: Fetches average community rating and vote count
+   */
+  public async getCommunityRating(
+    id: number | string,
+    userId?: string
+  ): Promise<{ communityRating: number; totalVotes: number; userRating: number | null }> {
+    try {
+      const qs = new URLSearchParams({ anime_id: String(id) });
+      if (userId) qs.set('user_id', userId);
+      const headers = this.getHeaders(false);
+      if (userId) headers['x-user-id'] = userId;
+
+      const res = await this.smartFetch(`/api/rate?${qs.toString()}`, {
+        method: 'GET',
+        headers
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      return { communityRating: 0, totalVotes: 0, userRating: null };
+    } catch (err) {
+      return { communityRating: 0, totalVotes: 0, userRating: null };
+    }
+  }
+
+  /**
+   * RATE: Submits a star rating for an anime (backwards compatible)
+   */
+  public async rateAnime(id: number | string, rating: number, userId?: string, username?: string): Promise<{ success: boolean; rating: number; communityRating?: number; totalVotes?: number }> {
+    try {
+      const headers: Record<string, string> = {
+        ...this.getHeaders(false)
+      };
+      if (userId) headers['x-user-id'] = userId;
+
+      const res = await this.smartFetch('/api/rate', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ anime_id: Number(id), rating, user_id: userId || 'anonymous', username })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          success: true,
+          rating: data.communityRating || data.rating || rating,
+          communityRating: data.communityRating,
+          totalVotes: data.totalVotes
+        };
       }
       throw new Error('Failed to submit rating');
     } catch (err: any) {

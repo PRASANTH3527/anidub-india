@@ -4,6 +4,7 @@ export type ActivityType =
   | 'anime_submission' 
   | 'anime_approved' 
   | 'upvote' 
+  | 'rating'
   | 'feedback' 
   | 'report'
   | 'system';
@@ -42,6 +43,8 @@ export function formatNotificationTitle(payload: NotificationPayload): string {
       return `🔥 Newly Approved Dub: ${payload.anime_title || payload.title || 'Anime'}`;
     case 'upvote':
       return `❤️ Upvote for ${payload.anime_title || 'Anime'}`;
+    case 'rating':
+      return `⭐ Community Rating: ${payload.anime_title || 'Anime'}`;
     case 'feedback':
       return `📩 New Community Feedback Received`;
     case 'report':
@@ -60,6 +63,8 @@ export function formatNotificationBody(payload: NotificationPayload): string {
       const comment = payload.message ? ` "${payload.message.slice(0, 80)}${payload.message.length > 80 ? '...' : ''}"` : '';
       return `${payload.user || 'Fan'} rated ${parts}${comment}`;
     }
+    case 'rating':
+      return `${payload.user || 'Fan'} rated ${payload.anime_title || 'this anime'} ${payload.rating || 5}★`;
     case 'chat':
       return payload.message ? payload.message.slice(0, 100) : 'Sent a live message in community chat';
     case 'anime_submission':

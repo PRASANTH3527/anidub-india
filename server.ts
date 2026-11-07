@@ -448,6 +448,15 @@ function runMigrations() {
       link TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS user_ratings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT,
+      anime_id INTEGER,
+      rating INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, anime_id)
+    );
   `);
 
   try {
@@ -468,6 +477,31 @@ function runMigrations() {
   try {
     db.run("ALTER TABLE chat_messages ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP;");
   } catch {}
+
+  // Seed sample community ratings if user_ratings table is empty
+  try {
+    const ratingsRes = db.exec("SELECT COUNT(*) FROM user_ratings");
+    if (!ratingsRes[0] || ratingsRes[0].values[0][0] === 0) {
+      const sampleSeedRatings = [
+        { user_id: 'user_arjun_99', anime_id: 1, rating: 10 },
+        { user_id: 'user_rohit_in', anime_id: 1, rating: 9 },
+        { user_id: 'user_priya_anime', anime_id: 1, rating: 8 },
+        { user_id: 'user_vikram_dub', anime_id: 1, rating: 9 },
+        { user_id: 'user_siddharth_22', anime_id: 2, rating: 9 },
+        { user_id: 'user_ananya_m', anime_id: 2, rating: 8 },
+        { user_id: 'user_kiran_telugu', anime_id: 2, rating: 10 },
+        { user_id: 'user_neha_tamil', anime_id: 3, rating: 8 },
+        { user_id: 'user_rahul_dub', anime_id: 3, rating: 9 }
+      ];
+      for (const r of sampleSeedRatings) {
+        db.run(
+          `INSERT OR IGNORE INTO user_ratings (user_id, anime_id, rating) VALUES (?, ?, ?)`,
+          [r.user_id, r.anime_id, r.rating]
+        );
+      }
+    }
+    db.run("UPDATE user_ratings SET rating = rating * 2 WHERE rating <= 5 AND id <= 9;");
+  } catch (_) {}
 
   // Ensure default user exists
   try {
@@ -864,8 +898,51 @@ app.get('/api/anime/:id', (req, res) => {
     const isWatchlisted = wlStmt.step();
     wlStmt.free();
 
-    res.set('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=300');
-    res.json({ ...anime, episodes, reviews, isWatchlisted });
+    // Query Anidub Community Rating stats dynamically
+    let communityRating = 0;
+    let communityVotes = 0;
+    try {
+      const commStmt = db.prepare("SELECT AVG(rating) as average_score, COUNT(rating) as total_votes FROM user_ratings WHERE anime_id = ?");
+      commStmt.bind([anime.id]);
+      if (commStmt.step()) {
+        const row: any = commStmt.getAsObject();
+        communityRating = row.average_score != null ? Number(Number(row.average_score).toFixed(1)) : 0;
+        communityVotes = Number(row.total_votes || 0);
+      }
+      commStmt.free();
+    } catch (_) {}
+
+    // Query authenticated user's specific rating if provided
+    let userRating: number | null = null;
+    const reqUserId = (req.query.userId as string) || (req.query.user_id as string) || (req.headers['x-user-id'] as string) || '';
+    if (reqUserId && reqUserId.trim()) {
+      try {
+        const userRateStmt = db.prepare("SELECT rating FROM user_ratings WHERE anime_id = ? AND user_id = ?");
+        userRateStmt.bind([anime.id, reqUserId.trim()]);
+        if (userRateStmt.step()) {
+          userRating = Number(userRateStmt.getAsObject().rating);
+        }
+        userRateStmt.free();
+      } catch (_) {}
+    }
+
+    res.set('Cache-Control', 'no-cache');
+    res.json({
+      ...anime,
+      episodes,
+      reviews,
+      isWatchlisted,
+      average_score: communityRating,
+      averageScore: communityRating,
+      community_rating: communityRating,
+      communityRating,
+      community_votes: communityVotes,
+      communityVotes,
+      total_votes: communityVotes,
+      totalVotes: communityVotes,
+      user_rating: userRating,
+      userRating
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1619,31 +1696,133 @@ app.post('/api/admin/reset-db', requireAdminAuth, async (req, res) => {
   }
 });
 
-// POST /api/anime/:id/rate
-app.post('/api/anime/:id/rate', (req, res) => {
+// POST /api/rate & /api/anime/:id/rate - UPSERT Community Rating
+app.post(['/api/rate', '/api/anime/:id/rate'], (req, res) => {
+  const start = Date.now();
   try {
-    const animeId = req.params.id;
-    const { rating } = req.body;
-    const userRating = parseFloat(rating);
-    if (isNaN(userRating) || userRating < 1 || userRating > 10) {
-      return res.status(400).json({ error: "Rating must be between 1 and 10." });
+    const anime_id = Number(req.body.anime_id || req.body.animeId || req.params.id);
+    const rawRating = req.body.rating;
+    const rating = Number(rawRating);
+    let user_id = String(req.body.user_id || req.body.userId || req.headers['x-user-id'] || '').trim();
+    if (!user_id) {
+      user_id = `guest_${req.ip ? String(req.ip).replace(/[^a-zA-Z0-9]/g, '') : 'anon'}`;
     }
 
-    const stmt = db.prepare("SELECT rating FROM anime WHERE id = ?");
-    stmt.bind([animeId]);
-    let currentRating = 8.5;
-    if (stmt.step()) {
-      currentRating = stmt.getAsObject().rating || 8.5;
+    if (!anime_id || isNaN(anime_id)) {
+      return res.status(400).json({ error: "Valid anime_id is required" });
     }
-    stmt.free();
+    if (isNaN(rating) || rating < 1 || rating > 10) {
+      return res.status(400).json({ error: "Rating must be a score between 1 and 10." });
+    }
 
-    const newRating = Number(((currentRating + userRating) / 2).toFixed(1));
-    db.run("UPDATE anime SET rating = ? WHERE id = ?", [newRating, animeId]);
+    const roundedRating = Math.round(rating);
+
+    // UPSERT statement in SQLite / Cloudflare D1
+    db.run(
+      `INSERT INTO user_ratings (user_id, anime_id, rating, created_at)
+       VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(user_id, anime_id) DO UPDATE SET
+         rating = excluded.rating,
+         created_at = CURRENT_TIMESTAMP;`,
+      [user_id, anime_id, roundedRating]
+    );
     persistD1();
 
-    res.json({ success: true, rating: newRating });
+    // Fetch updated community average and count using exact requested query
+    const statsStmt = db.prepare("SELECT AVG(rating) as average_score, COUNT(rating) as total_votes FROM user_ratings WHERE anime_id = ?");
+    statsStmt.bind([anime_id]);
+    let avgRating = roundedRating;
+    let totalVotes = 1;
+    if (statsStmt.step()) {
+      const row: any = statsStmt.getAsObject();
+      avgRating = row.average_score != null ? Number(Number(row.average_score).toFixed(1)) : roundedRating;
+      totalVotes = Number(row.total_votes || 1);
+    }
+    statsStmt.free();
+
+    logCloudflareEvent('D1', 'POST /api/rate', 200, Date.now() - start, `User ${user_id} rated anime ${anime_id}: ${roundedRating} stars`);
+
+    // Broadcast community live notification
+    try {
+      const nameStmt = db.prepare("SELECT title FROM anime WHERE id = ?");
+      nameStmt.bind([anime_id]);
+      let animeTitle = 'Anime';
+      if (nameStmt.step()) {
+        animeTitle = nameStmt.getAsObject().title || 'Anime';
+      }
+      nameStmt.free();
+
+      broadcastActivityNotification({
+        type: 'rating',
+        anime_id,
+        anime_title: animeTitle,
+        rating: roundedRating,
+        user: req.body.username || 'Community Member',
+        message: `gave ${roundedRating}★ to ${animeTitle}!`
+      }, false).catch(() => {});
+    } catch (_) {}
+
+    return res.json({
+      success: true,
+      anime_id,
+      rating: roundedRating,
+      average_score: avgRating,
+      averageScore: avgRating,
+      communityRating: avgRating,
+      community_rating: avgRating,
+      total_votes: totalVotes,
+      totalVotes,
+      userRating: roundedRating
+    });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error("Community rating submission error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/rate - Retrieve Community Rating & User's Vote
+app.get(['/api/rate', '/api/anime/:id/community-rating'], (req, res) => {
+  try {
+    const anime_id = Number(req.query.anime_id || req.query.id || req.params.id);
+    const user_id = String(req.query.user_id || req.query.userId || req.headers['x-user-id'] || '').trim();
+
+    if (!anime_id || isNaN(anime_id)) {
+      return res.status(400).json({ error: "anime_id query parameter is required" });
+    }
+
+    const statsStmt = db.prepare("SELECT AVG(rating) as average_score, COUNT(rating) as total_votes FROM user_ratings WHERE anime_id = ?");
+    statsStmt.bind([anime_id]);
+    let avgRating = 0;
+    let totalVotes = 0;
+    if (statsStmt.step()) {
+      const row: any = statsStmt.getAsObject();
+      avgRating = row.average_score != null ? Number(Number(row.average_score).toFixed(1)) : 0;
+      totalVotes = Number(row.total_votes || 0);
+    }
+    statsStmt.free();
+
+    let userRating: number | null = null;
+    if (user_id) {
+      const uStmt = db.prepare("SELECT rating FROM user_ratings WHERE anime_id = ? AND user_id = ?");
+      uStmt.bind([anime_id, user_id]);
+      if (uStmt.step()) {
+        userRating = Number(uStmt.getAsObject().rating);
+      }
+      uStmt.free();
+    }
+
+    return res.json({
+      anime_id,
+      average_score: avgRating,
+      averageScore: avgRating,
+      communityRating: avgRating,
+      community_rating: avgRating,
+      total_votes: totalVotes,
+      totalVotes,
+      userRating
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
 });
 

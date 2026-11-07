@@ -25,6 +25,8 @@ import { cloudflareApi } from '../services/cloudflareApi';
 import { getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
 import { generateRandomUsername } from '../utils/randomUser';
 import { formatRelativeTime } from '../utils/timestamps';
+import { useUser, SignInButton } from '@clerk/clerk-react';
+import { DualRating } from './DualRating';
 
 export interface AnimeDetailPageProps {
   animeId: number;
@@ -43,6 +45,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   onToggleWatchlist,
   onSelectAnime
 }) => {
+  const { user, isSignedIn } = useUser();
   const [details, setDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [upvotes, setUpvotes] = useState(0);
@@ -50,6 +53,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const [isVoting, setIsVoting] = useState(false);
   const [isRating, setIsRating] = useState(false);
   const [isWatched, setIsWatched] = useState(false);
+
+  // Community Rating states
+  const [communityRating, setCommunityRating] = useState<number>(0);
+  const [communityVotes, setCommunityVotes] = useState<number>(0);
+  const [userRating, setUserRating] = useState<number | null>(null);
+  const [hoverRating, setHoverRating] = useState<number>(0);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [showSignInPrompt, setShowSignInPrompt] = useState(false);
 
   // Review Form state
   const [reviewRating, setReviewRating] = useState(8.5);
@@ -87,6 +98,18 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       setIsWatched(false);
     }
 
+    // Check saved user rating locally
+    try {
+      const savedUserRate = localStorage.getItem(`cf_user_rating_${animeId}_${user?.id || 'anon'}`);
+      if (savedUserRate) {
+        setUserRating(Number(savedUserRate));
+      } else {
+        setUserRating(null);
+      }
+    } catch {
+      setUserRating(null);
+    }
+
     // Load saved reviews for this specific anime
     try {
       const savedRevs = localStorage.getItem(`cf_reviews_${animeId}`);
@@ -101,16 +124,37 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
     fetchDetails();
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [animeId]);
+  }, [animeId, user?.id]);
 
   const fetchDetails = async () => {
     setLoading(true);
     try {
-      const data = await cloudflareApi.getAnimeById(animeId);
+      const data = await cloudflareApi.getAnimeById(animeId, user?.id);
       if (data) {
         setDetails(data);
         if (data.popularity) setUpvotes(data.popularity);
         if (data.rating) setCurrentRating(data.rating);
+        
+        // Populate Community Rating data
+        if (data.community_rating !== undefined || data.communityRating !== undefined) {
+          const cRating = Number(data.community_rating ?? data.communityRating);
+          if (!isNaN(cRating) && cRating > 0) {
+            setCommunityRating(cRating);
+          }
+        }
+        if (data.community_votes !== undefined || data.communityVotes !== undefined) {
+          setCommunityVotes(Number(data.community_votes ?? data.communityVotes) || 0);
+        }
+        if (data.user_rating !== undefined || data.userRating !== undefined) {
+          const uRate = data.user_rating ?? data.userRating;
+          if (uRate !== null && !isNaN(Number(uRate))) {
+            setUserRating(Number(uRate));
+            try {
+              localStorage.setItem(`cf_user_rating_${animeId}_${user?.id || 'anon'}`, String(uRate));
+            } catch {}
+          }
+        }
+
         if (data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
           const normalized = data.reviews.map((r: any) => ({
             id: r.id || Date.now(),
@@ -171,6 +215,52 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         console.error(e);
       }
       setIsVoting(false);
+    }
+  };
+
+  // Interactive 10-point Community Rating with Optimistic UI updates
+  const handleCommunityRate = async (val: number) => {
+    // 1. Instant Optimistic UI Update
+    setUserRating(val);
+    const previousUserRating = userRating;
+    const previousCommunityRating = communityRating || (details?.rating || 8.5);
+    const previousTotalVotes = communityVotes || 0;
+
+    const newTotalVotes = previousUserRating ? previousTotalVotes : (previousTotalVotes + 1);
+    const baseSum = previousCommunityRating * (previousTotalVotes > 0 ? previousTotalVotes : 1);
+    const newSum = previousUserRating ? (baseSum - previousUserRating + val) : (baseSum + val);
+    const optimisticAvg = newTotalVotes > 0 ? Number((newSum / newTotalVotes).toFixed(1)) : val;
+    setCommunityRating(optimisticAvg);
+    setCommunityVotes(newTotalVotes);
+    showToast(`⭐ Rated ${val} / 10 with the Anidub Community!`);
+
+    try {
+      localStorage.setItem(`cf_user_rating_${animeId}_${user?.id || 'anon'}`, String(val));
+    } catch {}
+
+    // 2. Optional server sync if authenticated
+    if (user?.id) {
+      setIsSubmittingRating(true);
+      try {
+        const res = await cloudflareApi.submitCommunityRating(
+          animeId,
+          val,
+          user.id,
+          user.fullName || user.username || user.firstName || 'Anime Fan'
+        );
+        if (res && res.success) {
+          if (res.communityRating !== undefined) {
+            setCommunityRating(Number(res.communityRating));
+          }
+          if (res.totalVotes !== undefined) {
+            setCommunityVotes(Number(res.totalVotes));
+          }
+        }
+      } catch (err: any) {
+        console.warn('Community rating persisted locally, sync note:', err.message);
+      } finally {
+        setIsSubmittingRating(false);
+      }
     }
   };
 
@@ -592,6 +682,16 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </button>
           </div>
         </div>
+
+        {/* STANDALONE DUAL RATING COMPONENT (GLOBAL & 10-POINT COMMUNITY) */}
+        <DualRating
+          globalRating={details?.rating || 8.5}
+          initialUserRating={userRating}
+          communityScore={communityRating || (details?.rating || 8.5)}
+          totalVotes={communityVotes}
+          onRate={handleCommunityRate}
+          className="mt-4 mb-2"
+        />
       </div>
 
       {/* 3. NAKED CONTENT FLOW (100% CARDLESS & BOXLESS) */}

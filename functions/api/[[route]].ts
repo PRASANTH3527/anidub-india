@@ -354,6 +354,19 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             }
             const episodes = await env.DB.prepare("SELECT * FROM episodes WHERE anime_id = ? ORDER BY episode_number ASC").bind(anime.id).all();
             const reviews = await env.DB.prepare("SELECT * FROM reviews WHERE anime_id = ? ORDER BY id DESC").bind(anime.id).all();
+
+            let communityRating = 0;
+            let communityVotes = 0;
+            try {
+              const statsRes = await env.DB.prepare(
+                "SELECT AVG(rating) as average_score, COUNT(rating) as total_votes FROM user_ratings WHERE anime_id = ?"
+              ).bind(anime.id).first();
+              if (statsRes) {
+                communityRating = statsRes.average_score != null ? Number(Number(statsRes.average_score).toFixed(1)) : 0;
+                communityVotes = Number(statsRes.total_votes || 0);
+              }
+            } catch (_) {}
+
             return jsonResponse({
               ...anime,
               streaming_partners: streamingPartners,
@@ -361,9 +374,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               mixed_entries: mixedEntries,
               mixedEntries: mixedEntries,
               episodes: episodes.results || [],
-              reviews: reviews.results || []
+              reviews: reviews.results || [],
+              average_score: communityRating,
+              averageScore: communityRating,
+              community_rating: communityRating,
+              communityRating: communityRating,
+              total_votes: communityVotes,
+              totalVotes: communityVotes,
+              community_votes: communityVotes,
+              communityVotes: communityVotes
             }, 200, request, {
-              'Cache-Control': 'public, max-age=60, s-maxage=120, stale-while-revalidate=300'
+              'Cache-Control': 'no-cache'
             });
           }
         }
@@ -659,6 +680,138 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         return jsonResponse({ success: true, likes: 1, likesCount: 1 });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 500);
+      }
+    }
+  }
+
+  // 6b. POST /api/rate & GET /api/rate (Community 10-Point Rating System)
+  if (path === '/api/rate' || (path.startsWith('/api/anime/') && path.endsWith('/rate'))) {
+    if (method === 'POST') {
+      try {
+        const body: any = await request.json().catch(() => ({}));
+        let animeId = Number(body.anime_id || body.animeId);
+        if (!animeId && path.startsWith('/api/anime/')) {
+          const match = path.match(/^\/api\/anime\/([0-9]+)\/rate/);
+          if (match) animeId = Number(match[1]);
+        }
+        const rating = Number(body.rating);
+        let userId = String(body.user_id || body.userId || request.headers.get('x-user-id') || '').trim();
+        if (!userId) {
+          userId = `guest_${request.headers.get('cf-connecting-ip') || 'anon'}`;
+        }
+
+        if (!animeId || isNaN(animeId)) {
+          return jsonResponse({ error: "Valid anime_id is required" }, 400, request);
+        }
+        if (isNaN(rating) || rating < 1 || rating > 10) {
+          return jsonResponse({ error: "Rating must be a score between 1 and 10." }, 400, request);
+        }
+
+        const roundedRating = Math.round(rating);
+
+        if (env.DB) {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS user_ratings (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id TEXT,
+              anime_id INTEGER,
+              rating INTEGER,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE(user_id, anime_id)
+            )
+          `).run().catch(() => {});
+
+          await env.DB.prepare(
+            `INSERT INTO user_ratings (user_id, anime_id, rating, created_at)
+             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(user_id, anime_id) DO UPDATE SET
+               rating = excluded.rating,
+               created_at = CURRENT_TIMESTAMP;`
+          ).bind(userId, animeId, roundedRating).run();
+
+          const statsRes = await env.DB.prepare(
+            "SELECT AVG(rating) as average_score, COUNT(rating) as total_votes FROM user_ratings WHERE anime_id = ?"
+          ).bind(animeId).first();
+
+          const avgScore = statsRes?.average_score != null ? Number(Number(statsRes.average_score).toFixed(1)) : roundedRating;
+          const totalVotes = Number(statsRes?.total_votes || 1);
+
+          return jsonResponse({
+            success: true,
+            anime_id: animeId,
+            rating: roundedRating,
+            average_score: avgScore,
+            averageScore: avgScore,
+            communityRating: avgScore,
+            community_rating: avgScore,
+            total_votes: totalVotes,
+            totalVotes: totalVotes,
+            userRating: roundedRating
+          }, 200, request);
+        }
+
+        return jsonResponse({
+          success: true,
+          anime_id: animeId,
+          rating: roundedRating,
+          average_score: roundedRating,
+          averageScore: roundedRating,
+          communityRating: roundedRating,
+          community_rating: roundedRating,
+          total_votes: 1,
+          totalVotes: 1,
+          userRating: roundedRating
+        }, 200, request);
+      } catch (err: any) {
+        return jsonResponse({ error: err.message }, 500, request);
+      }
+    }
+
+    if (method === 'GET') {
+      try {
+        const animeId = Number(url.searchParams.get('anime_id') || url.searchParams.get('id'));
+        const userId = url.searchParams.get('user_id') || url.searchParams.get('userId') || request.headers.get('x-user-id');
+
+        if (!animeId || isNaN(animeId)) {
+          return jsonResponse({ error: "anime_id query parameter is required" }, 400, request);
+        }
+
+        let avgScore = 0;
+        let totalVotes = 0;
+        let userRating: number | null = null;
+
+        if (env.DB) {
+          const statsRes = await env.DB.prepare(
+            "SELECT AVG(rating) as average_score, COUNT(rating) as total_votes FROM user_ratings WHERE anime_id = ?"
+          ).bind(animeId).first();
+
+          if (statsRes) {
+            avgScore = statsRes.average_score != null ? Number(Number(statsRes.average_score).toFixed(1)) : 0;
+            totalVotes = Number(statsRes.total_votes || 0);
+          }
+
+          if (userId) {
+            const uRes = await env.DB.prepare(
+              "SELECT rating FROM user_ratings WHERE anime_id = ? AND user_id = ?"
+            ).bind(animeId, userId).first();
+            if (uRes) {
+              userRating = Number(uRes.rating);
+            }
+          }
+        }
+
+        return jsonResponse({
+          anime_id: animeId,
+          average_score: avgScore,
+          averageScore: avgScore,
+          communityRating: avgScore,
+          community_rating: avgScore,
+          total_votes: totalVotes,
+          totalVotes: totalVotes,
+          userRating
+        }, 200, request);
+      } catch (err: any) {
+        return jsonResponse({ error: err.message }, 500, request);
       }
     }
   }
