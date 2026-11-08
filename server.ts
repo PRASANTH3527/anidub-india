@@ -1473,11 +1473,31 @@ app.delete('/api/anime/:id', requireAdminAuth, (req, res) => {
 app.post('/api/admin/approve/:id', requireAdminAuth, async (req, res) => {
   try {
     const animeId = req.params.id;
+    if (!animeId) {
+      return res.status(400).json({ success: false, error: 'Missing anime ID for approval' });
+    }
+
+    if (!db) {
+      return res.status(500).json({ success: false, error: 'Database not initialized' });
+    }
+
+    const checkStmt = db.prepare("SELECT id, title FROM anime WHERE id = ? OR slug = ?");
+    checkStmt.bind([animeId, animeId]);
+    let exists = false;
+    if (checkStmt.step()) {
+      exists = true;
+    }
+    checkStmt.free();
+
+    if (!exists) {
+      return res.status(404).json({ success: false, error: `Anime ID ${animeId} not found in database` });
+    }
+
     const rawBodyStatus = (req.body?.airing_status || req.body?.status || '').toString().trim();
     const bodyStatus = rawBodyStatus.toLowerCase() === 'pending' ? null : rawBodyStatus;
     
     if (bodyStatus) {
-      db.run("UPDATE anime SET airing_status = ?, status = ?, submissionStatus = 'approved', approval_status = 'approved', is_published = 1, popularity = 0, likesCount = 0 WHERE id = ?", [bodyStatus, bodyStatus, animeId]);
+      db.run("UPDATE anime SET airing_status = ?, status = ?, submissionStatus = 'approved', approval_status = 'approved', is_published = 1, popularity = COALESCE(popularity, 0), likesCount = COALESCE(likesCount, 0) WHERE id = ? OR slug = ?", [bodyStatus, bodyStatus, animeId, animeId]);
     } else {
       db.run(`UPDATE anime SET 
         airing_status = CASE 
@@ -1491,16 +1511,16 @@ app.post('/api/admin/approve/:id', requireAdminAuth, async (req, res) => {
         submissionStatus = 'approved',
         approval_status = 'approved',
         is_published = 1,
-        popularity = 0,
-        likesCount = 0
-        WHERE id = ?`, [animeId]);
+        popularity = COALESCE(popularity, 0),
+        likesCount = COALESCE(likesCount, 0)
+        WHERE id = ? OR slug = ?`, [animeId, animeId]);
     }
     persistD1();
 
     let approvedAnime: any = null;
     try {
-      const stmt = db.prepare("SELECT * FROM anime WHERE id = ?");
-      stmt.bind([animeId]);
+      const stmt = db.prepare("SELECT * FROM anime WHERE id = ? OR slug = ?");
+      stmt.bind([animeId, animeId]);
       if (stmt.step()) {
         approvedAnime = stmt.getAsObject();
       }
@@ -1511,9 +1531,10 @@ app.post('/api/admin/approve/:id', requireAdminAuth, async (req, res) => {
       sendTelegramNotification(approvedAnime).catch(() => {});
     }
 
-    res.json({ success: true, id: animeId, submissionStatus: 'approved', status: bodyStatus, data: approvedAnime });
+    return res.json({ success: true, id: animeId, submissionStatus: 'approved', status: bodyStatus || approvedAnime?.status || 'Airing', data: approvedAnime });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[Approval Route Error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Internal server error during approval' });
   }
 });
 

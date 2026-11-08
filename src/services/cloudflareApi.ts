@@ -58,6 +58,7 @@ class CloudflareApiService {
     const isRelative = !url.startsWith('http://') && !url.startsWith('https://');
     const fetchOptions: RequestInit = {
       ...options,
+      cache: 'no-store',
       credentials: options.credentials || (isRelative ? 'same-origin' : 'include')
     };
     
