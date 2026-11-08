@@ -336,8 +336,12 @@ function runMigrations() {
     );
   `);
 
-  try { db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_anime_title ON anime(title);"); } catch (e) {}
-  try { db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_anime_slug ON anime(slug);"); } catch (e) {}
+  try {
+    db.run("DELETE FROM anime WHERE id NOT IN (SELECT MIN(id) FROM anime GROUP BY LOWER(TRIM(title)));");
+    db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_anime_title ON anime(title);");
+    db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_title ON anime(title);");
+    db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_anime_slug ON anime(slug);");
+  } catch (e) {}
 
   try { db.run("ALTER TABLE anime ADD COLUMN languages TEXT DEFAULT 'HIN,TAM,TEL';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN platform TEXT DEFAULT 'Crunchyroll';"); } catch (e) {}
@@ -1618,14 +1622,17 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       return res.status(400).json({ success: false, error: 'Empty or invalid import payload' });
     }
 
-    // 1. Query ALL existing titles and slugs from the anime table (covers main published + pending moderation queue)
+    // Helper for normalized string matching (handles case & trailing whitespace)
+    const normalize = (str: any) => String(str || '').toLowerCase().trim();
+
+    // 1. Query ALL existing titles and slugs from the anime table, normalizing them
     const existingTitlesStmt = db.prepare("SELECT title, slug FROM anime");
     const existingTitles = new Set<string>();
     const existingSlugs = new Set<string>();
     while (existingTitlesStmt.step()) {
       const rowObj = existingTitlesStmt.getAsObject();
-      if (rowObj.title) existingTitles.add(String(rowObj.title).trim().toLowerCase());
-      if (rowObj.slug) existingSlugs.add(String(rowObj.slug).trim().toLowerCase());
+      if (rowObj.title) existingTitles.add(normalize(rowObj.title));
+      if (rowObj.slug) existingSlugs.add(normalize(rowObj.slug));
     }
     existingTitlesStmt.free();
 
@@ -1634,21 +1641,22 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
     const seenInBatch = new Set<string>();
 
     for (const row of rows) {
-      // 1. ABSOLUTE HEADER EXTRACTION
-      const title = (row.title || row['Title'] || row.Name || '').toString().trim();
+      // 1. ABSOLUTE HEADER EXTRACTION & NORMALIZATION
+      const rawTitle = row.title || row['Title'] || row.Name || '';
+      const title = String(rawTitle).trim();
       if (!title) continue;
 
-      const lowerTitle = title.toLowerCase();
-      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const normTitle = normalize(title);
+      const slug = normalize(title).replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-      // 2. Filter in memory: skip if already in database or already processed in this batch
-      if (existingTitles.has(lowerTitle) || existingSlugs.has(slug) || seenInBatch.has(lowerTitle)) {
+      // 2. Filter in memory with strict normalized comparison
+      if (existingTitles.has(normTitle) || existingSlugs.has(slug) || seenInBatch.has(normTitle)) {
         skippedCount++;
         continue;
       }
 
-      seenInBatch.add(lowerTitle);
-      existingTitles.add(lowerTitle);
+      seenInBatch.add(normTitle);
+      existingTitles.add(normTitle);
       existingSlugs.add(slug);
 
       const rawStatus = String(row.status || row['Status'] || '').toLowerCase();
@@ -1679,16 +1687,17 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
         ? mixedEntriesRaw.map((e: any) => e.episodes || 12).join('|')
         : (row.episodes_per_season ? String(row.episodes_per_season) : String(epCount));
 
-      // 4. DB INSERT WITH INSERT OR IGNORE
+      // 4. SAFE INSERTION WITH ON CONFLICT DO NOTHING
       try {
         db.run(
-          `INSERT OR IGNORE INTO anime (
+          `INSERT INTO anime (
             title, slug, synopsis, cover_image, banner_image, 
             rating, episodes_count, status, airing_status, 
             submissionStatus, approval_status, is_published, 
             season, year, genres, popularity, languages, 
             platform, type, studio, episodes_per_season, mixedEntries
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(title) DO NOTHING`,
           [
             title, 
             slug, 
