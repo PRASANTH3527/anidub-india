@@ -205,15 +205,29 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     }
   }, [autoScroll]);
 
-  // Auto-scroll on message updates (instant on first mount, smooth on subsequent incoming messages)
+  // Smart auto-scroll on message updates (instant on first mount; smooth if user is already near bottom)
   useEffect(() => {
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
       scrollToBottom(false);
-    } else {
+      return;
+    }
+
+    // SMART SCROLLING:
+    // When new messages arrive (via polling or typing), automatically scroll to the bottom
+    // ONLY if the user is already near the bottom of the chat. Don't forcefully scroll them down
+    // if they are reading older messages.
+    const container = chatContainerRef.current;
+    if (!container || !autoScroll) return;
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    // Consider user near the bottom if within 150px of bottom
+    const isNearBottom = distanceFromBottom <= 150;
+
+    if (isNearBottom) {
       scrollToBottom(true);
     }
-  }, [messages, scrollToBottom]);
+  }, [messages, autoScroll, scrollToBottom]);
 
   // Scroll to bottom when user re-enables autoScroll toggle
   useEffect(() => {
@@ -252,32 +266,70 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   }, [currentUserName]);
 
   // 2. Fetch existing chat & review history from Backend / D1 Database
-  const fetchChatHistory = useCallback(async () => {
-    setIsSyncing(true);
+  // Supports silent background polling without spinners or toasts
+  const fetchMessages = useCallback(async (options: { silent?: boolean } = { silent: false }) => {
+    const isSilent = Boolean(options.silent);
+    if (!isSilent) {
+      setIsSyncing(true);
+    }
     try {
       const data = await cloudflareApi.fetchChatHistory();
       if (Array.isArray(data) && data.length > 0) {
         setMessages(prev => {
           const merged = mergeMessageLists(prev, data);
+
+          // Deep/Id check to avoid unnecessary re-renders if no messages changed
+          if (
+            merged.length === prev.length &&
+            merged[merged.length - 1]?.id === prev[prev.length - 1]?.id &&
+            merged[0]?.id === prev[0]?.id
+          ) {
+            return prev;
+          }
+
           try {
             localStorage.setItem('cf_community_chat', JSON.stringify(merged));
           } catch {}
           return merged;
         });
-        setSyncStatus('History loaded');
+
+        if (!isSilent) {
+          setSyncStatus('History loaded');
+        }
       }
     } catch (err) {
-      console.warn('Could not fetch backend chat history, using local cache:', err);
+      if (!isSilent) {
+        console.warn('Could not fetch backend chat history, using local cache:', err);
+      }
     } finally {
-      setIsSyncing(false);
-      setTimeout(() => setSyncStatus(null), 2500);
+      if (!isSilent) {
+        setIsSyncing(false);
+        setTimeout(() => setSyncStatus(null), 2500);
+      }
     }
   }, [mergeMessageLists]);
 
+  // Backward compatibility alias for manual refresh action
+  const fetchChatHistory = useCallback(() => {
+    return fetchMessages({ silent: false });
+  }, [fetchMessages]);
+
   // Load backend history on mount
   useEffect(() => {
-    fetchChatHistory();
-  }, [fetchChatHistory]);
+    fetchMessages({ silent: false });
+  }, [fetchMessages]);
+
+  // AUTO-POLLING LOGIC: Automatically call fetchMessages() every 3000ms (3 seconds) for real-time synchronization
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      fetchMessages({ silent: true });
+    }, 3000);
+
+    // CLEANUP: Clear interval when component unmounts
+    return () => {
+      clearInterval(pollInterval);
+    };
+  }, [fetchMessages]);
 
   // Sync across tabs via window storage event
   useEffect(() => {

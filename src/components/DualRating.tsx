@@ -142,7 +142,7 @@ export const DualRating: React.FC<DualRatingProps> = ({
                 const isLit = currentActiveScore >= star;
                 return (
                   <button
-                    key={star}
+                    key={`dual_rating_star_${star}`}
                     type="button"
                     onMouseEnter={() => setHoverRating(star)}
                     onMouseLeave={() => setHoverRating(0)}

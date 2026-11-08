@@ -703,9 +703,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             Available Dubs
           </h2>
           <div className="flex flex-wrap gap-x-6 gap-y-3">
-            {displayLanguages.map((lang: string) => (
+            {displayLanguages.map((lang: string, idx: number) => (
               <div
-                key={lang}
+                key={`detail_lang_${lang}_${idx}`}
                 className="flex items-center gap-2 text-sm font-bold text-white tracking-wide"
               >
                 <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse" />
@@ -737,7 +737,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <div className="flex flex-wrap items-center gap-2 pt-4 text-xs">
             <span className="text-purple-300/60 text-[10px] font-bold tracking-widest uppercase mr-1">GENRES:</span>
             {genres.map((g: string, i: number) => (
-              <span key={g} className="text-neutral-300 font-medium text-xs">
+              <span key={`detail_genre_${g}_${i}`} className="text-neutral-300 font-medium text-xs">
                 {g}{i < genres.length - 1 ? ' • ' : ''}
               </span>
             ))}
@@ -825,8 +825,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 onChange={(e) => setReviewLang(e.target.value)}
                 className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-purple-400 cursor-pointer"
               >
-                {displayLanguages.map((lang: string) => (
-                  <option key={lang} value={`${lang} Dub`}>{lang} Dub</option>
+                {displayLanguages.map((lang: string, idx: number) => (
+                  <option key={`review_opt_${lang}_${idx}`} value={`${lang} Dub`}>{lang} Dub</option>
                 ))}
               </select>
 
@@ -1078,9 +1078,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               </p>
 
               <div className="space-y-2 pt-1 max-h-[50vh] overflow-y-auto">
-                {availablePlatforms.map((plat) => (
+                {availablePlatforms.map((plat, idx) => (
                   <a
-                    key={plat.name}
+                    key={`detail_plat_${plat.name}_${idx}`}
                     href={plat.url}
                     target="_blank"
                     rel="noopener noreferrer"
