@@ -1622,42 +1622,66 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       return res.status(400).json({ success: false, error: 'Empty or invalid import payload' });
     }
 
-    // Helper for normalized string matching (handles case & trailing whitespace)
-    const normalize = (str: any) => String(str || '').toLowerCase().trim();
+    // 1. STRIP HIDDEN CHARACTERS HELPER
+    const cleanTitle = (title: any) => String(title || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\r/g, '').trim().toLowerCase();
 
-    // 1. Query ALL existing titles and slugs from the anime table, normalizing them
-    const existingTitlesStmt = db.prepare("SELECT title, slug FROM anime");
-    const existingTitles = new Set<string>();
-    const existingSlugs = new Set<string>();
-    while (existingTitlesStmt.step()) {
-      const rowObj = existingTitlesStmt.getAsObject();
-      if (rowObj.title) existingTitles.add(normalize(rowObj.title));
-      if (rowObj.slug) existingSlugs.add(normalize(rowObj.slug));
+    // 2. PRE-FETCH ALL EXISTING DATA FROM BOTH anime AND pending_anime TABLES
+    const existingTitlesSet = new Set<string>();
+    const existingSlugsSet = new Set<string>();
+
+    try {
+      db.run(`CREATE TABLE IF NOT EXISTS pending_anime AS SELECT * FROM anime WHERE approval_status = 'pending' OR submissionStatus = 'pending';`);
+    } catch (e) {}
+
+    const animeStmt = db.prepare("SELECT title, slug FROM anime");
+    while (animeStmt.step()) {
+      const row = animeStmt.getAsObject();
+      if (row.title) existingTitlesSet.add(cleanTitle(row.title));
+      if (row.slug) existingSlugsSet.add(cleanTitle(row.slug));
     }
-    existingTitlesStmt.free();
+    animeStmt.free();
 
-    let insertedCount = 0;
+    const pendingStmt = db.prepare("SELECT title, slug FROM pending_anime");
+    while (pendingStmt.step()) {
+      const row = pendingStmt.getAsObject();
+      if (row.title) existingTitlesSet.add(cleanTitle(row.title));
+      if (row.slug) existingSlugsSet.add(cleanTitle(row.slug));
+    }
+    pendingStmt.free();
+
+    // 3. STRICT IN-MEMORY FILTERING
+    const seenInThisUpload = new Set<string>();
+    const itemsToInsert: any[] = [];
     let skippedCount = 0;
-    const seenInBatch = new Set<string>();
 
     for (const row of rows) {
-      // 1. ABSOLUTE HEADER EXTRACTION & NORMALIZATION
       const rawTitle = row.title || row['Title'] || row.Name || '';
-      const title = String(rawTitle).trim();
-      if (!title) continue;
-
-      const normTitle = normalize(title);
-      const slug = normalize(title).replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-
-      // 2. Filter in memory with strict normalized comparison
-      if (existingTitles.has(normTitle) || existingSlugs.has(slug) || seenInBatch.has(normTitle)) {
+      const cleaned = cleanTitle(rawTitle);
+      if (!cleaned) {
         skippedCount++;
         continue;
       }
 
-      seenInBatch.add(normTitle);
-      existingTitles.add(normTitle);
-      existingSlugs.add(slug);
+      const slug = cleaned.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+      if (existingTitlesSet.has(cleaned) || existingSlugsSet.has(slug) || seenInThisUpload.has(cleaned)) {
+        skippedCount++;
+        continue;
+      }
+
+      seenInThisUpload.add(cleaned);
+      existingTitlesSet.add(cleaned);
+      existingSlugsSet.add(slug);
+      itemsToInsert.push(row);
+    }
+
+    // 4. ONLY INSERT NEW
+    let insertedCount = 0;
+    for (const row of itemsToInsert) {
+      const rawTitle = row.title || row['Title'] || row.Name || '';
+      const title = String(rawTitle).replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\r/g, '').trim();
+      const cleaned = cleanTitle(title);
+      const slug = cleaned.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
       const rawStatus = String(row.status || row['Status'] || '').toLowerCase();
       const finalStatus = rawStatus.includes('complete') ? 'Completed' : 'Airing';
@@ -1665,7 +1689,6 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       const synopsis = (row.synopsis || row['Synopsis'] || row.Description || '').toString().trim() || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs.';
       const poster = (row.cover_image || row.poster_url || row['Poster'] || row['Poster URL'] || row['Cover Image'] || '').toString().trim() || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
 
-      // 1b. Mixed Entries / Seasons Handling
       let mixedEntriesRaw = row.mixed_entries || row.mixedEntries;
       if (!mixedEntriesRaw && typeof row['Seasons'] === 'string') {
         mixedEntriesRaw = row['Seasons'].split('|').map((entry: string) => {
@@ -1687,7 +1710,6 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
         ? mixedEntriesRaw.map((e: any) => e.episodes || 12).join('|')
         : (row.episodes_per_season ? String(row.episodes_per_season) : String(epCount));
 
-      // 4. SAFE INSERTION WITH ON CONFLICT DO NOTHING
       try {
         db.run(
           `INSERT INTO anime (
@@ -1720,6 +1742,10 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
           ]
         );
         insertedCount++;
+
+        try {
+          db.run(`INSERT OR IGNORE INTO pending_anime SELECT * FROM anime WHERE title = ?`, [title]);
+        } catch (_) {}
       } catch (err) {
         skippedCount++;
       }
