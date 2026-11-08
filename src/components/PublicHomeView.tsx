@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { 
   Play, 
   Star, 
@@ -338,8 +339,13 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
           {airingNowList.map((anime, aIdx) => {
             const langs = parseLanguages(anime.languages);
             return (
-              <div
+              <motion.div
                 key={`airing_card_${anime.id}_${aIdx}`}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.1 }}
+                transition={{ duration: 0.5, ease: "easeOut", delay: (aIdx % 4) * 0.08 }}
+                whileHover={{ y: -4, transition: { duration: 0.2 } }}
                 onClick={() => onSelectAnime(anime)}
                 className="w-[140px] sm:w-[150px] shrink-0 snap-start bg-[#0e1222] border border-[#1e2338] hover:border-purple-500/50 rounded-[20px] overflow-hidden group cursor-pointer shadow-xl transition-all duration-300 flex flex-col justify-between"
               >
@@ -400,7 +406,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                     </span>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -434,8 +440,13 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
             const isSaved = watchlist.map(Number).includes(Number(anime.id));
 
             return (
-              <div
+              <motion.div
                 key={`recent_card_${anime.id}_${rIdx}`}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.1 }}
+                transition={{ duration: 0.5, ease: "easeOut", delay: (rIdx % 6) * 0.08 }}
+                whileHover={{ y: -4, transition: { duration: 0.2 } }}
                 onClick={() => onSelectAnime(anime)}
                 className="group bg-[#0e1222] border border-[#1e2338] hover:border-purple-500/50 rounded-[22px] overflow-hidden shadow-xl transition-all duration-300 flex flex-col justify-between cursor-pointer"
               >
@@ -518,7 +529,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                     </span>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>

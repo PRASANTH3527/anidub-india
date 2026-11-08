@@ -708,7 +708,7 @@ class CloudflareApiService {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success !== false) {
-        return { success: true, message: data };
+        return { success: true, message: data.message || data };
       }
       return { success: false, error: data.error || 'Failed to send message' };
     } catch (err: any) {

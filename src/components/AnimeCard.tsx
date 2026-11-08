@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { 
   Flame, 
   CheckCircle2, 
@@ -364,13 +364,19 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   };
 
   return (
-    <ParallaxCard className="h-full">
+    <motion.div
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 30 }}
+      whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.1 }}
+      transition={{ 
+        duration: 0.5, 
+        ease: "easeOut",
+        delay: staggerDelay 
+      }}
+      className="h-full"
+    >
       <motion.div 
         onClick={() => onSelect(anime)}
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 20 }}
-        whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "60px" }}
-        transition={{ duration: 0.35, delay: staggerDelay, ease: [0.25, 0.1, 0.25, 1.0] }}
         whileHover={shouldReduceMotion ? undefined : { y: -4, transition: { duration: 0.2 } }}
         whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
         className="group relative flex flex-col h-full bg-[#131926] cursor-pointer select-none rounded-2xl border border-neutral-800/60 hover:border-purple-500/40 shadow-lg will-change-transform"
@@ -698,7 +704,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
           </div>
         </div>
       </motion.div>
-    </ParallaxCard>
+    </motion.div>
   );
 };
 

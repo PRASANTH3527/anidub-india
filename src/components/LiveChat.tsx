@@ -185,6 +185,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const isInitialMountRef = useRef(true);
   const reconnectTimerRef = useRef<any>(null);
+  const pendingOptimisticRef = useRef<Map<string, ChatMessage>>(new Map());
 
   const scrollToBottom = useCallback((smooth = true) => {
     if (!autoScroll || !chatContainerRef.current) return;
@@ -243,7 +244,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   }, [currentUserName]);
 
   // 2. Fetch existing chat & review history from Backend / D1 Database
-  // Supports silent background polling without spinners or toasts; database acts as source of truth
+  // ABSOLUTE SOURCE OF TRUTH: completely replaces the state with database messages
   const fetchMessages = useCallback(async (options: { silent?: boolean } = { silent: false }) => {
     const isSilent = Boolean(options.silent);
     if (!isSilent) {
@@ -252,23 +253,49 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     try {
       const data = await cloudflareApi.fetchChatHistory();
       if (Array.isArray(data)) {
-        setMessages(prev => {
-          // Strictly deduplicate and overwrite with database records as absolute source of truth
-          const merged = syncAndDeduplicateChatMessages(prev, data, currentUserName);
+        // Map database records into ChatMessage format using exact persistent ID
+        const fetchedMessages: ChatMessage[] = data.map((item: any) => ({
+          id: String(item.id ?? `${item.user}_${item.timestamp}`),
+          user: String(item.user || 'Anonymous Fan'),
+          text: String(item.text || item.comment || item.message || ''),
+          timestamp: String(item.timestamp || 'Just now'),
+          isSelf: Boolean(item.user === currentUserName || (user?.id && item.clerk_user_id === user.id)),
+          isReview: Boolean(item.isReview || item.rating),
+          rating: item.rating !== undefined && item.rating !== null ? Number(item.rating) : null,
+          language: item.language || null
+        }));
 
-          // Deep/Id check to avoid unnecessary re-renders if no messages changed
-          if (
-            merged.length === prev.length &&
-            merged.every((m, idx) => m.id === prev[idx]?.id && m.text === prev[idx]?.text)
-          ) {
-            return prev;
+        // Deduplicate any repeated IDs in fetched batch
+        const seenIds = new Set<string>();
+        const uniqueFetched: ChatMessage[] = [];
+        for (const msg of fetchedMessages) {
+          const strId = String(msg.id);
+          if (!seenIds.has(strId)) {
+            seenIds.add(strId);
+            uniqueFetched.push(msg);
           }
+        }
 
-          try {
-            localStorage.setItem('cf_community_chat', JSON.stringify(merged));
-          } catch {}
-          return merged;
+        // Clean resolved in-flight items that are now confirmed in database
+        uniqueFetched.forEach(m => {
+          pendingOptimisticRef.current.delete(String(m.id));
         });
+
+        // Retain any pending in-flight messages that have not yet landed in the database
+        const inFlightPending: ChatMessage[] = [];
+        pendingOptimisticRef.current.forEach((pendingMsg, pId) => {
+          if (!seenIds.has(pId)) {
+            inFlightPending.push(pendingMsg);
+          }
+        });
+
+        // ABSOLUTE SOURCE OF TRUTH: completely replace the state
+        const nextState = [...uniqueFetched, ...inFlightPending];
+        setMessages(nextState);
+
+        try {
+          localStorage.setItem('cf_community_chat', JSON.stringify(nextState));
+        } catch {}
 
         if (!isSilent) {
           setSyncStatus('History loaded');
@@ -284,7 +311,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         setTimeout(() => setSyncStatus(null), 2500);
       }
     }
-  }, [currentUserName]);
+  }, [currentUserName, user?.id]);
 
   // Backward compatibility alias for manual refresh action
   const fetchChatHistory = useCallback(() => {
@@ -296,17 +323,20 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     fetchMessages({ silent: false });
   }, [fetchMessages]);
 
-  // AUTO-POLLING LOGIC: Automatically call fetchMessages() every 3000ms (3 seconds) for real-time synchronization
+  const fetchMessagesRef = useRef(fetchMessages);
+  fetchMessagesRef.current = fetchMessages;
+
+  // PREVENT INTERVAL DUPLICATION: Ensure the useEffect handling the setInterval has a strict cleanup
+  // function (return () => clearInterval(intervalId);) so React Strict Mode doesn't spawn multiple overlapping polling loops
   useEffect(() => {
-    const pollInterval = setInterval(() => {
-      fetchMessages({ silent: true });
+    const intervalId = setInterval(() => {
+      fetchMessagesRef.current({ silent: true });
     }, 3000);
 
-    // CLEANUP: Clear interval when component unmounts
     return () => {
-      clearInterval(pollInterval);
+      clearInterval(intervalId);
     };
-  }, [fetchMessages]);
+  }, []);
 
   // Sync across tabs via window storage event
   useEffect(() => {
@@ -432,17 +462,21 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     };
   }, [reconnectAttempts, currentUserName, mergeMessageLists]);
 
-  // 4. Send Message & Review: Optimistic UI with temp ID + Direct REST Persistence + Deduplication
+  // 4. Send Message & Review: Client-side unique ID + Optimistic UI + Direct REST Persistence
   const sendMessage = async (
     text: string, 
     extra: { isReview?: boolean; rating?: number | null; language?: string | null } = {}
   ): Promise<boolean> => {
     if (!text.trim()) return false;
 
-    // 1) Assign a temporary ID for the optimistic message
-    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    // 1) CLIENT-SIDE UNIQUE ID: Generate a unique ID (crypto.randomUUID() or Date.now().toString())
+    // Use this exact ID for both the optimistic UI update AND send it to the backend to be saved as the message ID.
+    const clientUniqueId = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
     const payload: ChatMessage & { clerk_user_id?: string } = {
-      id: tempId,
+      id: clientUniqueId,
       user: currentUserName.trim() || 'AnimeFan_IN',
       text: text.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -453,26 +487,28 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       clerk_user_id: user?.id || localStorage.getItem('anidub_device_fp') || 'guest'
     };
 
-    // 2) OPTIMISTIC UI: Instantly add the temporary message so the user sees it without delay
-    setMessages(prev => mergeMessageLists(prev, [payload]));
+    // Track as in-flight pending
+    pendingOptimisticRef.current.set(clientUniqueId, payload);
 
-    // 3) Persist to Backend D1 / SQLite Database via HTTP POST with impersonation validation
+    // 2) OPTIMISTIC UI: Instantly add the message with exact clientUniqueId so user sees it without delay
+    setMessages(prev => {
+      if (prev.some(m => String(m.id) === clientUniqueId)) return prev;
+      const updated = [...prev, payload];
+      try {
+        localStorage.setItem('cf_community_chat', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // 3) Persist to Backend D1 / SQLite Database with exact clientUniqueId
     try {
       const resp = await cloudflareApi.sendChatMessage(payload);
       if (!resp.success) {
         throw new Error(resp.error || 'Failed to post message');
       }
 
-      // If database returned the confirmed persistent message ID, upgrade the temp message in place
-      if (resp.message && resp.message.id) {
-        setMessages(prev => {
-          const upgraded = prev.map(m => (m.id === tempId ? { ...m, id: resp.message.id } : m));
-          try {
-            localStorage.setItem('cf_community_chat', JSON.stringify(upgraded));
-          } catch {}
-          return upgraded;
-        });
-      }
+      // Mark message as confirmed/resolved from in-flight
+      pendingOptimisticRef.current.delete(clientUniqueId);
 
       // 4) Broadcast over WebSocket if open
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -487,7 +523,8 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       return true;
     } catch (err: any) {
       // Rollback the optimistic message on error so user knows it wasn't saved
-      setMessages(prev => prev.filter(m => m.id !== tempId));
+      pendingOptimisticRef.current.delete(clientUniqueId);
+      setMessages(prev => prev.filter(m => String(m.id) !== clientUniqueId));
 
       console.warn('Network persistence note:', err);
       const errMsg = err.message || '';

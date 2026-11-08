@@ -424,7 +424,7 @@ function runMigrations() {
     );
 
     CREATE TABLE IF NOT EXISTS chat_messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT PRIMARY KEY,
       user TEXT NOT NULL,
       text TEXT NOT NULL,
       timestamp TEXT NOT NULL,
@@ -432,7 +432,8 @@ function runMigrations() {
       language TEXT,
       isReview INTEGER DEFAULT 0,
       clerk_user_id TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      avatar TEXT
     );
 
     CREATE TABLE IF NOT EXISTS activity_notifications (
@@ -1933,11 +1934,13 @@ app.get(['/api/chat', '/api/chat/messages'], (req, res) => {
 
 app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
   try {
-    const { user, username, user_name, text, message, comment, timestamp, rating, language, dub_language, dubLanguage, isReview, is_review, clerk_user_id, userId, user_id, avatar, user_avatar, avatar_url } = req.body;
+    const { id, messageId, client_id, user, username, user_name, text, message, comment, timestamp, rating, language, dub_language, dubLanguage, isReview, is_review, clerk_user_id, userId, user_id, avatar, user_avatar, avatar_url } = req.body;
     
     const rawText = text || message || comment;
     if (!rawText || !String(rawText).trim()) return res.status(400).json({ error: "Missing message text" });
 
+    // CLIENT-SIDE UNIQUE ID: Use exact client-provided ID, fallback to Date.now().toString()
+    const cleanId = String(id || messageId || client_id || Date.now().toString()).trim();
     const cleanUser = String(user || username || user_name || 'Anonymous Fan').trim().slice(0, 50);
     const cleanClerkId = String(clerk_user_id || userId || user_id || req.headers['x-clerk-user-id'] || req.headers['authorization'] || 'guest').trim();
     const cleanText = String(rawText).slice(0, 1000);
@@ -1968,32 +1971,21 @@ app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
       console.warn('Username check warning:', chkErr);
     }
 
-    let insertedId: any = Date.now();
+    let insertedId: any = cleanId;
     try {
       db.run(
-        "INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview, clerk_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId]
+        "INSERT INTO chat_messages (id, user, text, timestamp, rating, language, isReview, clerk_user_id, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = excluded.text, timestamp = excluded.timestamp",
+        [cleanId, cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId, cleanAvatar]
       );
       persistD1();
-
-      const stmt = db.prepare("SELECT last_insert_rowid() as id");
-      if (stmt.step()) {
-        insertedId = stmt.getAsObject().id;
-      }
-      stmt.free();
     } catch (insertErr) {
-      console.warn('Full chat insert failed, falling back to minimal columns:', insertErr);
+      console.warn('Full chat insert failed, falling back:', insertErr);
       try {
         db.run(
-          "INSERT INTO chat_messages (user, text, timestamp) VALUES (?, ?, ?)",
-          [cleanUser, cleanText, cleanTimestamp]
+          "INSERT OR REPLACE INTO chat_messages (id, user, text, timestamp) VALUES (?, ?, ?, ?)",
+          [cleanId, cleanUser, cleanText, cleanTimestamp]
         );
         persistD1();
-        const stmt = db.prepare("SELECT last_insert_rowid() as id");
-        if (stmt.step()) {
-          insertedId = stmt.getAsObject().id;
-        }
-        stmt.free();
       } catch (fbErr: any) {
         return res.status(500).json({ error: fbErr.message || 'Database insert failed' });
       }
