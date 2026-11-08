@@ -1328,7 +1328,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
     const id = req.params.id;
     const { 
       title, synopsis, cover_image, banner_image, rating, episodes_count, 
-      status, airing_status, submissionStatus, season, year, genres, studio, 
+      status, airing_status, submissionStatus, approval_status, season, year, genres, studio, 
       type, Type, languages, platform, imdbID, imdb_id,
       streaming_partners, streamingPartners, platforms_data, platformsData, watch_url, watchUrl,
       mixed_entries, mixedEntries, episodes_per_season
@@ -1337,6 +1337,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
     const rawStatusStr = (status || airing_status || '').toString().trim().toLowerCase();
     const resolvedStatus = rawStatusStr.includes('complete') ? 'Completed' : 'Airing';
     const resolvedType = (type || Type) ? normalizeAnimeType(type || Type) : null;
+    const resolvedSubStatus = submissionStatus || approval_status || null;
 
     // Robust extraction of streaming partners
     const rawPartners = streaming_partners !== undefined 
@@ -1380,6 +1381,8 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         episodes_count = COALESCE(?, episodes_count),
         status = ?,
         airing_status = ?,
+        submissionStatus = COALESCE(?, submissionStatus),
+        approval_status = COALESCE(?, approval_status),
         season = COALESCE(?, season),
         year = COALESCE(?, year),
         genres = COALESCE(?, genres),
@@ -1403,6 +1406,8 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
         episodes_count !== undefined ? parseInt(episodes_count) : null,
         resolvedStatus,
         resolvedStatus,
+        resolvedSubStatus,
+        resolvedSubStatus,
         season || null,
         year !== undefined ? parseInt(year) : null,
         genres || null,

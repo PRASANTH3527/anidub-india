@@ -471,7 +471,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
       const isAdminTokenPresent = Boolean(typeof window !== 'undefined' && (localStorage.getItem('cf_admin_token') || localStorage.getItem('admin_token')));
-      const resolvedSubmissionStatus = (mode === 'edit' || isAdminTokenPresent) ? 'approved' : 'pending';
+      const resolvedSubmissionStatus = mode === 'edit'
+        ? (initialData?.submissionStatus || initialData?.approval_status || 'approved')
+        : (isAdminTokenPresent ? 'approved' : 'pending');
 
       const formattedMixedEntries = mixedEntries.map(entry => ({
         id: entry.id,
