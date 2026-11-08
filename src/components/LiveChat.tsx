@@ -22,6 +22,7 @@ import { CLOUDFLARE_API_URL, getCloudflareUrl, getCloudflareWsUrl } from '../con
 import { cloudflareApi } from '../services/cloudflareApi';
 import { generateRandomUsername, ANIME_CHARACTERS } from '../utils/randomUser';
 import { formatRelativeTime } from '../utils/timestamps';
+import { syncAndDeduplicateChatMessages } from '../utils/chatDeduplication';
 import { useUser } from '@clerk/clerk-react';
 
 export interface ChatMessage {
@@ -236,37 +237,13 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     }
   }, [autoScroll, scrollToBottom]);
 
-  // Helper: Deduplicate and merge message lists cleanly
+  // Helper: Deduplicate and merge message lists cleanly with database overwrite & temp message removal
   const mergeMessageLists = useCallback((existing: ChatMessage[], incoming: any[]): ChatMessage[] => {
-    const seen = new Set<string>();
-    const result: ChatMessage[] = [];
-
-    const normalize = (msg: any): ChatMessage => ({
-      id: msg.id || `msg_${msg.user}_${msg.timestamp}_${msg.text?.slice(0, 10)}`,
-      user: msg.user || 'Anonymous Fan',
-      text: msg.text || msg.comment || '',
-      timestamp: msg.timestamp || 'Just now',
-      isSelf: msg.user === currentUserName || Boolean(msg.isSelf),
-      isReview: Boolean(msg.isReview || msg.rating),
-      rating: msg.rating !== undefined ? Number(msg.rating) : null,
-      language: msg.language || null
-    });
-
-    // Merge in chronological order
-    const all = [...existing, ...incoming].map(normalize);
-    for (const item of all) {
-      const key = `${item.id}-${item.user}-${item.text?.trim()}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        result.push(item);
-      }
-    }
-
-    return result.slice(-150); // Keep last 150 messages
+    return syncAndDeduplicateChatMessages(existing, incoming, currentUserName);
   }, [currentUserName]);
 
   // 2. Fetch existing chat & review history from Backend / D1 Database
-  // Supports silent background polling without spinners or toasts
+  // Supports silent background polling without spinners or toasts; database acts as source of truth
   const fetchMessages = useCallback(async (options: { silent?: boolean } = { silent: false }) => {
     const isSilent = Boolean(options.silent);
     if (!isSilent) {
@@ -274,15 +251,15 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     }
     try {
       const data = await cloudflareApi.fetchChatHistory();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setMessages(prev => {
-          const merged = mergeMessageLists(prev, data);
+          // Strictly deduplicate and overwrite with database records as absolute source of truth
+          const merged = syncAndDeduplicateChatMessages(prev, data, currentUserName);
 
           // Deep/Id check to avoid unnecessary re-renders if no messages changed
           if (
             merged.length === prev.length &&
-            merged[merged.length - 1]?.id === prev[prev.length - 1]?.id &&
-            merged[0]?.id === prev[0]?.id
+            merged.every((m, idx) => m.id === prev[idx]?.id && m.text === prev[idx]?.text)
           ) {
             return prev;
           }
@@ -307,7 +284,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         setTimeout(() => setSyncStatus(null), 2500);
       }
     }
-  }, [mergeMessageLists]);
+  }, [currentUserName]);
 
   // Backward compatibility alias for manual refresh action
   const fetchChatHistory = useCallback(() => {
@@ -455,15 +432,17 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     };
   }, [reconnectAttempts, currentUserName, mergeMessageLists]);
 
-  // 4. Send Message & Review: WebSocket + Direct REST Persistence
+  // 4. Send Message & Review: Optimistic UI with temp ID + Direct REST Persistence + Deduplication
   const sendMessage = async (
     text: string, 
     extra: { isReview?: boolean; rating?: number | null; language?: string | null } = {}
   ): Promise<boolean> => {
     if (!text.trim()) return false;
 
+    // 1) Assign a temporary ID for the optimistic message
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const payload: ChatMessage & { clerk_user_id?: string } = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: tempId,
       user: currentUserName.trim() || 'AnimeFan_IN',
       text: text.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -474,26 +453,31 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       clerk_user_id: user?.id || localStorage.getItem('anidub_device_fp') || 'guest'
     };
 
-    // 1) Persist to Backend D1 / SQLite Database via HTTP POST with impersonation validation
+    // 2) OPTIMISTIC UI: Instantly add the temporary message so the user sees it without delay
+    setMessages(prev => mergeMessageLists(prev, [payload]));
+
+    // 3) Persist to Backend D1 / SQLite Database via HTTP POST with impersonation validation
     try {
       const resp = await cloudflareApi.sendChatMessage(payload);
       if (!resp.success) {
         throw new Error(resp.error || 'Failed to post message');
       }
 
-      // 2) Update local state & LocalStorage once verified by database
-      setMessages(prev => {
-        const merged = mergeMessageLists(prev, [payload]);
-        try {
-          localStorage.setItem('cf_community_chat', JSON.stringify(merged));
-        } catch {}
-        return merged;
-      });
+      // If database returned the confirmed persistent message ID, upgrade the temp message in place
+      if (resp.message && resp.message.id) {
+        setMessages(prev => {
+          const upgraded = prev.map(m => (m.id === tempId ? { ...m, id: resp.message.id } : m));
+          try {
+            localStorage.setItem('cf_community_chat', JSON.stringify(upgraded));
+          } catch {}
+          return upgraded;
+        });
+      }
 
-      // 3) Broadcast over WebSocket if open
+      // 4) Broadcast over WebSocket if open
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         try {
-          wsRef.current.send(JSON.stringify(payload));
+          wsRef.current.send(JSON.stringify(resp.message || payload));
         } catch (err) {
           console.error('WebSocket send error:', err);
         }
@@ -502,6 +486,9 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       setChatError(null);
       return true;
     } catch (err: any) {
+      // Rollback the optimistic message on error so user knows it wasn't saved
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+
       console.warn('Network persistence note:', err);
       const errMsg = err.message || '';
       if (errMsg.includes('already claimed') || errMsg.includes('claimed by another') || errMsg.includes('taken')) {
