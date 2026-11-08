@@ -744,7 +744,7 @@ app.get('/api/anime', (req, res) => {
   const start = Date.now();
   try {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 8;
+    const limit = parseInt(req.query.limit as string) || 5000;
     const offset = (page - 1) * limit;
     const genre = req.query.genre as string;
     const status = req.query.status as string;

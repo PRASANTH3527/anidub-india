@@ -13,7 +13,7 @@ export interface VoiceSearchBarProps {
 export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
   value,
   onChange,
-  placeholder = 'Search 100+ anime titles, genres, or studios...',
+  placeholder = 'Search anime titles, genres, or studios...',
   className = ''
 }) => {
   const [isListening, setIsListening] = useState(false);

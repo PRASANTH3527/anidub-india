@@ -103,7 +103,7 @@ export default function App() {
   const fetchCatalogList = async () => {
     setIsCatalogLoading(true);
     try {
-      const response = await cloudflareApi.fetchCatalog({ limit: 100 });
+      const response = await cloudflareApi.fetchCatalog({ limit: 5000 });
       
       const data = response?.data;
       if (data && Array.isArray(data) && data.length > 0) {

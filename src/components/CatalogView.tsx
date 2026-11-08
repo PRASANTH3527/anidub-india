@@ -165,7 +165,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   const fetchCatalogFromBackend = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
+      const { data } = await cloudflareApi.fetchCatalog({ limit: 5000 });
       if (data && data.length > 0) {
         // Strictly filter out and hide any anime where status === 'pending' or submissionStatus === 'pending'
         const approvedOnly = data.filter((item: any) => 

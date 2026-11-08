@@ -76,7 +76,7 @@ class DatabaseService {
     }
 
     try {
-      const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
+      const { data } = await cloudflareApi.fetchCatalog({ limit: 5000 });
       const rawItems = data || [];
       const items = rawItems.filter((item: any) => 
         (item.submissionStatus === 'approved' || item.approval_status === 'approved' || item.is_published === 1)
