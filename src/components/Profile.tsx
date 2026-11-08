@@ -43,61 +43,89 @@ const DEFAULT_AVATAR = 'https://s4.anilist.co/file/anilistcdn/character/large/b6
 
 const AVATAR_CATEGORIES = [
   'All', 
-  'Hunters', 
-  'Swordsmen', 
-  'Sorcerers', 
-  'Ninjas', 
   'Shonen', 
-  'Titans', 
-  'Saiyans', 
-  'Strategy', 
-  'Dark Fantasy'
+  'Villains', 
+  'Swordsmen', 
+  'Hunters', 
+  'Ninjas'
 ];
 
-const RICH_ANIME_AVATARS = [
-  // Hunters
+export interface AnimeAvatarOption {
+  name: string;
+  category: 'Shonen' | 'Villains' | 'Swordsmen' | 'Hunters' | 'Ninjas';
+  url: string;
+}
+
+const RICH_ANIME_AVATARS: AnimeAvatarOption[] = [
+  // --- HUNTERS (Solo Leveling & Hunter x Hunter) ---
   { name: 'Sung Jin-woo', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b129928-BCEjVaP0AQSw.png' },
+  { name: 'Cha Hae-in', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b138789-AhE8m0LWjE7E.png' },
   { name: 'Killua Zoldyck', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b27-Z5O02kQUydpT.jpg' },
   { name: 'Gon Freecss', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b30-lyFExKyDhefc.jpg' },
   { name: 'Kurapika', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b28-ivA7UGnfE40a.png' },
+  { name: 'Hisoka Morow', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b31-FZckOuu7L1un.png' },
 
-  // Swordsmen
+  // --- SWORDSMEN (Blades, Hashira & Reapers) ---
   { name: 'Roronoa Zoro', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b62-S7oAeA9WInjV.png' },
   { name: 'Levi Ackerman', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b45627-CR68RyZmddGG.png' },
+  { name: 'Mikasa Ackerman', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40881-F3gr1PkreDvj.png' },
   { name: 'Tanjiro Kamado', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b126071-BTNEc1nRIv68.png' },
   { name: 'Zenitsu Agatsuma', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b129131-FZrQ7lSlxmEr.png' },
+  { name: 'Inosuke Hashibira', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/n129130-SJC0Kn1DU39E.jpg' },
+  { name: 'Kyojuro Rengoku', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b129133-VlTPowwt68rJ.png' },
+  { name: 'Tengen Uzui', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b136071-99Kexnnn2PiV.png' },
+  { name: 'Giyu Tomioka', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b130050-qsLThJs5VIbz.png' },
+  { name: 'Shinobu Kocho', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b136070-MC9LLxJsHyHE.png' },
   { name: 'Ichigo Kurosaki', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b5-a7bkJgjhhigE.png' },
+  { name: 'Byakuya Kuchiki', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b907-kgnDKeMtEN5y.png' },
+  { name: 'Kenpachi Zaraki', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b909-slhoFBon7oiH.jpg' },
+  { name: 'Guts', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b422-XTaiTuvRohsV.png' },
 
-  // Sorcerers
-  { name: 'Satoru Gojo', category: 'Sorcerers', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127691-9zqh1xpIubn7.png' },
-  { name: 'Yuji Itadori', category: 'Sorcerers', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127212-FVm2tD0erQ5B.png' },
-  { name: 'Megumi Fushiguro', category: 'Sorcerers', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b126635-L0y3I92JSUkN.png' },
-  { name: 'Sukuna', category: 'Sorcerers', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b133701-rCQuDpHr3UZL.png' },
-
-  // Ninjas
+  // --- NINJAS (Shinobi Legends) ---
   { name: 'Itachi Uchiha', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b14-9Kb1E5oel1ke.png' },
   { name: 'Kakashi Hatake', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b85-mkVBh2yjxjmx.png' },
   { name: 'Naruto Uzumaki', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b17-phjcWCkRuIhu.png' },
   { name: 'Sasuke Uchiha', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b13-SISLEw1oAD7a.png' },
+  { name: 'Minato Namikaze', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b2535-Xq9WKNPJQEt3.png' },
+  { name: 'Jiraiya', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b2434-Xz1F9bC9y80A.png' },
+  { name: 'Gaara', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b1662-8Xl6x1pL2wT0.png' },
 
-  // Shonen
+  // --- VILLAINS (Antagonists & Masterminds) ---
+  { name: 'Madara Uchiha', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b53901-HnRKSoHMG5Vg.png' },
+  { name: 'Sukuna', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b133701-rCQuDpHr3UZL.png' },
+  { name: 'Toji Fushiguro', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b162722-btzdghBizxKS.jpg' },
+  { name: 'Garou', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b89277-xBGb4B5YISXg.png' },
+  { name: 'Sosuke Aizen', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b1086-qR9218BjZTC0.png' },
+  { name: 'Light Yagami', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b80-26EhwSsSqQ50.png' },
+  { name: 'Muzan Kibutsuji', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b129132-4nIZakUZ1o8W.jpg' },
+  { name: 'Akaza', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b141694-0COi0GVXPuEn.png' },
+  { name: 'Pain', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b3180-ITMGBLWNBOgV.png' },
+  { name: 'Obito Uchiha', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b1660-8fS1kU9rL23T.png' },
+  { name: 'Griffith', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b424-Jfrsf8I7zBps.png' },
+  { name: 'Chrollo Lucilfer', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b58-USOmsz3nursi.jpg' },
+  { name: 'Tomura Shigaraki', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b89226-qGXqFthO4SM3.jpg' },
+  { name: 'Dabi', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b126378-RFSljq5koy5U.png' },
+  { name: 'Askeladd', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b13020-ZdiYlNmpRUNS.png' },
+
+  // --- SHONEN (Protagonists & Heroes) ---
   { name: 'Monkey D. Luffy', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40-MNypXsxSRb1R.png' },
+  { name: 'Sanji', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b305-6lisPmHtCnLT.png' },
+  { name: 'Yuji Itadori', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127212-FVm2tD0erQ5B.png' },
+  { name: 'Satoru Gojo', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127691-9zqh1xpIubn7.png' },
+  { name: 'Megumi Fushiguro', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b126635-L0y3I92JSUkN.png' },
+  { name: 'Eren Yeager', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40882-dsj7IP943WFF.jpg' },
   { name: 'Nezuko Kamado', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127518-NRlq1CQ1v1ro.png' },
   { name: 'Saitama', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b73935-ON5d0mAcrItd.jpg' },
+  { name: 'Goku', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/246-wsRRr6z1kii8.png' },
+  { name: 'Vegeta', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b913-NIFkKazWM8VO.png' },
+  { name: 'L Lawliet', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b71-1W4panC53vfs.png' },
   { name: 'Edward Elric', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b11-TA5Nuk7EDUZG.jpg' },
-
-  // Titans
-  { name: 'Eren Yeager', category: 'Titans', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40882-dsj7IP943WFF.jpg' },
-  { name: 'Mikasa Ackerman', category: 'Titans', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40881-F3gr1PkreDvj.png' },
-
-  // Saiyans
-  { name: 'Goku', category: 'Saiyans', url: 'https://s4.anilist.co/file/anilistcdn/character/large/246-wsRRr6z1kii8.png' },
-  { name: 'Vegeta', category: 'Saiyans', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b913-NIFkKazWM8VO.png' },
-
-  // Strategy & Dark Fantasy
-  { name: 'Light Yagami', category: 'Strategy', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b80-26EhwSsSqQ50.png' },
-  { name: 'L Lawliet', category: 'Strategy', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b71-1W4panC53vfs.png' },
-  { name: 'Ken Kaneki', category: 'Dark Fantasy', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b87275-mb13EWZBdbh3.png' },
+  { name: 'Roy Mustang', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b68-moBLY2WO2am3.png' },
+  { name: 'Katsuki Bakugo', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b88892-bdOha3lNcaN6.png' },
+  { name: 'Shoto Todoroki', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b89220-KNBwaVFAR8FD.png' },
+  { name: 'All Might', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b89224-K6KEuQAuYKzq.jpg' },
+  { name: 'Ken Kaneki', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b87275-mb13EWZBdbh3.png' },
+  { name: 'Lelouch Lamperouge', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b417-gVLmIJu9phcK.png' },
 ];
 
 export default function Profile({
@@ -601,39 +629,62 @@ export default function Profile({
 
                   {/* Category Pills */}
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                    {AVATAR_CATEGORIES.map((cat) => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setSelectedCategory(cat)}
-                        className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all shrink-0 cursor-pointer ${
-                          selectedCategory === cat
-                            ? 'bg-purple-600 text-white shadow-sm'
-                            : 'bg-white/5 text-neutral-400 hover:text-white hover:bg-white/10'
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
+                    {AVATAR_CATEGORIES.map((cat) => {
+                      const count = cat === 'All'
+                        ? RICH_ANIME_AVATARS.length
+                        : RICH_ANIME_AVATARS.filter((a) => a.category === cat).length;
+                      const isActive = selectedCategory === cat;
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setSelectedCategory(cat)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                            isActive
+                              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                              : 'bg-white/5 text-neutral-400 hover:text-white hover:bg-white/10'
+                          }`}
+                        >
+                          <span>{cat}</span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
+                              isActive
+                                ? 'bg-purple-900/70 text-purple-200'
+                                : 'bg-white/10 text-neutral-400'
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
                 {/* Avatar Grid (CUSTOM upload placeholder first, followed by anime avatars) */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-neutral-200">
-                    Character Library ({filteredAvatars.length})
-                  </label>
-                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-72 sm:max-h-80 overflow-y-auto pr-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-neutral-200">
+                      Character Library ({filteredAvatars.length} characters)
+                    </label>
+                    {selectedCategory !== 'All' && (
+                      <span className="text-[11px] text-purple-400 font-medium">
+                        Showing {selectedCategory}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 max-h-72 sm:max-h-84 overflow-y-auto pr-1">
                     
                     {/* CUSTOM UPLOAD PLACEHOLDER */}
                     <button
                       type="button"
                       onClick={handleCustomUpload}
-                      className="group relative rounded-2xl overflow-hidden aspect-square border-2 border-dashed border-purple-500/40 hover:border-purple-400 bg-purple-500/5 hover:bg-purple-500/10 transition-all p-2 flex flex-col items-center justify-center text-center cursor-pointer"
+                      className="group relative rounded-2xl overflow-hidden aspect-square border-2 border-dashed border-purple-500/40 hover:border-purple-400 bg-purple-500/5 hover:bg-purple-500/10 transition-all p-2 flex flex-col items-center justify-center text-center cursor-pointer hover:scale-102"
                       title="Upload or paste custom image URL"
                     >
                       <Upload className="w-5 h-5 text-purple-400 mb-1 group-hover:scale-110 transition-transform" />
                       <span className="text-[10px] font-bold text-purple-300">CUSTOM</span>
+                      <span className="text-[9px] text-neutral-400">Direct URL</span>
                     </button>
 
                     {/* Anime Avatars */}
@@ -646,18 +697,28 @@ export default function Profile({
                           onClick={() => setModalSelectedAvatar(av.url)}
                           className={`group relative rounded-2xl overflow-hidden aspect-square border-2 transition-all p-0.5 cursor-pointer flex flex-col items-center justify-center ${
                             isSelected 
-                              ? 'border-purple-500 scale-105 shadow-[0_0_12px_rgba(168,85,247,0.6)] bg-purple-500/10' 
-                              : 'border-white/10 hover:border-white/30 bg-white/[0.02] opacity-80 hover:opacity-100'
+                              ? 'border-purple-500 scale-105 shadow-[0_0_14px_rgba(168,85,247,0.7)] bg-purple-500/10 ring-2 ring-purple-400/50' 
+                              : 'border-white/10 hover:border-white/30 bg-white/[0.02] opacity-85 hover:opacity-100 hover:scale-102'
                           }`}
-                          title={`${av.name} (${av.category})`}
+                          title={`${av.name} • ${av.category}`}
                         >
                           <img 
                             src={av.url} 
                             alt={av.name} 
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = DEFAULT_AVATAR;
+                            }}
                             className="w-full h-full object-cover rounded-[14px]"
                           />
+                          {/* Name ribbon overlay */}
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-3 pb-1 px-1 rounded-b-[14px] pointer-events-none">
+                            <p className="text-[10px] font-bold text-white text-center truncate leading-tight drop-shadow-sm">
+                              {av.name}
+                            </p>
+                          </div>
                           {isSelected && (
-                            <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-purple-600 rounded-full flex items-center justify-center text-[9px] text-white font-black shadow">
+                            <span className="absolute top-1 right-1 w-4 h-4 bg-purple-600 rounded-full flex items-center justify-center text-[10px] text-white font-black shadow-md border border-white/20">
                               ✓
                             </span>
                           )}
