@@ -939,6 +939,21 @@ class CloudflareApiService {
   }
 
   /**
+   * FEEDBACK: Deletes / resolves feedback item
+   */
+  public async deleteFeedback(id: number | string): Promise<{ success: boolean }> {
+    try {
+      const res = await this.smartFetch(`/api/feedback/${id}`, {
+        method: 'DELETE',
+        headers: this.getHeaders(true)
+      });
+      return { success: res.ok };
+    } catch {
+      return { success: false };
+    }
+  }
+
+  /**
    * ANALYTICS: Fetches edge performance telemetry
    */
   public async fetchAnalytics(): Promise<any> {

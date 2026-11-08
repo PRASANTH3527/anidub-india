@@ -275,6 +275,28 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       // Re-populate streaming partners from initialData
       setStreamingPartners(parseStreamingPartners(initialData));
+    } else {
+      setTitle('');
+      setSynopsis('');
+      setRomajiTitle('');
+      setPoster('');
+      setReleaseYear(new Date().getFullYear());
+      setRating('');
+      setType('TV Series');
+      setStatusState('Airing');
+      setStudio('');
+      setGenres(['Action', 'Fantasy']);
+      setMixedEntries([
+        {
+          id: Date.now() + 1,
+          entryType: 'Season',
+          seasonNumber: '1',
+          episodes: '12',
+          languages: ['Tamil', 'Hindi'] as DubLanguage[]
+        }
+      ]);
+      setStreamingPartners([{ name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] }]);
+      setFormData({ type: 'TV Series', status: 'Airing' });
     }
   }, [initialData]);
 
