@@ -305,7 +305,7 @@ function runMigrations() {
 
     CREATE TABLE IF NOT EXISTS anime (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
+      title TEXT NOT NULL UNIQUE,
       slug TEXT UNIQUE NOT NULL,
       synopsis TEXT,
       cover_image TEXT NOT NULL,
@@ -335,6 +335,9 @@ function runMigrations() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  try { db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_anime_title ON anime(title);"); } catch (e) {}
+  try { db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_anime_slug ON anime(slug);"); } catch (e) {}
 
   try { db.run("ALTER TABLE anime ADD COLUMN languages TEXT DEFAULT 'HIN,TAM,TEL';"); } catch (e) {}
   try { db.run("ALTER TABLE anime ADD COLUMN platform TEXT DEFAULT 'Crunchyroll';"); } catch (e) {}
@@ -1616,18 +1619,31 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
     }
 
     let insertedCount = 0;
+    let skippedCount = 0;
     for (const row of rows) {
       // 1. ABSOLUTE HEADER EXTRACTION
       const title = (row.title || row['Title'] || row.Name || '').toString().trim();
       if (!title) continue;
 
+      const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const slug = baseSlug;
+
+      // Check if anime already exists by title or slug
+      const checkStmt = db.prepare("SELECT id FROM anime WHERE LOWER(title) = LOWER(?) OR slug = ?");
+      checkStmt.bind([title, slug]);
+      const exists = checkStmt.step();
+      checkStmt.free();
+
+      if (exists) {
+        skippedCount++;
+        continue;
+      }
+
       const rawStatus = String(row.status || row['Status'] || '').toLowerCase();
       const finalStatus = rawStatus.includes('complete') ? 'Completed' : 'Airing';
 
-      const synopsis = (row.synopsis || row['Synopsis'] || row.Description || '').toString().trim();
-      const poster = (row.cover_image || row.poster_url || row['Poster'] || row['Poster URL'] || row['Cover Image'] || '').toString().trim();
-      
-      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Math.random().toString(36).substring(2, 5);
+      const synopsis = (row.synopsis || row['Synopsis'] || row.Description || '').toString().trim() || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs.';
+      const poster = (row.cover_image || row.poster_url || row['Poster'] || row['Poster URL'] || row['Cover Image'] || '').toString().trim() || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
 
       // 1b. Mixed Entries / Seasons Handling
       let mixedEntriesRaw = row.mixed_entries || row.mixedEntries;
@@ -1651,43 +1667,47 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
         ? mixedEntriesRaw.map((e: any) => e.episodes || 12).join('|')
         : (row.episodes_per_season ? String(row.episodes_per_season) : String(epCount));
 
-      // 2. DB INSERT WITH SANITIZED VALUES
-      db.run(
-        `INSERT INTO anime (
-          title, slug, synopsis, cover_image, banner_image, 
-          rating, episodes_count, status, airing_status, 
-          submissionStatus, approval_status, is_published, 
-          season, year, genres, popularity, languages, 
-          platform, type, studio, episodes_per_season, mixedEntries
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          title, 
-          slug, 
-          synopsis, 
-          poster, 
-          poster, 
-          parseFloat(row.rating || row['Ratings'] || row['Rating'] || 8.5) || 8.5,
-          epCount,
-          finalStatus, 
-          finalStatus, 
-          parseInt(row.year || row['Release Year'] || row['Year'] || 2024, 10) || 2024,
-          Array.isArray(row.genres) ? row.genres.join(', ') : (typeof row.genres === 'string' && row.genres.includes('|') ? row.genres.split('|').map((g: string) => g.trim()).join(', ') : (row.genres || row['Genres'] || 'Action').toString()),
-          Math.floor(Math.random() * 50000) + 20000,
-          Array.isArray(row.languages) ? row.languages.join(', ') : (typeof row.languages === 'string' && row.languages.includes('|') ? row.languages.split('|').map((l: string) => l.trim()).join(', ') : (row.languages || row['Languages'] || 'Tamil, Hindi').toString()),
-          (row.platform || row['Platform'] || 'Crunchyroll').toString(),
-          (row.type || row['Type'] || 'TV Series').toString(),
-          (row.studio || row['Studio'] || 'Unknown Studio').toString(),
-          episodesPerSeason,
-          mixedEntriesJson
-        ]
-      );
-      
-      insertedCount++;
+      // 2. DB INSERT WITH INSERT OR IGNORE
+      try {
+        db.run(
+          `INSERT OR IGNORE INTO anime (
+            title, slug, synopsis, cover_image, banner_image, 
+            rating, episodes_count, status, airing_status, 
+            submissionStatus, approval_status, is_published, 
+            season, year, genres, popularity, languages, 
+            platform, type, studio, episodes_per_season, mixedEntries
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            title, 
+            slug, 
+            synopsis, 
+            poster, 
+            poster, 
+            parseFloat(row.rating || row['Ratings'] || row['Rating'] || 8.5) || 8.5,
+            epCount,
+            finalStatus, 
+            finalStatus, 
+            parseInt(row.year || row['Release Year'] || row['Year'] || 2024, 10) || 2024,
+            Array.isArray(row.genres) ? row.genres.join(', ') : (typeof row.genres === 'string' && row.genres.includes('|') ? row.genres.split('|').map((g: string) => g.trim()).join(', ') : (row.genres || row['Genres'] || 'Action').toString()),
+            Math.floor(Math.random() * 50000) + 20000,
+            Array.isArray(row.languages) ? row.languages.join(', ') : (typeof row.languages === 'string' && row.languages.includes('|') ? row.languages.split('|').map((l: string) => l.trim()).join(', ') : (row.languages || row['Languages'] || 'Tamil, Hindi').toString()),
+            (row.platform || row['Platform'] || 'Crunchyroll').toString(),
+            (row.type || row['Type'] || 'TV Series').toString(),
+            (row.studio || row['Studio'] || 'Unknown Studio').toString(),
+            episodesPerSeason,
+            mixedEntriesJson
+          ]
+        );
+        insertedCount++;
+      } catch (err) {
+        skippedCount++;
+      }
     }
 
     persistD1();
-    logCloudflareEvent('D1', 'CSV_IMPORT', 200, Date.now() - start, `Imported ${insertedCount} entries`);
-    res.json({ success: true, count: insertedCount });
+    const summaryMsg = `Upload complete: ${insertedCount} added, ${skippedCount} duplicates skipped.`;
+    logCloudflareEvent('D1', 'CSV_IMPORT', 200, Date.now() - start, summaryMsg);
+    res.json({ success: true, count: insertedCount, insertedCount, skippedCount, message: summaryMsg });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }

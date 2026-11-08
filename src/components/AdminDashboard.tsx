@@ -635,10 +635,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       // 4. Send clean rows to backend
       const res = await cloudflareApi.uploadCSV({ animeList: cleanedRows });
-      const count = res.count || cleanedRows.length;
-      const feedbackMsg = `Successfully imported ${count} anime titles into moderation queue!`;
+      const added = res.insertedCount !== undefined ? res.insertedCount : (res.count || cleanedRows.length);
+      const skipped = res.skippedCount !== undefined ? res.skippedCount : 0;
+      const feedbackMsg = res.message || `Upload complete: ${added} added, ${skipped} duplicates skipped.`;
 
-      setImportedCount(count);
+      setImportedCount(added);
       setShowImportToast(true);
       setSuccessMsg(feedbackMsg);
       addTerminalLog('OK', feedbackMsg);

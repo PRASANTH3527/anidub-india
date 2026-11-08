@@ -235,7 +235,7 @@ class CloudflareApiService {
   /**
    * UPLOAD / IMPORT CSV: Sends CSV text or array to backend import route
    */
-  public async uploadCSV(payload: { csvText?: string; animeList?: any[] } | string): Promise<{ success: boolean; count?: number; skipped?: number }> {
+  public async uploadCSV(payload: { csvText?: string; animeList?: any[] } | string): Promise<{ success: boolean; count?: number; skipped?: number; insertedCount?: number; skippedCount?: number; message?: string }> {
     const endpoint = '/api/admin/import-csv';
     const bodyData = typeof payload === 'string' ? { csvText: payload } : payload;
     
