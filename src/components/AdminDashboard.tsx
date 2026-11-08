@@ -423,7 +423,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const rawStatusIn = String(item.status || item.airing_status || '').trim().toLowerCase();
       const targetStatus = rawStatusIn.includes('complete') ? 'Completed' : (rawType === 'Movie' ? 'Completed' : 'Airing');
 
-      await cloudflareApi.approveAnime(itemId, targetStatus);
+      const res = await cloudflareApi.approveAnime(itemId, targetStatus);
+      if (!res || res.success === false) {
+        throw new Error(res?.error || 'Failed to approve anime on backend');
+      }
+
       setPendingItems(prev => {
         const updated = prev.filter(p => p.id !== itemId);
         try {
@@ -438,18 +442,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onAnimeCreated();
       }
       setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Cloudflare Approval error:', err);
-      setPendingItems(prev => {
-        const updated = prev.filter(p => p.id !== itemId);
-        try {
-          localStorage.setItem('cf_admin_pending_cache', JSON.stringify(updated));
-        } catch (e) {}
-        return updated;
-      });
-      setSuccessMsg('Anime Approved locally (Cloudflare sync attempted).');
-      addTerminalLog('WARN', `Edge sync notice during approval of #${itemId}`);
-      setTimeout(() => setSuccessMsg(''), 4000);
+      setSuccessMsg(`Approval Failed: ${err?.message || 'Server error'}`);
+      addTerminalLog('ERR', `[APPROVAL ERROR] Failed to approve #${itemId}: ${err?.message || err}`);
+      setTimeout(() => setSuccessMsg(''), 5000);
     } finally {
       setCloudSyncing(false);
       setCloudStatusText('');
