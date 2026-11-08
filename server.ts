@@ -1618,26 +1618,38 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       return res.status(400).json({ success: false, error: 'Empty or invalid import payload' });
     }
 
+    // 1. Query ALL existing titles and slugs from the anime table (covers main published + pending moderation queue)
+    const existingTitlesStmt = db.prepare("SELECT title, slug FROM anime");
+    const existingTitles = new Set<string>();
+    const existingSlugs = new Set<string>();
+    while (existingTitlesStmt.step()) {
+      const rowObj = existingTitlesStmt.getAsObject();
+      if (rowObj.title) existingTitles.add(String(rowObj.title).trim().toLowerCase());
+      if (rowObj.slug) existingSlugs.add(String(rowObj.slug).trim().toLowerCase());
+    }
+    existingTitlesStmt.free();
+
     let insertedCount = 0;
     let skippedCount = 0;
+    const seenInBatch = new Set<string>();
+
     for (const row of rows) {
       // 1. ABSOLUTE HEADER EXTRACTION
       const title = (row.title || row['Title'] || row.Name || '').toString().trim();
       if (!title) continue;
 
-      const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      const slug = baseSlug;
+      const lowerTitle = title.toLowerCase();
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-      // Check if anime already exists by title or slug
-      const checkStmt = db.prepare("SELECT id FROM anime WHERE LOWER(title) = LOWER(?) OR slug = ?");
-      checkStmt.bind([title, slug]);
-      const exists = checkStmt.step();
-      checkStmt.free();
-
-      if (exists) {
+      // 2. Filter in memory: skip if already in database or already processed in this batch
+      if (existingTitles.has(lowerTitle) || existingSlugs.has(slug) || seenInBatch.has(lowerTitle)) {
         skippedCount++;
         continue;
       }
+
+      seenInBatch.add(lowerTitle);
+      existingTitles.add(lowerTitle);
+      existingSlugs.add(slug);
 
       const rawStatus = String(row.status || row['Status'] || '').toLowerCase();
       const finalStatus = rawStatus.includes('complete') ? 'Completed' : 'Airing';
@@ -1667,7 +1679,7 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
         ? mixedEntriesRaw.map((e: any) => e.episodes || 12).join('|')
         : (row.episodes_per_season ? String(row.episodes_per_season) : String(epCount));
 
-      // 2. DB INSERT WITH INSERT OR IGNORE
+      // 4. DB INSERT WITH INSERT OR IGNORE
       try {
         db.run(
           `INSERT OR IGNORE INTO anime (
