@@ -127,3 +127,53 @@ test('Admin Dashboard - Feedback item resolution removes resolved ticket by id',
   assert.equal(filtered.length, 1);
   assert.equal(filtered[0].id, 2);
 });
+
+test('Admin Dashboard - CSV Import deduplication rejects existing anime and keeps only new items for pending review', () => {
+  const existingDatabaseAnime = [
+    { title: 'Solo Leveling', status: 'approved' },
+    { title: 'Demon Slayer: Kimetsu no Yaiba', status: 'approved' },
+    { title: 'Naruto Shippuden', status: 'pending' }
+  ];
+
+  const normalize = (t: string) => t.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ').replace(/["'“”‘’]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const simplify = (t: string) => normalize(t).replace(/[^a-z0-9]/g, '');
+
+  const existingNormSet = new Set(existingDatabaseAnime.map(a => normalize(a.title)));
+  const existingKeySet = new Set(existingDatabaseAnime.map(a => simplify(a.title)));
+
+  const incomingCsvRows = [
+    { title: 'Solo Leveling' }, // existing in DB (approved) -> must reject
+    { title: 'solo leveling ' }, // case & trailing space duplicate -> must reject
+    { title: 'Dr. Stone' }, // new -> must accept
+    { title: 'Attack on Titan' }, // new -> must accept
+    { title: 'Naruto Shippuden' }, // existing in DB (pending) -> must reject
+    { title: 'Dr Stone' }, // duplicate of Dr. Stone in same batch -> must reject
+    { title: 'Jujutsu Kaisen' } // new -> must accept
+  ];
+
+  const seenNorm = new Set<string>();
+  const seenKey = new Set<string>();
+  const acceptedForPending: any[] = [];
+  const rejectedDuplicates: string[] = [];
+
+  for (const row of incomingCsvRows) {
+    const rawTitle = row.title;
+    const norm = normalize(rawTitle);
+    const key = simplify(rawTitle);
+
+    if (existingNormSet.has(norm) || existingKeySet.has(key) || seenNorm.has(norm) || seenKey.has(key)) {
+      rejectedDuplicates.push(rawTitle);
+      continue;
+    }
+
+    seenNorm.add(norm);
+    seenKey.add(key);
+    acceptedForPending.push({ ...row, submissionStatus: 'pending' });
+  }
+
+  assert.equal(acceptedForPending.length, 3, 'Only 3 new titles should be accepted for pending');
+  assert.equal(rejectedDuplicates.length, 4, '4 duplicate/existing titles should be rejected');
+  assert.deepEqual(acceptedForPending.map(a => a.title), ['Dr. Stone', 'Attack on Titan', 'Jujutsu Kaisen']);
+  assert.ok(acceptedForPending.every(a => a.submissionStatus === 'pending'));
+});
+

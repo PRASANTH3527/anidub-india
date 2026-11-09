@@ -1278,8 +1278,8 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
       const mixedEntries = item.mixedEntries ? (typeof item.mixedEntries === 'string' ? item.mixedEntries : JSON.stringify(item.mixedEntries)) : '';
       const type = normalizeAnimeType(item.type || item.Type || 'TV Series');
 
-      const existingStmt = db.prepare("SELECT id FROM anime WHERE slug = ?");
-      existingStmt.bind([slug]);
+      const existingStmt = db.prepare("SELECT id FROM anime WHERE slug = ? OR LOWER(TRIM(title)) = LOWER(TRIM(?))");
+      existingStmt.bind([slug, title]);
       let existingId: number | null = null;
       if (existingStmt.step()) {
         existingId = existingStmt.getAsObject().id as number;
@@ -1287,36 +1287,14 @@ app.post('/api/anime/bulk', requireAdminAuth, (req, res) => {
       existingStmt.free();
 
       if (existingId) {
-        db.run(
-          `UPDATE anime SET 
-            title = ?,
-            synopsis = COALESCE(?, synopsis),
-            cover_image = COALESCE(?, cover_image),
-            banner_image = COALESCE(?, banner_image),
-            rating = COALESCE(?, rating),
-            episodes_count = COALESCE(?, episodes_count),
-            status = ?,
-            airing_status = ?,
-            submissionStatus = 'pending',
-            approval_status = 'pending',
-            is_published = 0,
-            season = COALESCE(?, season),
-            year = COALESCE(?, year),
-            genres = COALESCE(?, genres),
-            languages = COALESCE(?, languages),
-            platform = COALESCE(?, platform),
-            type = ?,
-            studio = COALESCE(?, studio),
-            episodes_per_season = COALESCE(?, episodes_per_season),
-            mixedEntries = COALESCE(?, mixedEntries)
-          WHERE id = ?`,
-          [title, synopsis, cover_image, banner_image, rating, episodes_count, status, status, season, year, genres, languages, platform, type, studio, episodes_per_season, mixedEntries, existingId]
-        );
-        db.run(
-          `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, status, season, year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, type, studio, episodes_per_season, mixedEntries]
-        );
+        // Skip existing anime to prevent duplicate entries
+        continue;
       }
+
+      db.run(
+        `INSERT OR IGNORE INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, status, season, year, genres, Math.floor(Math.random() * 50000) + 20000, languages, platform, type, studio, episodes_per_season, mixedEntries]
+      );
       insertedCount++;
     }
 
@@ -1622,76 +1600,115 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
       return res.status(400).json({ success: false, error: 'Empty or invalid import payload' });
     }
 
-    // 1. STRIP HIDDEN CHARACTERS HELPER
-    const cleanTitle = (title: any) => String(title || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\r/g, '').trim().toLowerCase();
+    // 1. COMPREHENSIVE TITLE CLEANING & KEY SIMPLIFICATION HELPERS
+    const normalizeTitle = (t: any): string => {
+      return String(t || '')
+        .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ')
+        .replace(/["'“”‘’]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+    };
 
-    // 2. PRE-FETCH ALL EXISTING DATA FROM BOTH anime AND pending_anime TABLES
-    const existingTitlesSet = new Set<string>();
-    const existingSlugsSet = new Set<string>();
+    const simplifyTitleKey = (t: any): string => {
+      return normalizeTitle(t).replace(/[^a-z0-9]/g, '');
+    };
 
-    try {
-      db.run(`CREATE TABLE IF NOT EXISTS pending_anime AS SELECT * FROM anime WHERE approval_status = 'pending' OR submissionStatus = 'pending';`);
-    } catch (e) {}
+    const extractTitleFromRow = (r: any): string => {
+      if (!r || typeof r !== 'object') return '';
+      return String(
+        r.title || 
+        r['Title'] || 
+        r['title'] || 
+        r.Name || 
+        r['Name'] || 
+        r['name'] || 
+        r.anime || 
+        r['Anime'] || 
+        r['anime'] || 
+        r['Anime Title'] || 
+        r['anime_title'] || 
+        r['Series'] || 
+        r['series'] || 
+        r['Title (English)'] ||
+        (Object.values(r)[0] ?? '')
+      ).trim();
+    };
+
+    // 2. PRE-FETCH ALL EXISTING TITLES & SLUGS FROM anime (both approved and pending)
+    const existingNormalizedTitles = new Set<string>();
+    const existingSimplifiedKeys = new Set<string>();
+    const existingSlugs = new Set<string>();
 
     const animeStmt = db.prepare("SELECT title, slug FROM anime");
     while (animeStmt.step()) {
       const row = animeStmt.getAsObject();
-      if (row.title) existingTitlesSet.add(cleanTitle(row.title));
-      if (row.slug) existingSlugsSet.add(cleanTitle(row.slug));
+      if (row.title) {
+        existingNormalizedTitles.add(normalizeTitle(row.title));
+        existingSimplifiedKeys.add(simplifyTitleKey(row.title));
+      }
+      if (row.slug) {
+        existingSlugs.add(normalizeTitle(row.slug));
+        existingSimplifiedKeys.add(simplifyTitleKey(row.slug));
+      }
     }
     animeStmt.free();
 
-    const pendingStmt = db.prepare("SELECT title, slug FROM pending_anime");
-    while (pendingStmt.step()) {
-      const row = pendingStmt.getAsObject();
-      if (row.title) existingTitlesSet.add(cleanTitle(row.title));
-      if (row.slug) existingSlugsSet.add(cleanTitle(row.slug));
-    }
-    pendingStmt.free();
-
-    // 3. STRICT IN-MEMORY FILTERING
+    // 3. STRICT IN-MEMORY FILTERING & DEDUPLICATION
     const seenInThisUpload = new Set<string>();
+    const seenInThisUploadKeys = new Set<string>();
     const itemsToInsert: any[] = [];
+    const skippedTitles: string[] = [];
+    const addedTitles: string[] = [];
     let skippedCount = 0;
 
     for (const row of rows) {
-      const rawTitle = row.title || row['Title'] || row.Name || '';
-      const cleaned = cleanTitle(rawTitle);
-      if (!cleaned) {
+      const rawTitle = extractTitleFromRow(row);
+      const norm = normalizeTitle(rawTitle);
+      const key = simplifyTitleKey(rawTitle);
+
+      if (!norm || !key) {
         skippedCount++;
         continue;
       }
 
-      const slug = cleaned.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const slug = norm.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'anime';
 
-      if (existingTitlesSet.has(cleaned) || existingSlugsSet.has(slug) || seenInThisUpload.has(cleaned)) {
+      // Check against existing database records AND earlier records in the same CSV upload
+      const isAlreadyInDb = existingNormalizedTitles.has(norm) || existingSimplifiedKeys.has(key) || existingSlugs.has(slug);
+      const isDuplicateInBatch = seenInThisUpload.has(norm) || seenInThisUploadKeys.has(key);
+
+      if (isAlreadyInDb || isDuplicateInBatch) {
         skippedCount++;
+        skippedTitles.push(rawTitle);
         continue;
       }
 
-      seenInThisUpload.add(cleaned);
-      existingTitlesSet.add(cleaned);
-      existingSlugsSet.add(slug);
-      itemsToInsert.push(row);
+      seenInThisUpload.add(norm);
+      seenInThisUploadKeys.add(key);
+      existingNormalizedTitles.add(norm);
+      existingSimplifiedKeys.add(key);
+      existingSlugs.add(slug);
+
+      itemsToInsert.push({ ...row, resolvedTitle: rawTitle, resolvedSlug: slug });
+      addedTitles.push(rawTitle);
     }
 
-    // 4. ONLY INSERT NEW
+    // 4. INSERT ONLY THE REMAINING UNIQUE ANIME INTO PENDING QUEUE
     let insertedCount = 0;
-    for (const row of itemsToInsert) {
-      const rawTitle = row.title || row['Title'] || row.Name || '';
-      const title = String(rawTitle).replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\r/g, '').trim();
-      const cleaned = cleanTitle(title);
-      const slug = cleaned.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    for (const item of itemsToInsert) {
+      const title = item.resolvedTitle;
+      const slug = item.resolvedSlug;
 
-      const rawStatus = String(row.status || row['Status'] || '').toLowerCase();
+      const rawStatus = String(item.status || item['Status'] || '').toLowerCase();
       const finalStatus = rawStatus.includes('complete') ? 'Completed' : 'Airing';
 
-      const synopsis = (row.synopsis || row['Synopsis'] || row.Description || '').toString().trim() || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs.';
-      const poster = (row.cover_image || row.poster_url || row['Poster'] || row['Poster URL'] || row['Cover Image'] || '').toString().trim() || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+      const synopsis = (item.synopsis || item['Synopsis'] || item.Description || item['description'] || '').toString().trim() || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs.';
+      const poster = (item.cover_image || item.poster_url || item['Poster'] || item['Poster URL'] || item['Cover Image'] || item['cover_image'] || '').toString().trim() || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
 
-      let mixedEntriesRaw = row.mixed_entries || row.mixedEntries;
-      if (!mixedEntriesRaw && typeof row['Seasons'] === 'string') {
-        mixedEntriesRaw = row['Seasons'].split('|').map((entry: string) => {
+      let mixedEntriesRaw = item.mixed_entries || item.mixedEntries;
+      if (!mixedEntriesRaw && typeof item['Seasons'] === 'string') {
+        mixedEntriesRaw = item['Seasons'].split('|').map((entry: string) => {
           const [name, eps] = entry.split(':');
           return {
             type: 'Season',
@@ -1705,10 +1722,10 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
         ? JSON.stringify(mixedEntriesRaw) 
         : (typeof mixedEntriesRaw === 'string' ? mixedEntriesRaw : '');
 
-      const epCount = parseInt(row.episodes_count || row.episodes || row['Episodes'] || 12, 10) || 12;
+      const epCount = parseInt(item.episodes_count || item.episodes || item['Episodes'] || 12, 10) || 12;
       const episodesPerSeason = Array.isArray(mixedEntriesRaw) && mixedEntriesRaw.length > 0
         ? mixedEntriesRaw.map((e: any) => e.episodes || 12).join('|')
-        : (row.episodes_per_season ? String(row.episodes_per_season) : String(epCount));
+        : (item.episodes_per_season ? String(item.episodes_per_season) : String(epCount));
 
       try {
         db.run(
@@ -1726,35 +1743,40 @@ app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
             synopsis, 
             poster, 
             poster, 
-            parseFloat(row.rating || row['Ratings'] || row['Rating'] || 8.5) || 8.5,
+            parseFloat(item.rating || item['Ratings'] || item['Rating'] || 8.5) || 8.5,
             epCount,
             finalStatus, 
             finalStatus, 
-            parseInt(row.year || row['Release Year'] || row['Year'] || 2024, 10) || 2024,
-            Array.isArray(row.genres) ? row.genres.join(', ') : (typeof row.genres === 'string' && row.genres.includes('|') ? row.genres.split('|').map((g: string) => g.trim()).join(', ') : (row.genres || row['Genres'] || 'Action').toString()),
+            parseInt(item.year || item['Release Year'] || item['Year'] || 2024, 10) || 2024,
+            Array.isArray(item.genres) ? item.genres.join(', ') : (typeof item.genres === 'string' && item.genres.includes('|') ? item.genres.split('|').map((g: string) => g.trim()).join(', ') : (item.genres || item['Genres'] || 'Action').toString()),
             Math.floor(Math.random() * 50000) + 20000,
-            Array.isArray(row.languages) ? row.languages.join(', ') : (typeof row.languages === 'string' && row.languages.includes('|') ? row.languages.split('|').map((l: string) => l.trim()).join(', ') : (row.languages || row['Languages'] || 'Tamil, Hindi').toString()),
-            (row.platform || row['Platform'] || 'Crunchyroll').toString(),
-            (row.type || row['Type'] || 'TV Series').toString(),
-            (row.studio || row['Studio'] || 'Unknown Studio').toString(),
+            Array.isArray(item.languages) ? item.languages.join(', ') : (typeof item.languages === 'string' && item.languages.includes('|') ? item.languages.split('|').map((l: string) => l.trim()).join(', ') : (item.languages || item['Languages'] || 'Tamil, Hindi').toString()),
+            (item.platform || item['Platform'] || 'Crunchyroll').toString(),
+            (item.type || item['Type'] || 'TV Series').toString(),
+            (item.studio || item['Studio'] || 'Unknown Studio').toString(),
             episodesPerSeason,
             mixedEntriesJson
           ]
         );
         insertedCount++;
-
-        try {
-          db.run(`INSERT OR IGNORE INTO pending_anime SELECT * FROM anime WHERE title = ?`, [title]);
-        } catch (_) {}
       } catch (err) {
         skippedCount++;
+        skippedTitles.push(title);
       }
     }
 
     persistD1();
-    const summaryMsg = `Upload complete: ${insertedCount} added, ${skippedCount} duplicates skipped.`;
+    const summaryMsg = `Upload complete: ${insertedCount} added to pending review, ${skippedCount} duplicates/existing anime rejected.`;
     logCloudflareEvent('D1', 'CSV_IMPORT', 200, Date.now() - start, summaryMsg);
-    res.json({ success: true, count: insertedCount, insertedCount, skippedCount, message: summaryMsg });
+    res.json({ 
+      success: true, 
+      count: insertedCount, 
+      insertedCount, 
+      skippedCount, 
+      skippedTitles, 
+      addedTitles, 
+      message: summaryMsg 
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -360,7 +360,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     addTerminalLog('SYNC', 'Querying Cloudflare Edge D1 endpoint: /api/anime');
     setApiError(false);
     try {
-      const { data } = await cloudflareApi.fetchCatalog({ limit: 100 });
+      const { data } = await cloudflareApi.fetchCatalog({ limit: 5000 });
       const items = (data || []).map((item: any) => ({
         ...item,
         type: item.type || item.Type || 'TV Series',
@@ -588,26 +588,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       // 3. STRICT HEADER EXTRACTION LOOP (Pipe separator for Languages and Genres, Cover Image strictly to poster_url)
       const cleanedRows = rawRows.map((row: any) => {
+        const rawTitle = (
+          row['Title'] || 
+          row['title'] || 
+          row['Name'] || 
+          row['name'] || 
+          row['Anime'] || 
+          row['anime'] || 
+          row['Anime Title'] || 
+          row['anime_title'] || 
+          row['Series'] || 
+          row['series'] || 
+          row['Title (English)'] ||
+          Object.values(row)[0] || 
+          ''
+        ).toString().trim();
+
+        const rawPoster = (
+          row['Cover Image'] || 
+          row['cover_image'] || 
+          row['Poster'] || 
+          row['poster_url'] || 
+          row['Poster URL'] || 
+          row['Image'] || 
+          row['image'] || 
+          ''
+        ).toString().trim();
+
+        const rawLanguages = row['Languages'] || row['languages'] || row['Language'] || row['language'] || row['Dub'] || row['dub'] || '';
+        const rawGenres = row['Genres'] || row['genres'] || row['Genre'] || row['genre'] || '';
+        const rawSeasons = row['Seasons'] || row['seasons'] || '';
+
         const parsedRow = {
-          title: row['Title'] || '',
-          poster_url: row['Cover Image'] || '', 
-          year: parseInt(row['Release Year']) || null,
-          languages: typeof row['Languages'] === 'string' ? row['Languages'].split('|').map((l: string) => l.trim()).filter(Boolean) : [],
-          genres: typeof row['Genres'] === 'string' ? row['Genres'].split('|').map((g: string) => g.trim()).filter(Boolean) : [],
-          studio: row['Studio'] || '',
-          type: row['Type'] || 'TV Series',
-          status: String(row['Status'] || '').toLowerCase().includes('complete') ? 'Completed' : 'Airing',
-          episodes: parseInt(row['Episodes']) || null,
-          platform: row['Platform'] || '', 
-          rating: parseFloat(row['Ratings']) || null,
-          synopsis: row['Synopsis'] || '',
+          title: rawTitle,
+          poster_url: rawPoster, 
+          year: parseInt(row['Release Year'] || row['year'] || row['Year'] || row['release_year']) || null,
+          languages: typeof rawLanguages === 'string' ? rawLanguages.split('|').map((l: string) => l.trim()).filter(Boolean) : (Array.isArray(rawLanguages) ? rawLanguages : []),
+          genres: typeof rawGenres === 'string' ? rawGenres.split('|').map((g: string) => g.trim()).filter(Boolean) : (Array.isArray(rawGenres) ? rawGenres : []),
+          studio: (row['Studio'] || row['studio'] || '').toString().trim(),
+          type: (row['Type'] || row['type'] || 'TV Series').toString().trim(),
+          status: String(row['Status'] || row['status'] || '').toLowerCase().includes('complete') ? 'Completed' : 'Airing',
+          episodes: parseInt(row['Episodes'] || row['episodes'] || row['episodes_count']) || null,
+          platform: (row['Platform'] || row['platform'] || '').toString().trim(), 
+          rating: parseFloat(row['Ratings'] || row['ratings'] || row['Rating'] || row['rating'] || row['Score']) || null,
+          synopsis: (row['Synopsis'] || row['synopsis'] || row['Description'] || row['description'] || '').toString().trim(),
           approval_status: 'pending',
           is_published: false,
-          mixed_entries: typeof row['Seasons'] === 'string' 
-            ? row['Seasons'].split('|').map((entry: string) => {
+          mixed_entries: typeof rawSeasons === 'string' && rawSeasons.trim().length > 0
+            ? rawSeasons.split('|').map((entry: string) => {
                 const [name, eps] = entry.split(':');
                 return {
-                  type: 'Season', // or dynamically extract if needed
+                  type: 'Season',
                   name: name ? name.trim() : '',
                   episodes: parseInt(eps) || null
                 };
@@ -628,30 +659,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             : String(parsedRow.episodes || 12),
           slug: (parsedRow.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
         };
-      });
+      }).filter((r: any) => Boolean(r.title && r.title !== 'untitled'));
 
-      addTerminalLog('CSV', `Cleaned ${cleanedRows.length} rows with 100% strict header mapping.`);
-      console.log('[REWRITTEN CSV PARSER OUTPUT]:', cleanedRows);
+      addTerminalLog('CSV', `Cleaned ${cleanedRows.length} valid rows from CSV file.`);
 
       // 4. Send clean rows to backend
       const res = await cloudflareApi.uploadCSV({ animeList: cleanedRows });
-      const added = res.insertedCount !== undefined ? res.insertedCount : (res.count || cleanedRows.length);
+      const added = res.insertedCount !== undefined ? res.insertedCount : (res.count || 0);
       const skipped = res.skippedCount !== undefined ? res.skippedCount : 0;
-      const feedbackMsg = res.message || `Upload complete: ${added} added, ${skipped} duplicates skipped.`;
+      const feedbackMsg = res.message || `Upload complete: ${added} added to pending queue, ${skipped} existing titles rejected.`;
 
       setImportedCount(added);
       setShowImportToast(true);
       setSuccessMsg(feedbackMsg);
       addTerminalLog('OK', feedbackMsg);
 
+      if (res.skippedTitles && res.skippedTitles.length > 0) {
+        addTerminalLog('REJ', `Rejected existing/duplicate anime: ${res.skippedTitles.slice(0, 8).join(', ')}${res.skippedTitles.length > 8 ? ` (+${res.skippedTitles.length - 8} more)` : ''}`);
+      }
+
       await fetchAnime();
       await fetchPendingItems();
+      setActiveAdminTab('pending'); // Automatically switch to Pending Review queue so the admin sees the newly ingested anime!
       if (onAnimeCreated) onAnimeCreated();
 
       setTimeout(() => {
         setShowImportToast(false);
         setSuccessMsg('');
-      }, 6000);
+      }, 7000);
 
     } catch (err: any) {
       console.error('[CSV Import Error]:', err);
