@@ -1565,6 +1565,17 @@ app.get('/api/admin/pending', requireAdminAuth, (req, res) => {
   }
 });
 
+// POST /api/admin/clear-pending - Purges all pending items
+app.post('/api/admin/clear-pending', requireAdminAuth, (req, res) => {
+  try {
+    db.run("DELETE FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' OR approval_status = 'pending'");
+    persistD1();
+    res.json({ success: true, message: 'Pending queue wiped successfully' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Admin CSV Import
 app.post('/api/admin/import-csv', requireAdminAuth, (req, res) => {
   const start = Date.now();

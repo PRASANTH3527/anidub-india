@@ -281,6 +281,26 @@ class CloudflareApiService {
     }
   }
 
+  /**
+   * CLEAR PENDING QUEUE: Clears all items in pending moderation queue
+   */
+  public async clearPendingQueue(): Promise<{ success: boolean; message?: string }> {
+    const endpoint = '/api/admin/clear-pending';
+    try {
+      const res = await this.smartFetch(endpoint, {
+        method: 'POST',
+        headers: this.getHeaders(true)
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to clear pending queue (Status ${res.status})`);
+      }
+      return await res.json();
+    } catch (err: any) {
+      console.error('[clearPendingQueue Error]:', err);
+      throw err;
+    }
+  }
+
   public async createAnime(payload: AnimePayload): Promise<{ success: boolean; animeId?: number; data?: any }> {
     const endpoint = CLOUDFLARE_ENDPOINTS.CATALOG;
     const res = await this.smartFetch(endpoint, {

@@ -177,3 +177,43 @@ test('Admin Dashboard - CSV Import deduplication rejects existing anime and keep
   assert.ok(acceptedForPending.every(a => a.submissionStatus === 'pending'));
 });
 
+test('Admin Dashboard - User CSV scenario (lastt2.csv with Solo Leveling, Demon Slayer, Dr. Stone)', () => {
+  // Existing database catalog
+  const databaseCatalog = [
+    { id: 1, title: 'Solo Leveling', status: 'Completed', is_published: 1 },
+    { id: 857, title: 'Dr. Stone', status: 'Completed', is_published: 1 }
+  ];
+
+  const normalize = (t: string) => t.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ').replace(/["'“”‘’]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const simplify = (t: string) => normalize(t).replace(/[^a-z0-9]/g, '');
+
+  const existingNormSet = new Set(databaseCatalog.map(a => normalize(a.title)));
+  const existingKeySet = new Set(databaseCatalog.map(a => simplify(a.title)));
+
+  // Incoming lastt2.csv rows
+  const incomingCsv = [
+    { title: 'Solo Leveling' },
+    { title: 'Demon Slayer: Hashira Training' },
+    { title: 'Dr. Stone' }
+  ];
+
+  const pendingQueue: any[] = [];
+  const rejectedList: string[] = [];
+
+  for (const row of incomingCsv) {
+    const norm = normalize(row.title);
+    const key = simplify(row.title);
+
+    if (existingNormSet.has(norm) || existingKeySet.has(key)) {
+      rejectedList.push(row.title);
+    } else {
+      pendingQueue.push({ ...row, status: 'pending', submissionStatus: 'pending', is_published: 0 });
+    }
+  }
+
+  // Exact assertion
+  assert.equal(pendingQueue.length, 1, 'Only Demon Slayer: Hashira Training should be in pending');
+  assert.equal(pendingQueue[0].title, 'Demon Slayer: Hashira Training');
+  assert.deepEqual(rejectedList, ['Solo Leveling', 'Dr. Stone'], 'Both existing titles must be rejected');
+});
+

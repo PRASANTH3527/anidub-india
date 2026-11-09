@@ -483,6 +483,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setSuccessMsg(''), 4000);
   };
 
+  const handleClearPendingQueue = async () => {
+    if (!window.confirm(`Are you sure you want to clear all ${pendingItems.length} pending submissions from the moderation queue?`)) {
+      return;
+    }
+    setCloudSyncing(true);
+    setCloudStatusText('Clearing pending moderation queue...');
+    addTerminalLog('PURGE', `Wiping pending moderation queue (${pendingItems.length} items)`);
+    try {
+      await cloudflareApi.clearPendingQueue();
+      setPendingItems([]);
+      try {
+        localStorage.setItem('cf_admin_pending_cache', JSON.stringify([]));
+      } catch (e) {}
+      setSuccessMsg('Pending moderation queue wiped successfully.');
+      addTerminalLog('OK', 'All pending submissions cleared from Cloudflare D1.');
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err: any) {
+      console.error('Clear pending error:', err);
+      setSuccessMsg(`Failed to clear queue: ${err.message || 'Server error'}`);
+      addTerminalLog('ERR', `Failed to wipe pending queue: ${err.message}`);
+      setTimeout(() => setSuccessMsg(''), 5000);
+    } finally {
+      setCloudSyncing(false);
+      setCloudStatusText('');
+    }
+  };
+
   /**
    * Cloudflare D1 Delete Handler for Catalog Items
    */
@@ -663,19 +690,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       addTerminalLog('CSV', `Cleaned ${cleanedRows.length} valid rows from CSV file.`);
 
-      // 4. Send clean rows to backend
-      const res = await cloudflareApi.uploadCSV({ animeList: cleanedRows });
-      const added = res.insertedCount !== undefined ? res.insertedCount : (res.count || 0);
-      const skipped = res.skippedCount !== undefined ? res.skippedCount : 0;
-      const feedbackMsg = res.message || `Upload complete: ${added} added to pending queue, ${skipped} existing titles rejected.`;
+      // 4. CLIENT-SIDE DEDUPLICATION: Check against live catalog & current pending queue
+      const normalizeStr = (s: any) => String(s || '').replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ').replace(/["'“”‘’]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const simplifyKey = (s: any) => normalizeStr(s).replace(/[^a-z0-9]/g, '');
 
-      setImportedCount(added);
+      const existingTitleSet = new Set<string>();
+      const existingKeySet = new Set<string>();
+
+      catalog.forEach((c: any) => {
+        if (c?.title) {
+          existingTitleSet.add(normalizeStr(c.title));
+          existingKeySet.add(simplifyKey(c.title));
+        }
+      });
+
+      pendingItems.forEach((p: any) => {
+        if (p?.title) {
+          existingTitleSet.add(normalizeStr(p.title));
+          existingKeySet.add(simplifyKey(p.title));
+        }
+      });
+
+      const clientSkippedTitles: string[] = [];
+      const clientFilteredRows: any[] = [];
+      const seenInUpload = new Set<string>();
+      const seenKeysInUpload = new Set<string>();
+
+      for (const row of cleanedRows) {
+        const norm = normalizeStr(row.title);
+        const key = simplifyKey(row.title);
+        if (!norm || !key) continue;
+
+        const isDuplicate = existingTitleSet.has(norm) || existingKeySet.has(key) || seenInUpload.has(norm) || seenKeysInUpload.has(key);
+        if (isDuplicate) {
+          clientSkippedTitles.push(row.title);
+          continue;
+        }
+
+        seenInUpload.add(norm);
+        seenKeysInUpload.add(key);
+        clientFilteredRows.push(row);
+      }
+
+      // If all anime in this CSV already exist in the database or pending queue
+      if (clientFilteredRows.length === 0) {
+        const allExistingMsg = `All ${clientSkippedTitles.length} anime already exist in the database! Skipped: ${clientSkippedTitles.slice(0, 3).join(', ')}${clientSkippedTitles.length > 3 ? ` (+${clientSkippedTitles.length - 3} more)` : ''}. 0 added to pending.`;
+        setImportedCount(0);
+        setShowImportToast(true);
+        setSuccessMsg(allExistingMsg);
+        addTerminalLog('REJ', `[DEDUPLICATION] All ${clientSkippedTitles.length} anime already exist in catalog or pending queue: ${clientSkippedTitles.join(', ')}`);
+        setActiveAdminTab('pending');
+        setTimeout(() => {
+          setShowImportToast(false);
+          setSuccessMsg('');
+        }, 7000);
+        return;
+      }
+
+      // 5. Send ONLY the non-existing, unique anime to backend
+      const res = await cloudflareApi.uploadCSV({ animeList: clientFilteredRows });
+      const backendAdded = res.insertedCount !== undefined ? res.insertedCount : (res.count || clientFilteredRows.length);
+      const backendSkipped = res.skippedCount !== undefined ? res.skippedCount : 0;
+      const totalAdded = backendAdded;
+      const totalSkipped = clientSkippedTitles.length + backendSkipped;
+      const allSkippedTitles = Array.from(new Set([...clientSkippedTitles, ...(res.skippedTitles || [])]));
+
+      const feedbackMsg = `Upload complete: ${totalAdded} added to pending queue, ${totalSkipped} existing titles rejected.`;
+
+      setImportedCount(totalAdded);
       setShowImportToast(true);
       setSuccessMsg(feedbackMsg);
       addTerminalLog('OK', feedbackMsg);
 
-      if (res.skippedTitles && res.skippedTitles.length > 0) {
-        addTerminalLog('REJ', `Rejected existing/duplicate anime: ${res.skippedTitles.slice(0, 8).join(', ')}${res.skippedTitles.length > 8 ? ` (+${res.skippedTitles.length - 8} more)` : ''}`);
+      if (allSkippedTitles.length > 0) {
+        addTerminalLog('REJ', `Rejected existing/duplicate anime: ${allSkippedTitles.slice(0, 8).join(', ')}${allSkippedTitles.length > 8 ? ` (+${allSkippedTitles.length - 8} more)` : ''}`);
       }
 
       await fetchAnime();
@@ -2030,10 +2118,22 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
                   <p className="text-xs text-neutral-400">Verify regional audio tracks, platform links, and approve submissions</p>
                 </div>
               </div>
-              <span className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold tracking-wide flex items-center gap-2 shadow-[0_0_12px_rgba(245,158,11,0.15)]">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span>{pendingItems.length} PENDING INGESTION</span>
-              </span>
+              <div className="flex items-center gap-2.5">
+                {pendingItems.length > 0 && (
+                  <button
+                    onClick={handleClearPendingQueue}
+                    className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 hover:text-rose-100 text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-[0_0_15px_rgba(244,63,94,0.2)]"
+                    title="Purge all pending submissions"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Clear All Pending</span>
+                  </button>
+                )}
+                <span className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold tracking-wide flex items-center gap-2 shadow-[0_0_12px_rgba(245,158,11,0.15)]">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span>{pendingItems.length} PENDING INGESTION</span>
+                </span>
+              </div>
             </div>
 
             {pendingItems.length === 0 ? (

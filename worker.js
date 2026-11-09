@@ -839,18 +839,110 @@ export default {
             return jsonResponse({ success: false, error: "Empty CSV payload" }, 400, request);
           }
 
-          let insertedCount = 0;
+          // Title Normalization and Key Simplification
+          const normalizeTitle = (t) => {
+            return String(t || '')
+              .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ')
+              .replace(/["'“”‘’]/g, '')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .toLowerCase();
+          };
+
+          const simplifyTitleKey = (t) => {
+            return normalizeTitle(t).replace(/[^a-z0-9]/g, '');
+          };
+
+          const extractTitleFromRow = (r) => {
+            if (!r || typeof r !== 'object') return '';
+            return String(
+              r.title || 
+              r['Title'] || 
+              r['title'] || 
+              r.Name || 
+              r['Name'] || 
+              r['name'] || 
+              r.anime || 
+              r['Anime'] || 
+              r['anime'] || 
+              r['Anime Title'] || 
+              r['anime_title'] || 
+              r['Series'] || 
+              r['series'] || 
+              r['Title (English)'] ||
+              (Object.values(r)[0] ?? '')
+            ).trim();
+          };
+
+          // 1. Pre-fetch all existing titles and slugs from Cloudflare D1
+          const existingNormalizedTitles = new Set();
+          const existingSimplifiedKeys = new Set();
+          const existingSlugs = new Set();
+
+          if (env.DB) {
+            try {
+              const res = await env.DB.prepare("SELECT title, slug FROM anime").all();
+              const items = (res && res.results) ? res.results : [];
+              for (const item of items) {
+                if (item.title) {
+                  existingNormalizedTitles.add(normalizeTitle(item.title));
+                  existingSimplifiedKeys.add(simplifyTitleKey(item.title));
+                }
+                if (item.slug) {
+                  existingSlugs.add(normalizeTitle(item.slug));
+                  existingSimplifiedKeys.add(simplifyTitleKey(item.slug));
+                }
+              }
+            } catch (dbErr) {
+              console.warn('[Worker D1 fetch existing titles warning]:', dbErr);
+            }
+          }
+
+          // 2. Strict In-Memory Filtering against D1 and within this batch
+          const seenInThisUpload = new Set();
+          const seenInThisUploadKeys = new Set();
+          const itemsToInsert = [];
+          const skippedTitles = [];
+          const addedTitles = [];
           let skippedCount = 0;
 
           for (const row of rows) {
-            const title = (row.title || row.Title || row.name || row.Name || Object.values(row)[0] || '').toString().trim();
-            if (!title) {
+            const rawTitle = extractTitleFromRow(row);
+            const norm = normalizeTitle(rawTitle);
+            const key = simplifyTitleKey(rawTitle);
+
+            if (!norm || !key) {
               skippedCount++;
               continue;
             }
 
-            const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-            const slug = `${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
+            const baseSlug = norm.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'anime';
+
+            // Check if this anime already exists in catalog or pending, or repeated in the CSV
+            const isAlreadyInDb = existingNormalizedTitles.has(norm) || existingSimplifiedKeys.has(key) || existingSlugs.has(baseSlug);
+            const isDuplicateInBatch = seenInThisUpload.has(norm) || seenInThisUploadKeys.has(key);
+
+            if (isAlreadyInDb || isDuplicateInBatch) {
+              skippedCount++;
+              skippedTitles.push(rawTitle);
+              continue;
+            }
+
+            seenInThisUpload.add(norm);
+            seenInThisUploadKeys.add(key);
+            existingNormalizedTitles.add(norm);
+            existingSimplifiedKeys.add(key);
+            existingSlugs.add(baseSlug);
+
+            itemsToInsert.push({ ...row, resolvedTitle: rawTitle, resolvedSlug: baseSlug });
+            addedTitles.push(rawTitle);
+          }
+
+          // 3. Insert ONLY the remaining truly unique anime into pending queue
+          let insertedCount = 0;
+          for (const row of itemsToInsert) {
+            const title = row.resolvedTitle;
+            const slug = row.resolvedSlug;
             const synopsis = (row.synopsis || row.Synopsis || row.description || row.Description || 'Exciting anime series').toString().trim();
             const year = parseInt(row.year || row['Release Year'] || row.Year || '2024', 10) || 2024;
             const rating = parseFloat(row.rating || row.Ratings || row.Rating || '8.5') || 8.5;
@@ -912,7 +1004,8 @@ export default {
               try {
                 await env.DB.prepare(
                   `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?, ?)`
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(title) DO NOTHING`
                 ).bind(title, slug, synopsis, cover_image, banner_image, rating, epCount, resolvedStatus, resolvedStatus, year, genres, languages, platform, resolvedType, studio, episodesPerSeason, mixedEntriesJson).run();
               } catch (firstErr) {
                 // Auto-heal missing D1 columns if migrations have not been applied yet
@@ -939,10 +1032,30 @@ export default {
             insertedCount++;
           }
 
-          return jsonResponse({ success: true, count: insertedCount, skipped: skippedCount }, 200, request);
+          return jsonResponse({
+            success: true,
+            count: insertedCount,
+            insertedCount,
+            skippedCount,
+            skippedTitles,
+            addedTitles,
+            message: `Upload complete: ${insertedCount} added to pending queue, ${skippedCount} existing titles rejected.`
+          }, 200, request);
         } catch (csvErr) {
           console.error("Worker CSV Import error:", csvErr);
           return jsonResponse({ success: false, error: csvErr.message }, 500, request);
+        }
+      }
+
+      // 14b. Admin Clear Pending Queue
+      if (path === "/api/admin/clear-pending" && method === "POST") {
+        try {
+          if (env.DB) {
+            await env.DB.prepare("DELETE FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' OR approval_status = 'pending'").run();
+          }
+          return jsonResponse({ success: true, message: "Pending queue wiped successfully" }, 200, request);
+        } catch (e) {
+          return jsonResponse({ success: false, error: e.message }, 500, request);
         }
       }
 
