@@ -77,7 +77,23 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   }, [isDarkMode]);
 
+  const logoClickCountRef = useRef(0);
+  const logoClickTimerRef = useRef<any>(null);
+
   const handleLogoClick = () => {
+    logoClickCountRef.current += 1;
+    clearTimeout(logoClickTimerRef.current);
+
+    if (logoClickCountRef.current >= 5) {
+      logoClickCountRef.current = 0;
+      onUnlockAdmin();
+      return;
+    }
+
+    logoClickTimerRef.current = setTimeout(() => {
+      logoClickCountRef.current = 0;
+    }, 1600);
+
     if (activeTab !== 'home') {
       setActiveTab('home');
       if (setFeedView) setFeedView('library');

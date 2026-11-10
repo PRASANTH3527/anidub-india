@@ -90,7 +90,6 @@ export default function App() {
     return found?.slug || undefined;
   }, [selectedAnimeId, catalogList]);
 
-
   // Admin Authentication State
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     return Boolean(localStorage.getItem('cf_admin_token'));
@@ -100,8 +99,96 @@ export default function App() {
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [adminPasswordError, setAdminPasswordError] = useState(false);
   const [adminPasswordLoading, setAdminPasswordLoading] = useState(false);
-
   const [isCatalogLoading, setIsCatalogLoading] = useState(true);
+
+  // Deep-link and history navigation handler
+  const handleOpenAnime = useCallback((animeId: number | null) => {
+    setSelectedAnimeId(animeId);
+    if (typeof window !== 'undefined') {
+      if (animeId !== null) {
+        const found = catalogList.find(a => a.id === animeId || String(a.id) === String(animeId));
+        const targetPath = found?.slug ? `/anime/${found.slug}` : `/anime/${animeId}`;
+        if (window.location.pathname !== targetPath) {
+          window.history.pushState({ animeId }, '', targetPath);
+        }
+      } else {
+        if (window.location.pathname.startsWith('/anime/')) {
+          window.history.pushState(null, '', '/');
+        }
+      }
+    }
+  }, [catalogList]);
+
+  // Handle URL deep-links on initial load and catalog ready
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const pathname = window.location.pathname;
+    if (pathname.startsWith('/anime/')) {
+      const slugOrId = pathname.replace(/^\/anime\//, '').split('/')[0].split('?')[0];
+      if (slugOrId) {
+        if (catalogList.length > 0) {
+          const matched = catalogList.find(a => a.slug === slugOrId || String(a.id) === slugOrId);
+          if (matched && selectedAnimeId !== matched.id) {
+            setSelectedAnimeId(matched.id);
+          }
+        }
+      }
+    } else if (pathname === '/admin' || pathname === '/admin/analytics') {
+      if (isAdminAuthenticated) {
+        setActiveTab('admin');
+      } else {
+        setIsPasswordModalOpen(true);
+      }
+    } else if (pathname === '/watchlist') {
+      setActiveTab('watchlist');
+    } else if (pathname === '/schedule') {
+      setActiveTab('schedule');
+    } else if (pathname === '/chat') {
+      setActiveTab('chat');
+    } else if (pathname === '/tierlist') {
+      setActiveTab('tierlist');
+    } else if (pathname === '/recommendations') {
+      setActiveTab('recommendations');
+    } else if (pathname === '/profile') {
+      setActiveTab('profile');
+    }
+  }, [catalogList, isAdminAuthenticated]);
+
+  // Handle browser back and forward buttons
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handlePopState = () => {
+      const pathname = window.location.pathname;
+      if (pathname.startsWith('/anime/')) {
+        const slugOrId = pathname.replace(/^\/anime\//, '').split('/')[0].split('?')[0];
+        const matched = catalogList.find(a => a.slug === slugOrId || String(a.id) === slugOrId);
+        if (matched) {
+          setSelectedAnimeId(matched.id);
+        }
+      } else {
+        setSelectedAnimeId(null);
+        if (pathname === '/admin' && isAdminAuthenticated) {
+          setActiveTab('admin');
+        } else if (pathname === '/watchlist') {
+          setActiveTab('watchlist');
+        } else if (pathname === '/schedule') {
+          setActiveTab('schedule');
+        } else if (pathname === '/chat') {
+          setActiveTab('chat');
+        } else if (pathname === '/tierlist') {
+          setActiveTab('tierlist');
+        } else if (pathname === '/recommendations') {
+          setActiveTab('recommendations');
+        } else if (pathname === '/profile') {
+          setActiveTab('profile');
+        } else if (pathname === '/') {
+          setActiveTab('home');
+        }
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [catalogList, isAdminAuthenticated]);
 
   useEffect(() => {
     fetchCatalogList();
@@ -337,7 +424,7 @@ export default function App() {
           }
         }}
         onOpenCollection={() => setIsCollectionOpen(true)}
-        onSelectAnime={(id) => setSelectedAnimeId(id)}
+        onSelectAnime={(id) => handleOpenAnime(id)}
         feedView={feedView}
         setFeedView={setFeedView}
         isAdminAuthenticated={isAdminAuthenticated}
@@ -425,7 +512,7 @@ export default function App() {
               <CatalogView
                 catalogList={catalogList}
                 onSelectAnime={(anime) => {
-                  setSelectedAnimeId(anime.id);
+                  handleOpenAnime(anime.id);
                   addToRecentlyViewed(anime);
                 }}
                 searchQuery={searchQuery}
@@ -450,7 +537,7 @@ export default function App() {
                 <RecommendationSystem
                   catalogList={catalogList}
                   onSelectAnime={(anime) => {
-                    setSelectedAnimeId(anime.id);
+                    handleOpenAnime(anime.id);
                     addToRecentlyViewed(anime);
                   }}
                   watchlist={watchlist}
@@ -469,7 +556,7 @@ export default function App() {
                 <WatchlistView
                   watchlist={realSavedWatchlist}
                   onSelectAnime={(anime) => {
-                    setSelectedAnimeId(anime.id);
+                    handleOpenAnime(anime.id);
                     addToRecentlyViewed(anime);
                   }}
                   onToggleWatchlist={handleToggleWatchlist}
@@ -483,7 +570,7 @@ export default function App() {
               <Suspense fallback={<ViewLoadingFallback />}>
                 <WeeklyScheduleView
                   onSelectAnime={(anime) => {
-                    setSelectedAnimeId(anime.id);
+                    handleOpenAnime(anime.id);
                     addToRecentlyViewed(anime);
                   }}
                   watchlist={watchlist}
@@ -501,7 +588,7 @@ export default function App() {
                   watchlist={watchlist}
                   catalogList={catalogList}
                   onSelectAnime={(anime) => {
-                    setSelectedAnimeId(anime.id);
+                    handleOpenAnime(anime.id);
                     addToRecentlyViewed(anime);
                   }}
                   onToggleWatchlist={handleToggleWatchlist}
@@ -517,7 +604,7 @@ export default function App() {
                 <AnimeTierListMaker
                   catalogList={catalogList}
                   onSelectAnime={(anime) => {
-                    setSelectedAnimeId(anime.id);
+                    handleOpenAnime(anime.id);
                     addToRecentlyViewed(anime);
                   }}
                   onNavigateHome={() => setActiveTab('home')}
@@ -531,7 +618,7 @@ export default function App() {
                 <CommunityChatView
                   onNavigateToCatalog={() => setActiveTab('home')}
                   onSelectAnime={(anime) => {
-                    setSelectedAnimeId(anime.id);
+                    handleOpenAnime(anime.id);
                     addToRecentlyViewed(anime);
                   }}
                 />
@@ -555,7 +642,7 @@ export default function App() {
             <AnimeDetailModal
               key="anime-detail-modal"
               animeId={selectedAnimeId}
-              onClose={() => setSelectedAnimeId(null)}
+              onClose={() => handleOpenAnime(null)}
               watchlist={watchlist}
               onToggleWatchlist={handleToggleWatchlist}
             />
@@ -570,7 +657,7 @@ export default function App() {
               animeList={catalogList}
               onClose={() => setIsRouletteOpen(false)}
               onSelectAnime={(anime) => {
-                setSelectedAnimeId(anime.id);
+                handleOpenAnime(anime.id);
                 addToRecentlyViewed(anime);
               }}
             />
