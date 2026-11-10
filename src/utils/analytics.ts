@@ -116,3 +116,11 @@ export function calculateScrollDepth(): number {
     return 0;
   }
 }
+
+/**
+ * Computes percentage of unique devices/visitors bounded safely between 0 and 100
+ */
+export function calculateDevicePercentage(count: number, totalUniqueVisitors: number): number {
+  if (!totalUniqueVisitors || totalUniqueVisitors <= 0 || !count || count <= 0) return 0;
+  return Math.min(100, Math.max(0, Math.round((count / totalUniqueVisitors) * 100)));
+}

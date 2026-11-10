@@ -1116,7 +1116,9 @@ export default {
           }
 
           const country = request.cf?.country || request.headers.get("cf-ipcountry") || "IN";
-          const city = request.cf?.city || request.headers.get("cf-ipcity") || request.headers.get("cf-city") || "Mumbai";
+          const rawRegion = request.cf?.region || request.headers.get("cf-region") || request.headers.get("cf-region-code") || payload?.region || "";
+          const region = rawRegion ? decodeURIComponent(rawRegion) : "Tamil Nadu";
+          const city = request.cf?.city || request.headers.get("cf-ipcity") || request.headers.get("cf-city") || "Chennai";
           const rawIp = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "127.0.0.1";
 
           let ipHash = "anon_visitor";
@@ -1150,12 +1152,13 @@ export default {
 
           if (env.DB) {
             await env.DB.prepare(`
-              INSERT INTO analytics_sessions (session_id, clerk_user_id, ip_hash, country, city, os, browser, device_type, referrer, started_at, last_active_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+              INSERT INTO analytics_sessions (session_id, clerk_user_id, ip_hash, country, region, city, os, browser, device_type, referrer, started_at, last_active_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
               ON CONFLICT(session_id) DO UPDATE SET 
                 last_active_at = datetime('now'),
-                clerk_user_id = COALESCE(excluded.clerk_user_id, analytics_sessions.clerk_user_id)
-            `).bind(sessionId, clerkUserId, ipHash, country, city, os, browser, deviceType, referrer).run();
+                clerk_user_id = COALESCE(excluded.clerk_user_id, analytics_sessions.clerk_user_id),
+                region = COALESCE(excluded.region, analytics_sessions.region)
+            `).bind(sessionId, clerkUserId, ipHash, country, region, city, os, browser, deviceType, referrer).run();
 
             if (payload.path || payload.pageview) {
               const p = payload.path || payload.pageview?.path || "/";
@@ -1210,22 +1213,23 @@ export default {
           }
 
           if (!env.DB) {
-            return jsonResponse({ success: true, data: { liveUsersCount: 0, totalSessions: 0, uniqueVisitors: 0, totalPageviews: 0, topPages: [], cities: [], countries: [], devices: [], browsers: [], os: [], outboundClicks: [], recentEvents: [] } }, 200, request);
+            return jsonResponse({ success: true, data: { liveUsersCount: 0, totalSessions: 0, uniqueVisitors: 0, totalPageviews: 0, topPages: [], regions: [], cities: [], countries: [], devices: [], browsers: [], os: [], outboundClicks: [], recentEvents: [] } }, 200, request);
           }
 
-          const [liveRes, sessRes, pvRes, bounceRes, topPagesRes, citiesRes, countriesRes, devRes, browserRes, osRes, outRes, eventsRes] = await Promise.all([
+          const [liveRes, sessRes, pvRes, bounceRes, topPagesRes, regionsRes, citiesRes, countriesRes, devRes, browserRes, osRes, outRes, eventsRes] = await Promise.all([
             env.DB.prepare("SELECT COUNT(*) as count FROM analytics_sessions WHERE last_active_at >= datetime('now', '-3 minutes')").first(),
             env.DB.prepare(`SELECT COUNT(*) as count, COUNT(DISTINCT ip_hash) as uniqueVisitors FROM analytics_sessions WHERE ${sessionFilter}`).first(),
             env.DB.prepare(`SELECT COUNT(*) as count, ROUND(AVG(time_spent_seconds)) as avgDuration, ROUND(AVG(max_scroll_depth)) as avgScroll FROM analytics_pageviews WHERE ${timeFilter}`).first(),
             env.DB.prepare(`SELECT COUNT(*) as count FROM (SELECT session_id FROM analytics_pageviews WHERE ${timeFilter} GROUP BY session_id HAVING COUNT(*) = 1)`).first(),
             env.DB.prepare(`SELECT path, COUNT(*) as views, ROUND(AVG(time_spent_seconds)) as avgTime, ROUND(AVG(max_scroll_depth)) as avgScroll FROM analytics_pageviews WHERE ${timeFilter} GROUP BY path ORDER BY views DESC LIMIT 10`).all(),
+            env.DB.prepare(`SELECT COALESCE(NULLIF(region, ''), city, 'Tamil Nadu') as region, country, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY COALESCE(NULLIF(region, ''), city, 'Tamil Nadu'), country ORDER BY count DESC LIMIT 10`).all(),
             env.DB.prepare(`SELECT city, country, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY city, country ORDER BY count DESC LIMIT 10`).all(),
             env.DB.prepare(`SELECT country, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY country ORDER BY count DESC LIMIT 8`).all(),
-            env.DB.prepare(`SELECT device_type as device, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY device_type ORDER BY count DESC`).all(),
-            env.DB.prepare(`SELECT browser, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY browser ORDER BY count DESC LIMIT 6`).all(),
-            env.DB.prepare(`SELECT os, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY os ORDER BY count DESC LIMIT 6`).all(),
+            env.DB.prepare(`SELECT device_type as device, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY device_type ORDER BY count DESC`).all(),
+            env.DB.prepare(`SELECT browser, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY browser ORDER BY count DESC LIMIT 6`).all(),
+            env.DB.prepare(`SELECT os, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY os ORDER BY count DESC LIMIT 6`).all(),
             env.DB.prepare(`SELECT target_id as url, COUNT(*) as clicks, event_type as provider FROM analytics_events WHERE ${timeFilter} AND event_type LIKE 'clicked_%' GROUP BY target_id, event_type ORDER BY clicks DESC LIMIT 10`).all(),
-            env.DB.prepare(`SELECT id, session_id, event_type, target_id, created_at FROM analytics_events ORDER BY id DESC LIMIT 20`).all()
+            env.DB.prepare(`SELECT e.id, e.session_id, e.event_type, e.target_id, e.created_at, COALESCE(s.region, s.city, 'Tamil Nadu') as region, s.city, s.country FROM analytics_events e LEFT JOIN analytics_sessions s ON e.session_id = s.session_id ORDER BY e.id DESC LIMIT 20`).all()
           ]);
 
           const liveUsersCount = Number(liveRes?.count) || 0;
@@ -1248,6 +1252,7 @@ export default {
               avgScrollDepth,
               bounceRatePercent,
               topPages: topPagesRes?.results || [],
+              regions: regionsRes?.results || [],
               cities: citiesRes?.results || [],
               countries: countriesRes?.results || [],
               devices: devRes?.results || [],

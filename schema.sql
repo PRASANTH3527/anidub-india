@@ -202,6 +202,7 @@ CREATE TABLE IF NOT EXISTS analytics_sessions (
   clerk_user_id TEXT,
   ip_hash TEXT,
   country TEXT DEFAULT 'IN',
+  region TEXT DEFAULT 'Unknown',
   city TEXT DEFAULT 'Unknown',
   os TEXT DEFAULT 'Unknown',
   browser TEXT DEFAULT 'Unknown',

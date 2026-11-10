@@ -28,6 +28,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { cloudflareApi } from '../services/cloudflareApi';
+import { calculateDevicePercentage } from '../utils/analytics';
 
 export interface AnalyticsDashboardProps {
   onNavigateHome?: () => void;
@@ -113,6 +114,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   const bounceRate = data?.bounceRatePercent ?? 0;
 
   const topPagesList: any[] = Array.isArray(data?.topPages) ? data.topPages : [];
+  const regionsList: any[] = Array.isArray(data?.regions) 
+    ? data.regions 
+    : (Array.isArray(data?.cities) ? data.cities : []);
   const citiesList: any[] = Array.isArray(data?.cities) ? data.cities : [];
   const countriesList: any[] = Array.isArray(data?.countries) ? data.countries : [];
   const devicesList: any[] = Array.isArray(data?.devices) ? data.devices : [];
@@ -343,28 +347,29 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             <span className="text-[11px] text-neutral-500">Edge Detected</span>
           </div>
 
-          {/* Top Cities */}
+          {/* Top States / Regions */}
           <div className="space-y-2.5">
             <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 block">
-              Top Active Cities
+              Top States / Regions
             </span>
-            {citiesList.length === 0 ? (
+            {regionsList.length === 0 ? (
               <div className="py-6 text-center text-neutral-500 text-xs">
                 No data available yet
               </div>
             ) : (
-              citiesList.slice(0, 6).map((cityItem: any, idx: number) => {
-                const maxCity = citiesList[0]?.count || 1;
-                const pct = Math.round((Number(cityItem.count || 0) / maxCity) * 100);
+              regionsList.slice(0, 6).map((regionItem: any, idx: number) => {
+                const maxRegion = regionsList[0]?.count || 1;
+                const pct = Math.round((Number(regionItem.count || 0) / maxRegion) * 100);
+                const regionName = regionItem.region || regionItem.city || 'Unknown Region';
                 return (
-                  <div key={`city_${idx}`} className="space-y-1">
+                  <div key={`region_${idx}`} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <span className="flex items-center gap-1.5 font-medium text-neutral-200">
-                        <span>{getCountryFlag(cityItem.country)}</span>
-                        <span>{cityItem.city || 'Unknown'}</span>
-                        <span className="text-[10px] text-neutral-500">({cityItem.country || 'N/A'})</span>
+                        <span>{getCountryFlag(regionItem.country)}</span>
+                        <span>{regionName}</span>
+                        <span className="text-[10px] text-neutral-500">({regionItem.country || 'N/A'})</span>
                       </span>
-                      <span className="font-bold text-white font-mono">{cityItem.count}</span>
+                      <span className="font-bold text-white font-mono">{regionItem.count}</span>
                     </div>
                     <div className="w-full h-1.5 rounded-full bg-neutral-800 overflow-hidden">
                       <div 
@@ -416,12 +421,12 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 <Smartphone className="w-4 h-4 text-emerald-400" />
                 <h2 className="text-sm font-black text-white tracking-wide">Devices & Browsers</h2>
               </div>
-              <span className="text-[11px] text-neutral-500">Telemetry</span>
+              <span className="text-[11px] text-emerald-400 font-mono font-semibold">Unique Visitors</span>
             </div>
 
             {/* Devices Bar */}
             <div className="space-y-2">
-              <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Device Types</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Unique Devices</span>
               {devicesList.length === 0 ? (
                 <div className="py-4 text-center text-neutral-500 text-xs">
                   No data available yet
@@ -429,8 +434,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {devicesList.map((d: any, idx: number) => {
-                    const total = totalSessions || 1;
-                    const pct = Math.round((Number(d.count || 0) / total) * 100);
+                    const totalUniqueDevices = uniqueVisitors || devicesList.reduce((sum: number, item: any) => sum + Number(item.count || 0), 0) || 1;
+                    const pct = calculateDevicePercentage(Number(d.count || 0), totalUniqueDevices);
                     return (
                       <div key={`dev_${idx}`} className="bg-neutral-800/40 border border-neutral-700/40 rounded-xl p-2.5 text-center space-y-1">
                         <div className="flex items-center justify-center gap-1 text-neutral-300">
@@ -448,7 +453,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
             {/* Browsers */}
             <div className="pt-2 border-t border-neutral-800/80 space-y-2">
-              <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Top Browsers</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Top Browsers (Unique Visitors)</span>
               {browsersList.length === 0 ? (
                 <div className="text-neutral-500 text-xs">
                   No data available yet
@@ -544,7 +549,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   <div className="text-right shrink-0">
                     <div className="text-[11px] font-semibold text-neutral-300 flex items-center gap-1 justify-end">
                       {ev.country && <span>{getCountryFlag(ev.country)}</span>}
-                      <span>{ev.city || 'Edge Node'}</span>
+                      <span>{ev.region || ev.city || 'Edge Node'}</span>
                     </div>
                     <div className="text-[10px] text-neutral-500 font-mono">
                       {ev.created_at ? new Date(ev.created_at).toLocaleTimeString() : 'Just now'}

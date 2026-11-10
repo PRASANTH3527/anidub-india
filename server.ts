@@ -474,7 +474,8 @@ function runMigrations() {
       clerk_user_id TEXT,
       ip_hash TEXT NOT NULL,
       country TEXT DEFAULT 'IN',
-      city TEXT DEFAULT 'Mumbai',
+      region TEXT DEFAULT 'Tamil Nadu',
+      city TEXT DEFAULT 'Chennai',
       os TEXT,
       browser TEXT,
       device_type TEXT,
@@ -509,6 +510,10 @@ function runMigrations() {
     db.run("CREATE INDEX IF NOT EXISTS idx_pageviews_path ON analytics_pageviews(path);");
     db.run("CREATE INDEX IF NOT EXISTS idx_events_session ON analytics_events(session_id);");
     db.run("CREATE INDEX IF NOT EXISTS idx_events_type ON analytics_events(event_type);");
+  } catch (e) {}
+
+  try {
+    db.run("ALTER TABLE analytics_sessions ADD COLUMN region TEXT;");
   } catch (e) {}
 
   // Ensure any sample mock sessions are purged so dashboard reflects strictly real data
@@ -2480,10 +2485,12 @@ app.post('/api/track', (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing sessionId' });
     }
 
-    // 1. Edge Geolocation via Cloudflare headers (fallback for local dev)
+    // 1. Edge Geolocation via Cloudflare headers (State/Region level for privacy & stability)
     const country = (req.headers['cf-ipcountry'] as string) || 'IN';
+    const rawRegion = (req.headers['cf-region'] as string) || (req.headers['cf-region-code'] as string) || (payload.region as string) || '';
+    const region = rawRegion ? decodeURIComponent(rawRegion) : 'Tamil Nadu';
     const rawCity = (req.headers['cf-ipcity'] as string) || (req.headers['cf-city'] as string) || '';
-    const city = rawCity ? decodeURIComponent(rawCity) : 'Mumbai';
+    const city = rawCity ? decodeURIComponent(rawCity) : 'Chennai';
 
     // 2. Anonymized IP hash for unique visitor metrics without storing PII
     const rawIp = (req.headers['cf-connecting-ip'] as string) ||
@@ -2515,7 +2522,7 @@ app.post('/api/track', (req, res) => {
     const referrer = payload.referrer || 'direct';
 
     if (db) {
-      // Upsert Session with fresh last_active_at
+      // Upsert Session with fresh last_active_at and state/region
       const sessStmt = db.prepare("SELECT session_id FROM analytics_sessions WHERE session_id = ?");
       sessStmt.bind([sessionId]);
       const hasSession = sessStmt.step();
@@ -2523,14 +2530,14 @@ app.post('/api/track', (req, res) => {
 
       if (hasSession) {
         db.run(
-          "UPDATE analytics_sessions SET last_active_at = datetime('now'), clerk_user_id = COALESCE(?, clerk_user_id) WHERE session_id = ?",
-          [clerkUserId, sessionId]
+          "UPDATE analytics_sessions SET last_active_at = datetime('now'), clerk_user_id = COALESCE(?, clerk_user_id), region = COALESCE(?, region) WHERE session_id = ?",
+          [clerkUserId, region, sessionId]
         );
       } else {
         db.run(
-          `INSERT INTO analytics_sessions (session_id, clerk_user_id, ip_hash, country, city, os, browser, device_type, referrer, started_at, last_active_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-          [sessionId, clerkUserId, ipHash, country, city, os, browser, deviceType, referrer]
+          `INSERT INTO analytics_sessions (session_id, clerk_user_id, ip_hash, country, region, city, os, browser, device_type, referrer, started_at, last_active_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+          [sessionId, clerkUserId, ipHash, country, region, city, os, browser, deviceType, referrer]
         );
       }
 
@@ -2685,8 +2692,24 @@ app.get('/api/analytics/dashboard', (req, res) => {
       pageStmt.free();
     } catch (_) {}
 
-    // 6. Geographic Traffic: Cities & Countries
+    // 6. Geographic Traffic: States/Regions & Countries
+    const regions: any[] = [];
     const cities: any[] = [];
+    try {
+      const regionStmt = db.prepare(`
+        SELECT COALESCE(NULLIF(region, ''), city, 'Tamil Nadu') as region, country, COUNT(*) as count
+        FROM analytics_sessions
+        WHERE ${sessionFilter}
+        GROUP BY COALESCE(NULLIF(region, ''), city, 'Tamil Nadu'), country
+        ORDER BY count DESC
+        LIMIT 10
+      `);
+      while (regionStmt.step()) {
+        regions.push(regionStmt.getAsObject());
+      }
+      regionStmt.free();
+    } catch (_) {}
+
     try {
       const cityStmt = db.prepare(`
         SELECT city, country, COUNT(*) as count
@@ -2718,11 +2741,11 @@ app.get('/api/analytics/dashboard', (req, res) => {
       countryStmt.free();
     } catch (_) {}
 
-    // 7. Devices, Browsers & OS Breakdown
+    // 7. Devices, Browsers & OS Breakdown (Distinct physical devices/visitors)
     const devices: any[] = [];
     try {
       const devStmt = db.prepare(`
-        SELECT device_type as device, COUNT(*) as count
+        SELECT device_type as device, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count
         FROM analytics_sessions
         WHERE ${sessionFilter}
         GROUP BY device_type
@@ -2737,7 +2760,7 @@ app.get('/api/analytics/dashboard', (req, res) => {
     const browsers: any[] = [];
     try {
       const bStmt = db.prepare(`
-        SELECT browser, COUNT(*) as count
+        SELECT browser, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count
         FROM analytics_sessions
         WHERE ${sessionFilter}
         GROUP BY browser
@@ -2753,7 +2776,7 @@ app.get('/api/analytics/dashboard', (req, res) => {
     const osList: any[] = [];
     try {
       const osStmt = db.prepare(`
-        SELECT os, COUNT(*) as count
+        SELECT os, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count
         FROM analytics_sessions
         WHERE ${sessionFilter}
         GROUP BY os
@@ -2799,13 +2822,15 @@ app.get('/api/analytics/dashboard', (req, res) => {
       ebStmt.free();
     } catch (_) {}
 
-    // 9. Recent Telemetry Events Stream
+    // 9. Recent Telemetry Events Stream (Enriched with Session State/Region)
     const recentEvents: any[] = [];
     try {
       const eventStmt = db.prepare(`
-        SELECT id, session_id, event_type, target_id, created_at
-        FROM analytics_events
-        ORDER BY id DESC
+        SELECT e.id, e.session_id, e.event_type, e.target_id, e.created_at, 
+               COALESCE(s.region, s.city, 'Tamil Nadu') as region, s.city, s.country
+        FROM analytics_events e
+        LEFT JOIN analytics_sessions s ON e.session_id = s.session_id
+        ORDER BY e.id DESC
         LIMIT 20
       `);
       while (eventStmt.step()) {
@@ -2825,6 +2850,7 @@ app.get('/api/analytics/dashboard', (req, res) => {
         avgScrollDepth,
         bounceRatePercent,
         topPages,
+        regions,
         cities,
         countries,
         devices,
