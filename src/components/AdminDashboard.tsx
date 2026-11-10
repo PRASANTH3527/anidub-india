@@ -65,6 +65,8 @@ import { cloudflareApi } from '../services/cloudflareApi';
 import { CLOUDFLARE_API_URL, getCloudflareUrl } from '../config/cloudflare';
 import Papa from 'papaparse';
 import { AniDubLogo } from './AniDubLogo';
+import { cleanWatchUrl } from '../utils/urlCleaning';
+import { AnalyticsDashboard } from './AnalyticsDashboard';
 
 export interface AdminDashboardProps {
   onAnimeCreated?: (anime?: any, deletedId?: string | number) => void;
@@ -1254,9 +1256,15 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
       poster: editedData.posterUrl || editedData.poster || resolvedImage,
       posterUrl: editedData.posterUrl || resolvedImage,
       poster_url: editedData.posterUrl || resolvedImage,
-      streaming_partners: editedData.streaming_partners || editedData.platforms_data || editingAnime?.streaming_partners || editingAnime?.platforms_data || [],
-      platforms_data: editedData.platforms_data || editedData.streaming_partners || editingAnime?.platforms_data || editingAnime?.streaming_partners || [],
-      watch_url: editedData.watch_url !== undefined ? editedData.watch_url : (editingAnime?.watch_url || ''),
+      streaming_partners: (editedData.streaming_partners || editedData.platforms_data || editingAnime?.streaming_partners || editingAnime?.platforms_data || []).map((p: any) => ({
+        ...p,
+        url: cleanWatchUrl(p.url || '')
+      })),
+      platforms_data: (editedData.platforms_data || editedData.streaming_partners || editingAnime?.platforms_data || editingAnime?.streaming_partners || []).map((p: any) => ({
+        ...p,
+        url: cleanWatchUrl(p.url || '')
+      })),
+      watch_url: cleanWatchUrl(editedData.watch_url !== undefined ? editedData.watch_url : (editingAnime?.watch_url || '')),
       platform: editedData.platform || editingAnime?.platform || 'Crunchyroll',
       mixed_entries: editedData.mixed_entries !== undefined ? editedData.mixed_entries : (editedData.mixedEntries !== undefined ? editedData.mixedEntries : (editingAnime?.mixed_entries || editingAnime?.mixedEntries || [])),
       mixedEntries: editedData.mixedEntries !== undefined ? editedData.mixedEntries : (editedData.mixed_entries !== undefined ? editedData.mixed_entries : (editingAnime?.mixedEntries || editingAnime?.mixed_entries || [])),
@@ -2734,92 +2742,11 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
           </div>
         )}
 
-        {/* TAB 6: EDGE ANALYTICS (CYBER TELEMETRY DECK) */}
+        {/* TAB 6: GOD-MODE EDGE ANALYTICS & TELEMETRY DECK */}
         {activeAdminTab === 'analytics' && (
-          <div className="space-y-6">
-            <div className="p-6 sm:p-8 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-2xl space-y-6">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-                    <Activity className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">Cloudflare Edge Telemetry</h2>
-                    <p className="text-xs text-neutral-400">Global visitor routing, edge caching ratios, and regional streaming consumption</p>
-                  </div>
-                </div>
-                <span className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-semibold flex items-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.2)]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  <span>ALL NODES OPERATIONAL</span>
-                </span>
-              </div>
-
-              {/* 4 Cyber Telemetry Metrics */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {loadingAnalytics ? (
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <div key={`analytics_skeleton_${i}`} className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-2 animate-pulse">
-                      <div className="h-2 w-20 bg-white/10 rounded" />
-                      <div className="h-6 w-16 bg-white/10 rounded" />
-                    </div>
-                  ))
-                ) : (
-                  <>
-                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
-                      <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">24h Edge API Requests</span>
-                      <div className="text-2xl font-black text-white font-mono">{(analyticsData?.totalRequests ?? 0).toLocaleString()}</div>
-                      <div className="text-[11px] text-emerald-400 font-medium font-mono">Live telemetry</div>
-                    </div>
-    
-                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
-                      <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Edge Cache Hit Ratio</span>
-                      <div className="text-2xl font-black text-cyan-400 font-mono">{analyticsData?.cacheHitRatio || '96.8%'}</div>
-                      <div className="text-[11px] text-cyan-300 font-medium font-mono">Cloudflare CDN cached</div>
-                    </div>
-    
-                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
-                      <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Mean Query Latency</span>
-                      <div className="text-2xl font-black text-purple-400 font-mono">{analyticsData?.avgLatencyMs || '14ms'}</div>
-                      <div className="text-[11px] text-purple-300 font-medium font-mono">India Edge PoPs</div>
-                    </div>
-    
-                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
-                      <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Active Stream Outlinks</span>
-                      <div className="text-2xl font-black text-amber-400 font-mono">
-                        {(analyticsData as any)?.activeOutlinks ? (analyticsData as any).activeOutlinks.toLocaleString() : (verifiedLinks || '28,490')}
-                      </div>
-                      <div className="text-[11px] text-amber-300 font-medium font-mono">Redirects to OTT</div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Regional Indian PoP Status Indicators */}
-              <div className="p-4 rounded-xl bg-[#07090e]/80 border border-white/10 space-y-3">
-                <span className="text-xs font-mono uppercase tracking-wider text-neutral-400 font-semibold">
-                  Indian Regional Edge Routing Points
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-                  <div className="flex items-center gap-2 text-neutral-300">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span>BOM (Mumbai): 8ms</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-neutral-300">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span>DEL (Delhi): 12ms</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-neutral-300">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span>BLR (Bengaluru): 10ms</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-neutral-300">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span>MAA (Chennai): 14ms</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <AnalyticsDashboard 
+            onNavigateHome={onNavigateHome}
+          />
         )}
 
         {/* TAB 7: CLOUD INFRASTRUCTURE & BACKUP */}
@@ -3335,6 +3262,16 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
         >
           <Database className="w-4 h-4" />
           <span className="text-[9px] font-medium">Catalog</span>
+        </button>
+
+        <button
+          onClick={() => setActiveAdminTab('analytics')}
+          className={`p-2 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
+            activeAdminTab === 'analytics' ? 'text-sky-300 bg-sky-500/15' : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <Activity className="w-4 h-4" />
+          <span className="text-[9px] font-medium">Analytics</span>
         </button>
 
         <button

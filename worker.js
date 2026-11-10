@@ -180,6 +180,22 @@ const SEED_ANIME = [
   { id: 4, title: 'Jujutsu Kaisen', slug: 'jujutsu-kaisen', synopsis: 'Cursed spirit...', cover_image: 'https://cdn.myanimelist.net/images/anime/1171/109222.jpg', rating: 8.8, year: 2020, genres: 'Action, Supernatural', platform: 'Crunchyroll', popularity: 110000 }
 ];
 
+function cleanWatchUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return '';
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return `${parsed.origin}${parsed.pathname}`;
+    }
+    return trimmed.split('?')[0].split('#')[0].trim();
+  } catch {
+    return trimmed.split('?')[0].split('#')[0].trim();
+  }
+}
+
 function getCorsHeaders(request) {
   const origin = request ? (request.headers.get("Origin") || request.headers.get("origin")) : null;
   
@@ -718,11 +734,15 @@ export default {
           try {
             const body = await request.json().catch(() => ({}));
             let platformsDataStr = null;
-            const rawPlatforms = body.streaming_partners !== undefined ? body.streaming_partners : (body.streamingPartners !== undefined ? body.streamingPartners : (body.platforms_data !== undefined ? body.platforms_data : body.platformsData));
+            let rawPlatforms = body.streaming_partners !== undefined ? body.streaming_partners : (body.streamingPartners !== undefined ? body.streamingPartners : (body.platforms_data !== undefined ? body.platforms_data : body.platformsData));
             if (rawPlatforms !== undefined) {
+              if (Array.isArray(rawPlatforms)) {
+                rawPlatforms = rawPlatforms.map(p => ({ ...p, url: cleanWatchUrl(p.url) }));
+              }
               platformsDataStr = typeof rawPlatforms === 'string' ? rawPlatforms : JSON.stringify(rawPlatforms);
             }
-            const watchUrl = body.watch_url !== undefined ? body.watch_url : body.watchUrl;
+            const rawWatchUrl = body.watch_url !== undefined ? body.watch_url : body.watchUrl;
+            const watchUrl = cleanWatchUrl(rawWatchUrl);
 
             const rawMixed = body.mixed_entries !== undefined ? body.mixed_entries : (body.mixedEntries !== undefined ? body.mixedEntries : null);
             let mixedDataStr = null;
@@ -1078,7 +1098,171 @@ export default {
         return jsonResponse({ success: true, id }, 200, request);
       }
 
-      // 16. Catch-all for /api/
+      // 16. GOD-MODE EDGE ANALYTICS: POST /api/track
+      if (path === "/api/track" && method === "POST") {
+        try {
+          let payload;
+          const contentType = (request.headers.get("content-type") || "").toLowerCase();
+          if (contentType.includes("application/json")) {
+            payload = await request.json().catch(() => ({}));
+          } else {
+            const text = await request.text().catch(() => "");
+            try { payload = JSON.parse(text); } catch { payload = {}; }
+          }
+
+          const sessionId = payload?.sessionId || payload?.session_id;
+          if (!sessionId) {
+            return jsonResponse({ success: false, error: "Missing sessionId" }, 400, request);
+          }
+
+          const country = request.cf?.country || request.headers.get("cf-ipcountry") || "IN";
+          const city = request.cf?.city || request.headers.get("cf-ipcity") || request.headers.get("cf-city") || "Mumbai";
+          const rawIp = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "127.0.0.1";
+
+          let ipHash = "anon_visitor";
+          try {
+            const msgUint8 = new TextEncoder().encode(rawIp + "_anidub_edge_salt");
+            const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            ipHash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("").substring(0, 16);
+          } catch (_) {}
+
+          const ua = request.headers.get("user-agent") || "";
+          let deviceType = "desktop";
+          if (/tablet|ipad/i.test(ua)) deviceType = "tablet";
+          else if (/mobile|android|iphone/i.test(ua)) deviceType = "mobile";
+
+          let os = "Unknown OS";
+          if (/windows/i.test(ua)) os = "Windows";
+          else if (/macintosh|mac os/i.test(ua)) os = "macOS";
+          else if (/android/i.test(ua)) os = "Android";
+          else if (/iphone|ipad|ipod/i.test(ua)) os = "iOS";
+          else if (/linux/i.test(ua)) os = "Linux";
+
+          let browser = "Unknown";
+          if (/edg/i.test(ua)) browser = "Edge";
+          else if (/chrome|crios/i.test(ua)) browser = deviceType === "mobile" ? "Chrome Mobile" : "Chrome";
+          else if (/firefox|fxios/i.test(ua)) browser = "Firefox";
+          else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = deviceType === "mobile" ? "Safari Mobile" : "Safari";
+
+          const clerkUserId = payload.clerkUserId || payload.clerk_user_id || null;
+          const referrer = payload.referrer || "direct";
+
+          if (env.DB) {
+            await env.DB.prepare(`
+              INSERT INTO analytics_sessions (session_id, clerk_user_id, ip_hash, country, city, os, browser, device_type, referrer, started_at, last_active_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+              ON CONFLICT(session_id) DO UPDATE SET 
+                last_active_at = datetime('now'),
+                clerk_user_id = COALESCE(excluded.clerk_user_id, analytics_sessions.clerk_user_id)
+            `).bind(sessionId, clerkUserId, ipHash, country, city, os, browser, deviceType, referrer).run();
+
+            if (payload.path || payload.pageview) {
+              const p = payload.path || payload.pageview?.path || "/";
+              const t = Math.max(0, Math.round(Number(payload.timeSpentSeconds ?? payload.pageview?.timeSpentSeconds ?? 0)));
+              const s = Math.min(100, Math.max(0, Math.round(Number(payload.maxScrollDepth ?? payload.pageview?.maxScrollDepth ?? 0))));
+              await env.DB.prepare(`
+                INSERT INTO analytics_pageviews (session_id, path, time_spent_seconds, max_scroll_depth, created_at)
+                VALUES (?, ?, ?, ?, datetime('now'))
+              `).bind(sessionId, p, t, s).run();
+            }
+
+            if (Array.isArray(payload.events) && payload.events.length > 0) {
+              for (const evt of payload.events) {
+                if (evt && (evt.eventType || evt.type)) {
+                  await env.DB.prepare(`
+                    INSERT INTO analytics_events (session_id, event_type, target_id, created_at)
+                    VALUES (?, ?, ?, datetime('now'))
+                  `).bind(sessionId, evt.eventType || evt.type, evt.targetId || evt.target || null).run();
+                }
+              }
+            } else if (payload.eventType || payload.event_type) {
+              await env.DB.prepare(`
+                INSERT INTO analytics_events (session_id, event_type, target_id, created_at)
+                VALUES (?, ?, ?, datetime('now'))
+              `).bind(sessionId, payload.eventType || payload.event_type, payload.targetId || payload.target_id || null).run();
+            }
+          }
+
+          return jsonResponse({ success: true, sessionId }, 200, request);
+        } catch (err) {
+          return jsonResponse({ success: false, error: err.message }, 500, request);
+        }
+      }
+
+      // 17. GOD-MODE EDGE ANALYTICS: GET /api/analytics/dashboard
+      if (path === "/api/analytics/dashboard" && method === "GET") {
+        try {
+          const url = new URL(request.url);
+          const range = url.searchParams.get("range") || "all";
+
+          let timeFilter = "1=1";
+          let sessionFilter = "1=1";
+          if (range === "today") {
+            timeFilter = "date(created_at) = date('now')";
+            sessionFilter = "date(started_at) = date('now')";
+          } else if (range === "24h") {
+            timeFilter = "created_at >= datetime('now', '-24 hours')";
+            sessionFilter = "started_at >= datetime('now', '-24 hours')";
+          } else if (range === "7d") {
+            timeFilter = "created_at >= datetime('now', '-7 days')";
+            sessionFilter = "started_at >= datetime('now', '-7 days')";
+          }
+
+          if (!env.DB) {
+            return jsonResponse({ success: true, data: { liveUsersCount: 1, totalSessions: 0, uniqueVisitors: 0, totalPageviews: 0, topPages: [], cities: [], countries: [], devices: [], browsers: [], os: [], outboundClicks: [], recentEvents: [] } }, 200, request);
+          }
+
+          const [liveRes, sessRes, pvRes, bounceRes, topPagesRes, citiesRes, countriesRes, devRes, browserRes, osRes, outRes, eventsRes] = await Promise.all([
+            env.DB.prepare("SELECT COUNT(*) as count FROM analytics_sessions WHERE last_active_at >= datetime('now', '-3 minutes')").first(),
+            env.DB.prepare(`SELECT COUNT(*) as count, COUNT(DISTINCT ip_hash) as uniqueVisitors FROM analytics_sessions WHERE ${sessionFilter}`).first(),
+            env.DB.prepare(`SELECT COUNT(*) as count, ROUND(AVG(time_spent_seconds)) as avgDuration, ROUND(AVG(max_scroll_depth)) as avgScroll FROM analytics_pageviews WHERE ${timeFilter}`).first(),
+            env.DB.prepare(`SELECT COUNT(*) as count FROM (SELECT session_id FROM analytics_pageviews WHERE ${timeFilter} GROUP BY session_id HAVING COUNT(*) = 1)`).first(),
+            env.DB.prepare(`SELECT path, COUNT(*) as views, ROUND(AVG(time_spent_seconds)) as avgTime, ROUND(AVG(max_scroll_depth)) as avgScroll FROM analytics_pageviews WHERE ${timeFilter} GROUP BY path ORDER BY views DESC LIMIT 10`).all(),
+            env.DB.prepare(`SELECT city, country, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY city, country ORDER BY count DESC LIMIT 10`).all(),
+            env.DB.prepare(`SELECT country, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY country ORDER BY count DESC LIMIT 8`).all(),
+            env.DB.prepare(`SELECT device_type as device, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY device_type ORDER BY count DESC`).all(),
+            env.DB.prepare(`SELECT browser, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY browser ORDER BY count DESC LIMIT 6`).all(),
+            env.DB.prepare(`SELECT os, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY os ORDER BY count DESC LIMIT 6`).all(),
+            env.DB.prepare(`SELECT target_id as url, COUNT(*) as clicks, event_type as provider FROM analytics_events WHERE ${timeFilter} AND event_type LIKE 'clicked_%' GROUP BY target_id, event_type ORDER BY clicks DESC LIMIT 10`).all(),
+            env.DB.prepare(`SELECT id, session_id, event_type, target_id, created_at FROM analytics_events ORDER BY id DESC LIMIT 20`).all()
+          ]);
+
+          const liveUsersCount = Math.max(1, Number(liveRes?.count) || 0);
+          const totalSessions = Number(sessRes?.count) || 0;
+          const uniqueVisitors = Number(sessRes?.uniqueVisitors) || 0;
+          const totalPageviews = Number(pvRes?.count) || 0;
+          const avgDurationSeconds = Number(pvRes?.avgDuration) || 0;
+          const avgScrollDepth = Number(pvRes?.avgScroll) || 0;
+          const singlePv = Number(bounceRes?.count) || 0;
+          const bounceRatePercent = totalSessions > 0 ? Math.min(100, Math.round((singlePv / totalSessions) * 100)) : 25;
+
+          return jsonResponse({
+            success: true,
+            data: {
+              liveUsersCount,
+              totalSessions,
+              uniqueVisitors,
+              totalPageviews,
+              avgDurationSeconds,
+              avgScrollDepth,
+              bounceRatePercent,
+              topPages: topPagesRes?.results || [],
+              cities: citiesRes?.results || [],
+              countries: countriesRes?.results || [],
+              devices: devRes?.results || [],
+              browsers: browserRes?.results || [],
+              os: osRes?.results || [],
+              outboundClicks: outRes?.results || [],
+              recentEvents: eventsRes?.results || []
+            }
+          }, 200, request);
+        } catch (err) {
+          return jsonResponse({ success: false, error: err.message }, 500, request);
+        }
+      }
+
+      // 18. Catch-all for /api/
       if (path.startsWith("/api/")) {
         return jsonResponse({ error: "Endpoint not implemented on worker", path }, 404, request);
       }

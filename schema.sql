@@ -191,3 +191,50 @@ INSERT OR IGNORE INTO anime (
   8.8, 24, 'Completed', 'Fall', 2020, 'Action, Supernatural', 
   110000, 'Hindi, Tamil, Telugu, English', 'Crunchyroll', 'TV Series', 'MAPPA', 'approved', 'approved', 1
 );
+
+-- ====================================================================
+-- 10. Analytics Tracking Schema (Edge Sessions, Pageviews & Events)
+-- ====================================================================
+
+-- 10.1 Analytics Sessions Table (Tracks unique sessions, edge geo, device, OS)
+CREATE TABLE IF NOT EXISTS analytics_sessions (
+  session_id TEXT PRIMARY KEY,
+  clerk_user_id TEXT,
+  ip_hash TEXT,
+  country TEXT DEFAULT 'IN',
+  city TEXT DEFAULT 'Unknown',
+  os TEXT DEFAULT 'Unknown',
+  browser TEXT DEFAULT 'Unknown',
+  device_type TEXT DEFAULT 'Desktop',
+  referrer TEXT DEFAULT '',
+  started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10.2 Analytics Pageviews Table (Tracks path, time spent, max scroll depth)
+CREATE TABLE IF NOT EXISTS analytics_pageviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  time_spent_seconds INTEGER DEFAULT 0,
+  max_scroll_depth INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (session_id) REFERENCES analytics_sessions(session_id) ON DELETE CASCADE
+);
+
+-- 10.3 Analytics Events Table (Tracks custom events: outbound clicks, review submissions, upvotes)
+CREATE TABLE IF NOT EXISTS analytics_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  target_id TEXT DEFAULT '',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (session_id) REFERENCES analytics_sessions(session_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON analytics_sessions(last_active_at);
+CREATE INDEX IF NOT EXISTS idx_pageviews_session ON analytics_pageviews(session_id);
+CREATE INDEX IF NOT EXISTS idx_pageviews_path ON analytics_pageviews(path);
+CREATE INDEX IF NOT EXISTS idx_events_session ON analytics_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_events_type ON analytics_events(event_type);
+

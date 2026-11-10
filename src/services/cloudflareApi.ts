@@ -977,6 +977,39 @@ class CloudflareApiService {
   /**
    * ANALYTICS: Fetches edge performance telemetry
    */
+  /**
+   * GOD-MODE ANALYTICS: Track edge session, pageview, or event
+   */
+  public async trackAnalytics(payload: any): Promise<boolean> {
+    try {
+      const res = await this.smartFetch('/api/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[cloudflareApi] trackAnalytics error:', err);
+      return false;
+    }
+  }
+
+  /**
+   * GOD-MODE ANALYTICS: Fetch live dashboard metrics from D1 Edge Analytics
+   */
+  public async fetchAnalyticsDashboard(range: string = 'all'): Promise<any> {
+    try {
+      const res = await this.smartFetch(`/api/analytics/dashboard?range=${encodeURIComponent(range)}`);
+      if (res.ok) {
+        const json = await res.json();
+        return json?.data || json;
+      }
+    } catch (err) {
+      console.warn('[cloudflareApi] fetchAnalyticsDashboard error:', err);
+    }
+    return null;
+  }
+
   public async fetchAnalytics(): Promise<any> {
     try {
       const res = await this.smartFetch('/api/analytics');

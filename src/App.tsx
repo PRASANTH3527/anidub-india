@@ -7,6 +7,7 @@ import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown, Loader2 } from
 import { cloudflareApi } from './services/cloudflareApi';
 import { getCloudflareUrl, CLOUDFLARE_API_URL } from './config/cloudflare';
 import { AniDubLogo } from './components/AniDubLogo';
+import { GodModeTracker } from './components/GodModeTracker';
 
 // Code-split heavy, non-critical views and modals using React.lazy
 const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
@@ -82,6 +83,12 @@ export default function App() {
   const [isRouletteOpen, setIsRouletteOpen] = useState(false);
   const [isCollectionOpen, setIsCollectionOpen] = useState(false);
   const [catalogList, setCatalogList] = useState<any[]>([]);
+
+  const activeAnimeSlug = useMemo(() => {
+    if (selectedAnimeId === null || selectedAnimeId === undefined) return undefined;
+    const found = catalogList.find(a => a.id === selectedAnimeId || String(a.id) === String(selectedAnimeId));
+    return found?.slug || undefined;
+  }, [selectedAnimeId, catalogList]);
 
 
   // Admin Authentication State
@@ -300,6 +307,9 @@ export default function App() {
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-primary-theme selection:text-white transition-colors duration-300 box-border">
       
+      {/* GOD-MODE FIRST-PARTY EDGE ANALYTICS & TELEMETRY TRACKER */}
+      <GodModeTracker activeTab={activeTab} activeAnimeSlug={activeAnimeSlug} />
+
       {/* 1. NAVBAR */}
       <Navbar
         activeTab={activeTab}

@@ -17,6 +17,7 @@ import {
 import { AnimeRecord, DubLanguage, dbService } from '../services/databaseService';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { useToast } from './Toast';
+import { cleanWatchUrl } from '../utils/urlCleaning';
 
 interface DubInfoModalProps {
   isOpen: boolean;
@@ -360,7 +361,11 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     setStreamingPartners(prev => {
       const updated = [...prev];
       if (updated[index]) {
-        updated[index] = { ...updated[index], [field]: value };
+        // Automatically clean URL if query params or UTM tracking tags are present
+        const finalVal = (field === 'url' && typeof value === 'string' && (value.includes('?') || value.includes('utm_')))
+          ? cleanWatchUrl(value)
+          : value;
+        updated[index] = { ...updated[index], [field]: finalVal };
       }
       return updated;
     });
@@ -503,15 +508,15 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         submissionStatus: resolvedSubmissionStatus,
         languages: derivedGlobalDubs.join(', '),
         platform: streamingPartners[0]?.name || 'Crunchyroll',
-        watch_url: (streamingPartners.find(p => p.url?.trim())?.url || streamingPartners[0]?.url || '').trim(),
+        watch_url: cleanWatchUrl(streamingPartners.find(p => p.url?.trim())?.url || streamingPartners[0]?.url || ''),
         streaming_partners: streamingPartners.map(p => ({
           name: p.name || 'Crunchyroll',
-          url: (p.url || '').trim(),
+          url: cleanWatchUrl(p.url || ''),
           languages: p.languages || derivedGlobalDubs
         })),
         platforms_data: streamingPartners.map(p => ({
           name: p.name || 'Crunchyroll',
-          url: (p.url || '').trim(),
+          url: cleanWatchUrl(p.url || ''),
           languages: p.languages || derivedGlobalDubs
         })),
         mixed_entries: formattedMixedEntries,
@@ -844,7 +849,15 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               type="url"
                               value={partner.url}
                               onChange={(e) => updateStreamingPartner(idx, 'url', e.target.value)}
-                              placeholder="Link (e.g. https://...)"
+                              onBlur={(e) => updateStreamingPartner(idx, 'url', cleanWatchUrl(e.target.value))}
+                              onPaste={(e) => {
+                                const pastedText = e.clipboardData.getData('text');
+                                if (pastedText && (pastedText.includes('?') || pastedText.includes('utm_'))) {
+                                  e.preventDefault();
+                                  updateStreamingPartner(idx, 'url', cleanWatchUrl(pastedText));
+                                }
+                              }}
+                              placeholder="Link (e.g. https://www.crunchyroll.com/...)"
                               className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-[11px] text-white placeholder-neutral-600 focus:outline-none focus:border-primary-theme"
                             />
                           </div>
