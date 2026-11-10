@@ -274,13 +274,13 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   }, [rawAnimeList]);
 
   return (
-    <div className="w-full max-w-[420px] mx-auto px-[11px] overflow-x-hidden font-['Inter',sans-serif] text-slate-100 pb-10">
+    <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 overflow-x-hidden font-['Inter',sans-serif] text-slate-100 pb-10 box-border">
       
       {/* 1. HERO SECTION */}
-      <div className="text-center pt-8 px-4 max-w-2xl mx-auto">
+      <div className="text-center pt-6 sm:pt-8 px-2 sm:px-4 max-w-3xl mx-auto">
         
         {/* Top Badge Pill */}
-        <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-purple-900/40 border border-purple-500/30 text-purple-200 text-[11px] font-medium shadow-sm mb-6">
+        <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-purple-900/40 border border-purple-500/30 text-purple-200 text-[11px] font-medium shadow-sm mb-5 sm:mb-6">
           <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
           <span>Official Indian Dubbed Anime Directory</span>
         </div>
@@ -295,35 +295,38 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         </h2>
 
         {/* Hero Subtitle */}
-        <p className="text-[13px] text-[#94a3b8] leading-relaxed max-w-[420px] mx-auto mb-8">
+        <p className="text-xs sm:text-sm text-[#94a3b8] leading-relaxed max-w-xl mx-auto mb-6 sm:mb-8">
           {translate('hero.subtitle', lang)}
         </p>
 
-        {/* CTA Button 1: Surprise Me Roulette */}
-        <button
-          onClick={onOpenRoulette}
-          className="w-full flex items-center justify-center gap-3 rounded-full bg-gradient-to-r from-[#f59e0b] via-[#ea580c] to-[#9333ea] px-5 py-3.5 shadow-[0_6px_25px_rgba(234,88,12,0.4)] transition-all duration-300 hover:scale-[1.02] active:scale-95 cursor-pointer"
-        >
-          <Dices className="w-5 h-5 text-white" />
-          <span className="text-[15px] font-extrabold text-white">{translate('surpriseMe', lang)}</span>
-          <span className="bg-black/30 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase text-white inline-flex items-center gap-1 shrink-0">
-            🎲 {translate('randomPick', lang)}
-          </span>
-        </button>
+        {/* Action Buttons */}
+        <div className="max-w-md mx-auto w-full space-y-3">
+          {/* CTA Button 1: Surprise Me Roulette */}
+          <button
+            onClick={onOpenRoulette}
+            className="w-full flex items-center justify-center gap-3 rounded-full bg-gradient-to-r from-[#f59e0b] via-[#ea580c] to-[#9333ea] px-5 py-3.5 shadow-[0_6px_25px_rgba(234,88,12,0.4)] transition-all duration-300 hover:scale-[1.02] active:scale-95 cursor-pointer"
+          >
+            <Dices className="w-5 h-5 text-white" />
+            <span className="text-[15px] font-extrabold text-white">{translate('surpriseMe', lang)}</span>
+            <span className="bg-black/30 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase text-white inline-flex items-center gap-1 shrink-0">
+              🎲 {translate('randomPick', lang)}
+            </span>
+          </button>
 
-        {/* CTA Button 2: Create Collection */}
-        <button
-          onClick={onOpenCollection}
-          className="mt-3 w-full bg-[#111524] border border-[#262d47] hover:border-purple-500/40 rounded-full px-5 py-2.5 inline-flex items-center justify-center gap-2.5 transition-all duration-300 hover:scale-[1.02] active:scale-95 cursor-pointer"
-        >
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-white" />
-            <span className="text-[13px] font-bold text-white">{translate('createCollection', lang)}</span>
-          </div>
-          <span className="bg-[#1e1436] border border-[#7e22ce] text-[#c084fc] text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full tracking-wide">
-            SHAREABLE
-          </span>
-        </button>
+          {/* CTA Button 2: Create Collection */}
+          <button
+            onClick={onOpenCollection}
+            className="w-full bg-[#111524] border border-[#262d47] hover:border-purple-500/40 rounded-full px-5 py-2.5 inline-flex items-center justify-center gap-2.5 transition-all duration-300 hover:scale-[1.02] active:scale-95 cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-white" />
+              <span className="text-[13px] font-bold text-white">{translate('createCollection', lang)}</span>
+            </div>
+            <span className="bg-[#1e1436] border border-[#7e22ce] text-[#c084fc] text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full tracking-wide">
+              SHAREABLE
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* 2. ANIMATED STATS CARDS ROW (DYNAMIC REAL STATS) */}
@@ -359,7 +362,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       )}
 
       {/* 2.8 DEDICATED ANIME SEARCH BOX */}
-      <div className="px-3.5 sm:px-4 mt-6">
+      <div className="px-0.5 sm:px-2 md:px-0 mt-6">
         <div className="relative flex items-center">
           <Search className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none shrink-0" />
           <input
@@ -388,7 +391,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       </div>
 
       {/* 3. REGIONAL DUB AUDIO FILTER PILLS */}
-      <div className="px-3.5 sm:px-4 mt-6">
+      <div className="px-0.5 sm:px-2 md:px-0 mt-6">
         <div className="flex items-center gap-1.5 mb-2.5">
           <Sparkles className="w-3.5 h-3.5 text-[#a855f7]" />
           <span className="text-[11px] font-extrabold uppercase text-[#94a3b8] tracking-wider">
@@ -419,7 +422,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       </div>
 
       {/* 4. FILTER & SORT DROPDOWNS GRID */}
-      <div className="px-3.5 sm:px-4 mt-5 grid grid-cols-2 gap-2.5 sm:gap-3">
+      <div className="px-0.5 sm:px-2 md:px-0 mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3">
         
         {/* Render Dropdowns */}
         {[
@@ -448,7 +451,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </div>
         ))}
         
-        {/* Sort (Half width) */}
+        {/* Sort (Half width or grid item) */}
         <div className="relative flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 hover:border-purple-500/40 rounded-xl px-3 py-1.5 sm:py-2 transition-colors duration-200">
           <span className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-wider shrink-0 pr-1">
             SORT
@@ -468,7 +471,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
 
       {/* 6. FOR YOU METADATA BANNER */}
       {feedView === 'foryou' && (
-        <div className="px-3.5 mt-6 mb-2">
+        <div className="px-0.5 sm:px-2 md:px-0 mt-6 mb-2">
           <div className="bg-gradient-to-r from-amber-500/15 via-purple-500/15 to-indigo-500/15 border border-amber-500/30 rounded-2xl p-3.5 flex items-center gap-3">
             <Sparkles className="w-5 h-5 text-amber-400 shrink-0 animate-pulse" />
             <div>
@@ -482,7 +485,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       )}
 
       {/* 7. Catalog List Grid with exact matching design */}
-      <div className="pt-8 px-3.5">
+      <div className="pt-6 sm:pt-8 px-0.5 sm:px-2 md:px-0">
         
         {/* 1. GRID HEADER ROW */}
         <div className="flex items-center justify-between mb-4 px-0.5">
@@ -490,7 +493,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             <Sparkles className="w-[14px] h-[14px] text-[#a855f7]" />
             <span className="text-[#94a3b8]">Showing <strong className="text-white font-bold">{filteredList.length}</strong> Titles</span>
           </div>
-          <span className="text-[11px] text-[#64748b]">2 Columns • Smooth 60fps Virtualized</span>
+          <span className="text-[11px] text-[#64748b]">Smooth 60fps Virtualized</span>
         </div>
 
         {loading ? (
@@ -514,13 +517,13 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             </button>
           </div>
         ) : (
-          /* 2. CARD CONTAINER USING AnimeCard (grid-cols-2 gap-3.5) WITH FLUID STAGGERED MOTION */
+          /* 2. CARD CONTAINER USING AnimeCard WITH RESPONSIVE COLUMNS & COMPACT MOBILE GAPS */
           <motion.div 
             key={`catalog_grid_${selectedLanguage}_${selectedGenre}_${selectedPlatform}_${selectedType}_${selectedStatus}_${selectedSort}`}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1.0] }}
-            className="grid grid-cols-2 gap-3.5"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3.5 md:gap-4.5"
           >
             {displayedAnime.map((anime, idx) => {
               const isWatchlisted = watchlist.map(Number).includes(Number(anime.id));

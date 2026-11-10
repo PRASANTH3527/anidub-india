@@ -137,7 +137,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
     .slice(0, 6);
 
   return (
-    <div className="w-full max-w-[510px] mx-auto px-4 py-5 space-y-7 text-slate-100 bg-[#0a0c14] font-['Inter',sans-serif]">
+    <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-5 space-y-7 text-slate-100 bg-[#0a0c14] font-['Inter',sans-serif] box-border">
 
       {/* 1. HERO SECTION */}
       {featuredAnime && (
@@ -433,8 +433,8 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
           </button>
         </div>
 
-        {/* 2-Column Responsive Grid */}
-        <div className="grid grid-cols-2 gap-3.5">
+        {/* Responsive Grid of Latest Approved Anime */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3.5 md:gap-4.5">
           {recentlyUpdatedList.map((anime, rIdx) => {
             const langs = parseLanguages(anime.languages);
             const isSaved = watchlist.map(Number).includes(Number(anime.id));

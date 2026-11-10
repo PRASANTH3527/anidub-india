@@ -682,16 +682,6 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </button>
           </div>
         </div>
-
-        {/* STANDALONE DUAL RATING COMPONENT (GLOBAL & 10-POINT COMMUNITY) */}
-        <DualRating
-          globalRating={details?.rating || 8.5}
-          initialUserRating={userRating}
-          communityScore={communityRating || (details?.rating || 8.5)}
-          totalVotes={communityVotes}
-          onRate={handleCommunityRate}
-          className="mt-4 mb-2"
-        />
       </div>
 
       {/* 3. NAKED CONTENT FLOW (100% CARDLESS & BOXLESS) */}
@@ -929,6 +919,18 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             )}
           </div>
         </section>
+
+        {/* DUAL RATING SYSTEM (GLOBAL SCORE & COMMUNITY SCORE) - PLACED DIRECTLY BELOW COMMUNITY DUB REVIEWS */}
+        <div className="mt-8">
+          <DualRating
+            globalRating={details?.rating || 8.5}
+            initialUserRating={userRating}
+            communityScore={communityRating || (details?.rating || 8.5)}
+            totalVotes={communityVotes}
+            onRate={handleCommunityRate}
+            className="w-full"
+          />
+        </div>
 
         {/* SECTION 5: FREQUENTLY ASKED QUESTIONS */}
         <div className="mt-12">

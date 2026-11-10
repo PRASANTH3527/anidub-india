@@ -105,8 +105,8 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
     : `${votesCount.toLocaleString()}`;
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-2.5 sm:px-4 mb-3 sm:mb-6 box-border">
-      <div className="grid grid-cols-3 gap-2 sm:gap-3.5 md:gap-4 w-full box-border">
+    <div className="w-full max-w-7xl mx-auto px-0.5 sm:px-2 md:px-0 mb-3 sm:mb-6 box-border">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-3.5 md:gap-4 w-full box-border">
         
         {/* CARD 1: TOTAL ANIME */}
         <div className="relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-primary-theme/30 rounded-xl sm:rounded-2xl p-2 sm:p-3.5 md:p-5 shadow-lg hover:border-primary-theme/50 transition-all duration-300 group flex flex-col justify-between min-w-0 box-border">

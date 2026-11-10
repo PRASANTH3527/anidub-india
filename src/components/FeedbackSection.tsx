@@ -143,10 +143,10 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   };
 
   return (
-    <section className="w-full max-w-[420px] mx-auto overflow-hidden bg-[#0c101a] py-8 px-0 box-border font-sans">
+    <section className="w-full max-w-2xl mx-auto overflow-hidden bg-[#0c101a] py-8 px-2 sm:px-4 md:px-6 box-border font-sans">
       
       {/* 1) INTRO (centered) */}
-      <div className="text-center px-[24px]">
+      <div className="text-center px-2 sm:px-4">
         <h3 className="text-[22px] font-[800] tracking-[-0.03em] text-white">
           Know a missing dub?
         </h3>
@@ -156,7 +156,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
       </div>
 
       {/* 2) SUBMIT BUTTON (20px below paragraph) */}
-      <div className="mt-[20px] px-[24px]">
+      <div className="mt-[20px] px-2 sm:px-4">
         <button
           type="button"
           onClick={onSubmitDub}
@@ -177,7 +177,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
       </div>
 
       {/* 4) FEEDBACK CARD (40px below divider) */}
-      <div className="mt-[40px] px-[16px]">
+      <div className="mt-[40px] px-1 sm:px-4">
         <div className="rounded-[24px] p-[24px] bg-[#0e1220] border border-[#202638] shadow-2xl text-left">
           <div className="space-y-[4px]">
             <h3 className="text-[18px] leading-[28px] font-bold text-white tracking-[-0.02em]">Share your feedback</h3>
