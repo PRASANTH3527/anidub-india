@@ -419,6 +419,7 @@ export default function App() {
                   addToRecentlyViewed(anime);
                 }}
                 searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
                 watchlist={watchlist}
                 onToggleWatchlist={handleToggleWatchlist}
                 onToggleLike={handleToggleLike}

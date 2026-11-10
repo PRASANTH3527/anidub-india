@@ -13,7 +13,9 @@ import {
   CheckCircle2, 
   TrendingUp, 
   Heart,
-  Loader2
+  Loader2,
+  Search,
+  X
 } from 'lucide-react';
 import { filterAndSortCatalog } from '../utils/pagination';
 import { AnimeCard, AnimeCardData } from './AnimeCard';
@@ -51,6 +53,7 @@ export interface CatalogViewProps {
   catalogList?: any[];
   onSelectAnime: (anime: Anime) => void;
   searchQuery: string;
+  setSearchQuery?: (query: string) => void;
   watchlist: number[];
   onToggleWatchlist: (animeId: number) => void;
   onToggleLike?: (animeId: number, liked: boolean, count: number) => void;
@@ -106,6 +109,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   catalogList,
   onSelectAnime,
   searchQuery,
+  setSearchQuery,
   watchlist,
   onToggleWatchlist,
   onToggleLike,
@@ -120,6 +124,21 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
 }) => {
   const lang = uiLanguage || 'en';
   const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(catalogList || []);
+  const [internalSearch, setInternalSearch] = useState(searchQuery || '');
+
+  // Keep internalSearch in sync with prop
+  useEffect(() => {
+    setInternalSearch(searchQuery || '');
+  }, [searchQuery]);
+
+  const effectiveSearch = setSearchQuery ? searchQuery : internalSearch;
+
+  const handleSearchChange = (val: string) => {
+    setInternalSearch(val);
+    if (setSearchQuery) {
+      setSearchQuery(val);
+    }
+  };
   
   // Sync rawAnimeList whenever catalogList prop updates from parent
   useEffect(() => {
@@ -207,15 +226,15 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       platform: selectedPlatform === 'All Platforms' ? 'All' : selectedPlatform,
       type: selectedType === 'All Types' ? 'All' : selectedType,
       status: selectedStatus === 'All Status' ? 'All' : selectedStatus,
-      search: searchQuery,
+      search: effectiveSearch,
       sort: selectedSort
     });
-  }, [currentAnimeList, selectedLanguage, selectedGenre, selectedPlatform, selectedType, selectedStatus, searchQuery, selectedSort]);
+  }, [currentAnimeList, selectedLanguage, selectedGenre, selectedPlatform, selectedType, selectedStatus, effectiveSearch, selectedSort]);
 
   // Reset visibleCount on filter or search change
   useEffect(() => {
     setVisibleCount(8);
-  }, [selectedLanguage, selectedGenre, selectedPlatform, selectedType, selectedStatus, selectedSort, searchQuery]);
+  }, [selectedLanguage, selectedGenre, selectedPlatform, selectedType, selectedStatus, selectedSort, effectiveSearch]);
 
   // IntersectionObserver for Infinite Scroll
   useEffect(() => {
@@ -334,6 +353,34 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         </div>
       )}
 
+      {/* 2.8 DEDICATED ANIME SEARCH BOX */}
+      <div className="px-3.5 sm:px-4 mt-6">
+        <div className="relative flex items-center">
+          <Search className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none shrink-0" />
+          <input
+            type="text"
+            value={effectiveSearch}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Search anime by title, voice actor, studio, genre..."
+            className="w-full bg-[#131926]/90 border border-neutral-700/80 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-2xl pl-10 pr-10 py-2.5 sm:py-3 text-xs sm:text-sm text-white placeholder-neutral-500 outline-none transition-all shadow-md shadow-black/40"
+          />
+          {effectiveSearch && (
+            <button
+              onClick={() => handleSearchChange('')}
+              className="absolute right-3 text-neutral-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+              title="Clear search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        {effectiveSearch && (
+          <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1 pt-1.5 font-mono">
+            <span>Filtering for: "{effectiveSearch}"</span>
+            <span className="text-purple-300 font-bold">{filteredList.length} matching titles</span>
+          </div>
+        )}
+      </div>
 
       {/* 3. REGIONAL DUB AUDIO FILTER PILLS */}
       <div className="px-3.5 sm:px-4 mt-6">

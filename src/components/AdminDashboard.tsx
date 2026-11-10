@@ -114,6 +114,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Pending queue state
   const [pendingItems, setPendingItems] = useState<any[]>([]);
+  const [pendingSearchQuery, setPendingSearchQuery] = useState('');
   const [showBulkBanner, setShowBulkBanner] = useState(true);
 
   // Catalog tab states
@@ -1208,11 +1209,30 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
 
   const pendingCount = pendingItems.length;
 
-  const filteredCatalog = catalog.filter(a => 
-    a.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    String(a.id).includes(searchQuery) ||
-    (a.languages && a.languages.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredCatalog = catalog.filter(a => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    const title = String(a.title || '').toLowerCase();
+    const id = String(a.id || '');
+    const langs = String(a.languages || '').toLowerCase();
+    const genres = String(a.genres || '').toLowerCase();
+    const studio = String(a.studio || '').toLowerCase();
+    const platform = String(a.platform || '').toLowerCase();
+    const status = String(a.status || a.airing_status || '').toLowerCase();
+    return title.includes(q) || id.includes(q) || langs.includes(q) || genres.includes(q) || studio.includes(q) || platform.includes(q) || status.includes(q);
+  });
+
+  const filteredPendingItems = pendingItems.filter(item => {
+    if (!pendingSearchQuery.trim()) return true;
+    const q = pendingSearchQuery.toLowerCase().trim();
+    const title = String(item.title || '').toLowerCase();
+    const id = String(item.id || '');
+    const langs = String(item.languages || '').toLowerCase();
+    const studio = String(item.studio || '').toLowerCase();
+    const platform = String(item.platform || '').toLowerCase();
+    const genres = String(item.genres || '').toLowerCase();
+    return title.includes(q) || id.includes(q) || langs.includes(q) || studio.includes(q) || platform.includes(q) || genres.includes(q);
+  });
 
   const handleSaveEdit = async (editedData: any) => {
     if (!editedData) return;
@@ -2136,6 +2156,37 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
               </div>
             </div>
 
+            {/* Moderation Search Box */}
+            {pendingItems.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-amber-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input 
+                    type="text"
+                    value={pendingSearchQuery}
+                    onChange={(e) => setPendingSearchQuery(e.target.value)}
+                    placeholder="Search pending moderation queue by title, ID, language, studio, genre..."
+                    className="w-full bg-[#0a0d16]/90 border border-amber-500/20 focus:border-amber-400 focus:shadow-[0_0_20px_rgba(245,158,11,0.2)] rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-neutral-500 outline-none transition-all duration-300"
+                  />
+                  {pendingSearchQuery && (
+                    <button
+                      onClick={() => setPendingSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+                      title="Clear filter"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {pendingSearchQuery && (
+                  <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1 font-mono">
+                    <span>Searching pending for: "{pendingSearchQuery}"</span>
+                    <span className="text-amber-300 font-bold">{filteredPendingItems.length} of {pendingItems.length} matching</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {pendingItems.length === 0 ? (
               <div className="text-center py-20 bg-white/[0.025] backdrop-blur-xl border border-white/10 rounded-2xl p-8 space-y-3 shadow-xl">
                 <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(16,185,129,0.25)]">
@@ -2144,9 +2195,13 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
                 <h3 className="text-base font-bold text-white">All Clear! Moderation Queue is Empty</h3>
                 <p className="text-xs text-neutral-400 max-w-sm mx-auto">New submissions from fans and community contributors will appear here for verification before publishing to Cloudflare.</p>
               </div>
+            ) : filteredPendingItems.length === 0 ? (
+              <div className="text-center py-16 bg-white/[0.025] backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+                <p className="text-xs text-neutral-400 font-mono">No pending submissions match "{pendingSearchQuery}".</p>
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-                {pendingItems.map((item) => (
+                {filteredPendingItems.map((item) => (
                   <div key={`pending_item_${item.id}`} className="p-5 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-amber-500/30 hover:border-amber-400/60 shadow-xl hover:shadow-[0_0_30px_rgba(245,158,11,0.15)] space-y-4 flex flex-col justify-between transition-all duration-300 hover:scale-[1.01] group">
                     <div className="flex items-start gap-4">
                       <div className="relative shrink-0">
@@ -2275,15 +2330,32 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
               </div>
 
               {/* Search Field */}
-              <div className="relative pt-1">
-                <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none mt-0.5" />
-                <input 
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter catalog by anime title, ID, language, genre..."
-                  className="w-full bg-[#0a0d16]/90 border border-white/10 focus:border-cyan-400 focus:shadow-[0_0_20px_rgba(6,182,212,0.25)] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-neutral-500 outline-none transition-all duration-300"
-                />
+              <div className="space-y-1.5 pt-1">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-cyan-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input 
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Filter catalog by anime title, ID, language, genre, studio..."
+                    className="w-full bg-[#0a0d16]/90 border border-white/10 focus:border-cyan-400 focus:shadow-[0_0_20px_rgba(6,182,212,0.25)] rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-neutral-500 outline-none transition-all duration-300"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+                      title="Clear filter"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {searchQuery && (
+                  <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1 font-mono">
+                    <span>Filtering catalog for: "{searchQuery}"</span>
+                    <span className="text-cyan-300 font-bold">{filteredCatalog.length} of {catalog.length} titles</span>
+                  </div>
+                )}
               </div>
             </div>
 
