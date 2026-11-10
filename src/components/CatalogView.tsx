@@ -22,7 +22,7 @@ import { AnimeCard, AnimeCardData } from './AnimeCard';
 import { RecentlyViewedRow } from './RecentlyViewedRow';
 import { AnimatedStats } from './AnimatedStats';
 import { cloudflareApi } from '../services/cloudflareApi';
-import { calculateCatalogStats } from '../utils/languages';
+import { calculateCatalogStats, computeDynamicLanguageFilters } from '../utils/languages';
 import { SkeletonGrid } from './SkeletonGrid';
 import { proxyUrl } from '../utils/imgbb';
 import { translate, SupportedLanguage } from '../utils/i18n';
@@ -268,6 +268,11 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     return filteredList.slice(0, visibleCount);
   }, [filteredList, visibleCount]);
 
+  // Compute dynamic regional dub language filter buttons directly from database animeList
+  const dynamicLanguageFilters = useMemo(() => {
+    return computeDynamicLanguageFilters(rawAnimeList);
+  }, [rawAnimeList]);
+
   return (
     <div className="w-full max-w-[420px] mx-auto px-[11px] overflow-x-hidden font-['Inter',sans-serif] text-slate-100 pb-10">
       
@@ -391,15 +396,8 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </span>
         </div>
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1.5 pt-0.5">
-          {[
-            { label: 'All', value: 'All', count: rawAnimeList.length },
-            { label: 'Tamil', value: 'Tamil', count: rawAnimeList.filter(a => a.languages?.toLowerCase().includes('tam')).length },
-            { label: 'Telugu', value: 'Telugu', count: rawAnimeList.filter(a => a.languages?.toLowerCase().includes('tel')).length },
-            { label: 'Hindi', value: 'Hindi', count: rawAnimeList.filter(a => a.languages?.toLowerCase().includes('hin')).length },
-            { label: 'Malayalam', value: 'Malayalam', count: rawAnimeList.filter(a => a.languages?.toLowerCase().includes('mal')).length },
-            { label: 'Kannada', value: 'Kannada', count: rawAnimeList.filter(a => a.languages?.toLowerCase().includes('kan')).length }
-          ].map((lang) => {
-            const active = selectedLanguage === lang.value;
+          {dynamicLanguageFilters.map((lang) => {
+            const active = selectedLanguage.toLowerCase() === lang.value.toLowerCase() || (selectedLanguage === 'All' && lang.value === 'All');
             return (
               <button
                 key={lang.value}

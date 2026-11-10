@@ -192,3 +192,71 @@ export function calculateCatalogStats(animeList: any[] = []) {
     languagesString: formatLanguagesBulletList(uniqueLanguages)
   };
 }
+
+export interface LanguageFilterItem {
+  label: string;
+  value: string;
+  count: number;
+}
+
+/**
+ * Computes the unique list of available regional languages directly from animeList data,
+ * counts occurrences across the catalog, and returns an array sorted descending by count.
+ * E.g., [{ label: 'All', value: 'All', count: 128 }, { label: 'Hindi', value: 'Hindi', count: 127 }, ...]
+ */
+export function computeDynamicLanguageFilters(animeList: any[] = []): LanguageFilterItem[] {
+  if (!Array.isArray(animeList) || animeList.length === 0) {
+    return [{ label: 'All', value: 'All', count: 0 }];
+  }
+
+  const counts: Record<string, number> = {};
+
+  animeList.forEach((anime) => {
+    if (!anime) return;
+    const raw = anime.languages || anime.language || anime.dub || anime.dubbedLanguages;
+    if (!raw) return;
+
+    let tokens: string[] = [];
+    if (Array.isArray(raw)) {
+      tokens = raw.map(String);
+    } else if (typeof raw === 'string') {
+      tokens = raw.split(/[,/|•+]+/);
+    }
+
+    // Set of languages for this anime to avoid double counting if an anime has duplicate tags
+    const seenForAnime = new Set<string>();
+
+    tokens.forEach((token) => {
+      const trimmed = token.trim();
+      if (!trimmed) return;
+      if (['Japanese', 'English', 'Romaji', 'Korean', 'Chinese'].includes(trimmed)) return;
+      if (isExcludedLanguage(trimmed)) return;
+      const normalized = normalizeLanguageName(trimmed);
+      if (normalized && !isExcludedLanguage(normalized)) {
+        seenForAnime.add(normalized);
+      }
+    });
+
+    seenForAnime.forEach((lang) => {
+      counts[lang] = (counts[lang] || 0) + 1;
+    });
+  });
+
+  // Convert to array and sort descending by count (highest count first)
+  const sortedLanguages = Object.entries(counts)
+    .sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1]; // primary: descending by count
+      return a[0].localeCompare(b[0]); // secondary: alphabetical
+    })
+    .map(([lang, count]) => ({
+      label: lang,
+      value: lang,
+      count
+    }));
+
+  return [
+    { label: 'All', value: 'All', count: animeList.length },
+    ...sortedLanguages
+  ];
+}
+

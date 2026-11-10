@@ -4,7 +4,8 @@ import {
   normalizeLanguageName,
   extractUniqueLanguagesFromAnimeList,
   formatLanguagesBulletList,
-  calculateCatalogStats
+  calculateCatalogStats,
+  computeDynamicLanguageFilters
 } from './languages.ts';
 
 test('normalizeLanguageName maps codes and abbreviations to proper language names', () => {
@@ -81,5 +82,47 @@ test('extractUniqueLanguagesFromAnimeList strictly filters out Japanese, English
   assert.equal(stats.languagesList.includes('Romaji'), false);
   assert.equal(stats.languagesList.includes('Korean'), false);
   assert.equal(stats.languagesList.includes('Chinese'), false);
+});
+
+test('computeDynamicLanguageFilters dynamically extracts languages, counts accurately, and sorts descending by count', () => {
+  const animeData = [
+    { id: 1, languages: 'Hindi, Tamil, Telugu' },
+    { id: 2, languages: 'Hindi, Tamil' },
+    { id: 3, languages: 'Hindi, Bengali' },
+    { id: 4, languages: 'Tamil, Marathi, Bengali' },
+    { id: 5, languages: 'Hindi' }
+  ];
+
+  const filterButtons = computeDynamicLanguageFilters(animeData);
+
+  // 'All' button should always be first with total count
+  assert.equal(filterButtons[0].label, 'All');
+  assert.equal(filterButtons[0].value, 'All');
+  assert.equal(filterButtons[0].count, 5);
+
+  // Counts:
+  // Hindi: 4 (id 1, 2, 3, 5)
+  // Tamil: 3 (id 1, 2, 4)
+  // Bengali: 2 (id 3, 4)
+  // Telugu: 1 (id 1)
+  // Marathi: 1 (id 4)
+  assert.equal(filterButtons[1].label, 'Hindi');
+  assert.equal(filterButtons[1].count, 4);
+
+  assert.equal(filterButtons[2].label, 'Tamil');
+  assert.equal(filterButtons[2].count, 3);
+
+  assert.equal(filterButtons[3].label, 'Bengali');
+  assert.equal(filterButtons[3].count, 2);
+
+  // New regional languages (Bengali, Marathi) appear automatically
+  const labels = filterButtons.map(f => f.label);
+  assert.ok(labels.includes('Bengali'));
+  assert.ok(labels.includes('Marathi'));
+});
+
+test('computeDynamicLanguageFilters handles empty anime list gracefully', () => {
+  const result = computeDynamicLanguageFilters([]);
+  assert.deepEqual(result, [{ label: 'All', value: 'All', count: 0 }]);
 });
 
