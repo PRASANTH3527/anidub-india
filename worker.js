@@ -1210,7 +1210,7 @@ export default {
           }
 
           if (!env.DB) {
-            return jsonResponse({ success: true, data: { liveUsersCount: 1, totalSessions: 0, uniqueVisitors: 0, totalPageviews: 0, topPages: [], cities: [], countries: [], devices: [], browsers: [], os: [], outboundClicks: [], recentEvents: [] } }, 200, request);
+            return jsonResponse({ success: true, data: { liveUsersCount: 0, totalSessions: 0, uniqueVisitors: 0, totalPageviews: 0, topPages: [], cities: [], countries: [], devices: [], browsers: [], os: [], outboundClicks: [], recentEvents: [] } }, 200, request);
           }
 
           const [liveRes, sessRes, pvRes, bounceRes, topPagesRes, citiesRes, countriesRes, devRes, browserRes, osRes, outRes, eventsRes] = await Promise.all([
@@ -1228,14 +1228,14 @@ export default {
             env.DB.prepare(`SELECT id, session_id, event_type, target_id, created_at FROM analytics_events ORDER BY id DESC LIMIT 20`).all()
           ]);
 
-          const liveUsersCount = Math.max(1, Number(liveRes?.count) || 0);
+          const liveUsersCount = Number(liveRes?.count) || 0;
           const totalSessions = Number(sessRes?.count) || 0;
           const uniqueVisitors = Number(sessRes?.uniqueVisitors) || 0;
           const totalPageviews = Number(pvRes?.count) || 0;
           const avgDurationSeconds = Number(pvRes?.avgDuration) || 0;
           const avgScrollDepth = Number(pvRes?.avgScroll) || 0;
           const singlePv = Number(bounceRes?.count) || 0;
-          const bounceRatePercent = totalSessions > 0 ? Math.min(100, Math.round((singlePv / totalSessions) * 100)) : 25;
+          const bounceRatePercent = totalSessions > 0 ? Math.min(100, Math.round((singlePv / totalSessions) * 100)) : 0;
 
           return jsonResponse({
             success: true,

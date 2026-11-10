@@ -511,70 +511,10 @@ function runMigrations() {
     db.run("CREATE INDEX IF NOT EXISTS idx_events_type ON analytics_events(event_type);");
   } catch (e) {}
 
-  // Seed sample edge analytics sessions and events if table is empty
+  // Ensure any sample mock sessions are purged so dashboard reflects strictly real data
   try {
-    const sRes = db.exec("SELECT COUNT(*) FROM analytics_sessions");
-    if (!sRes[0] || sRes[0].values[0][0] === 0) {
-      const sampleSessions = [
-        { id: 'sess_live_user_1', ip: 'a1b2c3d4e5f60001', country: 'IN', city: 'Mumbai', os: 'Android', browser: 'Chrome Mobile', device: 'mobile', minsAgo: 1 },
-        { id: 'sess_live_user_2', ip: 'a1b2c3d4e5f60002', country: 'IN', city: 'Bengaluru', os: 'macOS', browser: 'Chrome', device: 'desktop', minsAgo: 2 },
-        { id: 'sess_live_user_3', ip: 'a1b2c3d4e5f60003', country: 'IN', city: 'Delhi', os: 'Windows', browser: 'Edge', device: 'desktop', minsAgo: 1.5 },
-        { id: 'sess_in_che_04', ip: 'a1b2c3d4e5f60004', country: 'IN', city: 'Chennai', os: 'iOS', browser: 'Safari Mobile', device: 'mobile', minsAgo: 15 },
-        { id: 'sess_in_hyd_05', ip: 'a1b2c3d4e5f60005', country: 'IN', city: 'Hyderabad', os: 'Android', browser: 'Chrome Mobile', device: 'mobile', minsAgo: 45 },
-        { id: 'sess_in_kol_06', ip: 'a1b2c3d4e5f60006', country: 'IN', city: 'Kolkata', os: 'Windows', browser: 'Chrome', device: 'desktop', minsAgo: 120 },
-        { id: 'sess_in_pun_07', ip: 'a1b2c3d4e5f60007', country: 'IN', city: 'Pune', os: 'Android', browser: 'Chrome Mobile', device: 'mobile', minsAgo: 240 },
-        { id: 'sess_us_nyc_08', ip: 'a1b2c3d4e5f60008', country: 'US', city: 'New York', os: 'iOS', browser: 'Mobile Safari', device: 'mobile', minsAgo: 320 },
-        { id: 'sess_gb_lon_09', ip: 'a1b2c3d4e5f60009', country: 'GB', city: 'London', os: 'macOS', browser: 'Safari', device: 'desktop', minsAgo: 480 },
-        { id: 'sess_ae_dxb_10', ip: 'a1b2c3d4e5f60010', country: 'AE', city: 'Dubai', os: 'Android', browser: 'Chrome Mobile', device: 'mobile', minsAgo: 500 }
-      ];
-
-      for (const s of sampleSessions) {
-        db.run(
-          `INSERT OR IGNORE INTO analytics_sessions (session_id, clerk_user_id, ip_hash, country, city, os, browser, device_type, referrer, started_at, last_active_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' minutes'), datetime('now', '-' || ? || ' minutes'))`,
-          [s.id, null, s.ip, s.country, s.city, s.os, s.browser, s.device, 'direct', s.minsAgo + 5, s.minsAgo]
-        );
-      }
-
-      const sampleViews = [
-        { session_id: 'sess_live_user_1', path: '/anime/solo-leveling', time: 145, scroll: 92 },
-        { session_id: 'sess_live_user_1', path: '/', time: 45, scroll: 75 },
-        { session_id: 'sess_live_user_2', path: '/anime/demon-slayer-kimetsu-no-yaiba', time: 180, scroll: 88 },
-        { session_id: 'sess_live_user_2', path: '/schedule', time: 60, scroll: 65 },
-        { session_id: 'sess_live_user_3', path: '/anime/dr-stone', time: 95, scroll: 78 },
-        { session_id: 'sess_in_che_04', path: '/anime/jujutsu-kaisen', time: 160, scroll: 84 },
-        { session_id: 'sess_in_hyd_05', path: '/anime/solo-leveling', time: 130, scroll: 89 },
-        { session_id: 'sess_in_kol_06', path: '/anime/black-clover', time: 110, scroll: 70 },
-        { session_id: 'sess_in_pun_07', path: '/anime/chainsaw-man', time: 140, scroll: 85 },
-        { session_id: 'sess_us_nyc_08', path: '/anime/attack-on-titan', time: 200, scroll: 95 }
-      ];
-
-      for (const v of sampleViews) {
-        db.run(
-          `INSERT INTO analytics_pageviews (session_id, path, time_spent_seconds, max_scroll_depth, created_at)
-           VALUES (?, ?, ?, ?, datetime('now', '-5 minutes'))`,
-          [v.session_id, v.path, v.time, v.scroll]
-        );
-      }
-
-      const sampleEvents = [
-        { session_id: 'sess_live_user_1', event: 'clicked_crunchyroll', target: 'https://crunchyroll.com/series/G6W4QKX0R' },
-        { session_id: 'sess_live_user_2', event: 'clicked_netflix', target: 'https://netflix.com/title/81005489' },
-        { session_id: 'sess_live_user_3', event: 'clicked_crunchyroll', target: 'https://crunchyroll.com/series/GY5P48XEY' },
-        { session_id: 'sess_in_che_04', event: 'submitted_review', target: 'anime_1_review' },
-        { session_id: 'sess_in_hyd_05', event: 'voted_dub_quality', target: 'anime_2_vote' },
-        { session_id: 'sess_in_pun_07', event: 'clicked_jio_cinema', target: 'https://jiocinema.com' }
-      ];
-
-      for (const e of sampleEvents) {
-        db.run(
-          `INSERT INTO analytics_events (session_id, event_type, target_id, created_at)
-           VALUES (?, ?, ?, datetime('now', '-3 minutes'))`,
-          [e.session_id, e.event, e.target]
-        );
-      }
-    }
-  } catch (e) {}
+    db.run("DELETE FROM analytics_sessions WHERE session_id LIKE 'sess_live_user_%' OR session_id LIKE 'sess_in_%' OR session_id LIKE 'sess_us_%' OR session_id LIKE 'sess_gb_%' OR session_id LIKE 'sess_ae_%';");
+  } catch (_) {}
 
   try {
     db.run("ALTER TABLE chat_messages ADD COLUMN rating REAL;");
@@ -2681,13 +2621,12 @@ app.get('/api/analytics/dashboard', (req, res) => {
       });
     }
 
-    // 1. Real-time Live Users (active within last 3 minutes)
-    let liveUsersCount = 1;
+    // 1. Real-time Live Users (active within last 3 minutes strictly from D1)
+    let liveUsersCount = 0;
     try {
       const liveRes = db.exec("SELECT COUNT(*) FROM analytics_sessions WHERE last_active_at >= datetime('now', '-3 minutes')");
       if (liveRes[0]?.values[0]) {
-        const c = Number(liveRes[0].values[0][0]) || 0;
-        liveUsersCount = Math.max(1, c);
+        liveUsersCount = Number(liveRes[0].values[0][0]) || 0;
       }
     } catch (_) {}
 
@@ -2716,7 +2655,7 @@ app.get('/api/analytics/dashboard', (req, res) => {
     } catch (_) {}
 
     // 4. Bounce Rate calculation (% of sessions with only 1 pageview)
-    let bounceRatePercent = 28;
+    let bounceRatePercent = 0;
     try {
       const bounceRes = db.exec(`
         SELECT COUNT(*) FROM (
@@ -2827,7 +2766,7 @@ app.get('/api/analytics/dashboard', (req, res) => {
       osStmt.free();
     } catch (_) {}
 
-    // 8. Outbound OTT Clicks
+    // 8. Outbound OTT Clicks & Events Breakdown
     const outboundClicks: any[] = [];
     try {
       const outStmt = db.prepare(`
@@ -2842,6 +2781,22 @@ app.get('/api/analytics/dashboard', (req, res) => {
         outboundClicks.push(outStmt.getAsObject());
       }
       outStmt.free();
+    } catch (_) {}
+
+    const eventsBreakdown: any[] = [];
+    try {
+      const ebStmt = db.prepare(`
+        SELECT event_type, COUNT(*) as count
+        FROM analytics_events
+        WHERE ${timeFilter}
+        GROUP BY event_type
+        ORDER BY count DESC
+        LIMIT 10
+      `);
+      while (ebStmt.step()) {
+        eventsBreakdown.push(ebStmt.getAsObject());
+      }
+      ebStmt.free();
     } catch (_) {}
 
     // 9. Recent Telemetry Events Stream
@@ -2876,6 +2831,7 @@ app.get('/api/analytics/dashboard', (req, res) => {
         browsers,
         os: osList,
         outboundClicks,
+        eventsBreakdown,
         recentEvents
       }
     });
