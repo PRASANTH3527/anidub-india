@@ -65,7 +65,6 @@ import { cloudflareApi } from '../services/cloudflareApi';
 import { CLOUDFLARE_API_URL, getCloudflareUrl } from '../config/cloudflare';
 import Papa from 'papaparse';
 import { AniDubLogo } from './AniDubLogo';
-import { cleanWatchUrl } from '../utils/urlCleaning';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 
 export interface AdminDashboardProps {
@@ -1258,13 +1257,13 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
       poster_url: editedData.posterUrl || resolvedImage,
       streaming_partners: (editedData.streaming_partners || editedData.platforms_data || editingAnime?.streaming_partners || editingAnime?.platforms_data || []).map((p: any) => ({
         ...p,
-        url: cleanWatchUrl(p.url || '')
+        url: p.url ? String(p.url).trim() : ''
       })),
       platforms_data: (editedData.platforms_data || editedData.streaming_partners || editingAnime?.platforms_data || editingAnime?.streaming_partners || []).map((p: any) => ({
         ...p,
-        url: cleanWatchUrl(p.url || '')
+        url: p.url ? String(p.url).trim() : ''
       })),
-      watch_url: cleanWatchUrl(editedData.watch_url !== undefined ? editedData.watch_url : (editingAnime?.watch_url || '')),
+      watch_url: editedData.watch_url !== undefined ? String(editedData.watch_url).trim() : (editingAnime?.watch_url ? String(editingAnime.watch_url).trim() : ''),
       platform: editedData.platform || editingAnime?.platform || 'Crunchyroll',
       mixed_entries: editedData.mixed_entries !== undefined ? editedData.mixed_entries : (editedData.mixedEntries !== undefined ? editedData.mixedEntries : (editingAnime?.mixed_entries || editingAnime?.mixedEntries || [])),
       mixedEntries: editedData.mixedEntries !== undefined ? editedData.mixedEntries : (editedData.mixed_entries !== undefined ? editedData.mixed_entries : (editingAnime?.mixedEntries || editingAnime?.mixed_entries || [])),

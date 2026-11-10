@@ -1130,18 +1130,7 @@ function normalizeAnimeType(val: any): string {
 
 function cleanWatchUrl(rawUrl?: string | null): string {
   if (!rawUrl || typeof rawUrl !== 'string') return '';
-  const trimmed = rawUrl.trim();
-  if (!trimmed) return '';
-
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return `${parsed.origin}${parsed.pathname}`;
-    }
-    return trimmed.split('?')[0].split('#')[0].trim();
-  } catch {
-    return trimmed.split('?')[0].split('#')[0].trim();
-  }
+  return rawUrl.trim();
 }
 
 // POST /api/anime (Create Anime)
@@ -1151,16 +1140,16 @@ app.post('/api/anime', (req, res) => {
     const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, season, year, genres, languages, platform, type, Type, studio, episodes_per_season, mixedEntries, watch_url, platforms_data } = req.body;
     if (!title) return res.status(400).json({ error: "Title is required" });
 
-    // Clean tracking parameters and query strings from watch_url and platform links
-    const cleanedWatchUrl = watch_url ? cleanWatchUrl(watch_url) : '';
+    // Preserve watch_url and platform streaming links exactly as entered, retaining all query parameters
+    const cleanedWatchUrl = watch_url ? String(watch_url).trim() : '';
     let cleanedPlatformsData = platforms_data;
     if (Array.isArray(platforms_data)) {
-      cleanedPlatformsData = platforms_data.map((p: any) => ({ ...p, url: cleanWatchUrl(p.url) }));
+      cleanedPlatformsData = platforms_data.map((p: any) => ({ ...p, url: p.url ? String(p.url).trim() : '' }));
     } else if (typeof platforms_data === 'string' && platforms_data.trim()) {
       try {
         const parsed = JSON.parse(platforms_data);
         if (Array.isArray(parsed)) {
-          cleanedPlatformsData = parsed.map((p: any) => ({ ...p, url: cleanWatchUrl(p.url) }));
+          cleanedPlatformsData = parsed.map((p: any) => ({ ...p, url: p.url ? String(p.url).trim() : '' }));
         }
       } catch {}
     }
@@ -1408,7 +1397,7 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
     const resolvedType = (type || Type) ? normalizeAnimeType(type || Type) : null;
     const resolvedSubStatus = submissionStatus || approval_status || null;
 
-    // Robust extraction of streaming partners with clean URLs
+    // Robust extraction of streaming partners, preserving exact URLs and query parameters
     const rawPartners = streaming_partners !== undefined 
       ? streaming_partners 
       : (streamingPartners !== undefined 
@@ -1417,12 +1406,12 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
     
     let cleanedPartners = rawPartners;
     if (Array.isArray(rawPartners)) {
-      cleanedPartners = rawPartners.map((p: any) => ({ ...p, url: cleanWatchUrl(p.url) }));
+      cleanedPartners = rawPartners.map((p: any) => ({ ...p, url: p.url ? String(p.url).trim() : '' }));
     } else if (typeof rawPartners === 'string' && rawPartners.trim()) {
       try {
         const parsed = JSON.parse(rawPartners);
         if (Array.isArray(parsed)) {
-          cleanedPartners = parsed.map((p: any) => ({ ...p, url: cleanWatchUrl(p.url) }));
+          cleanedPartners = parsed.map((p: any) => ({ ...p, url: p.url ? String(p.url).trim() : '' }));
         }
       } catch {}
     }
@@ -1432,11 +1421,11 @@ app.put('/api/anime/:id', requireAdminAuth, (req, res) => {
       : null;
 
     let resolvedWatchUrl = watch_url !== undefined 
-      ? cleanWatchUrl(String(watch_url)) 
-      : (watchUrl !== undefined ? cleanWatchUrl(String(watchUrl)) : null);
+      ? (watch_url !== null ? String(watch_url).trim() : null) 
+      : (watchUrl !== undefined ? (watchUrl !== null ? String(watchUrl).trim() : null) : null);
     
     if (resolvedWatchUrl === null && Array.isArray(cleanedPartners) && cleanedPartners.length > 0) {
-      resolvedWatchUrl = cleanWatchUrl(cleanedPartners.find((p: any) => p.url?.trim())?.url || cleanedPartners[0].url || '');
+      resolvedWatchUrl = String(cleanedPartners.find((p: any) => p.url?.trim())?.url || cleanedPartners[0].url || '').trim();
     }
 
     // Robust extraction of mixed entries (Seasons, OVAs, Movies)

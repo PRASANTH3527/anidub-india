@@ -182,18 +182,7 @@ const SEED_ANIME = [
 
 function cleanWatchUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return '';
-  const trimmed = rawUrl.trim();
-  if (!trimmed) return '';
-
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return `${parsed.origin}${parsed.pathname}`;
-    }
-    return trimmed.split('?')[0].split('#')[0].trim();
-  } catch {
-    return trimmed.split('?')[0].split('#')[0].trim();
-  }
+  return rawUrl.trim();
 }
 
 function getCorsHeaders(request) {
@@ -737,12 +726,12 @@ export default {
             let rawPlatforms = body.streaming_partners !== undefined ? body.streaming_partners : (body.streamingPartners !== undefined ? body.streamingPartners : (body.platforms_data !== undefined ? body.platforms_data : body.platformsData));
             if (rawPlatforms !== undefined) {
               if (Array.isArray(rawPlatforms)) {
-                rawPlatforms = rawPlatforms.map(p => ({ ...p, url: cleanWatchUrl(p.url) }));
+                rawPlatforms = rawPlatforms.map(p => ({ ...p, url: p.url ? String(p.url).trim() : '' }));
               }
               platformsDataStr = typeof rawPlatforms === 'string' ? rawPlatforms : JSON.stringify(rawPlatforms);
             }
             const rawWatchUrl = body.watch_url !== undefined ? body.watch_url : body.watchUrl;
-            const watchUrl = cleanWatchUrl(rawWatchUrl);
+            const watchUrl = rawWatchUrl ? String(rawWatchUrl).trim() : '';
 
             const rawMixed = body.mixed_entries !== undefined ? body.mixed_entries : (body.mixedEntries !== undefined ? body.mixedEntries : null);
             let mixedDataStr = null;

@@ -19,18 +19,7 @@ const D1_DATABASE_ID = '75f053ab-5b44-4d48-abf8-b3a357a89426';
 
 function cleanWatchUrl(rawUrl?: string | null): string {
   if (!rawUrl || typeof rawUrl !== 'string') return '';
-  const trimmed = rawUrl.trim();
-  if (!trimmed) return '';
-
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return `${parsed.origin}${parsed.pathname}`;
-    }
-    return trimmed.split('?')[0].split('#')[0].trim();
-  } catch {
-    return trimmed.split('?')[0].split('#')[0].trim();
-  }
+  return rawUrl.trim();
 }
 
 function escapeTelegramHtml(text: any): string {
@@ -426,12 +415,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const rawPartners = body.streaming_partners !== undefined ? body.streaming_partners : body.platforms_data;
         let cleanedPartners = rawPartners;
         if (Array.isArray(rawPartners)) {
-          cleanedPartners = rawPartners.map((p: any) => ({ ...p, url: cleanWatchUrl(p.url) }));
+          cleanedPartners = rawPartners.map((p: any) => ({ ...p, url: p.url ? String(p.url).trim() : '' }));
         } else if (typeof rawPartners === 'string' && rawPartners.trim()) {
           try {
             const parsed = JSON.parse(rawPartners);
             if (Array.isArray(parsed)) {
-              cleanedPartners = parsed.map((p: any) => ({ ...p, url: cleanWatchUrl(p.url) }));
+              cleanedPartners = parsed.map((p: any) => ({ ...p, url: p.url ? String(p.url).trim() : '' }));
             }
           } catch {}
         }
@@ -439,9 +428,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           ? (typeof cleanedPartners === 'string' ? cleanedPartners : JSON.stringify(cleanedPartners))
           : null;
 
-        let resolvedWatchUrl = body.watch_url !== undefined ? cleanWatchUrl(String(body.watch_url)) : null;
+        let resolvedWatchUrl = body.watch_url !== undefined ? (body.watch_url !== null ? String(body.watch_url).trim() : null) : null;
         if (!resolvedWatchUrl && Array.isArray(cleanedPartners) && cleanedPartners.length > 0) {
-          resolvedWatchUrl = cleanWatchUrl(cleanedPartners.find((p: any) => p.url?.trim())?.url || cleanedPartners[0].url || '');
+          resolvedWatchUrl = String(cleanedPartners.find((p: any) => p.url?.trim())?.url || cleanedPartners[0].url || '').trim();
         }
 
         const rawMixed = body.mixed_entries !== undefined 
