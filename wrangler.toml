@@ -12,5 +12,8 @@ binding = "DB"
 database_name = "anime-db"
 database_id = "75f053ab-5b44-4d48-abf8-b3a357a89426"
 
+pages_build_output_dir = "dist"
+
 [vars]
 ENVIRONMENT = "production"
+
