@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { 
   Flame, 
@@ -45,6 +46,7 @@ export interface AnimeCardProps {
   anime: AnimeCardData;
   onSelect: (anime: AnimeCardData) => void;
   index?: number;
+  priority?: boolean;
   isBookmarked?: boolean;
   onToggleBookmark?: (id: number) => void;
   isLiked?: boolean;
@@ -70,6 +72,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   anime,
   onSelect,
   index = 0,
+  priority,
   isBookmarked = false,
   onToggleBookmark,
   isLiked,
@@ -81,7 +84,8 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 }) => {
   const { user, isSignedIn } = useUser();
   const shouldReduceMotion = useReducedMotion();
-  const staggerDelay = shouldReduceMotion ? 0 : Math.min((index % 12) * 0.05, 0.4);
+  const isPriorityCard = priority !== undefined ? priority : index < 4;
+  const staggerDelay = shouldReduceMotion || isPriorityCard ? 0 : Math.min((index % 12) * 0.05, 0.4);
   // Real Clerk-Based Vote States
   const [internalLiked, setInternalLiked] = useState<boolean>(Boolean(isLiked));
   const [internalUpvoted, setInternalUpvoted] = useState<boolean>(Boolean(isUpvoted));
@@ -106,18 +110,22 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
     toast = null;
   }
 
-  // Check real user vote status from backend on mount or user change
+  // Defer vote status check until browser idle time so it never competes with above-the-fold LCP image downloads
   useEffect(() => {
+    if (!user?.id) return;
     let isMounted = true;
-    cloudflareApi.checkVoteStatus(anime.id, user?.id).then((status) => {
-      if (isMounted) {
-        if (status.hasLiked) setInternalLiked(true);
-        if (status.hasUpvoted) setInternalUpvoted(true);
-      }
-    }).catch(() => {});
+    const timer = setTimeout(() => {
+      cloudflareApi.checkVoteStatus(anime.id, user?.id).then((status) => {
+        if (isMounted) {
+          if (status.hasLiked) setInternalLiked(true);
+          if (status.hasUpvoted) setInternalUpvoted(true);
+        }
+      }).catch(() => {});
+    }, 1200);
 
     return () => {
       isMounted = false;
+      clearTimeout(timer);
     };
   }, [anime.id, user?.id]);
 
@@ -365,8 +373,8 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 
   return (
     <motion.div
-      initial={shouldReduceMotion ? false : { opacity: 0, y: 30 }}
-      whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+      initial={shouldReduceMotion || isPriorityCard ? false : { opacity: 0, y: 30 }}
+      whileInView={shouldReduceMotion || isPriorityCard ? undefined : { opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.1 }}
       transition={{ 
         duration: 0.5, 
@@ -390,16 +398,15 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 
         {/* POSTER CONTAINER */}
         <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
-          <img
+          <Image
             src={getCleanCover()}
             alt={anime.title}
-            loading="lazy"
-            decoding="async"
+            priority={isPriorityCard}
+            loading={isPriorityCard ? undefined : "lazy"}
+            sizes="(max-width: 640px) 48vw, (max-width: 768px) 32vw, (max-width: 1024px) 24vw, 200px"
             width={300}
             height={420}
-            onError={(e) => {
-              e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
-            }}
+            quality={75}
             className="w-full h-full object-cover object-center sm:group-hover:scale-105 transition-transform duration-300"
           />
           {/* Bottom gradient overlay */}

@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import Script from 'next/script';
 import { useUser } from '@clerk/clerk-react';
 import { 
   getOrCreateSessionId, 
@@ -20,6 +21,7 @@ export const GodModeTracker: React.FC<GodModeTrackerProps> = ({
 }) => {
   const { user } = useUser();
   const clerkUserId = user?.id || null;
+  const [trackerReady, setTrackerReady] = useState(false);
 
   // Resolve current active effective route path
   const effectivePath = React.useMemo(() => {
@@ -56,8 +58,10 @@ export const GodModeTracker: React.FC<GodModeTrackerProps> = ({
     });
   };
 
-  // 1. Initial pageview & route transitions
+  // 1. Initial pageview & route transitions (deferred until lazyOnload trackerReady)
   useEffect(() => {
+    if (!trackerReady) return;
+
     // If path changed, flush stats for the previous path first
     if (activePathRef.current !== effectivePath) {
       flushPageviewMetrics(false);
@@ -77,7 +81,7 @@ export const GodModeTracker: React.FC<GodModeTrackerProps> = ({
       timeSpentSeconds: 0,
       maxScrollDepth: maxScrollRef.current
     });
-  }, [effectivePath]);
+  }, [effectivePath, trackerReady]);
 
   // 2. Scroll depth passive listener
   useEffect(() => {
@@ -195,5 +199,11 @@ export const GodModeTracker: React.FC<GodModeTrackerProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  return null; // Headless tracker component
+  return (
+    <Script
+      id="god-mode-edge-telemetry"
+      strategy="lazyOnload"
+      onReady={() => setTrackerReady(true)}
+    />
+  );
 };

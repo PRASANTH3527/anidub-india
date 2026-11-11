@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import Image from 'next/image';
 import { motion, useReducedMotion } from 'motion/react';
 import { 
   Clock, 
@@ -130,13 +131,13 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
             >
               {/* POSTER WRAPPER */}
               <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-900">
-                <img
+                <Image
                   src={anime.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
                   alt={anime.title}
                   loading="lazy"
-                  onError={(e) => {
-                    e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
-                  }}
+                  sizes="(max-width: 640px) 144px, 176px"
+                  width={176}
+                  height={235}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
 

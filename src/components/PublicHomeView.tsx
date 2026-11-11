@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { 
   Play, 
@@ -351,12 +352,14 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
               >
                 {/* 2:3 Poster Area */}
                 <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-950">
-                  <img
+                  <Image
                     src={getAnimeCover(anime)}
                     alt={anime.title}
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
-                    }}
+                    priority={aIdx < 2}
+                    loading={aIdx < 2 ? undefined : "lazy"}
+                    sizes="(max-width: 640px) 140px, 150px"
+                    width={150}
+                    height={225}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0e1222] via-transparent to-black/30" />
@@ -452,12 +455,13 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
               >
                 {/* 2:3 Vertical Poster */}
                 <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-950">
-                  <img
+                  <Image
                     src={getAnimeCover(anime)}
                     alt={anime.title}
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80';
-                    }}
+                    loading="lazy"
+                    sizes="(max-width: 640px) 48vw, (max-width: 1024px) 25vw, 200px"
+                    width={300}
+                    height={450}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0e1222] via-transparent to-black/25" />

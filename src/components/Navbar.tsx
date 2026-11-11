@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { motion, useReducedMotion } from 'motion/react';
 import { useUser } from '@clerk/clerk-react';
 import { 
@@ -19,9 +20,10 @@ import {
   Shield
 } from 'lucide-react';
 import { useToast } from './Toast';
-import { MicPermissionBottomSheet } from './MicPermissionBottomSheet';
-import { VoiceVisualizer } from './VoiceVisualizer';
 import { AniDubLogo } from './AniDubLogo';
+
+const MicPermissionBottomSheet = dynamic(() => import('./MicPermissionBottomSheet').then(m => m.MicPermissionBottomSheet), { ssr: false });
+const VoiceVisualizer = dynamic(() => import('./VoiceVisualizer').then(m => m.VoiceVisualizer), { ssr: false });
 
 interface NavbarProps {
   activeTab: string;

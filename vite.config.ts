@@ -11,6 +11,26 @@ export default defineConfig(() => {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),
         '@clerk/clerk-react': path.resolve(import.meta.dirname, 'src/lib/clerk.tsx'),
+        'next/image': path.resolve(import.meta.dirname, 'src/lib/next-image.tsx'),
+        'next/dynamic': path.resolve(import.meta.dirname, 'src/lib/next-dynamic.tsx'),
+        'next/script': path.resolve(import.meta.dirname, 'src/lib/next-script.tsx'),
+      },
+    },
+    build: {
+      target: 'es2020',
+      cssCodeSplit: true,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('lucide-react')) return 'icons-vendor';
+              if (id.includes('framer-motion') || id.includes('motion')) return 'motion-vendor';
+              if (id.includes('papaparse')) return 'csv-vendor';
+              if (id.includes('@clerk')) return 'clerk-vendor';
+              if (id.includes('react') || id.includes('react-dom')) return 'react-vendor';
+            }
+          },
+        },
       },
     },
     server: {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, 
@@ -539,12 +540,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
       {/* 1. VIBRANT FULL-BLEED BACKGROUND */}
       <div className="fixed inset-0 z-0 pointer-events-none">
-        <img 
+        <Image 
           src={coverImage} 
           alt={title}
-          onError={(e) => {
-            e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80';
-          }}
+          loading="lazy"
+          sizes="100vw"
+          width={640}
+          height={360}
+          quality={60}
           className="w-full h-full object-cover blur-[100px] opacity-70 saturate-[1.5]" 
         />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#050507]/90"></div>
@@ -594,12 +597,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         {/* Poster */}
         <div className="relative w-44 h-64 mx-auto mb-6">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-48 bg-purple-600 blur-[70px] opacity-50 pointer-events-none"></div>
-          <img
+          <Image
             src={posterImage}
             alt={title}
-            onError={(e) => {
-              e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
-            }}
+            priority
+            sizes="176px"
+            width={176}
+            height={256}
+            quality={80}
             className="relative w-44 h-64 rounded-2xl shadow-[0_20px_50px_rgba(168,85,247,0.4)] border border-white/10 object-cover z-10"
           />
         </div>

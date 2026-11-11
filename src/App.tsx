@@ -1,26 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
 import { CatalogView } from './components/CatalogView';
-import { FeedbackSection } from './components/FeedbackSection';
 import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown, Loader2 } from 'lucide-react';
 import { cloudflareApi } from './services/cloudflareApi';
 import { getCloudflareUrl, CLOUDFLARE_API_URL } from './config/cloudflare';
 import { AniDubLogo } from './components/AniDubLogo';
-import { GodModeTracker } from './components/GodModeTracker';
-
-// Code-split heavy, non-critical views and modals using React.lazy
-const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
-const AnimeDetailModal = React.lazy(() => import('./components/AnimeDetailModal').then(m => ({ default: m.AnimeDetailModal })));
-const RouletteModal = React.lazy(() => import('./components/RouletteModal').then(m => ({ default: m.RouletteModal })));
-const CreateCollectionModal = React.lazy(() => import('./components/CreateCollectionModal').then(m => ({ default: m.CreateCollectionModal })));
-const DubInfoModal = React.lazy(() => import('./components/DubInfoModal').then(m => ({ default: m.DubInfoModal })));
-const WatchlistView = React.lazy(() => import('./components/WatchlistView').then(m => ({ default: m.WatchlistView })));
-const WeeklyScheduleView = React.lazy(() => import('./components/WeeklyScheduleView').then(m => ({ default: m.WeeklyScheduleView })));
-const ProfileView = React.lazy(() => import('./components/ProfileView').then(m => ({ default: m.ProfileView })));
-const AnimeTierListMaker = React.lazy(() => import('./components/AnimeTierListMaker').then(m => ({ default: m.AnimeTierListMaker })));
-const RecommendationSystem = React.lazy(() => import('./components/RecommendationSystem').then(m => ({ default: m.RecommendationSystem })));
-const CommunityChatView = React.lazy(() => import('./components/CommunityChatView').then(m => ({ default: m.CommunityChatView })));
 
 const ViewLoadingFallback = () => (
   <div className="w-full min-h-[50vh] flex flex-col items-center justify-center p-8 space-y-3">
@@ -34,6 +20,21 @@ const ModalLoadingFallback = () => (
     <Loader2 className="w-10 h-10 text-purple-400 animate-spin" />
   </div>
 );
+
+// Dynamically import heavy, below-the-fold, and non-critical views using next/dynamic
+const GodModeTracker = dynamic(() => import('./components/GodModeTracker').then(m => m.GodModeTracker), { ssr: false });
+const FeedbackSection = dynamic(() => import('./components/FeedbackSection').then(m => m.FeedbackSection), { ssr: false });
+const AdminDashboard = dynamic(() => import('./components/AdminDashboard').then(m => m.AdminDashboard), { loading: ViewLoadingFallback, ssr: false });
+const AnimeDetailModal = dynamic(() => import('./components/AnimeDetailModal').then(m => m.AnimeDetailModal), { loading: ModalLoadingFallback, ssr: false });
+const RouletteModal = dynamic(() => import('./components/RouletteModal').then(m => m.RouletteModal), { loading: ModalLoadingFallback, ssr: false });
+const CreateCollectionModal = dynamic(() => import('./components/CreateCollectionModal').then(m => m.CreateCollectionModal), { loading: ModalLoadingFallback, ssr: false });
+const DubInfoModal = dynamic(() => import('./components/DubInfoModal').then(m => m.DubInfoModal), { loading: ModalLoadingFallback, ssr: false });
+const WatchlistView = dynamic(() => import('./components/WatchlistView').then(m => m.WatchlistView), { loading: ViewLoadingFallback, ssr: false });
+const WeeklyScheduleView = dynamic(() => import('./components/WeeklyScheduleView').then(m => m.WeeklyScheduleView), { loading: ViewLoadingFallback, ssr: false });
+const ProfileView = dynamic(() => import('./components/ProfileView').then(m => m.ProfileView), { loading: ViewLoadingFallback, ssr: false });
+const AnimeTierListMaker = dynamic(() => import('./components/AnimeTierListMaker').then(m => m.AnimeTierListMaker), { loading: ViewLoadingFallback, ssr: false });
+const RecommendationSystem = dynamic(() => import('./components/RecommendationSystem').then(m => m.RecommendationSystem), { loading: ViewLoadingFallback, ssr: false });
+const CommunityChatView = dynamic(() => import('./components/CommunityChatView').then(m => m.CommunityChatView), { loading: ViewLoadingFallback, ssr: false });
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');

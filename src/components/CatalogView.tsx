@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { motion } from 'motion/react';
 import { 
   Star, 
@@ -19,13 +20,14 @@ import {
 } from 'lucide-react';
 import { filterAndSortCatalog } from '../utils/pagination';
 import { AnimeCard, AnimeCardData } from './AnimeCard';
-import { RecentlyViewedRow } from './RecentlyViewedRow';
 import { AnimatedStats } from './AnimatedStats';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { calculateCatalogStats, computeDynamicLanguageFilters } from '../utils/languages';
 import { SkeletonGrid } from './SkeletonGrid';
 import { proxyUrl } from '../utils/imgbb';
 import { translate, SupportedLanguage } from '../utils/i18n';
+
+const RecentlyViewedRow = dynamic(() => import('./RecentlyViewedRow').then(m => m.RecentlyViewedRow), { ssr: false });
 
 export interface Anime {
   id: number;
@@ -182,11 +184,12 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
 
   const fetchCatalogFromBackend = useCallback(async () => {
+    // Skip duplicate network fetch if parent App already provides catalogList
+    if (catalogList !== undefined) return;
     setLoading(true);
     try {
       const { data } = await cloudflareApi.fetchCatalog({ limit: 5000 });
       if (data && data.length > 0) {
-        // Strictly filter out and hide any anime where status === 'pending' or submissionStatus === 'pending'
         const approvedOnly = data.filter((item: any) => 
           item.status !== 'pending' && 
           item.submissionStatus !== 'pending'
@@ -209,7 +212,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [catalogList]);
 
   useEffect(() => {
     fetchCatalogFromBackend();
@@ -518,11 +521,8 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </div>
         ) : (
           /* 2. CARD CONTAINER USING AnimeCard WITH RESPONSIVE COLUMNS & COMPACT MOBILE GAPS */
-          <motion.div 
+          <div 
             key={`catalog_grid_${selectedLanguage}_${selectedGenre}_${selectedPlatform}_${selectedType}_${selectedStatus}_${selectedSort}`}
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1.0] }}
             className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3.5 md:gap-4.5"
           >
             {displayedAnime.map((anime, idx) => {
@@ -532,6 +532,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                   key={`catalog_anime_${anime.id}_${idx}`}
                   anime={anime}
                   index={idx}
+                  priority={idx < 4}
                   onSelect={(a) => onSelectAnime(a as any)}
                   isBookmarked={isWatchlisted}
                   onToggleBookmark={onToggleWatchlist}
@@ -540,7 +541,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 />
               );
             })}
-          </motion.div>
+          </div>
         )}
 
         {/* Intersection Observer Sentinel & Loading Spinner */}

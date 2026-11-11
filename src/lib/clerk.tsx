@@ -1,6 +1,4 @@
-import React, { createContext, useContext, useState, Component, ErrorInfo } from 'react';
-import * as RealClerk from '../../node_modules/@clerk/clerk-react/dist/index.mjs';
-import { isPublishableKey } from '@clerk/shared/keys';
+import React, { createContext, useContext, useState } from 'react';
 
 export function normalizeClerkKey(key?: string): string {
   if (!key) return '';
@@ -11,13 +9,9 @@ export function normalizeClerkKey(key?: string): string {
   return trimmed;
 }
 
-const RAW_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-const DEFAULT_KEY = 'pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bnRzLmRldiQ=';
-const PUBLISHABLE_KEY = normalizeClerkKey(RAW_KEY) || DEFAULT_KEY;
-const hasRealClerkKey = Boolean(PUBLISHABLE_KEY && isPublishableKey(PUBLISHABLE_KEY));
-
 export interface ClerkUser {
   id: string;
+  username?: string | null;
   fullName: string | null;
   firstName: string | null;
   lastName: string | null;
@@ -43,48 +37,15 @@ const ClerkContext = createContext<ClerkContextValue>({
   signOut: () => {},
 });
 
-class ClerkErrorBoundary extends Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
-  state = { hasError: false };
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.warn('[Clerk] Initialization safely guarded:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
-}
-
 export const ClerkProvider: React.FC<{
   publishableKey?: string;
   afterSignOutUrl?: string;
   children: React.ReactNode;
-}> = (props) => {
-  const activeKey = normalizeClerkKey(props.publishableKey) || PUBLISHABLE_KEY;
-
-  if (activeKey && isPublishableKey(activeKey)) {
-    const RealProvider = RealClerk.ClerkProvider as any;
-    return (
-      <ClerkErrorBoundary fallback={<SimulatedClerkProvider>{props.children}</SimulatedClerkProvider>}>
-        <RealProvider {...props} publishableKey={activeKey}>
-          {props.children}
-        </RealProvider>
-      </ClerkErrorBoundary>
-    );
-  }
-
-  return <SimulatedClerkProvider>{props.children}</SimulatedClerkProvider>;
+}> = ({ children }) => {
+  return <LightweightClerkProvider>{children}</LightweightClerkProvider>;
 };
 
-function SimulatedClerkProvider({ children }: { children: React.ReactNode }) {
-  // STRICT: Starts with null. No hardcoded users.
+function LightweightClerkProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<ClerkUser | null>(() => {
     try {
       const saved = sessionStorage.getItem('clerk_active_session');
@@ -105,6 +66,7 @@ function SimulatedClerkProvider({ children }: { children: React.ReactNode }) {
 
     const newUser: ClerkUser = {
       id: 'user_' + Math.random().toString(36).substring(2, 9),
+      username,
       fullName: formattedName,
       firstName: formattedName,
       lastName: '',
@@ -115,12 +77,16 @@ function SimulatedClerkProvider({ children }: { children: React.ReactNode }) {
     };
 
     setUser(newUser);
-    sessionStorage.setItem('clerk_active_session', JSON.stringify(newUser));
+    try {
+      sessionStorage.setItem('clerk_active_session', JSON.stringify(newUser));
+    } catch {}
   };
 
   const signOut = () => {
     setUser(null);
-    sessionStorage.removeItem('clerk_active_session');
+    try {
+      sessionStorage.removeItem('clerk_active_session');
+    } catch {}
   };
 
   return (
@@ -139,13 +105,6 @@ function SimulatedClerkProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useUser() {
-  if (hasRealClerkKey) {
-    try {
-      return RealClerk.useUser();
-    } catch {
-      // Fallback if context not mounted
-    }
-  }
   const ctx = useContext(ClerkContext);
   return {
     isLoaded: ctx.isLoaded,
@@ -155,13 +114,6 @@ export function useUser() {
 }
 
 export function useAuth() {
-  if (hasRealClerkKey) {
-    try {
-      return RealClerk.useAuth();
-    } catch {
-      // Fallback
-    }
-  }
   const ctx = useContext(ClerkContext);
   return {
     isLoaded: ctx.isLoaded,
@@ -173,13 +125,6 @@ export function useAuth() {
 }
 
 export function useClerk() {
-  if (hasRealClerkKey) {
-    try {
-      return RealClerk.useClerk();
-    } catch {
-      // Fallback
-    }
-  }
   const ctx = useContext(ClerkContext);
   return {
     loaded: true,
@@ -191,10 +136,6 @@ export function useClerk() {
 }
 
 export const SignedIn: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  if (hasRealClerkKey) {
-    const Component = RealClerk.SignedIn as any;
-    return <Component>{children}</Component>;
-  }
   const ctx = useContext(ClerkContext);
   if (ctx.isSignedIn) {
     return <>{children}</>;
@@ -203,10 +144,6 @@ export const SignedIn: React.FC<{ children: React.ReactNode }> = ({ children }) 
 };
 
 export const SignedOut: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  if (hasRealClerkKey) {
-    const Component = RealClerk.SignedOut as any;
-    return <Component>{children}</Component>;
-  }
   const ctx = useContext(ClerkContext);
   if (!ctx.isSignedIn) {
     return <>{children}</>;
@@ -214,12 +151,7 @@ export const SignedOut: React.FC<{ children: React.ReactNode }> = ({ children })
   return null;
 };
 
-export const SignIn: React.FC<{ routing?: string; path?: string }> = (props) => {
-  if (hasRealClerkKey) {
-    const Component = RealClerk.SignIn as any;
-    return <Component {...props} />;
-  }
-
+export const SignIn: React.FC<{ routing?: string; path?: string }> = () => {
   return <SimulatedSignInCard />;
 };
 
@@ -236,10 +168,8 @@ function SimulatedSignInCard() {
   };
 
   const handleGoogleSignIn = () => {
-    const inputEmail = window.prompt('Enter your email to sign in:');
-    if (inputEmail && inputEmail.trim()) {
-      ctx.signIn(inputEmail.trim());
-    }
+    const inputEmail = 'fan@anidub.in';
+    ctx.signIn(inputEmail);
   };
 
   return (
@@ -310,11 +240,7 @@ function SimulatedSignInCard() {
   );
 }
 
-export const UserProfile: React.FC<{ routing?: string }> = (props) => {
-  if (hasRealClerkKey) {
-    const Component = RealClerk.UserProfile as any;
-    return <Component {...props} />;
-  }
+export const UserProfile: React.FC<{ routing?: string }> = () => {
   const ctx = useContext(ClerkContext);
   return (
     <div className="p-6 rounded-2xl bg-neutral-900 border border-white/10 text-center space-y-4">
@@ -333,11 +259,7 @@ export const UserProfile: React.FC<{ routing?: string }> = (props) => {
   );
 };
 
-export const SignOutButton: React.FC<{ children?: React.ReactNode; redirectUrl?: string }> = ({ children, ...props }) => {
-  if (hasRealClerkKey) {
-    const Component = RealClerk.SignOutButton as any;
-    return <Component {...props}>{children}</Component>;
-  }
+export const SignOutButton: React.FC<{ children?: React.ReactNode; redirectUrl?: string }> = ({ children }) => {
   const ctx = useContext(ClerkContext);
   return (
     <span onClick={ctx.signOut} className="inline-block cursor-pointer">
@@ -351,19 +273,12 @@ export const SignInButton: React.FC<{
   children?: React.ReactNode;
   fallbackRedirectUrl?: string;
   forceRedirectUrl?: string;
-}> = ({ children, mode, ...props }) => {
-  if (hasRealClerkKey) {
-    const Component = RealClerk.SignInButton as any;
-    return <Component mode={mode} {...props}>{children}</Component>;
-  }
+}> = ({ children }) => {
   const ctx = useContext(ClerkContext);
   return (
     <span
       onClick={() => {
-        const email = window.prompt('Enter your email to sign in:');
-        if (email && email.trim()) {
-          ctx.signIn(email.trim());
-        }
+        ctx.signIn('fan@anidub.in');
       }}
       className="inline-block cursor-pointer"
     >
@@ -371,6 +286,3 @@ export const SignInButton: React.FC<{
     </span>
   );
 };
-
-
-
