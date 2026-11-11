@@ -188,11 +188,25 @@ function isWorkerClerkAdmin(request, env) {
   }
 }
 
-function isWorkerClerkUser(request) {
+function getWorkerClerkUserId(request) {
   const authHeader = request.headers.get("Authorization") || request.headers.get("authorization") || "";
-  if (!authHeader.startsWith("Bearer ")) return false;
+  if (!authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7).trim();
-  return token.split(".").length === 3;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const payloadJson = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    if (payloadJson.exp && Number(payloadJson.exp) * 1000 < Date.now()) return null;
+    const sub = String(payloadJson.sub || "").trim();
+    if (!sub || sub === "guest") return null;
+    return sub;
+  } catch {
+    return null;
+  }
+}
+
+function isWorkerClerkUser(request) {
+  return Boolean(getWorkerClerkUserId(request));
 }
 
 const SEED_ANIME = [
@@ -396,6 +410,10 @@ export default {
           return jsonResponse([], 200, request);
         }
         if (method === "POST") {
+          const cleanClerkId = getWorkerClerkUserId(request);
+          if (!cleanClerkId) {
+            return jsonResponse({ error: "Unauthorized: Active Clerk user session required" }, 401, request);
+          }
           const body = await request.json().catch(() => ({}));
           const cleanUser = String(body.user || body.username || body.user_name || 'Anonymous Fan').slice(0, 50);
           const cleanText = String(body.text || body.message || body.comment || '').slice(0, 1000);
@@ -403,7 +421,6 @@ export default {
           const cleanRating = body.rating !== undefined && body.rating !== null && !isNaN(Number(body.rating)) ? Number(body.rating) : null;
           const cleanLanguage = (body.language || body.dub_language) ? String(body.language || body.dub_language).slice(0, 30) : null;
           const cleanIsReview = Boolean(body.isReview || body.is_review || cleanRating) ? 1 : 0;
-          const cleanClerkId = String(body.clerk_user_id || body.userId || 'guest').slice(0, 100);
 
           if (!cleanText.trim()) {
             return jsonResponse({ error: "Missing message text" }, 400, request);
@@ -504,14 +521,18 @@ export default {
           return jsonResponse({ reviews: [] }, 200, request);
         }
 
-        // POST Review
+        // POST Review (Requires authenticated Clerk user session)
         if (sub === 'reviews' && method === "POST") {
           try {
+            const userId = getWorkerClerkUserId(request);
+            if (!userId) {
+              return jsonResponse({ error: "Authentication required", requiresAuth: true }, 401, request);
+            }
             const body = await request.json().catch(() => ({}));
             if (env.DB && numericId) {
               await env.DB.prepare(
-                "INSERT INTO reviews (anime_id, user_name, user_avatar, rating, comment) VALUES (?, ?, ?, ?, ?)"
-              ).bind(numericId, body.user_name || 'Anonymous', body.user_avatar || '', body.rating || 10, body.comment || '').run();
+                "INSERT INTO reviews (anime_id, user_id, user_name, user_avatar, rating, comment) VALUES (?, ?, ?, ?, ?, ?)"
+              ).bind(numericId, userId, body.user_name || 'Anonymous', body.user_avatar || '', body.rating || 10, body.comment || '').run();
             }
             
             // Query title for notification
@@ -536,13 +557,13 @@ export default {
           }
         }
 
-        // GET Vote Status (Checks if authenticated user has already liked or upvoted)
+        // GET Vote Status (Checks if authenticated user has already liked or upvoted strictly via Bearer JWT)
         if (sub === 'vote-status' && method === "GET") {
           try {
-            const userId = url.searchParams.get('userId') || url.searchParams.get('user_id') || request.headers.get('x-user-id') || request.headers.get('x-device-id') || 'default_user';
+            const userId = getWorkerClerkUserId(request);
             let hasLiked = false;
             let hasUpvoted = false;
-            if (env.DB && numericId && userId && userId !== 'default_user') {
+            if (env.DB && numericId && userId) {
               const likeCheck = await env.DB.prepare(
                 "SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'like'"
               ).bind(numericId, userId).first().catch(() => null);
@@ -558,11 +579,10 @@ export default {
           }
         }
 
-        // POST Vote / Upvote (with Authentication & Unique Constraint Spam Prevention)
+        // POST Vote / Upvote (Strictly extracts userId from Bearer JWT session)
         if ((sub === 'vote' || sub === 'upvote') && method === "POST") {
           try {
-            const body = await request.json().catch(() => ({}));
-            const userId = body.user_id || body.userId || request.headers.get('x-user-id');
+            const userId = getWorkerClerkUserId(request);
             
             if (!userId) {
               return jsonResponse({
@@ -634,11 +654,10 @@ export default {
           }
         }
 
-        // POST Like (with Authentication & Unique Constraint Spam Prevention)
+        // POST Like (Strictly extracts userId from Bearer JWT session)
         if ((sub === 'like' || sub === 'likes') && method === "POST") {
           try {
-            const body = await request.json().catch(() => ({}));
-            const userId = body.user_id || body.userId || request.headers.get('x-user-id');
+            const userId = getWorkerClerkUserId(request);
 
             if (!userId) {
               return jsonResponse({
@@ -750,6 +769,9 @@ export default {
           return fallback ? jsonResponse(fallback, 200, request) : jsonResponse({ error: "Not found" }, 404, request);
         }
         if (method === "PUT" || method === "PATCH") {
+          if (!isWorkerClerkAdmin(request, env)) {
+            return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
+          }
           try {
             const body = await request.json().catch(() => ({}));
             let platformsDataStr = null;
@@ -835,6 +857,9 @@ export default {
           }
         }
         if (method === "DELETE") {
+          if (!isWorkerClerkAdmin(request, env)) {
+            return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
+          }
           try {
             if (env.DB) {
               await env.DB.prepare("DELETE FROM episodes WHERE anime_id = ?").bind(id).run();
@@ -852,6 +877,9 @@ export default {
 
       // 13. Admin Pending Queue
       if (path === "/api/admin/pending" && method === "GET") {
+        if (!isWorkerClerkAdmin(request, env)) {
+          return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
+        }
         try {
           if (env.DB) {
             const { results } = await env.DB.prepare(
@@ -867,6 +895,9 @@ export default {
 
       // 14. Admin CSV Import
       if (path === "/api/admin/import-csv" && method === "POST") {
+        if (!isWorkerClerkAdmin(request, env)) {
+          return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
+        }
         try {
           const body = await request.json();
           let rows = [];
@@ -1088,6 +1119,9 @@ export default {
 
       // 14b. Admin Clear Pending Queue
       if (path === "/api/admin/clear-pending" && method === "POST") {
+        if (!isWorkerClerkAdmin(request, env)) {
+          return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
+        }
         try {
           if (env.DB) {
             await env.DB.prepare("DELETE FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' OR approval_status = 'pending'").run();
@@ -1101,6 +1135,9 @@ export default {
       // 15. Admin Approve / Reject
       const approveMatch = path.match(/^\/api\/admin\/approve\/([0-9a-zA-Z_-]+)$/);
       if (approveMatch && method === "POST") {
+        if (!isWorkerClerkAdmin(request, env)) {
+          return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
+        }
         const id = approveMatch[1];
         if (env.DB) {
           await env.DB.prepare("UPDATE anime SET status = 'Ongoing', submissionStatus = 'approved', approval_status = 'approved', is_published = 1 WHERE id = ?").bind(id).run();
@@ -1110,6 +1147,9 @@ export default {
 
       const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)$/);
       if (rejectMatch && method === "POST") {
+        if (!isWorkerClerkAdmin(request, env)) {
+          return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
+        }
         const id = rejectMatch[1];
         if (env.DB) {
           await env.DB.prepare("DELETE FROM anime WHERE id = ?").bind(id).run();
@@ -1166,7 +1206,7 @@ export default {
           else if (/firefox|fxios/i.test(ua)) browser = "Firefox";
           else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = deviceType === "mobile" ? "Safari Mobile" : "Safari";
 
-          const clerkUserId = payload.clerkUserId || payload.clerk_user_id || null;
+          const clerkUserId = getWorkerClerkUserId(request);
           const referrer = payload.referrer || "direct";
 
           if (env.DB) {
@@ -1214,6 +1254,9 @@ export default {
 
       // 17. GOD-MODE EDGE ANALYTICS: GET /api/analytics/dashboard
       if (path === "/api/analytics/dashboard" && method === "GET") {
+        if (!isWorkerClerkAdmin(request, env)) {
+          return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
+        }
         try {
           const url = new URL(request.url);
           const range = url.searchParams.get("range") || "all";

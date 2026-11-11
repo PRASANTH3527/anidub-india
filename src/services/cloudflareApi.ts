@@ -200,16 +200,11 @@ class CloudflareApiService {
   /**
    * READ: Fetches single anime details by ID or slug from Cloudflare Worker / D1
    */
-  public async getAnimeById(id: number | string, userId?: string): Promise<any> {
-    const qs = userId ? `?userId=${encodeURIComponent(userId)}` : '';
-    const endpoint = `${CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id)}${qs}`;
-    const headers = this.getHeaders();
-    if (userId) {
-      headers['x-user-id'] = userId;
-    }
+  public async getAnimeById(id: number | string, _userId?: string): Promise<any> {
+    const endpoint = CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id);
     const res = await this.smartFetch(endpoint, {
       method: 'GET',
-      headers
+      headers: this.getHeaders()
     });
 
     if (!res.ok) {
@@ -444,17 +439,18 @@ class CloudflareApiService {
   }
 
   /**
-   * LIKE: Registers like increment or decrement in Cloudflare Worker / D1 (Strict 1 like per device via Cookie)
+   * LIKE: Registers like increment or decrement in Cloudflare Worker / D1 (Verified via Clerk Bearer JWT)
    */
   public async likeAnime(id: number | string, options?: { action?: 'like' | 'unlike'; delta?: number; userId?: string }): Promise<{ success: boolean; likes?: number; likesCount?: number }> {
     const endpoint = CLOUDFLARE_ENDPOINTS.LIKE(id);
+    const { userId: _ignoredUserId, ...safeOptions } = options || {};
     let res: Response;
     try {
       res = await this.smartFetch(endpoint, {
         method: 'POST',
         headers: this.getHeaders(false),
         credentials: 'include',
-        body: JSON.stringify(options || {})
+        body: JSON.stringify(safeOptions)
       });
     } catch (networkErr: any) {
       throw new Error(`[Network/Fetch Error] Unable to connect to ${endpoint}: ${networkErr.message}`);
@@ -486,16 +482,17 @@ class CloudflareApiService {
   }
 
   /**
-   * VOTE: Registers community upvote in Cloudflare D1 (Strict 1 vote per device via Cookie)
+   * VOTE: Registers community upvote in Cloudflare D1 (Verified via Clerk Bearer JWT)
    */
   public async upvoteAnime(id: number | string, options?: { action?: 'up' | 'down'; delta?: number; userId?: string }): Promise<{ success: boolean; upvotes?: number; popularity?: number }> {
     const endpoint = CLOUDFLARE_ENDPOINTS.VOTE(id);
+    const { userId: _ignoredUserId, ...safeOptions } = options || {};
     let res: Response;
     try {
       res = await this.smartFetch(endpoint, {
         method: 'POST',
         headers: this.getHeaders(false),
-        body: JSON.stringify(options || {})
+        body: JSON.stringify(safeOptions)
       });
     } catch (networkErr: any) {
       throw new Error(`[Network/Fetch Error] Unable to connect to ${endpoint}: ${networkErr.message}`);
@@ -529,10 +526,9 @@ class CloudflareApiService {
   /**
    * VOTE STATUS: Checks if current authenticated user has already voted for this anime
    */
-  public async checkVoteStatus(id: number | string, userId?: string): Promise<{ hasLiked: boolean; hasUpvoted: boolean }> {
+  public async checkVoteStatus(id: number | string, _userId?: string): Promise<{ hasLiked: boolean; hasUpvoted: boolean }> {
     try {
-      const currentUserId = userId || (typeof window !== 'undefined' && (window as any).Clerk?.user?.id) || '';
-      const endpoint = `/api/anime/${id}/vote-status${currentUserId ? `?userId=${encodeURIComponent(currentUserId)}` : ''}`;
+      const endpoint = `/api/anime/${id}/vote-status`;
       const res = await this.smartFetch(endpoint, {
         headers: this.getHeaders(false)
       });
@@ -691,18 +687,15 @@ class CloudflareApiService {
   }
 
   /**
-   * CHAT: Sends a new message or review to the community chat
+   * CHAT: Sends a new message or review to the community chat (User identity verified on backend from Clerk JWT)
    */
   public async sendChatMessage(payload: any): Promise<{ success: boolean; message?: any; error?: string }> {
     try {
-      const headers: Record<string, string> = {
-        ...this.getHeaders(false),
-        ...(payload.clerk_user_id ? { 'x-clerk-user-id': String(payload.clerk_user_id) } : {})
-      };
+      const { clerk_user_id: _ignoredClerkId, user_id: _ignoredUserId, userId: _ignoredUid, ...safePayload } = payload || {};
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
         method: 'POST',
-        headers,
-        body: JSON.stringify(payload)
+        headers: this.getHeaders(false),
+        body: JSON.stringify(safePayload)
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success !== false) {
@@ -716,26 +709,21 @@ class CloudflareApiService {
   }
 
   /**
-   * RATE: Submits a 10-point community rating for an anime via /api/rate (UPSERT)
+   * RATE: Submits a 10-point community rating for an anime via /api/rate (UPSERT; userId extracted from Clerk JWT on backend)
    */
   public async submitCommunityRating(
     id: number | string,
     rating: number,
-    userId: string,
+    _userId?: string,
     username?: string
   ): Promise<{ success: boolean; communityRating: number; totalVotes: number; userRating: number }> {
     try {
-      const headers = {
-        ...this.getHeaders(false),
-        'x-user-id': userId
-      };
       const res = await this.smartFetch('/api/rate', {
         method: 'POST',
-        headers,
+        headers: this.getHeaders(false),
         body: JSON.stringify({
           anime_id: Number(id),
           rating,
-          user_id: userId,
           username
         })
       });
@@ -755,17 +743,13 @@ class CloudflareApiService {
    */
   public async getCommunityRating(
     id: number | string,
-    userId?: string
+    _userId?: string
   ): Promise<{ communityRating: number; totalVotes: number; userRating: number | null }> {
     try {
       const qs = new URLSearchParams({ anime_id: String(id) });
-      if (userId) qs.set('user_id', userId);
-      const headers = this.getHeaders(false);
-      if (userId) headers['x-user-id'] = userId;
-
       const res = await this.smartFetch(`/api/rate?${qs.toString()}`, {
         method: 'GET',
-        headers
+        headers: this.getHeaders(false)
       });
       if (res.ok) {
         return await res.json();
@@ -777,19 +761,14 @@ class CloudflareApiService {
   }
 
   /**
-   * RATE: Submits a star rating for an anime (backwards compatible)
+   * RATE: Submits a star rating for an anime (backwards compatible; userId extracted from Clerk JWT on backend)
    */
-  public async rateAnime(id: number | string, rating: number, userId?: string, username?: string): Promise<{ success: boolean; rating: number; communityRating?: number; totalVotes?: number }> {
+  public async rateAnime(id: number | string, rating: number, _userId?: string, username?: string): Promise<{ success: boolean; rating: number; communityRating?: number; totalVotes?: number }> {
     try {
-      const headers: Record<string, string> = {
-        ...this.getHeaders(false)
-      };
-      if (userId) headers['x-user-id'] = userId;
-
       const res = await this.smartFetch('/api/rate', {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ anime_id: Number(id), rating, user_id: userId || 'anonymous', username })
+        headers: this.getHeaders(false),
+        body: JSON.stringify({ anime_id: Number(id), rating, username })
       });
       if (res.ok) {
         const data = await res.json();
@@ -1017,13 +996,23 @@ class CloudflareApiService {
   }
 
   /**
-   * D1: Executes a raw SQL query on the edge database
+   * D1: Executes a parameterized query on the edge database using structured parameters (never raw SQL)
    */
-  public async executeD1Query(sql: string): Promise<any> {
+  public async executeD1Query(params: {
+    table?: 'anime' | 'users' | 'logs';
+    animeId?: number | string;
+    title?: string;
+    limit?: number;
+  }): Promise<any> {
     const res = await this.smartFetch('/api/cloudflare/d1/query', {
       method: 'POST',
       headers: this.getHeaders(true),
-      body: JSON.stringify({ sql })
+      body: JSON.stringify({
+        table: params.table || 'anime',
+        animeId: params.animeId,
+        title: params.title,
+        limit: params.limit || 10
+      })
     });
     return await res.json();
   }

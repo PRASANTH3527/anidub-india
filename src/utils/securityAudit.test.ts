@@ -170,12 +170,72 @@ test('Security Audit 4: ImgBB API key & hardcoded credentials are not exposed in
   assert.ok(serverCode.includes('process.env.IMGBB_API_KEY'));
   assert.ok(serverCode.includes('await getAuth(req)'));
   assert.ok(serverCode.includes("app.post('/api/upload', requireUserAuth"));
-  assert.ok(serverCode.includes("app.post('/api/anime', requireUserAuth"));
+  assert.ok(serverCode.includes("app.post('/api/anime', requireAdminAuth"));
+  assert.ok(serverCode.includes("app.put('/api/anime/:id', requireAdminAuth"));
+  assert.ok(serverCode.includes("app.delete('/api/anime/:id', requireAdminAuth"));
   assert.ok(serverCode.includes("app.post(['/api/rate', '/api/anime/:id/rate'], requireUserAuth"));
   assert.ok(serverCode.includes("app.post('/api/anime/:id/reviews', requireUserAuth"));
+  assert.ok(serverCode.includes("app.get('/api/user/profile', requireUserAuth"));
   assert.ok(serverCode.includes("app.put('/api/user/profile', requireUserAuth"));
   assert.ok(serverCode.includes("app.post(['/api/chat', '/api/chat/messages'], requireUserAuth"));
   assert.ok(serverCode.includes("app.post('/api/watchlist', requireUserAuth"));
   assert.ok(serverCode.includes("app.post('/api/report', requireUserAuth"));
   assert.ok(serverCode.includes("app.get('/api/analytics/dashboard', requireAdminAuth"));
 });
+
+test('Security Audit 5: D1 Database Security (No raw client SQL) & User Actions extract userId strictly from session', () => {
+  const serverCode = fs.readFileSync(path.join(process.cwd(), 'server.ts'), 'utf-8');
+  const edgeRouteCode = fs.readFileSync(path.join(process.cwd(), 'functions/api/[[route]].ts'), 'utf-8');
+  const apiClientCode = fs.readFileSync(path.join(process.cwd(), 'src/services/cloudflareApi.ts'), 'utf-8');
+
+  // 1. D1 Database Security: Raw SQL execution from client is forbidden
+  assert.equal(serverCode.includes('db.exec(sql)'), false, 'server.ts must never execute raw client SQL via db.exec(sql)');
+  assert.equal(
+    edgeRouteCode.includes('env.DB.prepare(body.sql)'),
+    false,
+    'functions/api/[[route]].ts must never execute raw client SQL via env.DB.prepare(body.sql)'
+  );
+  assert.equal(
+    apiClientCode.includes('JSON.stringify({ sql })'),
+    false,
+    'cloudflareApi.ts must not send raw SQL strings to the backend'
+  );
+  assert.ok(
+    serverCode.includes('if (body.sql !== undefined)'),
+    'server.ts D1 query endpoint must explicitly reject raw sql payloads'
+  );
+  assert.ok(
+    edgeRouteCode.includes('if (body.sql !== undefined)'),
+    'functions/api/[[route]].ts D1 query endpoint must explicitly reject raw sql payloads'
+  );
+
+  // 2. API Route Protection (Anime/Catalog): Create, Update, Delete require Admin session
+  assert.ok(serverCode.includes("app.post('/api/anime', requireAdminAuth"));
+  assert.ok(serverCode.includes("app.post('/api/anime/bulk', requireAdminAuth"));
+  assert.ok(serverCode.includes("app.put('/api/anime/:id', requireAdminAuth"));
+  assert.ok(serverCode.includes("app.delete('/api/anime/:id', requireAdminAuth"));
+  assert.ok(edgeRouteCode.includes("import { getAuth } from '../../src/utils/auth'"));
+
+  // 3. User Actions (Profile, Chat, Rating): Never trust client user_id or 'default_user'
+  assert.equal(
+    serverCode.includes("WHERE id = 'default_user'"),
+    false,
+    'server.ts must not hardcode default_user for user profiles'
+  );
+  assert.equal(
+    edgeRouteCode.includes("WHERE id = 'default_user'"),
+    false,
+    'functions/api/[[route]].ts must not hardcode default_user for user profiles'
+  );
+  assert.equal(
+    apiClientCode.includes("'x-user-id'"),
+    false,
+    'cloudflareApi.ts must not send spoofable x-user-id headers'
+  );
+  assert.equal(
+    apiClientCode.includes("'x-clerk-user-id'"),
+    false,
+    'cloudflareApi.ts must not send spoofable x-clerk-user-id headers'
+  );
+});
+

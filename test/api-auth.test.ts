@@ -70,9 +70,51 @@ test('API Clerk JWT Authentication & Route Protection', async (t) => {
         },
       });
       assert.equal(exportCsv.status, 401);
+
+      const d1QueryRes = await fetch(`${BASE_URL}/api/cloudflare/d1/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${forgedJwt}`,
+        },
+        body: JSON.stringify({ sql: 'DROP TABLE anime;' }),
+      });
+      assert.equal(d1QueryRes.status, 401);
+
+      // User Actions (Profile, Chat, Rating) must reject spoofed user_id in body when JWT is invalid
+      const profilePutRes = await fetch(`${BASE_URL}/api/user/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'spoofed_user_123',
+        },
+        body: JSON.stringify({ user_id: 'spoofed_user_123', username: 'Hacker' }),
+      });
+      assert.equal(profilePutRes.status, 401);
+
+      const chatPostRes = await fetch(`${BASE_URL}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-clerk-user-id': 'spoofed_user_123',
+        },
+        body: JSON.stringify({ user_id: 'spoofed_user_123', clerk_user_id: 'spoofed_user_123', user: 'Hacker', text: 'Spoofed message' }),
+      });
+      assert.equal(chatPostRes.status, 401);
+
+      const ratePostRes = await fetch(`${BASE_URL}/api/rate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'spoofed_user_123',
+        },
+        body: JSON.stringify({ anime_id: 1, rating: 10, user_id: 'spoofed_user_123' }),
+      });
+      assert.equal(ratePostRes.status, 401);
     } catch (e: any) {
       if (e.code === 'ECONNREFUSED') return;
       throw e;
     }
   });
 });
+

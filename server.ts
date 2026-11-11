@@ -390,7 +390,7 @@ function runMigrations() {
     CREATE TABLE IF NOT EXISTS reviews (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       anime_id INTEGER NOT NULL,
-      user_id TEXT DEFAULT 'default_user',
+      user_id TEXT NOT NULL,
       user_name TEXT NOT NULL,
       user_avatar TEXT DEFAULT 'https://i.ibb.co/vzS8G90/default-avatar.png',
       rating INTEGER NOT NULL,
@@ -401,7 +401,7 @@ function runMigrations() {
 
     CREATE TABLE IF NOT EXISTS watchlist (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT DEFAULT 'default_user',
+      user_id TEXT NOT NULL,
       anime_id INTEGER NOT NULL,
       added_at TEXT DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, anime_id),
@@ -566,24 +566,6 @@ function runMigrations() {
       }
     }
     db.run("UPDATE user_ratings SET rating = rating * 2 WHERE rating <= 5 AND id <= 9;");
-  } catch (_) {}
-
-  // Ensure default user exists
-  try {
-    const userRes = db.exec("SELECT COUNT(*) FROM users WHERE id = 'default_user'");
-    if (!userRes[0] || userRes[0].values[0][0] === 0) {
-      db.run(
-        `INSERT INTO users (id, username, email, avatar_url, role, bio) VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          'default_user',
-          'Kaito_Cloud',
-          'kaito@cloudflare-anime.dev',
-          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200',
-          'admin',
-          'Watching anime edge-streamed via Cloudflare Pages and D1 with ImgBB CDN!'
-        ]
-      );
-    }
   } catch (_) {}
 
   // Ensure initial anime catalog is seeded if database is empty
@@ -781,11 +763,17 @@ app.post('/api/upload', requireUserAuth, async (req, res) => {
   }
 });
 
-// User Stats Route
-app.get('/api/user/stats', (req, res) => {
+// User Stats Route (Extracts user identity strictly from verified Clerk session)
+app.get('/api/user/stats', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || 'default_user';
-    const reviewStmt = db.prepare("SELECT COUNT(*) as count FROM reviews WHERE user_id = 'default_user'");
+    const session = await getAuth(req);
+    const userId = session.userId;
+    if (!userId) {
+      return res.json({ reviewCount: 0, voteCount: 0 });
+    }
+
+    const reviewStmt = db.prepare("SELECT COUNT(*) as count FROM reviews WHERE user_id = ?");
+    reviewStmt.bind([userId]);
     let reviewCount = 0;
     if (reviewStmt.step()) {
       reviewCount = reviewStmt.getAsObject().count as number;
@@ -899,7 +887,7 @@ app.get('/api/anime', (req, res) => {
 });
 
 // GET /api/anime/:id
-app.get('/api/anime/:id', (req, res) => {
+app.get('/api/anime/:id', async (req, res) => {
   try {
     const id = req.params.id;
     const stmt = db.prepare("SELECT * FROM anime WHERE id = ? OR slug = ?");
@@ -961,10 +949,16 @@ app.get('/api/anime/:id', (req, res) => {
     }
     revStmt.free();
 
-    const wlStmt = db.prepare("SELECT id FROM watchlist WHERE user_id = 'default_user' AND anime_id = ?");
-    wlStmt.bind([anime.id]);
-    const isWatchlisted = wlStmt.step();
-    wlStmt.free();
+    const session = await getAuth(req);
+    const verifiedUserId = session.userId;
+
+    let isWatchlisted = false;
+    if (verifiedUserId) {
+      const wlStmt = db.prepare("SELECT id FROM watchlist WHERE user_id = ? AND anime_id = ?");
+      wlStmt.bind([verifiedUserId, anime.id]);
+      isWatchlisted = wlStmt.step();
+      wlStmt.free();
+    }
 
     // Query Anidub Community Rating stats dynamically
     let communityRating = 0;
@@ -980,13 +974,12 @@ app.get('/api/anime/:id', (req, res) => {
       commStmt.free();
     } catch (_) {}
 
-    // Query authenticated user's specific rating if provided
+    // Query authenticated user's specific rating strictly from verified Clerk session
     let userRating: number | null = null;
-    const reqUserId = (req.query.userId as string) || (req.query.user_id as string) || (req.headers['x-user-id'] as string) || '';
-    if (reqUserId && reqUserId.trim()) {
+    if (verifiedUserId) {
       try {
         const userRateStmt = db.prepare("SELECT rating FROM user_ratings WHERE anime_id = ? AND user_id = ?");
-        userRateStmt.bind([anime.id, reqUserId.trim()]);
+        userRateStmt.bind([anime.id, verifiedUserId]);
         if (userRateStmt.step()) {
           userRating = Number(userRateStmt.getAsObject().rating);
         }
@@ -1100,11 +1093,16 @@ app.all(['/api/anime/:id/like', '/api/anime/:id/likes', '/anime/:id/like', '/ani
   }
 });
 
-// GET /api/anime/:id/vote-status
-app.get(['/api/anime/:id/vote-status', '/api/anime/:id/vote_status', '/anime/:id/vote-status'], (req, res) => {
+// GET /api/anime/:id/vote-status (Extracts userId strictly from verified Clerk JWT session)
+app.get(['/api/anime/:id/vote-status', '/api/anime/:id/vote_status', '/anime/:id/vote-status'], async (req, res) => {
   try {
     const animeId = req.params.id;
-    const userId = req.headers['x-user-id'] || req.query.userId || 'default_user';
+    const session = await getAuth(req);
+    const userId = session.userId;
+
+    if (!userId) {
+      return res.json({ animeId, userId: null, hasLiked: false, hasUpvoted: false });
+    }
 
     const likeStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'like'");
     likeStmt.bind([animeId, userId]);
@@ -1139,8 +1137,8 @@ function cleanWatchUrl(rawUrl?: string | null): string {
   return rawUrl.trim();
 }
 
-// POST /api/anime (Create Anime - Requires Authenticated Clerk User)
-app.post('/api/anime', requireUserAuth, (req: any, res) => {
+// POST /api/anime (Create Anime - Strictly Requires Authenticated Clerk Admin Session)
+app.post('/api/anime', requireAdminAuth, (req: any, res) => {
   const start = Date.now();
   try {
     const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, season, year, genres, languages, platform, type, Type, studio, episodes_per_season, mixedEntries, watch_url, platforms_data } = req.body;
@@ -1266,8 +1264,11 @@ app.post('/api/anime', requireUserAuth, (req: any, res) => {
         ]
       );
 
-      const resId = db.exec("SELECT last_insert_rowid() as id");
-      animeId = resId[0].values[0][0];
+      const idStmt = db.prepare("SELECT last_insert_rowid() as id");
+      if (idStmt.step()) {
+        animeId = Number(idStmt.getAsObject().id);
+      }
+      idStmt.free();
     }
 
     // Auto generate episodes with thumbnail
@@ -1998,11 +1999,12 @@ app.post(['/api/rate', '/api/anime/:id/rate'], requireUserAuth, (req: any, res) 
   }
 });
 
-// GET /api/rate - Retrieve Community Rating & User's Vote
-app.get(['/api/rate', '/api/anime/:id/community-rating'], (req, res) => {
+// GET /api/rate - Retrieve Community Rating & Authenticated User's Vote
+app.get(['/api/rate', '/api/anime/:id/community-rating'], async (req, res) => {
   try {
     const anime_id = Number(req.query.anime_id || req.query.id || req.params.id);
-    const user_id = String(req.query.user_id || req.query.userId || req.headers['x-user-id'] || '').trim();
+    const session = await getAuth(req);
+    const user_id = session.userId;
 
     if (!anime_id || isNaN(anime_id)) {
       return res.status(400).json({ error: "anime_id query parameter is required" });
@@ -2067,33 +2069,54 @@ app.post('/api/anime/:id/reviews', requireUserAuth, (req: any, res) => {
   }
 });
 
-// User Profile
-app.get('/api/user/profile', (req, res) => {
+// User Profile (Extracts userId strictly from verified Clerk JWT session)
+app.get('/api/user/profile', requireUserAuth, (req: any, res) => {
   try {
-    const stmt = db.prepare("SELECT * FROM users WHERE id = 'default_user'");
+    const userId = req.authUser.userId;
+    const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
+    stmt.bind([userId]);
     if (stmt.step()) {
       const user = stmt.getAsObject();
       stmt.free();
       return res.json(user);
     }
     stmt.free();
-    res.status(404).json({ error: "User not found" });
+    return res.json({
+      id: userId,
+      username: req.authUser.email ? req.authUser.email.split('@')[0] : 'AnimeFan',
+      email: req.authUser.email || '',
+      avatar_url: 'https://i.ibb.co/vzS8G90/default-avatar.png',
+      role: req.authUser.isAdmin ? 'admin' : 'user',
+      bio: ''
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.put('/api/user/profile', requireUserAuth, (req, res) => {
+app.put('/api/user/profile', requireUserAuth, (req: any, res) => {
   try {
+    const userId = req.authUser.userId;
     const { username, bio, avatar_url } = req.body;
     if (!username) return res.status(400).json({ error: "Username is required" });
 
+    const cleanUsername = String(username).trim().slice(0, 50);
+    const cleanBio = String(bio || '').slice(0, 500);
+    const cleanAvatar = String(avatar_url || 'https://i.ibb.co/vzS8G90/default-avatar.png').slice(0, 500);
+    const email = req.authUser.email || `${userId}@clerk.user`;
+    const role = req.authUser.isAdmin ? 'admin' : 'user';
+
     db.run(
-      `UPDATE users SET username = ?, bio = ?, avatar_url = ? WHERE id = 'default_user'`,
-      [username, bio || '', avatar_url || 'https://i.ibb.co/vzS8G90/default-avatar.png']
+      `INSERT INTO users (id, username, email, avatar_url, role, bio)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         username = excluded.username,
+         bio = excluded.bio,
+         avatar_url = excluded.avatar_url`,
+      [userId, cleanUsername, email, cleanAvatar, role, cleanBio]
     );
     persistD1();
-    res.json({ success: true });
+    res.json({ success: true, userId });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -2227,15 +2250,20 @@ app.post(['/api/chat', '/api/chat/messages'], requireUserAuth, (req: any, res) =
   }
 });
 
-// Watchlist
-app.get('/api/watchlist', (req, res) => {
+// Watchlist (Extracts userId strictly from verified Clerk JWT session)
+app.get('/api/watchlist', async (req, res) => {
   try {
+    const session = await getAuth(req);
+    if (!session.userId) {
+      return res.json({ data: [] });
+    }
     const stmt = db.prepare(`
       SELECT anime.* FROM watchlist 
       JOIN anime ON watchlist.anime_id = anime.id 
-      WHERE watchlist.user_id = 'default_user'
+      WHERE watchlist.user_id = ?
       ORDER BY watchlist.added_at DESC
     `);
+    stmt.bind([session.userId]);
     const list = [];
     while (stmt.step()) {
       list.push(stmt.getAsObject());
@@ -2249,20 +2277,21 @@ app.get('/api/watchlist', (req, res) => {
 
 app.post('/api/watchlist', requireUserAuth, (req: any, res) => {
   try {
+    const userId = req.authUser.userId;
     const { anime_id } = req.body;
     if (!anime_id) return res.status(400).json({ error: "Missing anime_id" });
 
-    const checkStmt = db.prepare("SELECT id FROM watchlist WHERE user_id = 'default_user' AND anime_id = ?");
-    checkStmt.bind([anime_id]);
+    const checkStmt = db.prepare("SELECT id FROM watchlist WHERE user_id = ? AND anime_id = ?");
+    checkStmt.bind([userId, anime_id]);
     const exists = checkStmt.step();
     checkStmt.free();
 
     if (exists) {
-      db.run("DELETE FROM watchlist WHERE user_id = 'default_user' AND anime_id = ?", [anime_id]);
+      db.run("DELETE FROM watchlist WHERE user_id = ? AND anime_id = ?", [userId, anime_id]);
       persistD1();
       res.json({ success: true, watchlisted: false });
     } else {
-      db.run("INSERT INTO watchlist (user_id, anime_id) VALUES ('default_user', ?)", [anime_id]);
+      db.run("INSERT INTO watchlist (user_id, anime_id) VALUES (?, ?)", [userId, anime_id]);
       persistD1();
       res.json({ success: true, watchlisted: true });
     }
@@ -2457,7 +2486,7 @@ app.delete('/api/feedback/:id', requireAdminAuth, (req, res) => {
 // ========================================================
 
 // POST /api/track: Ingests real-time edge telemetry with Cloudflare headers & sendBeacon support
-app.post('/api/track', (req, res) => {
+app.post('/api/track', async (req, res) => {
   try {
     let payload: any = req.body;
     if (typeof payload === 'string') {
@@ -2510,7 +2539,9 @@ app.post('/api/track', (req, res) => {
     else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
     else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = deviceType === 'mobile' ? 'Safari Mobile' : 'Safari';
 
-    const clerkUserId = payload.clerkUserId || payload.clerk_user_id || null;
+    // Extract authenticated user identity strictly from verified Clerk JWT session
+    const session = await getAuth(req);
+    const clerkUserId = session.userId || null;
     const referrer = payload.referrer || 'direct';
 
     if (db) {
@@ -2623,21 +2654,24 @@ app.get('/api/analytics/dashboard', requireAdminAuth, (req, res) => {
     // 1. Real-time Live Users (active within last 3 minutes strictly from D1)
     let liveUsersCount = 0;
     try {
-      const liveRes = db.exec("SELECT COUNT(*) FROM analytics_sessions WHERE last_active_at >= datetime('now', '-3 minutes')");
-      if (liveRes[0]?.values[0]) {
-        liveUsersCount = Number(liveRes[0].values[0][0]) || 0;
+      const liveStmt = db.prepare("SELECT COUNT(*) as count FROM analytics_sessions WHERE last_active_at >= datetime('now', '-3 minutes')");
+      if (liveStmt.step()) {
+        liveUsersCount = Number(liveStmt.getAsObject().count) || 0;
       }
+      liveStmt.free();
     } catch (_) {}
 
     // 2. Total Sessions & Unique Visitors
     let totalSessions = 0;
     let uniqueVisitors = 0;
     try {
-      const sessRes = db.exec(`SELECT COUNT(*), COUNT(DISTINCT ip_hash) FROM analytics_sessions WHERE ${sessionFilter}`);
-      if (sessRes[0]?.values[0]) {
-        totalSessions = Number(sessRes[0].values[0][0]) || 0;
-        uniqueVisitors = Number(sessRes[0].values[0][1]) || 0;
+      const sessStmt = db.prepare(`SELECT COUNT(*) as total, COUNT(DISTINCT ip_hash) as uniq FROM analytics_sessions WHERE ${sessionFilter}`);
+      if (sessStmt.step()) {
+        const row = sessStmt.getAsObject();
+        totalSessions = Number(row.total) || 0;
+        uniqueVisitors = Number(row.uniq) || 0;
       }
+      sessStmt.free();
     } catch (_) {}
 
     // 3. Pageviews & Engagement Metrics
@@ -2645,26 +2679,29 @@ app.get('/api/analytics/dashboard', requireAdminAuth, (req, res) => {
     let avgDurationSeconds = 0;
     let avgScrollDepth = 0;
     try {
-      const pvRes = db.exec(`SELECT COUNT(*), ROUND(AVG(time_spent_seconds)), ROUND(AVG(max_scroll_depth)) FROM analytics_pageviews WHERE ${timeFilter}`);
-      if (pvRes[0]?.values[0]) {
-        totalPageviews = Number(pvRes[0].values[0][0]) || 0;
-        avgDurationSeconds = Number(pvRes[0].values[0][1]) || 0;
-        avgScrollDepth = Number(pvRes[0].values[0][2]) || 0;
+      const pvStmt = db.prepare(`SELECT COUNT(*) as total, ROUND(AVG(time_spent_seconds)) as avgDur, ROUND(AVG(max_scroll_depth)) as avgScroll FROM analytics_pageviews WHERE ${timeFilter}`);
+      if (pvStmt.step()) {
+        const row = pvStmt.getAsObject();
+        totalPageviews = Number(row.total) || 0;
+        avgDurationSeconds = Number(row.avgDur) || 0;
+        avgScrollDepth = Number(row.avgScroll) || 0;
       }
+      pvStmt.free();
     } catch (_) {}
 
     // 4. Bounce Rate calculation (% of sessions with only 1 pageview)
     let bounceRatePercent = 0;
     try {
-      const bounceRes = db.exec(`
-        SELECT COUNT(*) FROM (
+      const bounceStmt = db.prepare(`
+        SELECT COUNT(*) as singlePv FROM (
           SELECT session_id FROM analytics_pageviews WHERE ${timeFilter} GROUP BY session_id HAVING COUNT(*) = 1
         )
       `);
-      if (bounceRes[0]?.values[0] && totalSessions > 0) {
-        const singlePvSessions = Number(bounceRes[0].values[0][0]) || 0;
+      if (bounceStmt.step() && totalSessions > 0) {
+        const singlePvSessions = Number(bounceStmt.getAsObject().singlePv) || 0;
         bounceRatePercent = Math.min(100, Math.round((singlePvSessions / totalSessions) * 100));
       }
+      bounceStmt.free();
     } catch (_) {}
 
     // 5. Top Performing Anime & Routes
@@ -2867,19 +2904,21 @@ app.get('/api/analytics', requireAdminAuth, (req, res) => {
     let activeOutlinks = 28490;
     if (db) {
       try {
-        const logCountRes = db.exec("SELECT COUNT(*), AVG(latency_ms) FROM cloudflare_logs");
-        if (logCountRes[0]?.values[0]) {
-          const count = Number(logCountRes[0].values[0][0]) || 0;
-          const avg = Math.round(Number(logCountRes[0].values[0][1])) || 14;
-          totalLogs = count;
+        const logStmt = db.prepare("SELECT COUNT(*) as total, AVG(latency_ms) as avgLat FROM cloudflare_logs");
+        if (logStmt.step()) {
+          const row = logStmt.getAsObject();
+          totalLogs = Number(row.total) || 0;
+          const avg = Math.round(Number(row.avgLat)) || 14;
           avgLatency = avg > 0 ? avg : 14;
         }
+        logStmt.free();
       } catch (_) {}
       try {
-        const outlinksRes = db.exec("SELECT COUNT(*) FROM anime WHERE platform IS NOT NULL AND platform != ''");
-        if (outlinksRes[0]?.values[0]) {
-          activeOutlinks = 28400 + (Number(outlinksRes[0].values[0][0]) || 0) * 12;
+        const outStmt = db.prepare("SELECT COUNT(*) as total FROM anime WHERE platform IS NOT NULL AND platform != ''");
+        if (outStmt.step()) {
+          activeOutlinks = 28400 + (Number(outStmt.getAsObject().total) || 0) * 12;
         }
+        outStmt.free();
       } catch (_) {}
     }
     res.json({
@@ -2903,8 +2942,12 @@ app.get('/api/cloudflare/status', requireAdminAuth, (req, res) => {
     }
     logStmt.free();
 
-    const animeCountRes = db.exec("SELECT COUNT(*) FROM anime");
-    const animeCount = animeCountRes[0]?.values[0][0] || 0;
+    let animeCount = 0;
+    const countStmt = db.prepare("SELECT COUNT(*) as total FROM anime");
+    if (countStmt.step()) {
+      animeCount = Number(countStmt.getAsObject().total) || 0;
+    }
+    countStmt.free();
 
     res.json({
       services: {
@@ -2926,34 +2969,57 @@ app.get('/api/cloudflare/status', requireAdminAuth, (req, res) => {
   }
 });
 
+// POST /api/cloudflare/d1/query - Parameterized D1 Query Endpoint (Rejects Raw SQL from Client)
 app.post('/api/cloudflare/d1/query', requireAdminAuth, (req, res) => {
   const start = Date.now();
   try {
-    const { sql } = req.body;
-    if (!sql) return res.status(400).json({ error: "Missing SQL query" });
+    const body = req.body || {};
 
-    const trimmed = sql.trim().toLowerCase();
-    if (trimmed.startsWith('drop') || trimmed.startsWith('truncate')) {
-      return res.status(400).json({ error: "DROP and TRUNCATE operations are restricted in D1 Console." });
-    }
-
-    const results = db.exec(sql);
-    persistD1();
-    const latency = Date.now() - start;
-
-    let formattedResult = [];
-    if (results.length > 0) {
-      const columns = results[0].columns;
-      const values = results[0].values;
-      formattedResult = values.map((row: any[]) => {
-        const obj: any = {};
-        columns.forEach((col: string, idx: number) => {
-          obj[col] = row[idx];
-        });
-        return obj;
+    // SECURITY: Never execute raw SQL strings passed from the client
+    if (body.sql !== undefined) {
+      return res.status(400).json({
+        error: "Executing raw SQL queries from the client is forbidden. Provide structured parameters (table, animeId, title, limit)."
       });
     }
 
+    const table = String(body.table || 'anime').trim().toLowerCase();
+    const rawLimit = Number(body.limit);
+    const safeLimit = !isNaN(rawLimit) && rawLimit > 0 ? Math.min(50, Math.floor(rawLimit)) : 10;
+    const animeId = body.animeId !== undefined && body.animeId !== '' ? Number(body.animeId) : (body.id !== undefined && body.id !== '' ? Number(body.id) : null);
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+
+    let stmt: any;
+    if (table === 'anime') {
+      if (animeId !== null && !isNaN(animeId) && title) {
+        stmt = db.prepare("SELECT id, title, slug, rating, status, year, genres, languages, platform, cover_image FROM anime WHERE id = ? AND title LIKE ? ORDER BY id DESC LIMIT ?");
+        stmt.bind([animeId, `%${title}%`, safeLimit]);
+      } else if (animeId !== null && !isNaN(animeId)) {
+        stmt = db.prepare("SELECT id, title, slug, rating, status, year, genres, languages, platform, cover_image FROM anime WHERE id = ? LIMIT ?");
+        stmt.bind([animeId, safeLimit]);
+      } else if (title) {
+        stmt = db.prepare("SELECT id, title, slug, rating, status, year, genres, languages, platform, cover_image FROM anime WHERE title LIKE ? ORDER BY id DESC LIMIT ?");
+        stmt.bind([`%${title}%`, safeLimit]);
+      } else {
+        stmt = db.prepare("SELECT id, title, slug, rating, status, year, genres, languages, platform, cover_image FROM anime ORDER BY id DESC LIMIT ?");
+        stmt.bind([safeLimit]);
+      }
+    } else if (table === 'users') {
+      stmt = db.prepare("SELECT id, username, email, role, avatar_url FROM users LIMIT ?");
+      stmt.bind([safeLimit]);
+    } else if (table === 'logs' || table === 'cloudflare_logs') {
+      stmt = db.prepare("SELECT id, timestamp, service, event_type, status_code, latency_ms, details FROM cloudflare_logs ORDER BY id DESC LIMIT ?");
+      stmt.bind([safeLimit]);
+    } else {
+      return res.status(400).json({ error: "Invalid table parameter. Allowed tables: anime, users, logs." });
+    }
+
+    const formattedResult = [];
+    while (stmt.step()) {
+      formattedResult.push(stmt.getAsObject());
+    }
+    stmt.free();
+
+    const latency = Date.now() - start;
     res.json({ success: true, results: formattedResult, latencyMs: latency });
   } catch (err: any) {
     res.status(400).json({ error: err.message });

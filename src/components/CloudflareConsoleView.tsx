@@ -6,7 +6,10 @@ import { cloudflareApi } from '../services/cloudflareApi';
 export const CloudflareConsoleView: React.FC = () => {
   const [statusData, setStatusData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [sqlQuery, setSqlQuery] = useState('SELECT id, title, rating, cover_image FROM anime LIMIT 5;');
+  const [d1Table, setD1Table] = useState<'anime' | 'users' | 'logs'>('anime');
+  const [d1AnimeId, setD1AnimeId] = useState('');
+  const [d1Title, setD1Title] = useState('');
+  const [d1Limit, setD1Limit] = useState(5);
   const [queryResult, setQueryResult] = useState<any>(null);
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryError, setQueryError] = useState('');
@@ -34,12 +37,16 @@ export const CloudflareConsoleView: React.FC = () => {
 
   const handleRunQuery = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sqlQuery.trim()) return;
     setQueryLoading(true);
     setQueryError('');
     setQueryResult(null);
     try {
-      const data = await cloudflareApi.executeD1Query(sqlQuery);
+      const data = await cloudflareApi.executeD1Query({
+        table: d1Table,
+        animeId: d1AnimeId.trim() ? Number(d1AnimeId.trim()) : undefined,
+        title: d1Title.trim() || undefined,
+        limit: d1Limit
+      });
       if (data.error) throw new Error(data.error);
       setQueryResult(data);
       fetchCloudflareStatus();
@@ -128,7 +135,7 @@ export const CloudflareConsoleView: React.FC = () => {
               onClick={() => setActiveSubTab('d1')}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeSubTab === 'd1' ? 'bg-orange-600 text-white shadow-md shadow-orange-600/30' : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'}`}
             >
-              D1 SQL Console
+              D1 Query Inspector
             </button>
             <button
               onClick={() => setActiveSubTab('schema')}
@@ -243,60 +250,103 @@ export const CloudflareConsoleView: React.FC = () => {
         </div>
       )}
 
-      {/* D1 SQL Console Tab */}
+      {/* Parameterized D1 Query Inspector Tab */}
       {(activeSubTab === 'overview' || activeSubTab === 'd1') && (
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
             <div>
               <h2 className="text-lg font-bold text-white font-['Space_Grotesk',sans-serif] flex items-center space-x-2">
                 <Terminal className="w-5 h-5 text-orange-400" />
-                <span>Cloudflare D1 SQL Interactive Console</span>
+                <span>Cloudflare D1 Parameterized Query Inspector</span>
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Execute standard SQL queries directly against your D1 SQLite database binding.
+                Query your D1 database securely using server-side prepared statements and bound parameters (SQL-injection protected).
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => setSqlQuery('SELECT id, username, email, avatar_url FROM users;')}
-                className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 hover:bg-slate-800"
+                type="button"
+                onClick={() => { setD1Table('users'); setD1AnimeId(''); setD1Title(''); }}
+                className={`px-3 py-1.5 rounded-lg border text-xs transition-all ${d1Table === 'users' ? 'bg-orange-600/20 border-orange-500/50 text-orange-300' : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
               >
-                SELECT users
+                Inspect users
               </button>
               <button
-                onClick={() => setSqlQuery('SELECT id, title, rating, cover_image FROM anime LIMIT 5;')}
-                className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 hover:bg-slate-800"
+                type="button"
+                onClick={() => { setD1Table('anime'); setD1AnimeId(''); setD1Title(''); }}
+                className={`px-3 py-1.5 rounded-lg border text-xs transition-all ${d1Table === 'anime' ? 'bg-orange-600/20 border-orange-500/50 text-orange-300' : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
               >
-                SELECT anime
+                Inspect anime
               </button>
               <button
-                onClick={() => setSqlQuery('SELECT id, service, event_type, status_code, details FROM cloudflare_logs ORDER BY id DESC LIMIT 5;')}
-                className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 hover:bg-slate-800"
+                type="button"
+                onClick={() => { setD1Table('logs'); setD1AnimeId(''); setD1Title(''); }}
+                className={`px-3 py-1.5 rounded-lg border text-xs transition-all ${d1Table === 'logs' ? 'bg-orange-600/20 border-orange-500/50 text-orange-300' : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
               >
-                SELECT logs
+                Inspect logs
               </button>
             </div>
           </div>
 
           <form onSubmit={handleRunQuery} className="space-y-4">
-            <div className="relative">
-              <textarea
-                value={sqlQuery}
-                onChange={(e) => setSqlQuery(e.target.value)}
-                rows={3}
-                className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 font-mono text-xs text-orange-300 placeholder-slate-600 focus:outline-none focus:border-orange-500"
-                placeholder="Enter SQL query (e.g. SELECT * FROM anime)..."
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">Target Table</label>
+                <select
+                  value={d1Table}
+                  onChange={(e) => setD1Table(e.target.value as 'anime' | 'users' | 'logs')}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                >
+                  <option value="anime">anime</option>
+                  <option value="users">users</option>
+                  <option value="logs">cloudflare_logs</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">Anime ID (Optional)</label>
+                <input
+                  type="number"
+                  value={d1AnimeId}
+                  onChange={(e) => setD1AnimeId(e.target.value)}
+                  disabled={d1Table !== 'anime'}
+                  placeholder="e.g. 1"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-orange-500 disabled:opacity-40"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">Title Filter (Optional)</label>
+                <input
+                  type="text"
+                  value={d1Title}
+                  onChange={(e) => setD1Title(e.target.value)}
+                  disabled={d1Table !== 'anime'}
+                  placeholder="e.g. Solo Leveling"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-orange-500 disabled:opacity-40"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">Row Limit</label>
+                <select
+                  value={d1Limit}
+                  onChange={(e) => setD1Limit(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                >
+                  <option value={5}>5 rows</option>
+                  <option value={10}>10 rows</option>
+                  <option value={25}>25 rows</option>
+                  <option value={50}>50 rows</option>
+                </select>
+              </div>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500">Hint: DROP and TRUNCATE queries are restricted for safety.</span>
+              <span className="text-xs text-slate-500">Raw SQL execution from the client is disabled; queries use server-side prepared statements.</span>
               <button
                 type="submit"
                 disabled={queryLoading}
                 className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs shadow-lg shadow-orange-600/30 transition-all disabled:opacity-50"
               >
                 {queryLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-white" />}
-                <span>Execute SQL Query</span>
+                <span>Run Parameterized Query</span>
               </button>
             </div>
           </form>

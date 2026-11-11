@@ -4,6 +4,8 @@
  * Integrates directly with Cloudflare D1 (env.DB) and ImgBB Backend Uploads
  */
 
+import { getAuth } from '../../src/utils/auth';
+
 interface Env {
   DB: any; // Cloudflare D1 Database binding
   IMGBB_API_KEY?: string;
@@ -15,13 +17,6 @@ interface Env {
 type PagesFunction<T = any> = (context: { request: Request; env: T; params?: any }) => Promise<Response> | Response;
 
 const D1_DATABASE_ID = '75f053ab-5b44-4d48-abf8-b3a357a89426';
-
-function hasEdgeUserAuth(request: Request): boolean {
-  const authHeader = request.headers.get('Authorization') || request.headers.get('authorization') || '';
-  if (!authHeader.startsWith('Bearer ')) return false;
-  const token = authHeader.slice(7).trim();
-  return token.split('.').length === 3;
-}
 
 function cleanWatchUrl(rawUrl?: string | null): string {
   if (!rawUrl || typeof rawUrl !== 'string') return '';
@@ -116,7 +111,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 1. POST /api/upload (ImgBB Secure Backend Upload - Requires Clerk User Session & env.IMGBB_API_KEY)
   if (path === '/api/upload' && method === 'POST') {
-    if (!hasEdgeUserAuth(request)) {
+    const session = await getAuth(request);
+    if (!session.userId) {
       return jsonResponse({ error: 'Unauthorized: Active Clerk user session required' }, 401, request);
     }
     try {
@@ -164,35 +160,56 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 2. GET /api/user/profile & PUT /api/user/profile
+  // 2. GET /api/user/profile & PUT /api/user/profile (Extracts userId strictly from verified Clerk JWT session)
   if (path === '/api/user/profile') {
+    const session = await getAuth(request);
+    if (!session.userId) {
+      return jsonResponse({ error: 'Unauthorized: Active Clerk user session required' }, 401, request);
+    }
+    const userId = session.userId;
+
     if (method === 'GET') {
       try {
         if (env.DB) {
-          const res = await env.DB.prepare("SELECT * FROM users WHERE id = 'default_user'").first();
-          if (res) return jsonResponse(res);
+          const res = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first();
+          if (res) return jsonResponse(res, 200, request);
         }
       } catch {}
       return jsonResponse({
-        id: 'default_user',
-        username: 'Kaito_Cloud',
-        email: 'kaito@cloudflare-anime.dev',
+        id: userId,
+        username: session.email ? session.email.split('@')[0] : 'AnimeFan',
+        email: session.email || '',
         avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-        role: 'admin',
-        bio: 'Watching anime edge-streamed via Cloudflare Pages and D1 with ImgBB CDN!'
-      });
+        role: session.isAdmin ? 'admin' : 'user',
+        bio: ''
+      }, 200, request);
     }
     if (method === 'PUT') {
       try {
         const body: any = await request.json();
+        if (!body.username) return jsonResponse({ error: 'Username is required' }, 400, request);
         if (env.DB) {
-          await env.DB.prepare("UPDATE users SET username = ?, bio = ?, avatar_url = ? WHERE id = 'default_user'")
-            .bind(body.username, body.bio || '', body.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80')
+          await env.DB.prepare(
+            `INSERT INTO users (id, username, email, avatar_url, role, bio)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+               username = excluded.username,
+               bio = excluded.bio,
+               avatar_url = excluded.avatar_url`
+          )
+            .bind(
+              userId,
+              String(body.username).trim().slice(0, 50),
+              session.email || `${userId}@clerk.user`,
+              String(body.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80').slice(0, 500),
+              session.isAdmin ? 'admin' : 'user',
+              String(body.bio || '').slice(0, 500)
+            )
             .run();
         }
-        return jsonResponse({ success: true });
+        return jsonResponse({ success: true, userId }, 200, request);
       } catch (err: any) {
-        return jsonResponse({ error: err.message }, 500);
+        return jsonResponse({ error: err.message }, 500, request);
       }
     }
   }
@@ -270,8 +287,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 4. POST /api/anime (Create anime)
+  // 4. POST /api/anime (Create anime - Strictly Requires Authenticated Clerk Admin Session)
   if (path === '/api/anime' && method === 'POST') {
+    const session = await getAuth(request);
+    if (!session.userId) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
+    if (!session.isAdmin) {
+      return jsonResponse({ error: 'Forbidden: Only the authorized Admin user can create anime entries' }, 403, request);
+    }
     try {
       const body: any = await request.json();
       let createdId: number | null = null;
@@ -410,9 +434,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       return jsonResponse({ error: "Anime not found" }, 404);
     }
 
-    if ((method === 'PUT' || method === 'PATCH') && env.DB) {
-      try {
-        const body: any = await request.json().catch(() => ({}));
+    if (method === 'PUT' || method === 'PATCH') {
+      const session = await getAuth(request);
+      if (!session.userId) {
+        return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      }
+      if (!session.isAdmin) {
+        return jsonResponse({ error: 'Forbidden: Only the authorized Admin user can update anime entries' }, 403, request);
+      }
+      if (env.DB) {
+        try {
+          const body: any = await request.json().catch(() => ({}));
         const incomingStatus = (body.status || body.airing_status || '').trim();
         const resolvedType = body.type || body.Type || null;
 
@@ -519,13 +551,24 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           mixedEntries: rawMixed,
           episodes_per_season: episodesPerSeasonStr
         });
-      } catch (err: any) {
-        return jsonResponse({ error: err.message }, 500);
+        } catch (err: any) {
+          return jsonResponse({ error: err.message }, 500);
+        }
       }
+      return jsonResponse({ success: true, id }, 200, request);
     }
 
-    if (method === 'DELETE' && env.DB) {
-      await env.DB.prepare("DELETE FROM anime WHERE id = ?").bind(id).run();
+    if (method === 'DELETE') {
+      const session = await getAuth(request);
+      if (!session.userId) {
+        return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      }
+      if (!session.isAdmin) {
+        return jsonResponse({ error: 'Forbidden: Only the authorized Admin user can delete anime entries' }, 403, request);
+      }
+      if (env.DB) {
+        await env.DB.prepare("DELETE FROM anime WHERE id = ?").bind(id).run();
+      }
       return jsonResponse({ success: true });
     }
   }
@@ -544,13 +587,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       } catch {}
     }
 
-    // POST /api/anime/:id/reviews
+    // POST /api/anime/:id/reviews (Strictly extracts userId from verified Clerk JWT session)
     if (sub === 'reviews' && method === 'POST') {
       try {
+        const session = await getAuth(request);
+        if (!session.userId) {
+          return jsonResponse({ error: "Authentication required", requiresAuth: true }, 401, request);
+        }
         const body: any = await request.json().catch(() => ({}));
         if (env.DB && numericId) {
-          await env.DB.prepare("INSERT INTO reviews (anime_id, user_name, user_avatar, rating, comment) VALUES (?, ?, ?, ?, ?)")
-            .bind(numericId, body.user_name || 'Anonymous', body.user_avatar || '', body.rating || 10, body.comment || '')
+          await env.DB.prepare("INSERT INTO reviews (anime_id, user_id, user_name, user_avatar, rating, comment) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(numericId, session.userId, String(body.user_name || 'Anonymous').slice(0, 50), String(body.user_avatar || '').slice(0, 500), Number(body.rating) || 10, String(body.comment || '').slice(0, 2000))
             .run();
         }
         return jsonResponse({ success: true, message: "Review posted successfully" });
@@ -559,12 +606,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       }
     }
 
-    // GET /api/anime/:id/vote-status
+    // GET /api/anime/:id/vote-status (Extracts userId strictly from verified Clerk JWT session)
     if (sub === 'vote-status' && method === 'GET') {
       let hasLiked = false;
       let hasUpvoted = false;
-      const userId = url.searchParams.get('userId') || url.searchParams.get('user_id') || request.headers.get('x-user-id');
-      if (env.DB && numericId && userId && userId !== 'default_user') {
+      const session = await getAuth(request);
+      const userId = session.userId;
+      if (env.DB && numericId && userId) {
         try {
           const likeCheck = await env.DB.prepare(
             "SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'like'"
@@ -579,11 +627,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       return jsonResponse({ animeId: numericId || id, hasLiked, hasUpvoted });
     }
 
-    // POST /api/anime/:id/vote (or /upvote)
+    // POST /api/anime/:id/vote (or /upvote) - Strictly extracts userId from verified Clerk JWT session
     if ((sub === 'vote' || sub === 'upvote') && method === 'POST') {
       try {
-        const body: any = await request.json().catch(() => ({}));
-        const userId = body.userId || body.user_id || request.headers.get('x-user-id');
+        const session = await getAuth(request);
+        const userId = session.userId;
 
         if (!userId) {
           return jsonResponse({
@@ -644,11 +692,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       }
     }
 
-    // POST /api/anime/:id/like (or /likes)
+    // POST /api/anime/:id/like (or /likes) - Strictly extracts userId from verified Clerk JWT session
     if ((sub === 'like' || sub === 'likes') && method === 'POST') {
       try {
-        const body: any = await request.json().catch(() => ({}));
-        const userId = body.userId || body.user_id || request.headers.get('x-user-id');
+        const session = await getAuth(request);
+        const userId = session.userId;
 
         if (!userId) {
           return jsonResponse({
@@ -710,10 +758,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 6b. POST /api/rate & GET /api/rate (Community 10-Point Rating System)
+  // 6b. POST /api/rate & GET /api/rate (Community 10-Point Rating System - Strictly uses verified Clerk JWT session)
   if (path === '/api/rate' || (path.startsWith('/api/anime/') && path.endsWith('/rate'))) {
     if (method === 'POST') {
       try {
+        const session = await getAuth(request);
+        if (!session.userId) {
+          return jsonResponse({ error: "Unauthorized: Active Clerk user session required to submit ratings" }, 401, request);
+        }
+        const userId = session.userId;
+
         const body: any = await request.json().catch(() => ({}));
         let animeId = Number(body.anime_id || body.animeId);
         if (!animeId && path.startsWith('/api/anime/')) {
@@ -721,10 +775,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           if (match) animeId = Number(match[1]);
         }
         const rating = Number(body.rating);
-        let userId = String(body.user_id || body.userId || request.headers.get('x-user-id') || '').trim();
-        if (!userId) {
-          userId = `guest_${request.headers.get('cf-connecting-ip') || 'anon'}`;
-        }
 
         if (!animeId || isNaN(animeId)) {
           return jsonResponse({ error: "Valid anime_id is required" }, 400, request);
@@ -796,7 +846,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (method === 'GET') {
       try {
         const animeId = Number(url.searchParams.get('anime_id') || url.searchParams.get('id'));
-        const userId = url.searchParams.get('user_id') || url.searchParams.get('userId') || request.headers.get('x-user-id');
+        const session = await getAuth(request);
+        const userId = session.userId;
 
         if (!animeId || isNaN(animeId)) {
           return jsonResponse({ error: "anime_id query parameter is required" }, 400, request);
@@ -842,28 +893,37 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 7. GET /api/watchlist & POST /api/watchlist
+  // 7. GET /api/watchlist & POST /api/watchlist (Extracts userId strictly from verified Clerk JWT session)
   if (path === '/api/watchlist') {
+    const session = await getAuth(request);
     if (method === 'GET') {
+      if (!session.userId) return jsonResponse({ data: [] }, 200, request);
       try {
         if (env.DB) {
           const list = await env.DB.prepare(`
             SELECT anime.* FROM watchlist 
             JOIN anime ON watchlist.anime_id = anime.id 
-            WHERE watchlist.user_id = 'default_user'
-          `).all();
-          if (list.results?.length) return jsonResponse({ data: list.results });
+            WHERE watchlist.user_id = ?
+          `).bind(session.userId).all();
+          if (list.results?.length) return jsonResponse({ data: list.results }, 200, request);
         }
       } catch {}
-      return jsonResponse({ data: [] });
+      return jsonResponse({ data: [] }, 200, request);
     }
     if (method === 'POST') {
-      return jsonResponse({ success: true, watchlisted: true });
+      if (!session.userId) {
+        return jsonResponse({ error: 'Unauthorized: Active Clerk user session required' }, 401, request);
+      }
+      return jsonResponse({ success: true, watchlisted: true }, 200, request);
     }
   }
 
-  // 8. GET /api/cloudflare/status
+  // 8. GET /api/cloudflare/status (Protected by Clerk Admin Auth)
   if (path === '/api/cloudflare/status') {
+    const session = await getAuth(request);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
     return jsonResponse({
       services: {
         pages: { status: "Operational", edgeLocations: "330+ Cities", region: "Global Anycast" },
@@ -891,17 +951,61 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     });
   }
 
-  // 9. POST /api/cloudflare/d1/query
+  // 9. POST /api/cloudflare/d1/query - Parameterized D1 Query Endpoint (Rejects Raw SQL from Client)
   if (path === '/api/cloudflare/d1/query' && method === 'POST') {
+    const session = await getAuth(request);
+    if (!session.userId) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
+    if (!session.isAdmin) {
+      return jsonResponse({ error: 'Forbidden: Only the authorized Admin user can query D1' }, 403, request);
+    }
     try {
-      const body: any = await request.json();
-      if (env.DB) {
-        const queryRes = await env.DB.prepare(body.sql).all();
-        return jsonResponse({ success: true, results: queryRes.results || [], latencyMs: 14 });
+      const body: any = await request.json().catch(() => ({}));
+      if (body.sql !== undefined) {
+        return jsonResponse({
+          error: "Executing raw SQL queries from the client is forbidden. Provide structured parameters (table, animeId, title, limit)."
+        }, 400, request);
       }
-      return jsonResponse({ success: true, results: [], latencyMs: 10 });
+
+      const table = String(body.table || 'anime').trim().toLowerCase();
+      const rawLimit = Number(body.limit);
+      const safeLimit = !isNaN(rawLimit) && rawLimit > 0 ? Math.min(50, Math.floor(rawLimit)) : 10;
+      const animeId = body.animeId !== undefined && body.animeId !== '' ? Number(body.animeId) : (body.id !== undefined && body.id !== '' ? Number(body.id) : null);
+      const title = typeof body.title === 'string' ? body.title.trim() : '';
+
+      if (env.DB) {
+        let queryRes: any;
+        if (table === 'anime') {
+          if (animeId !== null && !isNaN(animeId) && title) {
+            queryRes = await env.DB.prepare(
+              "SELECT id, title, slug, rating, status, year, genres, languages, platform, cover_image FROM anime WHERE id = ? AND title LIKE ? ORDER BY id DESC LIMIT ?"
+            ).bind(animeId, `%${title}%`, safeLimit).all();
+          } else if (animeId !== null && !isNaN(animeId)) {
+            queryRes = await env.DB.prepare(
+              "SELECT id, title, slug, rating, status, year, genres, languages, platform, cover_image FROM anime WHERE id = ? LIMIT ?"
+            ).bind(animeId, safeLimit).all();
+          } else if (title) {
+            queryRes = await env.DB.prepare(
+              "SELECT id, title, slug, rating, status, year, genres, languages, platform, cover_image FROM anime WHERE title LIKE ? ORDER BY id DESC LIMIT ?"
+            ).bind(`%${title}%`, safeLimit).all();
+          } else {
+            queryRes = await env.DB.prepare(
+              "SELECT id, title, slug, rating, status, year, genres, languages, platform, cover_image FROM anime ORDER BY id DESC LIMIT ?"
+            ).bind(safeLimit).all();
+          }
+        } else if (table === 'users') {
+          queryRes = await env.DB.prepare("SELECT id, username, email, role, avatar_url FROM users LIMIT ?").bind(safeLimit).all();
+        } else if (table === 'logs' || table === 'cloudflare_logs') {
+          queryRes = await env.DB.prepare("SELECT id, timestamp, service, event_type, status_code, latency_ms, details FROM cloudflare_logs ORDER BY id DESC LIMIT ?").bind(safeLimit).all();
+        } else {
+          return jsonResponse({ error: "Invalid table parameter. Allowed tables: anime, users, logs." }, 400, request);
+        }
+        return jsonResponse({ success: true, results: queryRes?.results || [], latencyMs: 14 }, 200, request);
+      }
+      return jsonResponse({ success: true, results: [], latencyMs: 10 }, 200, request);
     } catch (err: any) {
-      return jsonResponse({ error: err.message }, 400);
+      return jsonResponse({ error: err.message }, 400, request);
     }
   }
 
@@ -968,8 +1072,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     if (method === 'POST') {
       try {
+        const session = await getAuth(request);
+        if (!session.userId) {
+          return jsonResponse({ error: "Unauthorized: Active Clerk user session required to post chat messages" }, 401, request);
+        }
+
         const body: any = await request.json().catch(() => ({}));
-        const { user, username, user_name, text, message, comment, timestamp, rating, language, dub_language, dubLanguage, isReview, is_review, clerk_user_id, userId, user_id, avatar, user_avatar, avatar_url } = body;
+        const { user, username, user_name, text, message, comment, timestamp, rating, language, dub_language, dubLanguage, isReview, is_review, avatar, user_avatar, avatar_url } = body;
         
         const rawText = text || message || comment;
         if (!rawText || !String(rawText).trim()) {
@@ -977,14 +1086,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         }
 
         const cleanUser = String(user || username || user_name || 'Anonymous Fan').trim().slice(0, 50);
-        const cleanClerkId = String(
-          clerk_user_id || 
-          userId || 
-          user_id || 
-          request.headers.get('x-clerk-user-id') || 
-          request.headers.get('authorization') || 
-          'guest'
-        ).trim();
+        const cleanClerkId = session.userId;
         const cleanText = String(rawText).slice(0, 1000);
         const cleanTimestamp = String(timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         const cleanRating = rating !== undefined && rating !== null && !isNaN(Number(rating)) ? Number(rating) : null;
@@ -1120,8 +1222,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 10b. GET /api/feedback
+  // 10b. GET /api/feedback (Admin only)
   if (path === '/api/feedback' && method === 'GET') {
+    const session = await getAuth(request);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
     try {
       if (env.DB) {
         const res = await env.DB.prepare("SELECT * FROM feedback ORDER BY id DESC").all();
@@ -1133,8 +1239,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 10c. GET /api/admin/pending
+  // 10c. GET /api/admin/pending (Admin only)
   if (path === '/api/admin/pending' && method === 'GET') {
+    const session = await getAuth(request);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
     try {
       if (env.DB) {
         const res = await env.DB.prepare(
@@ -1148,8 +1258,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 10d. POST /api/admin/import-csv
+  // 10d. POST /api/admin/import-csv (Admin only)
   if (path === '/api/admin/import-csv' && method === 'POST') {
+    const session = await getAuth(request);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
     try {
       const body: any = await request.json();
       let rows: any[] = [];
@@ -1368,8 +1482,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 10d-2. POST /api/admin/clear-pending - Clears all items currently in pending moderation status
+  // 10d-2. POST /api/admin/clear-pending - Clears all items currently in pending moderation status (Admin only)
   if (path === '/api/admin/clear-pending' && method === 'POST') {
+    const session = await getAuth(request);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
     try {
       if (env.DB) {
         await env.DB.prepare("DELETE FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' OR approval_status = 'pending'").run();
@@ -1380,9 +1498,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 10e. POST /api/admin/approve/:id & /api/admin/reject/:id
+  // 10e. POST /api/admin/approve/:id & /api/admin/reject/:id (Admin only)
   const approveMatch = path.match(/^\/api\/admin\/approve\/([0-9a-zA-Z_-]+)\/?$/);
   if (approveMatch && method === 'POST') {
+    const session = await getAuth(request);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
     const id = approveMatch[1];
     const body: any = await request.json().catch(() => ({}));
     const targetStatus = (body.status || body.airing_status || '').trim() || 'Completed';
@@ -1394,6 +1516,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)\/?$/);
   if (rejectMatch && method === 'POST') {
+    const session = await getAuth(request);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
     const id = rejectMatch[1];
     if (env.DB) {
       await env.DB.prepare("DELETE FROM anime WHERE id = ?").bind(id).run();
@@ -1401,8 +1527,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return jsonResponse({ success: true, id });
   }
 
-  // 11. POST /api/admin/reset-db
+  // 11. POST /api/admin/reset-db (Admin only)
   if (path === '/api/admin/reset-db' && method === 'POST') {
+    const session = await getAuth(request);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
     try {
       if (env.DB) {
         await env.DB.prepare("DELETE FROM reviews").run();
@@ -1468,7 +1598,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
       else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = deviceType === 'mobile' ? 'Safari Mobile' : 'Safari';
 
-      const clerkUserId = payload.clerkUserId || payload.clerk_user_id || null;
+      const session = await getAuth(request);
+      const clerkUserId = session.userId || null;
       const referrer = payload.referrer || 'direct';
 
       if (env.DB) {
@@ -1517,8 +1648,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 13. GOD-MODE EDGE ANALYTICS: GET /api/analytics/dashboard
+  // 13. GOD-MODE EDGE ANALYTICS: GET /api/analytics/dashboard (Admin only)
   if (path === '/api/analytics/dashboard' && method === 'GET') {
+    const session = await getAuth(request);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
     try {
       const url = new URL(request.url);
       const range = url.searchParams.get('range') || 'all';
