@@ -8,10 +8,8 @@ import initSqlJs from 'sql.js';
 import multer from 'multer';
 import { GoogleGenAI } from '@google/genai';
 import {
-  generateAdminToken,
-  verifyAdminToken,
-  verifyClerkUserSession,
-  verifyClerkAdminRequest
+  auth,
+  getAuth
 } from './src/utils/auth.js';
 import { 
   formatNotificationTitle, 
@@ -33,7 +31,7 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
   }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-token, x-clerk-user-id, x-clerk-user-email, x-clerk-session-token, x-device-id, x-user-id, Accept, Origin, Cache-Control, Pragma, X-Requested-With');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-device-id, Accept, Origin, Cache-Control, Pragma, X-Requested-With');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -696,42 +694,46 @@ function runMigrations() {
   } catch (_) {}
 }
 
-// Strict Clerk Admin Authentication Middleware
-function requireAdminAuth(req: any, res: any, next: any) {
-  const check = verifyClerkAdminRequest(req.headers as any, req.body);
-  if (!check.authorized) {
+// Strict Cryptographic Clerk Admin Authentication Middleware
+async function requireAdminAuth(req: any, res: any, next: any) {
+  const session = await getAuth(req);
+  if (!session.userId) {
     return res.status(401).json({
       success: false,
-      error: check.reason || 'Unauthorized: Valid Clerk Admin session required'
+      error: 'Unauthorized: Valid Clerk JWT session required'
     });
   }
-  req.adminUser = { id: check.userId, email: check.email };
+  if (!session.isAdmin) {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden: User email does not match ADMIN_EMAIL environment variable'
+    });
+  }
+  req.adminUser = { id: session.userId, email: session.email };
+  req.authUser = session;
   next();
 }
 
-// Strict Clerk User Session Authentication Middleware for Data-Modifying Routes
-function requireUserAuth(req: any, res: any, next: any) {
-  const session = verifyClerkUserSession(req.headers as any, req.body);
-  if (!session.authenticated || !session.userId) {
+// Strict Cryptographic Clerk User Session Authentication Middleware for Data-Modifying Routes
+async function requireUserAuth(req: any, res: any, next: any) {
+  const session = await getAuth(req);
+  if (!session.userId) {
     return res.status(401).json({
       success: false,
-      error: 'Unauthorized: Active Clerk user session required to modify data'
+      error: 'Unauthorized: Active Clerk JWT session required to modify data'
     });
   }
   req.authUser = session;
   next();
 }
 
-app.post('/api/admin/login', (req, res) => {
-  const check = verifyClerkAdminRequest(req.headers as any, req.body);
-  if (!check.authorized || !check.userId || !check.email) {
-    return res.status(401).json({
-      success: false,
-      error: check.reason || 'Unauthorized: Valid Clerk Admin account required'
-    });
-  }
-  const token = generateAdminToken(check.userId, check.email);
-  return res.json({ success: true, token, role: 'admin', email: check.email });
+app.post('/api/admin/login', requireAdminAuth, (req: any, res) => {
+  return res.json({
+    success: true,
+    role: 'admin',
+    userId: req.adminUser.id,
+    email: req.adminUser.email
+  });
 });
 
 app.get('/api/admin/verify', requireAdminAuth, (req, res) => {
@@ -1014,12 +1016,12 @@ app.get('/api/anime/:id', (req, res) => {
   }
 });
 
-// POST /api/anime/:id/upvote (Strict Clerk Auth)
-app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/anime/:id/upvote'], (req, res, next) => {
+// POST /api/anime/:id/upvote (Strict Clerk JWT Auth)
+app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/anime/:id/upvote'], async (req, res, next) => {
   if (req.method !== 'POST' && req.method !== 'PUT') return next();
   try {
-    const session = verifyClerkUserSession(req.headers as any, req.body);
-    if (!session.authenticated || !session.userId) {
+    const session = await getAuth(req);
+    if (!session.userId) {
       return res.status(401).json({ success: false, error: "Unauthorized", message: "Please sign in with Clerk to upvote." });
     }
     const animeId = req.params.id;
@@ -1056,12 +1058,12 @@ app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/an
   }
 });
 
-// POST /api/anime/:id/like (Strict Clerk Auth)
-app.all(['/api/anime/:id/like', '/api/anime/:id/likes', '/anime/:id/like', '/anime/:id/likes'], (req, res, next) => {
+// POST /api/anime/:id/like (Strict Clerk JWT Auth)
+app.all(['/api/anime/:id/like', '/api/anime/:id/likes', '/anime/:id/like', '/anime/:id/likes'], async (req, res, next) => {
   if (req.method !== 'POST' && req.method !== 'PUT') return next();
   try {
-    const session = verifyClerkUserSession(req.headers as any, req.body);
-    if (!session.authenticated || !session.userId) {
+    const session = await getAuth(req);
+    if (!session.userId) {
       return res.status(401).json({ success: false, error: "Unauthorized", message: "Please sign in with Clerk to like." });
     }
     const animeId = req.params.id;
@@ -1159,7 +1161,7 @@ app.post('/api/anime', requireUserAuth, (req: any, res) => {
     }
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    const isAdmin = verifyClerkAdminRequest(req.headers as any, req.body).authorized;
+    const isAdmin = Boolean(req.authUser?.isAdmin);
     const resolvedType = normalizeAnimeType(type || Type || 'TV Series');
     
     // Explicitly preserve the airing status chosen by the admin/user (e.g. 'Completed', 'Airing', 'Ongoing', 'Upcoming')

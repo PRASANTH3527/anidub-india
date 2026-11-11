@@ -23,7 +23,7 @@ import { cloudflareApi } from '../services/cloudflareApi';
 import { generateRandomUsername, ANIME_CHARACTERS } from '../utils/randomUser';
 import { formatRelativeTime } from '../utils/timestamps';
 import { syncAndDeduplicateChatMessages } from '../utils/chatDeduplication';
-import { useUser } from '@clerk/clerk-react';
+import { useUser } from '@clerk/nextjs';
 
 export interface ChatMessage {
   id: string | number;

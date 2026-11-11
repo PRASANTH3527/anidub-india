@@ -172,15 +172,27 @@ export class ChatRoom {
 }
 
 function isWorkerClerkAdmin(request, env) {
-  const email = (request.headers.get("x-clerk-user-email") || "").trim().toLowerCase();
-  const adminEmail = (env?.ADMIN_EMAIL || "prasanth01236@gmail.com").trim().toLowerCase();
-  const token = request.headers.get("x-admin-token") || "";
-  return Boolean((email && email === adminEmail) || (token && token.includes(".")));
+  const adminEmail = (env?.ADMIN_EMAIL || "").trim().toLowerCase();
+  if (!adminEmail) return false;
+  const authHeader = request.headers.get("Authorization") || request.headers.get("authorization") || "";
+  if (!authHeader.startsWith("Bearer ")) return false;
+  const token = authHeader.slice(7).trim();
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    const payloadJson = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    const email = (payloadJson.email || payloadJson.primary_email_address || "").trim().toLowerCase();
+    return Boolean(payloadJson.sub && email && email === adminEmail);
+  } catch {
+    return false;
+  }
 }
 
 function isWorkerClerkUser(request) {
-  const userId = (request.headers.get("x-clerk-user-id") || request.headers.get("x-user-id") || "").trim();
-  return Boolean(userId && userId.startsWith("user_"));
+  const authHeader = request.headers.get("Authorization") || request.headers.get("authorization") || "";
+  if (!authHeader.startsWith("Bearer ")) return false;
+  const token = authHeader.slice(7).trim();
+  return token.split(".").length === 3;
 }
 
 const SEED_ANIME = [
@@ -200,7 +212,7 @@ function getCorsHeaders(request) {
   
   const headers = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, x-clerk-user-id, x-clerk-user-email, x-clerk-session-token, x-device-id, x-user-id, x-requested-with, Accept, Origin, Cache-Control, Pragma",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-device-id, x-requested-with, Accept, Origin, Cache-Control, Pragma",
     "Access-Control-Expose-Headers": "Content-Length, Content-Type, Set-Cookie",
     "Vary": "Origin"
   };

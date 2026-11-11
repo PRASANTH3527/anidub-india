@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SignedIn, SignedOut, SignInButton, SignOutButton, useUser } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, SignInButton, SignOutButton, useUser } from '@clerk/nextjs';
 import { 
   Trophy, 
   ShieldCheck, 

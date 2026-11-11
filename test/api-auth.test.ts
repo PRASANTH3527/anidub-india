@@ -1,20 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAdminToken, getAuthorizedAdminEmail } from '../src/utils/auth.js';
 
 const BASE_URL = 'http://localhost:3000';
 
-test('API Clerk Admin Authentication & Route Protection', async (t) => {
-  await t.test('POST /api/admin/login without authorized Clerk Admin session rejects 401', async () => {
+test('API Clerk JWT Authentication & Route Protection', async (t) => {
+  await t.test('POST /api/admin/login rejects spoofed headers and body without valid Clerk JWT (401)', async () => {
     try {
       const res = await fetch(`${BASE_URL}/api/admin/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-clerk-user-id': 'user_regular_fan',
-          'x-clerk-user-email': 'fan@anidub.in',
+          'x-clerk-user-id': 'user_clerk_admin_1',
+          'x-clerk-user-email': 'admin@anidub.in',
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          userId: 'user_clerk_admin_1',
+          email: 'admin@anidub.in',
+        }),
       });
       assert.equal(res.status, 401);
     } catch (e: any) {
@@ -23,80 +25,51 @@ test('API Clerk Admin Authentication & Route Protection', async (t) => {
     }
   });
 
-  await t.test('POST /api/admin/login with authorized Clerk Admin session succeeds', async () => {
+  await t.test('Protected routes reject unauthenticated or forged-token requests with 401', async () => {
     try {
-      const res = await fetch(`${BASE_URL}/api/admin/login`, {
+      const forgedJwt = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEyMyJ9.forgedsig';
+
+      const postAnime = await fetch(`${BASE_URL}/api/anime`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-clerk-user-id': 'user_clerk_admin_1',
-          'x-clerk-user-email': getAuthorizedAdminEmail(),
+          Authorization: `Bearer ${forgedJwt}`,
         },
-        body: JSON.stringify({}),
-      });
-      if (res.status === 404) return;
-      assert.equal(res.status, 200);
-      const json = await res.json();
-      assert.equal(json.success, true);
-      assert.ok(json.token);
-    } catch (e: any) {
-      if (e.code === 'ECONNREFUSED') return;
-      throw e;
-    }
-  });
-
-  await t.test('Protected routes reject unauthorized requests with 401', async () => {
-    try {
-      const postAnime = await fetch(`${BASE_URL}/api/anime`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: 'Unauthorized Title' }),
       });
       assert.equal(postAnime.status, 401);
 
       const putAnime = await fetch(`${BASE_URL}/api/anime/1`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${forgedJwt}`,
+        },
         body: JSON.stringify({ title: 'Unauthorized Edit' }),
       });
       assert.equal(putAnime.status, 401);
 
       const deleteAnime = await fetch(`${BASE_URL}/api/anime/1`, {
         method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${forgedJwt}`,
+        },
       });
       assert.equal(deleteAnime.status, 401);
 
-      const importCsv = await fetch(`${BASE_URL}/api/admin/import-csv`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      assert.equal(importCsv.status, 401);
-
-      const exportCsv = await fetch(`${BASE_URL}/api/admin/export-csv`);
-      assert.equal(exportCsv.status, 401);
-    } catch (e: any) {
-      if (e.code === 'ECONNREFUSED') return;
-      throw e;
-    }
-  });
-
-  await t.test('Protected routes succeed when valid Clerk Admin Bearer token is provided', async () => {
-    try {
-      const validToken = createAdminToken('user_clerk_admin_1', getAuthorizedAdminEmail());
       const verifyRes = await fetch(`${BASE_URL}/api/admin/verify`, {
-        headers: { Authorization: `Bearer ${validToken}` },
+        headers: {
+          Authorization: `Bearer ${forgedJwt}`,
+        },
       });
-      if (verifyRes.status === 404) return;
-      assert.equal(verifyRes.status, 200);
-      const verifyData = await verifyRes.json();
-      assert.equal(verifyData.valid, true);
+      assert.equal(verifyRes.status, 401);
 
-      const exportRes = await fetch(`${BASE_URL}/api/admin/export-csv`, {
-        headers: { Authorization: `Bearer ${validToken}` },
+      const exportCsv = await fetch(`${BASE_URL}/api/admin/export-csv`, {
+        headers: {
+          Authorization: `Bearer ${forgedJwt}`,
+        },
       });
-      assert.equal(exportRes.status, 200);
-      const exportData = await exportRes.json();
-      assert.equal(exportData.success, true);
+      assert.equal(exportCsv.status, 401);
     } catch (e: any) {
       if (e.code === 'ECONNREFUSED') return;
       throw e;

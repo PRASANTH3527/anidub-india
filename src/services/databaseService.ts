@@ -234,7 +234,6 @@ class DatabaseService {
     try {
       localStorage.removeItem('cf_anime_watchlist');
       localStorage.removeItem('cf_anime_recently_viewed');
-      localStorage.removeItem('cf_admin_token');
       this.cache = [];
       this.cacheTimestamp = 0;
       

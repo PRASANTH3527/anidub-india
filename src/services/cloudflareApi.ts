@@ -8,7 +8,7 @@
  */
 
 import { CLOUDFLARE_API_URL, getCloudflareUrl, CLOUDFLARE_ENDPOINTS, DEFAULT_FALLBACK_WORKER_URL } from '../config/cloudflare';
-import { getActiveClerkSession } from '../lib/clerk';
+import { getClerkSessionToken } from '../lib/clerk';
 
 export interface AnimePayload {
   id?: number | string;
@@ -57,8 +57,18 @@ class CloudflareApiService {
   private async smartFetch(path: string, options: RequestInit = {}): Promise<Response> {
     const url = getCloudflareUrl(path);
     const isRelative = !url.startsWith('http://') && !url.startsWith('https://');
+    const mergedHeaders: Record<string, string> = {
+      ...(options.headers as Record<string, string> | undefined),
+    };
+
+    const clerkJwt = await getClerkSessionToken();
+    if (clerkJwt && !mergedHeaders['Authorization'] && !mergedHeaders['authorization']) {
+      mergedHeaders['Authorization'] = `Bearer ${clerkJwt}`;
+    }
+
     const fetchOptions: RequestInit = {
       ...options,
+      headers: mergedHeaders,
       cache: 'no-store',
       credentials: options.credentials || (isRelative ? 'same-origin' : 'include')
     };
@@ -97,7 +107,6 @@ class CloudflareApiService {
         });
       }
 
-      // If response is OK and somehow text/plain, try returning it
       if (res.ok) {
         return res;
       }
@@ -118,47 +127,13 @@ class CloudflareApiService {
   }
 
   /**
-   * Retrieves the current signed admin authorization token (if present)
+   * Generates standard JSON headers; Clerk Bearer JWT is attached automatically in smartFetch.
    */
-  private getAdminToken(): string {
-    try {
-      return localStorage.getItem('cf_admin_token') || '';
-    } catch {
-      return '';
-    }
-  }
-
-  /**
-   * Generates headers for API requests with strict Clerk session and Admin token headers
-   */
-  private getHeaders(includeAuth: boolean = false): Record<string, string> {
-    const headers: Record<string, string> = {
+  private getHeaders(_includeAuth: boolean = false): Record<string, string> {
+    return {
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     };
-
-    const clerkUser = getActiveClerkSession();
-    if (clerkUser?.id) {
-      headers['x-clerk-user-id'] = clerkUser.id;
-      headers['x-user-id'] = clerkUser.id;
-      if (clerkUser.primaryEmailAddress?.emailAddress) {
-        headers['x-clerk-user-email'] = clerkUser.primaryEmailAddress.emailAddress;
-      }
-      if (clerkUser.sessionToken) {
-        headers['x-clerk-session-token'] = clerkUser.sessionToken;
-        headers['Authorization'] = `Bearer ${clerkUser.sessionToken}`;
-      }
-    }
-
-    if (includeAuth) {
-      const token = this.getAdminToken();
-      if (token) {
-        headers['x-admin-token'] = token;
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-    }
-
-    return headers;
   }
 
   /**
@@ -552,29 +527,14 @@ class CloudflareApiService {
   }
 
   /**
-   * VOTE STATUS: Checks if current client device has already voted for this anime
+   * VOTE STATUS: Checks if current authenticated user has already voted for this anime
    */
   public async checkVoteStatus(id: number | string, userId?: string): Promise<{ hasLiked: boolean; hasUpvoted: boolean }> {
     try {
-      let currentUserId = userId || 'default_user';
-      if (!userId) {
-        try {
-          const session = sessionStorage.getItem('clerk_active_session');
-          if (session) {
-            const parsed = JSON.parse(session);
-            if (parsed?.id) currentUserId = parsed.id;
-          }
-          const clerkUser = (window as any).Clerk?.user;
-          if (clerkUser?.id) currentUserId = clerkUser.id;
-        } catch {}
-      }
-
-      const endpoint = `/api/anime/${id}/vote-status?userId=${encodeURIComponent(currentUserId)}`;
+      const currentUserId = userId || (typeof window !== 'undefined' && (window as any).Clerk?.user?.id) || '';
+      const endpoint = `/api/anime/${id}/vote-status${currentUserId ? `?userId=${encodeURIComponent(currentUserId)}` : ''}`;
       const res = await this.smartFetch(endpoint, {
-        headers: {
-          ...this.getHeaders(false),
-          'x-user-id': currentUserId
-        }
+        headers: this.getHeaders(false)
       });
       if (res.ok) {
         return await res.json();
@@ -625,7 +585,7 @@ class CloudflareApiService {
   }
 
   /**
-   * ADMIN: Verifies current session token
+   * ADMIN: Verifies current Clerk JWT session with backend
    */
   public async verifyAdmin(): Promise<boolean> {
     try {
@@ -639,22 +599,18 @@ class CloudflareApiService {
   }
 
   /**
-   * ADMIN: Authenticates via active Clerk Admin session and obtains a signed HMAC session token
+   * ADMIN: Verifies Clerk Admin JWT session on the backend without sending client-side email or userId
    */
-  public async loginAdmin(clerkEmail?: string): Promise<{ success: boolean; token?: string; error?: string }> {
+  public async loginAdmin(): Promise<{ success: boolean; error?: string }> {
     try {
-      const clerkUser = getActiveClerkSession();
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.LOGIN_ADMIN, {
         method: 'POST',
-        headers: this.getHeaders(false),
-        body: JSON.stringify({
-          clerk_user_id: clerkUser?.id || null,
-          clerk_email: clerkEmail || clerkUser?.primaryEmailAddress?.emailAddress || null
-        })
+        headers: this.getHeaders(true),
+        body: JSON.stringify({})
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success && data.token) {
-        return { success: true, token: data.token };
+      if (res.ok && data.success) {
+        return { success: true };
       }
       return { success: false, error: data.error || 'Unauthorized Clerk Admin session' };
     } catch (err: any) {
@@ -1077,13 +1033,10 @@ class CloudflareApiService {
    */
   public async logoutAdmin(): Promise<boolean> {
     try {
-      const token = this.getAdminToken();
-      if (token) {
-        await this.smartFetch('/api/admin/logout', {
-          method: 'POST',
-          headers: this.getHeaders(true)
-        }).catch(() => {});
-      }
+      await this.smartFetch('/api/admin/logout', {
+        method: 'POST',
+        headers: this.getHeaders(true)
+      }).catch(() => {});
       return true;
     } catch {
       return true;

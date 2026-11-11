@@ -7,7 +7,7 @@ import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown, Loader2, LogOu
 import { cloudflareApi } from './services/cloudflareApi';
 import { getCloudflareUrl, CLOUDFLARE_API_URL } from './config/cloudflare';
 import { AniDubLogo } from './components/AniDubLogo';
-import { useUser, useClerk, SignIn } from './lib/clerk';
+import { useUser, useClerk, SignIn } from '@clerk/nextjs';
 import { isAuthorizedClerkAdmin } from './utils/auth';
 
 const ViewLoadingFallback = () => (
@@ -98,9 +98,7 @@ export default function App() {
   const { signOut: clerkSignOut } = useClerk();
   const isClerkAdmin = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
 
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return Boolean(localStorage.getItem('cf_admin_token')) && isClerkAdmin;
-  });
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(isClerkAdmin);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isDubModalOpen, setIsDubModalOpen] = useState(false);
   const [adminAuthError, setAdminAuthError] = useState<string>('');
@@ -279,7 +277,6 @@ export default function App() {
 
   useEffect(() => {
     if (!isClerkAdmin) {
-      localStorage.removeItem('cf_admin_token');
       setIsAdminAuthenticated(false);
       if (activeTab === 'admin') {
         setActiveTab('home');
@@ -287,34 +284,21 @@ export default function App() {
       return;
     }
 
-    const token = localStorage.getItem('cf_admin_token');
-    if (token) {
-      cloudflareApi.verifyAdmin().then(isValid => {
-        if (isValid) {
-          setIsAdminAuthenticated(true);
-        } else {
-          // Obtain fresh signed token for verified Clerk admin
-          cloudflareApi.loginAdmin(clerkUser?.primaryEmailAddress?.emailAddress).then(res => {
-            if (res.success && res.token) {
-              localStorage.setItem('cf_admin_token', res.token);
-              setIsAdminAuthenticated(true);
-            } else {
-              localStorage.removeItem('cf_admin_token');
-              setIsAdminAuthenticated(false);
-              if (activeTab === 'admin') setActiveTab('home');
-            }
-          });
-        }
-      });
-    } else {
-      cloudflareApi.loginAdmin(clerkUser?.primaryEmailAddress?.emailAddress).then(res => {
-        if (res.success && res.token) {
-          localStorage.setItem('cf_admin_token', res.token);
-          setIsAdminAuthenticated(true);
-        }
-      });
-    }
-  }, [isClerkAdmin, clerkUser?.primaryEmailAddress?.emailAddress]);
+    cloudflareApi.verifyAdmin().then(isValid => {
+      if (isValid) {
+        setIsAdminAuthenticated(true);
+      } else {
+        cloudflareApi.loginAdmin().then(res => {
+          if (res.success) {
+            setIsAdminAuthenticated(true);
+          } else {
+            setIsAdminAuthenticated(false);
+            if (activeTab === 'admin') setActiveTab('home');
+          }
+        });
+      }
+    });
+  }, [isClerkAdmin]);
 
   const handleVerifyClerkAdminUnlock = async () => {
     if (!isClerkAdmin) {
@@ -324,9 +308,8 @@ export default function App() {
     setAdminPasswordLoading(true);
     setAdminAuthError('');
     try {
-      const data = await cloudflareApi.loginAdmin(clerkUser?.primaryEmailAddress?.emailAddress);
-      if (data.success && data.token) {
-        localStorage.setItem('cf_admin_token', data.token);
+      const data = await cloudflareApi.loginAdmin();
+      if (data.success) {
         setIsAdminAuthenticated(true);
         setActiveTab('admin');
         setIsPasswordModalOpen(false);
@@ -346,7 +329,6 @@ export default function App() {
       await cloudflareApi.logoutAdmin();
     } catch {}
 
-    localStorage.removeItem('cf_admin_token');
     setIsAdminAuthenticated(false);
     setActiveTab('home');
   };

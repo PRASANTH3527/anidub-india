@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Shield, X, AlertCircle, CheckCircle2, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cloudflareApi } from '../services/cloudflareApi';
-import { useUser, useClerk, SignIn } from '../lib/clerk';
+import { useUser, useClerk, SignIn } from '@clerk/nextjs';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 
 interface AdminLoginModalProps {
@@ -23,9 +23,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
     setError('');
     setLoading(true);
     try {
-      const data = await cloudflareApi.loginAdmin(user?.primaryEmailAddress?.emailAddress);
-      if (data.success && data.token) {
-        localStorage.setItem('cf_admin_token', data.token);
+      const data = await cloudflareApi.loginAdmin();
+      if (data.success) {
         onSuccess();
         onClose();
       } else {

@@ -17,13 +17,10 @@ type PagesFunction<T = any> = (context: { request: Request; env: T; params?: any
 const D1_DATABASE_ID = '75f053ab-5b44-4d48-abf8-b3a357a89426';
 
 function hasEdgeUserAuth(request: Request): boolean {
-  const clerkId = request.headers.get('x-clerk-user-id') || request.headers.get('x-user-id') || '';
   const authHeader = request.headers.get('Authorization') || request.headers.get('authorization') || '';
-  return Boolean(
-    (clerkId && clerkId.startsWith('user_')) ||
-    authHeader.includes('clerk_sess_') ||
-    (authHeader.startsWith('Bearer ') && authHeader.includes('.'))
-  );
+  if (!authHeader.startsWith('Bearer ')) return false;
+  const token = authHeader.slice(7).trim();
+  return token.split('.').length === 3;
 }
 
 function cleanWatchUrl(rawUrl?: string | null): string {
@@ -90,7 +87,7 @@ function jsonResponse(data: any, status = 200, request?: Request, extraHeaders?:
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token, x-clerk-user-id, x-clerk-user-email, x-clerk-session-token, x-device-id, x-user-id',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-device-id',
     ...(extraHeaders || {})
   };
 

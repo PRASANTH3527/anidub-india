@@ -66,7 +66,7 @@ import { CLOUDFLARE_API_URL, getCloudflareUrl } from '../config/cloudflare';
 import Papa from 'papaparse';
 import { AniDubLogo } from './AniDubLogo';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
-import { useUser, SignIn } from '../lib/clerk';
+import { useUser, SignIn } from '@clerk/nextjs';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 
 export interface AdminDashboardProps {
@@ -1627,7 +1627,6 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
               onClick={() => {
                 if (onLogout) onLogout();
                 else {
-                  localStorage.removeItem('cf_admin_token');
                   window.location.href = '/';
                 }
               }}
@@ -1745,7 +1744,6 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
                 onClick={() => {
                   if (onLogout) onLogout();
                   else {
-                    localStorage.removeItem('cf_admin_token');
                     window.location.href = '/';
                   }
                 }}

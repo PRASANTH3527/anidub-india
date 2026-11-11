@@ -20,6 +20,9 @@
       "@/*": [
         "./*"
       ],
+      "@clerk/nextjs": [
+        "./src/lib/clerk.tsx"
+      ],
       "next/image": [
         "./src/lib/next-image.tsx"
       ],

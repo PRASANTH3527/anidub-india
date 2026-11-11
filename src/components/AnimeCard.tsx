@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { useToast } from './Toast';
-import { useUser } from '@clerk/clerk-react';
+import { useUser } from '@clerk/nextjs';
 
 export interface AnimeCardData {
   id: number;

@@ -10,7 +10,7 @@ export default defineConfig(() => {
       dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),
-        '@clerk/clerk-react': path.resolve(import.meta.dirname, 'src/lib/clerk.tsx'),
+        '@clerk/nextjs': path.resolve(import.meta.dirname, 'src/lib/clerk.tsx'),
         'next/image': path.resolve(import.meta.dirname, 'src/lib/next-image.tsx'),
         'next/dynamic': path.resolve(import.meta.dirname, 'src/lib/next-dynamic.tsx'),
         'next/script': path.resolve(import.meta.dirname, 'src/lib/next-script.tsx'),

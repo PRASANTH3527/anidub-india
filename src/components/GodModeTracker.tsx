@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Script from 'next/script';
-import { useUser } from '@clerk/clerk-react';
+import { useUser } from '@clerk/nextjs';
 import { 
   getOrCreateSessionId, 
   sendAnalyticsPayload, 

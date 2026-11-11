@@ -26,7 +26,7 @@ import { cloudflareApi } from '../services/cloudflareApi';
 import { getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
 import { generateRandomUsername } from '../utils/randomUser';
 import { formatRelativeTime } from '../utils/timestamps';
-import { useUser, SignInButton } from '@clerk/clerk-react';
+import { useUser, SignInButton } from '@clerk/nextjs';
 import { DualRating } from './DualRating';
 
 export interface AnimeDetailPageProps {

@@ -17,7 +17,7 @@ import {
 import { AnimeRecord, DubLanguage, dbService } from '../services/databaseService';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { useToast } from './Toast';
-import { getActiveClerkSession } from '../lib/clerk';
+import { useUser } from '@clerk/nextjs';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 
 interface DubInfoModalProps {
@@ -57,6 +57,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   onClose,
   onSubmit,
 }) => {
+  const { isSignedIn, user: clerkUser } = useUser();
   if (!isOpen) return null;
 
   const initDataAny = initialData as any;
@@ -473,9 +474,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
       const isAdminSessionVerified = Boolean(
-        typeof window !== 'undefined' &&
-        localStorage.getItem('cf_admin_token') &&
-        isAuthorizedClerkAdmin(getActiveClerkSession())
+        isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser)
       );
       const resolvedSubmissionStatus = mode === 'edit'
         ? (initialData?.submissionStatus || initialData?.approval_status || 'approved')
