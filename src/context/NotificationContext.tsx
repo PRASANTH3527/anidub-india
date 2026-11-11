@@ -3,6 +3,7 @@ import { useToast } from '../components/Toast';
 import { ActivityType, formatNotificationTitle, formatNotificationBody } from '../utils/notifications';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
+import { getClerkSessionToken } from '../lib/clerk';
 
 export interface NotificationItem {
   id: string | number;
@@ -276,44 +277,50 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
   }, [handleIncomingNotification]);
 
-  // Also connect to Cloudflare Worker WebSocket as secondary channel
+  // Also connect to Cloudflare Worker WebSocket as secondary channel when authenticated
   useEffect(() => {
     let wsActive = true;
-    try {
-      const ws = new WebSocket(getCloudflareWsUrl('/ws'));
-      wsRef.current = ws;
+    const initAuthenticatedWs = async () => {
+      try {
+        const token = await getClerkSessionToken();
+        if (!token || !wsActive) return;
 
-      ws.onmessage = (event) => {
-        if (!wsActive) return;
-        try {
-          const data = JSON.parse(event.data);
-          // If a new live review or chat arrived via Cloudflare WS
-          if (data && (data.text || data.comment)) {
-            // Avoid duplicate if it's the welcome greeting
-            if (data.id === 'welcome_init' || data.user === 'AniDub_Bot') return;
-            // Check if current guest sent it themselves to avoid double alert
-            const currentGuest = localStorage.getItem('anidub_guest_chat_name');
-            if (currentGuest && data.user === currentGuest) return;
+        const ws = new WebSocket(getCloudflareWsUrl('/ws', token));
+        wsRef.current = ws;
 
-            const isReview = Boolean(data.isReview || data.rating);
-            handleIncomingNotification({
-              id: data.id || `ws_${Date.now()}`,
-              type: isReview ? 'review' : 'chat',
-              user: data.user,
-              rating: data.rating,
-              language: data.language,
-              message: data.text || data.comment,
-              anime_title: isReview ? (data.animeTitle || 'Community Dub Review') : undefined,
-              timestamp: data.timestamp
-            });
-          }
-        } catch {}
-      };
-      ws.onerror = () => {
-        wsActive = false;
-        console.warn('WS connection failed, skipping.');
-      };
-    } catch {}
+        ws.onmessage = (event) => {
+          if (!wsActive) return;
+          try {
+            const data = JSON.parse(event.data);
+            // If a new live review or chat arrived via Cloudflare WS
+            if (data && (data.text || data.comment)) {
+              // Avoid duplicate if it's the welcome greeting
+              if (data.id === 'welcome_init' || data.user === 'AniDub_Bot') return;
+              // Check if current guest sent it themselves to avoid double alert
+              const currentGuest = localStorage.getItem('anidub_guest_chat_name');
+              if (currentGuest && data.user === currentGuest) return;
+
+              const isReview = Boolean(data.isReview || data.rating);
+              handleIncomingNotification({
+                id: data.id || `ws_${Date.now()}`,
+                type: isReview ? 'review' : 'chat',
+                user: data.user,
+                rating: data.rating,
+                language: data.language,
+                message: data.text || data.comment,
+                anime_title: isReview ? (data.animeTitle || 'Community Dub Review') : undefined,
+                timestamp: data.timestamp
+              });
+            }
+          } catch {}
+        };
+        ws.onerror = () => {
+          wsActive = false;
+          console.warn('WS connection failed, skipping.');
+        };
+      } catch {}
+    };
+    initAuthenticatedWs();
 
     return () => {
       wsActive = false;

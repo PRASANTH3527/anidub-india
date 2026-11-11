@@ -4,10 +4,13 @@
  * Integrates directly with Cloudflare D1 (env.DB) and ImgBB Backend Uploads
  */
 
-import { getAuth } from '../../src/utils/auth';
+import { getAuth, validateAndRateLimitFeedback, extractClientIp } from '../../src/utils/auth';
 
 interface Env {
   DB: any; // Cloudflare D1 Database binding
+  ADMIN_EMAIL?: string;
+  CLERK_SECRET_KEY?: string;
+  CLERK_JWT_KEY?: string;
   IMGBB_API_KEY?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;
@@ -111,12 +114,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 1. POST /api/upload (ImgBB Secure Backend Upload - Requires Clerk User Session & env.IMGBB_API_KEY)
   if (path === '/api/upload' && method === 'POST') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId) {
       return jsonResponse({ error: 'Unauthorized: Active Clerk user session required' }, 401, request);
     }
     try {
-      const apiKey = env.IMGBB_API_KEY || (typeof process !== 'undefined' ? process.env?.IMGBB_API_KEY : '');
+      const apiKey = env.IMGBB_API_KEY;
       if (!apiKey) {
         return jsonResponse({ error: 'Server configuration error: IMGBB_API_KEY environment variable is not set.' }, 500, request);
       }
@@ -162,7 +165,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 2. GET /api/user/profile & PUT /api/user/profile (Extracts userId strictly from verified Clerk JWT session)
   if (path === '/api/user/profile') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId) {
       return jsonResponse({ error: 'Unauthorized: Active Clerk user session required' }, 401, request);
     }
@@ -289,7 +292,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 4. POST /api/anime (Create anime - Strictly Requires Authenticated Clerk Admin Session)
   if (path === '/api/anime' && method === 'POST') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId) {
       return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -435,7 +438,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (method === 'PUT' || method === 'PATCH') {
-      const session = await getAuth(request);
+      const session = await getAuth(request, env);
       if (!session.userId) {
         return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
       }
@@ -559,7 +562,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (method === 'DELETE') {
-      const session = await getAuth(request);
+      const session = await getAuth(request, env);
       if (!session.userId) {
         return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
       }
@@ -590,7 +593,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     // POST /api/anime/:id/reviews (Strictly extracts userId from verified Clerk JWT session)
     if (sub === 'reviews' && method === 'POST') {
       try {
-        const session = await getAuth(request);
+        const session = await getAuth(request, env);
         if (!session.userId) {
           return jsonResponse({ error: "Authentication required", requiresAuth: true }, 401, request);
         }
@@ -610,7 +613,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (sub === 'vote-status' && method === 'GET') {
       let hasLiked = false;
       let hasUpvoted = false;
-      const session = await getAuth(request);
+      const session = await getAuth(request, env);
       const userId = session.userId;
       if (env.DB && numericId && userId) {
         try {
@@ -630,7 +633,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     // POST /api/anime/:id/vote (or /upvote) - Strictly extracts userId from verified Clerk JWT session
     if ((sub === 'vote' || sub === 'upvote') && method === 'POST') {
       try {
-        const session = await getAuth(request);
+        const session = await getAuth(request, env);
         const userId = session.userId;
 
         if (!userId) {
@@ -695,7 +698,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     // POST /api/anime/:id/like (or /likes) - Strictly extracts userId from verified Clerk JWT session
     if ((sub === 'like' || sub === 'likes') && method === 'POST') {
       try {
-        const session = await getAuth(request);
+        const session = await getAuth(request, env);
         const userId = session.userId;
 
         if (!userId) {
@@ -762,7 +765,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/rate' || (path.startsWith('/api/anime/') && path.endsWith('/rate'))) {
     if (method === 'POST') {
       try {
-        const session = await getAuth(request);
+        const session = await getAuth(request, env);
         if (!session.userId) {
           return jsonResponse({ error: "Unauthorized: Active Clerk user session required to submit ratings" }, 401, request);
         }
@@ -846,7 +849,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (method === 'GET') {
       try {
         const animeId = Number(url.searchParams.get('anime_id') || url.searchParams.get('id'));
-        const session = await getAuth(request);
+        const session = await getAuth(request, env);
         const userId = session.userId;
 
         if (!animeId || isNaN(animeId)) {
@@ -895,7 +898,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 7. GET /api/watchlist & POST /api/watchlist (Extracts userId strictly from verified Clerk JWT session)
   if (path === '/api/watchlist') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (method === 'GET') {
       if (!session.userId) return jsonResponse({ data: [] }, 200, request);
       try {
@@ -920,7 +923,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 8. GET /api/cloudflare/status (Protected by Clerk Admin Auth)
   if (path === '/api/cloudflare/status') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -943,7 +946,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         },
         workers: { status: "Running", zone: "Workers Functions API", avgLatencyMs: "11ms" }
       },
-      schemaSql: `-- Cloudflare D1 Database ID: ${D1_DATABASE_ID}\n-- ImgBB API Key: Configured via process.env.IMGBB_API_KEY`,
+      schemaSql: `-- Cloudflare D1 Database ID: ${D1_DATABASE_ID}\n-- ImgBB API Key: Configured via Cloudflare env.IMGBB_API_KEY`,
       logs: [
         { id: 1, timestamp: new Date().toISOString(), service: 'D1', event_type: 'SELECT /api/anime', status_code: 200, latency_ms: 12, details: 'Catalog pagination query' },
         { id: 2, timestamp: new Date().toISOString(), service: 'ImgBB', event_type: 'UPLOAD_POSTER', status_code: 200, latency_ms: 45, details: 'Uploaded to ImgBB CDN' }
@@ -953,7 +956,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 9. POST /api/cloudflare/d1/query - Parameterized D1 Query Endpoint (Rejects Raw SQL from Client)
   if (path === '/api/cloudflare/d1/query' && method === 'POST') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId) {
       return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -1072,7 +1075,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     if (method === 'POST') {
       try {
-        const session = await getAuth(request);
+        const session = await getAuth(request, env);
         if (!session.userId) {
           return jsonResponse({ error: "Unauthorized: Active Clerk user session required to post chat messages" }, 401, request);
         }
@@ -1192,39 +1195,40 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 10. POST /api/feedback
-  if (path === '/api/feedback' && method === 'POST') {
+  // 10. POST /api/feedback (Protected with Input Validation, Spam Prevention & IP Rate-Limiting)
+  if ((path === '/api/feedback' || path === '/api/submit-feedback') && method === 'POST') {
     try {
-      const body: any = await request.json();
+      const body: any = await request.json().catch(() => null);
+      const clientIp = extractClientIp(request);
+      const validation = validateAndRateLimitFeedback(body, clientIp);
+      if (!validation.ok || !validation.sanitized) {
+        return jsonResponse({ error: validation.error }, validation.status, request);
+      }
+
+      const { name: author, email, message } = validation.sanitized;
+
       if (env.DB) {
         await env.DB.prepare(
           "INSERT INTO feedback (name_or_insta, email, feedback_text) VALUES (?, ?, ?)"
-        ).bind(
-          body.name || body.nameOrInsta || 'Anonymous',
-          body.email || '',
-          body.message || body.feedback || ''
-        ).run();
+        ).bind(author, email, message).run();
       }
 
-      const author = body.name || body.nameOrInsta || 'Anonymous';
-      const email = body.email || 'N/A';
-      const message = body.message || body.feedback || '';
       const tgMsg = `💬 *NEW FEEDBACK / DUB SUBMISSION*\n\n` +
         `👤 *Name / Insta:* ${author}\n` +
-        `📧 *Email:* ${email}\n` +
+        `📧 *Email:* ${email || 'N/A'}\n` +
         `📝 *Feedback:* ${message}\n\n` +
         `_Received via Anidub India Edge_`;
       await sendTelegramAlert(env, tgMsg);
 
-      return jsonResponse({ success: true }, 201);
+      return jsonResponse({ success: true }, 201, request);
     } catch (err: any) {
-      return jsonResponse({ error: err.message }, 500);
+      return jsonResponse({ error: err.message }, 500, request);
     }
   }
 
   // 10b. GET /api/feedback (Admin only)
   if (path === '/api/feedback' && method === 'GET') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -1241,7 +1245,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 10c. GET /api/admin/pending (Admin only)
   if (path === '/api/admin/pending' && method === 'GET') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -1260,7 +1264,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 10d. POST /api/admin/import-csv (Admin only)
   if (path === '/api/admin/import-csv' && method === 'POST') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -1484,7 +1488,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 10d-2. POST /api/admin/clear-pending - Clears all items currently in pending moderation status (Admin only)
   if (path === '/api/admin/clear-pending' && method === 'POST') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -1501,7 +1505,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   // 10e. POST /api/admin/approve/:id & /api/admin/reject/:id (Admin only)
   const approveMatch = path.match(/^\/api\/admin\/approve\/([0-9a-zA-Z_-]+)\/?$/);
   if (approveMatch && method === 'POST') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -1516,7 +1520,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)\/?$/);
   if (rejectMatch && method === 'POST') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -1529,7 +1533,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 11. POST /api/admin/reset-db (Admin only)
   if (path === '/api/admin/reset-db' && method === 'POST') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -1598,7 +1602,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
       else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = deviceType === 'mobile' ? 'Safari Mobile' : 'Safari';
 
-      const session = await getAuth(request);
+      const session = await getAuth(request, env);
       const clerkUserId = session.userId || null;
       const referrer = payload.referrer || 'direct';
 
@@ -1650,7 +1654,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // 13. GOD-MODE EDGE ANALYTICS: GET /api/analytics/dashboard (Admin only)
   if (path === '/api/analytics/dashboard' && method === 'GET') {
-    const session = await getAuth(request);
+    const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }

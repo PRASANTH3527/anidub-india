@@ -9,7 +9,9 @@ import multer from 'multer';
 import { GoogleGenAI } from '@google/genai';
 import {
   auth,
-  getAuth
+  getAuth,
+  validateAndRateLimitFeedback,
+  extractClientIp
 } from './src/utils/auth.js';
 import { 
   formatNotificationTitle, 
@@ -2450,12 +2452,28 @@ app.get('/api/feedback', requireAdminAuth, async (req, res) => {
   }
 });
 
-app.post(['/api/feedback', '/api/submit-feedback'], upload.any(), requireUserAuth, async (req: any, res: any) => {
+app.get(['/ws', '/api/chat/stream', '/ws/api/chat/stream'], async (req: any, res: any) => {
+  const session = await getAuth(req);
+  if (!session.userId) {
+    return res.status(401).json({
+      error: 'Unauthorized: Verified Clerk session required for WebSocket stream'
+    });
+  }
+  return res.status(426).json({
+    error: 'Upgrade Required: Connect using a WebSocket client'
+  });
+});
+
+app.post(['/api/feedback', '/api/submit-feedback'], upload.any(), async (req: any, res: any) => {
   try {
     const body = req.body || {};
-    const name = body.name || body.nameOrInsta || 'Anonymous';
-    const email = body.email || '';
-    const feedback = body.feedback || body.message || '';
+    const clientIp = extractClientIp(req);
+    const validation = validateAndRateLimitFeedback(body, clientIp);
+    if (!validation.ok || !validation.sanitized) {
+      return res.status(validation.status).json({ error: validation.error });
+    }
+
+    const { name, email, message: feedback } = validation.sanitized;
 
     if (db) {
       db.run("INSERT INTO feedback (name_or_insta, email, feedback_text) VALUES (?, ?, ?)", [name, email, feedback]);
@@ -3135,9 +3153,41 @@ async function startServer() {
   });
 
   try {
-    const wss = new WebSocketServer({ server, path: '/ws' });
-    wss.on('connection', (ws) => {
-      ws.send(JSON.stringify({ type: 'connected', message: 'WebSocket connected' }));
+    const wss = new WebSocketServer({ noServer: true });
+    server.on('upgrade', async (req, socket, head) => {
+      try {
+        const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+        const wsPath = parsedUrl.pathname;
+        if (wsPath !== '/ws' && wsPath !== '/api/chat/stream' && wsPath !== '/ws/api/chat/stream') {
+          socket.destroy();
+          return;
+        }
+
+        // Strictly verify Clerk JWT session before upgrading to WebSocket stream
+        const session = await getAuth(req);
+        if (!session.userId) {
+          socket.write(
+            'HTTP/1.1 401 Unauthorized\r\n' +
+            'Content-Type: application/json\r\n' +
+            'Connection: close\r\n\r\n' +
+            JSON.stringify({ error: 'Unauthorized: Verified Clerk session required for WebSocket stream' })
+          );
+          socket.destroy();
+          return;
+        }
+
+        (req as any).verifiedUserId = session.userId;
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          wss.emit('connection', ws, req);
+        });
+      } catch {
+        socket.destroy();
+      }
+    });
+
+    wss.on('connection', (ws, req) => {
+      const verifiedUserId = (req as any)?.verifiedUserId;
+      ws.send(JSON.stringify({ type: 'connected', message: 'WebSocket connected', userId: verifiedUserId }));
     });
     wss.on('error', (err) => {
       console.warn('[WebSocket Warning]:', err.message);

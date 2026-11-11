@@ -27,6 +27,7 @@ import { getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
 import { generateRandomUsername } from '../utils/randomUser';
 import { formatRelativeTime } from '../utils/timestamps';
 import { useUser, SignInButton } from '@clerk/nextjs';
+import { getClerkSessionToken } from '../lib/clerk';
 import { DualRating } from './DualRating';
 
 export interface AnimeDetailPageProps {
@@ -333,14 +334,17 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
       // 3. Send through Cloudflare WebSocket so connected users receive it instantly
       try {
-        const ws = new WebSocket(getCloudflareWsUrl('/ws'));
-        ws.onopen = () => {
-          ws.send(JSON.stringify({
-            id: `rev_${Date.now()}`,
-            ...chatPayload
-          }));
-          setTimeout(() => ws.close(), 800);
-        };
+        const wsToken = await getClerkSessionToken();
+        if (wsToken) {
+          const ws = new WebSocket(getCloudflareWsUrl('/ws', wsToken));
+          ws.onopen = () => {
+            ws.send(JSON.stringify({
+              id: `rev_${Date.now()}`,
+              ...chatPayload
+            }));
+            setTimeout(() => ws.close(), 800);
+          };
+        }
       } catch (_) {}
 
     } catch (err) {

@@ -104,20 +104,29 @@ export function getCloudflareUrl(path: string): string {
 /**
  * Resolves full Cloudflare WebSocket URL.
  */
-export function getCloudflareWsUrl(path: string): string {
+export function getCloudflareWsUrl(path: string, token?: string | null): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  let baseWsUrl = '';
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (host === 'localhost' || host === '127.0.0.1' || host.includes('.run.app')) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${window.location.host}${cleanPath}`;
+      baseWsUrl = `${protocol}//${window.location.host}${cleanPath}`;
     }
   }
-  if (!CLOUDFLARE_API_URL || CLOUDFLARE_API_URL.trim() === '') {
-    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
-    return `${protocol}//${host}${cleanPath}`;
+  if (!baseWsUrl) {
+    if (!CLOUDFLARE_API_URL || CLOUDFLARE_API_URL.trim() === '') {
+      const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
+      baseWsUrl = `${protocol}//${host}${cleanPath}`;
+    } else {
+      const cleanBase = CLOUDFLARE_API_URL.replace(/\/+$/, '').replace(/^http/, 'ws');
+      baseWsUrl = `${cleanBase}${cleanPath}`;
+    }
   }
-  const cleanBase = CLOUDFLARE_API_URL.replace(/\/+$/, '').replace(/^http/, 'ws');
-  return `${cleanBase}${cleanPath}`;
+  if (token && token.trim()) {
+    const sep = baseWsUrl.includes('?') ? '&' : '?';
+    return `${baseWsUrl}${sep}token=${encodeURIComponent(token.trim())}`;
+  }
+  return baseWsUrl;
 }

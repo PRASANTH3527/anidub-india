@@ -7,6 +7,8 @@
  * Handles D1 CRUD, ImgBB Proxies, and Telegram Notifications.
  */
 
+import { createClerkClient, verifyToken } from '@clerk/backend';
+
 export class ChatRoom {
   constructor(state, env) {
     this.state = state;
@@ -52,11 +54,22 @@ export class ChatRoom {
       });
     }
 
-    // WebSocket Handshake
-    if (upgradeHeader === "websocket") {
+    // WebSocket Handshake - Strictly requires cryptographically verified Clerk session before upgrade
+    if (upgradeHeader && upgradeHeader.toLowerCase() === "websocket") {
+      const verifiedUserId =
+        request.headers.get("x-verified-clerk-user-id") ||
+        (await getWorkerClerkUserId(request, this.env));
+      if (!verifiedUserId) {
+        return jsonResponse(
+          { error: "Unauthorized: Verified Clerk session required for WebSocket stream" },
+          401,
+          request
+        );
+      }
+
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
-      await this.handleSession(server);
+      await this.handleSession(server, verifiedUserId);
       const response = new Response(null, { status: 101, webSocket: client });
       const headers = getCorsHeaders(request);
       for (const [key, value] of Object.entries(headers)) {
@@ -95,7 +108,11 @@ export class ChatRoom {
     }
   }
 
-  async handleSession(webSocket) {
+  async handleSession(webSocket, verifiedUserId) {
+    if (!verifiedUserId) {
+      webSocket.close(1008, "Unauthorized: Verified Clerk session required");
+      return;
+    }
     webSocket.accept();
     this.sessions.add(webSocket);
 
@@ -144,8 +161,10 @@ export class ChatRoom {
           rating: data.rating !== undefined && data.rating !== null && !isNaN(Number(data.rating)) ? Number(data.rating) : null,
           language: (data.language || data.dub_language) ? String(data.language || data.dub_language).slice(0, 30) : null,
           isReview: Boolean(data.isReview || data.is_review || data.rating) ? 1 : 0,
-          clerk_user_id: String(data.clerk_user_id || data.userId || "guest").slice(0, 100)
+          clerk_user_id: String(verifiedUserId).slice(0, 100)
         };
+
+        if (!chatMsg.text.trim()) return;
 
         if (this.env.DB) {
           try {
@@ -171,42 +190,202 @@ export class ChatRoom {
   }
 }
 
-function isWorkerClerkAdmin(request, env) {
-  const adminEmail = (env?.ADMIN_EMAIL || "").trim().toLowerCase();
-  if (!adminEmail) return false;
+function extractWorkerClerkToken(request) {
+  if (!request) return null;
   const authHeader = request.headers.get("Authorization") || request.headers.get("authorization") || "";
-  if (!authHeader.startsWith("Bearer ")) return false;
-  const token = authHeader.slice(7).trim();
-  const parts = token.split(".");
-  if (parts.length !== 3) return false;
-  try {
-    const payloadJson = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-    const email = (payloadJson.email || payloadJson.primary_email_address || "").trim().toLowerCase();
-    return Boolean(payloadJson.sub && email && email === adminEmail);
-  } catch {
-    return false;
+  if (authHeader.toLowerCase().startsWith("bearer ")) {
+    const token = authHeader.slice(7).trim();
+    if (token) return token;
   }
+
+  const cookieHeader = request.headers.get("Cookie") || request.headers.get("cookie") || "";
+  if (cookieHeader) {
+    const cookies = cookieHeader.split(";");
+    for (const part of cookies) {
+      const [rawName, ...rest] = part.trim().split("=");
+      if (rawName === "__session") {
+        const val = rest.join("=").trim();
+        if (val) return decodeURIComponent(val);
+      }
+    }
+  }
+
+  try {
+    const parsedUrl = new URL(request.url);
+    const queryToken = parsedUrl.searchParams.get("token") || parsedUrl.searchParams.get("__session");
+    if (queryToken && queryToken.trim()) {
+      return queryToken.trim();
+    }
+  } catch {
+    // Ignore URL parse errors
+  }
+
+  return null;
 }
 
-function getWorkerClerkUserId(request) {
-  const authHeader = request.headers.get("Authorization") || request.headers.get("authorization") || "";
-  if (!authHeader.startsWith("Bearer ")) return null;
-  const token = authHeader.slice(7).trim();
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
+async function verifyWorkerClerkJwt(request, env) {
+  const token = extractWorkerClerkToken(request);
+  if (!token || token.split(".").length !== 3) return null;
+
+  const secretKey = env?.CLERK_SECRET_KEY ? String(env.CLERK_SECRET_KEY).trim() : "";
+  const jwtKey = env?.CLERK_JWT_KEY ? String(env.CLERK_JWT_KEY).trim() : "";
+
+  if (!secretKey && !jwtKey) {
+    return null;
+  }
+
   try {
-    const payloadJson = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-    if (payloadJson.exp && Number(payloadJson.exp) * 1000 < Date.now()) return null;
-    const sub = String(payloadJson.sub || "").trim();
-    if (!sub || sub === "guest") return null;
-    return sub;
+    const verifyOptions = {};
+    if (secretKey) verifyOptions.secretKey = secretKey;
+    if (jwtKey) verifyOptions.jwtKey = jwtKey;
+
+    const verifiedPayload = await verifyToken(token, verifyOptions);
+    if (!verifiedPayload || typeof verifiedPayload.sub !== "string" || !verifiedPayload.sub.trim()) {
+      return null;
+    }
+    if (verifiedPayload.sub.trim() === "guest") {
+      return null;
+    }
+    return verifiedPayload;
   } catch {
     return null;
   }
 }
 
-function isWorkerClerkUser(request) {
-  return Boolean(getWorkerClerkUserId(request));
+export async function isWorkerClerkAdmin(request, env) {
+  const adminEmail = (env?.ADMIN_EMAIL || "").trim().toLowerCase();
+  if (!adminEmail) return false;
+
+  const verifiedPayload = await verifyWorkerClerkJwt(request, env);
+  if (!verifiedPayload) return false;
+
+  let email =
+    verifiedPayload.email ||
+    verifiedPayload.email_address ||
+    verifiedPayload.primary_email_address ||
+    null;
+
+  if (!email && env?.CLERK_SECRET_KEY) {
+    try {
+      const clerkClient = createClerkClient({ secretKey: String(env.CLERK_SECRET_KEY).trim() });
+      const user = await clerkClient.users.getUser(verifiedPayload.sub.trim());
+      const primary =
+        user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId) ||
+        user.emailAddresses[0];
+      if (primary?.emailAddress) {
+        email = primary.emailAddress;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  return Boolean(email && String(email).trim().toLowerCase() === adminEmail);
+}
+
+export async function getWorkerClerkUserId(request, env) {
+  const verifiedPayload = await verifyWorkerClerkJwt(request, env);
+  if (!verifiedPayload || typeof verifiedPayload.sub !== "string") return null;
+  const sub = verifiedPayload.sub.trim();
+  return sub && sub !== "guest" ? sub : null;
+}
+
+export async function isWorkerClerkUser(request, env) {
+  const userId = await getWorkerClerkUserId(request, env);
+  return Boolean(userId);
+}
+
+const workerFeedbackRateLimits = new Map();
+
+export function validateWorkerFeedback(body, clientIp) {
+  if (!body || typeof body !== "object") {
+    return { ok: false, status: 400, error: "Invalid feedback payload." };
+  }
+
+  const honeypot = body.website || body.honeypot || body.bot_field || body.company_url;
+  if (honeypot !== undefined && honeypot !== null && String(honeypot).trim() !== "") {
+    return { ok: false, status: 400, error: "Spam detected." };
+  }
+
+  const rawMessage = body.feedback ?? body.message ?? body.notes ?? "";
+  const rawName = body.name ?? body.nameOrInsta ?? body.animeTitle ?? "Anonymous";
+  const rawEmail = body.email ?? body.reason ?? "";
+
+  if (typeof rawMessage !== "string" || typeof rawName !== "string" || typeof rawEmail !== "string") {
+    return { ok: false, status: 400, error: "Feedback fields must be strings." };
+  }
+
+  const combinedRaw = `${rawName} ${rawEmail} ${rawMessage}`;
+  if (/<\s*script|javascript:|onerror\s*=|onload\s*=|union\s+select|drop\s+table/i.test(combinedRaw)) {
+    return { ok: false, status: 400, error: "Invalid characters or script content detected." };
+  }
+
+  const cleanMessage = rawMessage.replace(/<[^>]*>/g, "").trim();
+  const cleanName = rawName.replace(/<[^>]*>/g, "").trim() || "Anonymous";
+  const cleanEmail = rawEmail.replace(/<[^>]*>/g, "").trim();
+
+  if (cleanMessage.length < 5) {
+    return { ok: false, status: 400, error: "Feedback message is too short (minimum 5 characters)." };
+  }
+  if (cleanMessage.length > 1500) {
+    return { ok: false, status: 400, error: "Feedback message exceeds maximum length of 1500 characters." };
+  }
+  if (cleanName.length > 80) {
+    return { ok: false, status: 400, error: "Name exceeds maximum length of 80 characters." };
+  }
+  if (cleanEmail.length > 120) {
+    return { ok: false, status: 400, error: "Email exceeds maximum length of 120 characters." };
+  }
+
+  if (body.email !== undefined && cleanEmail !== "") {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return { ok: false, status: 400, error: "Please provide a valid email address." };
+    }
+  }
+
+  const urlMatches = cleanMessage.match(/https?:\/\/[^\s]+|www\.[^\s]+/gi) || [];
+  if (urlMatches.length > 2) {
+    return { ok: false, status: 400, error: "Spam detected: Too many links in feedback message." };
+  }
+  if (/(.)\1{19,}/.test(cleanMessage)) {
+    return { ok: false, status: 400, error: "Spam detected: Repetitive character pattern." };
+  }
+
+  const windowMs = 10 * 60 * 1000;
+  const maxRequests = 3;
+  const now = Date.now();
+  const ipKey = (clientIp || "127.0.0.1").trim();
+
+  const entry = workerFeedbackRateLimits.get(ipKey) || { timestamps: [], recentHashes: new Set() };
+  entry.timestamps = entry.timestamps.filter((ts) => now - ts < windowMs);
+  if (entry.timestamps.length === 0) {
+    entry.recentHashes.clear();
+  }
+
+  if (entry.timestamps.length >= maxRequests) {
+    workerFeedbackRateLimits.set(ipKey, entry);
+    return {
+      ok: false,
+      status: 429,
+      error: "Rate limit exceeded: Too many feedback submissions. Please try again later."
+    };
+  }
+
+  const normalizedHash = `${cleanName.toLowerCase()}::${cleanMessage.toLowerCase()}`;
+  if (entry.recentHashes.has(normalizedHash)) {
+    return { ok: false, status: 400, error: "Duplicate feedback submission detected." };
+  }
+
+  entry.timestamps.push(now);
+  entry.recentHashes.add(normalizedHash);
+  workerFeedbackRateLimits.set(ipKey, entry);
+
+  return {
+    ok: true,
+    status: 200,
+    sanitized: { name: cleanName, email: cleanEmail, message: cleanMessage }
+  };
 }
 
 const SEED_ANIME = [
@@ -285,12 +464,42 @@ export default {
       });
     }
 
-    // 1.5 WebSocket & SSE Routing to ChatRoom Durable Object
-    if (path === "/ws" || path === "/api/chat/stream" || path === "/api/notifications/stream") {
+    // 1.5 WebSocket & SSE Routing to ChatRoom Durable Object (WebSocket routes strictly require verified Clerk JWT)
+    if (
+      path === "/ws" ||
+      path === "/api/chat/stream" ||
+      path === "/ws/api/chat/stream" ||
+      path === "/api/notifications/stream"
+    ) {
+      const isWebSocketRoute =
+        path === "/ws" ||
+        path === "/api/chat/stream" ||
+        path === "/ws/api/chat/stream" ||
+        (request.headers.get("Upgrade") || "").toLowerCase() === "websocket";
+
+      let forwardedRequest = request;
+      if (isWebSocketRoute) {
+        const verifiedUserId = await getWorkerClerkUserId(request, env);
+        if (!verifiedUserId) {
+          return jsonResponse(
+            { error: "Unauthorized: Verified Clerk session required for WebSocket stream" },
+            401,
+            request
+          );
+        }
+        const headers = new Headers(request.headers);
+        headers.set("x-verified-clerk-user-id", verifiedUserId);
+        forwardedRequest = new Request(request.url, {
+          method: request.method,
+          headers,
+          body: request.body
+        });
+      }
+
       if (env.CHAT_ROOM) {
         const id = env.CHAT_ROOM.idFromName("global_chat");
         const obj = env.CHAT_ROOM.get(id);
-        return obj.fetch(request);
+        return obj.fetch(forwardedRequest);
       }
       return jsonResponse({ error: "Durable Object binding missing" }, 503, request);
     }
@@ -375,14 +584,14 @@ export default {
 
       // 5. Strict Clerk Admin Auth
       if (path === "/api/admin/login" && method === "POST") {
-        if (isWorkerClerkAdmin(request, env)) {
+        if (await isWorkerClerkAdmin(request, env)) {
           return jsonResponse({ success: true, role: "admin" }, 200, request);
         }
         return jsonResponse({ success: false, error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
       }
 
       if (path === "/api/admin/verify") {
-        if (!isWorkerClerkAdmin(request, env)) {
+        if (!(await isWorkerClerkAdmin(request, env))) {
           return jsonResponse({ success: false, valid: false, error: "Unauthorized" }, 401, request);
         }
         return jsonResponse({ success: true, valid: true, role: 'admin' }, 200, request);
@@ -410,7 +619,7 @@ export default {
           return jsonResponse([], 200, request);
         }
         if (method === "POST") {
-          const cleanClerkId = getWorkerClerkUserId(request);
+          const cleanClerkId = await getWorkerClerkUserId(request, env);
           if (!cleanClerkId) {
             return jsonResponse({ error: "Unauthorized: Active Clerk user session required" }, 401, request);
           }
@@ -463,22 +672,35 @@ export default {
         }
       }
 
-      // 9. Feedback & Reports
+      // 9. Feedback & Reports (Protected with Input Validation, Spam Prevention & IP Rate-Limiting)
       if (path === "/api/feedback" || path === "/api/report") {
         if (method === "POST") {
-          const body = await request.json();
+          const body = await request.json().catch(() => null);
+          const clientIp =
+            request.headers.get("CF-Connecting-IP") ||
+            request.headers.get("cf-connecting-ip") ||
+            request.headers.get("x-real-ip") ||
+            request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+            "127.0.0.1";
+
+          const validation = validateWorkerFeedback(body, clientIp);
+          if (!validation.ok) {
+            return jsonResponse({ error: validation.error }, validation.status, request);
+          }
+
+          const { name, email, message } = validation.sanitized;
           if (env.DB) {
             await env.DB.prepare("INSERT INTO feedback (name_or_insta, email, feedback_text) VALUES (?, ?, ?)")
-              .bind(body.name || body.animeTitle || 'Anon', body.email || body.reason || '', body.message || body.feedback || body.notes || '').run();
+              .bind(name, email, message).run();
           }
-          await sendTelegramAlert(env, `<b>New Interaction:</b> ${body.message || body.feedback || body.reason}`);
+          await sendTelegramAlert(env, `<b>New Interaction:</b> ${message}`);
           return jsonResponse({ success: true }, 201, request);
         }
       }
 
       // 10. Secure Server-Side Upload Proxy (Requires Clerk User Session & env.IMGBB_API_KEY)
       if (path === "/api/upload" && method === "POST") {
-        if (!isWorkerClerkUser(request) && !isWorkerClerkAdmin(request, env)) {
+        if (!(await isWorkerClerkUser(request, env)) && !(await isWorkerClerkAdmin(request, env))) {
           return jsonResponse({ error: "Unauthorized: Active Clerk user session required" }, 401, request);
         }
         const apiKey = env.IMGBB_API_KEY;
@@ -524,7 +746,7 @@ export default {
         // POST Review (Requires authenticated Clerk user session)
         if (sub === 'reviews' && method === "POST") {
           try {
-            const userId = getWorkerClerkUserId(request);
+            const userId = await getWorkerClerkUserId(request, env);
             if (!userId) {
               return jsonResponse({ error: "Authentication required", requiresAuth: true }, 401, request);
             }
@@ -560,7 +782,7 @@ export default {
         // GET Vote Status (Checks if authenticated user has already liked or upvoted strictly via Bearer JWT)
         if (sub === 'vote-status' && method === "GET") {
           try {
-            const userId = getWorkerClerkUserId(request);
+            const userId = await getWorkerClerkUserId(request, env);
             let hasLiked = false;
             let hasUpvoted = false;
             if (env.DB && numericId && userId) {
@@ -582,7 +804,7 @@ export default {
         // POST Vote / Upvote (Strictly extracts userId from Bearer JWT session)
         if ((sub === 'vote' || sub === 'upvote') && method === "POST") {
           try {
-            const userId = getWorkerClerkUserId(request);
+            const userId = await getWorkerClerkUserId(request, env);
             
             if (!userId) {
               return jsonResponse({
@@ -657,7 +879,7 @@ export default {
         // POST Like (Strictly extracts userId from Bearer JWT session)
         if ((sub === 'like' || sub === 'likes') && method === "POST") {
           try {
-            const userId = getWorkerClerkUserId(request);
+            const userId = await getWorkerClerkUserId(request, env);
 
             if (!userId) {
               return jsonResponse({
@@ -769,7 +991,7 @@ export default {
           return fallback ? jsonResponse(fallback, 200, request) : jsonResponse({ error: "Not found" }, 404, request);
         }
         if (method === "PUT" || method === "PATCH") {
-          if (!isWorkerClerkAdmin(request, env)) {
+          if (!(await isWorkerClerkAdmin(request, env))) {
             return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
           }
           try {
@@ -857,7 +1079,7 @@ export default {
           }
         }
         if (method === "DELETE") {
-          if (!isWorkerClerkAdmin(request, env)) {
+          if (!(await isWorkerClerkAdmin(request, env))) {
             return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
           }
           try {
@@ -877,7 +1099,7 @@ export default {
 
       // 13. Admin Pending Queue
       if (path === "/api/admin/pending" && method === "GET") {
-        if (!isWorkerClerkAdmin(request, env)) {
+        if (!(await isWorkerClerkAdmin(request, env))) {
           return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
         }
         try {
@@ -895,7 +1117,7 @@ export default {
 
       // 14. Admin CSV Import
       if (path === "/api/admin/import-csv" && method === "POST") {
-        if (!isWorkerClerkAdmin(request, env)) {
+        if (!(await isWorkerClerkAdmin(request, env))) {
           return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
         }
         try {
@@ -1119,7 +1341,7 @@ export default {
 
       // 14b. Admin Clear Pending Queue
       if (path === "/api/admin/clear-pending" && method === "POST") {
-        if (!isWorkerClerkAdmin(request, env)) {
+        if (!(await isWorkerClerkAdmin(request, env))) {
           return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
         }
         try {
@@ -1135,7 +1357,7 @@ export default {
       // 15. Admin Approve / Reject
       const approveMatch = path.match(/^\/api\/admin\/approve\/([0-9a-zA-Z_-]+)$/);
       if (approveMatch && method === "POST") {
-        if (!isWorkerClerkAdmin(request, env)) {
+        if (!(await isWorkerClerkAdmin(request, env))) {
           return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
         }
         const id = approveMatch[1];
@@ -1147,7 +1369,7 @@ export default {
 
       const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)$/);
       if (rejectMatch && method === "POST") {
-        if (!isWorkerClerkAdmin(request, env)) {
+        if (!(await isWorkerClerkAdmin(request, env))) {
           return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
         }
         const id = rejectMatch[1];
@@ -1206,7 +1428,7 @@ export default {
           else if (/firefox|fxios/i.test(ua)) browser = "Firefox";
           else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = deviceType === "mobile" ? "Safari Mobile" : "Safari";
 
-          const clerkUserId = getWorkerClerkUserId(request);
+          const clerkUserId = await getWorkerClerkUserId(request, env);
           const referrer = payload.referrer || "direct";
 
           if (env.DB) {
@@ -1254,7 +1476,7 @@ export default {
 
       // 17. GOD-MODE EDGE ANALYTICS: GET /api/analytics/dashboard
       if (path === "/api/analytics/dashboard" && method === "GET") {
-        if (!isWorkerClerkAdmin(request, env)) {
+        if (!(await isWorkerClerkAdmin(request, env))) {
           return jsonResponse({ error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
         }
         try {

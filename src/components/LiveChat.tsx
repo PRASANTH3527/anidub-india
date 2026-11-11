@@ -24,6 +24,7 @@ import { generateRandomUsername, ANIME_CHARACTERS } from '../utils/randomUser';
 import { formatRelativeTime } from '../utils/timestamps';
 import { syncAndDeduplicateChatMessages } from '../utils/chatDeduplication';
 import { useUser } from '@clerk/nextjs';
+import { getClerkSessionToken } from '../lib/clerk';
 
 export interface ChatMessage {
   id: string | number;
@@ -358,12 +359,20 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   useEffect(() => {
     let isSubscribed = true;
 
-    const connectWebSocket = () => {
+    const connectWebSocket = async () => {
       if (!isSubscribed) return;
 
       try {
+        const token = await getClerkSessionToken();
+        if (!token) {
+          // Unauthenticated visitors receive live messages via REST sync polling;
+          // WebSocket upgrades strictly require a verified Clerk session.
+          setConnectionStatus('connected');
+          return;
+        }
+
         setConnectionStatus('connecting');
-        const wsUrl = getCloudflareWsUrl('/ws');
+        const wsUrl = getCloudflareWsUrl('/ws', token);
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
@@ -475,7 +484,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       ? crypto.randomUUID()
       : `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-    const payload: ChatMessage & { clerk_user_id?: string } = {
+    const payload: ChatMessage = {
       id: clientUniqueId,
       user: currentUserName.trim() || 'AnimeFan_IN',
       text: text.trim(),
@@ -483,8 +492,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       isSelf: true,
       isReview: Boolean(extra.isReview),
       rating: extra.rating ?? null,
-      language: extra.language ?? null,
-      clerk_user_id: user?.id || localStorage.getItem('anidub_device_fp') || 'guest'
+      language: extra.language ?? null
     };
 
     // Track as in-flight pending

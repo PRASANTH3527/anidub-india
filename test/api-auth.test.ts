@@ -111,10 +111,75 @@ test('API Clerk JWT Authentication & Route Protection', async (t) => {
         body: JSON.stringify({ anime_id: 1, rating: 10, user_id: 'spoofed_user_123' }),
       });
       assert.equal(ratePostRes.status, 401);
+
+      // WebSocket Chat stream routes reject unauthenticated / forged-token requests with 401
+      const wsStreamRes = await fetch(`${BASE_URL}/ws/api/chat/stream`, {
+        headers: {
+          Authorization: `Bearer ${forgedJwt}`,
+        },
+      });
+      assert.equal(wsStreamRes.status, 401);
+
+      // Public Feedback POST route enforces input validation, spam prevention & IP rate-limiting
+      const testIp = `203.0.113.${Math.floor(Math.random() * 200) + 10}`;
+      const badFeedbackRes = await fetch(`${BASE_URL}/api/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-forwarded-for': testIp,
+        },
+        body: JSON.stringify({ name: 'Tester', feedback: 'hi' }),
+      });
+      assert.equal(badFeedbackRes.status, 400);
+
+      const spamFeedbackRes = await fetch(`${BASE_URL}/api/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-forwarded-for': testIp,
+        },
+        body: JSON.stringify({
+          name: 'SpamBot',
+          feedback: 'Valid length feedback message',
+          website: 'https://malicious-bot.example.com',
+        }),
+      });
+      assert.equal(spamFeedbackRes.status, 400);
+
+      for (let i = 1; i <= 3; i++) {
+        const validFeedbackRes = await fetch(`${BASE_URL}/api/feedback`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-forwarded-for': testIp,
+          },
+          body: JSON.stringify({
+            name: 'FanUser',
+            email: 'fan@example.com',
+            feedback: `Loving the new Hindi and Tamil dub catalog update #${i}!`,
+          }),
+        });
+        assert.equal(validFeedbackRes.status, 201);
+      }
+
+      const rateLimitedFeedbackRes = await fetch(`${BASE_URL}/api/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-forwarded-for': testIp,
+        },
+        body: JSON.stringify({
+          name: 'FanUser',
+          email: 'fan@example.com',
+          feedback: 'This 4th feedback submission from the same IP must be rate-limited!',
+        }),
+      });
+      assert.equal(rateLimitedFeedbackRes.status, 429);
     } catch (e: any) {
       if (e.code === 'ECONNREFUSED') return;
       throw e;
     }
   });
 });
+
 

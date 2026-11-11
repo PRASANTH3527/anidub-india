@@ -214,7 +214,7 @@ test('Security Audit 5: D1 Database Security (No raw client SQL) & User Actions 
   assert.ok(serverCode.includes("app.post('/api/anime/bulk', requireAdminAuth"));
   assert.ok(serverCode.includes("app.put('/api/anime/:id', requireAdminAuth"));
   assert.ok(serverCode.includes("app.delete('/api/anime/:id', requireAdminAuth"));
-  assert.ok(edgeRouteCode.includes("import { getAuth } from '../../src/utils/auth'"));
+  assert.ok(edgeRouteCode.includes("getAuth(request, env)"));
 
   // 3. User Actions (Profile, Chat, Rating): Never trust client user_id or 'default_user'
   assert.equal(
@@ -238,4 +238,117 @@ test('Security Audit 5: D1 Database Security (No raw client SQL) & User Actions 
     'cloudflareApi.ts must not send spoofable x-clerk-user-id headers'
   );
 });
+
+test('Security Audit 6: Worker JWT Signature Verification, WebSocket DO Auth, Cloudflare env bindings & Feedback Protection', async () => {
+  const workerCode = fs.readFileSync(path.join(process.cwd(), 'worker.js'), 'utf-8');
+  const authCode = fs.readFileSync(path.join(process.cwd(), 'src/utils/auth.ts'), 'utf-8');
+  const edgeRouteCode = fs.readFileSync(path.join(process.cwd(), 'functions/api/[[route]].ts'), 'utf-8');
+
+  // 1. True Worker JWT Verification: uses @clerk/backend verifyToken, never unverified atob()
+  assert.ok(
+    workerCode.includes("import { createClerkClient, verifyToken } from '@clerk/backend'"),
+    'worker.js must import verifyToken from @clerk/backend'
+  );
+  assert.equal(
+    workerCode.includes('atob('),
+    false,
+    'worker.js must not decode JWT payloads with unverified atob()'
+  );
+  const { isWorkerClerkAdmin, getWorkerClerkUserId } = await import('../../worker.js');
+  const forgedJwt = [
+    Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url'),
+    Buffer.from(JSON.stringify({ sub: 'user_forged_123', email: 'admin@anidub.in', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url'),
+    'forged_signature_bytes'
+  ].join('.');
+  const forgedReq = new Request('https://anidub.in/api/admin/verify', {
+    headers: { Authorization: `Bearer ${forgedJwt}` }
+  });
+  const workerEnv = { ADMIN_EMAIL: 'admin@anidub.in', CLERK_SECRET_KEY: 'sk_test_dummy_key_for_sig_check' };
+  assert.equal(await getWorkerClerkUserId(forgedReq, workerEnv), null, 'getWorkerClerkUserId must reject forged JWTs');
+  assert.equal(await isWorkerClerkAdmin(forgedReq, workerEnv), false, 'isWorkerClerkAdmin must reject forged JWTs');
+
+  // 2. WebSocket & Durable Object Security: authenticates before upgrading
+  assert.ok(
+    workerCode.includes('path === "/ws/api/chat/stream"'),
+    'worker.js must protect /ws/api/chat/stream'
+  );
+  assert.ok(
+    workerCode.includes('Unauthorized: Verified Clerk session required for WebSocket stream'),
+    'worker.js and ChatRoom DO must reject unauthenticated WebSocket upgrades with 401'
+  );
+
+  // 3. Cloudflare Environment Bindings: no direct process.env in auth.ts or functions/api/[[route]].ts
+  assert.equal(
+    authCode.includes('process.env.'),
+    false,
+    'src/utils/auth.ts must use Cloudflare env bindings instead of direct process.env.* access'
+  );
+  assert.equal(
+    edgeRouteCode.includes('process.env'),
+    false,
+    'functions/api/[[route]].ts must use Cloudflare env bindings instead of process.env'
+  );
+  assert.equal(
+    getAuthorizedAdminEmail({ ADMIN_EMAIL: 'cf-admin@anidub.in' }),
+    'cf-admin@anidub.in'
+  );
+  assert.equal(
+    isAuthorizedClerkAdmin({ email: 'cf-admin@anidub.in' }, { ADMIN_EMAIL: 'cf-admin@anidub.in' }),
+    true
+  );
+
+  // 4. Feedback API Protection: input validation, spam prevention & rate limiting
+  const { validateAndRateLimitFeedback } = await import('./auth');
+  const testStore = new Map();
+
+  // Rejects too-short message
+  const shortRes = validateAndRateLimitFeedback({ name: 'Test', feedback: 'hi' }, '10.0.0.1', { store: testStore });
+  assert.equal(shortRes.ok, false);
+  assert.equal(shortRes.status, 400);
+
+  // Rejects honeypot bot spam
+  const honeypotRes = validateAndRateLimitFeedback(
+    { name: 'Bot', feedback: 'Valid length feedback message', website: 'http://spam.com' },
+    '10.0.0.1',
+    { store: testStore }
+  );
+  assert.equal(honeypotRes.ok, false);
+  assert.equal(honeypotRes.status, 400);
+
+  // Rejects link spam (> 2 URLs)
+  const linkSpamRes = validateAndRateLimitFeedback(
+    { name: 'Spammer', feedback: 'Check https://a.com and https://b.com and https://c.com now!' },
+    '10.0.0.1',
+    { store: testStore }
+  );
+  assert.equal(linkSpamRes.ok, false);
+  assert.equal(linkSpamRes.status, 400);
+
+  // Rejects invalid email format
+  const badEmailRes = validateAndRateLimitFeedback(
+    { name: 'User', email: 'not-an-email', feedback: 'Please add Naruto Tamil dub episodes!' },
+    '10.0.0.1',
+    { store: testStore }
+  );
+  assert.equal(badEmailRes.ok, false);
+  assert.equal(badEmailRes.status, 400);
+
+  // Accepts 3 valid distinct submissions from same IP, then rate-limits 4th with 429
+  for (let i = 1; i <= 3; i++) {
+    const okRes = validateAndRateLimitFeedback(
+      { name: 'AnimeFan', email: 'fan@example.com', feedback: `Great Tamil dub quality on episode ${i}!` },
+      '10.0.0.2',
+      { store: testStore }
+    );
+    assert.equal(okRes.ok, true);
+  }
+  const rateLimitedRes = validateAndRateLimitFeedback(
+    { name: 'AnimeFan', email: 'fan@example.com', feedback: 'Fourth message within window should be rate limited!' },
+    '10.0.0.2',
+    { store: testStore }
+  );
+  assert.equal(rateLimitedRes.ok, false);
+  assert.equal(rateLimitedRes.status, 429);
+});
+
 
