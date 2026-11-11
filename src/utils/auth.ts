@@ -202,7 +202,14 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
   }
 
   try {
-    const verifyOptions: Record<string, any> = {};
+    const verifyOptions: Record<string, any> = {
+      authorizedParties: [
+        'http://localhost:3000',
+        'https://ais-dev-qwvw5bws5eviuuugfdklbn-712933804987.asia-southeast1.run.app',
+        'https://ais-pre-qwvw5bws5eviuuugfdklbn-712933804987.asia-southeast1.run.app',
+        'https://anidub.in'
+      ]
+    };
     if (secretKey) verifyOptions.secretKey = secretKey;
     if (jwtKey) verifyOptions.jwtKey = jwtKey;
 

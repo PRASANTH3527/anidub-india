@@ -81,20 +81,24 @@ async function sendTelegramAlert(env: Env, text: string, photoUrl?: string) {
 }
 
 function jsonResponse(data: any, status = 200, request?: Request, extraHeaders?: Record<string, string>) {
-  const origin = request ? (request.headers.get("Origin") || request.headers.get("origin") || "*") : "*";
+  const origin = request ? (request.headers.get("Origin") || request.headers.get("origin") || "") : "";
+  const allowed =
+    origin === "" ||
+    origin.includes("localhost") ||
+    origin.includes("127.0.0.1") ||
+    origin.includes(".run.app") ||
+    origin.includes(".pages.dev") ||
+    origin.includes("anidub.in");
+
+  const resolvedOrigin = allowed ? origin : "https://ais-pre-qwvw5bws5eviuuugfdklbn-712933804987.asia-southeast1.run.app";
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-device-id',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Origin': resolvedOrigin,
     ...(extraHeaders || {})
   };
-
-  if (origin !== "*") {
-    headers['Access-Control-Allow-Origin'] = origin;
-    headers['Access-Control-Allow-Credentials'] = 'true';
-  } else {
-    headers['Access-Control-Allow-Origin'] = '*';
-  }
 
   return new Response(JSON.stringify(data), {
     status,
@@ -234,7 +238,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           let params: any[] = [];
 
           const includePending = url.searchParams.get('includePending') === 'true';
-          if (!includePending) {
+          if (includePending) {
+            const session = await getAuth(request, env);
+            if (!session.userId || !session.isAdmin) {
+              return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required to view pending/unpublished entries' }, 401, request);
+            }
+          } else {
             whereClauses.push("(is_published = 1 OR is_published = true) AND status != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL)");
           }
 
@@ -368,6 +377,79 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       return jsonResponse({ success: true, animeId: createdId, id: createdId, status: finalStatus }, 201);
     } catch (err: any) {
       return jsonResponse({ error: err.message }, 500);
+    }
+  }
+
+  // 4b. POST /api/anime/submit (Authenticated users can submit new anime, set strictly to pending)
+  if (path === '/api/anime/submit' && method === 'POST') {
+    const session = await getAuth(request, env);
+    if (!session.userId) {
+      return jsonResponse({ error: 'Unauthorized: Active Clerk user session required to submit anime' }, 401, request);
+    }
+    try {
+      const body: any = await request.json().catch(() => ({}));
+      if (!body.title || !String(body.title).trim()) {
+        return jsonResponse({ error: 'Anime title is required' }, 400, request);
+      }
+
+      let createdId: number | null = null;
+      const slug = String(body.title).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      if (env.DB) {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS anime (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT UNIQUE,
+            slug TEXT,
+            synopsis TEXT,
+            cover_image TEXT,
+            banner_image TEXT,
+            rating REAL,
+            episodes_count INTEGER,
+            status TEXT DEFAULT 'pending',
+            submissionStatus TEXT DEFAULT 'pending',
+            approval_status TEXT DEFAULT 'pending',
+            is_published INTEGER DEFAULT 0,
+            season TEXT,
+            year INTEGER,
+            genres TEXT,
+            popularity INTEGER DEFAULT 0,
+            languages TEXT,
+            platform TEXT,
+            type TEXT,
+            studio TEXT
+          )
+        `).run().catch(() => {});
+
+        const insertRes = await env.DB.prepare(`
+          INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?)
+        `).bind(
+          String(body.title).trim(),
+          slug,
+          String(body.synopsis || '').trim(),
+          String(body.cover_image || body.poster_url || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800').trim(),
+          String(body.banner_image || body.cover_image || '').trim(),
+          parseFloat(body.rating) || 8.0,
+          parseInt(body.episodes_count || body.episodes) || 12,
+          body.season || 'Spring',
+          parseInt(body.year) || 2026,
+          body.genres || 'Action',
+          body.languages || 'Tamil, Hindi',
+          body.platform || 'Crunchyroll',
+          body.type || 'TV Series',
+          body.studio || 'Unknown Studio'
+        ).run();
+        createdId = insertRes.meta?.last_row_id || null;
+      }
+
+      return jsonResponse({
+        success: true,
+        id: createdId,
+        message: 'Anime submitted successfully for admin review.',
+        submissionStatus: 'pending'
+      }, 201, request);
+    } catch (err: any) {
+      return jsonResponse({ error: err.message }, 500, request);
     }
   }
 
@@ -896,11 +978,25 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 7. GET /api/watchlist & POST /api/watchlist (Extracts userId strictly from verified Clerk JWT session)
+  // 7. GET /api/watchlist, POST /api/watchlist & DELETE /api/watchlist (Extracts userId strictly from verified Clerk JWT session)
   if (path === '/api/watchlist') {
     const session = await getAuth(request, env);
+    if (!session.userId) {
+      return jsonResponse({ error: 'Unauthorized: Active Clerk user session required' }, 401, request);
+    }
+    if (env.DB) {
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS watchlist (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT NOT NULL,
+          anime_id INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, anime_id)
+        )
+      `).run().catch(() => {});
+    }
+
     if (method === 'GET') {
-      if (!session.userId) return jsonResponse({ data: [] }, 200, request);
       try {
         if (env.DB) {
           const list = await env.DB.prepare(`
@@ -908,16 +1004,48 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             JOIN anime ON watchlist.anime_id = anime.id 
             WHERE watchlist.user_id = ?
           `).bind(session.userId).all();
-          if (list.results?.length) return jsonResponse({ data: list.results }, 200, request);
+          return jsonResponse({ data: list.results || [] }, 200, request);
         }
-      } catch {}
+      } catch (err: any) {
+        return jsonResponse({ error: err.message, data: [] }, 500, request);
+      }
       return jsonResponse({ data: [] }, 200, request);
     }
+
     if (method === 'POST') {
-      if (!session.userId) {
-        return jsonResponse({ error: 'Unauthorized: Active Clerk user session required' }, 401, request);
+      try {
+        const body: any = await request.json().catch(() => ({}));
+        const animeId = Number(body.anime_id || body.animeId || body.id);
+        if (!animeId || isNaN(animeId)) {
+          return jsonResponse({ error: 'Valid anime_id is required' }, 400, request);
+        }
+        if (env.DB) {
+          await env.DB.prepare(`
+            INSERT INTO watchlist (user_id, anime_id) VALUES (?, ?)
+            ON CONFLICT(user_id, anime_id) DO NOTHING
+          `).bind(session.userId, animeId).run();
+        }
+        return jsonResponse({ success: true, watchlisted: true, anime_id: animeId }, 200, request);
+      } catch (err: any) {
+        return jsonResponse({ error: err.message }, 500, request);
       }
-      return jsonResponse({ success: true, watchlisted: true }, 200, request);
+    }
+
+    if (method === 'DELETE') {
+      try {
+        const animeId = Number(url.searchParams.get('anime_id') || url.searchParams.get('animeId') || url.searchParams.get('id'));
+        if (!animeId || isNaN(animeId)) {
+          return jsonResponse({ error: 'Valid anime_id query parameter is required for deletion' }, 400, request);
+        }
+        if (env.DB) {
+          await env.DB.prepare(`
+            DELETE FROM watchlist WHERE user_id = ? AND anime_id = ?
+          `).bind(session.userId, animeId).run();
+        }
+        return jsonResponse({ success: true, watchlisted: false, anime_id: animeId }, 200, request);
+      } catch (err: any) {
+        return jsonResponse({ error: err.message }, 500, request);
+      }
     }
   }
 
