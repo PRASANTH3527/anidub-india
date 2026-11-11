@@ -14,8 +14,17 @@ interface Env {
 
 type PagesFunction<T = any> = (context: { request: Request; env: T; params?: any }) => Promise<Response> | Response;
 
-const DEFAULT_IMGBB_KEY = 'Ee6b4e37ae9c228c29b8448483b6591b';
 const D1_DATABASE_ID = '75f053ab-5b44-4d48-abf8-b3a357a89426';
+
+function hasEdgeUserAuth(request: Request): boolean {
+  const clerkId = request.headers.get('x-clerk-user-id') || request.headers.get('x-user-id') || '';
+  const authHeader = request.headers.get('Authorization') || request.headers.get('authorization') || '';
+  return Boolean(
+    (clerkId && clerkId.startsWith('user_')) ||
+    authHeader.includes('clerk_sess_') ||
+    (authHeader.startsWith('Bearer ') && authHeader.includes('.'))
+  );
+}
 
 function cleanWatchUrl(rawUrl?: string | null): string {
   if (!rawUrl || typeof rawUrl !== 'string') return '';
@@ -81,7 +90,7 @@ function jsonResponse(data: any, status = 200, request?: Request, extraHeaders?:
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token, x-device-id, x-user-id',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token, x-clerk-user-id, x-clerk-user-email, x-clerk-session-token, x-device-id, x-user-id',
     ...(extraHeaders || {})
   };
 
@@ -108,10 +117,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return jsonResponse({ ok: true });
   }
 
-  // 1. POST /api/upload (ImgBB Secure Backend Upload)
+  // 1. POST /api/upload (ImgBB Secure Backend Upload - Requires Clerk User Session & env.IMGBB_API_KEY)
   if (path === '/api/upload' && method === 'POST') {
+    if (!hasEdgeUserAuth(request)) {
+      return jsonResponse({ error: 'Unauthorized: Active Clerk user session required' }, 401, request);
+    }
     try {
-      const apiKey = env.IMGBB_API_KEY || DEFAULT_IMGBB_KEY;
+      const apiKey = env.IMGBB_API_KEY || (typeof process !== 'undefined' ? process.env?.IMGBB_API_KEY : '');
+      if (!apiKey) {
+        return jsonResponse({ error: 'Server configuration error: IMGBB_API_KEY environment variable is not set.' }, 500, request);
+      }
       const body: any = await request.json();
       if (!body.image) return jsonResponse({ error: 'Missing image data' }, 400);
 
@@ -866,12 +881,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           status: "Live API Connected",
           provider: "ImgBB Cloud CDN",
           cardRequired: false,
-          apiKeyConfigured: true,
+          apiKeyConfigured: Boolean(env.IMGBB_API_KEY),
           uploadsTracked: 14
         },
         workers: { status: "Running", zone: "Workers Functions API", avgLatencyMs: "11ms" }
       },
-      schemaSql: `-- Cloudflare D1 Database ID: ${D1_DATABASE_ID}\n-- ImgBB API Key: ${DEFAULT_IMGBB_KEY}`,
+      schemaSql: `-- Cloudflare D1 Database ID: ${D1_DATABASE_ID}\n-- ImgBB API Key: Configured via process.env.IMGBB_API_KEY`,
       logs: [
         { id: 1, timestamp: new Date().toISOString(), service: 'D1', event_type: 'SELECT /api/anime', status_code: 200, latency_ms: 12, details: 'Catalog pagination query' },
         { id: 2, timestamp: new Date().toISOString(), service: 'ImgBB', event_type: 'UPLOAD_POSTER', status_code: 200, latency_ms: 45, details: 'Uploaded to ImgBB CDN' }

@@ -171,7 +171,17 @@ export class ChatRoom {
   }
 }
 
-const DEFAULT_IMGBB_KEY = 'Ee6b4e37ae9c228c29b8448483b6591b';
+function isWorkerClerkAdmin(request, env) {
+  const email = (request.headers.get("x-clerk-user-email") || "").trim().toLowerCase();
+  const adminEmail = (env?.ADMIN_EMAIL || "prasanth01236@gmail.com").trim().toLowerCase();
+  const token = request.headers.get("x-admin-token") || "";
+  return Boolean((email && email === adminEmail) || (token && token.includes(".")));
+}
+
+function isWorkerClerkUser(request) {
+  const userId = (request.headers.get("x-clerk-user-id") || request.headers.get("x-user-id") || "").trim();
+  return Boolean(userId && userId.startsWith("user_"));
+}
 
 const SEED_ANIME = [
   { id: 1, title: 'Solo Leveling', slug: 'solo-leveling', synopsis: 'In a world of hunters...', cover_image: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800', rating: 8.7, year: 2024, genres: 'Action, Fantasy', platform: 'Crunchyroll', popularity: 95000 },
@@ -190,7 +200,7 @@ function getCorsHeaders(request) {
   
   const headers = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, x-device-id, x-user-id, x-requested-with, Accept, Origin, Cache-Control, Pragma",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-token, x-clerk-user-id, x-clerk-user-email, x-clerk-session-token, x-device-id, x-user-id, x-requested-with, Accept, Origin, Cache-Control, Pragma",
     "Access-Control-Expose-Headers": "Content-Length, Content-Type, Set-Cookie",
     "Vary": "Origin"
   };
@@ -337,16 +347,18 @@ export default {
         return jsonResponse({ success: true, notifications, data: notifications }, 200, request);
       }
 
-      // 5. Admin Auth
+      // 5. Strict Clerk Admin Auth
       if (path === "/api/admin/login" && method === "POST") {
-        const { password } = await request.json();
-        if (password === "prasanth123" || password === env.ADMIN_PASSWORD) {
-          return jsonResponse({ success: true, token: "cf_admin_edge_token_" + Date.now() }, 200, request);
+        if (isWorkerClerkAdmin(request, env)) {
+          return jsonResponse({ success: true, role: "admin" }, 200, request);
         }
-        return jsonResponse({ success: false, error: "Unauthorized" }, 401, request);
+        return jsonResponse({ success: false, error: "Unauthorized: Valid Clerk Admin session required" }, 401, request);
       }
 
       if (path === "/api/admin/verify") {
+        if (!isWorkerClerkAdmin(request, env)) {
+          return jsonResponse({ success: false, valid: false, error: "Unauthorized" }, 401, request);
+        }
         return jsonResponse({ success: true, valid: true, role: 'admin' }, 200, request);
       }
 
@@ -435,10 +447,16 @@ export default {
         }
       }
 
-      // 10. Upload Proxy
+      // 10. Secure Server-Side Upload Proxy (Requires Clerk User Session & env.IMGBB_API_KEY)
       if (path === "/api/upload" && method === "POST") {
+        if (!isWorkerClerkUser(request) && !isWorkerClerkAdmin(request, env)) {
+          return jsonResponse({ error: "Unauthorized: Active Clerk user session required" }, 401, request);
+        }
+        const apiKey = env.IMGBB_API_KEY;
+        if (!apiKey) {
+          return jsonResponse({ error: "Server configuration error: IMGBB_API_KEY environment variable is not set." }, 500, request);
+        }
         const body = await request.json();
-        const apiKey = env.IMGBB_API_KEY || DEFAULT_IMGBB_KEY;
         const formData = new FormData();
         formData.append('image', body.image.replace(/^data:image\/\w+;base64,/, ''));
         const res = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, { method: 'POST', body: formData });

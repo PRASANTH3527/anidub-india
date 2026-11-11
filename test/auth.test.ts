@@ -1,26 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAdminToken, verifyAdminToken, validateAdminPassword } from '../src/utils/auth.js';
+import {
+  createAdminToken,
+  verifyAdminToken,
+  isAuthorizedClerkAdmin,
+  getAuthorizedAdminEmail,
+} from '../src/utils/auth.js';
 
-test('validateAdminPassword checks password correctly', () => {
-  assert.equal(validateAdminPassword('prasanth123'), true);
-  assert.equal(validateAdminPassword('wrongpassword'), false);
-  assert.equal(validateAdminPassword(''), false);
-  assert.equal(validateAdminPassword(undefined), false);
+test('isAuthorizedClerkAdmin checks Clerk administrator identity strictly', () => {
+  assert.equal(isAuthorizedClerkAdmin(getAuthorizedAdminEmail()), true);
+  assert.equal(isAuthorizedClerkAdmin('fan@anidub.in'), false);
+  assert.equal(isAuthorizedClerkAdmin(''), false);
+  assert.equal(isAuthorizedClerkAdmin(undefined), false);
 });
 
-test('createAdminToken creates a valid verifiable token', () => {
-  const token = createAdminToken();
+test('createAdminToken creates a valid verifiable HMAC-SHA256 token', () => {
+  const token = createAdminToken('user_clerk_admin', getAuthorizedAdminEmail());
   assert.ok(token);
   assert.equal(typeof token, 'string');
   assert.equal(verifyAdminToken(token), true);
 });
 
-test('verifyAdminToken rejects forged or tampered tokens', () => {
-  const token = createAdminToken();
-  const [timestamp, signature] = token.split('.');
-  const forgedToken = `${timestamp}.tampered${signature.slice(8)}`;
-  
+test('verifyAdminToken rejects forged, fake, or tampered tokens', () => {
+  const token = createAdminToken('user_clerk_admin', getAuthorizedAdminEmail());
+  const [payload, signature] = token.split('.');
+  const forgedToken = `${payload}.tampered${signature.slice(8)}`;
+
   assert.equal(verifyAdminToken(forgedToken), false);
   assert.equal(verifyAdminToken('invalid-token-format'), false);
   assert.equal(verifyAdminToken(''), false);
@@ -29,7 +34,6 @@ test('verifyAdminToken rejects forged or tampered tokens', () => {
 });
 
 test('verifyAdminToken rejects expired tokens', () => {
-  const token = createAdminToken();
-  // With maxAge 0ms, it should immediately be expired
+  const token = createAdminToken('user_clerk_admin', getAuthorizedAdminEmail());
   assert.equal(verifyAdminToken(token, undefined, -100), false);
 });

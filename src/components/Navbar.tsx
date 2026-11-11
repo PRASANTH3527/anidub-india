@@ -105,13 +105,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       const trimmed = searchQuery.trim().toLowerCase();
-      // Secret Admin Trigger Interception
-      if (
-        trimmed === '/admin-login' || 
-        trimmed === '/admin' || 
-        trimmed === 'admin123' || 
-        trimmed === 'prasanth123'
-      ) {
+      // Admin route navigation trigger (protected by Clerk Admin Auth)
+      if (trimmed === '/admin-login' || trimmed === '/admin') {
         e.preventDefault();
         setSearchQuery('');
         setIsSearchOpen(false);

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Lock, X, ShieldAlert, ArrowRight } from 'lucide-react';
+import { Shield, X, AlertCircle, CheckCircle2, LogOut } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { cloudflareApi } from '../services/cloudflareApi';
-import { AniDubLogo } from './AniDubLogo';
+import { useUser, useClerk, SignIn } from '../lib/clerk';
+import { isAuthorizedClerkAdmin } from '../utils/auth';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -10,107 +12,120 @@ interface AdminLoginModalProps {
 }
 
 export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState(false);
+  const { isSignedIn, user } = useUser();
+  const { signOut } = useClerk();
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (!isOpen) return null;
+  const isAuthorizedAdmin = Boolean(isSignedIn && user && isAuthorizedClerkAdmin(user));
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVerifyClerkAdmin = async () => {
+    setError('');
     setLoading(true);
-    setError(false);
     try {
-      const data = await cloudflareApi.loginAdmin(password);
+      const data = await cloudflareApi.loginAdmin(user?.primaryEmailAddress?.emailAddress);
       if (data.success && data.token) {
         localStorage.setItem('cf_admin_token', data.token);
-        setError(false);
-        setPassword('');
         onSuccess();
+        onClose();
       } else {
-        setError(true);
+        setError(data.error || 'Clerk Administrator verification failed.');
       }
-    } catch (err) {
-      // Fallback
-      if (password === 'prasanth123') {
-        localStorage.setItem('cf_admin_token', 'local_admin_session');
-        setError(false);
-        setPassword('');
-        onSuccess();
-      } else {
-        setError(true);
-      }
+    } catch {
+      setError('Unable to verify Clerk Admin session with the edge server.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#0E131F] border border-slate-800 rounded-3xl w-full max-w-md p-6 relative shadow-2xl animate-in fade-in zoom-in duration-200">
-        
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute -top-20 -right-20 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col items-center text-center space-y-4 mb-6 mt-2">
-          <AniDubLogo variant="stacked" size="sm" className="mb-1" />
-          <div>
-            <h3 className="text-xl font-bold text-white font-['Space_Grotesk',sans-serif]">
-              Restricted Admin Access
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Enter secret password to unlock the Anidub India moderation console.
-            </p>
-          </div>
-        </div>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-orange-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Clerk Admin Protection</h3>
+                  <p className="text-xs text-neutral-400">Authorized Clerk Administrator Only</p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2 text-neutral-400 hover:text-white rounded-full hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <input
-              type="password"
-              autoFocus
-              placeholder="Enter Admin Password..."
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (error) setError(false);
-              }}
-              className={`w-full bg-slate-950 border rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none transition-all ${
-                error ? 'border-rose-500 text-rose-200 shadow-[0_0_15px_rgba(244,63,94,0.2)]' : 'border-slate-800 focus:border-orange-500'
-              }`}
-            />
-            {error && (
-              <div className="flex items-center space-x-1.5 text-xs text-rose-400 pt-1 px-1">
-                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                <span>Access Denied. Incorrect password.</span>
+            {!isSignedIn ? (
+              <div className="flex flex-col items-center space-y-4">
+                <p className="text-xs text-neutral-300 text-center">
+                  Sign in with your authorized Clerk Administrator account to access <code className="text-purple-400">/admin</code>.
+                </p>
+                <SignIn />
+              </div>
+            ) : isAuthorizedAdmin ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-emerald-300">Verified Clerk Admin Account</p>
+                    <p className="text-[11px] text-neutral-300 truncate">{user?.primaryEmailAddress?.emailAddress}</p>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="flex items-center space-x-2 text-red-400 text-xs bg-red-500/10 border border-red-500/20 p-3 rounded-xl">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleVerifyClerkAdmin}
+                  disabled={loading}
+                  className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-semibold rounded-xl shadow-lg shadow-orange-500/20 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {loading ? 'Verifying Clerk Session...' : 'Enter Admin Console'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-start space-x-2.5 text-red-300 text-xs bg-red-500/10 border border-red-500/25 p-4 rounded-2xl">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-red-300">Unauthorized Account</p>
+                    <p className="mt-1 text-neutral-300">
+                      Signed in as <span className="font-mono text-white">{user?.primaryEmailAddress?.emailAddress}</span>. Only the authorized Clerk Administrator can access protected <code className="text-red-300">/admin</code> routes.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => signOut()}
+                  className="w-full py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Sign Out & Switch Clerk Account</span>
+                </button>
               </div>
             )}
-          </div>
-
-          <div className="flex space-x-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-xs transition-colors border border-slate-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold text-xs transition-all shadow-lg shadow-orange-600/30 flex items-center justify-center space-x-1.5"
-            >
-              <span>Unlock Admin</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </form>
-
-      </div>
-    </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 };

@@ -66,6 +66,8 @@ import { CLOUDFLARE_API_URL, getCloudflareUrl } from '../config/cloudflare';
 import Papa from 'papaparse';
 import { AniDubLogo } from './AniDubLogo';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { useUser, SignIn } from '../lib/clerk';
+import { isAuthorizedClerkAdmin } from '../utils/auth';
 
 export interface AdminDashboardProps {
   onAnimeCreated?: (anime?: any, deletedId?: string | number) => void;
@@ -83,6 +85,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   catalogList
 }) => {
   const shouldReduceMotion = useReducedMotion();
+  const { isSignedIn, user: clerkUser } = useUser();
+  const isClerkAdminAuthorized = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
   const [catalog, setCatalog] = useState<any[]>(() => (catalogList && catalogList.length > 0) ? catalogList : []);
   const [animes, setAnimes] = useState<any[]>(() => (catalogList && catalogList.length > 0) ? catalogList : []);
 
@@ -1419,6 +1423,39 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
       ).slice(0, 6)
     };
   }, [commandPaletteQuery, catalog, pendingCount, feedbackList.length]);
+
+  if (!isClerkAdminAuthorized) {
+    return (
+      <div className="w-full min-h-screen bg-[#07090e] text-slate-100 flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-3xl bg-[#121829] border border-purple-500/30 p-8 shadow-2xl text-center space-y-5">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-6 h-6 text-rose-400" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-lg font-black text-white">Protected Admin Route</h2>
+            <p className="text-xs text-neutral-400">
+              Only the authorized Clerk Administrator can access <code className="text-purple-400">/admin</code>.
+            </p>
+          </div>
+          {!isSignedIn && (
+            <div className="flex justify-center">
+              <SignIn />
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (onNavigateHome) onNavigateHome();
+              else window.location.href = '/';
+            }}
+            className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-white transition-colors cursor-pointer"
+          >
+            Return to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-h-screen bg-[#07090e] text-slate-100 flex flex-col md:flex-row font-sans relative selection:bg-purple-500 selection:text-white overflow-x-hidden">

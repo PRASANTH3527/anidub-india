@@ -17,6 +17,8 @@ import {
 import { AnimeRecord, DubLanguage, dbService } from '../services/databaseService';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { useToast } from './Toast';
+import { getActiveClerkSession } from '../lib/clerk';
+import { isAuthorizedClerkAdmin } from '../utils/auth';
 
 interface DubInfoModalProps {
   isOpen: boolean;
@@ -470,10 +472,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       const parsedYear = releaseYear ? Number(releaseYear) : 2025;
       const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
-      const isAdminTokenPresent = Boolean(typeof window !== 'undefined' && (localStorage.getItem('cf_admin_token') || localStorage.getItem('admin_token')));
+      const isAdminSessionVerified = Boolean(
+        typeof window !== 'undefined' &&
+        localStorage.getItem('cf_admin_token') &&
+        isAuthorizedClerkAdmin(getActiveClerkSession())
+      );
       const resolvedSubmissionStatus = mode === 'edit'
         ? (initialData?.submissionStatus || initialData?.approval_status || 'approved')
-        : (isAdminTokenPresent ? 'approved' : 'pending');
+        : (isAdminSessionVerified ? 'approved' : 'pending');
 
       const formattedMixedEntries = mixedEntries.map(entry => ({
         id: entry.id,

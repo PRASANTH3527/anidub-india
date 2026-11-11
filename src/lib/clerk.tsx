@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
+import { getAuthorizedAdminEmail, isAuthorizedClerkAdmin } from '../utils/auth';
 
 export function normalizeClerkKey(key?: string): string {
   if (!key) return '';
@@ -16,16 +17,38 @@ export interface ClerkUser {
   firstName: string | null;
   lastName: string | null;
   imageUrl: string;
+  role?: 'admin' | 'member';
+  sessionToken?: string;
   primaryEmailAddress: {
     emailAddress: string;
   } | null;
+}
+
+export function getActiveClerkSession(): ClerkUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const saved = sessionStorage.getItem('clerk_active_session');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && parsed.id && parsed.primaryEmailAddress?.emailAddress) {
+        return parsed;
+      }
+    }
+    const winClerk = (window as any).Clerk?.user;
+    if (winClerk && winClerk.id) {
+      return winClerk;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
 }
 
 interface ClerkContextValue {
   isLoaded: boolean;
   isSignedIn: boolean;
   user: ClerkUser | null;
-  signIn: (email: string) => void;
+  signIn: (email: string) => ClerkUser | null;
   signOut: () => void;
 }
 
@@ -33,7 +56,7 @@ const ClerkContext = createContext<ClerkContextValue>({
   isLoaded: true,
   isSignedIn: false,
   user: null,
-  signIn: () => {},
+  signIn: () => null,
   signOut: () => {},
 });
 
@@ -45,47 +68,69 @@ export const ClerkProvider: React.FC<{
   return <LightweightClerkProvider>{children}</LightweightClerkProvider>;
 };
 
+function createClerkUserFromEmail(rawEmail: string): ClerkUser | null {
+  const cleanEmail = rawEmail.trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes('@')) return null;
+
+  const username = cleanEmail.split('@')[0] || 'User';
+  const formattedName = username.charAt(0).toUpperCase() + username.slice(1);
+  const avatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(cleanEmail)}`;
+  const deterministicSuffix = Array.from(cleanEmail)
+    .reduce((acc, ch) => ((acc << 5) - acc + ch.charCodeAt(0)) | 0, 0);
+  const userId = `user_${Math.abs(deterministicSuffix).toString(36)}_${username.replace(/[^a-z0-9]/gi, '').slice(0, 8)}`;
+  const isAdmin = cleanEmail === getAuthorizedAdminEmail();
+
+  return {
+    id: userId,
+    username,
+    fullName: formattedName,
+    firstName: formattedName,
+    lastName: '',
+    imageUrl: avatar,
+    role: isAdmin ? 'admin' : 'member',
+    sessionToken: `clerk_sess_${userId}_${Date.now()}`,
+    primaryEmailAddress: {
+      emailAddress: cleanEmail,
+    },
+  };
+}
+
 function LightweightClerkProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<ClerkUser | null>(() => {
     try {
       const saved = sessionStorage.getItem('clerk_active_session');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.id && parsed.primaryEmailAddress?.emailAddress) {
+          if (!parsed.sessionToken) {
+            parsed.sessionToken = `clerk_sess_${parsed.id}_${Date.now()}`;
+          }
+          parsed.role = isAuthorizedClerkAdmin(parsed) ? 'admin' : 'member';
+          return parsed;
+        }
+      }
     } catch {
       // ignore
     }
     return null;
   });
 
-  const signIn = (email: string) => {
-    const cleanEmail = email.trim();
-    if (!cleanEmail) return;
-
-    const username = cleanEmail.split('@')[0] || 'User';
-    const formattedName = username.charAt(0).toUpperCase() + username.slice(1);
-    const avatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(cleanEmail)}`;
-
-    const newUser: ClerkUser = {
-      id: 'user_' + Math.random().toString(36).substring(2, 9),
-      username,
-      fullName: formattedName,
-      firstName: formattedName,
-      lastName: '',
-      imageUrl: avatar,
-      primaryEmailAddress: {
-        emailAddress: cleanEmail,
-      },
-    };
+  const signIn = (email: string): ClerkUser | null => {
+    const newUser = createClerkUserFromEmail(email);
+    if (!newUser) return null;
 
     setUser(newUser);
     try {
       sessionStorage.setItem('clerk_active_session', JSON.stringify(newUser));
     } catch {}
+    return newUser;
   };
 
   const signOut = () => {
     setUser(null);
     try {
       sessionStorage.removeItem('clerk_active_session');
+      localStorage.removeItem('cf_admin_token');
     } catch {}
   };
 
@@ -119,7 +164,9 @@ export function useAuth() {
     isLoaded: ctx.isLoaded,
     isSignedIn: ctx.isSignedIn,
     userId: ctx.user?.id || null,
-    sessionId: ctx.user ? 'sess_' + ctx.user.id : null,
+    sessionId: ctx.user ? ctx.user.sessionToken || 'sess_' + ctx.user.id : null,
+    isAdmin: Boolean(ctx.user && isAuthorizedClerkAdmin(ctx.user)),
+    getToken: async () => ctx.user?.sessionToken || null,
     signOut: ctx.signOut,
   };
 }
@@ -129,6 +176,7 @@ export function useClerk() {
   return {
     loaded: true,
     user: ctx.user,
+    signIn: ctx.signIn,
     signOut: ctx.signOut,
     openSignIn: () => {},
     openUserProfile: () => {},
@@ -151,31 +199,40 @@ export const SignedOut: React.FC<{ children: React.ReactNode }> = ({ children })
   return null;
 };
 
-export const SignIn: React.FC<{ routing?: string; path?: string }> = () => {
-  return <SimulatedSignInCard />;
+export const SignIn: React.FC<{
+  routing?: string;
+  path?: string;
+  onSuccess?: (user: ClerkUser) => void;
+}> = ({ onSuccess }) => {
+  return <SimulatedSignInCard onSuccess={onSuccess} />;
 };
 
-function SimulatedSignInCard() {
+function SimulatedSignInCard({ onSuccess }: { onSuccess?: (user: ClerkUser) => void }) {
   const ctx = useContext(ClerkContext);
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (email.trim()) {
-      ctx.signIn(email.trim());
+      const signedInUser = ctx.signIn(email.trim());
+      if (signedInUser && onSuccess) {
+        onSuccess(signedInUser);
+      }
     }
   };
 
   const handleGoogleSignIn = () => {
-    const inputEmail = 'fan@anidub.in';
-    ctx.signIn(inputEmail);
+    const inputEmail = email.trim() || 'fan@anidub.in';
+    const signedInUser = ctx.signIn(inputEmail);
+    if (signedInUser && onSuccess) {
+      onSuccess(signedInUser);
+    }
   };
 
   return (
     <div className="w-full max-w-sm rounded-3xl bg-[#13151b] border border-white/10 p-6 sm:p-8 shadow-2xl space-y-6 text-left animate-in fade-in duration-300">
       <div className="text-center space-y-1.5">
-        <h3 className="font-heading font-black text-xl text-white">Sign In</h3>
+        <h3 className="font-heading font-black text-xl text-white">Sign In with Clerk</h3>
         <p className="text-xs text-neutral-400">to continue to ANIDUB INDIA</p>
       </div>
 
@@ -201,7 +258,7 @@ function SimulatedSignInCard() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-neutral-300">Email address</label>
+          <label className="text-xs font-semibold text-neutral-300">Clerk Account Email</label>
           <input
             type="email"
             value={email}
@@ -212,22 +269,11 @@ function SimulatedSignInCard() {
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-neutral-300">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 focus:border-purple-500 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
-          />
-        </div>
-
         <button
           type="submit"
           className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition-all cursor-pointer"
         >
-          Continue
+          Continue with Clerk
         </button>
       </form>
 

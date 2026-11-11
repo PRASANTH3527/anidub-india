@@ -7,7 +7,12 @@ import fs from 'fs';
 import initSqlJs from 'sql.js';
 import multer from 'multer';
 import { GoogleGenAI } from '@google/genai';
-import { createAdminToken, verifyAdminToken, validateAdminPassword } from './src/utils/auth.js';
+import {
+  generateAdminToken,
+  verifyAdminToken,
+  verifyClerkUserSession,
+  verifyClerkAdminRequest
+} from './src/utils/auth.js';
 import { 
   formatNotificationTitle, 
   formatNotificationBody, 
@@ -28,7 +33,7 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
   }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-token, x-device-id, x-user-id, Accept, Origin, Cache-Control, Pragma, X-Requested-With');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-token, x-clerk-user-id, x-clerk-user-email, x-clerk-session-token, x-device-id, x-user-id, Accept, Origin, Cache-Control, Pragma, X-Requested-With');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -691,79 +696,78 @@ function runMigrations() {
   } catch (_) {}
 }
 
-// Admin Authentication Middleware
+// Strict Clerk Admin Authentication Middleware
 function requireAdminAuth(req: any, res: any, next: any) {
-  const authHeader = req.headers.authorization;
-  let token = '';
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  } else if (req.headers['x-admin-token']) {
-    token = req.headers['x-admin-token'] as string;
+  const check = verifyClerkAdminRequest(req.headers as any, req.body);
+  if (!check.authorized) {
+    return res.status(401).json({
+      success: false,
+      error: check.reason || 'Unauthorized: Valid Clerk Admin session required'
+    });
   }
+  req.adminUser = { id: check.userId, email: check.email };
+  next();
+}
 
-  const cleanToken = (token || '').trim();
-  if (
-    !cleanToken ||
-    (!verifyAdminToken(cleanToken) &&
-     cleanToken !== 'admin_secret' &&
-     cleanToken !== 'local_admin_session' &&
-     !cleanToken.startsWith('cf_admin_') &&
-     !cleanToken.startsWith('admin_'))
-  ) {
-    return res.status(401).json({ error: 'Unauthorized: Invalid or missing admin token' });
+// Strict Clerk User Session Authentication Middleware for Data-Modifying Routes
+function requireUserAuth(req: any, res: any, next: any) {
+  const session = verifyClerkUserSession(req.headers as any, req.body);
+  if (!session.authenticated || !session.userId) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Active Clerk user session required to modify data'
+    });
   }
+  req.authUser = session;
   next();
 }
 
 app.post('/api/admin/login', (req, res) => {
-  const { password } = req.body;
-  if (validateAdminPassword(password)) {
-    const token = createAdminToken();
-    return res.json({ success: true, token, role: 'admin' });
+  const check = verifyClerkAdminRequest(req.headers as any, req.body);
+  if (!check.authorized || !check.userId || !check.email) {
+    return res.status(401).json({
+      success: false,
+      error: check.reason || 'Unauthorized: Valid Clerk Admin account required'
+    });
   }
-  return res.status(401).json({ error: "Invalid admin password" });
+  const token = generateAdminToken(check.userId, check.email);
+  return res.json({ success: true, token, role: 'admin', email: check.email });
 });
 
 app.get('/api/admin/verify', requireAdminAuth, (req, res) => {
   res.json({ valid: true, role: 'admin' });
 });
 
-app.post('/api/admin/logout', (req, res) => {
+app.post('/api/admin/logout', requireAdminAuth, (req, res) => {
   res.json({ success: true });
 });
 
-// ImgBB Upload Gateway
+// Secure Server-Side ImgBB Upload Gateway (Uses process.env.IMGBB_API_KEY exclusively)
 async function uploadToImgBB(base64Image: string, filename: string = 'image.png'): Promise<{ success: boolean; url: string; display_url?: string }> {
-  const apiKey = process.env.IMGBB_API_KEY || 'Ee6b4e37ae9c228c29b8448483b6591b';
-  try {
-    const cleanBase64 = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
-    const formData = new URLSearchParams();
-    formData.append('key', apiKey);
-    formData.append('image', cleanBase64);
-    formData.append('name', filename.replace(/\.[^/.]+$/, ''));
-
-    const res = await fetch('https://api.imgbb.com/1/upload', {
-      method: 'POST',
-      body: formData
-    });
-
-    const json: any = await res.json();
-    if (json && json.success) {
-      return { success: true, url: json.data.url, display_url: json.data.display_url };
-    }
-    throw new Error(json?.error?.message || 'ImgBB upload rejected');
-  } catch (err: any) {
-    console.warn('[ImgBB Fallback]:', err.message);
-    const localFilename = `img_${Date.now()}_${filename}`;
-    const localPath = path.join(imgCacheDir, localFilename);
-    const baseData = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
-    fs.writeFileSync(localPath, Buffer.from(baseData, 'base64'));
-    const fallbackUrl = `/imgbb-cache/${localFilename}`;
-    return { success: true, url: fallbackUrl, display_url: fallbackUrl };
+  const apiKey = process.env.IMGBB_API_KEY;
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error('Server configuration error: IMGBB_API_KEY environment variable is not set.');
   }
+
+  const cleanBase64 = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
+  const formData = new URLSearchParams();
+  formData.append('key', apiKey.trim());
+  formData.append('image', cleanBase64);
+  formData.append('name', filename.replace(/\.[^/.]+$/, ''));
+
+  const res = await fetch('https://api.imgbb.com/1/upload', {
+    method: 'POST',
+    body: formData
+  });
+
+  const json: any = await res.json();
+  if (json && json.success) {
+    return { success: true, url: json.data.url, display_url: json.data.display_url };
+  }
+  throw new Error(json?.error?.message || 'ImgBB upload rejected');
 }
 
-app.post('/api/upload', async (req, res) => {
+app.post('/api/upload', requireUserAuth, async (req, res) => {
   try {
     const { image, filename } = req.body;
     if (!image) return res.status(400).json({ error: "Missing image data" });
@@ -1014,12 +1018,12 @@ app.get('/api/anime/:id', (req, res) => {
 app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/anime/:id/upvote'], (req, res, next) => {
   if (req.method !== 'POST' && req.method !== 'PUT') return next();
   try {
-    const animeId = req.params.id;
-    const userId = req.body?.userId || req.headers['x-user-id'] || null;
-
-    if (!userId || typeof userId !== 'string' || !userId.trim()) {
-      return res.status(401).json({ success: false, error: "Unauthorized", message: "Please sign in to upvote." });
+    const session = verifyClerkUserSession(req.headers as any, req.body);
+    if (!session.authenticated || !session.userId) {
+      return res.status(401).json({ success: false, error: "Unauthorized", message: "Please sign in with Clerk to upvote." });
     }
+    const animeId = req.params.id;
+    const userId = session.userId;
 
     const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'upvote'");
     checkStmt.bind([animeId, userId]);
@@ -1056,12 +1060,12 @@ app.all(['/api/anime/:id/vote', '/api/anime/:id/upvote', '/anime/:id/vote', '/an
 app.all(['/api/anime/:id/like', '/api/anime/:id/likes', '/anime/:id/like', '/anime/:id/likes'], (req, res, next) => {
   if (req.method !== 'POST' && req.method !== 'PUT') return next();
   try {
-    const animeId = req.params.id;
-    const userId = req.body?.userId || req.headers['x-user-id'] || null;
-
-    if (!userId || typeof userId !== 'string' || !userId.trim()) {
-      return res.status(401).json({ success: false, error: "Unauthorized", message: "Please sign in to like." });
+    const session = verifyClerkUserSession(req.headers as any, req.body);
+    if (!session.authenticated || !session.userId) {
+      return res.status(401).json({ success: false, error: "Unauthorized", message: "Please sign in with Clerk to like." });
     }
+    const animeId = req.params.id;
+    const userId = session.userId;
 
     const checkStmt = db.prepare("SELECT id FROM user_votes WHERE anime_id = ? AND user_id = ? AND vote_type = 'like'");
     checkStmt.bind([animeId, userId]);
@@ -1133,8 +1137,8 @@ function cleanWatchUrl(rawUrl?: string | null): string {
   return rawUrl.trim();
 }
 
-// POST /api/anime (Create Anime)
-app.post('/api/anime', (req, res) => {
+// POST /api/anime (Create Anime - Requires Authenticated Clerk User)
+app.post('/api/anime', requireUserAuth, (req: any, res) => {
   const start = Date.now();
   try {
     const { title, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, season, year, genres, languages, platform, type, Type, studio, episodes_per_season, mixedEntries, watch_url, platforms_data } = req.body;
@@ -1155,14 +1159,14 @@ app.post('/api/anime', (req, res) => {
     }
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    const isAdmin = Boolean(req.headers['x-admin-token'] || req.headers['authorization']);
+    const isAdmin = verifyClerkAdminRequest(req.headers as any, req.body).authorized;
     const resolvedType = normalizeAnimeType(type || Type || 'TV Series');
     
     // Explicitly preserve the airing status chosen by the admin/user (e.g. 'Completed', 'Airing', 'Ongoing', 'Upcoming')
     const rawStatusStr = (status || airing_status || '').toString().trim().toLowerCase();
     const sanitizedStatus = rawStatusStr.includes('complete') ? 'Completed' : (resolvedType === 'Movie' ? 'Completed' : 'Airing');
 
-    const finalSubmissionStatus = (isAdmin || submissionStatus === 'approved') ? 'approved' : (submissionStatus || 'pending');
+    const finalSubmissionStatus = isAdmin ? (submissionStatus || 'approved') : 'pending';
     const finalApprovalStatus = finalSubmissionStatus;
     const finalIsPublished = finalSubmissionStatus === 'approved' ? 1 : 0;
 
@@ -1911,17 +1915,14 @@ app.post('/api/admin/reset-db', requireAdminAuth, async (req, res) => {
   }
 });
 
-// POST /api/rate & /api/anime/:id/rate - UPSERT Community Rating
-app.post(['/api/rate', '/api/anime/:id/rate'], (req, res) => {
+// POST /api/rate & /api/anime/:id/rate - UPSERT Community Rating (Strict Clerk User Session Required)
+app.post(['/api/rate', '/api/anime/:id/rate'], requireUserAuth, (req: any, res) => {
   const start = Date.now();
   try {
     const anime_id = Number(req.body.anime_id || req.body.animeId || req.params.id);
     const rawRating = req.body.rating;
     const rating = Number(rawRating);
-    let user_id = String(req.body.user_id || req.body.userId || req.headers['x-user-id'] || '').trim();
-    if (!user_id) {
-      user_id = `guest_${req.ip ? String(req.ip).replace(/[^a-zA-Z0-9]/g, '') : 'anon'}`;
-    }
+    const user_id = req.authUser.userId;
 
     if (!anime_id || isNaN(anime_id)) {
       return res.status(400).json({ error: "Valid anime_id is required" });
@@ -2041,8 +2042,8 @@ app.get(['/api/rate', '/api/anime/:id/community-rating'], (req, res) => {
   }
 });
 
-// POST /api/anime/:id/reviews
-app.post('/api/anime/:id/reviews', (req, res) => {
+// POST /api/anime/:id/reviews (Strict Clerk User Session Required)
+app.post('/api/anime/:id/reviews', requireUserAuth, (req: any, res) => {
   try {
     const animeId = req.params.id;
     const { user_name, user_avatar, rating, comment } = req.body;
@@ -2054,7 +2055,7 @@ app.post('/api/anime/:id/reviews', (req, res) => {
 
     db.run(
       `INSERT INTO reviews (anime_id, user_id, user_name, user_avatar, rating, comment) VALUES (?, ?, ?, ?, ?, ?)`,
-      [animeId, 'default_user', cleanUser, user_avatar || 'https://i.ibb.co/vzS8G90/default-avatar.png', cleanRating, cleanComment]
+      [animeId, req.authUser.userId, cleanUser, user_avatar || 'https://i.ibb.co/vzS8G90/default-avatar.png', cleanRating, cleanComment]
     );
 
     persistD1();
@@ -2080,7 +2081,7 @@ app.get('/api/user/profile', (req, res) => {
   }
 });
 
-app.put('/api/user/profile', (req, res) => {
+app.put('/api/user/profile', requireUserAuth, (req, res) => {
   try {
     const { username, bio, avatar_url } = req.body;
     if (!username) return res.status(400).json({ error: "Username is required" });
@@ -2146,9 +2147,9 @@ app.get(['/api/chat', '/api/chat/messages'], (req, res) => {
   }
 });
 
-app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
+app.post(['/api/chat', '/api/chat/messages'], requireUserAuth, (req: any, res) => {
   try {
-    const { id, messageId, client_id, user, username, user_name, text, message, comment, timestamp, rating, language, dub_language, dubLanguage, isReview, is_review, clerk_user_id, userId, user_id, avatar, user_avatar, avatar_url } = req.body;
+    const { id, messageId, client_id, user, username, user_name, text, message, comment, timestamp, rating, language, dub_language, dubLanguage, isReview, is_review, avatar, user_avatar, avatar_url } = req.body;
     
     const rawText = text || message || comment;
     if (!rawText || !String(rawText).trim()) return res.status(400).json({ error: "Missing message text" });
@@ -2156,7 +2157,7 @@ app.post(['/api/chat', '/api/chat/messages'], (req, res) => {
     // CLIENT-SIDE UNIQUE ID: Use exact client-provided ID, fallback to Date.now().toString()
     const cleanId = String(id || messageId || client_id || Date.now().toString()).trim();
     const cleanUser = String(user || username || user_name || 'Anonymous Fan').trim().slice(0, 50);
-    const cleanClerkId = String(clerk_user_id || userId || user_id || req.headers['x-clerk-user-id'] || req.headers['authorization'] || 'guest').trim();
+    const cleanClerkId = req.authUser.userId;
     const cleanText = String(rawText).slice(0, 1000);
     const cleanTimestamp = String(timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     const cleanRating = rating !== undefined && rating !== null && !isNaN(Number(rating)) ? Number(rating) : null;
@@ -2244,7 +2245,7 @@ app.get('/api/watchlist', (req, res) => {
   }
 });
 
-app.post('/api/watchlist', (req, res) => {
+app.post('/api/watchlist', requireUserAuth, (req: any, res) => {
   try {
     const { anime_id } = req.body;
     if (!anime_id) return res.status(400).json({ error: "Missing anime_id" });
@@ -2269,7 +2270,7 @@ app.post('/api/watchlist', (req, res) => {
 });
 
 // Issue Report & Telegram routes
-app.post('/api/report', async (req, res) => {
+app.post('/api/report', requireUserAuth, async (req, res) => {
   try {
     const { animeTitle, reason, notes } = req.body;
     const reportMsg =
@@ -2286,7 +2287,7 @@ app.post('/api/report', async (req, res) => {
   }
 });
 
-app.post('/api/telegram', async (req, res) => {
+app.post('/api/telegram', requireAdminAuth, async (req, res) => {
   try {
     const { message, text, photoUrl } = req.body;
     const content = message || text || 'Notification from Anidub India';
@@ -2297,7 +2298,7 @@ app.post('/api/telegram', async (req, res) => {
   }
 });
 
-app.get('/api/telegram/status', (req, res) => {
+app.get('/api/telegram/status', requireAdminAuth, (req, res) => {
   const { token, chatId } = getTelegramConfig();
   res.json({
     configured: Boolean(token && chatId),
@@ -2327,7 +2328,7 @@ app.post('/api/telegram/settings', requireAdminAuth, (req, res) => {
   }
 });
 
-app.post('/api/telegram/test', async (req, res) => {
+app.post('/api/telegram/test', requireAdminAuth, async (req, res) => {
   try {
     const cfg = getTelegramConfig();
     const token = req.body?.token || cfg.token;
@@ -2385,7 +2386,7 @@ app.get(['/api/notifications', '/api/notifications/recent'], (req, res) => {
   }
 });
 
-app.post('/api/notifications/test', async (req, res) => {
+app.post('/api/notifications/test', requireUserAuth, async (req, res) => {
   try {
     const event = await broadcastActivityNotification({
       type: 'review',
@@ -2402,7 +2403,7 @@ app.post('/api/notifications/test', async (req, res) => {
 });
 
 // Feedback routes
-app.get('/api/feedback', async (req, res) => {
+app.get('/api/feedback', requireAdminAuth, async (req, res) => {
   try {
     const list = [];
     if (db) {
@@ -2418,7 +2419,7 @@ app.get('/api/feedback', async (req, res) => {
   }
 });
 
-app.post(['/api/feedback', '/api/submit-feedback'], upload.any(), async (req: any, res: any) => {
+app.post(['/api/feedback', '/api/submit-feedback'], upload.any(), requireUserAuth, async (req: any, res: any) => {
   try {
     const body = req.body || {};
     const name = body.name || body.nameOrInsta || 'Anonymous';
@@ -2576,8 +2577,8 @@ app.post('/api/track', (req, res) => {
   }
 });
 
-// GET /api/analytics/dashboard: Comprehensive enterprise edge telemetry aggregated from D1
-app.get('/api/analytics/dashboard', (req, res) => {
+// GET /api/analytics/dashboard: Comprehensive enterprise edge telemetry aggregated from D1 (Protected by Clerk Admin Auth)
+app.get('/api/analytics/dashboard', requireAdminAuth, (req, res) => {
   try {
     const range = (req.query.range as string) || 'all';
 
@@ -2856,8 +2857,8 @@ app.get('/api/analytics/dashboard', (req, res) => {
   }
 });
 
-// GET /api/analytics (Admin Edge Telemetry legacy summary)
-app.get('/api/analytics', (req, res) => {
+// GET /api/analytics (Admin Edge Telemetry legacy summary - Protected by Clerk Admin Auth)
+app.get('/api/analytics', requireAdminAuth, (req, res) => {
   try {
     let totalLogs = 0;
     let avgLatency = 14;
@@ -2891,7 +2892,7 @@ app.get('/api/analytics', (req, res) => {
 });
 
 // Cloudflare status & telemetry
-app.get('/api/cloudflare/status', (req, res) => {
+app.get('/api/cloudflare/status', requireAdminAuth, (req, res) => {
   try {
     const logStmt = db.prepare("SELECT * FROM cloudflare_logs ORDER BY id DESC LIMIT 25");
     const logs = [];
@@ -2923,7 +2924,7 @@ app.get('/api/cloudflare/status', (req, res) => {
   }
 });
 
-app.post('/api/cloudflare/d1/query', (req, res) => {
+app.post('/api/cloudflare/d1/query', requireAdminAuth, (req, res) => {
   const start = Date.now();
   try {
     const { sql } = req.body;

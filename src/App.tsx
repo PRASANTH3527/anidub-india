@@ -3,10 +3,12 @@ import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
 import { CatalogView } from './components/CatalogView';
-import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown, Loader2 } from 'lucide-react';
+import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown, Loader2, LogOut, ShieldAlert } from 'lucide-react';
 import { cloudflareApi } from './services/cloudflareApi';
 import { getCloudflareUrl, CLOUDFLARE_API_URL } from './config/cloudflare';
 import { AniDubLogo } from './components/AniDubLogo';
+import { useUser, useClerk, SignIn } from './lib/clerk';
+import { isAuthorizedClerkAdmin } from './utils/auth';
 
 const ViewLoadingFallback = () => (
   <div className="w-full min-h-[50vh] flex flex-col items-center justify-center p-8 space-y-3">
@@ -91,14 +93,17 @@ export default function App() {
     return found?.slug || undefined;
   }, [selectedAnimeId, catalogList]);
 
-  // Admin Authentication State
+  // Strict Clerk Admin Authentication State
+  const { isSignedIn, user: clerkUser } = useUser();
+  const { signOut: clerkSignOut } = useClerk();
+  const isClerkAdmin = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
+
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return Boolean(localStorage.getItem('cf_admin_token'));
+    return Boolean(localStorage.getItem('cf_admin_token')) && isClerkAdmin;
   });
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isDubModalOpen, setIsDubModalOpen] = useState(false);
-  const [adminPasswordInput, setAdminPasswordInput] = useState('');
-  const [adminPasswordError, setAdminPasswordError] = useState(false);
+  const [adminAuthError, setAdminAuthError] = useState<string>('');
   const [adminPasswordLoading, setAdminPasswordLoading] = useState(false);
   const [isCatalogLoading, setIsCatalogLoading] = useState(true);
 
@@ -273,67 +278,74 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!isClerkAdmin) {
+      localStorage.removeItem('cf_admin_token');
+      setIsAdminAuthenticated(false);
+      if (activeTab === 'admin') {
+        setActiveTab('home');
+      }
+      return;
+    }
+
     const token = localStorage.getItem('cf_admin_token');
     if (token) {
       cloudflareApi.verifyAdmin().then(isValid => {
         if (isValid) {
           setIsAdminAuthenticated(true);
         } else {
-          localStorage.removeItem('cf_admin_token');
-          setIsAdminAuthenticated(false);
-          if (activeTab === 'admin') setActiveTab('home');
+          // Obtain fresh signed token for verified Clerk admin
+          cloudflareApi.loginAdmin(clerkUser?.primaryEmailAddress?.emailAddress).then(res => {
+            if (res.success && res.token) {
+              localStorage.setItem('cf_admin_token', res.token);
+              setIsAdminAuthenticated(true);
+            } else {
+              localStorage.removeItem('cf_admin_token');
+              setIsAdminAuthenticated(false);
+              if (activeTab === 'admin') setActiveTab('home');
+            }
+          });
+        }
+      });
+    } else {
+      cloudflareApi.loginAdmin(clerkUser?.primaryEmailAddress?.emailAddress).then(res => {
+        if (res.success && res.token) {
+          localStorage.setItem('cf_admin_token', res.token);
+          setIsAdminAuthenticated(true);
         }
       });
     }
-  }, []);
+  }, [isClerkAdmin, clerkUser?.primaryEmailAddress?.emailAddress]);
 
-  const handleAdminPasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVerifyClerkAdminUnlock = async () => {
+    if (!isClerkAdmin) {
+      setAdminAuthError('Only the authorized Clerk Administrator can unlock /admin.');
+      return;
+    }
     setAdminPasswordLoading(true);
-    setAdminPasswordError(false);
+    setAdminAuthError('');
     try {
-      const data = await cloudflareApi.loginAdmin(adminPasswordInput);
+      const data = await cloudflareApi.loginAdmin(clerkUser?.primaryEmailAddress?.emailAddress);
       if (data.success && data.token) {
         localStorage.setItem('cf_admin_token', data.token);
         setIsAdminAuthenticated(true);
         setActiveTab('admin');
         setIsPasswordModalOpen(false);
-        setAdminPasswordInput('');
-        setAdminPasswordError(false);
+        setAdminAuthError('');
       } else {
-        if (adminPasswordInput === 'prasanth123') {
-          localStorage.setItem('cf_admin_token', 'local_admin_session');
-          setIsAdminAuthenticated(true);
-          setActiveTab('admin');
-          setIsPasswordModalOpen(false);
-          setAdminPasswordInput('');
-          setAdminPasswordError(false);
-        } else {
-          setAdminPasswordError(true);
-        }
+        setAdminAuthError(data.error || 'Access Denied. Clerk Admin session verification failed.');
       }
-    } catch (err) {
-      if (adminPasswordInput === 'prasanth123') {
-        localStorage.setItem('cf_admin_token', 'local_admin_session');
-        setIsAdminAuthenticated(true);
-        setActiveTab('admin');
-        setIsPasswordModalOpen(false);
-        setAdminPasswordInput('');
-        setAdminPasswordError(false);
-      } else {
-        setAdminPasswordError(true);
-      }
+    } catch {
+      setAdminAuthError('Unable to verify Clerk Admin session.');
     } finally {
       setAdminPasswordLoading(false);
     }
   };
 
   const handleAdminLogout = async () => {
-    // Strictly clear all admin related state and storage
     try {
       await cloudflareApi.logoutAdmin();
     } catch {}
-    
+
     localStorage.removeItem('cf_admin_token');
     setIsAdminAuthenticated(false);
     setActiveTab('home');
@@ -409,17 +421,13 @@ export default function App() {
           if (activeTab !== 'home' && activeTab !== 'catalog') setActiveTab('home'); 
         }}
         onUnlockAdmin={() => {
-          // STRICT: If not authenticated, ALWAYS show password prompt
-          if (!isAdminAuthenticated) {
+          if (!isAdminAuthenticated || !isClerkAdmin) {
             setIsPasswordModalOpen(true);
-            setAdminPasswordInput('');
-            setAdminPasswordError(false);
+            setAdminAuthError('');
           } else {
-            // If already authenticated, navigate to admin tab if not already there
             if (activeTab !== 'admin') {
               setActiveTab('admin');
             } else {
-              // If already on admin tab, 5 clicks simply toggles back to home (safer than confirm in iframe)
               setActiveTab('home');
             }
           }
@@ -428,14 +436,14 @@ export default function App() {
         onSelectAnime={(id) => handleOpenAnime(id)}
         feedView={feedView}
         setFeedView={setFeedView}
-        isAdminAuthenticated={isAdminAuthenticated}
+        isAdminAuthenticated={isAdminAuthenticated && isClerkAdmin}
         onLogout={handleAdminLogout}
         currentLang={currentLang}
         setCurrentLang={setCurrentLang}
       />
 
-      {/* 2. ADMIN DASHBOARD (When active in admin mode) */}
-      {activeTab === 'admin' && isAdminAuthenticated && (
+      {/* 2. ADMIN DASHBOARD (Protected strictly by Clerk Admin Auth) */}
+      {activeTab === 'admin' && isAdminAuthenticated && isClerkAdmin && (
         <Suspense fallback={<ViewLoadingFallback />}>
           <AdminDashboard
             catalogList={catalogList}
@@ -691,53 +699,94 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* 5. Stealth Admin Access Modal (Triggered by 5-taps on navbar logo) */}
+      {/* 5. Clerk Admin Authentication Modal */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-          <div className="w-full max-w-sm bg-[#121829] border border-primary-theme rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 relative">
-            <div className="text-center mb-6 flex flex-col items-center">
+          <div className="w-full max-w-md bg-[#121829] border border-primary-theme rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 relative">
+            <div className="text-center mb-5 flex flex-col items-center">
               <AniDubLogo variant="stacked" size="sm" className="mb-3" />
-              <h3 className="text-lg font-black text-white">Stealth Admin Access</h3>
-              <p className="text-xs text-neutral-400 mt-1">Enter secure passphrase to unlock Anidub Dashboard</p>
+              <h3 className="text-lg font-black text-white">Clerk Admin Protection</h3>
+              <p className="text-xs text-neutral-400 mt-1">
+                Strict Clerk Authentication is required to access <code className="text-purple-400">/admin</code>
+              </p>
             </div>
 
-            <form onSubmit={handleAdminPasswordSubmit} className="space-y-4">
-              <div>
-                <input
-                  type="password"
-                  autoFocus
-                  placeholder="Enter admin passphrase..."
-                  value={adminPasswordInput}
-                  onChange={(e) => {
-                    setAdminPasswordInput(e.target.value);
-                    if (adminPasswordError) setAdminPasswordError(false);
-                  }}
-                  className="w-full bg-[#131926] border border-neutral-700/80 focus:border-purple-500 rounded-xl px-4 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none transition-colors"
-                />
-                {adminPasswordError && (
-                  <p className="text-[11px] text-rose-400 mt-1.5 font-medium">
-                    Access Denied. Incorrect passphrase.
-                  </p>
-                )}
-              </div>
-
-              <div className="flex space-x-3 pt-2">
+            {!isSignedIn ? (
+              <div className="flex flex-col items-center space-y-4">
+                <SignIn />
                 <button
                   type="button"
                   onClick={() => setIsPasswordModalOpen(false)}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#161d2f] hover:bg-[#1a2236] text-neutral-300 text-xs font-semibold transition-colors border border-neutral-800 cursor-pointer"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#161d2f] hover:bg-[#1a2236] text-neutral-300 text-xs font-semibold transition-colors border border-neutral-800 cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={adminPasswordLoading}
-                  className="flex-1 px-4 py-2.5 rounded-xl btn-primary-theme text-white text-xs font-bold transition-all shadow-lg shadow-purple-950/40 disabled:opacity-50 cursor-pointer"
-                >
-                  {adminPasswordLoading ? 'Validating...' : 'Unlock Admin'}
-                </button>
               </div>
-            </form>
+            ) : isClerkAdmin ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-emerald-300">Authorized Clerk Administrator</p>
+                    <p className="text-[11px] text-neutral-300 truncate">{clerkUser?.primaryEmailAddress?.emailAddress}</p>
+                  </div>
+                </div>
+
+                {adminAuthError && (
+                  <p className="text-[11px] text-rose-400 font-medium text-center">
+                    {adminAuthError}
+                  </p>
+                )}
+
+                <div className="flex space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsPasswordModalOpen(false)}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-[#161d2f] hover:bg-[#1a2236] text-neutral-300 text-xs font-semibold transition-colors border border-neutral-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleVerifyClerkAdminUnlock}
+                    disabled={adminPasswordLoading}
+                    className="flex-1 px-4 py-2.5 rounded-xl btn-primary-theme text-white text-xs font-bold transition-all shadow-lg shadow-purple-950/40 disabled:opacity-50 cursor-pointer"
+                  >
+                    {adminPasswordLoading ? 'Verifying...' : 'Open Admin Console'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3">
+                  <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-bold text-rose-300">Unauthorized Clerk Account</p>
+                    <p className="text-[11px] text-neutral-300 mt-1">
+                      Signed in as <span className="font-mono text-white">{clerkUser?.primaryEmailAddress?.emailAddress}</span>. Only the authorized Clerk Administrator can access <code className="text-rose-300">/admin</code>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsPasswordModalOpen(false)}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-[#161d2f] hover:bg-[#1a2236] text-neutral-300 text-xs font-semibold transition-colors border border-neutral-800 cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => clerkSignOut()}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Switch Account</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

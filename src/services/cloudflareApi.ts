@@ -8,6 +8,7 @@
  */
 
 import { CLOUDFLARE_API_URL, getCloudflareUrl, CLOUDFLARE_ENDPOINTS, DEFAULT_FALLBACK_WORKER_URL } from '../config/cloudflare';
+import { getActiveClerkSession } from '../lib/clerk';
 
 export interface AnimePayload {
   id?: number | string;
@@ -117,18 +118,18 @@ class CloudflareApiService {
   }
 
   /**
-   * Retrieves the current admin authorization token
+   * Retrieves the current signed admin authorization token (if present)
    */
   private getAdminToken(): string {
     try {
-      return localStorage.getItem('cf_admin_token') || 'admin_secret';
+      return localStorage.getItem('cf_admin_token') || '';
     } catch {
-      return 'admin_secret';
+      return '';
     }
   }
 
   /**
-   * Generates default headers for Cloudflare Worker requests
+   * Generates headers for API requests with strict Clerk session and Admin token headers
    */
   private getHeaders(includeAuth: boolean = false): Record<string, string> {
     const headers: Record<string, string> = {
@@ -136,10 +137,25 @@ class CloudflareApiService {
       'Accept': 'application/json'
     };
 
+    const clerkUser = getActiveClerkSession();
+    if (clerkUser?.id) {
+      headers['x-clerk-user-id'] = clerkUser.id;
+      headers['x-user-id'] = clerkUser.id;
+      if (clerkUser.primaryEmailAddress?.emailAddress) {
+        headers['x-clerk-user-email'] = clerkUser.primaryEmailAddress.emailAddress;
+      }
+      if (clerkUser.sessionToken) {
+        headers['x-clerk-session-token'] = clerkUser.sessionToken;
+        headers['Authorization'] = `Bearer ${clerkUser.sessionToken}`;
+      }
+    }
+
     if (includeAuth) {
       const token = this.getAdminToken();
-      headers['x-admin-token'] = token;
-      headers['Authorization'] = `Bearer ${token}`;
+      if (token) {
+        headers['x-admin-token'] = token;
+        headers['Authorization'] = `Bearer ${token}`;
+      }
     }
 
     return headers;
@@ -623,22 +639,27 @@ class CloudflareApiService {
   }
 
   /**
-   * ADMIN: Authenticates with passphrase
+   * ADMIN: Authenticates via active Clerk Admin session and obtains a signed HMAC session token
    */
-  public async loginAdmin(password: string): Promise<{ success: boolean; token?: string }> {
+  public async loginAdmin(clerkEmail?: string): Promise<{ success: boolean; token?: string; error?: string }> {
     try {
+      const clerkUser = getActiveClerkSession();
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.LOGIN_ADMIN, {
         method: 'POST',
         headers: this.getHeaders(false),
-        body: JSON.stringify({ password })
+        body: JSON.stringify({
+          clerk_user_id: clerkUser?.id || null,
+          clerk_email: clerkEmail || clerkUser?.primaryEmailAddress?.emailAddress || null
+        })
       });
-      if (res.ok) {
-        return await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.token) {
+        return { success: true, token: data.token };
       }
-      return { success: false };
-    } catch (err) {
+      return { success: false, error: data.error || 'Unauthorized Clerk Admin session' };
+    } catch (err: any) {
       console.error('Admin login error:', err);
-      return { success: false };
+      return { success: false, error: err.message };
     }
   }
 
@@ -999,7 +1020,9 @@ class CloudflareApiService {
    */
   public async fetchAnalyticsDashboard(range: string = 'all'): Promise<any> {
     try {
-      const res = await this.smartFetch(`/api/analytics/dashboard?range=${encodeURIComponent(range)}`);
+      const res = await this.smartFetch(`/api/analytics/dashboard?range=${encodeURIComponent(range)}`, {
+        headers: this.getHeaders(true)
+      });
       if (res.ok) {
         const json = await res.json();
         return json?.data || json;
@@ -1012,7 +1035,9 @@ class CloudflareApiService {
 
   public async fetchAnalytics(): Promise<any> {
     try {
-      const res = await this.smartFetch('/api/analytics');
+      const res = await this.smartFetch('/api/analytics', {
+        headers: this.getHeaders(true)
+      });
       if (res.ok) return await res.json();
     } catch (err) {
       console.warn('Failed to fetch analytics:', err);
@@ -1025,7 +1050,9 @@ class CloudflareApiService {
    */
   public async fetchCloudflareStatus(): Promise<any> {
     try {
-      const res = await this.smartFetch('/api/cloudflare/status');
+      const res = await this.smartFetch('/api/cloudflare/status', {
+        headers: this.getHeaders(true)
+      });
       if (res.ok) return await res.json();
     } catch (err) {
       console.warn('Failed to fetch CF status:', err);
@@ -1051,7 +1078,7 @@ class CloudflareApiService {
   public async logoutAdmin(): Promise<boolean> {
     try {
       const token = this.getAdminToken();
-      if (token && token !== 'admin_secret') {
+      if (token) {
         await this.smartFetch('/api/admin/logout', {
           method: 'POST',
           headers: this.getHeaders(true)

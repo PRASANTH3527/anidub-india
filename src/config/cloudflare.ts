@@ -22,7 +22,7 @@ function sanitizeApiUrl(raw?: string): string {
 }
 
 // ---> DYNAMIC API BASE URL CONFIGURATION <---
-export const CLOUDFLARE_API_URL: string = sanitizeApiUrl(import.meta.env.VITE_CLOUDFLARE_API_URL);
+export const CLOUDFLARE_API_URL: string = sanitizeApiUrl((import.meta as any).env?.VITE_CLOUDFLARE_API_URL);
 
 /**
  * Default fallback Worker URL used when relative paths and env vars fail.
