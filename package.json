@@ -8,7 +8,6 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "vite preview",
-    "deploy": "wrangler pages deploy dist",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },
