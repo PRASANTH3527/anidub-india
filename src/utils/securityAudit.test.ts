@@ -370,5 +370,14 @@ test('Security Audit 8: Vite envPrefix, runtime /api/config Clerk fallback, unif
   assert.equal(apiRes.status, 200);
   const apiJson: any = await apiRes.json();
   assert.equal(apiJson.clerkPublishableKey, 'pk_live_dGVzdC5hbmkuY29tJA');
+
+  // Verify ChatRoom Durable Object class is explicitly exported from edge-entry.ts
+  assert.equal(typeof edgeEntryModule.ChatRoom, 'function');
+  const roomInstance = new edgeEntryModule.ChatRoom({}, {});
+  const roomStatusRes = await roomInstance.fetch(new Request('https://anidub.in/ws'));
+  assert.equal(roomStatusRes.status, 200);
+  const roomStatusJson: any = await roomStatusRes.json();
+  assert.equal(roomStatusJson.durableObject, 'ChatRoom');
 });
+
 

@@ -1,21 +1,30 @@
 import { onRequest } from '../functions/api/[[route]]';
+import { ChatRoom } from './chat-room';
+
+export { ChatRoom };
 
 interface EdgeEnv {
   DB: any;
+  CHAT_ROOM?: any;
   ASSETS?: { fetch: (request: Request) => Promise<Response> };
   [key: string]: any;
 }
 
 /**
  * Unified Cloudflare Worker entry-point for `wrangler deploy`.
- * Routes `/api/*` requests directly to the canonical Pages Function router in `functions/api/[[route]].ts`
- * and serves the Vite `./dist` static SPA bundle via `env.ASSETS`.
+ * Exports `ChatRoom` Durable Object and routes `/api/*` and `/ws*` requests
+ * to `functions/api/[[route]].ts` while serving `./dist` via `env.ASSETS`.
  */
 export default {
   async fetch(request: Request, env: EdgeEnv): Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+    if (
+      url.pathname === '/api' ||
+      url.pathname.startsWith('/api/') ||
+      url.pathname === '/ws' ||
+      url.pathname.startsWith('/ws/')
+    ) {
       return onRequest({ request, env });
     }
 
@@ -26,3 +35,4 @@ export default {
     return new Response('Static assets binding (ASSETS) is not configured.', { status: 404 });
   },
 };
+

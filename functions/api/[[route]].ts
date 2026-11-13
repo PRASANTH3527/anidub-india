@@ -5,9 +5,13 @@
  */
 
 import { getAuth, validateAndRateLimitFeedback, extractClientIp, isApprovedOrigin } from '../../src/utils/auth';
+import { ChatRoom } from '../../src/chat-room';
+
+export { ChatRoom };
 
 interface Env {
   DB: any; // Cloudflare D1 Database binding
+  CHAT_ROOM?: any; // Optional Cloudflare Durable Object binding
   ADMIN_EMAIL?: string;
   CLERK_SECRET_KEY?: string;
   CLERK_JWT_KEY?: string;
@@ -188,10 +192,19 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  if (path === '/ws/api/chat/stream') {
+  if (path === '/ws' || path === '/ws/api/chat/stream') {
     const session = await getAuth(request, env);
     if (!session.userId) {
       return jsonResponse({ error: 'Unauthorized: Active Clerk user session required for chat stream' }, 401, request);
+    }
+    if (
+      env.CHAT_ROOM &&
+      typeof env.CHAT_ROOM.idFromName === 'function' &&
+      request.headers.get('Upgrade')?.toLowerCase() === 'websocket'
+    ) {
+      const roomId = env.CHAT_ROOM.idFromName('global-chat');
+      const roomStub = env.CHAT_ROOM.get(roomId);
+      return roomStub.fetch(request);
     }
     return jsonResponse({ ok: true, userId: session.userId }, 200, request);
   }
