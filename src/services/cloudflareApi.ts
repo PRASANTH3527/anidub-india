@@ -216,6 +216,36 @@ class CloudflareApiService {
   }
 
   /**
+   * SUBMIT COMMUNITY ANIME: Allows authenticated normal users to submit anime into the pending moderation queue (/api/anime/submit)
+   */
+  public async submitCommunityAnime(payload: AnimePayload): Promise<{ success: boolean; id?: number; animeId?: number; submissionStatus?: string; message?: string }> {
+    const endpoint = CLOUDFLARE_ENDPOINTS.SUBMIT_ANIME;
+    const res = await this.smartFetch(endpoint, {
+      method: 'POST',
+      headers: this.getHeaders(false),
+      body: JSON.stringify({
+        ...payload,
+        status: 'pending',
+        submissionStatus: 'pending',
+      })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      let errorMsg = `Failed to submit anime (Status ${res.status})`;
+      try {
+        const json = JSON.parse(errText);
+        if (json.error) errorMsg = json.error;
+      } catch {
+        if (errText) errorMsg = errText;
+      }
+      throw new Error(errorMsg);
+    }
+
+    return await res.json();
+  }
+
+  /**
    * CREATE: Adds a new anime to Cloudflare D1
    */
   /**

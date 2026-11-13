@@ -207,12 +207,12 @@ class DatabaseService {
   public async submitDubInfo(animeData: any): Promise<any> {
     const payload = {
       ...animeData,
-      status: animeData.status || (animeData.type === 'Movie' ? 'Completed' : 'Airing'),
+      status: 'pending',
       airing_status: animeData.status || (animeData.type === 'Movie' ? 'Completed' : 'Airing'),
       submissionStatus: 'pending',
       approval_status: 'pending'
     };
-    const data = await cloudflareApi.createAnime(payload);
+    const data = await cloudflareApi.submitCommunityAnime(payload);
     this.notifyListeners();
     return data;
   }

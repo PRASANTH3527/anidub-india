@@ -23,12 +23,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   const [submitted, setSubmitted] = useState(false);
 
   // Safe top-level toast hook access
-  let toast: any = null;
-  try {
-    toast = useToast();
-  } catch {
-    toast = null;
-  }
+  const toast = useToast();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 

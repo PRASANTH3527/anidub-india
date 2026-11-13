@@ -27,8 +27,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   onClose,
   onSubmit
 }) => {
-  if (!isOpen) return null;
-
   const [title, setTitle] = useState('');
   const [synopsis, setSynopsis] = useState('');
   const [coverImage, setCoverImage] = useState('');
@@ -39,6 +37,10 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
   const [platform, setPlatform] = useState('Crunchyroll');
   const [selectedLangs, setSelectedLangs] = useState<string[]>([]);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!isOpen) return null;
 
   const availableGenres = [
     'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Isekai', 
@@ -59,9 +61,6 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
       prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre]
     );
   };
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

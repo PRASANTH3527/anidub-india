@@ -58,7 +58,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   onSubmit,
 }) => {
   const { isSignedIn, user: clerkUser } = useUser();
-  if (!isOpen) return null;
 
   const initDataAny = initialData as any;
 
@@ -536,8 +535,10 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       let savedResult: any = null;
       if (mode === 'edit' && initialData?.id) {
         savedResult = await cloudflareApi.updateAnime(initialData.id, payload);
-      } else {
+      } else if (isAdminSessionVerified) {
         savedResult = await cloudflareApi.createAnime(payload);
+      } else {
+        savedResult = await cloudflareApi.submitCommunityAnime(payload);
       }
 
       const fullUpdatedItem = {
@@ -622,6 +623,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   ];
 
   const shouldReduceMotion = useReducedMotion();
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto font-sans">

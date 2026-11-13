@@ -103,12 +103,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
 
   // Safe toast access
-  let toast: any = null;
-  try {
-    toast = useToast();
-  } catch {
-    toast = null;
-  }
+  const toast = useToast();
 
   // Defer vote status check until browser idle time so it never competes with above-the-fold LCP image downloads
   useEffect(() => {

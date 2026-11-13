@@ -10,14 +10,14 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
   isOpen,
   onClose
 }) => {
-  if (!isOpen) return null;
-
   const [syncCode, setSyncCode] = useState('');
   const [restoreInput, setRestoreInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoredSuccess, setRestoredSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  if (!isOpen) return null;
 
   const handleGenerateCode = () => {
     setIsGenerating(true);

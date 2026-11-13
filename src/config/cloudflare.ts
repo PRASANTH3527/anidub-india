@@ -36,6 +36,7 @@ export const CLOUDFLARE_D1_DATABASE_ID = '75f053ab-5b44-4d48-abf8-b3a357a89426';
 // Cloudflare Worker API routes specification
 export const CLOUDFLARE_ENDPOINTS = {
   CATALOG: '/api/anime',
+  SUBMIT_ANIME: '/api/anime/submit',
   ANIME_BY_ID: (id: string | number) => `/api/anime/${id}`,
   APPROVE: (id: string | number) => `/api/admin/approve/${id}`,
   VOTE: (id: string | number) => `/api/anime/${id}/vote`,

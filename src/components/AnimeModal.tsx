@@ -27,9 +27,9 @@ export const AnimeModal: React.FC<AnimeModalProps> = ({
   isBookmarked,
   onToggleBookmark
 }) => {
-  if (!isOpen || !anime) return null;
-
   const [copied, setCopied] = React.useState(false);
+
+  if (!isOpen || !anime) return null;
 
   const handleShare = () => {
     navigator.clipboard?.writeText(window.location.href);
