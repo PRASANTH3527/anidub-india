@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Shield, X, AlertCircle, CheckCircle2, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cloudflareApi } from '../services/cloudflareApi';
 import { getCloudflareUrl } from '../config/cloudflare';
 import { useUser, useAuth, useClerk, SignIn } from '@clerk/nextjs';
+import { getClerkSessionToken } from '../lib/clerk';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 
 interface AdminLoginModalProps {
@@ -34,27 +34,32 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
     setCheckingServerAdmin(true);
     (async () => {
       try {
-        const token = await getToken();
+        const token = (await getToken()) || (await getClerkSessionToken());
         const res = await fetch(getCloudflareUrl('/api/admin/verify'), {
           method: 'GET',
+          cache: 'no-store',
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         });
-        const data: any = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        if (res.ok) {
-          setServerAdminVerified(true);
-          setError('');
+        if (res.status === 200) {
+          if (!cancelled) {
+            setServerAdminVerified(true);
+            setError('');
+          }
         } else {
-          setServerAdminVerified(clientAdminMatch);
-          if (data.error) setError(data.error);
+          const data: any = await res.json().catch(() => ({}));
+          const backendError = data.error || data.message || `HTTP ${res.status}`;
+          if (!cancelled) {
+            setServerAdminVerified(clientAdminMatch);
+            setError(`Backend Error: ${backendError}`);
+          }
         }
       } catch (err: any) {
         if (!cancelled) {
           setServerAdminVerified(clientAdminMatch);
-          if (err?.message) setError(err.message);
+          setError(`Backend Error: ${err?.message || 'Unable to reach /api/admin/verify'}`);
         }
       } finally {
         if (!cancelled) setCheckingServerAdmin(false);
@@ -72,30 +77,26 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
     setError('');
     setLoading(true);
     try {
-      const token = await getToken();
-      const verifyRes = await fetch(getCloudflareUrl('/api/admin/verify'), {
+      const token = (await getToken()) || (await getClerkSessionToken());
+      const res = await fetch(getCloudflareUrl('/api/admin/verify'), {
         method: 'GET',
+        cache: 'no-store',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
-      const verifyData: any = await verifyRes.json().catch(() => ({}));
-      if (verifyRes.ok) {
+      if (res.status === 200) {
         onSuccess();
         onClose();
         return;
       }
 
-      const data = await cloudflareApi.loginAdmin(token);
-      if (data.success) {
-        onSuccess();
-        onClose();
-      } else {
-        setError(verifyData.error || data.error || 'Clerk Administrator verification failed.');
-      }
-    } catch {
-      setError('Unable to verify Clerk Admin session with the edge server.');
+      const data: any = await res.json().catch(() => ({}));
+      const backendError = data.error || data.message || `HTTP ${res.status}`;
+      setError(`Backend Error: ${backendError}`);
+    } catch (err: any) {
+      setError(`Backend Error: ${err?.message || 'Unable to verify Clerk Admin session with the edge server.'}`);
     } finally {
       setLoading(false);
     }
@@ -154,9 +155,9 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
                 </div>
 
                 {error && (
-                  <div className="flex items-center space-x-2 text-red-400 text-xs bg-red-500/10 border border-red-500/20 p-3 rounded-xl">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{error}</span>
+                  <div className="flex items-start space-x-2 text-red-400 text-xs bg-red-500/10 border border-red-500/20 p-3 rounded-xl break-words">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span className="break-words">{error}</span>
                   </div>
                 )}
 
@@ -173,11 +174,16 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
               <div className="space-y-4">
                 <div className="flex items-start space-x-2.5 text-red-300 text-xs bg-red-500/10 border border-red-500/25 p-4 rounded-2xl">
                   <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-bold text-red-300">Unauthorized Account</p>
                     <p className="mt-1 text-neutral-300">
                       Signed in as <span className="font-mono text-white">{user?.primaryEmailAddress?.emailAddress}</span>. Only the authorized Clerk Administrator can access protected <code className="text-red-300">/admin</code> routes.
                     </p>
+                    {error && (
+                      <p className="mt-2 text-red-300 font-medium break-words">
+                        {error}
+                      </p>
+                    )}
                   </div>
                 </div>
 

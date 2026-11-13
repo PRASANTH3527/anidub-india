@@ -8,6 +8,7 @@ import { cloudflareApi } from './services/cloudflareApi';
 import { getCloudflareUrl, CLOUDFLARE_API_URL } from './config/cloudflare';
 import { AniDubLogo } from './components/AniDubLogo';
 import { useUser, useAuth, useClerk, SignIn } from '@clerk/nextjs';
+import { getClerkSessionToken } from './lib/clerk';
 import { isAuthorizedClerkAdmin } from './utils/auth';
 
 const ViewLoadingFallback = () => (
@@ -292,18 +293,17 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const token = await getToken();
-        const verifyRes = await fetch(getCloudflareUrl('/api/admin/verify'), {
+        const token = (await getToken()) || (await getClerkSessionToken());
+        const res = await fetch(getCloudflareUrl('/api/admin/verify'), {
           method: 'GET',
+          cache: 'no-store',
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         });
-        const verifyData: any = await verifyRes.json().catch(() => ({}));
-        if (cancelled) return;
-
-        if (verifyRes.ok) {
+        if (res.status === 200) {
+          if (cancelled) return;
           setIsServerClerkAdmin(true);
           setIsAdminAuthenticated(true);
           setIsPasswordModalOpen(false);
@@ -314,32 +314,16 @@ export default function App() {
           return;
         }
 
-        if (isClientClerkAdmin) {
-          const res = await cloudflareApi.loginAdmin(token);
-          if (cancelled) return;
-          if (res.success) {
-            setIsServerClerkAdmin(true);
-            setIsAdminAuthenticated(true);
-            setIsPasswordModalOpen(false);
-            setAdminAuthError('');
-            if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
-              setActiveTab('admin');
-            }
-          } else {
-            setIsServerClerkAdmin(false);
-            setIsAdminAuthenticated(false);
-            setAdminAuthError(res.error || verifyData.error || 'Unauthorized: Valid Clerk Admin session required');
-            if (activeTab === 'admin') setActiveTab('home');
-          }
-        } else {
-          setIsServerClerkAdmin(false);
-          setIsAdminAuthenticated(false);
-          if (verifyData.error) setAdminAuthError(verifyData.error);
-          if (activeTab === 'admin') setActiveTab('home');
-        }
+        const data: any = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        const backendError = data.error || data.message || `HTTP ${res.status}`;
+        setIsServerClerkAdmin(false);
+        setIsAdminAuthenticated(false);
+        setAdminAuthError(`Backend Error: ${backendError}`);
+        if (activeTab === 'admin') setActiveTab('home');
       } catch (err: any) {
         if (!cancelled) {
-          setAdminAuthError(err?.message || 'Unable to verify Clerk Admin session.');
+          setAdminAuthError(`Backend Error: ${err?.message || 'Unable to verify Clerk Admin session.'}`);
         }
       }
     })();
@@ -351,23 +335,23 @@ export default function App() {
 
   const handleVerifyClerkAdminUnlock = async () => {
     if (!isSignedIn) {
-      setAdminAuthError('Only the authorized Clerk Administrator can unlock /admin.');
+      setAdminAuthError('Backend Error: Only the authorized Clerk Administrator can unlock /admin.');
       return;
     }
     setAdminPasswordLoading(true);
     setAdminAuthError('');
     try {
-      const token = await getToken();
-      const verifyRes = await fetch(getCloudflareUrl('/api/admin/verify'), {
+      const token = (await getToken()) || (await getClerkSessionToken());
+      const res = await fetch(getCloudflareUrl('/api/admin/verify'), {
         method: 'GET',
+        cache: 'no-store',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
-      const verifyData: any = await verifyRes.json().catch(() => ({}));
 
-      if (verifyRes.ok) {
+      if (res.status === 200) {
         setIsServerClerkAdmin(true);
         setIsAdminAuthenticated(true);
         setActiveTab('admin');
@@ -376,18 +360,11 @@ export default function App() {
         return;
       }
 
-      const data = await cloudflareApi.loginAdmin(token);
-      if (data.success) {
-        setIsServerClerkAdmin(true);
-        setIsAdminAuthenticated(true);
-        setActiveTab('admin');
-        setIsPasswordModalOpen(false);
-        setAdminAuthError('');
-      } else {
-        setAdminAuthError(verifyData.error || data.error || 'Access Denied. Clerk Admin session verification failed.');
-      }
-    } catch {
-      setAdminAuthError('Unable to verify Clerk Admin session.');
+      const data: any = await res.json().catch(() => ({}));
+      const backendError = data.error || data.message || `HTTP ${res.status}`;
+      setAdminAuthError(`Backend Error: ${backendError}`);
+    } catch (err: any) {
+      setAdminAuthError(`Backend Error: ${err?.message || 'Unable to verify Clerk Admin session.'}`);
     } finally {
       setAdminPasswordLoading(false);
     }
@@ -784,9 +761,9 @@ export default function App() {
                 </div>
 
                 {adminAuthError && (
-                  <p className="text-[11px] text-rose-400 font-medium text-center">
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-[11px] text-rose-400 font-medium text-center break-words">
                     {adminAuthError}
-                  </p>
+                  </div>
                 )}
 
                 <div className="flex space-x-3 pt-2">
@@ -811,13 +788,13 @@ export default function App() {
               <div className="space-y-4">
                 <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3">
                   <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs font-bold text-rose-300">Admin Verification Status</p>
                     <p className="text-[11px] text-neutral-300 mt-1">
                       Signed in as <span className="font-mono text-white">{clerkUser?.primaryEmailAddress?.emailAddress}</span>.
                     </p>
                     {adminAuthError && (
-                      <p className="text-[11px] text-rose-300 mt-2 font-medium">
+                      <p className="text-[11px] text-rose-300 mt-2 font-medium break-words">
                         {adminAuthError}
                       </p>
                     )}

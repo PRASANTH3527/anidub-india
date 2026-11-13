@@ -406,15 +406,15 @@ test('Security Audit 8: Vite envPrefix, runtime /api/config Clerk fallback, unif
   const missingTokenJson: any = await missingTokenRes.json();
   assert.ok(missingTokenJson.error.includes('Missing Clerk session token'));
 
-  // Verify App.tsx and AdminLoginModal.tsx fetch token via useAuth().getToken() and pass Authorization: Bearer ${token}
+  // Verify App.tsx and AdminLoginModal.tsx fetch token via useAuth().getToken(), pass Authorization: Bearer ${token}, and display Backend Error: ${backendError}
   const appCode = fs.readFileSync(path.join(process.cwd(), 'src/App.tsx'), 'utf-8');
   const modalCode = fs.readFileSync(path.join(process.cwd(), 'src/components/AdminLoginModal.tsx'), 'utf-8');
   assert.ok(appCode.includes('const { getToken } = useAuth()'));
   assert.ok(appCode.includes('Authorization: `Bearer ${token}`'));
+  assert.ok(appCode.includes('`Backend Error: ${backendError}`'));
+  assert.equal(appCode.includes('Unauthorized: Valid Clerk Admin session required'), false);
   assert.ok(modalCode.includes('const { getToken } = useAuth()'));
   assert.ok(modalCode.includes('Authorization: `Bearer ${token}`'));
+  assert.ok(modalCode.includes('`Backend Error: ${backendError}`'));
 });
-
-
-
 

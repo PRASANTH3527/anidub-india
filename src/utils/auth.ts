@@ -358,9 +358,15 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
 
   // Strict verification: require CLERK_SECRET_KEY or CLERK_JWT_KEY in env bindings
   if (!secretKey && !jwtKey) {
+    const boundKeys =
+      resolvedEnv && typeof resolvedEnv === 'object'
+        ? Object.keys(resolvedEnv).filter(
+            (k) => resolvedEnv[k] !== undefined && resolvedEnv[k] !== null && resolvedEnv[k] !== ''
+          )
+        : [];
     return {
       ...emptySession,
-      error: 'Missing CLERK_SECRET_KEY in env bindings',
+      error: `Missing CLERK_SECRET_KEY in env bindings (bound keys: ${boundKeys.length ? boundKeys.join(', ') : 'none'})`,
     };
   }
 
@@ -473,13 +479,13 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
   let adminError: string | undefined;
   if (!isAdmin) {
     if (!configuredAdminEmail) {
-      adminError = 'Missing ADMIN_EMAIL (or VITE_ADMIN_EMAIL) in env bindings';
+      adminError = `Missing ADMIN_EMAIL (or VITE_ADMIN_EMAIL) in env bindings (signed in as ${normalizedEmail || userId})`;
     } else if (!normalizedEmail && userLookupError) {
       adminError = `Failed to resolve email for Clerk user (${userId}): ${userLookupError}`;
     } else if (!normalizedEmail) {
       adminError = `Authenticated Clerk session (${userId}) has no verified email address`;
     } else {
-      adminError = `Authenticated email (${normalizedEmail}) does not match configured ADMIN_EMAIL in env bindings`;
+      adminError = `Email mismatch: ${normalizedEmail} !== ${configuredAdminEmail}`;
     }
   }
 

@@ -147,17 +147,23 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/admin/verify' && (method === 'GET' || method === 'POST')) {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
+      const descriptiveError =
+        session.error ||
+        (!session.userId
+          ? 'Missing or invalid Clerk session token'
+          : `Email mismatch: ${session.email || 'unknown'} !== ${env?.ADMIN_EMAIL || env?.VITE_ADMIN_EMAIL || 'unconfigured ADMIN_EMAIL'}`);
       return jsonResponse(
         {
           ok: false,
           success: false,
           authenticated: Boolean(session.userId),
           isAdmin: false,
-          error: session.error || 'Unauthorized: Valid Clerk Admin session required',
+          error: descriptiveError,
+          message: descriptiveError,
         },
         401,
         request,
-        { 'Cache-Control': 'no-store' }
+        { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
       );
     }
     return jsonResponse(
@@ -171,24 +177,30 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       },
       200,
       request,
-      { 'Cache-Control': 'no-store' }
+      { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
     );
   }
 
   if (path === '/api/admin/login' && (method === 'POST' || method === 'GET')) {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
+      const descriptiveError =
+        session.error ||
+        (!session.userId
+          ? 'Missing or invalid Clerk session token'
+          : `Email mismatch: ${session.email || 'unknown'} !== ${env?.ADMIN_EMAIL || env?.VITE_ADMIN_EMAIL || 'unconfigured ADMIN_EMAIL'}`);
       return jsonResponse(
         {
           ok: false,
           success: false,
           authenticated: Boolean(session.userId),
           isAdmin: false,
-          error: session.error || 'Unauthorized: Valid Clerk Admin session required',
+          error: descriptiveError,
+          message: descriptiveError,
         },
         401,
         request,
-        { 'Cache-Control': 'no-store' }
+        { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
       );
     }
     return jsonResponse(
@@ -202,7 +214,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       },
       200,
       request,
-      { 'Cache-Control': 'no-store' }
+      { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
     );
   }
 

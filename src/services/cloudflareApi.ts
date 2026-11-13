@@ -624,12 +624,13 @@ class CloudflareApiService {
         },
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) {
+      if (res.status === 200) {
         return { ok: true };
       }
-      return { ok: false, error: data.error || 'Unauthorized: Valid Clerk Admin session required' };
+      const backendError = data.error || data.message || `HTTP ${res.status}`;
+      return { ok: false, error: `Backend Error: ${backendError}` };
     } catch (err: any) {
-      return { ok: false, error: err?.message || 'Unable to reach /api/admin/verify' };
+      return { ok: false, error: `Backend Error: ${err?.message || 'Unable to reach /api/admin/verify'}` };
     }
   }
 
@@ -657,7 +658,7 @@ class CloudflareApiService {
         headers: authHeaders,
       });
       const verifyData = await verifyRes.json().catch(() => ({}));
-      if (verifyRes.ok) {
+      if (verifyRes.status === 200) {
         return { success: true };
       }
 
@@ -667,16 +668,22 @@ class CloudflareApiService {
         body: JSON.stringify({})
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) {
+      if (res.status === 200) {
         return { success: true };
       }
+      const backendError =
+        verifyData.error ||
+        verifyData.message ||
+        data.error ||
+        data.message ||
+        `HTTP ${verifyRes.status}`;
       return {
         success: false,
-        error: data.error || verifyData.error || 'Unauthorized Clerk Admin session'
+        error: `Backend Error: ${backendError}`
       };
     } catch (err: any) {
       console.error('Admin login error:', err);
-      return { success: false, error: err.message };
+      return { success: false, error: `Backend Error: ${err.message}` };
     }
   }
 
