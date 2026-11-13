@@ -64,22 +64,7 @@ export const CLOUDFLARE_ENDPOINTS = {
 export function getCloudflareUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
 
-  // If in browser, check if an admin manual override is set in localStorage
   if (typeof window !== 'undefined') {
-    let manualOverride = '';
-    try {
-      manualOverride = localStorage.getItem('cf_api_url_override') || '';
-    } catch {}
-
-    if (manualOverride && manualOverride.trim() !== '') {
-      try {
-        const cleanBase = manualOverride.trim().replace(/\/+$/, '');
-        const fullUrl = `${cleanBase}${cleanPath}`;
-        new URL(fullUrl);
-        return fullUrl;
-      } catch {}
-    }
-
     // On local dev, AI Studio preview, or unified Cloudflare Pages/Workers deployment, route via same-origin relative paths
     const host = window.location.hostname.toLowerCase();
     if (
@@ -92,6 +77,20 @@ export function getCloudflareUrl(path: string): string {
       host.includes('.run.app')
     ) {
       return cleanPath;
+    }
+
+    let manualOverride = '';
+    try {
+      manualOverride = localStorage.getItem('cf_api_url_override') || '';
+    } catch {}
+
+    if (manualOverride && manualOverride.trim() !== '') {
+      try {
+        const cleanBase = manualOverride.trim().replace(/\/+$/, '');
+        const fullUrl = `${cleanBase}${cleanPath}`;
+        new URL(fullUrl);
+        return fullUrl;
+      } catch {}
     }
   }
 

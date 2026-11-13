@@ -35,13 +35,16 @@ function cleanEnvValue(raw: unknown): string {
 }
 
 /**
- * Safely reads an environment variable from Cloudflare `env` bindings first,
- * falling back to Node's runtime environment only when available.
+ * Safely reads an environment variable from Cloudflare `env` bindings.
+ * When `env` is provided by the Cloudflare Worker/Pages context, reads strictly from `env` (never `process.env`).
  */
 export function getEnvBinding(key: string, env?: EnvBindings | null): string | undefined {
-  if (env && typeof env === 'object' && env[key] !== undefined && env[key] !== null) {
-    const val = cleanEnvValue(env[key]);
-    if (val !== '') return val;
+  if (env && typeof env === 'object') {
+    if (env[key] !== undefined && env[key] !== null) {
+      const val = cleanEnvValue(env[key]);
+      if (val !== '') return val;
+    }
+    return undefined;
   }
   const globalCloudflareEnv = (globalThis as any)?.__CLOUDFLARE_ENV__;
   if (globalCloudflareEnv && globalCloudflareEnv[key]) {

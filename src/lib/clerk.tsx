@@ -94,6 +94,9 @@ let registeredGetToken: (() => Promise<string | null>) | null = null;
 
 const ClerkTokenSynchronizer: React.FC = () => {
   const { getToken, isSignedIn } = useOfficialAuth();
+  if (isSignedIn && typeof getToken === 'function') {
+    registeredGetToken = () => getToken();
+  }
   useEffect(() => {
     if (isSignedIn && typeof getToken === 'function') {
       registeredGetToken = () => getToken();
@@ -197,7 +200,11 @@ export function useAuth() {
     };
   }
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useOfficialAuth();
+  const authResult = useOfficialAuth();
+  if (authResult.isSignedIn && typeof authResult.getToken === 'function') {
+    registeredGetToken = () => authResult.getToken();
+  }
+  return authResult;
 }
 
 export function useClerk() {

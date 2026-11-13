@@ -7,7 +7,7 @@ import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown, Loader2, LogOu
 import { cloudflareApi } from './services/cloudflareApi';
 import { getCloudflareUrl, CLOUDFLARE_API_URL } from './config/cloudflare';
 import { AniDubLogo } from './components/AniDubLogo';
-import { useUser, useClerk, SignIn } from '@clerk/nextjs';
+import { useUser, useAuth, useClerk, SignIn } from '@clerk/nextjs';
 import { isAuthorizedClerkAdmin } from './utils/auth';
 
 const ViewLoadingFallback = () => (
@@ -95,6 +95,7 @@ export default function App() {
 
   // Strict Clerk Admin Authentication State
   const { isSignedIn, user: clerkUser } = useUser();
+  const { getToken } = useAuth();
   const { signOut: clerkSignOut } = useClerk();
   const isClientClerkAdmin = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
   const [isServerClerkAdmin, setIsServerClerkAdmin] = useState<boolean>(false);
@@ -289,18 +290,32 @@ export default function App() {
     }
 
     let cancelled = false;
-    cloudflareApi.verifyAdminDetailed().then(detail => {
-      if (cancelled) return;
-      if (detail.ok) {
-        setIsServerClerkAdmin(true);
-        setIsAdminAuthenticated(true);
-        setIsPasswordModalOpen(false);
-        setAdminAuthError('');
-        if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
-          setActiveTab('admin');
+    (async () => {
+      try {
+        const token = await getToken();
+        const verifyRes = await fetch(getCloudflareUrl('/api/admin/verify'), {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        const verifyData: any = await verifyRes.json().catch(() => ({}));
+        if (cancelled) return;
+
+        if (verifyRes.ok) {
+          setIsServerClerkAdmin(true);
+          setIsAdminAuthenticated(true);
+          setIsPasswordModalOpen(false);
+          setAdminAuthError('');
+          if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+            setActiveTab('admin');
+          }
+          return;
         }
-      } else if (isClientClerkAdmin) {
-        cloudflareApi.loginAdmin().then(res => {
+
+        if (isClientClerkAdmin) {
+          const res = await cloudflareApi.loginAdmin(token);
           if (cancelled) return;
           if (res.success) {
             setIsServerClerkAdmin(true);
@@ -313,22 +328,26 @@ export default function App() {
           } else {
             setIsServerClerkAdmin(false);
             setIsAdminAuthenticated(false);
-            if (res.error) setAdminAuthError(res.error);
+            setAdminAuthError(res.error || verifyData.error || 'Unauthorized: Valid Clerk Admin session required');
             if (activeTab === 'admin') setActiveTab('home');
           }
-        });
-      } else {
-        setIsServerClerkAdmin(false);
-        setIsAdminAuthenticated(false);
-        if (detail.error) setAdminAuthError(detail.error);
-        if (activeTab === 'admin') setActiveTab('home');
+        } else {
+          setIsServerClerkAdmin(false);
+          setIsAdminAuthenticated(false);
+          if (verifyData.error) setAdminAuthError(verifyData.error);
+          if (activeTab === 'admin') setActiveTab('home');
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setAdminAuthError(err?.message || 'Unable to verify Clerk Admin session.');
+        }
       }
-    });
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn, isClientClerkAdmin, activeTab]);
+  }, [isSignedIn, isClientClerkAdmin, activeTab, getToken]);
 
   const handleVerifyClerkAdminUnlock = async () => {
     if (!isSignedIn) {
@@ -338,7 +357,26 @@ export default function App() {
     setAdminPasswordLoading(true);
     setAdminAuthError('');
     try {
-      const data = await cloudflareApi.loginAdmin();
+      const token = await getToken();
+      const verifyRes = await fetch(getCloudflareUrl('/api/admin/verify'), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const verifyData: any = await verifyRes.json().catch(() => ({}));
+
+      if (verifyRes.ok) {
+        setIsServerClerkAdmin(true);
+        setIsAdminAuthenticated(true);
+        setActiveTab('admin');
+        setIsPasswordModalOpen(false);
+        setAdminAuthError('');
+        return;
+      }
+
+      const data = await cloudflareApi.loginAdmin(token);
       if (data.success) {
         setIsServerClerkAdmin(true);
         setIsAdminAuthenticated(true);
@@ -346,7 +384,7 @@ export default function App() {
         setIsPasswordModalOpen(false);
         setAdminAuthError('');
       } else {
-        setAdminAuthError(data.error || 'Access Denied. Clerk Admin session verification failed.');
+        setAdminAuthError(verifyData.error || data.error || 'Access Denied. Clerk Admin session verification failed.');
       }
     } catch {
       setAdminAuthError('Unable to verify Clerk Admin session.');

@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Shield, X, AlertCircle, CheckCircle2, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cloudflareApi } from '../services/cloudflareApi';
-import { useUser, useClerk, SignIn } from '@clerk/nextjs';
+import { getCloudflareUrl } from '../config/cloudflare';
+import { useUser, useAuth, useClerk, SignIn } from '@clerk/nextjs';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 
 interface AdminLoginModalProps {
@@ -13,6 +14,7 @@ interface AdminLoginModalProps {
 
 export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const { isSignedIn, user } = useUser();
+  const { getToken } = useAuth();
   const { signOut } = useClerk();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,25 +32,39 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
 
     let cancelled = false;
     setCheckingServerAdmin(true);
-    cloudflareApi.verifyAdminDetailed()
-      .then((detail) => {
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(getCloudflareUrl('/api/admin/verify'), {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        const data: any = await res.json().catch(() => ({}));
         if (cancelled) return;
-        if (detail.ok) {
+        if (res.ok) {
           setServerAdminVerified(true);
           setError('');
         } else {
           setServerAdminVerified(clientAdminMatch);
-          if (detail.error) setError(detail.error);
+          if (data.error) setError(data.error);
         }
-      })
-      .finally(() => {
+      } catch (err: any) {
+        if (!cancelled) {
+          setServerAdminVerified(clientAdminMatch);
+          if (err?.message) setError(err.message);
+        }
+      } finally {
         if (!cancelled) setCheckingServerAdmin(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [isOpen, isSignedIn, clientAdminMatch]);
+  }, [isOpen, isSignedIn, clientAdminMatch, getToken]);
 
   const isAuthorizedAdmin = clientAdminMatch || serverAdminVerified;
 
@@ -56,12 +72,27 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
     setError('');
     setLoading(true);
     try {
-      const data = await cloudflareApi.loginAdmin();
+      const token = await getToken();
+      const verifyRes = await fetch(getCloudflareUrl('/api/admin/verify'), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const verifyData: any = await verifyRes.json().catch(() => ({}));
+      if (verifyRes.ok) {
+        onSuccess();
+        onClose();
+        return;
+      }
+
+      const data = await cloudflareApi.loginAdmin(token);
       if (data.success) {
         onSuccess();
         onClose();
       } else {
-        setError(data.error || 'Clerk Administrator verification failed.');
+        setError(verifyData.error || data.error || 'Clerk Administrator verification failed.');
       }
     } catch {
       setError('Unable to verify Clerk Admin session with the edge server.');

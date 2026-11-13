@@ -613,10 +613,15 @@ class CloudflareApiService {
   /**
    * ADMIN: Verifies current Clerk JWT session with backend (/api/admin/verify) and returns detailed status/error
    */
-  public async verifyAdminDetailed(): Promise<{ ok: boolean; error?: string }> {
+  public async verifyAdminDetailed(explicitToken?: string | null): Promise<{ ok: boolean; error?: string }> {
     try {
+      const token = explicitToken || (await getClerkSessionToken());
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.VERIFY_ADMIN, {
-        headers: this.getHeaders(true)
+        method: 'GET',
+        headers: {
+          ...this.getHeaders(true),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -631,19 +636,25 @@ class CloudflareApiService {
   /**
    * ADMIN: Verifies current Clerk JWT session with backend
    */
-  public async verifyAdmin(): Promise<boolean> {
-    const res = await this.verifyAdminDetailed();
+  public async verifyAdmin(explicitToken?: string | null): Promise<boolean> {
+    const res = await this.verifyAdminDetailed(explicitToken);
     return res.ok;
   }
 
   /**
    * ADMIN: Verifies Clerk Admin JWT session on the backend without sending client-side email or userId
    */
-  public async loginAdmin(): Promise<{ success: boolean; error?: string }> {
+  public async loginAdmin(explicitToken?: string | null): Promise<{ success: boolean; error?: string }> {
     try {
+      const token = explicitToken || (await getClerkSessionToken());
+      const authHeaders = {
+        ...this.getHeaders(true),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
       const verifyRes = await this.smartFetch(CLOUDFLARE_ENDPOINTS.VERIFY_ADMIN, {
         method: 'GET',
-        headers: this.getHeaders(true)
+        headers: authHeaders,
       });
       const verifyData = await verifyRes.json().catch(() => ({}));
       if (verifyRes.ok) {
@@ -652,7 +663,7 @@ class CloudflareApiService {
 
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.LOGIN_ADMIN, {
         method: 'POST',
-        headers: this.getHeaders(true),
+        headers: authHeaders,
         body: JSON.stringify({})
       });
       const data = await res.json().catch(() => ({}));

@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
     env.ADMIN_EMAIL ||
     process.env.NEXT_PUBLIC_ADMIN_EMAIL ||
     process.env.VITE_ADMIN_EMAIL ||
+    process.env.ADMIN_EMAIL ||
     '';
 
   const devEdgeApiPlugin = {
