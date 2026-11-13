@@ -13,10 +13,25 @@ import { createClerkClient, verifyToken } from '@clerk/backend';
 
 export interface EnvBindings {
   ADMIN_EMAIL?: string;
+  VITE_ADMIN_EMAIL?: string;
+  NEXT_PUBLIC_ADMIN_EMAIL?: string;
   CLERK_SECRET_KEY?: string;
+  VITE_CLERK_SECRET_KEY?: string;
+  NEXT_PUBLIC_CLERK_SECRET_KEY?: string;
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?: string;
+  VITE_CLERK_PUBLISHABLE_KEY?: string;
+  CLERK_PUBLISHABLE_KEY?: string;
   CLERK_JWT_KEY?: string;
   IMGBB_API_KEY?: string;
   [key: string]: any;
+}
+
+function cleanEnvValue(raw: unknown): string {
+  if (raw === undefined || raw === null) return '';
+  return String(raw)
+    .trim()
+    .replace(/^["']+|["']+$/g, '')
+    .trim();
 }
 
 /**
@@ -25,35 +40,45 @@ export interface EnvBindings {
  */
 export function getEnvBinding(key: string, env?: EnvBindings | null): string | undefined {
   if (env && typeof env === 'object' && env[key] !== undefined && env[key] !== null) {
-    const val = String(env[key]).trim();
+    const val = cleanEnvValue(env[key]);
     if (val !== '') return val;
   }
   const globalCloudflareEnv = (globalThis as any)?.__CLOUDFLARE_ENV__;
   if (globalCloudflareEnv && globalCloudflareEnv[key]) {
-    const val = String(globalCloudflareEnv[key]).trim();
+    const val = cleanEnvValue(globalCloudflareEnv[key]);
     if (val !== '') return val;
   }
   const nodeEnv = (globalThis as any)?.process?.env;
   if (nodeEnv && typeof nodeEnv[key] === 'string') {
-    const val = nodeEnv[key].trim();
+    const val = cleanEnvValue(nodeEnv[key]);
     if (val !== '') return val;
   }
   return undefined;
 }
 
 /**
- * Returns the configured ADMIN_EMAIL from Cloudflare `env` bindings (or client VITE_/NEXT_PUBLIC_ in browser).
+ * Returns the configured ADMIN_EMAIL from Cloudflare `env` bindings (`env.ADMIN_EMAIL` or `env.VITE_ADMIN_EMAIL` or `env.NEXT_PUBLIC_ADMIN_EMAIL`),
+ * falling back to client build-time `import.meta.env` in the browser.
  * Returns '' if not configured (fails closed).
  */
 export function getAuthorizedAdminEmail(env?: EnvBindings | null): string {
-  const serverEnvEmail = getEnvBinding('ADMIN_EMAIL', env);
+  const directBinding =
+    cleanEnvValue(env?.ADMIN_EMAIL) ||
+    cleanEnvValue(env?.VITE_ADMIN_EMAIL) ||
+    cleanEnvValue(env?.NEXT_PUBLIC_ADMIN_EMAIL);
+
+  const serverEnvEmail =
+    directBinding ||
+    getEnvBinding('ADMIN_EMAIL', env) ||
+    getEnvBinding('VITE_ADMIN_EMAIL', env) ||
+    getEnvBinding('NEXT_PUBLIC_ADMIN_EMAIL', env);
 
   let clientEnvEmail: string | undefined;
   try {
     clientEnvEmail =
-      (import.meta as any).env?.VITE_ADMIN_EMAIL ||
-      (import.meta as any).env?.NEXT_PUBLIC_ADMIN_EMAIL ||
-      (import.meta as any).env?.ADMIN_EMAIL;
+      cleanEnvValue((import.meta as any).env?.VITE_ADMIN_EMAIL) ||
+      cleanEnvValue((import.meta as any).env?.NEXT_PUBLIC_ADMIN_EMAIL) ||
+      cleanEnvValue((import.meta as any).env?.ADMIN_EMAIL);
   } catch {
     // import.meta.env may not exist in all runtimes
   }
@@ -63,14 +88,14 @@ export function getAuthorizedAdminEmail(env?: EnvBindings | null): string {
 
 /**
  * Validates whether a Clerk user object or verified email string belongs to the authorized Admin.
- * Strictly requires ADMIN_EMAIL to be configured in `env` bindings.
+ * Strictly requires ADMIN_EMAIL (or VITE_ADMIN_EMAIL) to be configured in `env` bindings.
  */
 export function isAuthorizedClerkAdmin(subject?: any, env?: EnvBindings | null): boolean {
   const authorizedEmail = getAuthorizedAdminEmail(env);
   if (!authorizedEmail || !subject) return false;
 
   if (typeof subject === 'string') {
-    return subject.trim().toLowerCase() === authorizedEmail;
+    return cleanEnvValue(subject).toLowerCase() === authorizedEmail;
   }
 
   if (subject.id === 'guest') return false;
@@ -95,14 +120,23 @@ export function isAuthorizedClerkAdmin(subject?: any, env?: EnvBindings | null):
       }
     }
   }
+  if (Array.isArray(subject.externalAccounts)) {
+    for (const ext of subject.externalAccounts) {
+      if (typeof ext?.emailAddress === 'string') {
+        candidateEmails.push(ext.emailAddress);
+      } else if (typeof ext?.email === 'string') {
+        candidateEmails.push(ext.email);
+      }
+    }
+  }
 
   return candidateEmails.some(
-    (email) => email.trim().toLowerCase() === authorizedEmail
+    (email) => cleanEnvValue(email).toLowerCase() === authorizedEmail
   );
 }
 
 /**
- * Extracts a well-formed 3-part bearer JWT, `__session` cookie, or `?token=` WebSocket query token
+ * Extracts a well-formed 3-part bearer JWT, `__session` / `__session_*` cookie, or `?token=` WebSocket query token
  * from a standard Fetch Request or Express Request.
  */
 export function extractClerkJwtFromRequest(req: any): string | null {
@@ -125,7 +159,7 @@ export function extractClerkJwtFromRequest(req: any): string | null {
     }
   }
 
-  // 2. Check __session cookie
+  // 2. Check __session and suffixed __session_* cookies
   let cookieHeader: string | null = null;
   if (typeof req.headers?.get === 'function') {
     cookieHeader = req.headers.get('cookie') || req.headers.get('Cookie');
@@ -138,7 +172,7 @@ export function extractClerkJwtFromRequest(req: any): string | null {
     const cookies = cookieHeader.split(';');
     for (const part of cookies) {
       const [rawName, ...rest] = part.trim().split('=');
-      if (rawName === '__session') {
+      if (rawName === '__session' || (rawName && rawName.startsWith('__session_'))) {
         const value = decodeURIComponent(rest.join('=').trim());
         if (value && value.split('.').length === 3) return value;
       }
@@ -170,6 +204,7 @@ export interface VerifiedClerkSession {
   authenticated: boolean;
   isAuthenticated: boolean;
   claims: Record<string, any> | null;
+  error?: string;
 }
 
 const BASE_AUTHORIZED_PARTIES = [
@@ -276,9 +311,9 @@ export function buildAuthorizedParties(req?: any, env?: EnvBindings | null): str
 
 /**
  * Official backend Clerk `getAuth(req, env)` implementation.
- * Cryptographically verifies the Clerk session JWT using `@clerk/backend`'s `verifyToken`
- * with Cloudflare `env` bindings (`env.CLERK_SECRET_KEY` / `env.CLERK_JWT_KEY`).
- * Never trusts unverified client payloads, query params, or request body fields.
+ * Explicitly passes `secretKey: env.CLERK_SECRET_KEY` and
+ * `publishableKey: (env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || env.VITE_CLERK_PUBLISHABLE_KEY)`
+ * when initializing the Clerk backend client and verifying tokens.
  */
 export async function getAuth(req?: any, env?: EnvBindings | null): Promise<VerifiedClerkSession> {
   const emptySession: VerifiedClerkSession = {
@@ -292,68 +327,169 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
   };
 
   const resolvedEnv: EnvBindings | undefined = env || (req as any)?.env || undefined;
-  const token = extractClerkJwtFromRequest(req);
-  if (!token) return emptySession;
 
-  const secretKey = getEnvBinding('CLERK_SECRET_KEY', resolvedEnv);
-  const jwtKey = getEnvBinding('CLERK_JWT_KEY', resolvedEnv);
+  const secretKey =
+    cleanEnvValue(resolvedEnv?.CLERK_SECRET_KEY) ||
+    cleanEnvValue(resolvedEnv?.VITE_CLERK_SECRET_KEY) ||
+    cleanEnvValue(resolvedEnv?.NEXT_PUBLIC_CLERK_SECRET_KEY) ||
+    getEnvBinding('CLERK_SECRET_KEY', resolvedEnv) ||
+    getEnvBinding('VITE_CLERK_SECRET_KEY', resolvedEnv) ||
+    '';
 
-  // Strict verification: require CLERK_SECRET_KEY or CLERK_JWT_KEY to verify cryptographic signature
+  const publishableKey =
+    cleanEnvValue(resolvedEnv?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) ||
+    cleanEnvValue(resolvedEnv?.VITE_CLERK_PUBLISHABLE_KEY) ||
+    cleanEnvValue(resolvedEnv?.CLERK_PUBLISHABLE_KEY) ||
+    getEnvBinding('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY', resolvedEnv) ||
+    getEnvBinding('VITE_CLERK_PUBLISHABLE_KEY', resolvedEnv) ||
+    getEnvBinding('CLERK_PUBLISHABLE_KEY', resolvedEnv) ||
+    '';
+
+  const jwtKey =
+    cleanEnvValue(resolvedEnv?.CLERK_JWT_KEY) ||
+    cleanEnvValue(resolvedEnv?.VITE_CLERK_JWT_KEY) ||
+    getEnvBinding('CLERK_JWT_KEY', resolvedEnv) ||
+    '';
+
+  const configuredAdminEmail = getAuthorizedAdminEmail(resolvedEnv);
+
+  // Strict verification: require CLERK_SECRET_KEY or CLERK_JWT_KEY in env bindings
   if (!secretKey && !jwtKey) {
-    return emptySession;
+    return {
+      ...emptySession,
+      error: 'Missing CLERK_SECRET_KEY in env bindings',
+    };
   }
 
-  try {
-    const verifyOptions: Record<string, any> = {
-      authorizedParties: buildAuthorizedParties(req, resolvedEnv),
-    };
-    if (secretKey) verifyOptions.secretKey = secretKey;
-    if (jwtKey) verifyOptions.jwtKey = jwtKey;
+  const clerkClient = secretKey
+    ? createClerkClient({
+        secretKey,
+        publishableKey: publishableKey || undefined,
+      })
+    : null;
 
-    const verifiedPayload = await verifyToken(token, verifyOptions);
-    if (!verifiedPayload || typeof verifiedPayload.sub !== 'string' || !verifiedPayload.sub.trim()) {
-      return emptySession;
+  let token = extractClerkJwtFromRequest(req);
+  let verifiedPayload: Record<string, any> | null = null;
+  let verifyErrorDetail = '';
+
+  if (token) {
+    try {
+      const verifyOptions: Record<string, any> = {
+        secretKey: secretKey || undefined,
+        publishableKey: publishableKey || undefined,
+        clockSkewInMs: 60000,
+      };
+      if (jwtKey) verifyOptions.jwtKey = jwtKey;
+
+      const verified = await verifyToken(token, verifyOptions);
+      if (verified && typeof verified.sub === 'string' && verified.sub.trim()) {
+        verifiedPayload = verified as Record<string, any>;
+      }
+    } catch (err: any) {
+      verifyErrorDetail = err?.message || 'Invalid or expired Clerk session token';
     }
+  }
 
-    const userId = verifiedPayload.sub.trim();
-    const sessionId = typeof verifiedPayload.sid === 'string' ? verifiedPayload.sid : null;
+  // Fallback: if authenticateRequest is available on clerkClient and req is a standard Fetch Request
+  if (!verifiedPayload && clerkClient && req && typeof req.url === 'string' && typeof req.headers?.get === 'function') {
+    try {
+      const requestState = await clerkClient.authenticateRequest(req as Request, {
+        secretKey,
+        publishableKey: publishableKey || undefined,
+      });
+      const authObj = requestState?.toAuth?.();
+      if (authObj?.userId) {
+        verifiedPayload = {
+          ...(authObj.sessionClaims || {}),
+          sub: authObj.userId,
+          sid: authObj.sessionId || null,
+        };
+      } else if (!verifyErrorDetail && requestState?.reason) {
+        verifyErrorDetail = String(requestState.reason);
+      }
+    } catch (err: any) {
+      if (!verifyErrorDetail) {
+        verifyErrorDetail = err?.message || 'Clerk request authentication failed';
+      }
+    }
+  }
 
-    // Extract email from verified token claims if present, or fetch from Clerk Backend API
-    let email: string | null =
-      (typeof (verifiedPayload as any).email === 'string' && (verifiedPayload as any).email) ||
-      (typeof (verifiedPayload as any).email_address === 'string' && (verifiedPayload as any).email_address) ||
-      (typeof (verifiedPayload as any).primary_email_address === 'string' && (verifiedPayload as any).primary_email_address) ||
-      null;
+  if (!verifiedPayload || typeof verifiedPayload.sub !== 'string' || !verifiedPayload.sub.trim()) {
+    if (!token) {
+      return {
+        ...emptySession,
+        error: 'Missing Clerk session token in Authorization header or __session cookie',
+      };
+    }
+    return {
+      ...emptySession,
+      error: verifyErrorDetail
+        ? `Clerk token verification failed: ${verifyErrorDetail}`
+        : 'Clerk token verification failed',
+    };
+  }
 
-    if (!email && secretKey) {
-      try {
-        const clerkClient = createClerkClient({ secretKey });
-        const user = await clerkClient.users.getUser(userId);
+  const userId = verifiedPayload.sub.trim();
+  const sessionId = typeof verifiedPayload.sid === 'string' ? verifiedPayload.sid : null;
+
+  // Extract email from verified token claims if present, or fetch from Clerk Backend API
+  let email: string | null =
+    (typeof verifiedPayload.email === 'string' && verifiedPayload.email) ||
+    (typeof verifiedPayload.email_address === 'string' && verifiedPayload.email_address) ||
+    (typeof verifiedPayload.primary_email_address === 'string' && verifiedPayload.primary_email_address) ||
+    (typeof verifiedPayload.user_email === 'string' && verifiedPayload.user_email) ||
+    null;
+
+  let clerkUserObj: any = null;
+  let userLookupError = '';
+
+  if (clerkClient) {
+    try {
+      clerkUserObj = await clerkClient.users.getUser(userId);
+      if (!email && clerkUserObj) {
         const primary =
-          user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId) ||
-          user.emailAddresses[0];
+          clerkUserObj.emailAddresses?.find((e: any) => e.id === clerkUserObj.primaryEmailAddressId) ||
+          clerkUserObj.emailAddresses?.[0] ||
+          clerkUserObj.externalAccounts?.[0];
         if (primary?.emailAddress) {
           email = primary.emailAddress;
         }
-      } catch {
-        // If Clerk API lookup fails, email remains null (fails closed for admin check)
       }
+    } catch (err: any) {
+      userLookupError = err?.message || 'Failed to fetch Clerk user profile';
     }
-
-    const isAdmin = Boolean(email && isAuthorizedClerkAdmin(email, resolvedEnv));
-
-    return {
-      userId,
-      sessionId,
-      email: email ? email.trim().toLowerCase() : null,
-      isAdmin,
-      authenticated: true,
-      isAuthenticated: true,
-      claims: verifiedPayload as Record<string, any>,
-    };
-  } catch {
-    return emptySession;
   }
+
+  const normalizedEmail = email ? cleanEnvValue(email).toLowerCase() : null;
+  const isAdmin = Boolean(
+    configuredAdminEmail &&
+      ((normalizedEmail && normalizedEmail === configuredAdminEmail) ||
+        (clerkUserObj && isAuthorizedClerkAdmin(clerkUserObj, resolvedEnv)))
+  );
+
+  let adminError: string | undefined;
+  if (!isAdmin) {
+    if (!configuredAdminEmail) {
+      adminError = 'Missing ADMIN_EMAIL (or VITE_ADMIN_EMAIL) in env bindings';
+    } else if (!normalizedEmail && userLookupError) {
+      adminError = `Failed to resolve email for Clerk user (${userId}): ${userLookupError}`;
+    } else if (!normalizedEmail) {
+      adminError = `Authenticated Clerk session (${userId}) has no verified email address`;
+    } else {
+      adminError = `Authenticated email (${normalizedEmail}) does not match configured ADMIN_EMAIL in env bindings`;
+    }
+  }
+
+  return {
+    userId,
+    sessionId,
+    email: normalizedEmail,
+    isAdmin,
+    authenticated: true,
+    isAuthenticated: true,
+    claims: verifiedPayload,
+    ...(adminError ? { error: adminError } : {}),
+  };
 }
 
 /**

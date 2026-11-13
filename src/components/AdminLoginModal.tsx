@@ -27,17 +27,19 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
       setCheckingServerAdmin(false);
       return;
     }
-    if (clientAdminMatch) {
-      setServerAdminVerified(true);
-      setCheckingServerAdmin(false);
-      return;
-    }
 
     let cancelled = false;
     setCheckingServerAdmin(true);
-    cloudflareApi.verifyAdmin()
-      .then((ok) => {
-        if (!cancelled) setServerAdminVerified(ok);
+    cloudflareApi.verifyAdminDetailed()
+      .then((detail) => {
+        if (cancelled) return;
+        if (detail.ok) {
+          setServerAdminVerified(true);
+          setError('');
+        } else {
+          setServerAdminVerified(clientAdminMatch);
+          if (detail.error) setError(detail.error);
+        }
       })
       .finally(() => {
         if (!cancelled) setCheckingServerAdmin(false);

@@ -611,17 +611,29 @@ class CloudflareApiService {
   }
 
   /**
-   * ADMIN: Verifies current Clerk JWT session with backend
+   * ADMIN: Verifies current Clerk JWT session with backend (/api/admin/verify) and returns detailed status/error
    */
-  public async verifyAdmin(): Promise<boolean> {
+  public async verifyAdminDetailed(): Promise<{ ok: boolean; error?: string }> {
     try {
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.VERIFY_ADMIN, {
         headers: this.getHeaders(true)
       });
-      return res.ok;
-    } catch {
-      return false;
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        return { ok: true };
+      }
+      return { ok: false, error: data.error || 'Unauthorized: Valid Clerk Admin session required' };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Unable to reach /api/admin/verify' };
     }
+  }
+
+  /**
+   * ADMIN: Verifies current Clerk JWT session with backend
+   */
+  public async verifyAdmin(): Promise<boolean> {
+    const res = await this.verifyAdminDetailed();
+    return res.ok;
   }
 
   /**
@@ -629,16 +641,28 @@ class CloudflareApiService {
    */
   public async loginAdmin(): Promise<{ success: boolean; error?: string }> {
     try {
+      const verifyRes = await this.smartFetch(CLOUDFLARE_ENDPOINTS.VERIFY_ADMIN, {
+        method: 'GET',
+        headers: this.getHeaders(true)
+      });
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      if (verifyRes.ok) {
+        return { success: true };
+      }
+
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.LOGIN_ADMIN, {
         method: 'POST',
         headers: this.getHeaders(true),
         body: JSON.stringify({})
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) {
+      if (res.ok) {
         return { success: true };
       }
-      return { success: false, error: data.error || 'Unauthorized Clerk Admin session' };
+      return {
+        success: false,
+        error: data.error || verifyData.error || 'Unauthorized Clerk Admin session'
+      };
     } catch (err: any) {
       console.error('Admin login error:', err);
       return { success: false, error: err.message };

@@ -378,6 +378,34 @@ test('Security Audit 8: Vite envPrefix, runtime /api/config Clerk fallback, unif
   assert.equal(roomStatusRes.status, 200);
   const roomStatusJson: any = await roomStatusRes.json();
   assert.equal(roomStatusJson.durableObject, 'ChatRoom');
+
+  // Verify VITE_ADMIN_EMAIL and quoted ADMIN_EMAIL in env bindings are resolved
+  assert.equal(getAuthorizedAdminEmail({ VITE_ADMIN_EMAIL: 'vite-admin@anidub.in' }), 'vite-admin@anidub.in');
+  assert.equal(getAuthorizedAdminEmail({ ADMIN_EMAIL: '"quoted-admin@anidub.in"' }), 'quoted-admin@anidub.in');
+
+  // Verify /api/admin/verify returns detailed error when CLERK_SECRET_KEY is missing in env bindings
+  const missingKeyRes = await edgeEntryModule.default.fetch(
+    new Request('https://anidub.in/api/admin/verify'),
+    { DB: null }
+  );
+  assert.equal(missingKeyRes.status, 401);
+  const missingKeyJson: any = await missingKeyRes.json();
+  assert.ok(missingKeyJson.error.includes('Missing CLERK_SECRET_KEY in env bindings'));
+
+  // Verify /api/admin/verify returns detailed error when token is missing
+  const missingTokenRes = await edgeEntryModule.default.fetch(
+    new Request('https://anidub.in/api/admin/verify'),
+    {
+      DB: null,
+      CLERK_SECRET_KEY: 'sk_test_example',
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'pk_test_Y2xlcmsuYW5pZHViLmluJA',
+      ADMIN_EMAIL: 'admin@anidub.in',
+    }
+  );
+  assert.equal(missingTokenRes.status, 401);
+  const missingTokenJson: any = await missingTokenRes.json();
+  assert.ok(missingTokenJson.error.includes('Missing Clerk session token'));
 });
+
 
 

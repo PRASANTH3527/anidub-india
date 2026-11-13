@@ -90,6 +90,23 @@ async function fetchRuntimeClerkPublishableKey(): Promise<string> {
   return '';
 }
 
+let registeredGetToken: (() => Promise<string | null>) | null = null;
+
+const ClerkTokenSynchronizer: React.FC = () => {
+  const { getToken, isSignedIn } = useOfficialAuth();
+  useEffect(() => {
+    if (isSignedIn && typeof getToken === 'function') {
+      registeredGetToken = () => getToken();
+    } else {
+      registeredGetToken = null;
+    }
+    return () => {
+      registeredGetToken = null;
+    };
+  }, [getToken, isSignedIn]);
+  return null;
+};
+
 /**
  * Official ClerkProvider wrapper.
  * Resolves the publishable key from build-time env vars (VITE_ / NEXT_PUBLIC_) first,
@@ -147,6 +164,7 @@ export const ClerkProvider: React.FC<{
   return (
     <ClerkConfigContext.Provider value={{ configured: true, loading: false }}>
       <OfficialClerkProvider publishableKey={activeKey} afterSignOutUrl={afterSignOutUrl}>
+        <ClerkTokenSynchronizer />
         {children}
       </OfficialClerkProvider>
     </ClerkConfigContext.Provider>
@@ -265,19 +283,60 @@ export const UserProfile: React.FC<any> = (props) => {
   return <OfficialUserProfile {...props} />;
 };
 
+function readSessionCookieFromDocument(): string | null {
+  if (typeof document === 'undefined' || !document.cookie) return null;
+  try {
+    const parts = document.cookie.split(';');
+    for (const part of parts) {
+      const [rawName, ...rest] = part.trim().split('=');
+      if (rawName === '__session' || (rawName && rawName.startsWith('__session_'))) {
+        const val = decodeURIComponent(rest.join('=').trim());
+        if (val && val.split('.').length === 3) return val;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+async function resolveClerkTokenOnce(): Promise<string | null> {
+  if (registeredGetToken) {
+    try {
+      const token = await registeredGetToken();
+      if (token && token.split('.').length === 3) return token;
+    } catch {}
+  }
+
+  try {
+    const clerkInstance = (window as any).Clerk;
+    if (clerkInstance?.session && typeof clerkInstance.session.getToken === 'function') {
+      const token = await clerkInstance.session.getToken();
+      if (token && token.split('.').length === 3) return token;
+    }
+    const activeSession = clerkInstance?.client?.activeSessions?.[0] || clerkInstance?.client?.sessions?.[0];
+    if (activeSession && typeof activeSession.getToken === 'function') {
+      const token = await activeSession.getToken();
+      if (token && token.split('.').length === 3) return token;
+    }
+  } catch {}
+
+  return readSessionCookieFromDocument();
+}
+
 /**
  * Retrieves the cryptographically signed Clerk JWT from the active Clerk browser SDK session.
  */
 export async function getClerkSessionToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
-  try {
-    const clerkInstance = (window as any).Clerk;
-    if (clerkInstance?.session && typeof clerkInstance.session.getToken === 'function') {
-      const token = await clerkInstance.session.getToken();
-      return token || null;
-    }
-  } catch {
-    return null;
+
+  const firstAttempt = await resolveClerkTokenOnce();
+  if (firstAttempt) return firstAttempt;
+
+  // If Clerk is signed in or initializing its session token right after sign-in, wait briefly and retry once
+  if (registeredGetToken || (window as any).Clerk?.user || (window as any).Clerk?.session) {
+    await new Promise((r) => setTimeout(r, 150));
+    return resolveClerkTokenOnce();
   }
+
   return null;
 }
+

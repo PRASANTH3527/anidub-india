@@ -289,12 +289,16 @@ export default function App() {
     }
 
     let cancelled = false;
-    cloudflareApi.verifyAdmin().then(isValid => {
+    cloudflareApi.verifyAdminDetailed().then(detail => {
       if (cancelled) return;
-      if (isValid) {
+      if (detail.ok) {
         setIsServerClerkAdmin(true);
         setIsAdminAuthenticated(true);
         setIsPasswordModalOpen(false);
+        setAdminAuthError('');
+        if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+          setActiveTab('admin');
+        }
       } else if (isClientClerkAdmin) {
         cloudflareApi.loginAdmin().then(res => {
           if (cancelled) return;
@@ -302,15 +306,21 @@ export default function App() {
             setIsServerClerkAdmin(true);
             setIsAdminAuthenticated(true);
             setIsPasswordModalOpen(false);
+            setAdminAuthError('');
+            if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+              setActiveTab('admin');
+            }
           } else {
             setIsServerClerkAdmin(false);
             setIsAdminAuthenticated(false);
+            if (res.error) setAdminAuthError(res.error);
             if (activeTab === 'admin') setActiveTab('home');
           }
         });
       } else {
         setIsServerClerkAdmin(false);
         setIsAdminAuthenticated(false);
+        if (detail.error) setAdminAuthError(detail.error);
         if (activeTab === 'admin') setActiveTab('home');
       }
     });
@@ -764,14 +774,28 @@ export default function App() {
                 <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3">
                   <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-xs font-bold text-rose-300">Unauthorized Clerk Account</p>
+                    <p className="text-xs font-bold text-rose-300">Admin Verification Status</p>
                     <p className="text-[11px] text-neutral-300 mt-1">
-                      Signed in as <span className="font-mono text-white">{clerkUser?.primaryEmailAddress?.emailAddress}</span>. Only the authorized Clerk Administrator can access <code className="text-rose-300">/admin</code>.
+                      Signed in as <span className="font-mono text-white">{clerkUser?.primaryEmailAddress?.emailAddress}</span>.
                     </p>
+                    {adminAuthError && (
+                      <p className="text-[11px] text-rose-300 mt-2 font-medium">
+                        {adminAuthError}
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleVerifyClerkAdminUnlock}
+                  disabled={adminPasswordLoading}
+                  className="w-full px-4 py-2.5 rounded-xl btn-primary-theme text-white text-xs font-bold transition-all shadow-lg shadow-purple-950/40 disabled:opacity-50 cursor-pointer"
+                >
+                  {adminPasswordLoading ? 'Verifying...' : 'Open Admin Console'}
+                </button>
+
+                <div className="flex space-x-3 pt-1">
                   <button
                     type="button"
                     onClick={() => setIsPasswordModalOpen(false)}

@@ -143,21 +143,67 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     );
   }
 
-  // 0b. GET /api/admin/verify & POST /api/admin/login & POST /api/admin/logout & GET /api/admin/export-csv
-  if (path === '/api/admin/verify' && method === 'GET') {
+  // 0b. GET/POST /api/admin/verify & POST /api/admin/login & POST /api/admin/logout & GET /api/admin/export-csv
+  if (path === '/api/admin/verify' && (method === 'GET' || method === 'POST')) {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ authenticated: false, isAdmin: false, error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        {
+          ok: false,
+          success: false,
+          authenticated: Boolean(session.userId),
+          isAdmin: false,
+          error: session.error || 'Unauthorized: Valid Clerk Admin session required',
+        },
+        401,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
     }
-    return jsonResponse({ authenticated: true, isAdmin: true, userId: session.userId }, 200, request, { 'Cache-Control': 'no-store' });
+    return jsonResponse(
+      {
+        ok: true,
+        success: true,
+        authenticated: true,
+        isAdmin: true,
+        userId: session.userId,
+        email: session.email,
+      },
+      200,
+      request,
+      { 'Cache-Control': 'no-store' }
+    );
   }
 
-  if (path === '/api/admin/login' && method === 'POST') {
+  if (path === '/api/admin/login' && (method === 'POST' || method === 'GET')) {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ success: false, error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        {
+          ok: false,
+          success: false,
+          authenticated: Boolean(session.userId),
+          isAdmin: false,
+          error: session.error || 'Unauthorized: Valid Clerk Admin session required',
+        },
+        401,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
     }
-    return jsonResponse({ success: true, isAdmin: true, userId: session.userId }, 200, request);
+    return jsonResponse(
+      {
+        ok: true,
+        success: true,
+        authenticated: true,
+        isAdmin: true,
+        userId: session.userId,
+        email: session.email,
+      },
+      200,
+      request,
+      { 'Cache-Control': 'no-store' }
+    );
   }
 
   if (path === '/api/admin/logout' && method === 'POST') {
@@ -167,7 +213,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/admin/export-csv' && method === 'GET') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     try {
       const rows = env.DB
@@ -413,7 +459,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/anime' && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     if (!session.isAdmin) {
       return jsonResponse({ error: 'Forbidden: Only the authorized Admin user can create anime entries' }, 403, request);
@@ -632,7 +678,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (method === 'PUT' || method === 'PATCH') {
       const session = await getAuth(request, env);
       if (!session.userId) {
-        return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+        return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
       }
       if (!session.isAdmin) {
         return jsonResponse({ error: 'Forbidden: Only the authorized Admin user can update anime entries' }, 403, request);
@@ -756,7 +802,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (method === 'DELETE') {
       const session = await getAuth(request, env);
       if (!session.userId) {
-        return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+        return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
       }
       if (!session.isAdmin) {
         return jsonResponse({ error: 'Forbidden: Only the authorized Admin user can delete anime entries' }, 403, request);
@@ -1163,7 +1209,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/cloudflare/status') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     return jsonResponse({
       services: {
@@ -1196,7 +1242,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/cloudflare/d1/query' && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     if (!session.isAdmin) {
       return jsonResponse({ error: 'Forbidden: Only the authorized Admin user can query D1' }, 403, request);
@@ -1468,7 +1514,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/feedback' && method === 'GET') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     try {
       if (env.DB) {
@@ -1485,7 +1531,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/admin/pending' && method === 'GET') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     try {
       if (env.DB) {
@@ -1504,7 +1550,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/admin/import-csv' && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     try {
       const body: any = await request.json();
@@ -1728,7 +1774,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/admin/clear-pending' && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     try {
       if (env.DB) {
@@ -1745,7 +1791,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (approveMatch && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     const id = approveMatch[1];
     const body: any = await request.json().catch(() => ({}));
@@ -1760,7 +1806,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (rejectMatch && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     const id = rejectMatch[1];
     if (env.DB) {
@@ -1773,7 +1819,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/admin/reset-db' && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     try {
       if (env.DB) {
@@ -1894,7 +1940,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/analytics/dashboard' && method === 'GET') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
     try {
       const url = new URL(request.url);

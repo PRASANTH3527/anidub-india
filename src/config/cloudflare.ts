@@ -80,9 +80,17 @@ export function getCloudflareUrl(path: string): string {
       } catch {}
     }
 
-    // On local dev or AI Studio preview container, route via same-origin relative paths to server.ts
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1' || host.includes('.run.app')) {
+    // On local dev, AI Studio preview, or unified Cloudflare Pages/Workers deployment, route via same-origin relative paths
+    const host = window.location.hostname.toLowerCase();
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === 'anidub.in' ||
+      host.endsWith('.anidub.in') ||
+      host.endsWith('.pages.dev') ||
+      host.endsWith('.workers.dev') ||
+      host.includes('.run.app')
+    ) {
       return cleanPath;
     }
   }
