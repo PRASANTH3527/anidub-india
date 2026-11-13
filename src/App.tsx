@@ -96,7 +96,9 @@ export default function App() {
   // Strict Clerk Admin Authentication State
   const { isSignedIn, user: clerkUser } = useUser();
   const { signOut: clerkSignOut } = useClerk();
-  const isClerkAdmin = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
+  const isClientClerkAdmin = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
+  const [isServerClerkAdmin, setIsServerClerkAdmin] = useState<boolean>(false);
+  const isClerkAdmin = isClientClerkAdmin || isServerClerkAdmin;
 
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(isClerkAdmin);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -140,6 +142,7 @@ export default function App() {
     } else if (pathname === '/admin' || pathname === '/admin/analytics') {
       if (isAdminAuthenticated) {
         setActiveTab('admin');
+        setIsPasswordModalOpen(false);
       } else {
         setIsPasswordModalOpen(true);
       }
@@ -276,7 +279,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!isClerkAdmin) {
+    if (!isSignedIn) {
+      setIsServerClerkAdmin(false);
       setIsAdminAuthenticated(false);
       if (activeTab === 'admin') {
         setActiveTab('home');
@@ -284,24 +288,40 @@ export default function App() {
       return;
     }
 
+    let cancelled = false;
     cloudflareApi.verifyAdmin().then(isValid => {
+      if (cancelled) return;
       if (isValid) {
+        setIsServerClerkAdmin(true);
         setIsAdminAuthenticated(true);
-      } else {
+        setIsPasswordModalOpen(false);
+      } else if (isClientClerkAdmin) {
         cloudflareApi.loginAdmin().then(res => {
+          if (cancelled) return;
           if (res.success) {
+            setIsServerClerkAdmin(true);
             setIsAdminAuthenticated(true);
+            setIsPasswordModalOpen(false);
           } else {
+            setIsServerClerkAdmin(false);
             setIsAdminAuthenticated(false);
             if (activeTab === 'admin') setActiveTab('home');
           }
         });
+      } else {
+        setIsServerClerkAdmin(false);
+        setIsAdminAuthenticated(false);
+        if (activeTab === 'admin') setActiveTab('home');
       }
     });
-  }, [isClerkAdmin]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, isClientClerkAdmin, activeTab]);
 
   const handleVerifyClerkAdminUnlock = async () => {
-    if (!isClerkAdmin) {
+    if (!isSignedIn) {
       setAdminAuthError('Only the authorized Clerk Administrator can unlock /admin.');
       return;
     }
@@ -310,6 +330,7 @@ export default function App() {
     try {
       const data = await cloudflareApi.loginAdmin();
       if (data.success) {
+        setIsServerClerkAdmin(true);
         setIsAdminAuthenticated(true);
         setActiveTab('admin');
         setIsPasswordModalOpen(false);

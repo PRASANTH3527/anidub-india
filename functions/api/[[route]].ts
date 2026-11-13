@@ -4,17 +4,24 @@
  * Integrates directly with Cloudflare D1 (env.DB) and ImgBB Backend Uploads
  */
 
-import { getAuth, validateAndRateLimitFeedback, extractClientIp } from '../../src/utils/auth';
+import { getAuth, validateAndRateLimitFeedback, extractClientIp, isApprovedOrigin } from '../../src/utils/auth';
 
 interface Env {
   DB: any; // Cloudflare D1 Database binding
   ADMIN_EMAIL?: string;
   CLERK_SECRET_KEY?: string;
   CLERK_JWT_KEY?: string;
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?: string;
+  VITE_CLERK_PUBLISHABLE_KEY?: string;
+  NEXT_PUBLIC_ADMIN_EMAIL?: string;
+  VITE_ADMIN_EMAIL?: string;
+  CLERK_AUTHORIZED_PARTIES?: string;
+  ALLOWED_ORIGINS?: string;
   IMGBB_API_KEY?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;
   ENVIRONMENT?: string;
+  ASSETS?: { fetch: (request: Request) => Promise<Response> };
 }
 
 type PagesFunction<T = any> = (context: { request: Request; env: T; params?: any }) => Promise<Response> | Response;
@@ -82,17 +89,12 @@ async function sendTelegramAlert(env: Env, text: string, photoUrl?: string) {
 
 function jsonResponse(data: any, status = 200, request?: Request, extraHeaders?: Record<string, string>) {
   const origin = request ? (request.headers.get("Origin") || request.headers.get("origin") || "") : "";
-  const allowed =
-    origin === "" ||
-    origin.includes("localhost") ||
-    origin.includes("127.0.0.1") ||
-    origin.includes(".run.app") ||
-    origin.includes(".pages.dev") ||
-    origin.includes("anidub.in");
+  const allowed = origin === "" || isApprovedOrigin(origin);
 
-  const resolvedOrigin = allowed ? origin : "https://ais-pre-qwvw5bws5eviuuugfdklbn-712933804987.asia-southeast1.run.app";
+  const resolvedOrigin = allowed && origin ? origin : "https://anidub.in";
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-device-id',
     'Access-Control-Allow-Credentials': 'true',
@@ -113,7 +115,100 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const method = request.method;
 
   if (method === 'OPTIONS') {
-    return jsonResponse({ ok: true });
+    return jsonResponse({ ok: true }, 200, request);
+  }
+
+  // 0. GET /api/config & /api/auth-config (Public runtime Clerk Publishable Key & safe session status)
+  if ((path === '/api/config' || path === '/api/auth-config') && method === 'GET') {
+    const clerkPublishableKey = String(
+      env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+      env?.VITE_CLERK_PUBLISHABLE_KEY ||
+      ''
+    ).trim();
+    const session = await getAuth(request, env);
+    return jsonResponse(
+      {
+        clerkPublishableKey,
+        authenticated: session.authenticated,
+        isAdmin: session.isAdmin,
+        userId: session.userId,
+      },
+      200,
+      request,
+      { 'Cache-Control': 'no-store' }
+    );
+  }
+
+  // 0b. GET /api/admin/verify & POST /api/admin/login & POST /api/admin/logout & GET /api/admin/export-csv
+  if (path === '/api/admin/verify' && method === 'GET') {
+    const session = await getAuth(request, env);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ authenticated: false, isAdmin: false, error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
+    return jsonResponse({ authenticated: true, isAdmin: true, userId: session.userId }, 200, request, { 'Cache-Control': 'no-store' });
+  }
+
+  if (path === '/api/admin/login' && method === 'POST') {
+    const session = await getAuth(request, env);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ success: false, error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
+    return jsonResponse({ success: true, isAdmin: true, userId: session.userId }, 200, request);
+  }
+
+  if (path === '/api/admin/logout' && method === 'POST') {
+    return jsonResponse({ success: true }, 200, request);
+  }
+
+  if (path === '/api/admin/export-csv' && method === 'GET') {
+    const session = await getAuth(request, env);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+    }
+    try {
+      const rows = env.DB
+        ? ((await env.DB.prepare('SELECT id, title, status, rating, episodes_count, year, genres, languages, platform, type, studio FROM anime ORDER BY id ASC').all())?.results || [])
+        : [];
+      const header = ['id', 'title', 'status', 'rating', 'episodes_count', 'year', 'genres', 'languages', 'platform', 'type', 'studio'];
+      const csvEscape = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+      const csvLines = [
+        header.join(','),
+        ...rows.map((r: any) => header.map((col) => csvEscape(r[col])).join(',')),
+      ];
+      return new Response(csvLines.join('\n'), {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="anidub-catalog.csv"',
+          'Cache-Control': 'no-store',
+        },
+      });
+    } catch (err: any) {
+      return jsonResponse({ error: err.message }, 500, request);
+    }
+  }
+
+  if (path === '/ws/api/chat/stream') {
+    const session = await getAuth(request, env);
+    if (!session.userId) {
+      return jsonResponse({ error: 'Unauthorized: Active Clerk user session required for chat stream' }, 401, request);
+    }
+    return jsonResponse({ ok: true, userId: session.userId }, 200, request);
+  }
+
+  if (path === '/api/notifications' && method === 'GET') {
+    return jsonResponse({ success: true, notifications: [] }, 200, request, { 'Cache-Control': 'no-store' });
+  }
+
+  if (path === '/api/notifications/stream' && method === 'GET') {
+    const ssePayload = `retry: 60000\ndata: ${JSON.stringify({ type: 'connected' })}\n\n`;
+    return new Response(ssePayload, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+      },
+    });
   }
 
   // 1. POST /api/upload (ImgBB Secure Backend Upload - Requires Clerk User Session & env.IMGBB_API_KEY)
@@ -232,18 +327,20 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const search = url.searchParams.get('search');
       const sort = url.searchParams.get('sort') || 'popularity';
 
+      const includePending = url.searchParams.get('includePending') === 'true';
+      if (includePending) {
+        const session = await getAuth(request, env);
+        if (!session.userId || !session.isAdmin) {
+          return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required to view pending/unpublished entries' }, 401, request);
+        }
+      }
+
       if (env.DB) {
         try {
           let whereClauses: string[] = [];
           let params: any[] = [];
 
-          const includePending = url.searchParams.get('includePending') === 'true';
-          if (includePending) {
-            const session = await getAuth(request, env);
-            if (!session.userId || !session.isAdmin) {
-              return jsonResponse({ error: 'Unauthorized: Valid Clerk Admin session required to view pending/unpublished entries' }, 401, request);
-            }
-          } else {
+          if (!includePending) {
             whereClauses.push("(is_published = 1 OR is_published = true) AND status != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL)");
           }
 

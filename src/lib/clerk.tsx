@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   ClerkProvider as OfficialClerkProvider,
   useUser as useOfficialUser,
@@ -13,61 +13,140 @@ import {
   UserButton as OfficialUserButton,
   UserProfile as OfficialUserProfile,
 } from '@clerk/clerk-react';
+import { getCloudflareUrl } from '../config/cloudflare';
 
-const ClerkConfigContext = createContext<boolean>(false);
+interface ClerkConfigState {
+  configured: boolean;
+  loading: boolean;
+}
 
-function isValidClerkPublishableKey(key: string): boolean {
+const ClerkConfigContext = createContext<ClerkConfigState>({ configured: false, loading: false });
+
+export function isValidClerkPublishableKey(key: string): boolean {
   if (!key || (!key.startsWith('pk_test_') && !key.startsWith('pk_live_'))) {
     return false;
   }
   const encoded = key.split('_')[2] || '';
   if (!encoded) return false;
   try {
-    const decoded = typeof atob === 'function' ? atob(encoded) : '';
+    const decoded = typeof atob === 'function' ? atob(encoded) : Buffer.from(encoded, 'base64').toString('utf8');
     return decoded.endsWith('$') && decoded.includes('.');
   } catch {
     return false;
   }
 }
 
-function resolvePublishableKey(explicitKey?: string): string {
-  const candidate =
-    explicitKey && explicitKey.trim()
-      ? explicitKey.trim()
-      : (() => {
-          const env = (import.meta as any).env;
-          const raw =
-            env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-            env?.VITE_CLERK_PUBLISHABLE_KEY ||
-            '';
-          return typeof raw === 'string' ? raw.trim() : '';
-        })();
+export function resolvePublishableKey(explicitKey?: string): string {
+  let candidate = explicitKey && explicitKey.trim() ? explicitKey.trim() : '';
+
+  if (!candidate) {
+    const metaEnv = (import.meta as any).env;
+    const rawMeta =
+      metaEnv?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+      metaEnv?.VITE_CLERK_PUBLISHABLE_KEY ||
+      '';
+    if (typeof rawMeta === 'string' && rawMeta.trim()) {
+      candidate = rawMeta.trim();
+    }
+  }
+
+  if (!candidate) {
+    try {
+      const nextPub = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+      const vitePub = process.env.VITE_CLERK_PUBLISHABLE_KEY;
+      const rawProcess = nextPub || vitePub || '';
+      if (typeof rawProcess === 'string' && rawProcess.trim()) {
+        candidate = rawProcess.trim();
+      }
+    } catch {
+      // process may not be defined in all browser runtimes
+    }
+  }
 
   return isValidClerkPublishableKey(candidate) ? candidate : '';
 }
 
+async function fetchRuntimeClerkPublishableKey(): Promise<string> {
+  const endpoints = ['/api/config', '/api/auth-config'];
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(getCloudflareUrl(endpoint), {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      });
+      if (!res.ok) continue;
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      if (!ct.includes('application/json')) continue;
+      const data: any = await res.json().catch(() => null);
+      const rawKey = typeof data?.clerkPublishableKey === 'string' ? data.clerkPublishableKey.trim() : '';
+      if (isValidClerkPublishableKey(rawKey)) {
+        return rawKey;
+      }
+    } catch {
+      // Continue trying fallback endpoint
+    }
+  }
+  return '';
+}
+
 /**
  * Official ClerkProvider wrapper.
- * Mounts the real Clerk SDK provider when a publishableKey is configured in environment variables.
+ * Resolves the publishable key from build-time env vars (VITE_ / NEXT_PUBLIC_) first,
+ * and falls back to fetching `/api/config` from Cloudflare runtime bindings if absent.
  */
 export const ClerkProvider: React.FC<{
   publishableKey?: string;
   afterSignOutUrl?: string;
   children: React.ReactNode;
 }> = ({ publishableKey, afterSignOutUrl = '/', children }) => {
-  const resolvedKey = resolvePublishableKey(publishableKey);
+  const buildTimeKey = resolvePublishableKey(publishableKey);
+  const [runtimeKey, setRuntimeKey] = useState<string>(buildTimeKey);
+  const [isLoadingConfig, setIsLoadingConfig] = useState<boolean>(!buildTimeKey && typeof window !== 'undefined');
 
-  if (!resolvedKey) {
+  useEffect(() => {
+    if (buildTimeKey) {
+      setRuntimeKey(buildTimeKey);
+      setIsLoadingConfig(false);
+      return;
+    }
+    if (typeof window === 'undefined') {
+      setIsLoadingConfig(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingConfig(true);
+    fetchRuntimeClerkPublishableKey()
+      .then((key) => {
+        if (!cancelled && key) {
+          setRuntimeKey(key);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingConfig(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [buildTimeKey]);
+
+  const activeKey = buildTimeKey || runtimeKey;
+
+  if (!activeKey) {
     return (
-      <ClerkConfigContext.Provider value={false}>
+      <ClerkConfigContext.Provider value={{ configured: false, loading: isLoadingConfig }}>
         {children}
       </ClerkConfigContext.Provider>
     );
   }
 
   return (
-    <ClerkConfigContext.Provider value={true}>
-      <OfficialClerkProvider publishableKey={resolvedKey} afterSignOutUrl={afterSignOutUrl}>
+    <ClerkConfigContext.Provider value={{ configured: true, loading: false }}>
+      <OfficialClerkProvider publishableKey={activeKey} afterSignOutUrl={afterSignOutUrl}>
         {children}
       </OfficialClerkProvider>
     </ClerkConfigContext.Provider>
@@ -75,8 +154,8 @@ export const ClerkProvider: React.FC<{
 };
 
 export function useUser() {
-  const isConfigured = useContext(ClerkConfigContext);
-  if (!isConfigured) {
+  const { configured } = useContext(ClerkConfigContext);
+  if (!configured) {
     return {
       isLoaded: true,
       isSignedIn: false as const,
@@ -88,8 +167,8 @@ export function useUser() {
 }
 
 export function useAuth() {
-  const isConfigured = useContext(ClerkConfigContext);
-  if (!isConfigured) {
+  const { configured } = useContext(ClerkConfigContext);
+  if (!configured) {
     return {
       isLoaded: true,
       isSignedIn: false as const,
@@ -104,8 +183,8 @@ export function useAuth() {
 }
 
 export function useClerk() {
-  const isConfigured = useContext(ClerkConfigContext);
-  if (!isConfigured) {
+  const { configured } = useContext(ClerkConfigContext);
+  if (!configured) {
     return {
       loaded: true,
       user: null,
@@ -120,20 +199,28 @@ export function useClerk() {
 }
 
 export const SignedIn: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const isConfigured = useContext(ClerkConfigContext);
-  if (!isConfigured) return null;
+  const { configured } = useContext(ClerkConfigContext);
+  if (!configured) return null;
   return <OfficialSignedIn>{children}</OfficialSignedIn>;
 };
 
 export const SignedOut: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const isConfigured = useContext(ClerkConfigContext);
-  if (!isConfigured) return <>{children}</>;
+  const { configured } = useContext(ClerkConfigContext);
+  if (!configured) return <>{children}</>;
   return <OfficialSignedOut>{children}</OfficialSignedOut>;
 };
 
 export const SignIn: React.FC<any> = (props) => {
-  const isConfigured = useContext(ClerkConfigContext);
-  if (!isConfigured) {
+  const { configured, loading } = useContext(ClerkConfigContext);
+  if (!configured) {
+    if (loading) {
+      return (
+        <div className="w-full max-w-sm rounded-2xl bg-[#13151b] border border-purple-500/30 p-6 text-center space-y-2">
+          <p className="text-xs font-bold text-purple-300">Loading Clerk Authentication...</p>
+          <p className="text-[11px] text-neutral-400">Connecting to runtime configuration...</p>
+        </div>
+      );
+    }
     return (
       <div className="w-full max-w-sm rounded-2xl bg-[#13151b] border border-rose-500/30 p-6 text-center space-y-2">
         <p className="text-xs font-bold text-rose-300">Clerk Authentication Required</p>
@@ -147,34 +234,34 @@ export const SignIn: React.FC<any> = (props) => {
 };
 
 export const SignUp: React.FC<any> = (props) => {
-  const isConfigured = useContext(ClerkConfigContext);
-  if (!isConfigured) return null;
+  const { configured } = useContext(ClerkConfigContext);
+  if (!configured) return null;
   return <OfficialSignUp {...props} />;
 };
 
 export const SignInButton: React.FC<any> = ({ children, ...props }) => {
-  const isConfigured = useContext(ClerkConfigContext);
-  if (!isConfigured) {
+  const { configured } = useContext(ClerkConfigContext);
+  if (!configured) {
     return <span className="inline-block opacity-60 cursor-not-allowed">{children || <button type="button" disabled>Sign In</button>}</span>;
   }
   return <OfficialSignInButton {...props}>{children}</OfficialSignInButton>;
 };
 
 export const SignOutButton: React.FC<any> = ({ children, ...props }) => {
-  const isConfigured = useContext(ClerkConfigContext);
-  if (!isConfigured) return null;
+  const { configured } = useContext(ClerkConfigContext);
+  if (!configured) return null;
   return <OfficialSignOutButton {...props}>{children}</OfficialSignOutButton>;
 };
 
 export const UserButton: React.FC<any> = (props) => {
-  const isConfigured = useContext(ClerkConfigContext);
-  if (!isConfigured) return null;
+  const { configured } = useContext(ClerkConfigContext);
+  if (!configured) return null;
   return <OfficialUserButton {...props} />;
 };
 
 export const UserProfile: React.FC<any> = (props) => {
-  const isConfigured = useContext(ClerkConfigContext);
-  if (!isConfigured) return null;
+  const { configured } = useContext(ClerkConfigContext);
+  if (!configured) return null;
   return <OfficialUserProfile {...props} />;
 };
 

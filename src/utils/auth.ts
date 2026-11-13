@@ -172,6 +172,108 @@ export interface VerifiedClerkSession {
   claims: Record<string, any> | null;
 }
 
+const BASE_AUTHORIZED_PARTIES = [
+  'http://localhost:3000',
+  'https://ais-dev-qwvw5bws5eviuuugfdklbn-712933804987.asia-southeast1.run.app',
+  'https://ais-pre-qwvw5bws5eviuuugfdklbn-712933804987.asia-southeast1.run.app',
+  'https://anidub.in',
+  'https://www.anidub.in',
+  'https://anidub-india.pages.dev',
+];
+
+/**
+ * Validates whether a given origin or URL belongs to an approved local dev, preview,
+ * Cloudflare Pages/Workers deployment, or production AniDub domain.
+ */
+export function isApprovedOrigin(originOrUrl?: string | null, env?: EnvBindings | null): boolean {
+  if (!originOrUrl || typeof originOrUrl !== 'string') return false;
+  const trimmed = originOrUrl.trim();
+  if (!trimmed) return false;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === 'anidub.in' ||
+      hostname.endsWith('.anidub.in') ||
+      hostname.endsWith('.pages.dev') ||
+      hostname.endsWith('.workers.dev') ||
+      hostname.endsWith('.run.app')
+    ) {
+      return true;
+    }
+
+    const extraOriginsRaw =
+      getEnvBinding('ALLOWED_ORIGINS', env) ||
+      getEnvBinding('CLERK_AUTHORIZED_PARTIES', env) ||
+      '';
+    if (extraOriginsRaw) {
+      const extras = extraOriginsRaw
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean);
+      for (const extra of extras) {
+        try {
+          const extraParsed = new URL(extra.startsWith('http') ? extra : `https://${extra}`);
+          if (extraParsed.origin.toLowerCase() === parsed.origin.toLowerCase()) return true;
+        } catch {
+          if (hostname === extra) return true;
+        }
+      }
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
+/**
+ * Builds the Clerk `authorizedParties` allowlist including approved Cloudflare Pages/Workers origins.
+ */
+export function buildAuthorizedParties(req?: any, env?: EnvBindings | null): string[] {
+  const parties = new Set<string>(BASE_AUTHORIZED_PARTIES);
+
+  const extraPartiesRaw =
+    getEnvBinding('CLERK_AUTHORIZED_PARTIES', env) ||
+    getEnvBinding('ALLOWED_ORIGINS', env) ||
+    '';
+  if (extraPartiesRaw) {
+    for (const raw of extraPartiesRaw.split(',')) {
+      const cleaned = raw.trim().replace(/\/+$/, '');
+      if (cleaned) parties.add(cleaned);
+    }
+  }
+
+  const candidateUrls: string[] = [];
+  if (typeof req?.headers?.get === 'function') {
+    const reqOrigin = req.headers.get('origin') || req.headers.get('Origin');
+    if (reqOrigin) candidateUrls.push(reqOrigin);
+  } else if (req?.headers && typeof req.headers === 'object') {
+    const reqOrigin = req.headers['origin'] || req.headers['Origin'];
+    if (typeof reqOrigin === 'string') candidateUrls.push(reqOrigin);
+  }
+  if (typeof req?.url === 'string' && req.url.startsWith('http')) {
+    try {
+      candidateUrls.push(new URL(req.url).origin);
+    } catch {}
+  }
+
+  for (const candidate of candidateUrls) {
+    if (isApprovedOrigin(candidate, env)) {
+      try {
+        parties.add(new URL(candidate).origin);
+      } catch {}
+    }
+  }
+
+  return Array.from(parties);
+}
+
 /**
  * Official backend Clerk `getAuth(req, env)` implementation.
  * Cryptographically verifies the Clerk session JWT using `@clerk/backend`'s `verifyToken`
@@ -203,12 +305,7 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
 
   try {
     const verifyOptions: Record<string, any> = {
-      authorizedParties: [
-        'http://localhost:3000',
-        'https://ais-dev-qwvw5bws5eviuuugfdklbn-712933804987.asia-southeast1.run.app',
-        'https://ais-pre-qwvw5bws5eviuuugfdklbn-712933804987.asia-southeast1.run.app',
-        'https://anidub.in'
-      ]
+      authorizedParties: buildAuthorizedParties(req, resolvedEnv),
     };
     if (secretKey) verifyOptions.secretKey = secretKey;
     if (jwtKey) verifyOptions.jwtKey = jwtKey;

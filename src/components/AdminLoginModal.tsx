@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Shield, X, AlertCircle, CheckCircle2, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cloudflareApi } from '../services/cloudflareApi';
@@ -16,8 +16,39 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
   const { signOut } = useClerk();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [serverAdminVerified, setServerAdminVerified] = useState(false);
+  const [checkingServerAdmin, setCheckingServerAdmin] = useState(false);
 
-  const isAuthorizedAdmin = Boolean(isSignedIn && user && isAuthorizedClerkAdmin(user));
+  const clientAdminMatch = Boolean(isSignedIn && user && isAuthorizedClerkAdmin(user));
+
+  useEffect(() => {
+    if (!isOpen || !isSignedIn) {
+      setServerAdminVerified(false);
+      setCheckingServerAdmin(false);
+      return;
+    }
+    if (clientAdminMatch) {
+      setServerAdminVerified(true);
+      setCheckingServerAdmin(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingServerAdmin(true);
+    cloudflareApi.verifyAdmin()
+      .then((ok) => {
+        if (!cancelled) setServerAdminVerified(ok);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingServerAdmin(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, isSignedIn, clientAdminMatch]);
+
+  const isAuthorizedAdmin = clientAdminMatch || serverAdminVerified;
 
   const handleVerifyClerkAdmin = async () => {
     setError('');
@@ -73,6 +104,11 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
                   Sign in with your authorized Clerk Administrator account to access <code className="text-purple-400">/admin</code>.
                 </p>
                 <SignIn />
+              </div>
+            ) : checkingServerAdmin ? (
+              <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/25 text-center space-y-1">
+                <p className="text-xs font-bold text-purple-300">Verifying Clerk Administrator...</p>
+                <p className="text-[11px] text-neutral-400">Checking session credentials with edge runtime...</p>
               </div>
             ) : isAuthorizedAdmin ? (
               <div className="space-y-4">

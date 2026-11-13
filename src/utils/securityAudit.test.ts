@@ -252,3 +252,123 @@ test('Security Audit 6: Cloudflare Pages Functions, env bindings & Feedback Prot
   assert.equal(rateLimitedRes.ok, false);
   assert.equal(rateLimitedRes.status, 429);
 });
+
+test('Security Audit 7: Strict origin allowlist, authorizedParties, /api/config runtime Clerk key & /api/admin/verify enforcement', async () => {
+  const { isApprovedOrigin, buildAuthorizedParties } = await import('./auth');
+
+  assert.equal(isApprovedOrigin('http://localhost:3000'), true);
+  assert.equal(isApprovedOrigin('https://anidub.in'), true);
+  assert.equal(isApprovedOrigin('https://www.anidub.in'), true);
+  assert.equal(isApprovedOrigin('https://anidub-india.pages.dev'), true);
+  assert.equal(isApprovedOrigin('https://anidub-india.myaccount.workers.dev'), true);
+  assert.equal(isApprovedOrigin('https://evil.com'), false);
+  assert.equal(isApprovedOrigin('https://pages.dev.evil.com'), false);
+  assert.equal(isApprovedOrigin('https://anidub.in.evil.com'), false);
+
+  const parties = buildAuthorizedParties({ url: 'https://anidub-india.myaccount.workers.dev/api/config', headers: new Headers({ Origin: 'https://evil.com' }) });
+  assert.ok(parties.includes('https://anidub-india.myaccount.workers.dev'));
+  assert.ok(parties.includes('https://anidub.in'));
+  assert.equal(parties.includes('https://evil.com'), false);
+
+  const { onRequest } = await import('../../functions/api/[[route]]');
+  const mockEnv = {
+    DB: null,
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'pk_test_Y2xlcmsuYW5pZHViLmluJA',
+    CLERK_SECRET_KEY: 'sk_test_super_secret_should_never_leak',
+    ADMIN_EMAIL: 'secret-admin@anidub.in',
+    IMGBB_API_KEY: 'imgbb_secret_never_leak',
+  };
+
+  const configRes = await onRequest({
+    request: new Request('https://anidub-india.myaccount.workers.dev/api/config', {
+      headers: { Origin: 'https://anidub-india.myaccount.workers.dev' },
+    }),
+    env: mockEnv,
+  });
+  assert.equal(configRes.status, 200);
+  assert.equal(configRes.headers.get('Access-Control-Allow-Origin'), 'https://anidub-india.myaccount.workers.dev');
+  const configText = await configRes.text();
+  const configJson = JSON.parse(configText);
+  assert.equal(configJson.clerkPublishableKey, 'pk_test_Y2xlcmsuYW5pZHViLmluJA');
+  assert.equal(configJson.authenticated, false);
+  assert.equal(configJson.isAdmin, false);
+  assert.equal(configText.includes('sk_test_super_secret_should_never_leak'), false);
+  assert.equal(configText.includes('imgbb_secret_never_leak'), false);
+  assert.equal(configText.includes('secret-admin@anidub.in'), false);
+
+  const evilCorsRes = await onRequest({
+    request: new Request('https://anidub.in/api/auth-config', {
+      headers: { Origin: 'https://evil.com' },
+    }),
+    env: mockEnv,
+  });
+  assert.equal(evilCorsRes.headers.get('Access-Control-Allow-Origin'), 'https://anidub.in');
+
+  const verifyUnauth = await onRequest({
+    request: new Request('https://anidub.in/api/admin/verify'),
+    env: mockEnv,
+  });
+  assert.equal(verifyUnauth.status, 401);
+
+  const loginUnauth = await onRequest({
+    request: new Request('https://anidub.in/api/admin/login', { method: 'POST' }),
+    env: mockEnv,
+  });
+  assert.equal(loginUnauth.status, 401);
+
+  const pendingLeakRes = await onRequest({
+    request: new Request('https://anidub.in/api/anime?includePending=true'),
+    env: mockEnv,
+  });
+  assert.equal(pendingLeakRes.status, 401);
+});
+
+test('Security Audit 8: Vite envPrefix, runtime /api/config Clerk fallback, unified edge entry-point, and self-building wrangler.toml', async () => {
+  const viteConfig = fs.readFileSync(path.join(process.cwd(), 'vite.config.ts'), 'utf-8');
+  assert.ok(viteConfig.includes("envPrefix: ['VITE_', 'NEXT_PUBLIC_']"));
+  assert.ok(viteConfig.includes('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'));
+  assert.ok(viteConfig.includes('VITE_CLERK_PUBLISHABLE_KEY'));
+
+  const clerkLib = fs.readFileSync(path.join(process.cwd(), 'src/lib/clerk.tsx'), 'utf-8');
+  assert.ok(clerkLib.includes('/api/config'));
+  assert.ok(clerkLib.includes('/api/auth-config'));
+
+  const wranglerToml = fs.readFileSync(path.join(process.cwd(), 'wrangler.toml'), 'utf-8');
+  assert.ok(wranglerToml.includes('main = "src/edge-entry.ts"'));
+  assert.ok(wranglerToml.includes('[build]'));
+  assert.ok(wranglerToml.includes('command = "npm run build"'));
+  assert.ok(wranglerToml.includes('[assets]'));
+  assert.ok(wranglerToml.includes('directory = "./dist"'));
+  assert.ok(wranglerToml.includes('database_name = "anime-db"'));
+  assert.ok(wranglerToml.includes('database_id = "75f053ab-5b44-4d48-abf8-b3a357a89426"'));
+  assert.equal(wranglerToml.includes('pages_build_output_dir'), false);
+
+  const edgeEntryModule = await import('../edge-entry');
+  let assetsFetched = false;
+  const assetRes = await edgeEntryModule.default.fetch(
+    new Request('https://anidub.in/admin'),
+    {
+      DB: null,
+      ASSETS: {
+        fetch: async () => {
+          assetsFetched = true;
+          return new Response('<html>SPA</html>', { status: 200 });
+        },
+      },
+    }
+  );
+  assert.equal(assetsFetched, true);
+  assert.equal(assetRes.status, 200);
+
+  const apiRes = await edgeEntryModule.default.fetch(
+    new Request('https://anidub.in/api/config'),
+    {
+      DB: null,
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_dGVzdC5hbmkuY29tJA',
+    }
+  );
+  assert.equal(apiRes.status, 200);
+  const apiJson: any = await apiRes.json();
+  assert.equal(apiJson.clerkPublishableKey, 'pk_live_dGVzdC5hbmkuY29tJA');
+});
+
