@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react';
 import { motion } from 'motion/react';
 import { 
   ChevronDown,
@@ -21,7 +20,7 @@ import { SkeletonGrid } from './SkeletonGrid';
 import { proxyUrl } from '../utils/imgbb';
 import { translate, SupportedLanguage } from '../utils/i18n';
 
-const RecentlyViewedRow = dynamic(() => import('./RecentlyViewedRow').then(m => m.RecentlyViewedRow), { ssr: false });
+const RecentlyViewedRow = lazy(() => import('./RecentlyViewedRow').then(m => ({ default: m.RecentlyViewedRow })));
 
 export interface Anime {
   id: number;
@@ -409,14 +408,16 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       {/* 2.5 RECENTLY VIEWED ROW */}
       {recentlyViewed && recentlyViewed.length > 0 && (
         <div className="mt-2 px-1">
-          <RecentlyViewedRow
-            items={recentlyViewed}
-            onSelectAnime={(a) => onSelectAnime(a as any)}
-            onClear={onClearRecentlyViewed || (() => {})}
-            onRemoveItem={onRemoveRecentlyViewedItem}
-            watchlist={watchlist}
-            onToggleWatchlist={onToggleWatchlist}
-          />
+          <Suspense fallback={null}>
+            <RecentlyViewedRow
+              items={recentlyViewed}
+              onSelectAnime={(a) => onSelectAnime(a as any)}
+              onClear={onClearRecentlyViewed || (() => {})}
+              onRemoveItem={onRemoveRecentlyViewedItem}
+              watchlist={watchlist}
+              onToggleWatchlist={onToggleWatchlist}
+            />
+          </Suspense>
         </div>
       )}
 

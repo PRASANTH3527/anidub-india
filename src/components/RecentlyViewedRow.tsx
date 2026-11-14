@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import Image from 'next/image';
+import Image from './OptimizedImage';
 import { motion, useReducedMotion } from 'motion/react';
 import { 
   Clock, 

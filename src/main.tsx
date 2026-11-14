@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { ToastProvider } from './components/Toast.tsx';
 import { NotificationProvider } from './context/NotificationContext.tsx';
-import { ClerkProvider } from '@clerk/nextjs';
+import { ClerkProvider } from './lib/clerk.tsx';
 import './index.css';
 
 const PUBLISHABLE_KEY =

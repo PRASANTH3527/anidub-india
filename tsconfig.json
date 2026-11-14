@@ -19,18 +19,6 @@
     "paths": {
       "@/*": [
         "./*"
-      ],
-      "@clerk/nextjs": [
-        "./src/lib/clerk.tsx"
-      ],
-      "next/image": [
-        "./src/lib/next-image.tsx"
-      ],
-      "next/dynamic": [
-        "./src/lib/next-dynamic.tsx"
-      ],
-      "next/script": [
-        "./src/lib/next-script.tsx"
       ]
     },
     "allowImportingTsExtensions": true,

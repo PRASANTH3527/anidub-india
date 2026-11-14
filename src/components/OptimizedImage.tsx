@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
-export interface ImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src' | 'width' | 'height' | 'loading'> {
+export interface OptimizedImageProps
+  extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src' | 'width' | 'height' | 'loading'> {
   src: string;
   alt: string;
   width?: number | string;
@@ -15,7 +16,7 @@ export interface ImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElemen
 }
 
 /**
- * Optimizes an image URL for a target width and quality (e.g., Unsplash, Imgix, or CDN URLs)
+ * Optimizes an image URL for a target width and quality (e.g., Unsplash CDN URLs)
  * so mobile devices receive appropriately sized WebP/AVIF assets instead of oversized originals.
  */
 export function buildOptimizedImageUrl(rawSrc: string, width?: number, quality: number = 75): string {
@@ -57,11 +58,13 @@ export function buildResponsiveSrcSet(rawSrc: string, quality: number = 75): str
 }
 
 /**
- * Resolves standard HTML image performance attributes from Next.js Image props.
+ * Resolves standard HTML image performance attributes for priority and lazy images.
  */
-export function resolveImagePerformanceAttrs(props: Pick<ImageProps, 'priority' | 'loading' | 'sizes' | 'fill'>) {
+export function resolveImagePerformanceAttrs(
+  props: Pick<OptimizedImageProps, 'priority' | 'loading' | 'sizes' | 'fill'>
+) {
   const isPriority = Boolean(props.priority);
-  const resolvedLoading: 'eager' | 'lazy' = isPriority ? 'eager' : (props.loading || 'lazy');
+  const resolvedLoading: 'eager' | 'lazy' = isPriority ? 'eager' : props.loading || 'lazy';
   const resolvedDecoding: 'sync' | 'async' = isPriority ? 'sync' : 'async';
   const resolvedFetchPriority: 'high' | 'low' | 'auto' = isPriority
     ? 'high'
@@ -85,7 +88,7 @@ export function resolveImagePerformanceAttrs(props: Pick<ImageProps, 'priority' 
 const DEFAULT_FALLBACK =
   'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&q=75&w=480';
 
-export const Image: React.FC<ImageProps> = ({
+export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   src,
   alt,
   width,
@@ -107,7 +110,9 @@ export const Image: React.FC<ImageProps> = ({
   const [currentSrc, setCurrentSrc] = useState(optimizedSrc || fallbackSrc);
 
   useEffect(() => {
-    setCurrentSrc(unoptimized ? src : buildOptimizedImageUrl(src, numericWidth || 480, quality) || fallbackSrc);
+    setCurrentSrc(
+      unoptimized ? src : buildOptimizedImageUrl(src, numericWidth || 480, quality) || fallbackSrc
+    );
   }, [src, numericWidth, quality, unoptimized, fallbackSrc]);
 
   const perfAttrs = resolveImagePerformanceAttrs({ priority, loading, sizes, fill });
@@ -163,4 +168,4 @@ export const Image: React.FC<ImageProps> = ({
   );
 };
 
-export default Image;
+export default OptimizedImage;

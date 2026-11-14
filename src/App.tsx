@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
 import { CatalogView } from './components/CatalogView';
@@ -7,8 +6,7 @@ import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown, Loader2, LogOu
 import { cloudflareApi } from './services/cloudflareApi';
 import { getCloudflareUrl, CLOUDFLARE_API_URL } from './config/cloudflare';
 import { AniDubLogo } from './components/AniDubLogo';
-import { useUser, useAuth, useClerk, SignIn } from '@clerk/nextjs';
-import { getClerkSessionToken } from './lib/clerk';
+import { useUser, useAuth, useClerk, SignIn, getClerkSessionToken } from './lib/clerk';
 import { isAuthorizedClerkAdmin } from './utils/auth';
 import {
   mergeGuestAndServerWatchlist,
@@ -40,21 +38,21 @@ const ModalLoadingFallback = () => (
   </div>
 );
 
-// Dynamically import heavy, below-the-fold, and non-critical views using next/dynamic
-const GodModeTracker = dynamic(() => import('./components/GodModeTracker').then(m => m.GodModeTracker), { ssr: false });
-const FeedbackSection = dynamic(() => import('./components/FeedbackSection').then(m => m.FeedbackSection), { ssr: false });
-const AdminDashboard = dynamic(() => import('./components/AdminDashboard').then(m => m.AdminDashboard), { loading: ViewLoadingFallback, ssr: false });
-const AnimeDetailModal = dynamic(() => import('./components/AnimeDetailPage').then(m => m.AnimeDetailModal), { loading: ModalLoadingFallback, ssr: false });
-const RouletteModal = dynamic(() => import('./components/RouletteModal').then(m => m.RouletteModal), { loading: ModalLoadingFallback, ssr: false });
-const CreateCollectionModal = dynamic(() => import('./components/CreateCollectionModal').then(m => m.CreateCollectionModal), { loading: ModalLoadingFallback, ssr: false });
-const DubInfoModal = dynamic(() => import('./components/DubInfoModal').then(m => m.DubInfoModal), { loading: ModalLoadingFallback, ssr: false });
-const WatchlistView = dynamic(() => import('./components/WatchlistView').then(m => m.WatchlistView), { loading: ViewLoadingFallback, ssr: false });
-const WeeklyScheduleView = dynamic(() => import('./components/WeeklyScheduleView').then(m => m.WeeklyScheduleView), { loading: ViewLoadingFallback, ssr: false });
-const ProfileView = dynamic(() => import('./components/ProfileView').then(m => m.ProfileView), { loading: ViewLoadingFallback, ssr: false });
-const AnimeTierListMaker = dynamic(() => import('./components/AnimeTierListMaker').then(m => m.AnimeTierListMaker), { loading: ViewLoadingFallback, ssr: false });
-const RecommendationSystem = dynamic(() => import('./components/RecommendationSystem').then(m => m.RecommendationSystem), { loading: ViewLoadingFallback, ssr: false });
-const CommunityChatView = dynamic(() => import('./components/CommunityChatView').then(m => m.CommunityChatView), { loading: ViewLoadingFallback, ssr: false });
-const LanguageLandingView = dynamic(() => import('./components/LanguageLandingView').then(m => m.LanguageLandingView), { loading: ViewLoadingFallback, ssr: false });
+// Code-split heavy, below-the-fold, and non-critical views using React.lazy
+const GodModeTracker = lazy(() => import('./components/GodModeTracker').then(m => ({ default: m.GodModeTracker })));
+const FeedbackSection = lazy(() => import('./components/FeedbackSection').then(m => ({ default: m.FeedbackSection })));
+const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const AnimeDetailModal = lazy(() => import('./components/AnimeDetailPage').then(m => ({ default: m.AnimeDetailModal })));
+const RouletteModal = lazy(() => import('./components/RouletteModal').then(m => ({ default: m.RouletteModal })));
+const CreateCollectionModal = lazy(() => import('./components/CreateCollectionModal').then(m => ({ default: m.CreateCollectionModal })));
+const DubInfoModal = lazy(() => import('./components/DubInfoModal').then(m => ({ default: m.DubInfoModal })));
+const WatchlistView = lazy(() => import('./components/WatchlistView').then(m => ({ default: m.WatchlistView })));
+const WeeklyScheduleView = lazy(() => import('./components/WeeklyScheduleView').then(m => ({ default: m.WeeklyScheduleView })));
+const ProfileView = lazy(() => import('./components/ProfileView').then(m => ({ default: m.ProfileView })));
+const AnimeTierListMaker = lazy(() => import('./components/AnimeTierListMaker').then(m => ({ default: m.AnimeTierListMaker })));
+const RecommendationSystem = lazy(() => import('./components/RecommendationSystem').then(m => ({ default: m.RecommendationSystem })));
+const CommunityChatView = lazy(() => import('./components/CommunityChatView').then(m => ({ default: m.CommunityChatView })));
+const LanguageLandingView = lazy(() => import('./components/LanguageLandingView').then(m => ({ default: m.LanguageLandingView })));
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -604,7 +602,9 @@ export default function App() {
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-primary-theme selection:text-white transition-colors duration-300 box-border">
       
       {/* GOD-MODE FIRST-PARTY EDGE ANALYTICS & TELEMETRY TRACKER */}
-      <GodModeTracker activeTab={activeTab} activeAnimeSlug={activeAnimeSlug} />
+      <Suspense fallback={null}>
+        <GodModeTracker activeTab={activeTab} activeAnimeSlug={activeAnimeSlug} />
+      </Suspense>
 
       {/* 1. NAVBAR */}
       <Navbar
@@ -850,10 +850,12 @@ export default function App() {
       </main>
 
       {/* FEEDBACK SECTION / FOOTER */}
-      <FeedbackSection
-        onSubmitDub={() => setIsDubModalOpen(true)}
-        onNavigateLanguage={handleNavigateLanguage}
-      />
+      <Suspense fallback={null}>
+        <FeedbackSection
+          onSubmitDub={() => setIsDubModalOpen(true)}
+          onNavigateLanguage={handleNavigateLanguage}
+        />
+      </Suspense>
 
 
       {/* MODALS WITH SPRING ANIMATEPRESENCE */}

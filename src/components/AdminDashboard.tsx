@@ -39,7 +39,7 @@ import {
   parseOptionalEpisodesCount,
   parseOptionalSeason,
 } from '../utils/dataNormalization';
-import { useUser, SignIn } from '@clerk/nextjs';
+import { useUser, SignIn } from '../lib/clerk';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 import { AdminOverviewTab, type GenreStatBar } from './admin/AdminOverviewTab';
 import { AdminPendingTab } from './admin/AdminPendingTab';

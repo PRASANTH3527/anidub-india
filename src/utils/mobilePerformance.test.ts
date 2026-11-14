@@ -6,7 +6,7 @@ import {
   buildOptimizedImageUrl,
   buildResponsiveSrcSet,
   resolveImagePerformanceAttrs,
-} from '../lib/next-image';
+} from '../components/OptimizedImage';
 
 describe('Mobile Lighthouse Performance Optimizations', () => {
   it('optimizes Unsplash image URLs with width, quality, and auto WebP/AVIF format', () => {
@@ -47,32 +47,31 @@ describe('Mobile Lighthouse Performance Optimizations', () => {
     assert.ok(lazyAttrs.sizes.includes('48vw'));
   });
 
-  it('uses next/image with priority, loading="lazy", and sizes across AnimeCard and PublicHomeView', () => {
+  it('uses OptimizedImage with priority, loading="lazy", and sizes across AnimeCard and PublicHomeView', () => {
     const cardContent = fs.readFileSync(path.resolve(process.cwd(), 'src/components/AnimeCard.tsx'), 'utf-8');
-    assert.ok(cardContent.includes("from 'next/image'"), 'AnimeCard must import next/image');
+    assert.ok(cardContent.includes("from './OptimizedImage'"), 'AnimeCard must import OptimizedImage');
     assert.ok(cardContent.includes('priority={isPriorityCard}'), 'AnimeCard must set priority for above-the-fold cards');
     assert.ok(cardContent.includes('sizes='), 'AnimeCard must provide responsive sizes attribute');
 
     const homeContent = fs.readFileSync(path.resolve(process.cwd(), 'src/components/PublicHomeView.tsx'), 'utf-8');
-    assert.ok(homeContent.includes("from 'next/image'"), 'PublicHomeView must import next/image');
+    assert.ok(homeContent.includes("from './OptimizedImage'"), 'PublicHomeView must import OptimizedImage');
     assert.ok(homeContent.includes('priority'), 'PublicHomeView hero banner must set priority');
     assert.ok(homeContent.includes('loading="lazy"'), 'PublicHomeView below-the-fold posters must use loading="lazy"');
     assert.ok(homeContent.includes('sizes='), 'PublicHomeView images must specify sizes');
   });
 
-  it('uses next/dynamic to code-split heavy and below-the-fold components', () => {
+  it('uses React.lazy and Suspense to code-split heavy and below-the-fold components', () => {
     const appContent = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf-8');
-    assert.ok(appContent.includes("from 'next/dynamic'"), 'App.tsx must import next/dynamic');
-    assert.ok(appContent.includes('dynamic('), 'App.tsx must dynamically load non-critical views');
+    assert.ok(appContent.includes('lazy('), 'App.tsx must use React.lazy for non-critical views');
+    assert.ok(appContent.includes('<Suspense'), 'App.tsx must wrap lazy views in Suspense');
 
     const catalogContent = fs.readFileSync(path.resolve(process.cwd(), 'src/components/CatalogView.tsx'), 'utf-8');
-    assert.ok(catalogContent.includes("from 'next/dynamic'"), 'CatalogView.tsx must import next/dynamic');
+    assert.ok(catalogContent.includes('lazy('), 'CatalogView.tsx must use React.lazy for below-the-fold rows');
   });
 
-  it('eliminates render-blocking fonts and scripts via next/script lazyOnload and async stylesheet preload', () => {
+  it('eliminates render-blocking fonts and scripts via idle scheduling and async stylesheet preload', () => {
     const trackerContent = fs.readFileSync(path.resolve(process.cwd(), 'src/components/GodModeTracker.tsx'), 'utf-8');
-    assert.ok(trackerContent.includes("from 'next/script'"), 'GodModeTracker must import next/script');
-    assert.ok(trackerContent.includes('strategy="lazyOnload"'), 'GodModeTracker must use lazyOnload strategy');
+    assert.ok(trackerContent.includes('requestIdleCallback'), 'GodModeTracker must defer analytics initialization until idle/load');
 
     const htmlContent = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
     assert.ok(htmlContent.includes('rel="preload"'), 'index.html must preload font stylesheet');

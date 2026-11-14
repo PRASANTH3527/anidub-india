@@ -1,6 +1,6 @@
 {
   "name": "ANIDUB INDIA",
-  "description": "The Premier Destination for Anime Streaming & Dubbing in India. Discover hundreds of anime with Hindi, Tamil, and Telugu regional audio dubs powered by Cloudflare Ecosystem.",
+  "description": "The Premier Destination for Anime Streaming & Dubbing in India. Discover 100+ Indian-dubbed anime with Hindi, Tamil, and Telugu regional audio dubs powered by Cloudflare Ecosystem.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

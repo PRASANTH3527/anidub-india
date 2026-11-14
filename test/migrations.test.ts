@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import initSqlJs from 'sql.js';
+import { DatabaseSync } from 'node:sqlite';
 
 const ROOT_DIR = process.cwd();
 
@@ -75,18 +75,17 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     '0004_add_community_submissions.sql',
   ]);
 
-  const SQL = await initSqlJs();
-  const db = new SQL.Database();
+  const db = new DatabaseSync(':memory:');
 
   for (const fileName of migrationFiles) {
     const sqlText = fs.readFileSync(path.join(migrationsDir, fileName), 'utf8');
     db.exec(sqlText);
   }
 
-  const tablesRes = db.exec(
-    "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name ASC;"
-  );
-  const tableNames = (tablesRes[0]?.values || []).map((row: unknown[]) => String(row[0]));
+  const tablesRes = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name ASC;")
+    .all() as Array<{ name: string }>;
+  const tableNames = tablesRes.map((row) => String(row.name));
 
   for (const requiredTable of [
     'anime',

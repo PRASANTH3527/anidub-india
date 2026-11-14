@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import Script from 'next/script';
-import { useUser } from '@clerk/nextjs';
+import { useUser } from '../lib/clerk';
 import { 
   getOrCreateSessionId, 
   sendAnalyticsPayload, 
@@ -199,11 +198,35 @@ export const GodModeTracker: React.FC<GodModeTrackerProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <Script
-      id="god-mode-edge-telemetry"
-      strategy="lazyOnload"
-      onReady={() => setTrackerReady(true)}
-    />
-  );
+  // 6. Defer tracker activation until browser is idle after load (non-blocking)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let idleId: number | null = null;
+
+    const activate = () => setTrackerReady(true);
+    const scheduleIdle = () => {
+      if ('requestIdleCallback' in window) {
+        idleId = (window as any).requestIdleCallback(activate, { timeout: 3500 });
+      } else {
+        timerId = setTimeout(activate, 1200);
+      }
+    };
+
+    if (document.readyState === 'complete') {
+      scheduleIdle();
+    } else {
+      window.addEventListener('load', scheduleIdle, { once: true });
+    }
+
+    return () => {
+      window.removeEventListener('load', scheduleIdle);
+      if (timerId !== null) clearTimeout(timerId);
+      if (idleId !== null && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleId);
+      }
+    };
+  }, []);
+
+  return null;
 };

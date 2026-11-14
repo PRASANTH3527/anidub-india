@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Shield, X, AlertCircle, CheckCircle2, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getCloudflareUrl } from '../config/cloudflare';
-import { useUser, useAuth, useClerk, SignIn } from '@clerk/nextjs';
-import { getClerkSessionToken } from '../lib/clerk';
+import { useUser, useAuth, useClerk, SignIn, getClerkSessionToken } from '../lib/clerk';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 
 interface AdminLoginModalProps {

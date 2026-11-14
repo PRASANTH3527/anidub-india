@@ -17,7 +17,7 @@ import {
 import { AnimeRecord, DubLanguage, dbService } from '../services/databaseService';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { useToast } from './Toast';
-import { useUser } from '@clerk/nextjs';
+import { useUser } from '../lib/clerk';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 import { validateImageUpload } from '../utils/imgbb';
 import { validateExternalImageUrl } from '../utils/submissionValidation';

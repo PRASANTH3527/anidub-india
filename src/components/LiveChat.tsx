@@ -20,8 +20,7 @@ import { cloudflareApi } from '../services/cloudflareApi';
 import { ANIME_CHARACTERS } from '../utils/randomUser';
 import { syncAndDeduplicateChatMessages } from '../utils/chatDeduplication';
 import { getVerifiedClerkUsername } from '../utils/chatIdentity';
-import { useUser, useAuth } from '@clerk/nextjs';
-import { getClerkSessionToken } from '../lib/clerk';
+import { useUser, useAuth, getClerkSessionToken } from '../lib/clerk';
 
 export interface ChatMessage {
   id: string | number;

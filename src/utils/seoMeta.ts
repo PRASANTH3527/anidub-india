@@ -282,7 +282,7 @@ export function buildAnimeJsonLd(
 export function buildDefaultSeoMeta(originInput?: string): SeoMetaPayload {
   const origin = resolveOrigin(originInput);
   const description =
-    'Discover hundreds of anime with Hindi, Tamil, and Telugu regional audio dubs on ANIDUB INDIA. The premier destination for legal anime streaming in India.';
+    'Discover 100+ Indian-dubbed anime with Hindi, Tamil, and Telugu regional audio dubs on ANIDUB INDIA. The premier destination for legal anime streaming in India.';
   return {
     title: 'ANIDUB INDIA | The Premier Destination for Anime Streaming & Dubbing in India',
     ogTitle: 'ANIDUB INDIA | Anime Streaming & Dubbing',
@@ -560,4 +560,96 @@ export function updateDocumentSeoMeta(meta: SeoMetaPayload): void {
       ldEl.textContent = meta.jsonLd;
     }
   }
+}
+
+export interface SitemapAnimeRow {
+  id?: number | string | null;
+  slug?: string | null;
+  created_at?: string | null;
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function formatSitemapLastmod(rawDate: unknown): string | null {
+  if (typeof rawDate !== 'string' || !rawDate.trim()) return null;
+  const parsed = new Date(rawDate.trim());
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+/**
+ * Generates a valid XML sitemap combining static directory routes,
+ * regional dubbed language landing pages, and published D1 anime pages.
+ */
+export function buildDynamicSitemapXml(
+  animeRows: SitemapAnimeRow[],
+  originInput?: string
+): string {
+  const origin = resolveOrigin(originInput);
+  const seenUrls = new Set<string>();
+  const urlEntries: string[] = [];
+
+  const pushEntry = (
+    loc: string,
+    changefreq: 'daily' | 'weekly' | 'monthly',
+    priority: string,
+    lastmod?: string | null
+  ) => {
+    if (!loc || seenUrls.has(loc)) return;
+    seenUrls.add(loc);
+    const lines = [
+      '  <url>',
+      `    <loc>${escapeXml(loc)}</loc>`,
+      ...(lastmod ? [`    <lastmod>${escapeXml(lastmod)}</lastmod>`] : []),
+      `    <changefreq>${changefreq}</changefreq>`,
+      `    <priority>${priority}</priority>`,
+      '  </url>',
+    ];
+    urlEntries.push(lines.join('\n'));
+  };
+
+  // Core static pages
+  pushEntry(`${origin}/`, 'daily', '1.0');
+  pushEntry(`${origin}/schedule`, 'daily', '0.8');
+  pushEntry(`${origin}/recommendations`, 'weekly', '0.8');
+  pushEntry(`${origin}/tierlist`, 'weekly', '0.7');
+  pushEntry(`${origin}/chat`, 'daily', '0.6');
+
+  // Regional Indian language SEO landing pages
+  for (const lang of FEATURED_SEO_LANGUAGES) {
+    const slug = getLanguageSlug(lang);
+    const isPrimary = (PRIMARY_SEO_LANGUAGES as readonly string[]).includes(lang);
+    pushEntry(
+      `${origin}/dubbed-anime/${slug}`,
+      isPrimary ? 'daily' : 'weekly',
+      isPrimary && ['Hindi', 'Tamil', 'Telugu'].includes(lang) ? '0.9' : '0.8'
+    );
+  }
+
+  // Dynamic published anime pages from D1
+  if (Array.isArray(animeRows)) {
+    for (const row of animeRows) {
+      if (!row) continue;
+      const slugOrId = String(row.slug || row.id || '').trim();
+      if (!slugOrId) continue;
+      const loc = `${origin}/anime/${encodeURIComponent(slugOrId)}`;
+      const lastmod = formatSitemapLastmod(row.created_at);
+      pushEntry(loc, 'weekly', '0.8', lastmod);
+    }
+  }
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...urlEntries,
+    '</urlset>',
+    '',
+  ].join('\n');
 }

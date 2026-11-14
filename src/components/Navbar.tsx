@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { useUser } from '@clerk/nextjs';
+import { useUser } from '../lib/clerk';
 import { 
   Compass, 
   Sparkles, 

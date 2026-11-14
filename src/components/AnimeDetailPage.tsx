@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import Image from 'next/image';
+import Image from './OptimizedImage';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { 
   ArrowLeft, 
@@ -27,8 +27,7 @@ import { getCloudflareWsUrl } from '../config/cloudflare';
 import { generateRandomUsername } from '../utils/randomUser';
 import { getVerifiedClerkUsername } from '../utils/chatIdentity';
 import { formatRelativeTime } from '../utils/timestamps';
-import { useUser } from '@clerk/nextjs';
-import { getClerkSessionToken } from '../lib/clerk';
+import { useUser, getClerkSessionToken } from '../lib/clerk';
 import { DualRating } from './DualRating';
 import { buildAnimeJsonLd } from '../utils/seoMeta';
 

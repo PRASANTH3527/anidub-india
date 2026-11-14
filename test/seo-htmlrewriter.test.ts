@@ -383,8 +383,38 @@ test('functions/dubbed-anime/[language].ts and src/edge-entry.ts rewrite languag
   }
 });
 
-test('Sitemap and Footer regional links include all primary dubbed language pages and Header excludes Languages dropdown', () => {
-  const sitemap = fs.readFileSync(path.join(process.cwd(), 'public/sitemap.xml'), 'utf-8');
+test('Dynamic sitemap.xml Pages Function and Footer regional links include all primary dubbed language pages and published anime', async () => {
+  assert.equal(fs.existsSync(path.join(process.cwd(), 'public/sitemap.xml')), false);
+
+  const { onRequest } = await import('../functions/sitemap.xml');
+  const mockDb = {
+    prepare(sql: string) {
+      assert.ok(sql.includes('is_published = 1'));
+      return {
+        async all<T = Record<string, unknown>>() {
+          return {
+            results: [
+              { id: 1, slug: 'naruto-shippuden-hindi', created_at: '2025-02-01T12:00:00Z' },
+              { id: 2, slug: 'solo-leveling-tamil', created_at: '2025-02-05T00:00:00Z' },
+            ] as unknown as T[],
+          };
+        },
+      };
+    },
+  };
+
+  const res = await onRequest({
+    request: new Request('https://anidub.in/sitemap.xml'),
+    env: { DB: mockDb },
+  });
+  assert.equal(res.status, 200);
+  assert.ok((res.headers.get('Content-Type') || '').includes('application/xml'));
+  const sitemap = await res.text();
+  assert.ok(sitemap.includes('<loc>https://anidub.in/</loc>'));
+  assert.ok(sitemap.includes('<loc>https://anidub.in/anime/naruto-shippuden-hindi</loc>'));
+  assert.ok(sitemap.includes('<loc>https://anidub.in/anime/solo-leveling-tamil</loc>'));
+  assert.ok(sitemap.includes('<lastmod>2025-02-01</lastmod>'));
+
   for (const slug of ['hindi', 'tamil', 'telugu', 'malayalam', 'kannada']) {
     assert.ok(
       sitemap.includes(`<loc>https://anidub.in/dubbed-anime/${slug}</loc>`),

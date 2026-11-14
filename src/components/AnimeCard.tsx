@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
+import Image from './OptimizedImage';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { 
   Flame, 
@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { useToast } from './Toast';
-import { useUser } from '@clerk/nextjs';
+import { useUser } from '../lib/clerk';
 
 export interface AnimeCardData {
   id: number;
