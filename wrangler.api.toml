@@ -1,0 +1,19 @@
+# Force update for anidub-apiii deployment
+name = "anidub-apiii"
+main = "src/edge-entry.ts"
+compatibility_date = "2025-03-20"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "anime-db"
+database_id = "75f053ab-5b44-4d48-abf8-b3a357a89426"
+migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "CHAT_ROOM"
+class_name = "ChatRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]
