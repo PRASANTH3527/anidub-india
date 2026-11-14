@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "start": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "tsx --test \"test/**/*.test.ts\" \"src/**/*.test.ts\"",
+    "db:migrate": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
     "@clerk/backend": "^3.26.5",

@@ -5,15 +5,20 @@ const SUPPORTED_MIME_TYPES = [
   'image/jpeg',
   'image/jpg',
   'image/png',
-  'image/gif',
   'image/webp',
-  'image/bmp',
-  'image/tiff',
 ];
+
+const MIME_EXTENSION_MAP: Record<string, readonly string[]> = {
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/jpg': ['jpg', 'jpeg'],
+  'image/png': ['png'],
+  'image/webp': ['webp'],
+};
 
 export function validateImageUpload(
   sizeBytes: number,
-  mimeType: string
+  mimeType: string,
+  fileName?: string
 ): { valid: boolean; error?: string } {
   if (sizeBytes <= 0) {
     return { valid: false, error: 'Image file is empty' };
@@ -23,7 +28,17 @@ export function validateImageUpload(
   }
   const normalizedMime = (mimeType || '').split(';')[0].trim().toLowerCase();
   if (!SUPPORTED_MIME_TYPES.includes(normalizedMime)) {
-    return { valid: false, error: `Unsupported image format: ${mimeType}` };
+    return { valid: false, error: `Unsupported image format: ${mimeType}. Allowed: image/jpeg, image/png, image/webp` };
+  }
+  if (fileName) {
+    const ext = fileName.trim().split('.').pop()?.toLowerCase() || '';
+    const allowedExts = MIME_EXTENSION_MAP[normalizedMime] || [];
+    if (!ext || !allowedExts.includes(ext)) {
+      return {
+        valid: false,
+        error: `Invalid file extension ".${ext}" for image type ${normalizedMime}`,
+      };
+    }
   }
   return { valid: true };
 }
@@ -76,7 +91,7 @@ export function parseImgbbApiResponse(response: any): {
  * @returns The direct image URL (e.g., https://i.ibb.co/...)
  */
 export const uploadToImgBB = async (file: File): Promise<string> => {
-  const check = validateImageUpload(file.size, file.type || 'image/png');
+  const check = validateImageUpload(file.size, file.type, file.name);
   if (!check.valid) {
     throw new Error(check.error);
   }
@@ -94,7 +109,7 @@ export const uploadToImgBB = async (file: File): Promise<string> => {
     reader.readAsDataURL(file);
   });
 
-  const data = await cloudflareApi.uploadImage(base64Image, file.name);
+  const data = await cloudflareApi.uploadImage(base64Image, file.name, file.type);
   const directUrl = data.display_url || data.url;
   if (!directUrl) {
     throw new Error('Server upload did not return a valid image URL');

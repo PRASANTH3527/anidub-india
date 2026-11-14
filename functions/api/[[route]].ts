@@ -8,6 +8,13 @@ import { getAuth, validateAndRateLimitFeedback, extractClientIp, isApprovedOrigi
 import { buildVerifiedChatIdentity, validateChatSender } from '../../src/utils/chatIdentity';
 import { buildLanguageLikePatterns, buildPaginatedMeta, parsePaginationQuery } from '../../src/utils/pagination';
 import { computeDynamicLanguageFilters, extractUniqueLanguagesFromAnimeList, formatLanguagesBulletList } from '../../src/utils/languages';
+import {
+  validateServerImageUpload,
+  validateExternalImageUrl,
+  validateCommunitySubmissionAccount,
+  checkAndRecordSubmissionRateLimit,
+  validateAndSanitizeCommunitySubmission,
+} from '../../src/utils/submissionValidation';
 import { ChatRoom } from '../../src/chat-room';
 
 export { ChatRoom };
@@ -310,54 +317,105 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     });
   }
 
-  // 1. POST /api/upload (ImgBB Secure Backend Upload - Requires Clerk User Session & env.IMGBB_API_KEY)
+  // 1. POST /api/upload (ImgBB Secure Backend Upload - Requires Clerk Session, strict MIME/extension/size/magic-byte validation & env.IMGBB_API_KEY)
   if (path === '/api/upload' && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId) {
       return jsonResponse({ error: 'Unauthorized: Active Clerk user session required' }, 401, request);
     }
     try {
+      const contentType = (request.headers.get('content-type') || '').toLowerCase();
+      let validationInput: {
+        image?: unknown;
+        bytes?: Uint8Array;
+        filename?: unknown;
+        mimeType?: unknown;
+      };
+
+      if (contentType.includes('multipart/form-data')) {
+        const incomingForm = await request.formData();
+        const uploadedFile = incomingForm.get('file') || incomingForm.get('image');
+        if (!uploadedFile || typeof uploadedFile === 'string') {
+          return jsonResponse({ success: false, error: 'Missing image file in multipart form payload' }, 400, request);
+        }
+        const fileObj = uploadedFile as File;
+        const arrayBuf = await fileObj.arrayBuffer();
+        validationInput = {
+          bytes: new Uint8Array(arrayBuf),
+          filename: fileObj.name,
+          mimeType: fileObj.type,
+        };
+      } else {
+        const body: any = await request.json().catch(() => null);
+        if (!body || typeof body !== 'object') {
+          return jsonResponse({ success: false, error: 'Invalid upload request payload' }, 400, request);
+        }
+        validationInput = {
+          image: body.image,
+          filename: body.filename,
+          mimeType: body.mimeType || body.contentType,
+        };
+      }
+
+      const validation = validateServerImageUpload(validationInput);
+      if (!validation.ok) {
+        return jsonResponse({ success: false, error: validation.error }, validation.status, request);
+      }
+
       const apiKey = env.IMGBB_API_KEY;
       if (!apiKey) {
         return jsonResponse({ error: 'Server configuration error: IMGBB_API_KEY environment variable is not set.' }, 500, request);
       }
-      const body: any = await request.json();
-      if (!body.image) return jsonResponse({ error: 'Missing image data' }, 400);
 
-      const cleanBase64 = body.image.replace(/^data:image\/\w+;base64,/, '');
       const formData = new FormData();
-      formData.append('image', cleanBase64);
-      if (body.filename) {
-        formData.append('name', body.filename.replace(/\.[^/.]+$/, ''));
+      if (validation.cleanBase64) {
+        formData.append('image', validation.cleanBase64);
+      } else if (validationInput.bytes) {
+        const blob = new Blob([validationInput.bytes.slice()], { type: validation.mimeType });
+        formData.append('image', blob, validation.sanitizedFilename || 'poster.png');
+      }
+      if (validation.sanitizedFilename) {
+        formData.append('name', validation.sanitizedFilename.replace(/\.[^/.]+$/, ''));
       }
 
       const imgbbRes = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
         method: 'POST',
         body: formData
       });
-      const data: any = await imgbbRes.json();
-      if (data.success && data.data) {
-        return jsonResponse({
-          success: true,
-          url: data.data.url,
-          display_url: data.data.display_url,
-          thumb: data.data.thumb?.url || data.data.url,
-          delete_url: data.data.delete_url,
-          storage: 'ImgBB Live Cloud'
-        });
+      const data: any = await imgbbRes.json().catch(() => null);
+      if (!imgbbRes.ok || !data?.success || !data?.data) {
+        const providerError = data?.error?.message || data?.status_txt || `ImgBB upload failed (HTTP ${imgbbRes.status})`;
+        return jsonResponse({ success: false, error: providerError }, 502, request);
       }
 
-      // Fallback if key fails
-      const fallbackUrl = `https://i.ibb.co/vzS8G90/${Date.now()}.png`;
+      const primaryUrlCheck = validateExternalImageUrl(data.data.url || data.data.display_url, {
+        required: true,
+        fieldName: 'Uploaded image URL',
+      });
+      const displayUrlCheck = validateExternalImageUrl(data.data.display_url || data.data.url, {
+        required: true,
+        fieldName: 'Uploaded display URL',
+      });
+      if (!primaryUrlCheck.ok || !displayUrlCheck.ok) {
+        return jsonResponse(
+          { success: false, error: primaryUrlCheck.error || displayUrlCheck.error || 'Image host returned an invalid URL' },
+          502,
+          request
+        );
+      }
+
       return jsonResponse({
         success: true,
-        url: fallbackUrl,
-        display_url: fallbackUrl,
-        thumb: fallbackUrl,
-        storage: 'ImgBB CDN'
-      });
+        url: primaryUrlCheck.url,
+        display_url: displayUrlCheck.url,
+        thumb: data.data.thumb?.url || primaryUrlCheck.url,
+        delete_url: data.data.delete_url,
+        mimeType: validation.mimeType,
+        sizeBytes: validation.sizeBytes,
+        storage: 'ImgBB Live Cloud'
+      }, 200, request);
     } catch (err: any) {
-      return jsonResponse({ error: err.message }, 500);
+      return jsonResponse({ success: false, error: err?.message || 'Image upload failed' }, 500, request);
     }
   }
 
@@ -389,6 +447,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       try {
         const body: any = await request.json();
         if (!body.username) return jsonResponse({ error: 'Username is required' }, 400, request);
+        const avatarCheck = validateExternalImageUrl(body.avatar_url, { required: false, fieldName: 'Avatar URL' });
+        if (!avatarCheck.ok) {
+          return jsonResponse({ error: avatarCheck.error }, 400, request);
+        }
+        const safeAvatarUrl = avatarCheck.url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
         if (env.DB) {
           await env.DB.prepare(
             `INSERT INTO users (id, username, email, avatar_url, role, bio)
@@ -402,7 +465,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               userId,
               String(body.username).trim().slice(0, 50),
               session.email || `${userId}@clerk.user`,
-              String(body.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80').slice(0, 500),
+              safeAvatarUrl.slice(0, 500),
               session.isAdmin ? 'admin' : 'user',
               String(body.bio || '').slice(0, 500)
             )
@@ -578,6 +641,20 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
     try {
       const body: any = await request.json();
+      if (!body.title || !String(body.title).trim()) {
+        return jsonResponse({ error: 'Anime title is required' }, 400, request);
+      }
+      const coverCheck = validateExternalImageUrl(body.cover_image, { required: false, fieldName: 'Cover Image URL' });
+      if (!coverCheck.ok) {
+        return jsonResponse({ error: coverCheck.error }, 400, request);
+      }
+      const bannerCheck = validateExternalImageUrl(body.banner_image, { required: false, fieldName: 'Banner Image URL' });
+      if (!bannerCheck.ok) {
+        return jsonResponse({ error: bannerCheck.error }, 400, request);
+      }
+      const safeCoverUrl = coverCheck.url || body.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
+      const safeBannerUrl = bannerCheck.url || safeCoverUrl;
+
       let createdId: number | null = null;
       const incomingStatus = (body.status || body.airing_status || '').trim();
       const resolvedType = body.type || body.Type || 'TV Series';
@@ -596,8 +673,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             body.title,
             slug,
             body.synopsis || '',
-            body.cover_image,
-            body.banner_image || body.cover_image,
+            safeCoverUrl,
+            safeBannerUrl,
             parseFloat(body.rating) || 8.5,
             parseInt(body.episodes_count) || 12,
             finalStatus,
@@ -648,64 +725,81 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 4b. POST /api/anime/submit (Authenticated users can submit new anime, set strictly to pending)
+  // 4b. POST /api/anime/submit (Authenticated users with verified email & rate-limit/spam checks submit pending entries)
   if (path === '/api/anime/submit' && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId) {
       return jsonResponse({ error: 'Unauthorized: Active Clerk user session required to submit anime' }, 401, request);
     }
+
+    const accountCheck = validateCommunitySubmissionAccount(session);
+    if (!accountCheck.ok) {
+      return jsonResponse({ error: accountCheck.error }, accountCheck.status, request);
+    }
+
     try {
       const body: any = await request.json().catch(() => ({}));
-      if (!body.title || !String(body.title).trim()) {
-        return jsonResponse({ error: 'Anime title is required' }, 400, request);
+      const validation = validateAndSanitizeCommunitySubmission(body);
+      if (!validation.ok || !validation.data) {
+        return jsonResponse({ error: validation.error || 'Invalid submission data' }, validation.status, request);
+      }
+
+      const submission = validation.data;
+      const clientIp = extractClientIp(request);
+
+      if (env.DB) {
+        const existingAnime = await env.DB.prepare(
+          "SELECT id FROM anime WHERE LOWER(title) = LOWER(?) OR slug = ? LIMIT 1"
+        ).bind(submission.title, submission.slug).first().catch(() => null);
+
+        if (existingAnime) {
+          return jsonResponse(
+            { error: 'This anime already exists or is already pending review in our database.' },
+            409,
+            request
+          );
+        }
+      }
+
+      const rateLimitCheck = await checkAndRecordSubmissionRateLimit({
+        userId: session.userId,
+        clientIp,
+        titleSlug: submission.slug,
+        db: env.DB,
+        isAdmin: session.isAdmin,
+      });
+
+      if (!rateLimitCheck.ok) {
+        return jsonResponse(
+          { error: rateLimitCheck.error },
+          rateLimitCheck.status,
+          request,
+          rateLimitCheck.retryAfterSeconds
+            ? { 'Retry-After': String(rateLimitCheck.retryAfterSeconds) }
+            : undefined
+        );
       }
 
       let createdId: number | null = null;
-      const slug = String(body.title).toLowerCase().replace(/[^a-z0-9]+/g, '-');
       if (env.DB) {
-        await env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS anime (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT UNIQUE,
-            slug TEXT,
-            synopsis TEXT,
-            cover_image TEXT,
-            banner_image TEXT,
-            rating REAL,
-            episodes_count INTEGER,
-            status TEXT DEFAULT 'pending',
-            submissionStatus TEXT DEFAULT 'pending',
-            approval_status TEXT DEFAULT 'pending',
-            is_published INTEGER DEFAULT 0,
-            season TEXT,
-            year INTEGER,
-            genres TEXT,
-            popularity INTEGER DEFAULT 0,
-            languages TEXT,
-            platform TEXT,
-            type TEXT,
-            studio TEXT
-          )
-        `).run().catch(() => {});
-
         const insertRes = await env.DB.prepare(`
           INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio)
           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?)
         `).bind(
-          String(body.title).trim(),
-          slug,
-          String(body.synopsis || '').trim(),
-          String(body.cover_image || body.poster_url || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800').trim(),
-          String(body.banner_image || body.cover_image || '').trim(),
-          parseFloat(body.rating) || 8.0,
-          parseInt(body.episodes_count || body.episodes) || 12,
-          body.season || 'Spring',
-          parseInt(body.year) || 2026,
-          body.genres || 'Action',
-          body.languages || 'Tamil, Hindi',
-          body.platform || 'Crunchyroll',
-          body.type || 'TV Series',
-          body.studio || 'Unknown Studio'
+          submission.title,
+          submission.slug,
+          submission.synopsis,
+          submission.cover_image,
+          submission.banner_image,
+          submission.rating,
+          submission.episodes_count,
+          submission.season,
+          submission.year,
+          submission.genres,
+          submission.languages,
+          submission.platform,
+          submission.type,
+          submission.studio
         ).run();
         createdId = insertRes.meta?.last_row_id || null;
       }
@@ -798,16 +892,20 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       if (env.DB) {
         try {
           const body: any = await request.json().catch(() => ({}));
+          if (body.cover_image !== undefined) {
+            const coverCheck = validateExternalImageUrl(body.cover_image, { required: false, fieldName: 'Cover Image URL' });
+            if (!coverCheck.ok) {
+              return jsonResponse({ error: coverCheck.error }, 400, request);
+            }
+          }
+          if (body.banner_image !== undefined) {
+            const bannerCheck = validateExternalImageUrl(body.banner_image, { required: false, fieldName: 'Banner Image URL' });
+            if (!bannerCheck.ok) {
+              return jsonResponse({ error: bannerCheck.error }, 400, request);
+            }
+          }
         const incomingStatus = (body.status || body.airing_status || '').trim();
         const resolvedType = body.type || body.Type || null;
-
-        // Auto-migrate platforms_data, watch_url, mixedEntries, mixed_entries if not yet in D1 schema
-        await env.DB.prepare("ALTER TABLE anime ADD COLUMN watch_url TEXT DEFAULT ''").run().catch(() => {});
-        await env.DB.prepare("ALTER TABLE anime ADD COLUMN platforms_data TEXT DEFAULT ''").run().catch(() => {});
-        await env.DB.prepare("ALTER TABLE anime ADD COLUMN streaming_partners TEXT DEFAULT ''").run().catch(() => {});
-        await env.DB.prepare("ALTER TABLE anime ADD COLUMN mixedEntries TEXT DEFAULT ''").run().catch(() => {});
-        await env.DB.prepare("ALTER TABLE anime ADD COLUMN mixed_entries TEXT DEFAULT ''").run().catch(() => {});
-        await env.DB.prepare("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT ''").run().catch(() => {});
 
         const rawPartners = body.streaming_partners !== undefined ? body.streaming_partners : body.platforms_data;
         let cleanedPartners = rawPartners;
@@ -1139,17 +1237,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const roundedRating = Math.round(rating);
 
         if (env.DB) {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS user_ratings (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user_id TEXT,
-              anime_id INTEGER,
-              rating INTEGER,
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-              UNIQUE(user_id, anime_id)
-            )
-          `).run().catch(() => {});
-
           await env.DB.prepare(
             `INSERT INTO user_ratings (user_id, anime_id, rating, created_at)
              VALUES (?, ?, ?, CURRENT_TIMESTAMP)
@@ -1256,17 +1343,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         request,
         { 'Cache-Control': 'no-store' }
       );
-    }
-    if (env.DB) {
-      await env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS watchlist (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id TEXT NOT NULL,
-          anime_id INTEGER NOT NULL,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(user_id, anime_id)
-        )
-      `).run().catch(() => {});
     }
 
     if (method === 'GET') {
@@ -1460,29 +1536,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (method === 'GET') {
       try {
         if (env.DB) {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS chat_messages (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user TEXT NOT NULL,
-              text TEXT NOT NULL,
-              timestamp TEXT NOT NULL,
-              rating REAL,
-              language TEXT,
-              isReview INTEGER DEFAULT 0,
-              clerk_user_id TEXT,
-              avatar TEXT,
-              created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-          `).run().catch(() => {});
-
-          // Auto-migrate any potentially missing columns on existing D1 databases
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN rating REAL").run().catch(() => {});
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN language TEXT").run().catch(() => {});
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN isReview INTEGER DEFAULT 0").run().catch(() => {});
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN clerk_user_id TEXT").run().catch(() => {});
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN avatar TEXT").run().catch(() => {});
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP").run().catch(() => {});
-
           let list: any[] = [];
           try {
             const res = await env.DB.prepare(
@@ -1568,30 +1621,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const cleanAvatar = (avatar || user_avatar || avatar_url) ? String(avatar || user_avatar || avatar_url).slice(0, 500) : null;
 
         if (env.DB) {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS chat_messages (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user TEXT NOT NULL,
-              text TEXT NOT NULL,
-              timestamp TEXT NOT NULL,
-              rating REAL,
-              language TEXT,
-              isReview INTEGER DEFAULT 0,
-              clerk_user_id TEXT,
-              avatar TEXT,
-              created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-          `).run().catch(() => {});
-
-          // Auto-migrate columns silently
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN rating REAL").run().catch(() => {});
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN language TEXT").run().catch(() => {});
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN isReview INTEGER DEFAULT 0").run().catch(() => {});
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN clerk_user_id TEXT").run().catch(() => {});
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN avatar TEXT").run().catch(() => {});
-          await env.DB.prepare("ALTER TABLE chat_messages ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP").run().catch(() => {});
-
-          // 1. Check if this exact username has been claimed by someone else in the database (safe check)
+          // Check if this exact username has been claimed by someone else in the database (safe check)
           try {
             const checkRes = await env.DB.prepare(
               "SELECT DISTINCT clerk_user_id FROM chat_messages WHERE LOWER(TRIM(user)) = LOWER(?) AND clerk_user_id IS NOT NULL AND clerk_user_id != ''"
@@ -1911,33 +1941,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           : (row.episodes_per_season ? String(row.episodes_per_season) : String(epCount));
 
         if (env.DB) {
-          try {
-            await env.DB.prepare(
-              `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(title) DO NOTHING`
-            ).bind(title, slug, synopsis, cover_image, banner_image, rating, epCount, resolvedStatus, resolvedStatus, year, genres, languages, platform, resolvedType, studio, episodesPerSeason, mixedEntriesJson).run();
-          } catch (firstErr: any) {
-            // Auto-heal missing D1 columns if migrations have not been applied yet
-            try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN is_published INTEGER DEFAULT 0").run(); } catch {}
-            try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN studio TEXT DEFAULT 'Unknown Studio'").run(); } catch {}
-            try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN approval_status TEXT DEFAULT 'pending'").run(); } catch {}
-            try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN submissionStatus TEXT DEFAULT 'pending'").run(); } catch {}
-            try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN episodes_per_season TEXT DEFAULT ''").run(); } catch {}
-            try { await env.DB.prepare("ALTER TABLE anime ADD COLUMN mixedEntries TEXT DEFAULT ''").run(); } catch {}
-
-            try {
-              await env.DB.prepare(
-                `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?, ?)`
-              ).bind(title, slug, synopsis, cover_image, banner_image, rating, epCount, resolvedStatus, resolvedStatus, year, genres, languages, platform, resolvedType, studio, episodesPerSeason, mixedEntriesJson).run();
-            } catch {
-              await env.DB.prepare(
-                `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, is_published, season, year, genres, popularity, languages, platform, type, studio)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?)`
-              ).bind(title, slug, synopsis, cover_image, banner_image, rating, epCount, resolvedStatus, year, genres, languages, platform, resolvedType, studio).run();
-            }
-          }
+          await env.DB.prepare(
+            `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(title) DO NOTHING`
+          ).bind(title, slug, synopsis, cover_image, banner_image, rating, epCount, resolvedStatus, resolvedStatus, year, genres, languages, platform, resolvedType, studio, episodesPerSeason, mixedEntriesJson).run();
         }
         insertedCount++;
       }

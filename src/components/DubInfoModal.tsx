@@ -19,6 +19,8 @@ import { cloudflareApi } from '../services/cloudflareApi';
 import { useToast } from './Toast';
 import { useUser } from '@clerk/nextjs';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
+import { validateImageUpload } from '../utils/imgbb';
+import { validateExternalImageUrl } from '../utils/submissionValidation';
 
 interface DubInfoModalProps {
   isOpen: boolean;
@@ -314,14 +316,20 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const validation = validateImageUpload(file.size, file.type, file.name);
+    if (!validation.valid) {
+      toast.error('Invalid Image', validation.error || 'Please choose a valid JPG, PNG, or WebP image.');
+      e.target.value = '';
+      return;
+    }
+
     setIsUploading(true);
     try {
-      // Use FileReader to convert to base64 for the cloudflareApi proxy
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64String = (reader.result as string).split(',')[1];
+        const dataUrl = reader.result as string;
         try {
-          const data = await cloudflareApi.uploadImage(base64String, file.name);
+          const data = await cloudflareApi.uploadImage(dataUrl, file.name, file.type);
           if (data && data.success) {
             const publicUrl = data.display_url || data.url;
             setPoster(publicUrl);
@@ -333,17 +341,19 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
               image: publicUrl
             }));
           } else {
-            console.warn('Cloudflare Proxy upload failed:', data);
+            toast.error('Upload Failed', 'Server did not return a valid image URL.');
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error('Cloudflare Proxy upload error:', err);
+          toast.error('Upload Failed', err?.message || 'Could not upload image.');
         } finally {
           setIsUploading(false);
         }
       };
       reader.readAsDataURL(file);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Image processing error:', err);
+      toast.error('Upload Failed', err?.message || 'Could not read image file.');
       setIsUploading(false);
     }
   };
@@ -460,8 +470,18 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     )) as DubLanguage[];
     const derivedGlobalDubs = rawLanguages.length > 0 ? rawLanguages : (['Tamil', 'Hindi'] as DubLanguage[]);
 
+    const rawPoster = (poster || formData.posterUrl || formData.poster || formData.image || formData.cover_image || '').trim();
+    if (rawPoster) {
+      const posterCheck = validateExternalImageUrl(rawPoster, { required: false, fieldName: 'Poster Image URL' });
+      if (!posterCheck.ok) {
+        toast.error('Invalid Poster URL', posterCheck.error || 'Poster must be a valid HTTPS image URL.');
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
     const defaultCover =
-      (poster || formData.posterUrl || formData.poster || formData.image || formData.cover_image || '').trim() ||
+      rawPoster ||
       'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80';
 
     try {

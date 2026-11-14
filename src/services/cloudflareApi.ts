@@ -637,7 +637,7 @@ class CloudflareApiService {
   /**
    * UPLOAD: Proxies image upload to ImgBB via Cloudflare Worker backend
    */
-  public async uploadImage(base64Image: string, filename?: string): Promise<{ success: boolean; url: string; display_url?: string }> {
+  public async uploadImage(base64Image: string, filename?: string, mimeType?: string): Promise<{ success: boolean; url: string; display_url?: string }> {
     const endpoint = CLOUDFLARE_ENDPOINTS.UPLOAD;
     const res = await this.smartFetch(endpoint, {
       method: 'POST',
@@ -645,6 +645,7 @@ class CloudflareApiService {
       body: JSON.stringify({
         image: base64Image,
         filename: filename || 'poster.png',
+        ...(mimeType ? { mimeType } : {}),
         type: 'POSTER'
       })
     });

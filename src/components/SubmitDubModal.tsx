@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { AniDubLogo } from './AniDubLogo';
 import { dbService } from '../services/databaseService';
+import { validateExternalImageUrl } from '../utils/submissionValidation';
 
 export interface SubmitDubModalProps {
   isOpen: boolean;
@@ -66,14 +67,25 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     e.preventDefault();
     if (!title.trim()) return;
 
+    const coverCheck = validateExternalImageUrl(coverImage, { required: false, fieldName: 'Cover Image URL' });
+    if (!coverCheck.ok) {
+      setError(coverCheck.error || 'Please enter a valid HTTPS Cover Image URL.');
+      return;
+    }
+    const bannerCheck = validateExternalImageUrl(bannerImage, { required: false, fieldName: 'Banner Image URL' });
+    if (!bannerCheck.ok) {
+      setError(bannerCheck.error || 'Please enter a valid HTTPS Banner Image URL.');
+      return;
+    }
+
     setError(null);
     setIsSubmitting(true);
 
     const payload = {
       title: title.trim(),
       synopsis: synopsis.trim(),
-      cover_image: coverImage,
-      banner_image: bannerImage,
+      cover_image: coverCheck.url || '',
+      banner_image: bannerCheck.url || '',
       rating: parseFloat(rating) || 8.5,
       episodes_count: parseInt(episodesCount) || 12,
       status: 'pending',
