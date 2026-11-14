@@ -7,7 +7,13 @@
  * Cloudflare Workers and D1 database.
  */
 
-import { CLOUDFLARE_API_URL, getCloudflareUrl, CLOUDFLARE_ENDPOINTS, DEFAULT_FALLBACK_WORKER_URL } from '../config/cloudflare';
+import {
+  CLOUDFLARE_API_URL,
+  getCloudflareUrl,
+  CLOUDFLARE_ENDPOINTS,
+  DEFAULT_FALLBACK_WORKER_URL,
+  CHAT_WORKER_HTTP_URL,
+} from '../config/cloudflare';
 import { getClerkSessionToken } from '../lib/clerk';
 import {
   normalizeWatchlistIds,
@@ -1099,12 +1105,40 @@ class CloudflareApiService {
         ...safePayload,
         ...(token ? { token } : {}),
       };
-      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
+      let res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
         method: 'POST',
         headers,
         body: JSON.stringify(bodyWithToken)
       });
-      const data = await res.json().catch(() => ({}));
+      let data = await res.json().catch(() => ({}));
+
+      // If Pages /api/chat lacks CLERK_SECRET_KEY or fails in production, retry directly against the dedicated anime-chat worker
+      if (
+        (!res.ok || data.success === false) &&
+        typeof window !== 'undefined' &&
+        window.location.hostname !== 'localhost' &&
+        window.location.hostname !== '127.0.0.1' &&
+        !window.location.hostname.includes('.run.app') &&
+        (res.status === 401 || res.status === 404 || res.status >= 500 || String(data?.error || '').includes('CLERK_SECRET_KEY'))
+      ) {
+        try {
+          const workerRes = await fetch(`${CHAT_WORKER_HTTP_URL}${CLOUDFLARE_ENDPOINTS.CHAT}`, {
+            method: 'POST',
+            headers,
+            cache: 'no-store',
+            body: JSON.stringify(bodyWithToken),
+          });
+          const workerData = await workerRes.json().catch(() => ({}));
+          if (workerRes.ok && workerData.success !== false) {
+            return { success: true, message: workerData.message || workerData };
+          }
+          res = workerRes;
+          data = workerData;
+        } catch {
+          // Preserve original error response below
+        }
+      }
+
       if (res.ok && data.success !== false) {
         return { success: true, message: data.message || data };
       }

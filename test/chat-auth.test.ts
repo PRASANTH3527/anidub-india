@@ -401,3 +401,62 @@ test('getCloudflareWsUrl targets anime-chat worker with ?token= and anime-chat w
   assert.equal(roomOptionsRes.status, 204);
   assert.equal(roomOptionsRes.headers.get('Access-Control-Allow-Origin'), 'https://anidub-india-a1y.pages.dev');
 });
+
+test('edge-entry.ts and functions/api/[[route]].ts preserve non-enumerable Cloudflare env secret bindings without spread loss', async () => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
+  const secretBackingStore: Record<string, any> = {
+    ADMIN_EMAIL: 'admin@anidub.in',
+    CLERK_JWT_KEY: publicKey,
+    CLERK_SECRET_KEY: '',
+    DB: null,
+  };
+
+  // Simulate Cloudflare workerd Proxy env where secrets are accessible via env.KEY but omitted from Object.keys / {...env}
+  const proxyEnv = new Proxy({}, {
+    get(_target, prop) {
+      return secretBackingStore[String(prop)];
+    },
+    ownKeys() {
+      return [];
+    },
+  });
+
+  const jwt = createSignedJwt(
+    {
+      sub: 'user_proxy_secret_1',
+      sid: 'sess_proxy_1',
+      username: 'Prasanth',
+      azp: 'https://anidub-india-a1y.pages.dev',
+    },
+    privateKey
+  );
+
+  const edgeModule = await import('../src/edge-entry');
+  const res = await edgeModule.default.fetch(
+    new Request('https://anime-chat.samayaprasanth0.workers.dev/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://anidub-india-a1y.pages.dev',
+      },
+      body: JSON.stringify({
+        type: 'message',
+        user: 'Prasanth',
+        text: 'Testing live env secret propagation',
+        token: jwt,
+      }),
+    }),
+    proxyEnv as any
+  );
+
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('Access-Control-Allow-Origin'), 'https://anidub-india-a1y.pages.dev');
+  const json: any = await res.json();
+  assert.equal(json.success, true);
+  assert.equal(json.message.clerk_user_id, 'user_proxy_secret_1');
+});

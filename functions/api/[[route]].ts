@@ -32,10 +32,7 @@ const ROUTE_HANDLERS = [
 
 export const onRequest: PagesFunction<CloudflareEnvInput> = async (context) => {
   const { request } = context;
-  const env: CloudflareEnv = {
-    ...context.env,
-    DB: (context.env?.DB ?? null) as D1DatabaseLike | null,
-  };
+  const env: CloudflareEnv = (context.env ?? { DB: null }) as CloudflareEnv;
   const jsonResponse = createJsonResponder(request, env);
   const url = new URL(request.url);
   const path = url.pathname;

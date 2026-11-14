@@ -109,6 +109,7 @@ export function getCloudflareUrl(path: string): string {
   }
 }
 
+export const CHAT_WORKER_HTTP_URL = 'https://anime-chat.samayaprasanth0.workers.dev';
 export const CHAT_WORKER_WS_URL = 'wss://anime-chat.samayaprasanth0.workers.dev';
 
 /**
