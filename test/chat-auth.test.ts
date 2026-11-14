@@ -328,10 +328,43 @@ test('/api/chat POST and /ws enforce Clerk JWT auth and reject impersonation wit
   assert.equal(validPostJson.success, true);
   assert.equal(validPostJson.message.user, 'verified_listener');
   assert.equal(validPostJson.message.clerk_user_id, 'user_signed_101');
+
+  // 6. Explicit token passed directly in JSON payload with a Cloudflare Pages preview/production subdomain azp -> 200
+  const subdomainJwt = createSignedJwt(
+    {
+      sub: 'user_subdomain_202',
+      sid: 'sess_202',
+      username: 'Prasanth',
+      azp: 'https://preview-123.anidub-india-a1y.pages.dev',
+    },
+    privateKey
+  );
+  const explicitPayloadRes = await onRequest({
+    request: new Request('https://anidub-india-a1y.pages.dev/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        type: 'message',
+        user: 'Prasanth',
+        text: 'Hello from preview subdomain!',
+        token: subdomainJwt,
+      }),
+    }),
+    env,
+  });
+  assert.equal(explicitPayloadRes.status, 200);
+  const explicitPayloadJson: any = await explicitPayloadRes.json();
+  assert.equal(explicitPayloadJson.success, true);
+  assert.equal(explicitPayloadJson.message.user, 'Prasanth');
+  assert.equal(explicitPayloadJson.message.clerk_user_id, 'user_subdomain_202');
 });
 
 test('LiveChat.tsx and AnimeDetailPage.tsx enforce Clerk verified username and handle WebSocket error events', () => {
   const liveChatCode = fs.readFileSync(path.join(process.cwd(), 'src/components/LiveChat.tsx'), 'utf-8');
+  assert.ok(liveChatCode.includes("import { useAuth } from '@clerk/clerk-react';"));
+  assert.ok(liveChatCode.includes('const token = await getToken();'));
   assert.ok(liveChatCode.includes('getVerifiedClerkUsername(user)'));
   assert.ok(liveChatCode.includes("data.type === 'error'"));
   assert.ok(liveChatCode.includes('setChatError(errorText)'));

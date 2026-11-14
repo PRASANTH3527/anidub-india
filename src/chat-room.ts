@@ -1,4 +1,4 @@
-import { getAuth, type EnvBindings } from './utils/auth';
+import { verifyChatTokenDirect, extractExplicitChatToken, type EnvBindings } from './utils/auth';
 import {
   buildVerifiedChatIdentity,
   validateChatSender,
@@ -154,7 +154,8 @@ export class ChatRoom {
   async fetch(request: Request): Promise<Response> {
     const upgradeHeader = request.headers.get('Upgrade');
     if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
-      const session = await getAuth(request, this.env);
+      const explicitWsToken = extractExplicitChatToken(request);
+      const session = await verifyChatTokenDirect(explicitWsToken, this.env);
       if (!session.userId) {
         return new Response(
           JSON.stringify({
@@ -246,7 +247,19 @@ export class ChatRoom {
 
     if (request.method === 'POST') {
       try {
-        const session = await getAuth(request, this.env);
+        const rawPayload = await request.text();
+        let parsed: any;
+        try {
+          parsed = JSON.parse(rawPayload);
+        } catch {
+          return new Response(JSON.stringify({ ok: false, error: 'Invalid JSON payload' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        const explicitPostToken = extractExplicitChatToken(request, parsed);
+        const session = await verifyChatTokenDirect(explicitPostToken, this.env);
         if (!session.userId) {
           return new Response(
             JSON.stringify({
@@ -265,17 +278,6 @@ export class ChatRoom {
           claims: session.claims,
           clerkUser: session.clerkUser,
         });
-
-        const rawPayload = await request.text();
-        let parsed: any;
-        try {
-          parsed = JSON.parse(rawPayload);
-        } catch {
-          return new Response(JSON.stringify({ ok: false, error: 'Invalid JSON payload' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
 
         const claimedUsername = parsed?.user ?? parsed?.username ?? parsed?.user_name ?? '';
         const senderCheck = validateChatSender({

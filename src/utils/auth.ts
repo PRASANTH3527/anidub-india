@@ -550,6 +550,224 @@ export async function auth(req?: any, env?: EnvBindings | null): Promise<Verifie
 }
 
 /**
+ * Extracts an explicit 3-part Clerk JWT from a chat payload (`body.token`),
+ * `Authorization: Bearer <token>` header, or `?token=` query parameter (WebSocket),
+ * without relying on cookies or automatic middleware.
+ */
+export function extractExplicitChatToken(
+  req?: any,
+  body?: Record<string, unknown> | null
+): string | null {
+  if (body && typeof body.token === 'string') {
+    const bodyToken = body.token.trim();
+    if (bodyToken && bodyToken.split('.').length === 3) {
+      return bodyToken;
+    }
+  }
+
+  let authHeader: string | null = null;
+  if (typeof req?.headers?.get === 'function') {
+    authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+  } else if (req?.headers && typeof req.headers === 'object') {
+    const raw = req.headers['authorization'] || req.headers['Authorization'];
+    authHeader = Array.isArray(raw) ? raw[0] : raw || null;
+  }
+
+  if (authHeader && typeof authHeader === 'string') {
+    const trimmed = authHeader.trim();
+    if (trimmed.toLowerCase().startsWith('bearer ')) {
+      const headerToken = trimmed.slice(7).trim();
+      if (headerToken && headerToken.split('.').length === 3) {
+        return headerToken;
+      }
+    }
+  }
+
+  try {
+    const rawUrl = req?.url || req?.originalUrl;
+    if (rawUrl && typeof rawUrl === 'string') {
+      const parsedUrl = new URL(rawUrl, 'http://localhost');
+      const queryToken = parsedUrl.searchParams.get('token');
+      if (queryToken && queryToken.trim() && queryToken.trim().split('.').length === 3) {
+        return queryToken.trim();
+      }
+    }
+  } catch {
+    // Ignore malformed URLs
+  }
+
+  return null;
+}
+
+/**
+ * Verifies an explicit Clerk JWT for Live Chat routes using `@clerk/backend` `verifyToken`
+ * without enforcing strict `authorizedParties` domain/subdomain restrictions.
+ */
+export async function verifyChatTokenDirect(
+  token: string | null | undefined,
+  env?: EnvBindings | null
+): Promise<VerifiedClerkSession> {
+  const emptySession: VerifiedClerkSession = {
+    userId: null,
+    sessionId: null,
+    email: null,
+    isAdmin: false,
+    authenticated: false,
+    isAuthenticated: false,
+    claims: null,
+  };
+
+  const cleanToken = typeof token === 'string' ? token.trim() : '';
+  if (!cleanToken || cleanToken.split('.').length !== 3) {
+    return {
+      ...emptySession,
+      error: 'Missing Clerk session token in chat payload or Authorization header',
+    };
+  }
+
+  const secretKey =
+    cleanEnvValue(env?.CLERK_SECRET_KEY) ||
+    cleanEnvValue(env?.VITE_CLERK_SECRET_KEY) ||
+    cleanEnvValue(env?.NEXT_PUBLIC_CLERK_SECRET_KEY) ||
+    getEnvBinding('CLERK_SECRET_KEY', env) ||
+    getEnvBinding('VITE_CLERK_SECRET_KEY', env) ||
+    '';
+
+  const publishableKey =
+    cleanEnvValue(env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) ||
+    cleanEnvValue(env?.VITE_CLERK_PUBLISHABLE_KEY) ||
+    cleanEnvValue(env?.CLERK_PUBLISHABLE_KEY) ||
+    getEnvBinding('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY', env) ||
+    getEnvBinding('VITE_CLERK_PUBLISHABLE_KEY', env) ||
+    getEnvBinding('CLERK_PUBLISHABLE_KEY', env) ||
+    '';
+
+  const jwtKey =
+    cleanEnvValue(env?.CLERK_JWT_KEY) ||
+    cleanEnvValue(env?.VITE_CLERK_JWT_KEY) ||
+    getEnvBinding('CLERK_JWT_KEY', env) ||
+    '';
+
+  if (!secretKey && !jwtKey) {
+    return {
+      ...emptySession,
+      error: 'Missing CLERK_SECRET_KEY in env bindings',
+    };
+  }
+
+  let verifiedPayload: Record<string, any> | null = null;
+  try {
+    const verifyOptions: Record<string, any> = {
+      secretKey: secretKey || undefined,
+      publishableKey: publishableKey || undefined,
+      clockSkewInMs: 60000,
+    };
+    if (jwtKey) verifyOptions.jwtKey = jwtKey;
+
+    const verified = await verifyToken(cleanToken, verifyOptions);
+    if (verified && typeof verified.sub === 'string' && verified.sub.trim()) {
+      verifiedPayload = verified as Record<string, any>;
+    }
+  } catch (err: any) {
+    return {
+      ...emptySession,
+      error: `Clerk token verification failed: ${err?.message || 'Invalid or expired token'}`,
+    };
+  }
+
+  if (!verifiedPayload || typeof verifiedPayload.sub !== 'string' || !verifiedPayload.sub.trim()) {
+    return {
+      ...emptySession,
+      error: 'Clerk token verification failed',
+    };
+  }
+
+  const userId = verifiedPayload.sub.trim();
+  const sessionId = typeof verifiedPayload.sid === 'string' ? verifiedPayload.sid : null;
+  const configuredAdminEmail = getAuthorizedAdminEmail(env);
+
+  const clerkClient = secretKey
+    ? createClerkClient({
+        secretKey,
+        publishableKey: publishableKey || undefined,
+      })
+    : null;
+
+  let clerkUserObj: any = null;
+  if (clerkClient) {
+    try {
+      clerkUserObj = await clerkClient.users.getUser(userId);
+    } catch {
+      // Fallback gracefully to verified JWT claims if user API lookup fails
+    }
+  }
+
+  const claimEmail: string | null =
+    (typeof verifiedPayload.email === 'string' && verifiedPayload.email) ||
+    (typeof verifiedPayload.email_address === 'string' && verifiedPayload.email_address) ||
+    (typeof verifiedPayload.primary_email_address === 'string' && verifiedPayload.primary_email_address) ||
+    (typeof verifiedPayload.user_email === 'string' && verifiedPayload.user_email) ||
+    null;
+
+  let primaryEmail: string | null = null;
+  let primaryEmailVerified = false;
+
+  if (clerkUserObj) {
+    const primaryEntry =
+      (Array.isArray(clerkUserObj.emailAddresses) && clerkUserObj.primaryEmailAddressId
+        ? clerkUserObj.emailAddresses.find((e: any) => e?.id === clerkUserObj.primaryEmailAddressId)
+        : null) ||
+      (clerkUserObj.primaryEmailAddress && typeof clerkUserObj.primaryEmailAddress === 'object'
+        ? clerkUserObj.primaryEmailAddress
+        : null);
+
+    if (primaryEntry && typeof (primaryEntry.emailAddress || primaryEntry.email) === 'string') {
+      primaryEmail = primaryEntry.emailAddress || primaryEntry.email;
+      primaryEmailVerified = primaryEntry?.verification?.status === 'verified';
+    }
+  } else {
+    primaryEmail = claimEmail;
+    primaryEmailVerified = verifiedPayload.email_verified === true;
+  }
+
+  if (verifiedPayload.email_verified === false) {
+    primaryEmailVerified = false;
+  }
+
+  const normalizedEmail = primaryEmail ? cleanEnvValue(primaryEmail).toLowerCase() : null;
+  const isAdmin = Boolean(
+    configuredAdminEmail &&
+      normalizedEmail &&
+      normalizedEmail === configuredAdminEmail &&
+      primaryEmailVerified === true
+  );
+
+  const resolvedUsername =
+    cleanEnvValue(clerkUserObj?.username) ||
+    cleanEnvValue(verifiedPayload?.username) ||
+    cleanEnvValue(verifiedPayload?.preferred_username) ||
+    cleanEnvValue([clerkUserObj?.firstName, clerkUserObj?.lastName].filter(Boolean).join(' ')) ||
+    cleanEnvValue(verifiedPayload?.name) ||
+    cleanEnvValue(verifiedPayload?.full_name) ||
+    cleanEnvValue(clerkUserObj?.firstName) ||
+    cleanEnvValue(verifiedPayload?.first_name) ||
+    (normalizedEmail && normalizedEmail.includes('@') ? normalizedEmail.split('@')[0].trim() : '') ||
+    `User_${userId.slice(-6)}`;
+
+  return {
+    userId,
+    sessionId,
+    email: normalizedEmail,
+    username: resolvedUsername || null,
+    clerkUser: clerkUserObj || null,
+    isAdmin,
+    authenticated: true,
+    isAuthenticated: true,
+    claims: verifiedPayload,
+  };
+}
+
+/**
  * Extracts client IP address from Fetch Request or Express Request headers.
  */
 export function extractClientIp(req: any): string {

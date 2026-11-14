@@ -20,7 +20,8 @@ import { cloudflareApi } from '../services/cloudflareApi';
 import { ANIME_CHARACTERS } from '../utils/randomUser';
 import { syncAndDeduplicateChatMessages } from '../utils/chatDeduplication';
 import { getVerifiedClerkUsername } from '../utils/chatIdentity';
-import { useUser, useAuth, getClerkSessionToken } from '../lib/clerk';
+import { useAuth } from '@clerk/clerk-react';
+import { useUser } from '../lib/clerk';
 
 export interface ChatMessage {
   id: string | number;
@@ -343,9 +344,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       if (!isSubscribed) return;
 
       try {
-        const token = isSignedIn
-          ? ((await getToken()) || (await getClerkSessionToken()))
-          : await getClerkSessionToken();
+        const token = isSignedIn ? await getToken() : null;
         if (!token) {
           // Unauthenticated visitors receive live messages via REST sync polling;
           // WebSocket upgrades strictly require a verified Clerk session.
@@ -495,6 +494,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       return false;
     }
 
+    const token = await getToken();
+    if (!token) {
+      console.error("No token!");
+      setChatError('Unauthorized: Active Clerk session token unavailable. Please refresh or sign in again.');
+      setTimeout(() => setChatError(null), 6000);
+      return false;
+    }
+
     // 1) CLIENT-SIDE UNIQUE ID: Generate a unique ID (crypto.randomUUID() or Date.now().toString())
     // Use this exact ID for both the optimistic UI update AND send it to the backend to be saved as the message ID.
     const clientUniqueId = typeof crypto !== 'undefined' && crypto.randomUUID
@@ -526,10 +533,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       return updated;
     });
 
-    // 3) Persist to Backend D1 / SQLite Database with verified Clerk username
+    // 3) Persist to Backend D1 / SQLite Database with verified Clerk username and explicit JWT token
     try {
-      const token = (await getToken().catch(() => null)) || (await getClerkSessionToken());
-      const resp = await cloudflareApi.sendChatMessage(payload, token);
+      const outboundPayload = {
+        ...payload,
+        type: 'message',
+        token,
+      };
+      const resp = await cloudflareApi.sendChatMessage(outboundPayload, token);
       if (!resp.success) {
         throw new Error(resp.error || 'Failed to post message');
       }
@@ -542,8 +553,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         try {
           const wsPayload = {
             ...(resp.message || payload),
+            type: 'message',
             user: verifiedUsername,
             username: verifiedUsername,
+            token,
           };
           wsRef.current.send(JSON.stringify(wsPayload));
         } catch (err) {

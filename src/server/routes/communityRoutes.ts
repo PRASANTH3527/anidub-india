@@ -1,4 +1,10 @@
-import { getAuth, validateAndRateLimitFeedback, extractClientIp } from '../../utils/auth';
+import {
+  getAuth,
+  verifyChatTokenDirect,
+  extractExplicitChatToken,
+  validateAndRateLimitFeedback,
+  extractClientIp,
+} from '../../utils/auth';
 import { buildVerifiedChatIdentity, validateChatSender } from '../../utils/chatIdentity';
 import { getErrorMessage, sendTelegramAlert, type RouteContext } from './shared';
 
@@ -7,7 +13,8 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
 
   // 1. WebSocket Chat Handshake (/ws & /ws/api/chat/stream)
   if (path === '/ws' || path === '/ws/api/chat/stream') {
-    const session = await getAuth(request, env);
+    const explicitWsToken = extractExplicitChatToken(request);
+    const session = await verifyChatTokenDirect(explicitWsToken, env);
     if (!session.userId) {
       return jsonResponse({ error: session.error || 'Unauthorized: Active Clerk user session required for chat stream' }, 401, request);
     }
@@ -105,9 +112,15 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
 
     if (method === 'POST') {
       try {
-        const session = await getAuth(request, env);
+        const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+        const explicitToken = extractExplicitChatToken(request, body);
+        const session = await verifyChatTokenDirect(explicitToken, env);
         if (!session.userId) {
-          return jsonResponse({ error: 'Unauthorized: Active Clerk user session required to post chat messages' }, 401, request);
+          return jsonResponse(
+            { error: session.error || 'Unauthorized: Active Clerk user session required to post chat messages' },
+            401,
+            request
+          );
         }
 
         const identity = buildVerifiedChatIdentity({
@@ -118,8 +131,6 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
           claims: session.claims,
           clerkUser: session.clerkUser,
         });
-
-        const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
         const {
           user,
           username,

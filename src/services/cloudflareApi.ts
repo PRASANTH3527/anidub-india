@@ -138,6 +138,8 @@ export interface FeedbackRecord {
 
 export interface ChatMessagePayload {
   id?: string | number;
+  type?: string;
+  token?: string;
   user?: string;
   username?: string;
   user_avatar?: string;
@@ -224,9 +226,11 @@ class CloudflareApiService {
       ...(options.headers as Record<string, string> | undefined),
     };
 
-    const clerkJwt = await getClerkSessionToken();
-    if (clerkJwt && !mergedHeaders['Authorization'] && !mergedHeaders['authorization']) {
-      mergedHeaders['Authorization'] = `Bearer ${clerkJwt}`;
+    if (!mergedHeaders['Authorization'] && !mergedHeaders['authorization']) {
+      const clerkJwt = await getClerkSessionToken();
+      if (clerkJwt) {
+        mergedHeaders['Authorization'] = `Bearer ${clerkJwt}`;
+      }
     }
 
     const fetchOptions: RequestInit = {
@@ -1087,14 +1091,18 @@ class CloudflareApiService {
     try {
       const { clerk_user_id: _ignoredClerkId, user_id: _ignoredUserId, userId: _ignoredUid, ...safePayload } = payload || {};
       const headers = this.getHeaders(false);
-      const token = explicitToken || await getClerkSessionToken();
+      const token = explicitToken || safePayload.token || await getClerkSessionToken();
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
+      const bodyWithToken: ChatMessagePayload = {
+        ...safePayload,
+        ...(token ? { token } : {}),
+      };
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
         method: 'POST',
         headers,
-        body: JSON.stringify(safePayload)
+        body: JSON.stringify(bodyWithToken)
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success !== false) {
