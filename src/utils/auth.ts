@@ -671,41 +671,10 @@ export async function verifyChatTokenDirect(
       verifiedPayload = verified as Record<string, any>;
     }
   } catch (err: any) {
-    const errMsg = String(err?.message || '').toLowerCase();
-    if (
-      errMsg.includes('jwks') ||
-      errMsg.includes('signing key') ||
-      errMsg.includes('kid') ||
-      errMsg.includes('signature') ||
-      errMsg.includes('key')
-    ) {
-      try {
-        const parts = cleanToken.split('.');
-        if (parts.length === 3) {
-          const base64Url = parts[1];
-          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-          const jsonPayload = decodeURIComponent(
-            atob(base64)
-              .split('')
-              .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-              .join('')
-          );
-          const decodedClaims = JSON.parse(jsonPayload);
-          if (decodedClaims && typeof decodedClaims.sub === 'string' && decodedClaims.sub.trim()) {
-            verifiedPayload = decodedClaims as Record<string, any>;
-          }
-        }
-      } catch {
-        // Fallback failed
-      }
-    }
-
-    if (!verifiedPayload) {
-      return {
-        ...emptySession,
-        error: `Clerk token verification failed: ${err?.message || 'Invalid or expired token'}`,
-      };
-    }
+    return {
+      ...emptySession,
+      error: `Clerk token verification failed: ${err?.message || 'Invalid or expired token'}`,
+    };
   }
 
   if (!verifiedPayload || typeof verifiedPayload.sub !== 'string' || !verifiedPayload.sub.trim()) {

@@ -461,10 +461,9 @@ test('edge-entry.ts and functions/api/[[route]].ts preserve non-enumerable Cloud
   assert.equal(json.message.clerk_user_id, 'user_proxy_secret_1');
 });
 
-test('verifyChatTokenDirect gracefully falls back to payload claims when JWKS signing key or kid verification fails', async () => {
+test('verifyChatTokenDirect rejects unverified or invalid JWT tokens with strict signature verification', async () => {
   const { verifyChatTokenDirect } = await import('../src/utils/auth');
 
-  // Construct a well-formed 3-part JWT with arbitrary signature that will fail JWKS signature verification
   const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: 'unknown_kid' })).toString('base64url');
   const payload = Buffer.from(
     JSON.stringify({
@@ -480,7 +479,6 @@ test('verifyChatTokenDirect gracefully falls back to payload claims when JWKS si
     CLERK_SECRET_KEY: 'sk_test_fake_key_for_jwks_test',
   });
 
-  assert.equal(session.authenticated, true);
-  assert.equal(session.userId, 'user_jwks_fallback_99');
-  assert.equal(session.username, 'FallbackUser');
+  assert.equal(session.authenticated, false);
+  assert.equal(session.userId, null);
 });

@@ -336,6 +336,8 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
+  const reconnectAttemptsRef = useRef(0);
+
   // 3. WebSocket Connection & Auto-Reconnect Logic
   useEffect(() => {
     let isSubscribed = true;
@@ -346,9 +348,9 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       try {
         const token = isSignedIn ? await getToken() : null;
         if (!token) {
-          // Unauthenticated visitors receive live messages via REST sync polling;
-          // WebSocket upgrades strictly require a verified Clerk session.
-          setConnectionStatus('connected');
+          // Unauthenticated visitors / guests receive live messages via REST polling;
+          // they do not have an active WebSocket connection, so status remains disconnected/polling.
+          setConnectionStatus('disconnected');
           return;
         }
 
@@ -364,7 +366,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         ws.onopen = () => {
           if (!isSubscribed) return;
           setConnectionStatus('connected');
-          setReconnectAttempts(0);
+          reconnectAttemptsRef.current = 0;
         };
 
         ws.onmessage = (event) => {
@@ -450,9 +452,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
           if (event && event.code >= 4000 && event.reason) {
             setChatError(event.reason);
           }
-          // Auto-reconnect with backoff
-          const delay = Math.min(10000, 1000 * Math.pow(1.5, reconnectAttempts));
-          setReconnectAttempts(prev => prev + 1);
+          // Auto-reconnect with backoff using reconnectAttemptsRef
+          const attempts = reconnectAttemptsRef.current;
+          const delay = Math.min(10000, 1000 * Math.pow(1.5, attempts));
+          reconnectAttemptsRef.current = attempts + 1;
           reconnectTimerRef.current = setTimeout(() => {
             connectWebSocket();
           }, delay);
@@ -473,7 +476,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         clearTimeout(reconnectTimerRef.current);
       }
     };
-  }, [reconnectAttempts, isSignedIn, getToken, currentUserName, verifiedClerkUsername, mergeMessageLists]);
+  }, [isSignedIn, getToken, currentUserName, verifiedClerkUsername, mergeMessageLists]);
 
   // 4. Send Message & Review: Client-side unique ID + Verified Clerk Username + Direct REST & WebSocket Persistence
   const sendMessage = async (
