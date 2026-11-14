@@ -94,7 +94,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 w-full max-w-full bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 transition-colors box-border select-none">
-      <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
+      <div className="w-full max-w-7xl mx-auto px-2.5 min-[390px]:px-3 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1.5 min-[390px]:gap-2 sm:gap-4">
         
         {/* LEFT: BRAND LOGO (Natural width, transparent, no empty box or spacing artifacts) */}
         <motion.div 
@@ -110,12 +110,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             variant="horizontal"
             size="sm"
             hideTrailingLine={true}
-            className="h-7 sm:h-8 w-auto object-contain select-none shrink-0"
+            className="h-6 sm:h-8 w-auto object-contain select-none shrink-0"
           />
         </motion.div>
 
         {/* CENTER SCROLLABLE NAVIGATION ICONS */}
-        <nav className="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0 overflow-x-auto no-scrollbar py-1 justify-start">
+        <nav className="flex items-center flex-1 min-w-0 overflow-x-auto no-scrollbar py-1">
+          <div className="flex items-center gap-0.5 min-[375px]:gap-1 min-[410px]:gap-1.5 sm:gap-1.5 ml-auto sm:ml-0 shrink-0">
           
           {/* 1. Compass (Directory) */}
           <motion.button
@@ -125,7 +126,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               if (setFeedView) setFeedView('library');
             }}
             title="Explore Catalog Directory"
-            className={`w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
+            className={`w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               isDirectoryActive
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
@@ -142,7 +143,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               if (setFeedView) setFeedView('foryou');
             }}
             title="For You Recommendations"
-            className={`w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
+            className={`w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               isForYouActive
                 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
@@ -156,7 +157,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => setActiveTab('watchlist')}
             title="My Saved Anime Watchlist"
-            className={`relative w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
+            className={`relative w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               activeTab === 'watchlist'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
@@ -175,7 +176,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => setActiveTab('schedule')}
             title="Weekly Simulcast Schedule"
-            className={`w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
+            className={`w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               activeTab === 'schedule'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
@@ -189,7 +190,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => setActiveTab('chat')}
             title="Live Community Chat & Dub Discussions"
-            className={`relative w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
+            className={`relative w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               activeTab === 'chat'
                 ? 'bg-purple-600/30 text-purple-300 border border-purple-400 shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
@@ -204,7 +205,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => setActiveTab('profile')}
             title="User Profile"
-            className={`w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
+            className={`w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               activeTab === 'profile'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
@@ -231,7 +232,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => setActiveTab('tierlist')}
             title="Anime Tier List & Community Rankings"
-            className={`flex w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
+            className={`flex w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               activeTab === 'tierlist'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
@@ -247,14 +248,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               if (onOpenCollection) onOpenCollection();
             }}
             title="Create Shareable Anime Collection"
-            className="w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50 transition-colors cursor-pointer shrink-0"
+            className="w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50 transition-colors cursor-pointer shrink-0"
           >
             <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
           </motion.button>
+          </div>
         </nav>
 
-        {/* RIGHT UTILITY ACTIONS */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0 ml-1">
+        {/* RIGHT UTILITY ACTIONS (Hidden on mobile unless admin button is shown to avoid trailing gap) */}
+        <div className={`${isAdminAuthenticated ? 'flex' : 'hidden sm:flex'} items-center gap-1.5 sm:gap-2 shrink-0`}>
 
           {/* Create List Button (LG screens) */}
           <motion.button
