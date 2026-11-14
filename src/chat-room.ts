@@ -1,4 +1,9 @@
-import { verifyChatTokenDirect, extractExplicitChatToken, type EnvBindings } from './utils/auth';
+import {
+  verifyChatTokenDirect,
+  extractExplicitChatToken,
+  isApprovedOrigin,
+  type EnvBindings,
+} from './utils/auth';
 import {
   buildVerifiedChatIdentity,
   validateChatSender,
@@ -28,6 +33,23 @@ export class ChatRoom {
     this.env = env || {};
     this.sessions = new Set();
     this.socketIdentities = new Map();
+  }
+
+  private getCorsHeaders(request: Request, contentType?: string): Record<string, string> {
+    const origin = request?.headers?.get?.('Origin') || request?.headers?.get?.('origin') || '';
+    const resolvedOrigin =
+      origin && isApprovedOrigin(origin, this.env)
+        ? origin
+        : 'https://anidub-india-a1y.pages.dev';
+
+    return {
+      ...(contentType ? { 'Content-Type': contentType } : {}),
+      Vary: 'Origin',
+      'Access-Control-Allow-Origin': resolvedOrigin,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Upgrade, Connection, x-device-id',
+      'Access-Control-Allow-Credentials': 'true',
+    };
   }
 
   public attachVerifiedIdentity(ws: any, identity: VerifiedChatIdentity): void {
@@ -152,6 +174,14 @@ export class ChatRoom {
   }
 
   async fetch(request: Request): Promise<Response> {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: this.getCorsHeaders(request),
+      });
+    }
+
+    const jsonCorsHeaders = this.getCorsHeaders(request, 'application/json');
     const upgradeHeader = request.headers.get('Upgrade');
     if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
       const explicitWsToken = extractExplicitChatToken(request);
@@ -164,7 +194,7 @@ export class ChatRoom {
           }),
           {
             status: 401,
-            headers: { 'Content-Type': 'application/json' },
+            headers: jsonCorsHeaders,
           }
         );
       }
@@ -181,7 +211,7 @@ export class ChatRoom {
       if (!identity) {
         return new Response(
           JSON.stringify({ ok: false, error: 'Unable to resolve verified Clerk chat identity.' }),
-          { status: 401, headers: { 'Content-Type': 'application/json' } }
+          { status: 401, headers: jsonCorsHeaders }
         );
       }
 
@@ -203,7 +233,7 @@ export class ChatRoom {
               }),
               {
                 status: handshakeCheck.status,
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonCorsHeaders,
               }
             );
           }
@@ -241,6 +271,7 @@ export class ChatRoom {
         return new Response(null, {
           status: 101,
           webSocket: client,
+          headers: this.getCorsHeaders(request),
         } as any);
       }
     }
@@ -254,7 +285,7 @@ export class ChatRoom {
         } catch {
           return new Response(JSON.stringify({ ok: false, error: 'Invalid JSON payload' }), {
             status: 400,
-            headers: { 'Content-Type': 'application/json' },
+            headers: jsonCorsHeaders,
           });
         }
 
@@ -266,7 +297,7 @@ export class ChatRoom {
               ok: false,
               error: session.error || 'Unauthorized: Valid Clerk session required to broadcast.',
             }),
-            { status: 401, headers: { 'Content-Type': 'application/json' } }
+            { status: 401, headers: jsonCorsHeaders }
           );
         }
 
@@ -291,7 +322,7 @@ export class ChatRoom {
             JSON.stringify({ ok: false, code: senderCheck.code, error: senderCheck.error }),
             {
               status: senderCheck.status,
-              headers: { 'Content-Type': 'application/json' },
+              headers: jsonCorsHeaders,
             }
           );
         }
@@ -304,12 +335,12 @@ export class ChatRoom {
         this.broadcast(JSON.stringify(sanitized));
         return new Response(JSON.stringify({ ok: true, broadcasted: true }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: jsonCorsHeaders,
         });
       } catch (err: any) {
         return new Response(JSON.stringify({ ok: false, error: err?.message || 'Broadcast failed' }), {
           status: 500,
-          headers: { 'Content-Type': 'application/json' },
+          headers: jsonCorsHeaders,
         });
       }
     }
@@ -322,7 +353,7 @@ export class ChatRoom {
       }),
       {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        headers: jsonCorsHeaders,
       }
     );
   }

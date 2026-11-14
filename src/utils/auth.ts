@@ -230,6 +230,8 @@ const BASE_AUTHORIZED_PARTIES = [
   'https://anidub-india-a1y.pages.dev',
   'https://anidub-india.samayaprasanth0.workers.dev',
   'https://anidub-api.samayaprasanth0.workers.dev',
+  'https://anidub-apiii.samayaprasanth0.workers.dev',
+  'https://anime-chat.samayaprasanth0.workers.dev',
 ] as const;
 
 function parseExactOrigin(raw?: string | null): string | null {

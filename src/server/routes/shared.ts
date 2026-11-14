@@ -155,7 +155,7 @@ export function buildJsonResponse(
     'Content-Type': 'application/json',
     Vary: 'Origin',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-device-id',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Upgrade, Connection, x-device-id',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Origin': resolvedOrigin,
     ...(extraHeaders || {}),

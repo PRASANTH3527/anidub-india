@@ -374,3 +374,30 @@ test('LiveChat.tsx and AnimeDetailPage.tsx enforce Clerk verified username and h
   assert.ok(detailPageCode.includes('getVerifiedClerkUsername(user)'));
   assert.ok(detailPageCode.includes("errData?.type === 'error'"));
 });
+
+test('getCloudflareWsUrl targets anime-chat worker with ?token= and anime-chat worker sets CORS headers for anidub-india-a1y.pages.dev', async () => {
+  const { getCloudflareWsUrl } = await import('../src/config/cloudflare');
+  const wsUrl = getCloudflareWsUrl('/ws', 'header.payload.sig');
+  assert.equal(wsUrl, 'wss://anime-chat.samayaprasanth0.workers.dev/ws?token=header.payload.sig');
+
+  const edgeModule = await import('../src/edge-entry');
+  const preflightRes = await edgeModule.default.fetch(
+    new Request('https://anime-chat.samayaprasanth0.workers.dev/ws', {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://anidub-india-a1y.pages.dev' },
+    }),
+    { DB: null }
+  );
+  assert.equal(preflightRes.status, 204);
+  assert.equal(preflightRes.headers.get('Access-Control-Allow-Origin'), 'https://anidub-india-a1y.pages.dev');
+
+  const room = new ChatRoom({}, {});
+  const roomOptionsRes = await room.fetch(
+    new Request('https://anime-chat.samayaprasanth0.workers.dev/ws', {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://anidub-india-a1y.pages.dev' },
+    })
+  );
+  assert.equal(roomOptionsRes.status, 204);
+  assert.equal(roomOptionsRes.headers.get('Access-Control-Allow-Origin'), 'https://anidub-india-a1y.pages.dev');
+});

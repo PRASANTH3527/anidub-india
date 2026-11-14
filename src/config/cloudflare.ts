@@ -109,29 +109,21 @@ export function getCloudflareUrl(path: string): string {
   }
 }
 
+export const CHAT_WORKER_WS_URL = 'wss://anime-chat.samayaprasanth0.workers.dev';
+
 /**
- * Resolves full Cloudflare WebSocket URL.
+ * Resolves full Cloudflare WebSocket URL pointing directly to the external
+ * `anime-chat` Durable Object worker (`wss://anime-chat.samayaprasanth0.workers.dev`),
+ * preserving the Clerk `?token=` query parameter for session authentication.
  */
 export function getCloudflareWsUrl(path: string, token?: string | null): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  let baseWsUrl = '';
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1' || host.includes('.run.app')) {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      baseWsUrl = `${protocol}//${window.location.host}${cleanPath}`;
-    }
-  }
-  if (!baseWsUrl) {
-    if (!CLOUDFLARE_API_URL || CLOUDFLARE_API_URL.trim() === '') {
-      const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
-      baseWsUrl = `${protocol}//${host}${cleanPath}`;
-    } else {
-      const cleanBase = CLOUDFLARE_API_URL.replace(/\/+$/, '').replace(/^http/, 'ws');
-      baseWsUrl = `${cleanBase}${cleanPath}`;
-    }
-  }
+  const configuredWsBase =
+    CLOUDFLARE_API_URL && CLOUDFLARE_API_URL.trim() !== ''
+      ? CLOUDFLARE_API_URL.replace(/\/+$/, '').replace(/^http/, 'ws')
+      : CHAT_WORKER_WS_URL;
+  const baseWsUrl = `${configuredWsBase}${cleanPath}`;
+
   if (token && token.trim()) {
     const sep = baseWsUrl.includes('?') ? '&' : '?';
     return `${baseWsUrl}${sep}token=${encodeURIComponent(token.trim())}`;
