@@ -430,17 +430,7 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
     }
   }
 
-  // Defense-in-depth: strictly enforce azp claim matches authorizedParties
-  if (verifiedPayload) {
-    const tokenAzp = parseExactOrigin(typeof verifiedPayload.azp === 'string' ? verifiedPayload.azp : null);
-    const allowedPartySet = new Set(
-      authorizedParties.map((p) => parseExactOrigin(p)).filter((p): p is string => Boolean(p))
-    );
-    if (!tokenAzp || !allowedPartySet.has(tokenAzp)) {
-      verifyErrorDetail = `Invalid JWT Authorized party claim (azp): ${verifiedPayload.azp || 'missing'}`;
-      verifiedPayload = null;
-    }
-  }
+
 
   if (!verifiedPayload || typeof verifiedPayload.sub !== 'string' || !verifiedPayload.sub.trim()) {
     if (!token) {
