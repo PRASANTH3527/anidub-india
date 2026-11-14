@@ -366,8 +366,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     addTerminalLog('SYNC', 'Querying Cloudflare Edge D1 endpoint: /api/anime');
     setApiError(false);
     try {
-      const { data } = await cloudflareApi.fetchCatalog({ limit: 5000 });
-      const items = (data || []).map((item: any) => ({
+      const { data, meta } = await cloudflareApi.fetchCatalog({ page: 1, limit: 100 });
+      const allData = [...(data || [])];
+      if (meta && meta.totalPages > 1) {
+        const extraPages = Math.min(meta.totalPages, 10);
+        for (let p = 2; p <= extraPages; p++) {
+          const nextRes = await cloudflareApi.fetchCatalog({ page: p, limit: 100 });
+          if (nextRes?.data?.length) allData.push(...nextRes.data);
+        }
+      }
+      const items = allData.map((item: any) => ({
         ...item,
         type: item.type || item.Type || 'TV Series',
         Type: item.type || item.Type || 'TV Series'

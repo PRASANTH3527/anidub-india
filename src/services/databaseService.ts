@@ -76,7 +76,7 @@ class DatabaseService {
     }
 
     try {
-      const { data } = await cloudflareApi.fetchCatalog({ limit: 5000 });
+      const { data } = await cloudflareApi.fetchCatalog({ page: 1, limit: 50 });
       const rawItems = data || [];
       const items = rawItems.filter((item: any) => 
         (item.submissionStatus === 'approved' || item.approval_status === 'approved' || item.is_published === 1)
@@ -99,10 +99,11 @@ class DatabaseService {
   }
 
   public async getApprovedAnimePaginated(cursor: number = 0, limit: number = 20): Promise<{ data: AnimeRecord[]; nextCursor: number | null }> {
-    const all = await this.getApprovedAnime();
-    const slice = all.slice(cursor, cursor + limit);
-    const nextCursor = cursor + limit < all.length ? cursor + limit : null;
-    return { data: slice, nextCursor };
+    const safeLimit = Math.max(1, limit || 20);
+    const page = Math.floor(Math.max(0, cursor) / safeLimit) + 1;
+    const { data, meta } = await cloudflareApi.fetchCatalog({ page, limit: safeLimit });
+    const nextCursor = meta.hasNextPage ? page * safeLimit : null;
+    return { data: data || [], nextCursor };
   }
 
   public async searchApprovedAnime(

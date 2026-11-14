@@ -48,10 +48,31 @@ export interface FetchCatalogOptions {
   page?: number;
   limit?: number;
   search?: string;
+  language?: string;
   genre?: string;
+  platform?: string;
+  type?: string;
   status?: string;
   sort?: string;
   includePending?: boolean;
+}
+
+export interface CatalogMeta {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  limit: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
+export interface CatalogSummary {
+  totalAnime: number;
+  totalVotes: number;
+  totalLanguages: number;
+  languagesList: string[];
+  languagesString: string;
+  languageFilters?: { label: string; value: string; count: number }[];
 }
 
 class CloudflareApiService {
@@ -143,14 +164,27 @@ class CloudflareApiService {
   }
 
   /**
-   * READ: Fetches anime catalog from Cloudflare Worker / D1
+   * READ: Fetches paginated anime catalog from Cloudflare Worker / D1
    */
-  public async fetchCatalog(options: FetchCatalogOptions = {}): Promise<{ data: any[]; total: number; page: number; totalPages: number }> {
+  public async fetchCatalog(options: FetchCatalogOptions = {}): Promise<{
+    data: any[];
+    meta: CatalogMeta;
+    summary?: CatalogSummary | null;
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
+    const requestedPage = Math.max(1, options.page || 1);
+    const requestedLimit = Math.max(1, options.limit || 12);
+
     const queryParams = new URLSearchParams();
-    if (options.limit) queryParams.set('limit', String(options.limit));
-    if (options.page) queryParams.set('page', String(options.page));
-    if (options.search) queryParams.set('search', options.search);
+    queryParams.set('page', String(requestedPage));
+    queryParams.set('limit', String(requestedLimit));
+    if (options.search && options.search.trim()) queryParams.set('search', options.search.trim());
+    if (options.language && options.language !== 'All') queryParams.set('language', options.language);
     if (options.genre && options.genre !== 'All' && options.genre !== 'All Genres') queryParams.set('genre', options.genre);
+    if (options.platform && options.platform !== 'All' && options.platform !== 'All Platforms') queryParams.set('platform', options.platform);
+    if (options.type && options.type !== 'All' && options.type !== 'All Types') queryParams.set('type', options.type);
     if (options.status && options.status !== 'All' && options.status !== 'All Status') queryParams.set('status', options.status);
     if (options.sort) queryParams.set('sort', options.sort);
     if (options.includePending) queryParams.set('includePending', 'true');
@@ -158,6 +192,15 @@ class CloudflareApiService {
     const qs = queryParams.toString();
     const endpoint = `${CLOUDFLARE_ENDPOINTS.CATALOG}${qs ? `?${qs}` : ''}`;
     const url = getCloudflareUrl(endpoint);
+
+    const fallbackMeta: CatalogMeta = {
+      currentPage: requestedPage,
+      totalPages: 1,
+      totalItems: 0,
+      limit: requestedLimit,
+      hasNextPage: false,
+      hasPrevPage: requestedPage > 1,
+    };
 
     const res = await this.smartFetch(endpoint, {
       method: 'GET',
@@ -169,8 +212,10 @@ class CloudflareApiService {
       console.warn(`[API Notice] GET ${url} received status ${res.status}: ${errText}.`);
       return {
         data: [],
+        meta: fallbackMeta,
+        summary: null,
         total: 0,
-        page: options.page || 1,
+        page: requestedPage,
         totalPages: 1
       };
     }
@@ -180,26 +225,40 @@ class CloudflareApiService {
       console.warn(`[API Notice] Received non-JSON content type (${contentType}) from ${url}.`);
       return {
         data: [],
+        meta: fallbackMeta,
+        summary: null,
         total: 0,
-        page: options.page || 1,
+        page: requestedPage,
         totalPages: 1
       };
     }
 
     const json = await res.json().catch(() => ({ data: [] }));
     const data = json.data || (Array.isArray(json) ? json : []);
-    const pagination = json.pagination || {
-      page: options.page || 1,
-      total: data.length,
-      limit: options.limit || data.length,
-      totalPages: 1
+    const rawMeta = json.meta || {};
+    const rawPag = json.pagination || {};
+
+    const currentPage = Number(rawMeta.currentPage ?? rawPag.page ?? requestedPage) || 1;
+    const totalItems = Number(rawMeta.totalItems ?? rawPag.total ?? data.length) || 0;
+    const resolvedLimit = Number(rawMeta.limit ?? rawPag.limit ?? requestedLimit) || requestedLimit;
+    const totalPages = Math.max(1, Number(rawMeta.totalPages ?? rawPag.totalPages ?? Math.ceil(totalItems / resolvedLimit)) || 1);
+
+    const meta: CatalogMeta = {
+      currentPage,
+      totalPages,
+      totalItems,
+      limit: resolvedLimit,
+      hasNextPage: rawMeta.hasNextPage !== undefined ? Boolean(rawMeta.hasNextPage) : currentPage < totalPages,
+      hasPrevPage: rawMeta.hasPrevPage !== undefined ? Boolean(rawMeta.hasPrevPage) : currentPage > 1,
     };
 
     return {
       data,
-      total: pagination.total ?? data.length,
-      page: pagination.page ?? 1,
-      totalPages: pagination.totalPages ?? 1
+      meta,
+      summary: json.summary || null,
+      total: meta.totalItems,
+      page: meta.currentPage,
+      totalPages: meta.totalPages
     };
   }
 

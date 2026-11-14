@@ -5,6 +5,9 @@
  */
 
 import { getAuth, validateAndRateLimitFeedback, extractClientIp, isApprovedOrigin } from '../../src/utils/auth';
+import { buildVerifiedChatIdentity, validateChatSender } from '../../src/utils/chatIdentity';
+import { buildLanguageLikePatterns, buildPaginatedMeta, parsePaginationQuery } from '../../src/utils/pagination';
+import { computeDynamicLanguageFilters, extractUniqueLanguagesFromAnimeList, formatLanguagesBulletList } from '../../src/utils/languages';
 import { ChatRoom } from '../../src/chat-room';
 
 export { ChatRoom };
@@ -253,8 +256,33 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/ws' || path === '/ws/api/chat/stream') {
     const session = await getAuth(request, env);
     if (!session.userId) {
-      return jsonResponse({ error: 'Unauthorized: Active Clerk user session required for chat stream' }, 401, request);
+      return jsonResponse({ error: session.error || 'Unauthorized: Active Clerk user session required for chat stream' }, 401, request);
     }
+
+    const identity = buildVerifiedChatIdentity({
+      userId: session.userId,
+      username: session.username,
+      email: session.email,
+      isAdmin: session.isAdmin,
+      claims: session.claims,
+      clerkUser: session.clerkUser,
+    });
+    const requestedUsername = url.searchParams.get('username') || url.searchParams.get('user');
+    if (requestedUsername) {
+      const handshakeCheck = validateChatSender({
+        claimedUsername: requestedUsername,
+        identity,
+        env,
+      });
+      if (!handshakeCheck.ok) {
+        return jsonResponse(
+          { ok: false, code: handshakeCheck.code, error: handshakeCheck.error },
+          handshakeCheck.status,
+          request
+        );
+      }
+    }
+
     if (
       env.CHAT_ROOM &&
       typeof env.CHAT_ROOM.idFromName === 'function' &&
@@ -264,7 +292,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const roomStub = env.CHAT_ROOM.get(roomId);
       return roomStub.fetch(request);
     }
-    return jsonResponse({ ok: true, userId: session.userId }, 200, request);
+    return jsonResponse({ ok: true, userId: session.userId, username: identity?.username || null }, 200, request);
   }
 
   if (path === '/api/notifications' && method === 'GET') {
@@ -387,17 +415,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
-  // 3. GET /api/anime (Catalog with pagination & search)
+  // 3. GET /api/anime (Catalog with server-side LIMIT/OFFSET pagination, filtering & search)
   if (path === '/api/anime' && method === 'GET') {
     try {
-      const page = parseInt(url.searchParams.get('page') || '1');
-      const limit = parseInt(url.searchParams.get('limit') || '8');
-      const offset = (page - 1) * limit;
-      const genre = url.searchParams.get('genre');
-      const status = url.searchParams.get('status');
-      const search = url.searchParams.get('search');
-      const sort = url.searchParams.get('sort') || 'popularity';
-
       const includePending = url.searchParams.get('includePending') === 'true';
       if (includePending) {
         const session = await getAuth(request, env);
@@ -406,59 +426,139 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         }
       }
 
+      const { page, limit, offset } = parsePaginationQuery(url.searchParams, {
+        defaultLimit: 12,
+        maxLimit: includePending ? 500 : 100,
+      });
+
+      const genre = url.searchParams.get('genre');
+      const language = url.searchParams.get('language');
+      const platform = url.searchParams.get('platform');
+      const animeType = url.searchParams.get('type');
+      const status = url.searchParams.get('status');
+      const rawSearch = url.searchParams.get('search');
+      const search = rawSearch && !rawSearch.trim().toLowerCase().startsWith('/admin') ? rawSearch.trim() : '';
+      const sort = url.searchParams.get('sort') || 'popularity';
+
       if (env.DB) {
         try {
-          let whereClauses: string[] = [];
-          let params: any[] = [];
+          const basePublishedClause = "(is_published = 1 OR is_published = true) AND status != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL)";
+          const whereClauses: string[] = [];
+          const params: any[] = [];
 
           if (!includePending) {
-            whereClauses.push("(is_published = 1 OR is_published = true) AND status != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL)");
+            whereClauses.push(basePublishedClause);
           }
 
-          if (genre && genre !== 'All') {
-            whereClauses.push("genres LIKE ?");
-            params.push(`%${genre}%`);
+          if (language && language !== 'All') {
+            const langPatterns = buildLanguageLikePatterns(language);
+            if (langPatterns.length > 0) {
+              const langOr = langPatterns.map(() => "LOWER(COALESCE(languages, 'HIN,TAM,TEL')) LIKE ?").join(' OR ');
+              whereClauses.push(`(${langOr})`);
+              params.push(...langPatterns);
+            }
           }
-          if (status && status !== 'All') {
-            whereClauses.push("status = ?");
-            params.push(status);
+
+          if (genre && genre !== 'All' && genre !== 'All Genres') {
+            whereClauses.push("LOWER(COALESCE(genres, '')) LIKE ?");
+            params.push(`%${genre.trim().toLowerCase()}%`);
           }
+
+          if (platform && platform !== 'All' && platform !== 'All Platforms') {
+            whereClauses.push("LOWER(COALESCE(platform, 'Crunchyroll')) LIKE ?");
+            params.push(`%${platform.trim().toLowerCase()}%`);
+          }
+
+          if (animeType && animeType !== 'All' && animeType !== 'All Types') {
+            whereClauses.push("LOWER(COALESCE(type, 'TV Series')) LIKE ?");
+            params.push(`%${animeType.trim().toLowerCase()}%`);
+          }
+
+          if (status && status !== 'All' && status !== 'All Status') {
+            const normStatus = status.trim().toLowerCase();
+            if (normStatus === 'airing') {
+              whereClauses.push("(LOWER(COALESCE(status, '')) IN ('airing', 'ongoing') OR LOWER(COALESCE(status, '')) LIKE '%simulcast%')");
+            } else if (normStatus === 'completed') {
+              whereClauses.push("(LOWER(COALESCE(status, '')) LIKE '%complete%' OR LOWER(COALESCE(status, '')) LIKE '%finished%')");
+            } else {
+              whereClauses.push("LOWER(COALESCE(status, '')) = ?");
+              params.push(normStatus);
+            }
+          }
+
           if (search) {
-            whereClauses.push("(title LIKE ? OR synopsis LIKE ? OR genres LIKE ?)");
-            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+            const likeSearch = `%${search.toLowerCase()}%`;
+            whereClauses.push("(LOWER(title) LIKE ? OR LOWER(COALESCE(synopsis, '')) LIKE ? OR LOWER(COALESCE(genres, '')) LIKE ? OR LOWER(COALESCE(studio, '')) LIKE ?)");
+            params.push(likeSearch, likeSearch, likeSearch, likeSearch);
           }
+
           const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-          let orderSql = "ORDER BY popularity DESC";
-          if (sort === 'rating') orderSql = "ORDER BY rating DESC";
+          let orderSql = "ORDER BY popularity DESC, id DESC";
+          if (sort === 'rating') orderSql = "ORDER BY rating DESC, id DESC";
           else if (sort === 'newest') orderSql = "ORDER BY year DESC, id DESC";
-          else if (sort === 'title') orderSql = "ORDER BY title ASC";
+          else if (sort === 'title') orderSql = "ORDER BY title ASC, id DESC";
 
           const countRes = await env.DB.prepare(`SELECT COUNT(*) as total FROM anime ${whereSql}`).bind(...params).first();
-          const total = countRes ? Number(countRes.total) : 0;
+          const totalItems = countRes ? Number(countRes.total) : 0;
+          const meta = buildPaginatedMeta(totalItems, page, limit);
 
-          if (total > 0) {
+          let results: any[] = [];
+          if (totalItems > 0) {
             const queryParams = [...params, limit, offset];
             const dataRes = await env.DB.prepare(`SELECT * FROM anime ${whereSql} ${orderSql} LIMIT ? OFFSET ?`).bind(...queryParams).all();
-            return jsonResponse({
-              data: dataRes.results || [],
-              pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 }
-            }, 200, request, {
-              'Cache-Control': 'public, max-age=60, s-maxage=120, stale-while-revalidate=300'
-            });
+            results = dataRes.results || [];
           }
+
+          let summary: any = undefined;
+          try {
+            const summaryWhere = includePending ? '' : `WHERE ${basePublishedClause}`;
+            const aggRes = await env.DB.prepare(
+              `SELECT COUNT(*) as totalAnime, COALESCE(SUM(MAX(0, CASE WHEN upvotes > 0 THEN upvotes ELSE COALESCE(popularity, 0) END)), 0) as totalVotes FROM anime ${summaryWhere}`
+            ).first();
+            const langRows = await env.DB.prepare(`SELECT languages FROM anime ${summaryWhere}`).all();
+            const langEntries = (langRows?.results || []).map((r: any) => ({ languages: r.languages }));
+            const languagesList = extractUniqueLanguagesFromAnimeList(langEntries);
+            const languageFilters = computeDynamicLanguageFilters(langEntries);
+            summary = {
+              totalAnime: Number(aggRes?.totalAnime) || totalItems,
+              totalVotes: Number(aggRes?.totalVotes) || 0,
+              totalLanguages: languagesList.length,
+              languagesList,
+              languagesString: formatLanguagesBulletList(languagesList),
+              languageFilters,
+            };
+          } catch {
+            // Optional summary fallback if upvotes/popularity columns vary
+          }
+
+          return jsonResponse({
+            data: results,
+            meta,
+            pagination: {
+              page: meta.currentPage,
+              limit: meta.limit,
+              total: meta.totalItems,
+              totalPages: meta.totalPages,
+            },
+            ...(summary ? { summary } : {}),
+          }, 200, request, {
+            'Cache-Control': 'public, max-age=60, s-maxage=120, stale-while-revalidate=300'
+          });
         } catch (dbErr) {
           console.error("D1 Catalog Query Error:", dbErr);
         }
       }
 
+      const emptyMeta = buildPaginatedMeta(0, page, limit);
       return jsonResponse({
         data: [],
-        pagination: { 
-          page, 
-          limit, 
-          total: 0, 
-          totalPages: 1 
-        }
+        meta: emptyMeta,
+        pagination: {
+          page: emptyMeta.currentPage,
+          limit: emptyMeta.limit,
+          total: 0,
+          totalPages: emptyMeta.totalPages,
+        },
       }, 200, request, {
         'Cache-Control': 'public, max-age=60, s-maxage=120, stale-while-revalidate=300'
       });
@@ -1423,15 +1523,42 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           return jsonResponse({ error: "Unauthorized: Active Clerk user session required to post chat messages" }, 401, request);
         }
 
+        const identity = buildVerifiedChatIdentity({
+          userId: session.userId,
+          username: session.username,
+          email: session.email,
+          isAdmin: session.isAdmin,
+          claims: session.claims,
+          clerkUser: session.clerkUser,
+        });
+
         const body: any = await request.json().catch(() => ({}));
         const { user, username, user_name, text, message, comment, timestamp, rating, language, dub_language, dubLanguage, isReview, is_review, avatar, user_avatar, avatar_url } = body;
         
         const rawText = text || message || comment;
         if (!rawText || !String(rawText).trim()) {
-          return jsonResponse({ error: "Missing message text" }, 400);
+          return jsonResponse({ error: "Missing message text" }, 400, request);
         }
 
-        const cleanUser = String(user || username || user_name || 'Anonymous Fan').trim().slice(0, 50);
+        const claimedUsername = user ?? username ?? user_name ?? '';
+        const senderCheck = validateChatSender({
+          claimedUsername,
+          identity,
+          env,
+        });
+        if (!senderCheck.ok || !senderCheck.verifiedUsername) {
+          return jsonResponse(
+            {
+              success: false,
+              code: senderCheck.code,
+              error: senderCheck.error || 'Username verification failed.',
+            },
+            senderCheck.status,
+            request
+          );
+        }
+
+        const cleanUser = senderCheck.verifiedUsername.slice(0, 50);
         const cleanClerkId = session.userId;
         const cleanText = String(rawText).slice(0, 1000);
         const cleanTimestamp = String(timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));

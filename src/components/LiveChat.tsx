@@ -2,28 +2,25 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { 
   MessageSquare, 
-  Radio, 
   RefreshCw, 
   Sparkles, 
   Send, 
   Dices,
-  Flame,
   CheckCircle2,
   AlertCircle,
   Star,
   ShieldCheck,
-  Volume2,
   Hash,
   ArrowDown,
   Smile,
   X
 } from 'lucide-react';
-import { CLOUDFLARE_API_URL, getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
+import { getCloudflareWsUrl } from '../config/cloudflare';
 import { cloudflareApi } from '../services/cloudflareApi';
-import { generateRandomUsername, ANIME_CHARACTERS } from '../utils/randomUser';
-import { formatRelativeTime } from '../utils/timestamps';
+import { ANIME_CHARACTERS } from '../utils/randomUser';
 import { syncAndDeduplicateChatMessages } from '../utils/chatDeduplication';
-import { useUser } from '@clerk/nextjs';
+import { getVerifiedClerkUsername } from '../utils/chatIdentity';
+import { useUser, useAuth } from '@clerk/nextjs';
 import { getClerkSessionToken } from '../lib/clerk';
 
 export interface ChatMessage {
@@ -94,6 +91,7 @@ export interface LiveChatProps {
 
 export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle }) => {
   const { user, isSignedIn } = useUser();
+  const { getToken } = useAuth();
   // 1. Initial State loaded from LocalStorage
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
@@ -139,20 +137,8 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     }
   });
 
-  useEffect(() => {
-    if (user?.id) {
-      const suffix = getClerkSuffix(user.id);
-      setGuestName(prev => {
-        const parts = prev.split('_');
-        const char = parts[0] || 'AnimeFan';
-        const updated = `${char}_${suffix}`;
-        localStorage.setItem('anidub_guest_chat_name', updated);
-        return updated;
-      });
-    }
-  }, [user?.id]);
-
-  const currentUserName = guestName;
+  const verifiedClerkUsername = isSignedIn && user ? getVerifiedClerkUsername(user) : '';
+  const currentUserName = verifiedClerkUsername || guestName;
   const [autoScroll, setAutoScroll] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
@@ -165,17 +151,12 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   const [reviewLang, setReviewLang] = useState<string>('Tamil Dub');
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showUserEdit, setShowUserEdit] = useState(false);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
-  const userEditRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
         setShowEmojiPicker(false);
-      }
-      if (userEditRef.current && !userEditRef.current.contains(e.target as Node)) {
-        setShowUserEdit(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -363,7 +344,9 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       if (!isSubscribed) return;
 
       try {
-        const token = await getClerkSessionToken();
+        const token = isSignedIn
+          ? ((await getToken()) || (await getClerkSessionToken()))
+          : await getClerkSessionToken();
         if (!token) {
           // Unauthenticated visitors receive live messages via REST sync polling;
           // WebSocket upgrades strictly require a verified Clerk session.
@@ -372,7 +355,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         }
 
         setConnectionStatus('connecting');
-        const wsUrl = getCloudflareWsUrl('/ws', token);
+        const baseWsUrl = getCloudflareWsUrl('/ws', token);
+        const wsUrl = verifiedClerkUsername
+          ? `${baseWsUrl}${baseWsUrl.includes('?') ? '&' : '?'}username=${encodeURIComponent(verifiedClerkUsername)}`
+          : baseWsUrl;
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
@@ -387,7 +373,20 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
           if (!isSubscribed) return;
           try {
             const data = JSON.parse(event.data);
-            
+
+            // Handle explicit WebSocket server rejection / error events (e.g. username mismatch or reserved name)
+            if (data && (data.type === 'error' || (data.error && !data.text && !data.comment))) {
+              const errorText = String(data.error || data.message || 'WebSocket message rejected by server.');
+              setChatError(errorText);
+              if (data.messageId !== undefined && data.messageId !== null) {
+                const rejectedId = String(data.messageId);
+                pendingOptimisticRef.current.delete(rejectedId);
+                setMessages(prev => prev.filter(m => String(m.id) !== rejectedId));
+              }
+              setTimeout(() => setChatError(null), 8000);
+              return;
+            }
+
             // Handle array of history messages sent on connection
             if (Array.isArray(data)) {
               setMessages(prev => {
@@ -441,11 +440,18 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
         ws.onerror = (err) => {
           console.warn('WebSocket connection note:', err);
+          if (isSubscribed) {
+            setChatError('WebSocket connection error occurred while verifying chat session.');
+            setTimeout(() => setChatError(null), 6000);
+          }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
           if (!isSubscribed) return;
           setConnectionStatus('disconnected');
+          if (event && event.code >= 4000 && event.reason) {
+            setChatError(event.reason);
+          }
           // Auto-reconnect with backoff
           const delay = Math.min(10000, 1000 * Math.pow(1.5, reconnectAttempts));
           setReconnectAttempts(prev => prev + 1);
@@ -469,14 +475,26 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         clearTimeout(reconnectTimerRef.current);
       }
     };
-  }, [reconnectAttempts, currentUserName, mergeMessageLists]);
+  }, [reconnectAttempts, isSignedIn, getToken, currentUserName, verifiedClerkUsername, mergeMessageLists]);
 
-  // 4. Send Message & Review: Client-side unique ID + Optimistic UI + Direct REST Persistence
+  // 4. Send Message & Review: Client-side unique ID + Verified Clerk Username + Direct REST & WebSocket Persistence
   const sendMessage = async (
     text: string, 
     extra: { isReview?: boolean; rating?: number | null; language?: string | null } = {}
   ): Promise<boolean> => {
     if (!text.trim()) return false;
+
+    if (!isSignedIn || !user) {
+      setChatError('Please sign in with Clerk to send messages in Live Chat.');
+      setTimeout(() => setChatError(null), 6000);
+      return false;
+    }
+
+    const verifiedUsername = getVerifiedClerkUsername(user);
+    if (!verifiedUsername) {
+      setChatError('Unable to resolve verified Clerk username from your account profile.');
+      return false;
+    }
 
     // 1) CLIENT-SIDE UNIQUE ID: Generate a unique ID (crypto.randomUUID() or Date.now().toString())
     // Use this exact ID for both the optimistic UI update AND send it to the backend to be saved as the message ID.
@@ -484,9 +502,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       ? crypto.randomUUID()
       : `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-    const payload: ChatMessage = {
+    const payload: ChatMessage & { username: string } = {
       id: clientUniqueId,
-      user: currentUserName.trim() || 'AnimeFan_IN',
+      user: verifiedUsername,
+      username: verifiedUsername,
       text: text.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isSelf: true,
@@ -508,7 +527,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       return updated;
     });
 
-    // 3) Persist to Backend D1 / SQLite Database with exact clientUniqueId
+    // 3) Persist to Backend D1 / SQLite Database with verified Clerk username
     try {
       const resp = await cloudflareApi.sendChatMessage(payload);
       if (!resp.success) {
@@ -518,10 +537,15 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       // Mark message as confirmed/resolved from in-flight
       pendingOptimisticRef.current.delete(clientUniqueId);
 
-      // 4) Broadcast over WebSocket if open
+      // 4) Broadcast verified message over WebSocket if open
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         try {
-          wsRef.current.send(JSON.stringify(resp.message || payload));
+          const wsPayload = {
+            ...(resp.message || payload),
+            user: verifiedUsername,
+            username: verifiedUsername,
+          };
+          wsRef.current.send(JSON.stringify(wsPayload));
         } catch (err) {
           console.error('WebSocket send error:', err);
         }
@@ -536,11 +560,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
       console.warn('Network persistence note:', err);
       const errMsg = err.message || '';
-      if (errMsg.includes('already claimed') || errMsg.includes('claimed by another') || errMsg.includes('taken')) {
-        setChatError('Name taken, please choose another or use Randomize');
-      } else {
-        setChatError(errMsg || 'Failed to post message');
-      }
+      setChatError(errMsg || 'Failed to post message');
       setTimeout(() => setChatError(null), 8000);
       return false;
     }
@@ -614,55 +634,28 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             </span>
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${connectionStatus === 'connected' ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-amber-400'}`} />
             
-            {/* Identity chip: Click to edit or randomize */}
-            <div className="relative hidden sm:inline-block" ref={userEditRef}>
-              <button
-                type="button"
-                onClick={() => setShowUserEdit(prev => !prev)}
-                className="text-[11px] text-neutral-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-md px-1.5 py-0.5 flex items-center gap-1 transition-colors cursor-pointer"
-                title="Click to change chat nickname"
+            {/* Identity chip: Verified Clerk badge when signed in; editable guest name otherwise */}
+            {isSignedIn && user ? (
+              <div
+                className="hidden sm:inline-flex items-center gap-1 text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 rounded-md px-2 py-0.5 font-medium"
+                title="Verified Clerk Identity"
               >
-                <span className="truncate max-w-[100px] text-purple-300 font-medium">@{guestName}</span>
-                <Dices className="w-2.5 h-2.5 text-neutral-400 hover:text-amber-300 shrink-0" />
-              </button>
-
-              {/* Floating Nickname Editor Popover */}
-              {showUserEdit && (
-                <div className="absolute left-0 top-full mt-1.5 w-60 bg-[#101524] border border-white/10 rounded-xl shadow-2xl p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Chat Nickname</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowUserEdit(false)}
-                      className="text-neutral-500 hover:text-white text-xs p-0.5 rounded cursor-pointer"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      value={guestName}
-                      onChange={(e) => {
-                        setChatError(null);
-                        setGuestName(e.target.value);
-                        localStorage.setItem('anidub_guest_chat_name', e.target.value);
-                      }}
-                      className="bg-white/[0.06] border border-white/10 rounded-lg px-2 py-1 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400 flex-1 font-medium"
-                      placeholder="Enter nickname"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleRandomizeName}
-                      className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-white/15 border border-white/10 text-amber-400 hover:text-amber-300 transition-transform active:scale-90 cursor-pointer"
-                      title="Randomize name"
-                    >
-                      <Dices className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+                <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span className="truncate max-w-[140px]">@{currentUserName}</span>
+              </div>
+            ) : (
+              <div className="relative hidden sm:inline-block">
+                <button
+                  type="button"
+                  onClick={handleRandomizeName}
+                  className="text-[11px] text-neutral-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-md px-1.5 py-0.5 flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Sign in with Clerk to post (click to cycle guest tag)"
+                >
+                  <span className="truncate max-w-[100px] text-purple-300 font-medium">@{guestName}</span>
+                  <Dices className="w-2.5 h-2.5 text-neutral-400 hover:text-amber-300 shrink-0" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -819,19 +812,20 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       {/* 3. INPUT AREA POLISH (Streamlined, zero clutter, embedded emoji & send) */}
       <div className="p-2.5 sm:p-3 border-t border-white/[0.06] bg-black/20 space-y-2 relative">
         
-        {/* Error Warning (e.g., name collision) */}
+        {/* Error Warning (e.g., WebSocket / identity verification error) */}
         {chatError && (
           <div className="px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-center justify-between gap-2 shadow-xs animate-in fade-in duration-200">
             <div className="flex items-center gap-1.5 min-w-0">
               <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-              <span className="truncate">{chatError}</span>
+              <span className="break-words">{chatError}</span>
             </div>
             <button
               type="button"
-              onClick={handleRandomizeName}
-              className="px-2 py-0.5 rounded-md bg-rose-500/20 hover:bg-rose-500/30 text-white text-[10px] font-semibold tracking-wide uppercase transition-all shrink-0 cursor-pointer"
+              onClick={() => setChatError(null)}
+              className="p-1 rounded-md text-rose-300 hover:text-white hover:bg-rose-500/20 transition-all shrink-0 cursor-pointer"
+              aria-label="Dismiss error"
             >
-              🎲 Randomize
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
@@ -889,21 +883,17 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
         {/* Active Username Indicator directly above Chat Input Box */}
         <div className="text-xs text-gray-400 mb-1 flex items-center justify-between px-1 select-none">
-          <div className="flex items-center gap-1">
-            <span>👤 Chatting as:</span>
+          <div className="flex items-center gap-1.5">
+            <span>{isSignedIn && user ? '🛡️ Verified Clerk Identity:' : '👤 Visitor Mode:'}</span>
             <strong className="text-white font-semibold tracking-wide">
-              {guestName}
+              {currentUserName}
             </strong>
           </div>
-          <button
-            type="button"
-            onClick={handleRandomizeName}
-            className="text-[11px] text-neutral-400 hover:text-amber-300 transition-colors flex items-center gap-1 cursor-pointer"
-            title="Generate a new randomized nickname"
-          >
-            <Dices className="w-3 h-3 text-amber-400/80" />
-            <span className="hover:underline">Randomize</span>
-          </button>
+          {!isSignedIn && (
+            <span className="text-[11px] text-amber-300/90">
+              Sign in with Clerk to post
+            </span>
+          )}
         </div>
 
         {/* Sleek, Single Pill Input with Integrated Smiley and Send Button */}
@@ -933,25 +923,16 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               placeholder={
-                mode === 'review'
-                  ? `Review as ${guestName} (${reviewLang})...`
+                !isSignedIn
+                  ? 'Sign in with Clerk to post in Live Chat...'
+                  : mode === 'review'
+                  ? `Review as ${currentUserName} (${reviewLang})...`
                   : defaultAnimeTitle 
-                    ? `Message as ${guestName} about ${defaultAnimeTitle}...`
-                    : `Message as ${guestName}...`
+                    ? `Message as ${currentUserName} about ${defaultAnimeTitle}...`
+                    : `Message as ${currentUserName}...`
               }
               className="flex-1 bg-transparent text-xs sm:text-[13px] text-white placeholder-neutral-500 focus:outline-none min-w-0 py-1"
             />
-
-            {/* Subtle Randomize Nickname Button inside Input Bar */}
-            <button
-              type="button"
-              onClick={handleRandomizeName}
-              className="p-1.5 rounded-full text-neutral-500 hover:text-amber-300 hover:bg-white/5 transition-all duration-200 hover:scale-110 active:scale-90 cursor-pointer shrink-0 mx-0.5"
-              title={`Posting as @${guestName} — Click to randomize name`}
-              aria-label="Randomize nickname"
-            >
-              <Dices className="w-3.5 h-3.5" />
-            </button>
 
             {/* Embedded Circular Send Button */}
             <button

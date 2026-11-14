@@ -86,7 +86,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   const fetchSchedule = async () => {
     setLoading(true);
     try {
-      const { data } = await cloudflareApi.fetchCatalog({ limit: 5000 });
+      const { data } = await cloudflareApi.fetchCatalog({ page: 1, limit: 50 });
       if (data && data.length > 0) {
         processScheduleData(data);
       } else {

@@ -2,26 +2,20 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { motion } from 'motion/react';
 import { 
-  Star, 
-  Tv, 
   ChevronDown,
-  Bookmark, 
+  ChevronLeft,
+  ChevronRight,
   Dices, 
   Layers, 
-  Languages, 
-  Flame, 
   Sparkles, 
-  CheckCircle2, 
-  TrendingUp, 
-  Heart,
   Loader2,
   Search,
   X
 } from 'lucide-react';
-import { filterAndSortCatalog } from '../utils/pagination';
-import { AnimeCard, AnimeCardData } from './AnimeCard';
+import { calculatePagination, filterAndSortCatalog, getVisiblePageNumbers } from '../utils/pagination';
+import { AnimeCard } from './AnimeCard';
 import { AnimatedStats } from './AnimatedStats';
-import { cloudflareApi } from '../services/cloudflareApi';
+import { cloudflareApi, type CatalogMeta, type CatalogSummary } from '../services/cloudflareApi';
 import { calculateCatalogStats, computeDynamicLanguageFilters } from '../utils/languages';
 import { SkeletonGrid } from './SkeletonGrid';
 import { proxyUrl } from '../utils/imgbb';
@@ -169,6 +163,8 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     if (onToggleUpvote) onToggleUpvote(animeId, Boolean(upvoted), newCount ?? 0);
   }, [onToggleUpvote]);
 
+  const CATALOG_PAGE_SIZE = 12;
+
   // Filter States
   const [selectedLanguage, setSelectedLanguage] = useState('All');
   const [selectedGenre, setSelectedGenre] = useState('All Genres');
@@ -178,21 +174,57 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   const [selectedSort, setSelectedSort] = useState('popularity');
   const [loading, setLoading] = useState(false);
 
-  // Infinite Scroll States
-  const [visibleCount, setVisibleCount] = useState(8);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
+  // Server-Side Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [debouncedSearch, setDebouncedSearch] = useState(effectiveSearch || '');
+  const [paginationMeta, setPaginationMeta] = useState<CatalogMeta>({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    limit: CATALOG_PAGE_SIZE,
+    hasNextPage: false,
+    hasPrevPage: false,
+  });
+  const [catalogSummary, setCatalogSummary] = useState<CatalogSummary | null>(null);
+  const gridTopRef = React.useRef<HTMLDivElement | null>(null);
 
-  const fetchCatalogFromBackend = useCallback(async () => {
-    // Skip duplicate network fetch if parent App already provides catalogList
-    if (catalogList !== undefined) return;
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(effectiveSearch || '');
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [effectiveSearch]);
+
+  // Reset to page 1 when filters or search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedLanguage, selectedGenre, selectedPlatform, selectedType, selectedStatus, selectedSort, debouncedSearch]);
+
+  const fetchCatalogPage = useCallback(async (pageToFetch: number) => {
     setLoading(true);
     try {
-      const { data } = await cloudflareApi.fetchCatalog({ limit: 5000 });
-      if (data && data.length > 0) {
-        const approvedOnly = data.filter((item: any) => 
-          item.status !== 'pending' && 
-          item.submissionStatus !== 'pending'
+      const response = await cloudflareApi.fetchCatalog({
+        page: pageToFetch,
+        limit: CATALOG_PAGE_SIZE,
+        search: debouncedSearch,
+        language: selectedLanguage,
+        genre: selectedGenre,
+        platform: selectedPlatform,
+        type: selectedType,
+        status: selectedStatus,
+        sort: selectedSort,
+      });
+
+      const data = response?.data || [];
+      const meta = response?.meta;
+
+      if (response?.summary) {
+        setCatalogSummary(response.summary);
+      }
+
+      if (data.length > 0 || (meta && meta.totalItems > 0)) {
+        const approvedOnly = data.filter((item: any) =>
+          item.status !== 'pending' && item.submissionStatus !== 'pending'
         );
         const normalized = approvedOnly.map((item: any) => ({
           ...item,
@@ -203,78 +235,100 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           type: item.type || 'TV Series'
         }));
         setRawAnimeList(normalized);
+        if (meta) {
+          setPaginationMeta(meta);
+        }
+      } else if (catalogList && catalogList.length > 0) {
+        // Offline / preloaded fallback if backend DB has no rows
+        const offlineFiltered = filterAndSortCatalog(catalogList, {
+          language: selectedLanguage,
+          genre: selectedGenre === 'All Genres' ? 'All' : selectedGenre,
+          platform: selectedPlatform === 'All Platforms' ? 'All' : selectedPlatform,
+          type: selectedType === 'All Types' ? 'All' : selectedType,
+          status: selectedStatus === 'All Status' ? 'All' : selectedStatus,
+          search: debouncedSearch,
+          sort: selectedSort,
+        });
+        const calc = calculatePagination(offlineFiltered.length, pageToFetch, CATALOG_PAGE_SIZE);
+        setRawAnimeList(offlineFiltered.slice(calc.offset, calc.offset + calc.limit));
+        setPaginationMeta({
+          currentPage: calc.page,
+          totalPages: calc.totalPages,
+          totalItems: calc.total,
+          limit: calc.limit,
+          hasNextPage: calc.hasNextPage,
+          hasPrevPage: calc.hasPrevPage,
+        });
       } else {
         setRawAnimeList([]);
+        if (meta) {
+          setPaginationMeta(meta);
+        } else {
+          setPaginationMeta({
+            currentPage: pageToFetch,
+            totalPages: 1,
+            totalItems: 0,
+            limit: CATALOG_PAGE_SIZE,
+            hasNextPage: false,
+            hasPrevPage: pageToFetch > 1,
+          });
+        }
       }
     } catch (err) {
-      console.warn('Failed fetching catalog from Cloudflare:', err);
+      console.warn('Failed fetching paginated catalog from Cloudflare:', err);
       setRawAnimeList([]);
     } finally {
       setLoading(false);
     }
-  }, [catalogList]);
+  }, [
+    catalogList,
+    debouncedSearch,
+    selectedLanguage,
+    selectedGenre,
+    selectedPlatform,
+    selectedType,
+    selectedStatus,
+    selectedSort,
+  ]);
 
   useEffect(() => {
-    fetchCatalogFromBackend();
-  }, [fetchCatalogFromBackend]);
+    fetchCatalogPage(currentPage);
+  }, [currentPage, fetchCatalogPage]);
 
-  const currentAnimeList = useMemo(() => {
+  const displayedAnime = rawAnimeList;
+
+  const handlePageChange = (nextPage: number) => {
+    const bounded = Math.min(Math.max(1, nextPage), paginationMeta.totalPages || 1);
+    if (bounded === currentPage || loading) return;
+    setCurrentPage(bounded);
+    try {
+      gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch {}
+  };
+
+  // Compute dynamic regional dub language filter buttons from backend summary or loaded list
+  const dynamicLanguageFilters = useMemo(() => {
+    if (catalogSummary?.languageFilters && catalogSummary.languageFilters.length > 0) {
+      return catalogSummary.languageFilters;
+    }
+    return computeDynamicLanguageFilters(catalogList && catalogList.length > 0 ? catalogList : rawAnimeList);
+  }, [catalogSummary, catalogList, rawAnimeList]);
+
+  const statsSourceList = useMemo(() => {
     return (catalogList && catalogList.length > 0) ? catalogList : rawAnimeList;
   }, [catalogList, rawAnimeList]);
 
-  const filteredList = useMemo(() => {
-    return filterAndSortCatalog(currentAnimeList, {
-      language: selectedLanguage,
-      genre: selectedGenre === 'All Genres' ? 'All' : selectedGenre,
-      platform: selectedPlatform === 'All Platforms' ? 'All' : selectedPlatform,
-      type: selectedType === 'All Types' ? 'All' : selectedType,
-      status: selectedStatus === 'All Status' ? 'All' : selectedStatus,
-      search: effectiveSearch,
-      sort: selectedSort
-    });
-  }, [currentAnimeList, selectedLanguage, selectedGenre, selectedPlatform, selectedType, selectedStatus, effectiveSearch, selectedSort]);
+  const visiblePageNumbers = useMemo(() => {
+    return getVisiblePageNumbers(paginationMeta.currentPage, paginationMeta.totalPages, 5);
+  }, [paginationMeta.currentPage, paginationMeta.totalPages]);
 
-  // Reset visibleCount on filter or search change
-  useEffect(() => {
-    setVisibleCount(8);
-  }, [selectedLanguage, selectedGenre, selectedPlatform, selectedType, selectedStatus, selectedSort, effectiveSearch]);
-
-  // IntersectionObserver for Infinite Scroll
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const first = entries[0];
-        if (first.isIntersecting && visibleCount < filteredList.length && !isLoadingMore) {
-          setIsLoadingMore(true);
-          setTimeout(() => {
-            setVisibleCount(prev => Math.min(prev + 8, filteredList.length));
-            setIsLoadingMore(false);
-          }, 400);
-        }
-      },
-      { threshold: 0.1 }
-    );
-
-    const currentSentinel = sentinelRef.current;
-    if (currentSentinel) {
-      observer.observe(currentSentinel);
-    }
-
-    return () => {
-      if (currentSentinel) {
-        observer.unobserve(currentSentinel);
-      }
-    };
-  }, [visibleCount, filteredList.length, isLoadingMore]);
-
-  const displayedAnime = useMemo(() => {
-    return filteredList.slice(0, visibleCount);
-  }, [filteredList, visibleCount]);
-
-  // Compute dynamic regional dub language filter buttons directly from database animeList
-  const dynamicLanguageFilters = useMemo(() => {
-    return computeDynamicLanguageFilters(rawAnimeList);
-  }, [rawAnimeList]);
+  const rangeStart = paginationMeta.totalItems === 0
+    ? 0
+    : ((paginationMeta.currentPage - 1) * paginationMeta.limit) + 1;
+  const rangeEnd = Math.min(
+    paginationMeta.totalItems,
+    rangeStart + Math.max(0, displayedAnime.length - 1)
+  );
 
   return (
     <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 overflow-x-hidden font-['Inter',sans-serif] text-slate-100 pb-10 box-border">
@@ -335,11 +389,13 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       {/* 2. ANIMATED STATS CARDS ROW (DYNAMIC REAL STATS) */}
       <div className="mt-8">
         {(() => {
-          const stats = calculateCatalogStats(currentAnimeList);
+          const stats = catalogSummary
+            ? catalogSummary
+            : calculateCatalogStats(statsSourceList);
 
           return (
             <AnimatedStats
-              animeList={currentAnimeList}
+              animeList={statsSourceList}
               totalAnime={stats.totalAnime}
               totalVotes={stats.totalVotes}
               totalLanguages={stats.totalLanguages}
@@ -388,7 +444,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         {effectiveSearch && (
           <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1 pt-1.5 font-mono">
             <span>Filtering for: "{effectiveSearch}"</span>
-            <span className="text-purple-300 font-bold">{filteredList.length} matching titles</span>
+            <span className="text-purple-300 font-bold">{paginationMeta.totalItems} matching titles</span>
           </div>
         )}
       </div>
@@ -487,16 +543,28 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         </div>
       )}
 
-      {/* 7. Catalog List Grid with exact matching design */}
-      <div className="pt-6 sm:pt-8 px-0.5 sm:px-2 md:px-0">
+      {/* 7. Catalog List Grid with Server-Side Pagination */}
+      <div ref={gridTopRef} className="pt-6 sm:pt-8 px-0.5 sm:px-2 md:px-0">
         
         {/* 1. GRID HEADER ROW */}
         <div className="flex items-center justify-between mb-4 px-0.5">
           <div className="flex items-center space-x-1.5 text-[12px]">
             <Sparkles className="w-[14px] h-[14px] text-[#a855f7]" />
-            <span className="text-[#94a3b8]">Showing <strong className="text-white font-bold">{filteredList.length}</strong> Titles</span>
+            <span className="text-[#94a3b8]">
+              {paginationMeta.totalItems > 0 ? (
+                <>
+                  Showing <strong className="text-white font-bold">{rangeStart}–{rangeEnd}</strong> of <strong className="text-white font-bold">{paginationMeta.totalItems}</strong> Titles
+                </>
+              ) : (
+                <>
+                  Showing <strong className="text-white font-bold">0</strong> Titles
+                </>
+              )}
+            </span>
           </div>
-          <span className="text-[11px] text-[#64748b]">Smooth 60fps Virtualized</span>
+          <span className="text-[11px] text-[#64748b]">
+            Page {paginationMeta.currentPage} of {paginationMeta.totalPages}
+          </span>
         </div>
 
         {loading ? (
@@ -513,6 +581,8 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 setSelectedPlatform('All Platforms');
                 setSelectedType('All Types');
                 setSelectedStatus('All Status');
+                handleSearchChange('');
+                setCurrentPage(1);
               }}
               className="mt-3 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-md"
             >
@@ -522,7 +592,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         ) : (
           /* 2. CARD CONTAINER USING AnimeCard WITH RESPONSIVE COLUMNS & COMPACT MOBILE GAPS */
           <div 
-            key={`catalog_grid_${selectedLanguage}_${selectedGenre}_${selectedPlatform}_${selectedType}_${selectedStatus}_${selectedSort}`}
+            key={`catalog_grid_${paginationMeta.currentPage}_${selectedLanguage}_${selectedGenre}_${selectedPlatform}_${selectedType}_${selectedStatus}_${selectedSort}`}
             className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3.5 md:gap-4.5"
           >
             {displayedAnime.map((anime, idx) => {
@@ -544,18 +614,74 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </div>
         )}
 
-        {/* Intersection Observer Sentinel & Loading Spinner */}
-        <div ref={sentinelRef} className="py-8 flex items-center justify-center">
-          {isLoadingMore && (
-            <div className="flex items-center space-x-2 text-purple-400 text-xs font-semibold">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Loading more anime titles...</span>
+        {/* Server-Side Pagination Controls (Next / Previous & Page Numbers) */}
+        {paginationMeta.totalItems > 0 && (
+          <nav
+            aria-label="Catalog pagination"
+            className="mt-8 pt-6 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-3"
+          >
+            <div className="text-xs text-slate-400 flex items-center gap-2">
+              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />}
+              <span>
+                Page <strong className="text-white">{paginationMeta.currentPage}</strong> of{' '}
+                <strong className="text-white">{paginationMeta.totalPages}</strong> ({paginationMeta.totalItems} titles)
+              </span>
             </div>
-          )}
-          {visibleCount >= filteredList.length && filteredList.length > 0 && (
-            <span className="text-slate-500 text-[11px]">You've reached the end of the catalog 🎉</span>
-          )}
-        </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => handlePageChange(paginationMeta.currentPage - 1)}
+                disabled={!paginationMeta.hasPrevPage || loading}
+                aria-label="Previous page"
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-[#141b29] border border-[#242d46] hover:border-purple-500/50 text-xs font-semibold text-slate-200 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Previous</span>
+              </button>
+
+              <div className="flex items-center gap-1">
+                {visiblePageNumbers.map((pageItem, pIdx) =>
+                  pageItem === 'ellipsis' ? (
+                    <span
+                      key={`ellipsis_${pIdx}`}
+                      className="px-1.5 text-xs text-slate-500 select-none"
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={`page_btn_${pageItem}`}
+                      type="button"
+                      onClick={() => handlePageChange(pageItem)}
+                      disabled={loading}
+                      aria-label={`Page ${pageItem}`}
+                      aria-current={pageItem === paginationMeta.currentPage ? 'page' : undefined}
+                      className={`min-w-[34px] h-[34px] px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        pageItem === paginationMeta.currentPage
+                          ? 'bg-gradient-to-r from-[#9333ea] to-[#6366f1] text-white shadow-[0_3px_12px_rgba(147,51,234,0.35)] border border-purple-400/50'
+                          : 'bg-[#141b29] border border-[#242d46] hover:border-purple-500/40 text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      {pageItem}
+                    </button>
+                  )
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handlePageChange(paginationMeta.currentPage + 1)}
+                disabled={!paginationMeta.hasNextPage || loading}
+                aria-label="Next page"
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-[#141b29] border border-[#242d46] hover:border-purple-500/50 text-xs font-semibold text-slate-200 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </nav>
+        )}
       </div>
 
     </div>

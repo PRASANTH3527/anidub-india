@@ -25,6 +25,7 @@ import { Anime } from './CatalogView';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
 import { generateRandomUsername } from '../utils/randomUser';
+import { getVerifiedClerkUsername } from '../utils/chatIdentity';
 import { formatRelativeTime } from '../utils/timestamps';
 import { useUser, SignInButton } from '@clerk/nextjs';
 import { getClerkSessionToken } from '../lib/clerk';
@@ -286,7 +287,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     e.preventDefault();
     if (!reviewComment.trim()) return;
 
-    const currentUsername = generateRandomUsername();
+    const currentUsername = user ? getVerifiedClerkUsername(user) : generateRandomUsername();
     const nowIso = new Date().toISOString();
 
     const newRev = {
@@ -320,32 +321,43 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         comment: reviewComment
       }).catch(() => {});
 
-      // 2. Broadcast review into Live Community Chat REST API
-      const chatPayload = {
-        user: currentUsername,
-        text: `[⭐ ${reviewRating}/10 • ${reviewLang}] ${reviewComment}`,
-        isReview: true,
-        rating: reviewRating,
-        language: reviewLang,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
+      // 2. Broadcast review into Live Community Chat REST API with verified Clerk username
+      if (user) {
+        const chatPayload = {
+          user: currentUsername,
+          username: currentUsername,
+          text: `[⭐ ${reviewRating}/10 • ${reviewLang}] ${reviewComment}`,
+          isReview: true,
+          rating: reviewRating,
+          language: reviewLang,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
 
-      cloudflareApi.sendChatMessage(chatPayload).catch(() => {});
+        cloudflareApi.sendChatMessage(chatPayload).catch(() => {});
 
-      // 3. Send through Cloudflare WebSocket so connected users receive it instantly
-      try {
-        const wsToken = await getClerkSessionToken();
-        if (wsToken) {
-          const ws = new WebSocket(getCloudflareWsUrl('/ws', wsToken));
-          ws.onopen = () => {
-            ws.send(JSON.stringify({
-              id: `rev_${Date.now()}`,
-              ...chatPayload
-            }));
-            setTimeout(() => ws.close(), 800);
-          };
-        }
-      } catch (_) {}
+        // 3. Send through Cloudflare WebSocket so connected users receive it instantly
+        try {
+          const wsToken = await getClerkSessionToken();
+          if (wsToken) {
+            const ws = new WebSocket(getCloudflareWsUrl('/ws', wsToken));
+            ws.onopen = () => {
+              ws.send(JSON.stringify({
+                id: `rev_${Date.now()}`,
+                ...chatPayload
+              }));
+              setTimeout(() => ws.close(), 800);
+            };
+            ws.onmessage = (event) => {
+              try {
+                const errData = JSON.parse(event.data);
+                if (errData?.type === 'error' && errData?.error) {
+                  showToast(errData.error);
+                }
+              } catch {}
+            };
+          }
+        } catch (_) {}
+      }
 
     } catch (err) {
       console.error(err);

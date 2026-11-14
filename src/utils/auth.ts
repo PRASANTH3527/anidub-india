@@ -203,6 +203,8 @@ export interface VerifiedClerkSession {
   userId: string | null;
   sessionId: string | null;
   email: string | null;
+  username?: string | null;
+  clerkUser?: any;
   isAdmin: boolean;
   authenticated: boolean;
   isAuthenticated: boolean;
@@ -489,10 +491,24 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
     }
   }
 
+  const resolvedUsername =
+    cleanEnvValue(clerkUserObj?.username) ||
+    cleanEnvValue(verifiedPayload?.username) ||
+    cleanEnvValue(verifiedPayload?.preferred_username) ||
+    cleanEnvValue([clerkUserObj?.firstName, clerkUserObj?.lastName].filter(Boolean).join(' ')) ||
+    cleanEnvValue(verifiedPayload?.name) ||
+    cleanEnvValue(verifiedPayload?.full_name) ||
+    cleanEnvValue(clerkUserObj?.firstName) ||
+    cleanEnvValue(verifiedPayload?.first_name) ||
+    (normalizedEmail && normalizedEmail.includes('@') ? normalizedEmail.split('@')[0].trim() : '') ||
+    `User_${userId.slice(-6)}`;
+
   return {
     userId,
     sessionId,
     email: normalizedEmail,
+    username: resolvedUsername || null,
+    clerkUser: clerkUserObj || null,
     isAdmin,
     authenticated: true,
     isAuthenticated: true,
