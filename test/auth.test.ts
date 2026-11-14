@@ -431,18 +431,8 @@ test('Security headers (_headers), .gitignore, SEO assets, and non-sensitive rev
   assert.ok(headersContent.includes('X-Content-Type-Options: nosniff'));
   assert.ok(headersContent.includes('Referrer-Policy: strict-origin-when-cross-origin'));
   assert.ok(headersContent.includes('Strict-Transport-Security:'));
-  assert.ok(headersContent.includes('Content-Security-Policy:'));
-  assert.ok(
-    headersContent.includes("img-src 'self' data: blob: https://i.ibb.co https://cdn.myanimelist.net https://img.clerk.com"),
-    'img-src must explicitly whitelist CDNs instead of wildcard https:'
-  );
-  assert.equal(/img-src[^;]*\bhttps:\s*;/.test(headersContent), false);
-  assert.ok(headersContent.includes('wss://anidub.in'));
-  assert.match(headersContent, /script-src[^;]*'unsafe-inline'[^;]*'unsafe-eval'/);
-  assert.match(headersContent, /script-src[^;]*https:\/\/\*\.clerk\.com[^;]*https:\/\/\*\.clerk\.accounts\.dev/);
-  assert.match(headersContent, /connect-src[^;]*https:\/\/\*\.clerk\.com[^;]*https:\/\/\*\.clerk\.accounts\.dev[^;]*wss:/);
-  assert.match(headersContent, /frame-src[^;]*https:\/\/\*\.clerk\.com[^;]*https:\/\/\*\.clerk\.accounts\.dev/);
-  assert.match(headersContent, /worker-src[^;]*https:\/\/\*\.clerk\.com[^;]*https:\/\/\*\.clerk\.accounts\.dev/);
+  assert.ok(headersContent.includes('Permissions-Policy:'));
+  assert.equal(headersContent.includes('Content-Security-Policy:'), false);
 
   const gitignoreContent = fs.readFileSync(path.join(process.cwd(), '.gitignore'), 'utf-8');
   assert.ok(gitignoreContent.includes('.wrangler/'));
