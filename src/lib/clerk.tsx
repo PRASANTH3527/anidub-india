@@ -29,7 +29,9 @@ export function isValidClerkPublishableKey(key: string): boolean {
   const encoded = key.split('_')[2] || '';
   if (!encoded) return false;
   try {
-    const decoded = typeof atob === 'function' ? atob(encoded) : Buffer.from(encoded, 'base64').toString('utf8');
+    const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const decoded = typeof atob === 'function' ? atob(padded) : Buffer.from(encoded, 'base64').toString('utf8');
     return decoded.endsWith('$') && decoded.includes('.');
   } catch {
     return false;
@@ -139,8 +141,14 @@ export const ClerkProvider: React.FC<{
     setIsLoadingConfig(true);
     fetchRuntimeClerkPublishableKey()
       .then((key) => {
-        if (!cancelled && key) {
-          setRuntimeKey(key);
+        if (!cancelled) {
+          if (key) {
+            setRuntimeKey(key);
+          } else {
+            console.error(
+              '[Clerk] ClerkProvider failed to initialize: VITE_CLERK_PUBLISHABLE_KEY is missing and /api/config returned no valid Clerk publishable key.'
+            );
+          }
         }
       })
       .finally(() => {
@@ -265,9 +273,22 @@ export const SignUp: React.FC<any> = (props) => {
 };
 
 export const SignInButton: React.FC<any> = ({ children, ...props }) => {
-  const { configured } = useContext(ClerkConfigContext);
+  const { configured, loading } = useContext(ClerkConfigContext);
   if (!configured) {
-    return <span className="inline-block opacity-60 cursor-not-allowed">{children || <button type="button" disabled>Sign In</button>}</span>;
+    return (
+      <span
+        className="inline-block opacity-60 cursor-not-allowed"
+        onClick={() => {
+          console.error(
+            loading
+              ? '[Clerk] Sign In clicked while Clerk configuration is still loading.'
+              : '[Clerk] Sign In unavailable: ClerkProvider has no valid VITE_CLERK_PUBLISHABLE_KEY configured.'
+          );
+        }}
+      >
+        {children || <button type="button" disabled>Sign In</button>}
+      </span>
+    );
   }
   return <OfficialSignInButton {...props}>{children}</OfficialSignInButton>;
 };
