@@ -8,3 +8,5 @@ binding = "DB"
 database_name = "anime-db"
 database_id = "75f053ab-5b44-4d48-abf8-b3a357a89426"
 migrations_dir = "migrations"
+[vars]
+VITE_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsuYW5pZHViLWluZGlhLWExeS5wYWdlcy5kZXYk"
