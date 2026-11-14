@@ -382,6 +382,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       }
 
       const formData = new FormData();
+      formData.append('key', apiKey);
       if (validation.cleanBase64) {
         formData.append('image', validation.cleanBase64);
       } else if (validationInput.bytes) {
@@ -392,7 +393,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         formData.append('name', validation.sanitizedFilename.replace(/\.[^/.]+$/, ''));
       }
 
-      const imgbbRes = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+      const imgbbRes = await fetch('https://api.imgbb.com/1/upload', {
         method: 'POST',
         body: formData
       });
@@ -429,7 +430,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         storage: 'ImgBB Live Cloud'
       }, 200, request);
     } catch (err: any) {
-      return jsonResponse({ success: false, error: err?.message || 'Image upload failed' }, 500, request);
+      const safeMessage = String(err?.message || 'Image upload failed')
+        .replace(/([?&]key=)[^&\s]+/gi, '$1[REDACTED]');
+      return jsonResponse({ success: false, error: safeMessage }, 500, request);
     }
   }
 

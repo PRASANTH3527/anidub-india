@@ -220,9 +220,7 @@ class DatabaseService {
   }
 
   public async deleteAnime(animeId: any): Promise<void> {
-    console.log('Deleting anime ID via Cloudflare API:', animeId);
     await cloudflareApi.deleteAnime(animeId);
-    console.log('Deleted anime ID from Cloudflare D1:', animeId);
     this.notifyListeners();
   }
 

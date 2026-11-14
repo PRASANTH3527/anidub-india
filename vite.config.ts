@@ -97,7 +97,8 @@ export default defineConfig(({ mode }) => {
           manualChunks(id) {
             if (id.includes('node_modules')) {
               if (id.includes('lucide-react')) return 'icons-vendor';
-              if (id.includes('framer-motion') || id.includes('motion')) return 'motion-vendor';
+              if (id.includes('recharts')) return 'recharts-vendor';
+              if (id.includes('motion')) return 'motion-vendor';
               if (id.includes('papaparse')) return 'csv-vendor';
               if (id.includes('@clerk')) return 'clerk-vendor';
               if (id.includes('react') || id.includes('react-dom')) return 'react-vendor';

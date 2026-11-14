@@ -452,3 +452,61 @@ test('Security headers (_headers), .gitignore, SEO assets, and non-sensitive rev
   assert.equal(/SELECT\s+\*\s+FROM\s+reviews/i.test(routeCode), false);
   assert.ok(routeCode.includes('SELECT id, anime_id, user_id, user_name, user_avatar, rating, language, comment, created_at FROM reviews'));
 });
+
+test('Performance & code hygiene: no app/ Next.js leftovers, single animation lib, lazy Recharts, zero console.log, no ImgBB ?key= URLs', () => {
+  // 1. Next.js app/ directory must be deleted
+  assert.equal(fs.existsSync(path.join(process.cwd(), 'app')), false);
+
+  // 2. Duplicate animation library removed from package.json and src/
+  const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'));
+  assert.equal(Boolean(pkg.dependencies?.['framer-motion']), false);
+  assert.ok(Boolean(pkg.dependencies?.motion));
+
+  const walk = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === 'dist') continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) out.push(...walk(full));
+      else if (/\.(ts|tsx|js|jsx)$/.test(entry.name)) out.push(full);
+    }
+    return out;
+  };
+
+  const prodFiles = [
+    ...walk(path.join(process.cwd(), 'src')),
+    ...walk(path.join(process.cwd(), 'functions')),
+  ];
+
+  for (const file of prodFiles) {
+    const content = fs.readFileSync(file, 'utf-8');
+    const rel = path.relative(process.cwd(), file);
+    if (!rel.endsWith('.test.ts') && !rel.endsWith('.test.tsx')) {
+      assert.equal(
+        /\bconsole\.log\s*\(/.test(content),
+        false,
+        `Unexpected console.log in production file: ${rel}`
+      );
+      assert.equal(
+        content.includes("from 'framer-motion'") || content.includes('from "framer-motion"'),
+        false,
+        `Unexpected framer-motion import in ${rel}`
+      );
+    }
+  }
+
+  // 3. Recharts is only imported inside the lazy-loaded AiringStatusPieChart component
+  const ratioWidget = fs.readFileSync(path.join(process.cwd(), 'src/components/AiringStatusRatioWidget.tsx'), 'utf-8');
+  assert.equal(ratioWidget.includes("from 'recharts'"), false);
+  assert.ok(ratioWidget.includes("lazy(() =>"));
+  assert.ok(ratioWidget.includes('./AiringStatusPieChart'));
+
+  const adminDash = fs.readFileSync(path.join(process.cwd(), 'src/components/AdminDashboard.tsx'), 'utf-8');
+  assert.ok(adminDash.includes("lazy(() =>"));
+  assert.ok(adminDash.includes('./AnalyticsDashboard'));
+
+  // 4. ImgBB key is never appended as a URL query parameter (?key=)
+  const routeCode = fs.readFileSync(path.join(process.cwd(), 'functions/api/[[route]].ts'), 'utf-8');
+  assert.equal(routeCode.includes('api.imgbb.com/1/upload?key='), false);
+});
+

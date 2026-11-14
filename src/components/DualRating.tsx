@@ -62,8 +62,6 @@ export const DualRating: React.FC<DualRatingProps> = ({
     try {
       if (onRate) {
         await onRate(selectedRating);
-      } else {
-        console.log(`[DualRating] User rated: ${selectedRating}/10`);
       }
       setUserRating(selectedRating);
       setIsSubmitted(true);

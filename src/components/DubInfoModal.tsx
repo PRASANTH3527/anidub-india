@@ -224,7 +224,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   const [statusState, setStatusState] = useState<string>(() => {
     const anime = (initialData || {}) as any;
     const initialValue = anime.status === 'Completed' ? 'Completed' : 'Airing';
-    console.log(`[DubInfoModal] Initializing statusState: ${initialValue} (raw: ${anime.status})`);
     return initialValue;
   });
   const [releaseDay, setReleaseDay] = useState<string>('Saturday');
@@ -266,7 +265,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         status: initialStatus,
         airing_status: initialStatus
       });
-      console.log(`[DubInfoModal] useEffect triggered. Setting status to: ${initialStatus}`);
 
       // Re-populate mixed entries / seasons from initialData
       const parsedMixed = parseMixedEntries(initialData);
@@ -549,8 +547,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         upvotes: 0,
         studio: studio || 'Unknown Studio'
       };
-
-      console.log("[DubInfoModal] Submitting payload with mixed_entries:", payload);
 
       let savedResult: any = null;
       if (mode === 'edit' && initialData?.id) {

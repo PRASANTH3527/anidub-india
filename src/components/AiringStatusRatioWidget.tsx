@@ -1,7 +1,10 @@
-import React from 'react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
-import { Sparkles, Tv, CheckCircle2, Clock } from 'lucide-react';
+import React, { Suspense, lazy } from 'react';
+import { CheckCircle2, Clock } from 'lucide-react';
 import { Anime } from './CatalogView';
+
+const AiringStatusPieChart = lazy(() =>
+  import('./AiringStatusPieChart').then((m) => ({ default: m.AiringStatusPieChart }))
+);
 
 export interface AiringStatusRatioWidgetProps {
   catalogList: Anime[];
@@ -57,26 +60,13 @@ export const AiringStatusRatioWidget: React.FC<AiringStatusRatioWidgetProps> = (
           
           {/* LEFT COLUMN (CHART) */}
           <div className="h-[180px] w-full relative md:col-span-1 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={data}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={75}
-                  paddingAngle={6}
-                  dataKey="value"
-                >
-                  {data.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0e1322', borderColor: '#272d3d', borderRadius: '12px', fontSize: '11px', color: '#fff' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            <Suspense
+              fallback={
+                <div className="w-[150px] h-[150px] rounded-full border-8 border-white/10 animate-pulse" />
+              }
+            >
+              <AiringStatusPieChart data={data} />
+            </Suspense>
 
             {/* ABSOLUTE CENTERED TOTAL ANIME COUNT LABEL */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">

@@ -8,10 +8,10 @@ describe('Anime Card Scroll Reveal Animation', () => {
     const cardPath = path.resolve(process.cwd(), 'src/components/AnimeCard.tsx');
     const content = fs.readFileSync(cardPath, 'utf-8');
 
-    // Verify import from framer-motion
+    // Verify import from motion/react
     assert.ok(
-      content.includes("from 'framer-motion'"),
-      'AnimeCard must import motion from framer-motion'
+      content.includes("from 'motion/react'"),
+      'AnimeCard must import motion from motion/react'
     );
 
     // Verify initial state: { opacity: 0, y: 12 }
@@ -38,8 +38,8 @@ describe('Anime Card Scroll Reveal Animation', () => {
     const content = fs.readFileSync(homePath, 'utf-8');
 
     assert.ok(
-      content.includes("from 'framer-motion'"),
-      'PublicHomeView must import motion from framer-motion'
+      content.includes("from 'motion/react'"),
+      'PublicHomeView must import motion from motion/react'
     );
 
     assert.ok(

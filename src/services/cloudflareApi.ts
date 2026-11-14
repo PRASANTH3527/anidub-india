@@ -319,8 +319,6 @@ class CloudflareApiService {
   public async uploadCSV(payload: { csvText?: string; animeList?: any[] } | string): Promise<{ success: boolean; count?: number; skipped?: number; insertedCount?: number; skippedCount?: number; skippedTitles?: string[]; addedTitles?: string[]; message?: string }> {
     const endpoint = '/api/admin/import-csv';
     const bodyData = typeof payload === 'string' ? { csvText: payload } : payload;
-    
-    console.log("Sending to backend:", bodyData);
 
     const res = await this.smartFetch(endpoint, {
       method: 'POST',
@@ -330,7 +328,6 @@ class CloudflareApiService {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      console.log('CSV Upload Error Response:', errText);
       let errorMsg = `CSV Import failed (Status ${res.status})`;
       try {
         const json = JSON.parse(errText);
@@ -392,7 +389,6 @@ class CloudflareApiService {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      console.log('Create Anime Error Response:', errText);
       let errorMsg = `Failed to create anime (Status ${res.status})`;
       try {
         const json = JSON.parse(errText);
@@ -478,7 +474,6 @@ class CloudflareApiService {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      console.log('Delete Anime Error Response:', errText);
       let errorMsg = `Failed to delete anime ID ${id} (Status ${res.status})`;
       try {
         const json = JSON.parse(errText);

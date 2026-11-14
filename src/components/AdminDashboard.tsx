@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { 
   ShieldCheck, 
   Plus, 
@@ -65,9 +65,12 @@ import { cloudflareApi } from '../services/cloudflareApi';
 import { CLOUDFLARE_API_URL, getCloudflareUrl } from '../config/cloudflare';
 import Papa from 'papaparse';
 import { AniDubLogo } from './AniDubLogo';
-import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { useUser, SignIn } from '@clerk/nextjs';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
+
+const AnalyticsDashboard = lazy(() =>
+  import('./AnalyticsDashboard').then((m) => ({ default: m.AnalyticsDashboard }))
+);
 
 export interface AdminDashboardProps {
   onAnimeCreated?: (anime?: any, deletedId?: string | number) => void;
@@ -439,7 +442,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleApprovePending = async (itemId: any) => {
-    console.log('Approving ID on Cloudflare D1:', itemId);
     const item = pendingItems.find(p => p.id === itemId);
     if (!item) return;
 
@@ -544,7 +546,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleDeleteCatalogAnime = async (e: React.MouseEvent, anime: any) => {
     e.stopPropagation();
     const targetId = anime.id || anime._id;
-    console.log('handleDeleteCatalogAnime triggered for ID on Cloudflare D1:', targetId);
     
     setDeletingId(targetId);
     setCloudSyncing(true);
@@ -2800,9 +2801,18 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
 
         {/* TAB 6: GOD-MODE EDGE ANALYTICS & TELEMETRY DECK */}
         {activeAdminTab === 'analytics' && (
-          <AnalyticsDashboard 
-            onNavigateHome={onNavigateHome}
-          />
+          <Suspense
+            fallback={
+              <div className="w-full py-16 flex items-center justify-center text-xs text-neutral-400">
+                <Loader2 className="w-5 h-5 animate-spin mr-2 text-purple-400" />
+                Loading analytics...
+              </div>
+            }
+          >
+            <AnalyticsDashboard
+              onNavigateHome={onNavigateHome}
+            />
+          </Suspense>
         )}
 
         {/* TAB 7: CLOUD INFRASTRUCTURE & BACKUP */}
