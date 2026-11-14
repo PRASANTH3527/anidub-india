@@ -416,9 +416,17 @@ test('Security Audit 8: Vite envPrefix, runtime /api/config Clerk fallback, unif
   assert.ok(wranglerToml.includes('database_name = "anime-db"'));
   assert.ok(wranglerToml.includes('database_id = "75f053ab-5b44-4d48-abf8-b3a357a89426"'));
 
+  const wranglerChatToml = fs.readFileSync(path.join(process.cwd(), 'wrangler.chat.toml'), 'utf-8');
+  assert.ok(wranglerChatToml.includes('name = "anime-chat"'));
+  assert.ok(wranglerChatToml.includes('main = "src/edge-entry.ts"'));
+  assert.ok(wranglerChatToml.includes('name = "CHAT_ROOM"'));
+  assert.ok(wranglerChatToml.includes('class_name = "ChatRoom"'));
+  assert.ok(wranglerChatToml.includes('new_sqlite_classes = ["ChatRoom"]'));
+
   const pkgJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'));
   assert.equal(pkgJson.scripts.build, 'vite build');
   assert.equal(pkgJson.scripts.deploy, 'wrangler pages deploy dist');
+  assert.equal(pkgJson.scripts['deploy:chat'], 'wrangler deploy -c wrangler.chat.toml');
 
   const edgeEntryModule = await import('../edge-entry');
   let assetsFetched = false;

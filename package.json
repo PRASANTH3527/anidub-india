@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "deploy": "wrangler pages deploy dist",
+    "deploy:chat": "wrangler deploy -c wrangler.chat.toml",
     "preview": "vite preview",
     "start": "vite preview",
     "clean": "rm -rf dist",
