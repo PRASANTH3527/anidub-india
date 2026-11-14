@@ -5,9 +5,18 @@ import { NotificationProvider } from './context/NotificationContext.tsx';
 import { ClerkProvider } from './lib/clerk.tsx';
 import './index.css';
 
+const PUBLISHABLE_KEY =
+  (import.meta as any).env?.VITE_CLERK_PUBLISHABLE_KEY ||
+  (import.meta as any).env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+  "pk_live_Y2xlcmsuYW5pZHViLWluZGlhLWExeS5wYWdlcy5kZXYk";
+
+if (!PUBLISHABLE_KEY) {
+  throw new Error("Missing Publishable Key");
+}
+
 createRoot(document.getElementById('root')!).render(
   <ClerkProvider
-    publishableKey="pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bnRzLmRldiQ"
+    publishableKey={PUBLISHABLE_KEY}
     afterSignOutUrl="/"
   >
     <ToastProvider>
