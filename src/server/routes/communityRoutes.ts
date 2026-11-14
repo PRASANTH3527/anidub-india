@@ -72,7 +72,7 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
           let list: Record<string, unknown>[] = [];
           try {
             const res = await env.DB.prepare(
-              'SELECT id, user, text, timestamp, rating, language, isReview, clerk_user_id, created_at FROM chat_messages ORDER BY id ASC LIMIT 150'
+              'SELECT id, user, text, timestamp, rating, language, isReview, clerk_user_id, avatar, created_at FROM chat_messages ORDER BY id ASC LIMIT 150'
             ).all();
             list = (res.results || []).map((m) => ({
               ...m,
@@ -200,9 +200,9 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
           let insertedId: number = Date.now();
           try {
             const insertRes = await env.DB.prepare(
-              'INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview, clerk_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+              'INSERT INTO chat_messages (user, text, timestamp, rating, language, isReview, clerk_user_id, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
             )
-              .bind(cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId)
+              .bind(cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId, cleanAvatar)
               .run();
             insertedId = insertRes.meta?.last_row_id || Date.now();
           } catch {
