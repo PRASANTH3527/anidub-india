@@ -22,6 +22,9 @@ export interface EnvBindings {
   VITE_CLERK_PUBLISHABLE_KEY?: string;
   CLERK_PUBLISHABLE_KEY?: string;
   CLERK_JWT_KEY?: string;
+  ALLOWED_ORIGINS?: string;
+  CLERK_AUTHORIZED_PARTIES?: string;
+  APP_URL?: string;
   IMGBB_API_KEY?: string;
   [key: string]: any;
 }
@@ -90,8 +93,9 @@ export function getAuthorizedAdminEmail(env?: EnvBindings | null): string {
 }
 
 /**
- * Validates whether a Clerk user object or verified email string belongs to the authorized Admin.
- * Strictly requires ADMIN_EMAIL (or VITE_ADMIN_EMAIL) to be configured in `env` bindings.
+ * Validates whether a Clerk user object, verified claims object, or email string belongs to the authorized Admin.
+ * Strictly requires ADMIN_EMAIL (or VITE_ADMIN_EMAIL) to be configured in `env` bindings AND,
+ * for user/claim objects, strictly requires the primary email to be verified (`verification.status === 'verified'` or `email_verified === true`).
  */
 export function isAuthorizedClerkAdmin(subject?: any, env?: EnvBindings | null): boolean {
   const authorizedEmail = getAuthorizedAdminEmail(env);
@@ -102,40 +106,41 @@ export function isAuthorizedClerkAdmin(subject?: any, env?: EnvBindings | null):
   }
 
   if (subject.id === 'guest') return false;
+  if (subject.email_verified === false) return false;
 
-  const candidateEmails: string[] = [];
+  // Clerk User / UserResource shape: require primary email AND verification.status === 'verified'
+  if (
+    subject.primaryEmailAddress !== undefined ||
+    Array.isArray(subject.emailAddresses) ||
+    subject.primaryEmailAddressId !== undefined
+  ) {
+    const primaryEntry =
+      (Array.isArray(subject.emailAddresses) && subject.primaryEmailAddressId
+        ? subject.emailAddresses.find((e: any) => e?.id === subject.primaryEmailAddressId)
+        : null) ||
+      (subject.primaryEmailAddress && typeof subject.primaryEmailAddress === 'object'
+        ? subject.primaryEmailAddress
+        : null);
 
-  if (typeof subject.primaryEmailAddress?.emailAddress === 'string') {
-    candidateEmails.push(subject.primaryEmailAddress.emailAddress);
-  }
-  if (typeof subject.email === 'string') {
-    candidateEmails.push(subject.email);
-  }
-  if (typeof subject.emailAddress === 'string') {
-    candidateEmails.push(subject.emailAddress);
-  }
-  if (Array.isArray(subject.emailAddresses)) {
-    for (const entry of subject.emailAddresses) {
-      if (typeof entry?.emailAddress === 'string') {
-        candidateEmails.push(entry.emailAddress);
-      } else if (typeof entry?.email === 'string') {
-        candidateEmails.push(entry.email);
-      }
-    }
-  }
-  if (Array.isArray(subject.externalAccounts)) {
-    for (const ext of subject.externalAccounts) {
-      if (typeof ext?.emailAddress === 'string') {
-        candidateEmails.push(ext.emailAddress);
-      } else if (typeof ext?.email === 'string') {
-        candidateEmails.push(ext.email);
-      }
-    }
+    if (!primaryEntry) return false;
+
+    const primaryAddress = cleanEnvValue(primaryEntry.emailAddress || primaryEntry.email).toLowerCase();
+    const isPrimaryVerified = primaryEntry?.verification?.status === 'verified';
+    return Boolean(primaryAddress && primaryAddress === authorizedEmail && isPrimaryVerified);
   }
 
-  return candidateEmails.some(
-    (email) => cleanEnvValue(email).toLowerCase() === authorizedEmail
-  );
+  // Verified JWT claim / session object shape: require email_verified === true
+  const claimEmail = cleanEnvValue(
+    subject.email ||
+      subject.emailAddress ||
+      subject.primary_email_address ||
+      subject.user_email
+  ).toLowerCase();
+  if (!claimEmail) return false;
+
+  const isClaimVerified =
+    subject.email_verified === true || subject.verification?.status === 'verified';
+  return Boolean(claimEmail === authorizedEmail && isClaimVerified);
 }
 
 /**
@@ -214,80 +219,75 @@ export interface VerifiedClerkSession {
 
 const BASE_AUTHORIZED_PARTIES = [
   'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
   'https://ais-dev-qwvw5bws5eviuuugfdklbn-712933804987.asia-southeast1.run.app',
   'https://ais-pre-qwvw5bws5eviuuugfdklbn-712933804987.asia-southeast1.run.app',
   'https://anidub.in',
   'https://www.anidub.in',
   'https://anidub-india.pages.dev',
-];
+  'https://anidub-india.samayaprasanth0.workers.dev',
+  'https://anidub-api.samayaprasanth0.workers.dev',
+] as const;
 
-/**
- * Validates whether a given origin or URL belongs to an approved local dev, preview,
- * Cloudflare Pages/Workers deployment, or production AniDub domain.
- */
-export function isApprovedOrigin(originOrUrl?: string | null, env?: EnvBindings | null): boolean {
-  if (!originOrUrl || typeof originOrUrl !== 'string') return false;
-  const trimmed = originOrUrl.trim();
-  if (!trimmed) return false;
+function parseExactOrigin(raw?: string | null): string | null {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  if (!trimmed || trimmed.includes('*')) return null;
 
   try {
     const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    const hostname = parsed.hostname.toLowerCase();
-
-    if (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === 'anidub.in' ||
-      hostname.endsWith('.anidub.in') ||
-      hostname.endsWith('.pages.dev') ||
-      hostname.endsWith('.workers.dev') ||
-      hostname.endsWith('.run.app')
-    ) {
-      return true;
-    }
-
-    const extraOriginsRaw =
-      getEnvBinding('ALLOWED_ORIGINS', env) ||
-      getEnvBinding('CLERK_AUTHORIZED_PARTIES', env) ||
-      '';
-    if (extraOriginsRaw) {
-      const extras = extraOriginsRaw
-        .split(',')
-        .map((item) => item.trim().toLowerCase())
-        .filter(Boolean);
-      for (const extra of extras) {
-        try {
-          const extraParsed = new URL(extra.startsWith('http') ? extra : `https://${extra}`);
-          if (extraParsed.origin.toLowerCase() === parsed.origin.toLowerCase()) return true;
-        } catch {
-          if (hostname === extra) return true;
-        }
-      }
-    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (parsed.username || parsed.password) return null;
+    return parsed.origin.toLowerCase();
   } catch {
-    return false;
+    return null;
+  }
+}
+
+function getApprovedOriginMap(env?: EnvBindings | null): Map<string, string> {
+  const originMap = new Map<string, string>();
+
+  for (const base of BASE_AUTHORIZED_PARTIES) {
+    const normalized = parseExactOrigin(base);
+    if (normalized) originMap.set(normalized, base);
   }
 
-  return false;
+  const envListSources = [
+    getEnvBinding('ALLOWED_ORIGINS', env),
+    getEnvBinding('CLERK_AUTHORIZED_PARTIES', env),
+    getEnvBinding('APP_URL', env),
+  ];
+
+  for (const rawList of envListSources) {
+    if (!rawList) continue;
+    for (const item of rawList.split(',')) {
+      const normalized = parseExactOrigin(item);
+      if (normalized && !originMap.has(normalized)) {
+        originMap.set(normalized, normalized);
+      }
+    }
+  }
+
+  return originMap;
 }
 
 /**
- * Builds the Clerk `authorizedParties` allowlist including approved Cloudflare Pages/Workers origins.
+ * Validates whether a given origin or URL strictly matches an exact approved local dev,
+ * preview, Cloudflare deployment, or production AniDub origin (no broad suffix wildcards).
+ */
+export function isApprovedOrigin(originOrUrl?: string | null, env?: EnvBindings | null): boolean {
+  const normalized = parseExactOrigin(originOrUrl);
+  if (!normalized) return false;
+  return getApprovedOriginMap(env).has(normalized);
+}
+
+/**
+ * Builds the exact Clerk `authorizedParties` allowlist from approved origins and env configuration.
  */
 export function buildAuthorizedParties(req?: any, env?: EnvBindings | null): string[] {
-  const parties = new Set<string>(BASE_AUTHORIZED_PARTIES);
-
-  const extraPartiesRaw =
-    getEnvBinding('CLERK_AUTHORIZED_PARTIES', env) ||
-    getEnvBinding('ALLOWED_ORIGINS', env) ||
-    '';
-  if (extraPartiesRaw) {
-    for (const raw of extraPartiesRaw.split(',')) {
-      const cleaned = raw.trim().replace(/\/+$/, '');
-      if (cleaned) parties.add(cleaned);
-    }
-  }
+  const originMap = getApprovedOriginMap(env);
 
   const candidateUrls: string[] = [];
   if (typeof req?.headers?.get === 'function') {
@@ -303,15 +303,15 @@ export function buildAuthorizedParties(req?: any, env?: EnvBindings | null): str
     } catch {}
   }
 
+  // Keep only exact allowlisted origins (never auto-approve unknown request Origins/URLs)
   for (const candidate of candidateUrls) {
-    if (isApprovedOrigin(candidate, env)) {
-      try {
-        parties.add(new URL(candidate).origin);
-      } catch {}
+    const normalized = parseExactOrigin(candidate);
+    if (normalized && originMap.has(normalized)) {
+      originMap.set(normalized, originMap.get(normalized)!);
     }
   }
 
-  return Array.from(parties);
+  return Array.from(originMap.values());
 }
 
 /**
@@ -383,11 +383,14 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
   let verifiedPayload: Record<string, any> | null = null;
   let verifyErrorDetail = '';
 
+  const authorizedParties = buildAuthorizedParties(req, resolvedEnv);
+
   if (token) {
     try {
       const verifyOptions: Record<string, any> = {
         secretKey: secretKey || undefined,
         publishableKey: publishableKey || undefined,
+        authorizedParties,
         clockSkewInMs: 60000,
       };
       if (jwtKey) verifyOptions.jwtKey = jwtKey;
@@ -407,6 +410,7 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
       const requestState = await clerkClient.authenticateRequest(req as Request, {
         secretKey,
         publishableKey: publishableKey || undefined,
+        authorizedParties,
       });
       const authObj = requestState?.toAuth?.();
       if (authObj?.userId) {
@@ -422,6 +426,18 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
       if (!verifyErrorDetail) {
         verifyErrorDetail = err?.message || 'Clerk request authentication failed';
       }
+    }
+  }
+
+  // Defense-in-depth: strictly enforce azp claim matches authorizedParties
+  if (verifiedPayload) {
+    const tokenAzp = parseExactOrigin(typeof verifiedPayload.azp === 'string' ? verifiedPayload.azp : null);
+    const allowedPartySet = new Set(
+      authorizedParties.map((p) => parseExactOrigin(p)).filter((p): p is string => Boolean(p))
+    );
+    if (!tokenAzp || !allowedPartySet.has(tokenAzp)) {
+      verifyErrorDetail = `Invalid JWT Authorized party claim (azp): ${verifiedPayload.azp || 'missing'}`;
+      verifiedPayload = null;
     }
   }
 
@@ -443,8 +459,8 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
   const userId = verifiedPayload.sub.trim();
   const sessionId = typeof verifiedPayload.sid === 'string' ? verifiedPayload.sid : null;
 
-  // Extract email from verified token claims if present, or fetch from Clerk Backend API
-  let email: string | null =
+  // Extract email from verified token claims if present, and fetch authoritative Clerk user profile if secretKey exists
+  const claimEmail: string | null =
     (typeof verifiedPayload.email === 'string' && verifiedPayload.email) ||
     (typeof verifiedPayload.email_address === 'string' && verifiedPayload.email_address) ||
     (typeof verifiedPayload.primary_email_address === 'string' && verifiedPayload.primary_email_address) ||
@@ -457,25 +473,43 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
   if (clerkClient) {
     try {
       clerkUserObj = await clerkClient.users.getUser(userId);
-      if (!email && clerkUserObj) {
-        const primary =
-          clerkUserObj.emailAddresses?.find((e: any) => e.id === clerkUserObj.primaryEmailAddressId) ||
-          clerkUserObj.emailAddresses?.[0] ||
-          clerkUserObj.externalAccounts?.[0];
-        if (primary?.emailAddress) {
-          email = primary.emailAddress;
-        }
-      }
     } catch (err: any) {
       userLookupError = err?.message || 'Failed to fetch Clerk user profile';
     }
   }
 
-  const normalizedEmail = email ? cleanEnvValue(email).toLowerCase() : null;
+  let primaryEmail: string | null = null;
+  let primaryEmailVerified = false;
+
+  if (clerkUserObj) {
+    const primaryEntry =
+      (Array.isArray(clerkUserObj.emailAddresses) && clerkUserObj.primaryEmailAddressId
+        ? clerkUserObj.emailAddresses.find((e: any) => e?.id === clerkUserObj.primaryEmailAddressId)
+        : null) ||
+      (clerkUserObj.primaryEmailAddress && typeof clerkUserObj.primaryEmailAddress === 'object'
+        ? clerkUserObj.primaryEmailAddress
+        : null);
+
+    if (primaryEntry && typeof (primaryEntry.emailAddress || primaryEntry.email) === 'string') {
+      primaryEmail = primaryEntry.emailAddress || primaryEntry.email;
+      primaryEmailVerified = primaryEntry?.verification?.status === 'verified';
+    }
+  } else {
+    primaryEmail = claimEmail;
+    primaryEmailVerified = verifiedPayload.email_verified === true;
+  }
+
+  // Never treat an explicitly unverified JWT claim as verified
+  if (verifiedPayload.email_verified === false) {
+    primaryEmailVerified = false;
+  }
+
+  const normalizedEmail = primaryEmail ? cleanEnvValue(primaryEmail).toLowerCase() : null;
   const isAdmin = Boolean(
     configuredAdminEmail &&
-      ((normalizedEmail && normalizedEmail === configuredAdminEmail) ||
-        (clerkUserObj && isAuthorizedClerkAdmin(clerkUserObj, resolvedEnv)))
+      normalizedEmail &&
+      normalizedEmail === configuredAdminEmail &&
+      primaryEmailVerified === true
   );
 
   let adminError: string | undefined;
@@ -485,9 +519,11 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
     } else if (!normalizedEmail && userLookupError) {
       adminError = `Failed to resolve email for Clerk user (${userId}): ${userLookupError}`;
     } else if (!normalizedEmail) {
-      adminError = `Authenticated Clerk session (${userId}) has no verified email address`;
-    } else {
+      adminError = `Authenticated Clerk session (${userId}) has no primary email address`;
+    } else if (normalizedEmail !== configuredAdminEmail) {
       adminError = `Email mismatch: ${normalizedEmail} !== ${configuredAdminEmail}`;
+    } else if (!primaryEmailVerified) {
+      adminError = `Admin access denied: primary email (${normalizedEmail}) is not verified (email_verified === true required)`;
     }
   }
 

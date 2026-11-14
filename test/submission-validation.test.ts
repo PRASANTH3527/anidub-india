@@ -42,6 +42,7 @@ function createSignedClerkJwt(sub: string, extraClaims: Record<string, any> = {}
     JSON.stringify({
       sub,
       sid: `sess_${sub}`,
+      azp: 'http://localhost:3000',
       exp: nowSec + 300,
       iat: nowSec - 10,
       nbf: nowSec - 10,

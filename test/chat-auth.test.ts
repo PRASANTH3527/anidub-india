@@ -40,6 +40,7 @@ function createSignedJwt(payload: Record<string, any>, privateKeyPem: string): s
       iat: now - 5,
       nbf: now - 5,
       exp: now + 300,
+      azp: 'https://anidub.in',
       ...payload,
     })
   ).toString('base64url');

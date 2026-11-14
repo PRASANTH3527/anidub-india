@@ -59,10 +59,43 @@ test('Security Audit 2: Strict ADMIN_EMAIL validation with zero hardcoded fallba
       }),
       false
     );
+    // Unverified or missing verification must be rejected even if email matches ADMIN_EMAIL
+    assert.equal(
+      isAuthorizedClerkAdmin({
+        id: 'user_admin_clerk_unverified_missing',
+        primaryEmailAddress: { emailAddress: 'configured-admin@example.com' },
+      }),
+      false
+    );
+    assert.equal(
+      isAuthorizedClerkAdmin({
+        id: 'user_admin_clerk_unverified',
+        primaryEmailAddress: {
+          emailAddress: 'configured-admin@example.com',
+          verification: { status: 'unverified' },
+        },
+      }),
+      false
+    );
+    // Verified secondary email cannot escalate when primary email is different
+    assert.equal(
+      isAuthorizedClerkAdmin({
+        id: 'user_secondary_attempt',
+        primaryEmailAddressId: 'email_1',
+        emailAddresses: [
+          { id: 'email_1', emailAddress: 'viewer@anidub.in', verification: { status: 'verified' } },
+          { id: 'email_2', emailAddress: 'configured-admin@example.com', verification: { status: 'verified' } },
+        ],
+      }),
+      false
+    );
     assert.equal(
       isAuthorizedClerkAdmin({
         id: 'user_admin_clerk_1',
-        primaryEmailAddress: { emailAddress: 'configured-admin@example.com' },
+        primaryEmailAddress: {
+          emailAddress: 'configured-admin@example.com',
+          verification: { status: 'verified' },
+        },
       }),
       true
     );
@@ -201,7 +234,11 @@ test('Security Audit 6: Cloudflare Pages Functions, env bindings & Feedback Prot
     'cf-admin@anidub.in'
   );
   assert.equal(
-    isAuthorizedClerkAdmin({ email: 'cf-admin@anidub.in' }, { ADMIN_EMAIL: 'cf-admin@anidub.in' }),
+    isAuthorizedClerkAdmin({ email: 'cf-admin@anidub.in', email_verified: false }, { ADMIN_EMAIL: 'cf-admin@anidub.in' }),
+    false
+  );
+  assert.equal(
+    isAuthorizedClerkAdmin({ email: 'cf-admin@anidub.in', email_verified: true }, { ADMIN_EMAIL: 'cf-admin@anidub.in' }),
     true
   );
 
@@ -260,13 +297,28 @@ test('Security Audit 7: Strict origin allowlist, authorizedParties, /api/config 
   assert.equal(isApprovedOrigin('https://anidub.in'), true);
   assert.equal(isApprovedOrigin('https://www.anidub.in'), true);
   assert.equal(isApprovedOrigin('https://anidub-india.pages.dev'), true);
-  assert.equal(isApprovedOrigin('https://anidub-india.myaccount.workers.dev'), true);
+  assert.equal(isApprovedOrigin('https://anidub-india.samayaprasanth0.workers.dev'), true);
+  assert.equal(isApprovedOrigin('https://anidub-api.samayaprasanth0.workers.dev'), true);
+  // Broad suffix wildcards MUST be rejected unless explicitly listed in env.ALLOWED_ORIGINS
+  assert.equal(isApprovedOrigin('https://anidub-india.myaccount.workers.dev'), false);
+  assert.equal(isApprovedOrigin('https://attacker.pages.dev'), false);
+  assert.equal(isApprovedOrigin('https://evil.workers.dev'), false);
+  assert.equal(isApprovedOrigin('https://evil.run.app'), false);
+  assert.equal(isApprovedOrigin('https://sub.anidub.in'), false);
   assert.equal(isApprovedOrigin('https://evil.com'), false);
   assert.equal(isApprovedOrigin('https://pages.dev.evil.com'), false);
   assert.equal(isApprovedOrigin('https://anidub.in.evil.com'), false);
+  assert.equal(
+    isApprovedOrigin('https://staging.anidub.in', { ALLOWED_ORIGINS: 'https://staging.anidub.in' }),
+    true
+  );
 
-  const parties = buildAuthorizedParties({ url: 'https://anidub-india.myaccount.workers.dev/api/config', headers: new Headers({ Origin: 'https://evil.com' }) });
-  assert.ok(parties.includes('https://anidub-india.myaccount.workers.dev'));
+  const parties = buildAuthorizedParties(
+    { url: 'https://anidub-india.myaccount.workers.dev/api/config', headers: new Headers({ Origin: 'https://evil.com' }) },
+    { ALLOWED_ORIGINS: 'https://staging.anidub.in' }
+  );
+  assert.equal(parties.includes('https://anidub-india.myaccount.workers.dev'), false);
+  assert.ok(parties.includes('https://staging.anidub.in'));
   assert.ok(parties.includes('https://anidub.in'));
   assert.equal(parties.includes('https://evil.com'), false);
 
@@ -280,13 +332,13 @@ test('Security Audit 7: Strict origin allowlist, authorizedParties, /api/config 
   };
 
   const configRes = await onRequest({
-    request: new Request('https://anidub-india.myaccount.workers.dev/api/config', {
-      headers: { Origin: 'https://anidub-india.myaccount.workers.dev' },
+    request: new Request('https://anidub-india.samayaprasanth0.workers.dev/api/config', {
+      headers: { Origin: 'https://anidub-india.samayaprasanth0.workers.dev' },
     }),
     env: mockEnv,
   });
   assert.equal(configRes.status, 200);
-  assert.equal(configRes.headers.get('Access-Control-Allow-Origin'), 'https://anidub-india.myaccount.workers.dev');
+  assert.equal(configRes.headers.get('Access-Control-Allow-Origin'), 'https://anidub-india.samayaprasanth0.workers.dev');
   const configText = await configRes.text();
   const configJson = JSON.parse(configText);
   assert.equal(configJson.clerkPublishableKey, 'pk_test_Y2xlcmsuYW5pZHViLmluJA');
