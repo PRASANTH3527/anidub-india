@@ -53,6 +53,25 @@ class MockHTMLRewriter implements HTMLRewriterLike {
       for (const { selector, handler } of this.rules) {
         if (!handler.element) continue;
 
+        if (selector === 'html') {
+          output = output.replace(/<html\b[^>]*>/i, (tagHtml) => {
+            let updatedTag = tagHtml;
+            handler.element?.({
+              setInnerContent() {},
+              setAttribute(name: string, value: string) {
+                const targetAttrRegex = new RegExp(`\\b${name}=["'][^"']*["']`, 'i');
+                if (targetAttrRegex.test(updatedTag)) {
+                  updatedTag = updatedTag.replace(targetAttrRegex, `${name}="${value}"`);
+                } else {
+                  updatedTag = updatedTag.replace(/>$/, ` ${name}="${value}">`);
+                }
+              },
+            });
+            return updatedTag;
+          });
+          continue;
+        }
+
         if (selector === 'title') {
           output = output.replace(/<title>[\s\S]*?<\/title>/i, (full) => {
             let nextInner = '';
@@ -231,8 +250,19 @@ test('applySeoMetaWithHtmlRewriter injects anime and language tags into raw inde
   );
   const langHtml = await rewrittenLang.text();
 
-  assert.ok(langHtml.includes('<title>Best Tamil Dubbed Anime in India | ANIDUB INDIA</title>'));
+  assert.ok(langHtml.includes('<html lang="ta">'));
+  assert.ok(
+    langHtml.includes('<title>தமிழ் டப் அனிமே - Best Tamil Dubbed Anime in India | ANIDUB INDIA</title>')
+  );
   assert.ok(langHtml.includes('<link rel="canonical" href="https://anidub.in/dubbed-anime/tamil" />'));
+
+  const mlMeta = buildLanguageSeoMeta('Malayalam', 'https://anidub.in');
+  assert.equal(mlMeta.htmlLang, 'ml');
+  assert.ok(mlMeta.title.includes('മലയാളം ഡബ്ബ് ആനിമേഷൻ'));
+
+  const knMeta = buildLanguageSeoMeta('Kannada', 'https://anidub.in');
+  assert.equal(knMeta.htmlLang, 'kn');
+  assert.ok(knMeta.title.includes('ಕನ್ನಡ ಡಬ್ ಅನಿಮೆ'));
 });
 
 test('functions/anime/[id].ts injects published anime metadata from D1 and never leaks unpublished rows', async () => {
@@ -351,7 +381,10 @@ test('functions/dubbed-anime/[language].ts and src/edge-entry.ts rewrite languag
     RewriterCtor: MockHTMLRewriter,
   });
   const hindiHtml = await hindiRes.text();
-  assert.ok(hindiHtml.includes('<title>Best Hindi Dubbed Anime in India | ANIDUB INDIA</title>'));
+  assert.ok(hindiHtml.includes('<html lang="hi">'));
+  assert.ok(
+    hindiHtml.includes('<title>हिंदी डब एनीमे - Best Hindi Dubbed Anime in India | ANIDUB INDIA</title>')
+  );
   assert.ok(hindiHtml.includes('https://anidub.in/dubbed-anime/hindi'));
 
   // 2. Unified Worker entry (`src/edge-entry.ts`) with global HTMLRewriter stub
@@ -372,7 +405,10 @@ test('functions/dubbed-anime/[language].ts and src/edge-entry.ts rewrite languag
       { DB: null, ASSETS: mockAssets }
     );
     const teluguHtml = await teluguWorkerRes.text();
-    assert.ok(teluguHtml.includes('<title>Best Telugu Dubbed Anime in India | ANIDUB INDIA</title>'));
+    assert.ok(teluguHtml.includes('<html lang="te">'));
+    assert.ok(
+      teluguHtml.includes('<title>తెలుగు డబ్ అనిమే - Best Telugu Dubbed Anime in India | ANIDUB INDIA</title>')
+    );
     assert.ok(teluguHtml.includes('https://anidub.in/dubbed-anime/telugu'));
   } finally {
     if (prevRewriter === undefined) {

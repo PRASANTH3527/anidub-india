@@ -554,14 +554,14 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     {/* POSTER */}
                     <div className="w-24 sm:w-28 aspect-[3/4.2] rounded-xl overflow-hidden bg-neutral-900 shrink-0 relative">
                       <img
-                        src={anime.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                        src={anime.cover_image || '/logo.png'}
                         alt={anime.title}
                         width={200}
                         height={280}
                         loading="lazy"
                         decoding="async"
                         onError={(e) => {
-                          e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+                          e.currentTarget.src = '/logo.png';
                         }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />

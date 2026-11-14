@@ -132,7 +132,7 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
               {/* POSTER WRAPPER */}
               <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-900">
                 <Image
-                  src={anime.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                  src={anime.cover_image || '/logo.png'}
                   alt={anime.title}
                   loading="lazy"
                   sizes="(max-width: 640px) 144px, 176px"

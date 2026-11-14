@@ -141,7 +141,7 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <img
-                          src={anime.image || anime.posterUrl || anime.cover_image || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                          src={anime.image || anime.posterUrl || anime.cover_image || anime.poster || '/logo.png'}
                           alt={anime.title}
                           className="w-8 h-11 rounded-md object-cover ring-1 ring-white/10 shrink-0"
                         />

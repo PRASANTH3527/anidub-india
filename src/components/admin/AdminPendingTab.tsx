@@ -104,7 +104,7 @@ export const AdminPendingTab: React.FC<AdminPendingTabProps> = ({
               <div className="flex items-start gap-4">
                 <div className="relative shrink-0">
                   <img
-                    src={item.cover_image || item.posterUrl || item.image || item.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                    src={item.cover_image || item.posterUrl || item.image || item.poster || '/logo.png'}
                     alt={item.title}
                     className="w-16 h-24 rounded-xl object-cover ring-1 ring-white/15 shadow-md shadow-black/60 group-hover:ring-amber-400/50 transition-all"
                   />

@@ -451,14 +451,14 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                           title={anime.title}
                         >
                           <img 
-                            src={anime.cover_image ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                            src={anime.cover_image ? anime.cover_image : '/logo.png'}
                             alt={anime.title}
                             width={160}
                             height={213}
                             loading="lazy"
                             decoding="async"
                             onError={(e) => {
-                              e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+                              e.currentTarget.src = '/logo.png';
                             }}
                             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" 
                           />
@@ -568,14 +568,14 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                       title={`${anime.title} - Drag into tier`}
                     >
                       <img 
-                        src={anime.cover_image ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                        src={anime.cover_image ? anime.cover_image : '/logo.png'}
                         alt={anime.title}
                         width={160}
                         height={213}
                         loading="lazy"
                         decoding="async"
                         onError={(e) => {
-                          e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+                          e.currentTarget.src = '/logo.png';
                         }}
                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" 
                       />

@@ -66,46 +66,17 @@ const getLanguagePillClass = (lang: string): string => {
   }
 };
 
-const ART_FALLBACKS: Record<number, { cover: string; banner: string }> = {
-  1: {
-    cover: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-    banner: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1600&auto=format&fit=crop&q=80'
-  },
-  2: {
-    cover: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80',
-    banner: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1600&auto=format&fit=crop&q=80'
-  },
-  3: {
-    cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80',
-    banner: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1600&auto=format&fit=crop&q=80'
-  },
-  4: {
-    cover: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=800&auto=format&fit=crop&q=80',
-    banner: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1600&auto=format&fit=crop&q=80'
-  },
-  5: {
-    cover: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&auto=format&fit=crop&q=80',
-    banner: 'https://images.unsplash.com/photo-1511447333015-45b65e60f6d5?w=1600&auto=format&fit=crop&q=80'
-  },
-  6: {
-    cover: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800&auto=format&fit=crop&q=80',
-    banner: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&auto=format&fit=crop&q=80'
-  }
-};
-
 const getAnimeCover = (anime: Anime): string => {
   if (anime.cover_image) {
     return anime.cover_image;
   }
-  if (ART_FALLBACKS[anime.id]?.cover) return ART_FALLBACKS[anime.id].cover;
-  return 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+  return '/logo.png';
 };
 
 const getAnimeBanner = (anime: Anime): string => {
   if (anime.banner_image) {
     return anime.banner_image;
   }
-  if (ART_FALLBACKS[anime.id]?.banner) return ART_FALLBACKS[anime.id].banner;
   return getAnimeCover(anime);
 };
 
@@ -152,7 +123,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
               height={260}
               decoding="async"
               onError={(e) => {
-                e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80';
+                e.currentTarget.src = '/logo.png';
               }}
               className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
             />

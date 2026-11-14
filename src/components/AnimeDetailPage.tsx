@@ -483,7 +483,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
   // Anime properties and fallbacks
   const title = details?.title || 'Anime Details';
-  const coverImage = details?.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+  const coverImage = details?.cover_image || '/logo.png';
   const posterImage = coverImage;
   const rawSynopsis = details?.synopsis || details?.description || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
   const synopsis = rawSynopsis.replace(/Imported via standardized CSV format\.?/gi, '').trim() || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';

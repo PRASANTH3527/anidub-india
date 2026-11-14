@@ -147,7 +147,7 @@ export async function handleUserRoutes(ctx: RouteContext): Promise<Response | nu
           id: userId,
           username: session.email ? session.email.split('@')[0] : 'AnimeFan',
           email: session.email || '',
-          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+          avatar_url: '/app-icon.png',
           role: session.isAdmin ? 'admin' : 'user',
           bio: '',
         },
@@ -164,8 +164,7 @@ export async function handleUserRoutes(ctx: RouteContext): Promise<Response | nu
         if (!avatarCheck.ok) {
           return jsonResponse({ error: avatarCheck.error }, 400, request);
         }
-        const safeAvatarUrl =
-          avatarCheck.url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
+        const safeAvatarUrl = avatarCheck.url || '/app-icon.png';
         if (env.DB) {
           await env.DB.prepare(
             `INSERT INTO users (id, username, email, avatar_url, role, bio)

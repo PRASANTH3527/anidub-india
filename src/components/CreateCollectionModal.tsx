@@ -285,14 +285,14 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                           {idx + 1}.
                         </span>
                         <img
-                          src={anime.cover_image ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                          src={anime.cover_image ? anime.cover_image : '/logo.png'}
                           alt={anime.title}
                           width={32}
                           height={44}
                           loading="lazy"
                           decoding="async"
                           onError={(e) => {
-                            e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+                            e.currentTarget.src = '/logo.png';
                           }}
                           className="w-8 h-11 rounded-lg object-cover shrink-0 border border-white/10"
                         />
@@ -389,14 +389,14 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                 >
                   <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
                     <img
-                      src={anime.cover_image ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                      src={anime.cover_image ? anime.cover_image : '/logo.png'}
                       alt={anime.title}
                       width={240}
                       height={336}
                       loading="lazy"
                       decoding="async"
                       onError={(e) => {
-                        e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+                        e.currentTarget.src = '/logo.png';
                       }}
                       className="w-full h-full object-cover"
                     />

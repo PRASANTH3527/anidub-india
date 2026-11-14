@@ -180,7 +180,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
               <div className="flex items-center gap-4 min-w-0">
                 <div className="relative shrink-0 group-hover:scale-105 transition-transform duration-300">
                   <img
-                    src={anime.image || anime.posterUrl || anime.cover_image || anime.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                    src={anime.image || anime.posterUrl || anime.cover_image || anime.poster || '/logo.png'}
                     alt={anime.title}
                     className="w-14 h-20 sm:w-16 sm:h-22 rounded-xl object-cover ring-1 ring-white/15 shadow-md shadow-black/60 group-hover:ring-purple-400/50"
                   />

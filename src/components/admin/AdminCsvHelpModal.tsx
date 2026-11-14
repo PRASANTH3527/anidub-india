@@ -135,7 +135,7 @@ export const AdminCsvHelpModal: React.FC<AdminCsvHelpModalProps> = ({
                       <td className="py-2.5 px-3 font-bold text-white">Cover Image</td>
                       <td className="py-2.5 px-3 text-neutral-300">URL</td>
                       <td className="py-2.5 px-3 text-emerald-400 font-semibold">Yes</td>
-                      <td className="py-2.5 px-3 text-cyan-300">https://images.unsplash.com/...</td>
+                      <td className="py-2.5 px-3 text-cyan-300">https://i.ibb.co/...</td>
                       <td className="py-2.5 px-3 text-neutral-400 font-sans">Maps strictly to poster/cover_image</td>
                     </tr>
                     <tr className="hover:bg-white/[0.02]">
@@ -237,9 +237,9 @@ export const AdminCsvHelpModal: React.FC<AdminCsvHelpModalProps> = ({
 
               <pre className="p-3.5 rounded-xl bg-black/80 border border-white/10 font-mono text-[10px] text-neutral-300 overflow-x-auto leading-relaxed select-all">
                 {`Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,Platform,Ratings,Synopsis,Seasons
-Solo Leveling,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Crunchyroll,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"
-Demon Slayer: Hashira Training,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"
-Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"`}
+Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Crunchyroll,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"
+Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"
+Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"`}
               </pre>
             </div>
           </div>

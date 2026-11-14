@@ -139,7 +139,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         try {
           new Notification('AniDub India Notifications Active', {
             body: 'You are now receiving instant alerts for dub reviews and community chat.',
-            icon: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200'
+            icon: '/app-icon.png'
           });
         } catch {}
         return true;
@@ -212,8 +212,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       try {
         new Notification(title, {
           body: message,
-          icon: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200',
-          badge: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200'
+          icon: '/app-icon.png',
+          badge: '/app-icon.png'
         });
       } catch {}
     }

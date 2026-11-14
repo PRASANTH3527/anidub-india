@@ -214,7 +214,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
       if (!bannerCheck.ok) {
         return jsonResponse({ error: bannerCheck.error }, 400, request);
       }
-      const safeCoverUrl = coverCheck.url || String(body.cover_image || '') || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
+      const safeCoverUrl = coverCheck.url || String(body.cover_image || '') || '/logo.png';
       const safeBannerUrl = bannerCheck.url || safeCoverUrl;
 
       let createdId: number | null = null;

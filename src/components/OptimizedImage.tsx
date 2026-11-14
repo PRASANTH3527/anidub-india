@@ -16,45 +16,18 @@ export interface OptimizedImageProps
 }
 
 /**
- * Optimizes an image URL for a target width and quality (e.g., Unsplash CDN URLs)
- * so mobile devices receive appropriately sized WebP/AVIF assets instead of oversized originals.
+ * Normalizes an image URL cleanly for responsive rendering.
  */
-export function buildOptimizedImageUrl(rawSrc: string, width?: number, quality: number = 75): string {
+export function buildOptimizedImageUrl(rawSrc: string, _width?: number, _quality: number = 75): string {
   if (!rawSrc || typeof rawSrc !== 'string') return '';
-  const trimmed = rawSrc.trim();
-  if (!trimmed || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
-
-  if (trimmed.includes('images.unsplash.com')) {
-    try {
-      const url = new URL(trimmed);
-      url.searchParams.set('auto', 'format');
-      url.searchParams.set('fit', 'crop');
-      url.searchParams.set('q', String(quality));
-      if (width && width > 0) {
-        url.searchParams.set('w', String(width));
-      }
-      return url.toString();
-    } catch {
-      return trimmed;
-    }
-  }
-
-  return trimmed;
+  return rawSrc.trim();
 }
 
 /**
- * Generates a responsive `srcSet` string for supported remote image providers
- * so mobile viewports download smaller images (320w, 480w, 640w) instead of full desktop resolution.
+ * Generates a responsive `srcSet` string when a CDN supports width transforms.
  */
-export function buildResponsiveSrcSet(rawSrc: string, quality: number = 75): string | undefined {
-  if (!rawSrc || typeof rawSrc !== 'string') return undefined;
-  const trimmed = rawSrc.trim();
-  if (!trimmed.includes('images.unsplash.com')) return undefined;
-
-  const widths = [320, 480, 640, 800, 1200];
-  return widths
-    .map((w) => `${buildOptimizedImageUrl(trimmed, w, quality)} ${w}w`)
-    .join(', ');
+export function buildResponsiveSrcSet(_rawSrc: string, _quality: number = 75): string | undefined {
+  return undefined;
 }
 
 /**
@@ -85,8 +58,7 @@ export function resolveImagePerformanceAttrs(
   };
 }
 
-const DEFAULT_FALLBACK =
-  'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&q=75&w=480';
+const DEFAULT_FALLBACK = '/logo.png';
 
 export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   src,

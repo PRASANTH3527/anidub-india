@@ -107,7 +107,7 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
                 <div key={`rating_correction_${idx}`} className="p-4 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
                   <div className="flex items-center gap-3.5 min-w-0">
                     <img
-                      src={item.anime.cover_image || item.anime.posterUrl || item.anime.image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                      src={item.anime.cover_image || item.anime.posterUrl || item.anime.image || '/logo.png'}
                       alt={item.anime.title}
                       className="w-12 h-16 rounded-lg object-cover ring-1 ring-white/20 shrink-0"
                     />

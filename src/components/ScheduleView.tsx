@@ -409,14 +409,14 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
       >
         <div className="flex items-center gap-2">
           <img 
-            src={anime.cover_image ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+            src={anime.cover_image ? anime.cover_image : '/logo.png'}
             alt={anime.title}
             width={32}
             height={44}
             loading="lazy"
             decoding="async"
             onError={(e) => {
-              e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+              e.currentTarget.src = '/logo.png';
             }}
             className="w-8 h-11 rounded-lg object-cover shrink-0 border border-white/5"
           />
@@ -447,14 +447,14 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
           className="relative w-20 sm:w-24 aspect-[3/4.2] rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-700/80 shrink-0 cursor-pointer group-hover:scale-[1.02] transition-transform"
         >
           <img 
-            src={anime.cover_image ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+            src={anime.cover_image ? anime.cover_image : '/logo.png'}
             alt={anime.title}
             width={192}
             height={269}
             loading="lazy"
             decoding="async"
             onError={(e) => {
-              e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+              e.currentTarget.src = '/logo.png';
             }}
             className="w-full h-full object-cover"
           />

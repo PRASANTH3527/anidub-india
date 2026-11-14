@@ -635,8 +635,7 @@ export interface SanitizedCommunitySubmission {
   studio: string;
 }
 
-const DEFAULT_SUBMISSION_COVER_URL =
-  'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
+const DEFAULT_SUBMISSION_COVER_URL = '/logo.png';
 
 /**
  * Validates and sanitizes community anime submission payloads (`POST /api/anime/submit`).

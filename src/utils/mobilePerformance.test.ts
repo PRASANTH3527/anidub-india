@@ -9,22 +9,18 @@ import {
 } from '../components/OptimizedImage';
 
 describe('Mobile Lighthouse Performance Optimizations', () => {
-  it('optimizes Unsplash image URLs with width, quality, and auto WebP/AVIF format', () => {
-    const raw = 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800';
-    const optimized = buildOptimizedImageUrl(raw, 480, 75);
-    assert.ok(optimized.includes('auto=format'), 'Must include auto=format');
-    assert.ok(optimized.includes('fit=crop'), 'Must include fit=crop');
-    assert.ok(optimized.includes('q=75'), 'Must include q=75');
-    assert.ok(optimized.includes('w=480'), 'Must resize to requested width w=480');
-  });
+  it('normalizes local /logo.png and CDN image URLs cleanly without Unsplash dependencies', () => {
+    const cdn = '  https://i.ibb.co/98W13PY/poster.jpg  ';
+    assert.strictEqual(buildOptimizedImageUrl(cdn), 'https://i.ibb.co/98W13PY/poster.jpg');
+    assert.strictEqual(buildOptimizedImageUrl('/logo.png'), '/logo.png');
+    assert.strictEqual(buildResponsiveSrcSet('https://i.ibb.co/98W13PY/poster.jpg'), undefined);
 
-  it('generates responsive srcSet for Unsplash images across mobile and desktop widths', () => {
-    const raw = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800';
-    const srcSet = buildResponsiveSrcSet(raw, 75);
-    assert.ok(srcSet, 'Should return a non-empty srcSet string');
-    assert.ok(srcSet.includes('320w'), 'Must include 320w mobile candidate');
-    assert.ok(srcSet.includes('480w'), 'Must include 480w mobile candidate');
-    assert.ok(srcSet.includes('800w'), 'Must include 800w tablet/desktop candidate');
+    const optImgContent = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/OptimizedImage.tsx'),
+      'utf-8'
+    );
+    assert.ok(optImgContent.includes("DEFAULT_FALLBACK = '/logo.png'"));
+    assert.strictEqual(optImgContent.includes('unsplash.com'), false);
   });
 
   it('resolves priority image attributes for above-the-fold LCP images and lazy attributes for others', () => {

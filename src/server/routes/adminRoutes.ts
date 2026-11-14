@@ -389,7 +389,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
             row['Poster'] ||
             row['Poster URL'] ||
             row['Cover Image'] ||
-            'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800'
+            '/logo.png'
         );
         const banner_image = String(row.banner_image || row['Banner Image'] || cover_image);
 

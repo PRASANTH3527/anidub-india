@@ -432,6 +432,12 @@ test('Security headers (_headers), .gitignore, SEO assets, and non-sensitive rev
   assert.ok(headersContent.includes('Referrer-Policy: strict-origin-when-cross-origin'));
   assert.ok(headersContent.includes('Strict-Transport-Security:'));
   assert.ok(headersContent.includes('Content-Security-Policy:'));
+  assert.ok(
+    headersContent.includes("img-src 'self' data: blob: https://i.ibb.co https://cdn.myanimelist.net https://img.clerk.com"),
+    'img-src must explicitly whitelist CDNs instead of wildcard https:'
+  );
+  assert.equal(/img-src[^;]*\bhttps:\s*;/.test(headersContent), false);
+  assert.ok(headersContent.includes('wss://anidub.in'));
 
   const gitignoreContent = fs.readFileSync(path.join(process.cwd(), '.gitignore'), 'utf-8');
   assert.ok(gitignoreContent.includes('.wrangler/'));
@@ -447,6 +453,12 @@ test('Security headers (_headers), .gitignore, SEO assets, and non-sensitive rev
   const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
   assert.ok(indexHtml.includes('content="https://anidub.in/logo.png"'));
   assert.equal(indexHtml.includes('property="og:image" content="/logo.png"'), false);
+  assert.equal(indexHtml.includes('images.unsplash.com'), false);
+  assert.ok(
+    indexHtml.includes(
+      '<meta name="google-site-verification" content="svUhVIZSzl8_OJjRLTeLQPG2dAJJ-1KQMezuuVV_7B4" />'
+    )
+  );
 
   const readCombinedRouteCode = () => {
     const files: string[] = [path.join(process.cwd(), 'functions/api/[[route]].ts')];

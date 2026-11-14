@@ -97,14 +97,14 @@ export const MoreLikeThisSection: React.FC<MoreLikeThisSectionProps> = ({
               {/* TOP MEDIA ROW */}
               <div className="relative aspect-[16/10] w-full overflow-hidden bg-neutral-900">
                 <img
-                  src={anime.banner_image || anime.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                  src={anime.banner_image || anime.cover_image || '/logo.png'}
                   alt={anime.title}
                   width={400}
                   height={250}
                   loading="lazy"
                   decoding="async"
                   onError={(e) => {
-                    e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+                    e.currentTarget.src = '/logo.png';
                   }}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />

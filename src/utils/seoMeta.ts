@@ -24,6 +24,71 @@ export const FEATURED_SEO_LANGUAGES = [
   'Punjabi',
 ] as const;
 
+export interface LocalizedLanguageSeoConfig {
+  lang: string;
+  title: string;
+  localizedSubtitle: string;
+}
+
+export const LANGUAGE_SEO_LOCALIZATION: Record<string, LocalizedLanguageSeoConfig> = {
+  Hindi: {
+    lang: 'hi',
+    title: 'हिंदी डब एनीमे',
+    localizedSubtitle: 'भारत में आधिकारिक हिंदी डब एनीमे सीरीज और फिल्में',
+  },
+  Tamil: {
+    lang: 'ta',
+    title: 'தமிழ் டப் அனிமே',
+    localizedSubtitle: 'இந்தியாவில் அதிகாரப்பூர்வ தமிழ் டப் அனிமே தொகுப்பு',
+  },
+  Telugu: {
+    lang: 'te',
+    title: 'తెలుగు డబ్ అనిమే',
+    localizedSubtitle: 'భారతదేశంలో అధికారిక తెలుగు డబ్ అనిమే జాబితా',
+  },
+  Malayalam: {
+    lang: 'ml',
+    title: 'മലയാളം ഡബ്ബ് ആനിമേഷൻ',
+    localizedSubtitle: 'ഇന്ത്യയിലെ ഔദ്യോഗിക മലയാളം ഡബ്ബ് ആനിമേഷൻ ശേഖരം',
+  },
+  Kannada: {
+    lang: 'kn',
+    title: 'ಕನ್ನಡ ಡಬ್ ಅನಿಮೆ',
+    localizedSubtitle: 'ಭಾರತದಲ್ಲಿ ಅಧಿಕೃತ ಕನ್ನಡ ಡಬ್ ಅನಿಮೆ ಸಂಗ್ರಹ',
+  },
+  Bengali: {
+    lang: 'bn',
+    title: 'বাংলা ডাবড অ্যানিমে',
+    localizedSubtitle: 'ভারতে অফিসিয়াল বাংলা ডাব করা অ্যানিমে সংগ্রহ',
+  },
+  Marathi: {
+    lang: 'mr',
+    title: 'मराठी डब अ‍ॅनिमे',
+    localizedSubtitle: 'भारतातील अधिकृत मराठी डब अ‍ॅनिमे संग्रह',
+  },
+  Gujarati: {
+    lang: 'gu',
+    title: 'ગુજરાતી ડબ એનિમે',
+    localizedSubtitle: 'ભારતમાં સત્તાવાર ગુજરાતી ડબ એનિમે સંગ્રહ',
+  },
+  Punjabi: {
+    lang: 'pa',
+    title: 'ਪੰਜਾਬੀ ਡੱਬ ਐਨੀਮੇ',
+    localizedSubtitle: 'ਭਾਰਤ ਵਿੱਚ ਅਧਿਕਾਰਤ ਪੰਜਾਬੀ ਡੱਬ ਐਨੀਮੇ ਸੰਗ੍ਰਹਿ',
+  },
+};
+
+export function getLocalizedLanguageSeo(language: string): LocalizedLanguageSeoConfig {
+  const normalized = normalizeLanguageName(language) || 'Hindi';
+  return (
+    LANGUAGE_SEO_LOCALIZATION[normalized] || {
+      lang: 'en',
+      title: `${normalized} Dubbed Anime`,
+      localizedSubtitle: `Official ${normalized} Dubbed Anime Directory in India`,
+    }
+  );
+}
+
 export interface SeoMetaPayload {
   title: string;
   ogTitle: string;
@@ -31,6 +96,7 @@ export interface SeoMetaPayload {
   image: string;
   canonicalUrl: string;
   ogType: 'website' | 'video.tv_show' | 'video.movie';
+  htmlLang: string;
   jsonLd?: string;
 }
 
@@ -290,6 +356,7 @@ export function buildDefaultSeoMeta(originInput?: string): SeoMetaPayload {
     image: DEFAULT_OG_IMAGE,
     canonicalUrl: `${origin}/`,
     ogType: 'website',
+    htmlLang: 'en',
     jsonLd: serializeSafeJsonLd({
       '@context': 'https://schema.org',
       '@type': 'WebSite',
@@ -336,6 +403,7 @@ export function buildAnimeSeoMeta(
     image,
     canonicalUrl,
     ogType,
+    htmlLang: 'en',
     jsonLd: buildAnimeJsonLd(anime, originInput, fallbackIdOrSlug),
   };
 }
@@ -347,23 +415,26 @@ export function buildLanguageSeoMeta(
   const origin = resolveOrigin(originInput);
   const normalized = normalizeLanguageName(language) || 'Hindi';
   const slug = getLanguageSlug(normalized);
-  const description = `Browse the complete directory of official ${normalized} dubbed anime streaming legally in India on Crunchyroll, Netflix, JioHotstar, and Prime Video.`;
+  const localized = getLocalizedLanguageSeo(normalized);
+  const description = `${localized.localizedSubtitle}. Browse the complete directory of official ${normalized} dubbed anime streaming legally in India on Crunchyroll, Netflix, JioHotstar, and Prime Video.`;
   const canonicalUrl = `${origin}/dubbed-anime/${slug}`;
+  const fullTitle = `${localized.title} - Best ${normalized} Dubbed Anime in India | ANIDUB INDIA`;
 
   return {
-    title: `Best ${normalized} Dubbed Anime in India | ANIDUB INDIA`,
-    ogTitle: `Best ${normalized} Dubbed Anime in India | ANIDUB INDIA`,
+    title: fullTitle,
+    ogTitle: fullTitle,
     description,
     image: DEFAULT_OG_IMAGE,
     canonicalUrl,
     ogType: 'website',
+    htmlLang: localized.lang,
     jsonLd: serializeSafeJsonLd({
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
-      name: `Best ${normalized} Dubbed Anime in India`,
+      name: `${localized.title} - Best ${normalized} Dubbed Anime in India`,
       url: canonicalUrl,
       description,
-      inLanguage: normalized,
+      inLanguage: [localized.lang, normalized],
     }),
   };
 }
@@ -384,6 +455,11 @@ export function applySeoMetaWithHtmlRewriter(
   }
 
   const rewriter = new Ctor()
+    .on('html', {
+      element(el) {
+        el.setAttribute('lang', meta.htmlLang || 'en');
+      },
+    })
     .on('title', {
       element(el) {
         el.setInnerContent(meta.title);
@@ -535,6 +611,7 @@ export function resolveLanguageSeoResponse(params: {
  */
 export function updateDocumentSeoMeta(meta: SeoMetaPayload): void {
   if (typeof document === 'undefined') return;
+  document.documentElement.lang = meta.htmlLang || 'en';
   document.title = meta.title;
 
   const setMeta = (selector: string, attr: string, value: string) => {

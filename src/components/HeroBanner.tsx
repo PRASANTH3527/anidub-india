@@ -34,13 +34,13 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ anime, onSelectAnime, on
       {/* Background Banner Image */}
       <div className="absolute inset-0">
         <img
-          src={anime.banner_image || anime.cover_image}
+          src={anime.banner_image || anime.cover_image || '/logo.png'}
           alt={anime.title}
           width={1280}
           height={540}
           decoding="async"
           onError={(e) => {
-            e.currentTarget.src = 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1600&auto=format&fit=crop&q=80';
+            e.currentTarget.src = '/logo.png';
           }}
           className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
         />

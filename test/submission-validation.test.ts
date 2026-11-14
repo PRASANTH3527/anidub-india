@@ -138,7 +138,7 @@ test('validateExternalImageUrl allows safe HTTPS URLs and blocks HTTP, javascrip
     true
   );
   assert.equal(
-    validateExternalImageUrl('https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800').ok,
+    validateExternalImageUrl('https://cdn.myanimelist.net/images/anime/10/47347.jpg').ok,
     true
   );
 
@@ -435,7 +435,7 @@ test('POST /api/anime/submit enforces external URL validation, spam checks, dupl
           title: `Legit Regional Dub ${i}`,
           synopsis: 'Great official regional Hindi and Tamil dub release.',
           cover_image: 'https://i.ibb.co/98W13PY/poster.jpg',
-          banner_image: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800',
+          banner_image: 'https://cdn.myanimelist.net/images/anime/10/47347.jpg',
         }),
       }),
       env,

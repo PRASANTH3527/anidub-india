@@ -83,14 +83,14 @@ export const RouletteModal: React.FC<RouletteModalProps> = ({
               {/* POSTER AREA */}
               <div className="relative h-60 sm:h-72 w-full overflow-hidden bg-neutral-950">
                 <img
-                  src={selectedAnime.banner_image || selectedAnime.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
+                  src={selectedAnime.banner_image || selectedAnime.cover_image || '/logo.png'}
                   alt={selectedAnime.title}
                   width={512}
                   height={288}
                   loading="lazy"
                   decoding="async"
                   onError={(e) => {
-                    e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+                    e.currentTarget.src = '/logo.png';
                   }}
                   className={`w-full h-full object-cover transition-transform duration-500 ${isSpinning ? 'scale-110 blur-[1px]' : 'scale-100'}`}
                 />

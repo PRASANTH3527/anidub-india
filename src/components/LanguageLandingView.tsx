@@ -9,6 +9,7 @@ import {
   SITE_ORIGIN,
   filterAnimeByLanguage,
   getLanguageSlug,
+  getLocalizedLanguageSeo,
 } from '../utils/seoMeta';
 import { AnimeCard, type AnimeCardData } from './AnimeCard';
 import { SkeletonGrid } from './SkeletonGrid';
@@ -64,6 +65,10 @@ export const LanguageLandingView: React.FC<LanguageLandingViewProps> = ({
   );
   const languageSlug = useMemo(
     () => getLanguageSlug(displayLanguage),
+    [displayLanguage]
+  );
+  const localizedSeo = useMemo(
+    () => getLocalizedLanguageSeo(displayLanguage),
     [displayLanguage]
   );
 
@@ -276,6 +281,13 @@ export const LanguageLandingView: React.FC<LanguageLandingViewProps> = ({
             {meta.totalItems} {meta.totalItems === 1 ? 'Title' : 'Titles'} Available
           </span>
         </div>
+
+        <p
+          lang={localizedSeo.lang}
+          className="text-sm sm:text-base font-semibold text-purple-300 tracking-wide"
+        >
+          {localizedSeo.title}
+        </p>
 
         <h1
           id="language-landing-heading"
