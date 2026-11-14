@@ -1083,12 +1083,17 @@ class CloudflareApiService {
   /**
    * CHAT: Sends a new message or review to the community chat (User identity verified on backend from Clerk JWT)
    */
-  public async sendChatMessage(payload: ChatMessagePayload): Promise<{ success: boolean; message?: ChatMessageRecord; error?: string }> {
+  public async sendChatMessage(payload: ChatMessagePayload, explicitToken?: string | null): Promise<{ success: boolean; message?: ChatMessageRecord; error?: string }> {
     try {
       const { clerk_user_id: _ignoredClerkId, user_id: _ignoredUserId, userId: _ignoredUid, ...safePayload } = payload || {};
+      const headers = this.getHeaders(false);
+      const token = explicitToken || await getClerkSessionToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
         method: 'POST',
-        headers: this.getHeaders(false),
+        headers,
         body: JSON.stringify(safePayload)
       });
       const data = await res.json().catch(() => ({}));

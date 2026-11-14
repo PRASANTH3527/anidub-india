@@ -227,6 +227,7 @@ const BASE_AUTHORIZED_PARTIES = [
   'https://anidub.in',
   'https://www.anidub.in',
   'https://anidub-india.pages.dev',
+  'https://anidub-india-a1y.pages.dev',
   'https://anidub-india.samayaprasanth0.workers.dev',
   'https://anidub-api.samayaprasanth0.workers.dev',
 ] as const;

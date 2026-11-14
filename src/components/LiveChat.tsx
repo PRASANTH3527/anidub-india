@@ -528,7 +528,8 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
     // 3) Persist to Backend D1 / SQLite Database with verified Clerk username
     try {
-      const resp = await cloudflareApi.sendChatMessage(payload);
+      const token = (await getToken().catch(() => null)) || (await getClerkSessionToken());
+      const resp = await cloudflareApi.sendChatMessage(payload, token);
       if (!resp.success) {
         throw new Error(resp.error || 'Failed to post message');
       }
