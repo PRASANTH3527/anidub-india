@@ -5,19 +5,11 @@ import { NotificationProvider } from './context/NotificationContext.tsx';
 import { ClerkProvider } from './lib/clerk.tsx';
 import './index.css';
 
-const PUBLISHABLE_KEY =
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
-  import.meta.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-  '';
-
-if (!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY) {
-  console.error(
-    '[Clerk] Missing import.meta.env.VITE_CLERK_PUBLISHABLE_KEY. Falling back to NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY or runtime /api/config.'
-  );
-}
-
 createRoot(document.getElementById('root')!).render(
-  <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
+  <ClerkProvider
+    publishableKey="pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bnRzLmRldiQ"
+    afterSignOutUrl="/"
+  >
     <ToastProvider>
       <NotificationProvider>
         <App />

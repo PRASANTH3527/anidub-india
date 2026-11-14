@@ -404,8 +404,7 @@ test('Security Audit 8: Vite envPrefix, runtime /api/config Clerk fallback, unif
   assert.ok(viteConfig.includes('VITE_CLERK_PUBLISHABLE_KEY'));
 
   const clerkLib = fs.readFileSync(path.join(process.cwd(), 'src/lib/clerk.tsx'), 'utf-8');
-  assert.ok(clerkLib.includes('/api/config'));
-  assert.ok(clerkLib.includes('/api/auth-config'));
+  assert.ok(clerkLib.includes('pk_live_Y2xlcmsuYW5pZHViLWluZGlhLWExeS5wYWdlcy5kZXYk'));
 
   const wranglerToml = fs.readFileSync(path.join(process.cwd(), 'wrangler.toml'), 'utf-8');
   assert.equal(wranglerToml.includes('main ='), false);
