@@ -55,7 +55,11 @@ export const ClerkProvider: React.FC<{
 }) => {
   return (
     <ClerkConfigContext.Provider value={{ configured: true, loading: false }}>
-      <OfficialClerkProvider publishableKey={publishableKey} afterSignOutUrl={afterSignOutUrl}>
+      <OfficialClerkProvider
+        publishableKey={publishableKey}
+        afterSignOutUrl={afterSignOutUrl}
+        clerkJSUrl="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+      >
         <ClerkTokenSynchronizer />
         {children}
       </OfficialClerkProvider>
