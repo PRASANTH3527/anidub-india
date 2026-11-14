@@ -438,6 +438,11 @@ test('Security headers (_headers), .gitignore, SEO assets, and non-sensitive rev
   );
   assert.equal(/img-src[^;]*\bhttps:\s*;/.test(headersContent), false);
   assert.ok(headersContent.includes('wss://anidub.in'));
+  assert.match(headersContent, /script-src[^;]*'unsafe-inline'[^;]*'unsafe-eval'/);
+  assert.match(headersContent, /script-src[^;]*https:\/\/\*\.clerk\.com[^;]*https:\/\/\*\.clerk\.accounts\.dev/);
+  assert.match(headersContent, /connect-src[^;]*https:\/\/\*\.clerk\.com[^;]*https:\/\/\*\.clerk\.accounts\.dev[^;]*wss:/);
+  assert.match(headersContent, /frame-src[^;]*https:\/\/\*\.clerk\.com[^;]*https:\/\/\*\.clerk\.accounts\.dev/);
+  assert.match(headersContent, /worker-src[^;]*https:\/\/\*\.clerk\.com[^;]*https:\/\/\*\.clerk\.accounts\.dev/);
 
   const gitignoreContent = fs.readFileSync(path.join(process.cwd(), '.gitignore'), 'utf-8');
   assert.ok(gitignoreContent.includes('.wrangler/'));
