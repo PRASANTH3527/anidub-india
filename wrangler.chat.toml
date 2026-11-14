@@ -1,3 +1,4 @@
+# Force update for anime-chat deployment
 name = "anime-chat"
 main = "src/edge-entry.ts"
 compatibility_date = "2025-03-20"
