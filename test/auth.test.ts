@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   isAuthorizedClerkAdmin,
   getAuthorizedAdminEmail,
@@ -160,7 +162,7 @@ test('getAuth and /api/admin/verify enforce Clerk authorizedParties (azp) and ve
     }),
     env,
   });
-  assert.equal(unverifiedFalseRes.status, 401);
+  assert.equal(unverifiedFalseRes.status, 403);
 
   // 4. Token with approved azp + matching admin email + omitted email_verified MUST be denied admin access
   const omittedVerifiedJwt = signClerkTestJwt(
@@ -198,4 +200,255 @@ test('getAuth and /api/admin/verify enforce Clerk authorizedParties (azp) and ve
   const validJson: any = await validRes.json();
   assert.equal(validJson.ok, true);
   assert.equal(validJson.isAdmin, true);
+});
+
+test('/api/admin/verify and /api/admin/login never leak ADMIN_EMAIL in error responses', async () => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
+  const secretAdminEmail = 'top-secret-founder@anidub.in';
+  const env = {
+    ADMIN_EMAIL: secretAdminEmail,
+    CLERK_JWT_KEY: publicKey,
+    DB: null as any,
+  };
+
+  const nonAdminJwt = signClerkTestJwt(
+    {
+      sub: 'user_regular_viewer',
+      email: 'viewer@example.com',
+      email_verified: true,
+      azp: 'https://anidub.in',
+    },
+    privateKey
+  );
+
+  for (const endpoint of ['/api/admin/verify', '/api/admin/login']) {
+    const res = await onRequest({
+      request: new Request(`https://anidub.in${endpoint}`, {
+        method: endpoint === '/api/admin/login' ? 'POST' : 'GET',
+        headers: { Authorization: `Bearer ${nonAdminJwt}` },
+      }),
+      env,
+    });
+    assert.equal(res.status, 403);
+    const bodyText = await res.text();
+    const json = JSON.parse(bodyText);
+    assert.equal(json.isAdmin, false);
+    assert.match(json.error, /Forbidden|Unauthorized/i);
+    assert.equal(bodyText.includes(secretAdminEmail), false, `${endpoint} leaked ADMIN_EMAIL`);
+    assert.equal(bodyText.includes('Email mismatch'), false, `${endpoint} leaked Email mismatch`);
+  }
+});
+
+test('GET /api/anime/:id hides unpublished rows from public/non-admins and allows admins', async () => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
+  const rows = [
+    { id: 10, slug: 'solo-leveling', title: 'Solo Leveling', is_published: 1 },
+    { id: 99, slug: 'secret-pending-dub', title: 'Secret Pending Dub', is_published: 0 },
+  ];
+  const executedSql: string[] = [];
+
+  const mockDb = {
+    prepare(sql: string) {
+      executedSql.push(sql);
+      let bindings: any[] = [];
+      return {
+        bind(...args: any[]) {
+          bindings = args;
+          return this;
+        },
+        async first() {
+          if (sql.startsWith('SELECT * FROM anime WHERE')) {
+            const requiresPublished = sql.includes('is_published = 1');
+            const target = String(bindings[0]);
+            return (
+              rows.find(
+                (r) =>
+                  (String(r.id) === target || r.slug === target) &&
+                  (!requiresPublished || r.is_published === 1)
+              ) || null
+            );
+          }
+          return null;
+        },
+        async all() {
+          return { results: [] };
+        },
+      };
+    },
+  };
+
+  const env = {
+    ADMIN_EMAIL: 'admin@anidub.in',
+    CLERK_JWT_KEY: publicKey,
+    DB: mockDb,
+  };
+
+  // 1. Public request for unpublished anime by ID and by slug -> 404
+  const pubPendingById = await onRequest({
+    request: new Request('https://anidub.in/api/anime/99'),
+    env,
+  });
+  assert.equal(pubPendingById.status, 404);
+
+  const pubPendingBySlug = await onRequest({
+    request: new Request('https://anidub.in/api/anime/secret-pending-dub'),
+    env,
+  });
+  assert.equal(pubPendingBySlug.status, 404);
+  assert.ok(
+    executedSql.some((s) => s.includes('WHERE (id = ? OR slug = ?) AND is_published = 1')),
+    'Public GET /api/anime/:id SQL must wrap OR in parentheses and filter AND is_published = 1'
+  );
+
+  // 2. Non-admin authenticated user also gets 404 for unpublished row
+  const userJwt = signClerkTestJwt(
+    { sub: 'user_viewer', email: 'viewer@example.com', email_verified: true, azp: 'https://anidub.in' },
+    privateKey
+  );
+  const nonAdminPending = await onRequest({
+    request: new Request('https://anidub.in/api/anime/99', {
+      headers: { Authorization: `Bearer ${userJwt}` },
+    }),
+    env,
+  });
+  assert.equal(nonAdminPending.status, 404);
+
+  // 3. Public request for published anime -> 200
+  const pubPublished = await onRequest({
+    request: new Request('https://anidub.in/api/anime/10'),
+    env,
+  });
+  assert.equal(pubPublished.status, 200);
+
+  // 4. Verified Admin request for unpublished anime -> 200
+  const adminJwt = signClerkTestJwt(
+    { sub: 'user_admin', email: 'admin@anidub.in', email_verified: true, azp: 'https://anidub.in' },
+    privateKey
+  );
+  const adminPending = await onRequest({
+    request: new Request('https://anidub.in/api/anime/secret-pending-dub', {
+      headers: { Authorization: `Bearer ${adminJwt}` },
+    }),
+    env,
+  });
+  assert.equal(adminPending.status, 200);
+  const adminJson: any = await adminPending.json();
+  assert.equal(adminJson.title, 'Secret Pending Dub');
+});
+
+test('POST /api/admin/reset-db requires strict { confirm: "DELETE ALL" } and AdminDashboard enforces prompt()', async () => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
+  const deletedTables: string[] = [];
+  const mockDb = {
+    prepare(sql: string) {
+      return {
+        async run() {
+          deletedTables.push(sql);
+          return { success: true };
+        },
+      };
+    },
+  };
+
+  const env = {
+    ADMIN_EMAIL: 'admin@anidub.in',
+    CLERK_JWT_KEY: publicKey,
+    DB: mockDb,
+  };
+
+  const adminJwt = signClerkTestJwt(
+    { sub: 'user_admin', email: 'admin@anidub.in', email_verified: true, azp: 'https://anidub.in' },
+    privateKey
+  );
+
+  // 1. Missing body -> 400 and no DELETE executed
+  const missingBodyRes = await onRequest({
+    request: new Request('https://anidub.in/api/admin/reset-db', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminJwt}` },
+    }),
+    env,
+  });
+  assert.equal(missingBodyRes.status, 400);
+  assert.equal(deletedTables.length, 0);
+
+  // 2. Wrong confirmation string -> 400 and no DELETE executed
+  for (const wrongPayload of [{}, { confirm: '' }, { confirm: 'delete all' }, { confirm: 'YES' }]) {
+    const wrongRes = await onRequest({
+      request: new Request('https://anidub.in/api/admin/reset-db', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminJwt}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(wrongPayload),
+      }),
+      env,
+    });
+    assert.equal(wrongRes.status, 400);
+    assert.equal(deletedTables.length, 0);
+  }
+
+  // 3. Exact { confirm: "DELETE ALL" } -> 200 and deletes executed
+  const confirmRes = await onRequest({
+    request: new Request('https://anidub.in/api/admin/reset-db', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${adminJwt}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ confirm: 'DELETE ALL' }),
+    }),
+    env,
+  });
+  assert.equal(confirmRes.status, 200);
+  assert.ok(deletedTables.some((s) => s.includes('DELETE FROM anime')));
+
+  // 4. Frontend AdminDashboard.tsx requires window.prompt() matching "DELETE ALL"
+  const dashboardCode = fs.readFileSync(path.join(process.cwd(), 'src/components/AdminDashboard.tsx'), 'utf-8');
+  assert.ok(dashboardCode.includes('window.prompt('));
+  assert.ok(dashboardCode.includes("typedConfirmation !== 'DELETE ALL'"));
+});
+
+test('Security headers (_headers), .gitignore, SEO assets, and non-sensitive reviews SQL projection', () => {
+  const headersContent = fs.readFileSync(path.join(process.cwd(), 'public/_headers'), 'utf-8');
+  assert.ok(headersContent.includes('X-Frame-Options: DENY'));
+  assert.ok(headersContent.includes('X-Content-Type-Options: nosniff'));
+  assert.ok(headersContent.includes('Referrer-Policy: strict-origin-when-cross-origin'));
+  assert.ok(headersContent.includes('Strict-Transport-Security:'));
+  assert.ok(headersContent.includes('Content-Security-Policy:'));
+
+  const gitignoreContent = fs.readFileSync(path.join(process.cwd(), '.gitignore'), 'utf-8');
+  assert.ok(gitignoreContent.includes('.wrangler/'));
+  assert.ok(gitignoreContent.includes('.wrangler/state'));
+
+  const robotsContent = fs.readFileSync(path.join(process.cwd(), 'public/robots.txt'), 'utf-8');
+  assert.ok(robotsContent.includes('Sitemap: https://anidub.in/sitemap.xml'));
+  assert.ok(robotsContent.includes('Disallow: /admin'));
+
+  const sitemapContent = fs.readFileSync(path.join(process.cwd(), 'public/sitemap.xml'), 'utf-8');
+  assert.ok(sitemapContent.includes('<loc>https://anidub.in/</loc>'));
+
+  const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+  assert.ok(indexHtml.includes('content="https://anidub.in/logo.png"'));
+  assert.equal(indexHtml.includes('property="og:image" content="/logo.png"'), false);
+
+  const routeCode = fs.readFileSync(path.join(process.cwd(), 'functions/api/[[route]].ts'), 'utf-8');
+  assert.equal(/SELECT\s+\*\s+FROM\s+reviews/i.test(routeCode), false);
+  assert.ok(routeCode.includes('SELECT id, anime_id, user_id, user_name, user_avatar, rating, language, comment, created_at FROM reviews'));
 });

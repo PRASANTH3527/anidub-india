@@ -9,3 +9,8 @@ coverage/
 data/
 .aistudio/
 .playwright-cli/
+.wrangler/
+.wrangler/state
+*.sqlite
+*.sqlite3
+

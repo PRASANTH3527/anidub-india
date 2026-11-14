@@ -301,20 +301,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const [confirmPurge, setConfirmPurge] = useState(false);
 
-  const handlePurgeCache = () => {
-    if (!confirmPurge) {
-      setConfirmPurge(true);
-      setTimeout(() => setConfirmPurge(false), 4000);
+  const handlePurgeCache = async () => {
+    const typedConfirmation = window.prompt(
+      'DANGER: This will permanently delete all anime, users, reviews, watchlists, episodes, and feedback from the database.\n\nType "DELETE ALL" to confirm:'
+    );
+    if (typedConfirmation !== 'DELETE ALL') {
+      setConfirmPurge(false);
+      addTerminalLog('WARN', 'Database reset cancelled: exact confirmation "DELETE ALL" was not entered.');
+      setSuccessMsg('Reset cancelled. You must type "DELETE ALL" to confirm.');
+      setTimeout(() => setSuccessMsg(''), 4000);
       return;
     }
-    dbService.clearAllData();
+
+    const res = await dbService.clearAllData(typedConfirmation);
+    if (!res.success) {
+      setConfirmPurge(false);
+      addTerminalLog('ERR', `Database reset failed: ${res.error || 'Server error'}`);
+      setSuccessMsg(`Database reset failed: ${res.error || 'Server error'}`);
+      setTimeout(() => setSuccessMsg(''), 5000);
+      return;
+    }
+
     try {
       localStorage.removeItem('cf_admin_catalog_cache');
       localStorage.removeItem('cf_admin_pending_cache');
     } catch (_) {}
     setConfirmPurge(false);
-    setSuccessMsg('Local storage cache purged successfully!');
-    addTerminalLog('OK', 'Local storage cache cleared. Fresh records will re-hydrate from Cloudflare D1.');
+    setSuccessMsg('Database and local storage cache reset successfully!');
+    addTerminalLog('OK', 'Database reset confirmed ("DELETE ALL") and local cache cleared.');
     setTimeout(() => setSuccessMsg(''), 4000);
   };
 
@@ -2969,7 +2983,7 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
                   <span>Administrative Emergency Controls</span>
                 </div>
                 <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Resetting local storage will purge client cached database records. Fresh records will immediately re-hydrate from your live Cloudflare Worker backend upon next query.
+                  Resetting will clear client cached records and wipe all D1 database tables (anime, users, reviews, watchlists, episodes, feedback). You will be prompted to type <span className="font-mono text-rose-300 font-semibold">DELETE ALL</span> to confirm.
                 </p>
                 <button 
                   type="button"
@@ -2980,7 +2994,7 @@ Dr. Stone,https://images.unsplash.com/photo-1578632767115-351597fd14f5?w=300,201
                       : 'bg-rose-500/10 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 hover:text-white hover:shadow-[0_0_15px_rgba(244,63,94,0.3)]'
                   }`}
                 >
-                  {confirmPurge ? 'Click Again to Confirm Local Wipe' : 'Purge Local Storage Cache'}
+                  Reset Database &amp; Cache
                 </button>
               </div>
             </div>

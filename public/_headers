@@ -1,0 +1,7 @@
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  Permissions-Policy: camera=(), microphone=(self), geolocation=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://clerk.anidub.in https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.clerk.accounts.dev https://clerk.anidub.in https://anidub.in https://*.workers.dev https://*.pages.dev https://api.imgbb.com wss://anidub.in wss://*.workers.dev; frame-src 'self' https://challenges.cloudflare.com https://*.clerk.accounts.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'

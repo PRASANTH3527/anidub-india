@@ -515,15 +515,13 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
   let adminError: string | undefined;
   if (!isAdmin) {
     if (!configuredAdminEmail) {
-      adminError = `Missing ADMIN_EMAIL (or VITE_ADMIN_EMAIL) in env bindings (signed in as ${normalizedEmail || userId})`;
+      adminError = 'Missing ADMIN_EMAIL (or VITE_ADMIN_EMAIL) in env bindings';
     } else if (!normalizedEmail && userLookupError) {
-      adminError = `Failed to resolve email for Clerk user (${userId}): ${userLookupError}`;
-    } else if (!normalizedEmail) {
-      adminError = `Authenticated Clerk session (${userId}) has no primary email address`;
-    } else if (normalizedEmail !== configuredAdminEmail) {
-      adminError = `Email mismatch: ${normalizedEmail} !== ${configuredAdminEmail}`;
+      adminError = `Unauthorized: Unable to verify Clerk account email (${userLookupError})`;
+    } else if (!normalizedEmail || normalizedEmail !== configuredAdminEmail) {
+      adminError = 'Forbidden: Unauthorized access';
     } else if (!primaryEmailVerified) {
-      adminError = `Admin access denied: primary email (${normalizedEmail}) is not verified (email_verified === true required)`;
+      adminError = 'Forbidden: Primary email is not verified (email_verified === true required)';
     }
   }
 

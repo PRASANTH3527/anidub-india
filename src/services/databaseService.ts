@@ -232,18 +232,24 @@ class DatabaseService {
     return data;
   }
 
-  public async clearAllData(): Promise<void> {
+  public async clearAllData(confirmPhrase?: string): Promise<{ success: boolean; error?: string }> {
+    if (confirmPhrase !== 'DELETE ALL') {
+      return { success: false, error: 'Confirmation phrase "DELETE ALL" is required.' };
+    }
     try {
       localStorage.removeItem('cf_anime_watchlist');
       localStorage.removeItem('cf_anime_recently_viewed');
       this.cache = [];
       this.cacheTimestamp = 0;
-      
-      await cloudflareApi.resetDatabase();
-    } catch (err) {
+
+      const res = await cloudflareApi.resetDatabase(confirmPhrase);
+      this.notifyListeners();
+      return res;
+    } catch (err: any) {
       console.error('clearAllData error:', err);
+      this.notifyListeners();
+      return { success: false, error: err?.message || 'Reset failed' };
     }
-    this.notifyListeners();
   }
 }
 

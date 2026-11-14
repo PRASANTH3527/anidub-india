@@ -1296,17 +1296,25 @@ class CloudflareApiService {
   }
 
   /**
-   * ADMIN: Resets the D1 database to initial state (Seed data)
+   * ADMIN: Resets the D1 database to initial state (requires explicit "DELETE ALL" confirmation)
    */
-  public async resetDatabase(): Promise<{ success: boolean }> {
+  public async resetDatabase(confirmPhrase?: string): Promise<{ success: boolean; error?: string }> {
+    if (confirmPhrase !== 'DELETE ALL') {
+      return { success: false, error: 'Confirmation phrase "DELETE ALL" is required.' };
+    }
     try {
       const res = await this.smartFetch('/api/admin/reset-db', {
         method: 'POST',
-        headers: this.getHeaders(true)
+        headers: this.getHeaders(true),
+        body: JSON.stringify({ confirm: confirmPhrase })
       });
-      return { success: res.ok };
-    } catch {
-      return { success: false };
+      const data: any = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { success: false, error: data?.error || `HTTP ${res.status}` };
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to reset database' };
     }
   }
 }

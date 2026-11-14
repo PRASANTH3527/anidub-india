@@ -101,9 +101,15 @@ async function sendTelegramAlert(env: Env, text: string, photoUrl?: string) {
   }
 }
 
-function jsonResponse(data: any, status = 200, request?: Request, extraHeaders?: Record<string, string>) {
+function buildJsonResponse(
+  data: any,
+  status = 200,
+  request?: Request,
+  extraHeaders?: Record<string, string>,
+  env?: Env
+) {
   const origin = request ? (request.headers.get("Origin") || request.headers.get("origin") || "") : "";
-  const allowed = origin === "" || isApprovedOrigin(origin);
+  const allowed = origin === "" || isApprovedOrigin(origin, env);
 
   const resolvedOrigin = allowed && origin ? origin : "https://anidub.in";
   const headers: Record<string, string> = {
@@ -124,6 +130,12 @@ function jsonResponse(data: any, status = 200, request?: Request, extraHeaders?:
 
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
+  const jsonResponse = (
+    data: any,
+    status = 200,
+    reqArg?: Request,
+    extraHeaders?: Record<string, string>
+  ) => buildJsonResponse(data, status, reqArg ?? request, extraHeaders, env);
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
@@ -157,11 +169,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/admin/verify' && (method === 'GET' || method === 'POST')) {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
+      const statusCode = !session.userId ? 401 : 403;
       const descriptiveError =
         session.error ||
         (!session.userId
-          ? 'Missing or invalid Clerk session token'
-          : `Email mismatch: ${session.email || 'unknown'} !== ${env?.ADMIN_EMAIL || env?.VITE_ADMIN_EMAIL || 'unconfigured ADMIN_EMAIL'}`);
+          ? 'Unauthorized: Missing or invalid Clerk session token'
+          : 'Forbidden: Unauthorized access');
       return jsonResponse(
         {
           ok: false,
@@ -171,7 +184,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           error: descriptiveError,
           message: descriptiveError,
         },
-        401,
+        statusCode,
         request,
         { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
       );
@@ -194,11 +207,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/admin/login' && (method === 'POST' || method === 'GET')) {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
+      const statusCode = !session.userId ? 401 : 403;
       const descriptiveError =
         session.error ||
         (!session.userId
-          ? 'Missing or invalid Clerk session token'
-          : `Email mismatch: ${session.email || 'unknown'} !== ${env?.ADMIN_EMAIL || env?.VITE_ADMIN_EMAIL || 'unconfigured ADMIN_EMAIL'}`);
+          ? 'Unauthorized: Missing or invalid Clerk session token'
+          : 'Forbidden: Unauthorized access');
       return jsonResponse(
         {
           ok: false,
@@ -208,7 +222,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           error: descriptiveError,
           message: descriptiveError,
         },
-        401,
+        statusCode,
         request,
         { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
       );
@@ -822,7 +836,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (method === 'GET') {
       try {
         if (env.DB) {
-          const anime = await env.DB.prepare("SELECT * FROM anime WHERE id = ? OR slug = ?").bind(id, id).first();
+          const session = await getAuth(request, env);
+          const query = session.isAdmin
+            ? "SELECT * FROM anime WHERE id = ? OR slug = ?"
+            : "SELECT * FROM anime WHERE (id = ? OR slug = ?) AND is_published = 1";
+          const anime = await env.DB.prepare(query).bind(id, id).first();
           if (anime) {
             let streamingPartners: any[] = [];
             const rawP = anime.streaming_partners || anime.platforms_data;
@@ -839,7 +857,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               } catch {}
             }
             const episodes = await env.DB.prepare("SELECT * FROM episodes WHERE anime_id = ? ORDER BY episode_number ASC").bind(anime.id).all();
-            const reviews = await env.DB.prepare("SELECT * FROM reviews WHERE anime_id = ? ORDER BY id DESC").bind(anime.id).all();
+            const reviews = await env.DB.prepare(
+              "SELECT id, anime_id, user_id, user_name, user_avatar, rating, language, comment, created_at FROM reviews WHERE anime_id = ? ORDER BY id DESC"
+            ).bind(anime.id).all();
 
             let communityRating = 0;
             let communityVotes = 0;
@@ -2009,11 +2029,26 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return jsonResponse({ success: true, id });
   }
 
-  // 11. POST /api/admin/reset-db (Admin only)
+  // 11. POST /api/admin/reset-db (Admin only + strict "DELETE ALL" confirmation)
   if (path === '/api/admin/reset-db' && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        { error: session.error || 'Unauthorized: Valid Clerk Admin session required' },
+        !session.userId ? 401 : 403,
+        request
+      );
+    }
+    const body: any = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object' || body.confirm !== 'DELETE ALL') {
+      return jsonResponse(
+        {
+          success: false,
+          error: 'Confirmation required: send JSON payload { "confirm": "DELETE ALL" }',
+        },
+        400,
+        request
+      );
     }
     try {
       if (env.DB) {
