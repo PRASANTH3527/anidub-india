@@ -659,6 +659,10 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                         <img
                           src="https://api.dicebear.com/9.x/fun-emoji/svg?seed=AnyaChibiLove&backgroundColor=b6e3f4,ffd5dc,ffdfbf"
                           alt="Anime Chibi"
+                          width={32}
+                          height={32}
+                          loading="lazy"
+                          decoding="async"
                           className="w-8 h-8 object-contain drop-shadow-[0_4px_8px_rgba(244,63,94,0.5)] transform -rotate-6"
                         />
                       </div>

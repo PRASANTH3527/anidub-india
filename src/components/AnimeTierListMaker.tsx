@@ -453,6 +453,10 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                           <img 
                             src={anime.cover_image ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
                             alt={anime.title}
+                            width={160}
+                            height={213}
+                            loading="lazy"
+                            decoding="async"
                             onError={(e) => {
                               e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
                             }}
@@ -566,6 +570,10 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                       <img 
                         src={anime.cover_image ? anime.cover_image : 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
                         alt={anime.title}
+                        width={160}
+                        height={213}
+                        loading="lazy"
+                        decoding="async"
                         onError={(e) => {
                           e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
                         }}

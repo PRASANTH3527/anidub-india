@@ -1,4 +1,5 @@
 import { getAuth } from '../../utils/auth';
+import { checkAnalyticsRateLimit } from '../../utils/rateLimiter';
 import { getErrorMessage, type RouteContext } from './shared';
 
 interface CloudflareRequestWithCf extends Request {
@@ -42,6 +43,30 @@ export async function handleAnalyticsRoutes(ctx: RouteContext): Promise<Response
   // 1. POST /api/track
   if (path === '/api/track' && method === 'POST') {
     try {
+      const rateLimit = await checkAnalyticsRateLimit(request, {
+        kv: env.RATE_LIMIT_KV ?? null,
+      });
+      const rateLimitHeaders: Record<string, string> = {
+        'X-RateLimit-Limit': String(rateLimit.limit),
+        'X-RateLimit-Remaining': String(rateLimit.remaining),
+        'X-RateLimit-Reset': String(Math.ceil(rateLimit.resetAtMs / 1000)),
+      };
+
+      if (!rateLimit.allowed) {
+        return jsonResponse(
+          {
+            success: false,
+            error: 'Rate limit exceeded for analytics tracking. Please slow down.',
+          },
+          429,
+          request,
+          {
+            ...rateLimitHeaders,
+            'Retry-After': String(rateLimit.retryAfterSeconds),
+          }
+        );
+      }
+
       let payload: TrackAnalyticsPayload;
       const contentType = (request.headers.get('content-type') || '').toLowerCase();
       if (contentType.includes('application/json')) {
@@ -57,7 +82,7 @@ export async function handleAnalyticsRoutes(ctx: RouteContext): Promise<Response
 
       const sessionId = payload?.sessionId || payload?.session_id;
       if (!sessionId) {
-        return jsonResponse({ success: false, error: 'Missing sessionId' }, 400);
+        return jsonResponse({ success: false, error: 'Missing sessionId' }, 400, request, rateLimitHeaders);
       }
 
       const cfReq = request as CloudflareRequestWithCf;
@@ -125,7 +150,7 @@ export async function handleAnalyticsRoutes(ctx: RouteContext): Promise<Response
         }
 
         if (Array.isArray(payload.events) && payload.events.length > 0) {
-          for (const evt of payload.events) {
+          for (const evt of payload.events.slice(0, 25)) {
             if (evt && (evt.eventType || evt.type)) {
               await env.DB.prepare(`
                 INSERT INTO analytics_events (session_id, event_type, target_id, created_at)
@@ -145,7 +170,7 @@ export async function handleAnalyticsRoutes(ctx: RouteContext): Promise<Response
         }
       }
 
-      return jsonResponse({ success: true, sessionId });
+      return jsonResponse({ success: true, sessionId }, 200, request, rateLimitHeaders);
     } catch (err) {
       return jsonResponse({ success: false, error: getErrorMessage(err) }, 500);
     }

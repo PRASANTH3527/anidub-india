@@ -29,6 +29,7 @@ const SAMPLE_INDEX_HTML = `<!doctype html>
     <meta name="twitter:title" content="ANIDUB INDIA | Anime Streaming & Dubbing" />
     <meta name="twitter:description" content="Default Twitter description" />
     <meta name="twitter:image" content="https://anidub.in/logo.png" />
+    <script type="application/ld+json">{"@type":"WebSite"}</script>
   </head>
   <body><div id="root"></div></body>
 </html>`;
@@ -63,6 +64,25 @@ class MockHTMLRewriter implements HTMLRewriterLike {
             });
             return nextInner ? `<title>${nextInner}</title>` : full;
           });
+          continue;
+        }
+
+        if (selector === 'script[type="application/ld+json"]') {
+          output = output.replace(
+            /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/i,
+            (full) => {
+              let nextInner = '';
+              handler.element?.({
+                setInnerContent(content: string) {
+                  nextInner = content;
+                },
+                setAttribute() {},
+              });
+              return nextInner
+                ? `<script type="application/ld+json">${nextInner}</script>`
+                : full;
+            }
+          );
           continue;
         }
 
@@ -283,6 +303,15 @@ test('functions/anime/[id].ts injects published anime metadata from D1 and never
   assert.ok(publishedHtml.includes('<title>Jujutsu Kaisen (Hindi, Tamil Dub) | ANIDUB INDIA</title>'));
   assert.ok(publishedHtml.includes('https://cdn.anidub.in/posters/jjk.jpg'));
   assert.ok(publishedHtml.includes('https://anidub.in/anime/jujutsu-kaisen'));
+  const ldMatch = publishedHtml.match(
+    /<script type="application\/ld\+json">([\s\S]*?)<\/script>/
+  );
+  assert.ok(ldMatch && ldMatch[1], 'HTMLRewriter must inject JSON-LD script');
+  const parsedLd = JSON.parse(ldMatch[1]);
+  assert.equal(parsedLd['@type'], 'TVSeries');
+  assert.equal(parsedLd.name, 'Jujutsu Kaisen');
+  assert.equal(parsedLd.image, 'https://cdn.anidub.in/posters/jjk.jpg');
+  assert.deepEqual(parsedLd.inLanguage, ['Hindi', 'Tamil']);
   assert.ok(
     executedQueries.some(
       (sql) => sql.includes('is_published = 1') && sql.includes("status != 'pending'")
@@ -354,7 +383,7 @@ test('functions/dubbed-anime/[language].ts and src/edge-entry.ts rewrite languag
   }
 });
 
-test('Sitemap, Header dropdown, and Footer regional links include all primary dubbed language pages', () => {
+test('Sitemap and Footer regional links include all primary dubbed language pages and Header excludes Languages dropdown', () => {
   const sitemap = fs.readFileSync(path.join(process.cwd(), 'public/sitemap.xml'), 'utf-8');
   for (const slug of ['hindi', 'tamil', 'telugu', 'malayalam', 'kannada']) {
     assert.ok(
@@ -364,8 +393,8 @@ test('Sitemap, Header dropdown, and Footer regional links include all primary du
   }
 
   const navbar = fs.readFileSync(path.join(process.cwd(), 'src/components/Navbar.tsx'), 'utf-8');
-  assert.ok(navbar.includes('Languages'));
-  assert.ok(navbar.includes('/dubbed-anime/'));
+  assert.ok(!navbar.includes('Browse Dubbed Anime by Language'));
+  assert.ok(!navbar.includes('Indian Regional Dub Languages'));
 
   const footer = fs.readFileSync(
     path.join(process.cwd(), 'src/components/FeedbackSection.tsx'),

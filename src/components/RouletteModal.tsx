@@ -85,6 +85,10 @@ export const RouletteModal: React.FC<RouletteModalProps> = ({
                 <img
                   src={selectedAnime.banner_image || selectedAnime.cover_image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80'}
                   alt={selectedAnime.title}
+                  width={512}
+                  height={288}
+                  loading="lazy"
+                  decoding="async"
                   onError={(e) => {
                     e.currentTarget.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
                   }}

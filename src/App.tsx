@@ -636,8 +636,6 @@ export default function App() {
         onLogout={handleAdminLogout}
         currentLang={currentLang}
         setCurrentLang={setCurrentLang}
-        onNavigateLanguage={handleNavigateLanguage}
-        activeSeoLanguage={selectedSeoLanguage}
       />
 
       {/* 2. ADMIN DASHBOARD (Protected strictly by Clerk Admin Auth) */}

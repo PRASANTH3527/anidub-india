@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { 
@@ -30,6 +30,7 @@ import { formatRelativeTime } from '../utils/timestamps';
 import { useUser } from '@clerk/nextjs';
 import { getClerkSessionToken } from '../lib/clerk';
 import { DualRating } from './DualRating';
+import { buildAnimeJsonLd } from '../utils/seoMeta';
 
 export interface AnimeReviewItem {
   id: number | string;
@@ -621,8 +622,51 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     }
   ];
 
+  const animeJsonLd = useMemo(
+    () =>
+      buildAnimeJsonLd(
+        {
+          id: animeId,
+          slug: details?.slug,
+          title,
+          synopsis,
+          cover_image: posterImage,
+          languages: displayLanguages.join(', '),
+          type,
+          year: releaseYear,
+          rating: currentRating ?? details?.rating,
+          studio,
+          genres: genres.join(', '),
+          episodes_count: totalEpisodes,
+          popularity: upvotes,
+        },
+        typeof window !== 'undefined' ? window.location.origin : undefined,
+        String(details?.slug || animeId)
+      ),
+    [
+      animeId,
+      currentRating,
+      details?.rating,
+      details?.slug,
+      displayLanguages,
+      genres,
+      posterImage,
+      releaseYear,
+      studio,
+      synopsis,
+      title,
+      totalEpisodes,
+      type,
+      upvotes,
+    ]
+  );
+
   return (
     <div className="relative w-full min-h-screen bg-[#050507] text-neutral-100 font-sans pb-36 overflow-x-hidden selection:bg-purple-500/30">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: animeJsonLd }}
+      />
 
       {/* 1. VIBRANT FULL-BLEED BACKGROUND */}
       <div className="fixed inset-0 z-0 pointer-events-none">

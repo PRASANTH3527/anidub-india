@@ -1,4 +1,5 @@
 import { isApprovedOrigin } from '../../utils/auth';
+import type { RateLimitKvLike } from '../../utils/rateLimiter';
 
 export interface D1MetaLike {
   last_row_id?: number;
@@ -54,6 +55,7 @@ export interface CloudflareEnv {
   TELEGRAM_CHAT_ID?: string;
   ENVIRONMENT?: string;
   ASSETS?: { fetch: (request: Request) => Promise<Response> };
+  RATE_LIMIT_KV?: RateLimitKvLike | null;
 }
 
 export type CloudflareEnvInput = Omit<CloudflareEnv, 'DB'> & {

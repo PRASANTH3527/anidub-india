@@ -36,6 +36,9 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ anime, onSelectAnime, on
         <img
           src={anime.banner_image || anime.cover_image}
           alt={anime.title}
+          width={1280}
+          height={540}
+          decoding="async"
           onError={(e) => {
             e.currentTarget.src = 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1600&auto=format&fit=crop&q=80';
           }}

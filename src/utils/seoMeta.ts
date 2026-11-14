@@ -31,6 +31,7 @@ export interface SeoMetaPayload {
   image: string;
   canonicalUrl: string;
   ogType: 'website' | 'video.tv_show' | 'video.movie';
+  jsonLd?: string;
 }
 
 export interface HTMLRewriterElementLike {
@@ -170,16 +171,132 @@ function truncateDescription(text: string, maxLen = 158): string {
   return `${cleaned.slice(0, maxLen - 3).trimEnd()}...`;
 }
 
+function serializeSafeJsonLd(payload: Record<string, unknown>): string {
+  return JSON.stringify(payload)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}
+
+function extractNormalizedDubLanguages(rawLanguages: unknown): string[] {
+  const tokens = Array.isArray(rawLanguages)
+    ? rawLanguages.map(String)
+    : typeof rawLanguages === 'string' && rawLanguages.trim().length > 0
+      ? rawLanguages.split(/[,/|•+]+/)
+      : [];
+
+  const normalized = Array.from(
+    new Set(
+      tokens
+        .map((l) => normalizeLanguageName(l))
+        .filter((l) => Boolean(l) && !isExcludedLanguage(l))
+    )
+  );
+
+  return normalized.length > 0 ? normalized : ['Hindi', 'Tamil', 'Telugu'];
+}
+
+/**
+ * Generates Google-friendly Schema.org JSON-LD (`TVSeries` or `Movie`)
+ * for anime detail pages and edge HTMLRewriter responses.
+ */
+export function buildAnimeJsonLd(
+  anime: Record<string, unknown>,
+  originInput?: string,
+  fallbackIdOrSlug?: string
+): string {
+  const origin = resolveOrigin(originInput);
+  const title = String(anime.title || '').trim() || 'Anime Dub Details';
+  const slugOrId = String(anime.slug || anime.id || fallbackIdOrSlug || '').trim();
+  const url = slugOrId ? `${origin}/anime/${encodeURIComponent(slugOrId)}` : `${origin}/`;
+  const dubLanguages = extractNormalizedDubLanguages(anime.languages);
+  const langsFormatted = dubLanguages.join(', ');
+
+  const synopsis = truncateDescription(String(anime.synopsis || anime.description || ''), 300);
+  const description =
+    synopsis ||
+    `Watch ${title} with official ${langsFormatted} dubs legally in India on ANIDUB INDIA.`;
+
+  const image = resolveAbsoluteImageUrl(
+    anime.cover_image ?? anime.poster_url ?? anime.banner_image,
+    origin
+  );
+
+  const animeType = String(anime.type || '').toLowerCase();
+  const isMovie = animeType.includes('movie');
+
+  const jsonLdObj: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': isMovie ? 'Movie' : 'TVSeries',
+    name: title,
+    description,
+    image,
+    url,
+    inLanguage: dubLanguages,
+  };
+
+  const rawGenres = String(anime.genres || anime.genre || '').trim();
+  if (rawGenres) {
+    const genreList = rawGenres
+      .split(',')
+      .map((g) => g.trim())
+      .filter(Boolean);
+    if (genreList.length > 0) {
+      jsonLdObj.genre = genreList;
+    }
+  }
+
+  const parsedYear = Number(anime.releaseYear ?? anime.year);
+  if (Number.isFinite(parsedYear) && parsedYear >= 1950 && parsedYear <= 2100) {
+    jsonLdObj.datePublished = String(parsedYear);
+  }
+
+  const studio = String(anime.studio || '').trim();
+  if (studio && studio.toLowerCase() !== 'unknown studio') {
+    jsonLdObj.productionCompany = {
+      '@type': 'Organization',
+      name: studio,
+    };
+  }
+
+  const parsedEpisodes = Number(anime.episodes_count ?? anime.episodes ?? anime.episode_count);
+  if (!isMovie && Number.isFinite(parsedEpisodes) && parsedEpisodes > 0) {
+    jsonLdObj.numberOfEpisodes = Math.round(parsedEpisodes);
+  }
+
+  const parsedRating = Number(anime.rating);
+  if (Number.isFinite(parsedRating) && parsedRating > 0 && parsedRating <= 10) {
+    const votes = Number(anime.community_votes ?? anime.popularity ?? 1);
+    jsonLdObj.aggregateRating = {
+      '@type': 'AggregateRating',
+      ratingValue: Number(parsedRating.toFixed(1)),
+      bestRating: 10,
+      worstRating: 1,
+      ratingCount: Number.isFinite(votes) && votes > 0 ? Math.round(votes) : 1,
+    };
+  }
+
+  return serializeSafeJsonLd(jsonLdObj);
+}
+
 export function buildDefaultSeoMeta(originInput?: string): SeoMetaPayload {
   const origin = resolveOrigin(originInput);
+  const description =
+    'Discover hundreds of anime with Hindi, Tamil, and Telugu regional audio dubs on ANIDUB INDIA. The premier destination for legal anime streaming in India.';
   return {
     title: 'ANIDUB INDIA | The Premier Destination for Anime Streaming & Dubbing in India',
     ogTitle: 'ANIDUB INDIA | Anime Streaming & Dubbing',
-    description:
-      'Discover hundreds of anime with Hindi, Tamil, and Telugu regional audio dubs on ANIDUB INDIA. The premier destination for legal anime streaming in India.',
+    description,
     image: DEFAULT_OG_IMAGE,
     canonicalUrl: `${origin}/`,
     ogType: 'website',
+    jsonLd: serializeSafeJsonLd({
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: SITE_NAME,
+      url: `${origin}/`,
+      description,
+    }),
   };
 }
 
@@ -193,14 +310,8 @@ export function buildAnimeSeoMeta(
   const slugOrId = String(anime.slug || anime.id || fallbackIdOrSlug || '').trim();
   const canonicalUrl = slugOrId ? `${origin}/anime/${encodeURIComponent(slugOrId)}` : `${origin}/`;
 
-  const languagesRaw = String(anime.languages || '').trim();
-  const langsFormatted = languagesRaw
-    ? languagesRaw
-        .split(/[,/|]+/)
-        .map((l) => normalizeLanguageName(l))
-        .filter((l) => l && !isExcludedLanguage(l))
-        .join(', ')
-    : 'Hindi, Tamil, Telugu';
+  const dubLanguages = extractNormalizedDubLanguages(anime.languages);
+  const langsFormatted = dubLanguages.join(', ');
 
   const synopsis = truncateDescription(String(anime.synopsis || anime.description || ''), 145);
   const fallbackDesc = `Watch ${title} in ${langsFormatted} dubs legally in India. Streaming platforms, episode counts, and community ratings on ANIDUB INDIA.`;
@@ -225,6 +336,7 @@ export function buildAnimeSeoMeta(
     image,
     canonicalUrl,
     ogType,
+    jsonLd: buildAnimeJsonLd(anime, originInput, fallbackIdOrSlug),
   };
 }
 
@@ -235,14 +347,24 @@ export function buildLanguageSeoMeta(
   const origin = resolveOrigin(originInput);
   const normalized = normalizeLanguageName(language) || 'Hindi';
   const slug = getLanguageSlug(normalized);
+  const description = `Browse the complete directory of official ${normalized} dubbed anime streaming legally in India on Crunchyroll, Netflix, JioHotstar, and Prime Video.`;
+  const canonicalUrl = `${origin}/dubbed-anime/${slug}`;
 
   return {
     title: `Best ${normalized} Dubbed Anime in India | ANIDUB INDIA`,
     ogTitle: `Best ${normalized} Dubbed Anime in India | ANIDUB INDIA`,
-    description: `Browse the complete directory of official ${normalized} dubbed anime streaming legally in India on Crunchyroll, Netflix, JioHotstar, and Prime Video.`,
+    description,
     image: DEFAULT_OG_IMAGE,
-    canonicalUrl: `${origin}/dubbed-anime/${slug}`,
+    canonicalUrl,
     ogType: 'website',
+    jsonLd: serializeSafeJsonLd({
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: `Best ${normalized} Dubbed Anime in India`,
+      url: canonicalUrl,
+      description,
+      inLanguage: normalized,
+    }),
   };
 }
 
@@ -316,6 +438,13 @@ export function applySeoMetaWithHtmlRewriter(
       element(el) {
         el.setAttribute('content', meta.image);
       },
+    })
+    .on('script[type="application/ld+json"]', {
+      element(el) {
+        if (meta.jsonLd) {
+          el.setInnerContent(meta.jsonLd, { html: true });
+        }
+      },
     });
 
   const transformed = rewriter.transform(response);
@@ -360,7 +489,7 @@ export async function resolveAnimeSeoResponse(params: {
     try {
       animeRow = await db
         .prepare(
-          "SELECT id, title, slug, synopsis, cover_image, banner_image, languages, year, rating, type, studio FROM anime WHERE (id = ? OR slug = ?) AND (is_published = 1 OR is_published = true) AND status != 'pending' LIMIT 1"
+          "SELECT id, title, slug, synopsis, cover_image, banner_image, languages, year, rating, type, studio, genres, episodes_count, popularity FROM anime WHERE (id = ? OR slug = ?) AND (is_published = 1 OR is_published = true) AND status != 'pending' LIMIT 1"
         )
         .bind(idOrSlug, idOrSlug)
         .first();
@@ -425,4 +554,10 @@ export function updateDocumentSeoMeta(meta: SeoMetaPayload): void {
   setMeta('meta[name="twitter:description"]', 'content', meta.description);
   setMeta('meta[name="twitter:image"]', 'content', meta.image);
   setMeta('link[rel="canonical"]', 'href', meta.canonicalUrl);
+  if (meta.jsonLd) {
+    const ldEl = document.head.querySelector('script[type="application/ld+json"]');
+    if (ldEl) {
+      ldEl.textContent = meta.jsonLd;
+    }
+  }
 }
