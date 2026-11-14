@@ -611,11 +611,6 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={handleNavigateTab}
         watchlistCount={realSavedWatchlist.length}
-        searchQuery={searchQuery}
-        setSearchQuery={(q) => { 
-          setSearchQuery(q); 
-          if (activeTab !== 'home' && activeTab !== 'catalog') handleNavigateTab('home'); 
-        }}
         onUnlockAdmin={() => {
           if (!isAdminAuthenticated || !isClerkAdmin) {
             setIsPasswordModalOpen(true);

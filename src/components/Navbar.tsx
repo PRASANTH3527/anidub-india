@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import dynamic from 'next/dynamic';
 import { motion, useReducedMotion } from 'motion/react';
 import { useUser } from '@clerk/nextjs';
 import { 
   Compass, 
-  Search, 
   Sparkles, 
   Bookmark, 
   Calendar, 
@@ -12,25 +10,17 @@ import {
   Trophy,
   Cloud,
   Plus,
-  X,
   User,
   MessageSquare,
-  Mic,
   ShieldCheck,
   Shield
 } from 'lucide-react';
-import { useToast } from './Toast';
 import { AniDubLogo } from './AniDubLogo';
-
-const MicPermissionBottomSheet = dynamic(() => import('./MicPermissionBottomSheet').then(m => m.MicPermissionBottomSheet), { ssr: false });
-const VoiceVisualizer = dynamic(() => import('./VoiceVisualizer').then(m => m.VoiceVisualizer), { ssr: false });
 
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   watchlistCount: number;
-  searchQuery: string;
-  setSearchQuery: (q: string) => void;
   onUnlockAdmin: () => void;
   onOpenCollection?: () => void;
   onSelectAnime?: (id: number) => void;
@@ -47,8 +37,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   watchlistCount,
-  searchQuery,
-  setSearchQuery,
   onUnlockAdmin,
   onOpenCollection,
   onSelectAnime,
@@ -62,7 +50,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const { user } = useUser();
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
     if (saved) return saved === 'dark';
@@ -102,135 +89,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      const trimmed = searchQuery.trim().toLowerCase();
-      // Admin route navigation trigger (protected by Clerk Admin Auth)
-      if (trimmed === '/admin-login' || trimmed === '/admin') {
-        e.preventDefault();
-        setSearchQuery('');
-        setIsSearchOpen(false);
-        onUnlockAdmin();
-        return;
-      }
-
-      // Normal Search Execution
-      if (activeTab !== 'home' && activeTab !== 'catalog') {
-        setActiveTab('home');
-      }
-    }
-  };
-
   const isForYouActive = activeTab === 'foryou' || feedView === 'foryou';
   const isDirectoryActive = (activeTab === 'home' || activeTab === 'library' || activeTab === 'catalog') && !isForYouActive;
-
-  const [isListening, setIsListening] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState('');
-  const [showBottomSheet, setShowBottomSheet] = useState(false);
-  const [isPermanentlyBlocked, setIsPermanentlyBlocked] = useState(false);
-  const recognitionRef = useRef<any>(null);
-  const toast = useToast();
-
-  const stopListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-    setIsListening(false);
-  };
-
-  const startActualVoiceSearch = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'en-IN';
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
-
-      recognition.onstart = () => {
-        setIsListening(true);
-        setShowBottomSheet(false);
-        setVoiceTranscript('');
-      };
-
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          setVoiceTranscript(transcript);
-          const isFinal = event.results[0].isFinal;
-          
-          if (isFinal) {
-            const cleanTranscript = transcript.replace(/[.,/#!$%^&*;:{}=\-_`~()?]/g, "").trim();
-            setSearchQuery(cleanTranscript);
-            if (activeTab !== 'home') {
-              setActiveTab('home');
-              if (setFeedView) setFeedView('library');
-            }
-            toast.success('Voice Recognized', `Searching for "${cleanTranscript}"`);
-            setIsListening(false);
-          }
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.warn('Speech recognition error:', event.error);
-        setIsListening(false);
-        if (event.error === 'not-allowed') {
-          setIsPermanentlyBlocked(true);
-          setShowBottomSheet(true);
-        }
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err) {
-      console.warn('Speech recognition start failed:', err);
-      setIsListening(false);
-    }
-  };
-
-  const handleVoiceSearch = async () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      toast.error('Voice Search Unsupported', 'Your browser does not support speech recognition. Please try Chrome or Safari.');
-      return;
-    }
-
-    if (isListening) {
-      setIsListening(false);
-      return;
-    }
-
-    try {
-      // 1. Explicitly trigger the browser's native "Allow / Deny" prompt first
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      // 2. If we reach here, permission was granted. Stop the test stream immediately.
-      stream.getTracks().forEach(track => track.stop());
-
-      // 3. Proceed with actual Speech Recognition
-      startActualVoiceSearch();
-    } catch (err: any) {
-      console.warn('Voice Search permission interaction failed:', err.name, err.message);
-      setIsListening(false);
-
-      // 4. Handle permanent block / denial (NotAllowedError / DOMException)
-      if (
-        err.name === 'NotAllowedError' || 
-        err.name === 'PermissionDeniedError' || 
-        err.name === 'SecurityError' ||
-        (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'AbortError'))
-      ) {
-        setIsPermanentlyBlocked(true);
-        setShowBottomSheet(true);
-      }
-    }
-  };
 
   return (
     <header className="sticky top-0 z-40 w-full max-w-full bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 transition-colors box-border select-none">
@@ -254,63 +114,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           />
         </motion.div>
 
-        {/* EXPANDED INLINE SEARCH (Fills remaining space with flex-1, never squashes the fixed logo) */}
-        {isSearchOpen ? (
-          <div className="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 ml-1 sm:ml-2">
-            <div className="relative flex-1 flex items-center min-w-0">
-              <Search className="w-4 h-4 text-neutral-400 absolute left-3 pointer-events-none shrink-0" />
-              <input
-                type="text"
-                autoFocus
-                placeholder={isListening ? "Listening..." : "Search anime by title, voice actor, or studio..."}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  handleSearchKeyDown(e);
-                  if (e.key === 'Escape') setIsSearchOpen(false);
-                }}
-                className={`w-full bg-[#131926] border rounded-xl pl-9 pr-14 py-1.5 text-xs text-white placeholder-neutral-500 outline-none transition-colors ${
-                  isListening 
-                    ? 'border-purple-500/80 ring-4 ring-purple-500/20 bg-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.4)] animate-pulse placeholder-purple-300' 
-                    : 'border-neutral-700/80 focus:border-purple-500'
-                }`}
-              />
-              <div className="absolute right-2 flex items-center gap-1">
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="text-neutral-400 hover:text-white p-0.5"
-                    title="Clear search"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleVoiceSearch}
-                  className={`p-1 rounded-lg transition-all cursor-pointer ${
-                    isListening
-                      ? 'bg-purple-600 text-white animate-pulse shadow-lg ring-2 ring-purple-400'
-                      : 'text-neutral-400 hover:text-purple-300 hover:bg-white/5'
-                  }`}
-                  title={isListening ? 'Listening for voice input...' : 'Search by Voice'}
-                >
-                  <Mic className={`w-3.5 h-3.5 ${isListening ? 'animate-bounce text-white' : ''}`} />
-                </button>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsSearchOpen(false)}
-              className="p-1.5 sm:p-2 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800/60 transition-colors cursor-pointer shrink-0"
-              title="Close Search"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* CENTER SCROLLABLE NAVIGATION ICONS */}
-            <nav className="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0 overflow-x-auto no-scrollbar py-1 justify-start">
+        {/* CENTER SCROLLABLE NAVIGATION ICONS */}
+        <nav className="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0 overflow-x-auto no-scrollbar py-1 justify-start">
           
           {/* 1. Compass (Directory) */}
           <motion.button
@@ -327,20 +132,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Compass className="w-4 h-4 sm:w-5 sm:h-5" />
-          </motion.button>
-
-          {/* 2. Search (Quick Search Trigger) */}
-          <motion.button
-            whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-            onClick={() => setIsSearchOpen(!isSearchOpen)}
-            title="Quick Search"
-            className={`w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-              isSearchOpen
-                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-            }`}
-          >
-            <Search className="w-4 h-4 sm:w-5 sm:h-5" />
           </motion.button>
 
           {/* 3. Sparkles (For You) */}
@@ -464,53 +255,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* RIGHT UTILITY ACTIONS */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0 ml-1">
-          
-          {/* Primary Search Bar (XL screens) - Fade in from top */}
-          <motion.div 
-            initial={shouldReduceMotion ? false : { opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, delay: 0.08, ease: "easeOut" }}
-            className="hidden xl:flex items-center relative w-52 2xl:w-64"
-          >
-            <Search className="w-4 h-4 text-neutral-400 absolute left-3 pointer-events-none" />
-            <input
-              type="text"
-              placeholder={isListening ? "Listening..." : "Search anime dubs..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              className={`w-full bg-[#131926] border rounded-xl pl-9 pr-14 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none transition-colors ${
-                isListening 
-                  ? 'border-purple-500/80 ring-4 ring-purple-500/20 bg-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.4)] animate-pulse placeholder-purple-300' 
-                  : 'border-neutral-800/80 focus:border-purple-500/50'
-              }`}
-            />
-            
-            {/* Right Buttons Container inside search input */}
-            <div className="absolute right-2 flex items-center gap-1">
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="text-neutral-400 hover:text-white"
-                  title="Clear search"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={handleVoiceSearch}
-                className={`p-1 rounded-lg transition-all cursor-pointer ${
-                  isListening
-                    ? 'bg-purple-600 text-white animate-pulse shadow-lg ring-2 ring-purple-400'
-                    : 'text-neutral-400 hover:text-purple-300 hover:bg-white/5'
-                }`}
-                title={isListening ? 'Listening for voice input...' : 'Search by Voice'}
-              >
-                <Mic className={`w-3.5 h-3.5 ${isListening ? 'animate-bounce text-white' : ''}`} />
-              </button>
-            </div>
-          </motion.div>
 
           {/* Create List Button (LG screens) */}
           <motion.button
@@ -554,30 +298,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               <ShieldCheck className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400" />
             </motion.button>
           )}
-          </div>
-        </>
-      )}
-    </div>
-
-      {/* PERMISSION BOTTOM SHEET */}
-      <MicPermissionBottomSheet 
-        isOpen={showBottomSheet}
-        isPermanentlyBlocked={isPermanentlyBlocked}
-        onClose={() => setShowBottomSheet(false)}
-        onAllow={() => {
-          if (isPermanentlyBlocked) {
-            setIsPermanentlyBlocked(false);
-          }
-          handleVoiceSearch();
-        }}
-      />
-
-      {/* ACTIVE VOICE VISUALIZER */}
-      <VoiceVisualizer 
-        isListening={isListening}
-        transcript={voiceTranscript}
-        onClose={stopListening}
-      />
+        </div>
+      </div>
     </header>
   );
 };
