@@ -408,14 +408,17 @@ test('Security Audit 8: Vite envPrefix, runtime /api/config Clerk fallback, unif
   assert.ok(clerkLib.includes('/api/auth-config'));
 
   const wranglerToml = fs.readFileSync(path.join(process.cwd(), 'wrangler.toml'), 'utf-8');
-  assert.equal(wranglerToml.includes('main = "src/edge-entry.ts"'), false);
+  assert.equal(wranglerToml.includes('main ='), false);
   assert.equal(wranglerToml.includes('[assets]'), false);
+  assert.equal(wranglerToml.includes('[build]'), false);
   assert.ok(wranglerToml.includes('compatibility_date = "2025-03-20"'));
-  assert.ok(wranglerToml.includes('[build]'));
-  assert.ok(wranglerToml.includes('command = "bun run build"'));
-  assert.ok(wranglerToml.includes('pages_build_output_dir = "./dist"'));
+  assert.ok(wranglerToml.includes('pages_build_output_dir = "dist"'));
   assert.ok(wranglerToml.includes('database_name = "anime-db"'));
   assert.ok(wranglerToml.includes('database_id = "75f053ab-5b44-4d48-abf8-b3a357a89426"'));
+
+  const pkgJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'));
+  assert.equal(pkgJson.scripts.build, 'vite build');
+  assert.equal(pkgJson.scripts.deploy, 'wrangler pages deploy dist');
 
   const edgeEntryModule = await import('../edge-entry');
   let assetsFetched = false;

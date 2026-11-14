@@ -1,14 +1,10 @@
 name = "anidub-india"
 compatibility_date = "2025-03-20"
 compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = "./dist"
-
-[build]
-command = "bun run build"
+pages_build_output_dir = "dist"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "anime-db"
 database_id = "75f053ab-5b44-4d48-abf8-b3a357a89426"
 migrations_dir = "migrations"
-

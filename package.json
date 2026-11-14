@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "deploy": "wrangler pages deploy dist",
     "preview": "vite preview",
     "start": "vite preview",
     "clean": "rm -rf dist",
