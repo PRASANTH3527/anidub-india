@@ -10,13 +10,15 @@ interface WatchlistViewProps {
   onSelectAnime: (anime: Anime) => void;
   onToggleWatchlist: (animeId: number) => void;
   onNavigateToCatalog: () => void;
+  isSignedIn?: boolean;
 }
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
   watchlist,
   onSelectAnime,
   onToggleWatchlist,
-  onNavigateToCatalog
+  onNavigateToCatalog,
+  isSignedIn = false
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -46,7 +48,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               </span>
             </div>
             <p className="text-xs text-neutral-400 mt-1 max-w-xl leading-relaxed">
-              Saved locally in your browser. Access your favorite regional dubbed anime instantly without logging in.
+              {isSignedIn
+                ? 'Synced with your account across devices. Manage your saved regional dubbed anime below.'
+                : 'Saved locally in your browser. Access your favorite regional dubbed anime instantly or sign in to sync across devices.'}
             </p>
           </div>
         </div>

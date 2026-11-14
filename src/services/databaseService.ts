@@ -143,9 +143,9 @@ class DatabaseService {
     return all.find(a => a.id === id) || null;
   }
 
-  public async toggleWatchlist(_userId: string, animeId: number): Promise<{ watchlisted: boolean }> {
+  public async toggleWatchlist(_userId: string, animeId: number, currentlyWatchlisted?: boolean): Promise<{ watchlisted: boolean }> {
     try {
-      const { success, watchlisted } = await cloudflareApi.toggleWatchlist(animeId);
+      const { success, watchlisted } = await cloudflareApi.toggleWatchlist(animeId, currentlyWatchlisted);
       if (success) {
         this.notifyListeners();
         return { watchlisted };
@@ -154,15 +154,16 @@ class DatabaseService {
       console.error('toggleWatchlist error:', err);
     }
     this.notifyListeners();
-    return { watchlisted: true };
+    return { watchlisted: Boolean(currentlyWatchlisted) };
   }
 
-  public async toggleWatchlistStatus(userId: string, animeId: number): Promise<{ watchlisted: boolean }> {
-    return this.toggleWatchlist(userId, animeId);
+  public async toggleWatchlistStatus(userId: string, animeId: number, currentlyWatchlisted?: boolean): Promise<{ watchlisted: boolean }> {
+    return this.toggleWatchlist(userId, animeId, currentlyWatchlisted);
   }
 
-  public async removeFromWatchlist(userId: string, animeId: number): Promise<void> {
-    await this.toggleWatchlist(userId, animeId);
+  public async removeFromWatchlist(_userId: string, animeId: number): Promise<void> {
+    await cloudflareApi.removeFromWatchlist(animeId);
+    this.notifyListeners();
   }
 
   public async getUserWatchlist(_userId: string): Promise<WatchlistEntry[]> {

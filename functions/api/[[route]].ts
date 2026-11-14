@@ -1150,7 +1150,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (path === '/api/watchlist') {
     const session = await getAuth(request, env);
     if (!session.userId) {
-      return jsonResponse({ error: 'Unauthorized: Active Clerk user session required' }, 401, request);
+      return jsonResponse(
+        { error: session.error || 'Unauthorized: Active Clerk user session required' },
+        401,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
     }
     if (env.DB) {
       await env.DB.prepare(`
@@ -1168,24 +1173,41 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       try {
         if (env.DB) {
           const list = await env.DB.prepare(`
-            SELECT anime.* FROM watchlist 
-            JOIN anime ON watchlist.anime_id = anime.id 
+            SELECT anime.* FROM watchlist
+            JOIN anime ON watchlist.anime_id = anime.id
             WHERE watchlist.user_id = ?
+            ORDER BY watchlist.id DESC
           `).bind(session.userId).all();
-          return jsonResponse({ data: list.results || [] }, 200, request);
+          const results = list.results || [];
+          const watchlistIds = results
+            .map((row: any) => Number(row.id))
+            .filter((id: number) => Number.isInteger(id) && id > 0);
+          return jsonResponse(
+            { data: results, watchlist: watchlistIds, user_id: session.userId },
+            200,
+            request,
+            { 'Cache-Control': 'no-store' }
+          );
         }
       } catch (err: any) {
-        return jsonResponse({ error: err.message, data: [] }, 500, request);
+        return jsonResponse({ error: err.message, data: [], watchlist: [] }, 500, request, { 'Cache-Control': 'no-store' });
       }
-      return jsonResponse({ data: [] }, 200, request);
+      return jsonResponse({ data: [], watchlist: [], user_id: session.userId }, 200, request, { 'Cache-Control': 'no-store' });
     }
 
     if (method === 'POST') {
       try {
         const body: any = await request.json().catch(() => ({}));
-        const animeId = Number(body.anime_id || body.animeId || body.id);
-        if (!animeId || isNaN(animeId)) {
-          return jsonResponse({ error: 'Valid anime_id is required' }, 400, request);
+        const animeId = Number(
+          body.anime_id ??
+          body.animeId ??
+          body.id ??
+          url.searchParams.get('anime_id') ??
+          url.searchParams.get('animeId') ??
+          url.searchParams.get('id')
+        );
+        if (!Number.isInteger(animeId) || animeId <= 0) {
+          return jsonResponse({ error: 'Valid anime_id is required' }, 400, request, { 'Cache-Control': 'no-store' });
         }
         if (env.DB) {
           await env.DB.prepare(`
@@ -1193,28 +1215,53 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             ON CONFLICT(user_id, anime_id) DO NOTHING
           `).bind(session.userId, animeId).run();
         }
-        return jsonResponse({ success: true, watchlisted: true, anime_id: animeId }, 200, request);
+        return jsonResponse(
+          { success: true, watchlisted: true, anime_id: animeId, user_id: session.userId },
+          200,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
       } catch (err: any) {
-        return jsonResponse({ error: err.message }, 500, request);
+        return jsonResponse({ error: err.message }, 500, request, { 'Cache-Control': 'no-store' });
       }
     }
 
     if (method === 'DELETE') {
       try {
-        const animeId = Number(url.searchParams.get('anime_id') || url.searchParams.get('animeId') || url.searchParams.get('id'));
-        if (!animeId || isNaN(animeId)) {
-          return jsonResponse({ error: 'Valid anime_id query parameter is required for deletion' }, 400, request);
+        const body: any = await request.json().catch(() => ({}));
+        const animeId = Number(
+          url.searchParams.get('anime_id') ??
+          url.searchParams.get('animeId') ??
+          url.searchParams.get('id') ??
+          body.anime_id ??
+          body.animeId ??
+          body.id
+        );
+        if (!Number.isInteger(animeId) || animeId <= 0) {
+          return jsonResponse(
+            { error: 'Valid anime_id query parameter or body is required for deletion' },
+            400,
+            request,
+            { 'Cache-Control': 'no-store' }
+          );
         }
         if (env.DB) {
           await env.DB.prepare(`
             DELETE FROM watchlist WHERE user_id = ? AND anime_id = ?
           `).bind(session.userId, animeId).run();
         }
-        return jsonResponse({ success: true, watchlisted: false, anime_id: animeId }, 200, request);
+        return jsonResponse(
+          { success: true, watchlisted: false, anime_id: animeId, user_id: session.userId },
+          200,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
       } catch (err: any) {
-        return jsonResponse({ error: err.message }, 500, request);
+        return jsonResponse({ error: err.message }, 500, request, { 'Cache-Control': 'no-store' });
       }
     }
+
+    return jsonResponse({ error: 'Method not allowed for /api/watchlist' }, 405, request, { 'Cache-Control': 'no-store' });
   }
 
   // 8. GET /api/cloudflare/status (Protected by Clerk Admin Auth)

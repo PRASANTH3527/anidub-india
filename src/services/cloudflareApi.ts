@@ -9,6 +9,12 @@
 
 import { CLOUDFLARE_API_URL, getCloudflareUrl, CLOUDFLARE_ENDPOINTS, DEFAULT_FALLBACK_WORKER_URL } from '../config/cloudflare';
 import { getClerkSessionToken } from '../lib/clerk';
+import {
+  normalizeWatchlistIds,
+  readWatchlistFromStorage,
+  toggleWatchlistIdLocally,
+  writeWatchlistToStorage,
+} from '../utils/watchlist';
 
 export interface AnimePayload {
   id?: number | string;
@@ -688,40 +694,165 @@ class CloudflareApiService {
   }
 
   /**
-   * WATCHLIST: Fetches the user's watchlist from Cloudflare D1
+   * WATCHLIST: Fetches the user's watchlist from Cloudflare D1 with hydration status
    */
-  public async fetchWatchlist(): Promise<any[]> {
+  public async fetchWatchlistDetailed(explicitToken?: string | null): Promise<{
+    ok: boolean;
+    items: any[];
+    ids: number[];
+    unauthenticated?: boolean;
+  }> {
     try {
+      const token = explicitToken || (await getClerkSessionToken());
+      if (!token) {
+        return { ok: false, items: [], ids: [], unauthenticated: true };
+      }
+
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.WATCHLIST, {
-        headers: this.getHeaders(false)
+        method: 'GET',
+        headers: {
+          ...this.getHeaders(false),
+          Authorization: `Bearer ${token}`,
+        },
       });
+      if (res.status === 401) {
+        return { ok: false, items: [], ids: [], unauthenticated: true };
+      }
       if (res.ok) {
-        const data = await res.json();
-        return data.watchlist || data.data || [];
+        const data = await res.json().catch(() => ({}));
+        const items = Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data.watchlist)
+          ? data.watchlist
+          : [];
+        const ids = normalizeWatchlistIds(
+          Array.isArray(data.watchlist) && data.watchlist.every((x: any) => typeof x === 'number' || typeof x === 'string')
+            ? data.watchlist
+            : items
+        );
+        return { ok: true, items, ids };
       }
     } catch (err) {
       console.warn('Failed to fetch watchlist:', err);
     }
-    return [];
+    return { ok: false, items: [], ids: [] };
   }
 
   /**
-   * WATCHLIST: Toggles an anime in the user's watchlist
+   * WATCHLIST: Fetches the user's watchlist from Cloudflare D1
    */
-  public async toggleWatchlist(animeId: number | string): Promise<{ success: boolean; watchlisted: boolean }> {
+  public async fetchWatchlist(explicitToken?: string | null): Promise<any[]> {
+    const res = await this.fetchWatchlistDetailed(explicitToken);
+    return res.items;
+  }
+
+  /**
+   * WATCHLIST: Adds an anime to the authenticated user's D1 watchlist via POST /api/watchlist
+   */
+  public async addToWatchlist(
+    animeId: number | string,
+    explicitToken?: string | null
+  ): Promise<{ success: boolean; watchlisted: boolean; error?: string }> {
+    const idNum = Number(animeId);
+    if (!Number.isInteger(idNum) || idNum <= 0) {
+      return { success: false, watchlisted: false, error: 'Valid anime_id is required' };
+    }
     try {
+      const token = explicitToken || (await getClerkSessionToken());
+      if (!token) {
+        return { success: false, watchlisted: false, error: 'Not authenticated' };
+      }
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.WATCHLIST, {
         method: 'POST',
-        headers: this.getHeaders(false),
-        body: JSON.stringify({ anime_id: Number(animeId) })
+        headers: {
+          ...this.getHeaders(false),
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ anime_id: idNum }),
       });
       if (res.ok) {
-        return await res.json();
+        const data = await res.json().catch(() => ({}));
+        return { success: true, watchlisted: data.watchlisted !== false };
       }
-      return { success: false, watchlisted: false };
-    } catch {
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, watchlisted: false, error: errData.error };
+    } catch (err: any) {
+      return { success: false, watchlisted: false, error: err?.message };
+    }
+  }
+
+  /**
+   * WATCHLIST: Removes an anime from the authenticated user's D1 watchlist via DELETE /api/watchlist
+   */
+  public async removeFromWatchlist(
+    animeId: number | string,
+    explicitToken?: string | null
+  ): Promise<{ success: boolean; watchlisted: boolean; error?: string }> {
+    const idNum = Number(animeId);
+    if (!Number.isInteger(idNum) || idNum <= 0) {
+      return { success: false, watchlisted: false, error: 'Valid anime_id is required' };
+    }
+    try {
+      const token = explicitToken || (await getClerkSessionToken());
+      if (!token) {
+        return { success: false, watchlisted: false, error: 'Not authenticated' };
+      }
+      const res = await this.smartFetch(`${CLOUDFLARE_ENDPOINTS.WATCHLIST}?anime_id=${idNum}`, {
+        method: 'DELETE',
+        headers: {
+          ...this.getHeaders(false),
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ anime_id: idNum }),
+      });
+      if (res.ok) {
+        return { success: true, watchlisted: false };
+      }
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, watchlisted: true, error: errData.error };
+    } catch (err: any) {
+      return { success: false, watchlisted: true, error: err?.message };
+    }
+  }
+
+  /**
+   * WATCHLIST: Toggles an anime in the watchlist.
+   * - Sends DELETE /api/watchlist when removing an already saved anime.
+   * - Sends POST /api/watchlist when adding a new anime.
+   * - Falls back cleanly to localStorage for guest (unauthenticated) users.
+   */
+  public async toggleWatchlist(
+    animeId: number | string,
+    currentlyWatchlisted?: boolean,
+    explicitToken?: string | null
+  ): Promise<{ success: boolean; watchlisted: boolean; localOnly?: boolean }> {
+    const idNum = Number(animeId);
+    if (!Number.isInteger(idNum) || idNum <= 0) {
       return { success: false, watchlisted: false };
     }
+
+    const token = explicitToken || (await getClerkSessionToken());
+    if (!token) {
+      const currentGuestIds = readWatchlistFromStorage();
+      const { ids, watchlisted } = toggleWatchlistIdLocally(currentGuestIds, idNum);
+      writeWatchlistToStorage(ids, 'guest');
+      return { success: true, watchlisted, localOnly: true };
+    }
+
+    let isSaved = currentlyWatchlisted;
+    if (isSaved === undefined) {
+      const serverRes = await this.fetchWatchlistDetailed(token);
+      if (serverRes.ok) {
+        isSaved = serverRes.ids.includes(idNum);
+      } else {
+        isSaved = readWatchlistFromStorage().includes(idNum);
+      }
+    }
+
+    if (isSaved) {
+      return this.removeFromWatchlist(idNum, token);
+    }
+    return this.addToWatchlist(idNum, token);
   }
 
   /**

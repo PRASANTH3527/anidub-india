@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
@@ -10,6 +10,13 @@ import { AniDubLogo } from './components/AniDubLogo';
 import { useUser, useAuth, useClerk, SignIn } from '@clerk/nextjs';
 import { getClerkSessionToken } from './lib/clerk';
 import { isAuthorizedClerkAdmin } from './utils/auth';
+import {
+  mergeGuestAndServerWatchlist,
+  readWatchlistFromStorage,
+  readWatchlistOwner,
+  toggleWatchlistIdLocally,
+  writeWatchlistToStorage,
+} from './utils/watchlist';
 
 const ViewLoadingFallback = () => (
   <div className="w-full min-h-[50vh] flex flex-col items-center justify-center p-8 space-y-3">
@@ -51,26 +58,12 @@ export default function App() {
     localStorage.setItem('cf_anime_lang', currentLang);
   }, [currentLang]);
   
-  // Watchlist state (strictly real state - defaults to empty)
-  const [watchlist, setWatchlist] = useState<number[]>(() => {
-    try {
-      const saved = localStorage.getItem('cf_anime_watchlist');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Clean out legacy fake [1, 2] mock placeholder if present
-        if (Array.isArray(parsed)) {
-          if (parsed.length === 2 && parsed[0] === 1 && parsed[1] === 2) {
-            localStorage.removeItem('cf_anime_watchlist');
-            return [];
-          }
-          return parsed.map(Number).filter(id => !isNaN(id));
-        }
-      }
-      return [];
-    } catch {
-      return [];
-    }
-  });
+  // Watchlist state (hydrated from localStorage for guests, or D1 on Clerk sign-in)
+  const [watchlist, setWatchlist] = useState<number[]>(() => readWatchlistFromStorage());
+  const watchlistRef = useRef<number[]>(watchlist);
+  watchlistRef.current = watchlist;
+  const prevSignedInRef = useRef<boolean>(false);
+  const hydratedUserRef = useRef<string | null>(null);
 
   // Recently viewed state (strictly real state - defaults to empty)
   const [recentlyViewed, setRecentlyViewed] = useState<any[]>(() => {
@@ -225,11 +218,63 @@ export default function App() {
     }
   };
 
+  // Hydrate watchlist from server/D1 on Clerk login and sync any local guest items
   useEffect(() => {
-    try {
-      localStorage.setItem('cf_anime_watchlist', JSON.stringify(watchlist));
-    } catch {}
-  }, [watchlist]);
+    if (!isSignedIn || !clerkUser?.id) {
+      if (prevSignedInRef.current) {
+        prevSignedInRef.current = false;
+        hydratedUserRef.current = null;
+        const cleared = writeWatchlistToStorage([], 'guest');
+        watchlistRef.current = cleared;
+        setWatchlist(cleared);
+      } else {
+        const owner = readWatchlistOwner();
+        if (owner === 'guest') {
+          const guestIds = readWatchlistFromStorage();
+          watchlistRef.current = guestIds;
+          setWatchlist(guestIds);
+        }
+      }
+      return;
+    }
+
+    prevSignedInRef.current = true;
+    if (hydratedUserRef.current === clerkUser.id) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = (await getToken()) || (await getClerkSessionToken());
+        if (!token || cancelled) return;
+
+        const serverRes = await cloudflareApi.fetchWatchlistDetailed(token);
+        if (cancelled || !serverRes.ok) return;
+
+        const localOwner = readWatchlistOwner();
+        const guestIds = localOwner === 'guest' ? readWatchlistFromStorage() : [];
+        const { mergedIds, toSyncIds } = mergeGuestAndServerWatchlist(serverRes.ids, guestIds);
+
+        if (toSyncIds.length > 0) {
+          for (const idToSync of toSyncIds) {
+            if (cancelled) return;
+            await cloudflareApi.addToWatchlist(idToSync, token);
+          }
+        }
+
+        if (cancelled) return;
+        hydratedUserRef.current = clerkUser.id;
+        const persisted = writeWatchlistToStorage(mergedIds, clerkUser.id);
+        watchlistRef.current = persisted;
+        setWatchlist(persisted);
+      } catch (err) {
+        console.warn('Watchlist hydration skipped:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, clerkUser?.id, getToken]);
 
   const addToRecentlyViewed = useCallback((anime: any) => {
     setRecentlyViewed(prev => {
@@ -261,24 +306,48 @@ export default function App() {
 
   const handleToggleWatchlist = useCallback(async (animeId: number) => {
     const idNum = Number(animeId);
+    if (!Number.isInteger(idNum) || idNum <= 0) return;
+
+    const previousIds = watchlistRef.current;
+    const isCurrentlySaved = previousIds.map(Number).includes(idNum);
+    const { ids: nextIds } = toggleWatchlistIdLocally(previousIds, idNum);
+    const ownerTag = isSignedIn && clerkUser?.id ? clerkUser.id : 'guest';
+
+    watchlistRef.current = nextIds;
+    setWatchlist(nextIds);
+    writeWatchlistToStorage(nextIds, ownerTag);
+
+    if (!isSignedIn) {
+      return;
+    }
+
     try {
-      const data = await cloudflareApi.toggleWatchlist(idNum);
-      if (data.watchlisted) {
-        setWatchlist(prev => Array.from(new Set([...prev.map(Number), idNum])));
-      } else {
-        setWatchlist(prev => prev.map(Number).filter(id => id !== idNum));
+      const token = (await getToken()) || (await getClerkSessionToken());
+      if (!token) {
+        writeWatchlistToStorage(nextIds, 'guest');
+        return;
+      }
+
+      const result = isCurrentlySaved
+        ? await cloudflareApi.removeFromWatchlist(idNum, token)
+        : await cloudflareApi.addToWatchlist(idNum, token);
+
+      if (!result.success) {
+        const refreshed = await cloudflareApi.fetchWatchlistDetailed(token);
+        if (refreshed.ok) {
+          const synced = writeWatchlistToStorage(refreshed.ids, clerkUser?.id || 'guest');
+          watchlistRef.current = synced;
+          setWatchlist(synced);
+        } else {
+          // Retain local guest cache if network/server is temporarily unreachable
+          writeWatchlistToStorage(nextIds, 'guest');
+        }
       }
     } catch (err) {
-      console.error('Failed to toggle watchlist:', err);
-      // Optimistic fallback
-      setWatchlist(prev => {
-        const normalized = prev.map(Number);
-        return normalized.includes(idNum) 
-          ? normalized.filter(id => id !== idNum) 
-          : [...normalized, idNum];
-      });
+      console.error('Failed to sync watchlist toggle:', err);
+      writeWatchlistToStorage(nextIds, 'guest');
     }
-  }, []);
+  }, [isSignedIn, clerkUser?.id, getToken]);
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -402,7 +471,9 @@ export default function App() {
       catalogList.some(a => String(a.id) === String(wId))
     );
     if (validWatchlist.length !== watchlist.length) {
+      watchlistRef.current = validWatchlist;
       setWatchlist(validWatchlist);
+      writeWatchlistToStorage(validWatchlist, isSignedIn && clerkUser?.id ? clerkUser.id : 'guest');
     }
 
     // 2. Cleanup Recently Viewed
@@ -598,6 +669,7 @@ export default function App() {
                   }}
                   onToggleWatchlist={handleToggleWatchlist}
                   onNavigateToCatalog={() => setActiveTab('home')}
+                  isSignedIn={Boolean(isSignedIn)}
                 />
               </Suspense>
             )}
