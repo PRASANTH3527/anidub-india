@@ -17,6 +17,15 @@ import {
   toggleWatchlistIdLocally,
   writeWatchlistToStorage,
 } from './utils/watchlist';
+import {
+  buildAnimeSeoMeta,
+  buildDefaultSeoMeta,
+  buildLanguageSeoMeta,
+  getLanguageSlug,
+  parseLanguageFromPath,
+  updateDocumentSeoMeta,
+} from './utils/seoMeta';
+import { normalizeLanguageName } from './utils/languages';
 
 const ViewLoadingFallback = () => (
   <div className="w-full min-h-[50vh] flex flex-col items-center justify-center p-8 space-y-3">
@@ -45,9 +54,15 @@ const ProfileView = dynamic(() => import('./components/ProfileView').then(m => m
 const AnimeTierListMaker = dynamic(() => import('./components/AnimeTierListMaker').then(m => m.AnimeTierListMaker), { loading: ViewLoadingFallback, ssr: false });
 const RecommendationSystem = dynamic(() => import('./components/RecommendationSystem').then(m => m.RecommendationSystem), { loading: ViewLoadingFallback, ssr: false });
 const CommunityChatView = dynamic(() => import('./components/CommunityChatView').then(m => m.CommunityChatView), { loading: ViewLoadingFallback, ssr: false });
+const LanguageLandingView = dynamic(() => import('./components/LanguageLandingView').then(m => m.LanguageLandingView), { loading: ViewLoadingFallback, ssr: false });
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
+  const [selectedSeoLanguage, setSelectedSeoLanguage] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const parsed = parseLanguageFromPath(window.location.pathname);
+    return parsed ? parsed.language : null;
+  });
   const [feedView, setFeedView] = useState('library');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentLang, setCurrentLang] = useState<string>(() => {
@@ -102,6 +117,45 @@ export default function App() {
   const [adminPasswordLoading, setAdminPasswordLoading] = useState(false);
   const [isCatalogLoading, setIsCatalogLoading] = useState(true);
 
+  const handleNavigateTab = useCallback((nextTab: string) => {
+    setActiveTab(nextTab);
+    if (nextTab !== 'language') {
+      setSelectedSeoLanguage(null);
+      if (typeof window !== 'undefined') {
+        const pathByTab: Record<string, string> = {
+          home: '/',
+          catalog: '/',
+          watchlist: '/watchlist',
+          schedule: '/schedule',
+          chat: '/chat',
+          tierlist: '/tierlist',
+          recommendations: '/recommendations',
+          profile: '/profile',
+          admin: '/admin',
+        };
+        const targetPath = pathByTab[nextTab];
+        if (targetPath && window.location.pathname !== targetPath) {
+          window.history.pushState({ tab: nextTab }, '', targetPath);
+        }
+      }
+    }
+  }, []);
+
+  const handleNavigateLanguage = useCallback((language: string) => {
+    const normalized = normalizeLanguageName(language) || 'Hindi';
+    const slug = getLanguageSlug(normalized);
+    setSelectedAnimeId(null);
+    setSelectedSeoLanguage(normalized);
+    setActiveTab('language');
+    if (typeof window !== 'undefined') {
+      const targetPath = `/dubbed-anime/${slug}`;
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ language: normalized }, '', targetPath);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
+
   // Deep-link and history navigation handler
   const handleOpenAnime = useCallback((animeId: number | null) => {
     setSelectedAnimeId(animeId);
@@ -114,16 +168,27 @@ export default function App() {
         }
       } else {
         if (window.location.pathname.startsWith('/anime/')) {
-          window.history.pushState(null, '', '/');
+          const fallbackPath =
+            activeTab === 'language' && selectedSeoLanguage
+              ? `/dubbed-anime/${getLanguageSlug(selectedSeoLanguage)}`
+              : '/';
+          window.history.pushState(null, '', fallbackPath);
         }
       }
     }
-  }, [catalogList]);
+  }, [catalogList, activeTab, selectedSeoLanguage]);
 
   // Handle URL deep-links on initial load and catalog ready
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const pathname = window.location.pathname;
+    const languageMatch = parseLanguageFromPath(pathname);
+    if (languageMatch) {
+      setSelectedSeoLanguage(languageMatch.language);
+      setActiveTab('language');
+      return;
+    }
+
     if (pathname.startsWith('/anime/')) {
       const slugOrId = pathname.replace(/^\/anime\//, '').split('/')[0].split('?')[0];
       if (slugOrId) {
@@ -161,6 +226,14 @@ export default function App() {
     if (typeof window === 'undefined') return;
     const handlePopState = () => {
       const pathname = window.location.pathname;
+      const languageMatch = parseLanguageFromPath(pathname);
+      if (languageMatch) {
+        setSelectedAnimeId(null);
+        setSelectedSeoLanguage(languageMatch.language);
+        setActiveTab('language');
+        return;
+      }
+
       if (pathname.startsWith('/anime/')) {
         const slugOrId = pathname.replace(/^\/anime\//, '').split('/')[0].split('?')[0];
         const matched = catalogList.find(a => a.slug === slugOrId || String(a.id) === slugOrId);
@@ -169,6 +242,7 @@ export default function App() {
         }
       } else {
         setSelectedAnimeId(null);
+        setSelectedSeoLanguage(null);
         if (pathname === '/admin' && isAdminAuthenticated) {
           setActiveTab('admin');
         } else if (pathname === '/watchlist') {
@@ -191,6 +265,29 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [catalogList, isAdminAuthenticated]);
+
+  // Keep document SEO <title>, <meta>, OpenGraph, and canonical URL synchronized on client transitions
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const origin = window.location.origin;
+
+    if (selectedAnimeId !== null) {
+      const matched = catalogList.find(
+        (a) => a.id === selectedAnimeId || String(a.id) === String(selectedAnimeId)
+      );
+      if (matched) {
+        updateDocumentSeoMeta(buildAnimeSeoMeta(matched, origin, String(selectedAnimeId)));
+        return;
+      }
+    }
+
+    if (activeTab === 'language' && selectedSeoLanguage) {
+      updateDocumentSeoMeta(buildLanguageSeoMeta(selectedSeoLanguage, origin));
+      return;
+    }
+
+    updateDocumentSeoMeta(buildDefaultSeoMeta(origin));
+  }, [activeTab, selectedSeoLanguage, selectedAnimeId, catalogList]);
 
   useEffect(() => {
     fetchCatalogList();
@@ -485,19 +582,19 @@ export default function App() {
     }
   }, [catalogList, isCatalogLoading]);
 
-  const handleToggleLike = useCallback((animeId: number, _liked: boolean, count: number) => {
+  const handleToggleLike = useCallback((animeId: number, _liked?: boolean, count?: number) => {
     setCatalogList(prev => prev.map(a => {
       if (a.id === animeId || String(a.id) === String(animeId)) {
-        return { ...a, likesCount: count };
+        return { ...a, likesCount: count ?? a.likesCount };
       }
       return a;
     }));
   }, []);
 
-  const handleToggleUpvote = useCallback((animeId: number, _upvoted: boolean, count: number) => {
+  const handleToggleUpvote = useCallback((animeId: number, _upvoted?: boolean, count?: number) => {
     setCatalogList(prev => prev.map(a => {
       if (a.id === animeId || String(a.id) === String(animeId)) {
-        return { ...a, popularity: count };
+        return { ...a, popularity: count ?? a.popularity };
       }
       return a;
     }));
@@ -512,12 +609,12 @@ export default function App() {
       {/* 1. NAVBAR */}
       <Navbar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleNavigateTab}
         watchlistCount={realSavedWatchlist.length}
         searchQuery={searchQuery}
         setSearchQuery={(q) => { 
           setSearchQuery(q); 
-          if (activeTab !== 'home' && activeTab !== 'catalog') setActiveTab('home'); 
+          if (activeTab !== 'home' && activeTab !== 'catalog') handleNavigateTab('home'); 
         }}
         onUnlockAdmin={() => {
           if (!isAdminAuthenticated || !isClerkAdmin) {
@@ -525,9 +622,9 @@ export default function App() {
             setAdminAuthError('');
           } else {
             if (activeTab !== 'admin') {
-              setActiveTab('admin');
+              handleNavigateTab('admin');
             } else {
-              setActiveTab('home');
+              handleNavigateTab('home');
             }
           }
         }}
@@ -539,6 +636,8 @@ export default function App() {
         onLogout={handleAdminLogout}
         currentLang={currentLang}
         setCurrentLang={setCurrentLang}
+        onNavigateLanguage={handleNavigateLanguage}
+        activeSeoLanguage={selectedSeoLanguage}
       />
 
       {/* 2. ADMIN DASHBOARD (Protected strictly by Clerk Admin Auth) */}
@@ -721,11 +820,31 @@ export default function App() {
               </Suspense>
             )}
 
+            {/* REGIONAL LANGUAGE SEO LANDING VIEW (/dubbed-anime/:language) */}
+            {activeTab === 'language' && selectedSeoLanguage && (
+              <Suspense fallback={<ViewLoadingFallback />}>
+                <LanguageLandingView
+                  language={selectedSeoLanguage}
+                  catalogList={catalogList}
+                  watchlist={watchlist}
+                  onSelectAnime={(anime) => {
+                    handleOpenAnime(anime.id);
+                    addToRecentlyViewed(anime);
+                  }}
+                  onToggleWatchlist={handleToggleWatchlist}
+                  onToggleLike={handleToggleLike}
+                  onToggleUpvote={handleToggleUpvote}
+                  onNavigateLanguage={handleNavigateLanguage}
+                  onNavigateHome={() => handleNavigateTab('home')}
+                />
+              </Suspense>
+            )}
+
             {/* LIVE COMMUNITY CHAT VIEW */}
             {activeTab === 'chat' && (
               <Suspense fallback={<ViewLoadingFallback />}>
                 <CommunityChatView
-                  onNavigateToCatalog={() => setActiveTab('home')}
+                  onNavigateToCatalog={() => handleNavigateTab('home')}
                   onSelectAnime={(anime) => {
                     handleOpenAnime(anime.id);
                     addToRecentlyViewed(anime);
@@ -740,6 +859,7 @@ export default function App() {
       {/* FEEDBACK SECTION / FOOTER */}
       <FeedbackSection
         onSubmitDub={() => setIsDubModalOpen(true)}
+        onNavigateLanguage={handleNavigateLanguage}
       />
 
 

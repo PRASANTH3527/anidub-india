@@ -1,4 +1,10 @@
 import { getAuth } from '../../utils/auth';
+import {
+  normalizePlatformString,
+  parseCsvMixedEntriesAndEpisodesPerSeason,
+  parseOptionalEpisodesCount,
+  parseOptionalSeason,
+} from '../../utils/dataNormalization';
 import { D1_DATABASE_ID, getErrorMessage, type RouteContext } from './shared';
 
 interface CsvImportRow {
@@ -364,7 +370,11 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
                 .map((g) => g.trim())
                 .join(', ')
             : String(row.genres || row.Genres || 'Action, Fantasy').trim();
-        const platform = String(row.platform || row.Platform || 'Crunchyroll').trim();
+        const platform =
+          normalizePlatformString(
+            row.platform ?? row.Platform ?? row['Streaming Partners'] ?? row.streaming_partners
+          ) || null;
+        const season = parseOptionalSeason(row);
         const languages = Array.isArray(row.languages)
           ? row.languages.join(', ')
           : typeof row.languages === 'string' && row.languages.includes('|')
@@ -411,40 +421,25 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         if (!studio) studio = 'Unknown Studio';
 
         const resolvedType = String(row.type || row.Type || 'TV Series').trim();
-        const epCount = parseInt(String(row.episodes_count || row.episodes || '12'), 10) || 12;
+        const rawMixedInput = row.mixed_entries ?? row.mixedEntries;
+        const { mixedEntries, episodesPerSeason } = parseCsvMixedEntriesAndEpisodesPerSeason(
+          row['Seasons'] ?? row.seasons,
+          rawMixedInput,
+          row.episodes_per_season
+        );
+        const epCount = parseOptionalEpisodesCount(row, mixedEntries);
 
-        let mixedEntriesRaw = row.mixed_entries || row.mixedEntries;
-        if (!mixedEntriesRaw && typeof row['Seasons'] === 'string') {
-          mixedEntriesRaw = row['Seasons']
-            .split('|')
-            .map((entry) => {
-              const [name, eps] = entry.split(':');
-              return {
-                type: 'Season',
-                name: name ? name.trim() : '',
-                episodes: parseInt(eps || '', 10) || null,
-              };
-            })
-            .filter((e) => e.name !== '');
-        }
-
-        const mixedEntriesJson = Array.isArray(mixedEntriesRaw)
-          ? JSON.stringify(mixedEntriesRaw)
-          : typeof mixedEntriesRaw === 'string'
-            ? mixedEntriesRaw
-            : '';
-
-        const episodesPerSeason =
-          Array.isArray(mixedEntriesRaw) && mixedEntriesRaw.length > 0
-            ? mixedEntriesRaw.map((e: { episodes?: number | null }) => e.episodes || 12).join('|')
-            : row.episodes_per_season
-              ? String(row.episodes_per_season)
-              : String(epCount);
+        const mixedEntriesJson =
+          mixedEntries.length > 0
+            ? JSON.stringify(mixedEntries)
+            : typeof rawMixedInput === 'string'
+              ? rawMixedInput
+              : '';
 
         if (env.DB) {
           await env.DB.prepare(
             `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, 'Spring', ?, ?, 0, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(title) DO NOTHING`
           )
             .bind(
@@ -457,6 +452,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
               epCount,
               resolvedStatus,
               resolvedStatus,
+              season,
               year,
               genres,
               languages,
@@ -565,6 +561,66 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
       return jsonResponse({ success: true, message: 'Database cleared successfully' });
     } catch (err) {
       return jsonResponse({ error: getErrorMessage(err) }, 500);
+    }
+  }
+
+  // 10. POST/GET /api/admin/normalize-platforms (Temporary admin cleanup endpoint)
+  if (path === '/api/admin/normalize-platforms' && (method === 'POST' || method === 'GET')) {
+    const session = await getAuth(request, env);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
+    }
+
+    try {
+      if (!env.DB) {
+        return jsonResponse({ success: true, totalScanned: 0, updatedCount: 0, unchangedCount: 0, updatedSamples: [] }, 200, request);
+      }
+
+      const res = await env.DB.prepare('SELECT id, platform FROM anime ORDER BY id ASC').all<{
+        id: number | string;
+        platform: string | null;
+      }>();
+      const rows = res?.results || [];
+
+      let updatedCount = 0;
+      let unchangedCount = 0;
+      const updatedSamples: Array<{ id: number | string; before: string; after: string }> = [];
+
+      for (const row of rows) {
+        const currentPlatform = typeof row.platform === 'string' ? row.platform : row.platform == null ? '' : String(row.platform);
+        if (!currentPlatform.trim()) {
+          unchangedCount++;
+          continue;
+        }
+        const normalized = normalizePlatformString(currentPlatform);
+        if (normalized !== currentPlatform) {
+          await env.DB.prepare('UPDATE anime SET platform = ? WHERE id = ?').bind(normalized, row.id).run();
+          updatedCount++;
+          if (updatedSamples.length < 50) {
+            updatedSamples.push({ id: row.id, before: currentPlatform, after: normalized });
+          }
+        } else {
+          unchangedCount++;
+        }
+      }
+
+      return jsonResponse(
+        {
+          success: true,
+          totalScanned: rows.length,
+          updatedCount,
+          unchangedCount,
+          updatedSamples,
+        },
+        200,
+        request
+      );
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
     }
   }
 

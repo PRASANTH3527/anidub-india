@@ -9,9 +9,9 @@ export interface AnimeRecord {
   banner_url?: string;
   rating?: number;
   popularity?: number;
-  episodes_count?: number;
+  episodes_count?: number | null;
   status?: string;
-  release_season?: string;
+  release_season?: string | null;
   genres?: string;
   languages?: string;
   platform?: string;

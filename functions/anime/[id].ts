@@ -1,0 +1,54 @@
+import {
+  type D1SeoDbLike,
+  type HTMLRewriterConstructorLike,
+  resolveAnimeSeoResponse,
+} from '../../src/utils/seoMeta';
+
+export interface PagesSeoContext {
+  request: Request;
+  env: {
+    DB?: D1SeoDbLike | null;
+    ASSETS?: { fetch: (request: Request) => Promise<Response> };
+  };
+  params?: { id?: string };
+  next?: () => Promise<Response>;
+  RewriterCtor?: HTMLRewriterConstructorLike;
+}
+
+export async function onRequest(context: PagesSeoContext): Promise<Response> {
+  const { request, env, params, next, RewriterCtor } = context;
+
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    if (typeof next === 'function') return next();
+    if (env.ASSETS) return env.ASSETS.fetch(request);
+    return new Response('Method Not Allowed', { status: 405 });
+  }
+
+  const url = new URL(request.url);
+  const pathSegment = url.pathname.replace(/^\/anime\//, '').split('/')[0] || '';
+  const idOrSlug = decodeURIComponent(String(params?.id || pathSegment)).trim();
+
+  let baseHtmlResponse: Response | null = null;
+  if (typeof next === 'function') {
+    baseHtmlResponse = await next();
+  } else if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+    baseHtmlResponse = await env.ASSETS.fetch(
+      new Request(new URL('/index.html', url.origin), {
+        method: 'GET',
+        headers: request.headers,
+      })
+    );
+  }
+
+  if (!baseHtmlResponse) {
+    return new Response('HTML entrypoint not found', { status: 404 });
+  }
+
+  return resolveAnimeSeoResponse({
+    request,
+    db: env.DB ?? null,
+    idOrSlug,
+    baseHtmlResponse,
+    RewriterCtor,
+  });
+}

@@ -21,6 +21,7 @@ import { useUser } from '@clerk/nextjs';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 import { validateImageUpload } from '../utils/imgbb';
 import { validateExternalImageUrl } from '../utils/submissionValidation';
+import { normalizePlatformString } from '../utils/dataNormalization';
 
 interface DubInfoModalProps {
   isOpen: boolean;
@@ -150,7 +151,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         id: Date.now() + 2,
         entryType: 'Season',
         seasonNumber: data.release_season || data.season || '1',
-        episodes: String(rawEp || data.episodes_count || 12),
+        episodes: rawEp || data.episodes_count ? String(rawEp || data.episodes_count) : '',
         languages: defaultLangs
       }
     ];
@@ -519,12 +520,12 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         cover_image: defaultCover,
         banner_image: defaultCover,
         rating: parsedRating,
-        episodes_count: totalEpisodes || 12,
+        episodes_count: totalEpisodes > 0 ? totalEpisodes : null,
         status: statusState,
         airing_status: statusState,
         submissionStatus: resolvedSubmissionStatus,
         languages: derivedGlobalDubs.join(', '),
-        platform: streamingPartners[0]?.name || 'Crunchyroll',
+        platform: normalizePlatformString(streamingPartners.map((p) => p.name).filter(Boolean)),
         watch_url: (streamingPartners.find(p => p.url?.trim())?.url || streamingPartners[0]?.url || '').trim(),
         streaming_partners: streamingPartners.map(p => ({
           name: p.name || 'Crunchyroll',
@@ -540,7 +541,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         mixedEntries: formattedMixedEntries,
         episodes_per_season: episodesPerSeasonStr,
         type: formData.type || type || 'TV Series',
-        season: 'Spring',
+        season: currentSeason.trim() || null,
         year: parsedYear,
         genres: Array.isArray(genres) ? genres.join(',') : genres,
         popularity: 0,

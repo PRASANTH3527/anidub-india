@@ -50,7 +50,7 @@ export interface AnimePayload {
   popularity?: number;
   likes?: number;
   likesCount?: number;
-  episodes_count?: number;
+  episodes_count?: number | null;
   episodes?: number | null;
   episode_count?: number | null;
   status?: string;
@@ -58,7 +58,7 @@ export interface AnimePayload {
   submissionStatus?: string;
   approval_status?: string;
   is_published?: boolean | number;
-  season?: string;
+  season?: string | null;
   year?: number | null;
   releaseYear?: number;
   release_year?: number;

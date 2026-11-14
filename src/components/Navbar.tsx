@@ -17,10 +17,13 @@ import {
   MessageSquare,
   Mic,
   ShieldCheck,
-  Shield
+  Shield,
+  Globe,
+  ChevronDown
 } from 'lucide-react';
 import { useToast } from './Toast';
 import { AniDubLogo } from './AniDubLogo';
+import { PRIMARY_SEO_LANGUAGES, getLanguageSlug } from '../utils/seoMeta';
 
 const MicPermissionBottomSheet = dynamic(() => import('./MicPermissionBottomSheet').then(m => m.MicPermissionBottomSheet), { ssr: false });
 const VoiceVisualizer = dynamic(() => import('./VoiceVisualizer').then(m => m.VoiceVisualizer), { ssr: false });
@@ -41,6 +44,8 @@ interface NavbarProps {
   userAvatar?: string;
   currentLang?: string;
   setCurrentLang?: (lang: string) => void;
+  onNavigateLanguage?: (language: string) => void;
+  activeSeoLanguage?: string | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -58,11 +63,15 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   userAvatar,
   currentLang = 'en',
-  setCurrentLang
+  setCurrentLang,
+  onNavigateLanguage,
+  activeSeoLanguage
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const { user } = useUser();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isLanguagesOpen, setIsLanguagesOpen] = useState(false);
+  const languagesMenuRef = useRef<HTMLDivElement | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
     if (saved) return saved === 'dark';
@@ -78,6 +87,26 @@ export const Navbar: React.FC<NavbarProps> = ({
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  useEffect(() => {
+    if (!isLanguagesOpen) return;
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (languagesMenuRef.current && !languagesMenuRef.current.contains(event.target as Node)) {
+        setIsLanguagesOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsLanguagesOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isLanguagesOpen]);
 
   const logoClickCountRef = useRef(0);
   const logoClickTimerRef = useRef<any>(null);
@@ -310,7 +339,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         ) : (
           <>
             {/* CENTER SCROLLABLE NAVIGATION ICONS */}
-            <nav className="flex items-center gap-1 sm:gap-1.5 flex-grow overflow-x-auto no-scrollbar py-1 justify-start">
+            <nav className="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0 overflow-x-auto no-scrollbar py-1 justify-start">
           
           {/* 1. Compass (Directory) */}
           <motion.button
@@ -461,6 +490,68 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
           </motion.button>
         </nav>
+
+        {/* REGIONAL DUB LANGUAGES DROPDOWN (SEO + DISCOVERY) */}
+        <div ref={languagesMenuRef} className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsLanguagesOpen((prev) => !prev)}
+            aria-expanded={isLanguagesOpen}
+            aria-haspopup="menu"
+            aria-label="Browse Dubbed Anime by Language"
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              activeTab === 'language' || isLanguagesOpen
+                ? 'bg-[var(--primary-accent)]/20 text-accent-theme border-primary-theme'
+                : 'bg-[#131926] border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5 shrink-0" />
+            <span>{activeTab === 'language' && activeSeoLanguage ? activeSeoLanguage : 'Languages'}</span>
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isLanguagesOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isLanguagesOpen && (
+            <div
+              role="menu"
+              aria-label="Indian Regional Dub Languages"
+              className="absolute right-0 mt-2 w-64 rounded-xl bg-[#111726] border border-neutral-800 shadow-2xl py-1.5 z-50"
+            >
+              <div className="px-3 py-1.5 text-[11px] font-medium text-neutral-400 border-b border-neutral-800/80">
+                Browse by Regional Dub
+              </div>
+              {PRIMARY_SEO_LANGUAGES.map((langName) => {
+                const slug = getLanguageSlug(langName);
+                const isSelected =
+                  activeTab === 'language' &&
+                  activeSeoLanguage?.toLowerCase() === langName.toLowerCase();
+                return (
+                  <a
+                    key={langName}
+                    role="menuitem"
+                    href={`/dubbed-anime/${slug}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setIsLanguagesOpen(false);
+                      if (onNavigateLanguage) {
+                        onNavigateLanguage(langName);
+                      } else {
+                        window.location.href = `/dubbed-anime/${slug}`;
+                      }
+                    }}
+                    className={`flex items-center justify-between gap-3 px-3 py-2 text-xs transition-colors ${
+                      isSelected
+                        ? 'bg-purple-600/20 text-purple-200 font-semibold'
+                        : 'text-neutral-200 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <span className="whitespace-nowrap">{langName} Dubbed Anime</span>
+                    <span className="text-[11px] text-neutral-400 whitespace-nowrap">/{slug}</span>
+                  </a>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* RIGHT UTILITY ACTIONS */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0 ml-1">

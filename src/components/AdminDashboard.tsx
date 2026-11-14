@@ -33,6 +33,12 @@ import { cloudflareApi } from '../services/cloudflareApi';
 import { CLOUDFLARE_API_URL } from '../config/cloudflare';
 import Papa from 'papaparse';
 import { AniDubLogo } from './AniDubLogo';
+import {
+  normalizePlatformString,
+  parseCsvMixedEntriesAndEpisodesPerSeason,
+  parseOptionalEpisodesCount,
+  parseOptionalSeason,
+} from '../utils/dataNormalization';
 import { useUser, SignIn } from '@clerk/nextjs';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 import { AdminOverviewTab, type GenreStatBar } from './admin/AdminOverviewTab';
@@ -687,23 +693,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           const rawGenres = row['Genres'] || row['genres'] || row['Genre'] || row['genre'] || '';
           const rawSeasons = row['Seasons'] || row['seasons'] || '';
 
-          const mixedEntries =
-            typeof rawSeasons === 'string' && rawSeasons.trim().length > 0
-              ? rawSeasons
-                  .split('|')
-                  .map((entry) => {
-                    const [name, eps] = entry.split(':');
-                    return {
-                      type: 'Season',
-                      name: name ? name.trim() : '',
-                      episodes: parseInt(eps || '', 10) || null,
-                    };
-                  })
-                  .filter((e) => e.name !== '')
-              : [];
+          const { mixedEntries, episodesPerSeason } = parseCsvMixedEntriesAndEpisodesPerSeason(
+            rawSeasons,
+            undefined,
+            row['episodes_per_season']
+          );
 
           const parsedYear = parseInt(row['Release Year'] || row['year'] || row['Year'] || row['release_year'] || '', 10) || null;
-          const parsedEpisodes = parseInt(row['Episodes'] || row['episodes'] || row['episodes_count'] || '', 10) || null;
+          const parsedEpisodes = parseOptionalEpisodesCount(row, mixedEntries);
+          const parsedSeason = parseOptionalSeason(row);
+          const normalizedPlatform = normalizePlatformString(
+            row['Platform'] || row['platform'] || row['Streaming Partners'] || row['streaming_partners'] || ''
+          );
           const parsedRating =
             parseFloat(row['Ratings'] || row['ratings'] || row['Rating'] || row['rating'] || row['Score'] || '') || null;
           const status = String(row['Status'] || row['status'] || '')
@@ -717,6 +718,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             poster_url: rawPoster,
             cover_image: rawPoster,
             year: parsedYear,
+            season: parsedSeason,
             languages: rawLanguages
               .split('|')
               .map((l) => l.trim())
@@ -730,8 +732,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             status,
             airing_status: status,
             episodes: parsedEpisodes,
-            episodes_count: parsedEpisodes || 12,
-            platform: (row['Platform'] || row['platform'] || '').toString().trim(),
+            episodes_count: parsedEpisodes,
+            platform: normalizedPlatform,
             rating: parsedRating,
             synopsis: (row['Synopsis'] || row['synopsis'] || row['Description'] || row['description'] || '').toString().trim(),
             approval_status: 'pending',
@@ -739,10 +741,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             is_published: false,
             mixed_entries: mixedEntries,
             mixedEntries,
-            episodes_per_season:
-              mixedEntries.length > 0
-                ? mixedEntries.map((m) => m.episodes || 12).join('|')
-                : String(parsedEpisodes || 12),
+            episodes_per_season: episodesPerSeason,
             slug: (rawTitle || 'untitled')
               .toLowerCase()
               .replace(/[^a-z0-9]+/g, '-')
@@ -869,7 +868,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const rows = catalog
       .map((a) => {
         const clean = (val: unknown) => `"${String(val ?? '').replace(/"/g, '""')}"`;
-        return `${clean(a.title)},${clean(a.type || a.Type || 'TV Series')},${clean(a.status || a.airing_status || 'Airing')},${clean(a.studio || '')},${clean(a.year || a.release_year || 2024)},${clean(a.rating || 8.5)},${clean(a.genres || a.genre || '')},${clean(a.synopsis || a.description || '')},${clean(a.platform || 'Crunchyroll')},${clean(formatLanguageText(a.languages))},${clean(a.episodes_per_season || a.episodes_count || 12)},${clean(a.cover_image || a.poster_url || '')}`;
+        return `${clean(a.title)},${clean(a.type || a.Type || 'TV Series')},${clean(a.status || a.airing_status || 'Airing')},${clean(a.studio || '')},${clean(a.year || a.release_year || 2024)},${clean(a.rating || 8.5)},${clean(a.genres || a.genre || '')},${clean(a.synopsis || a.description || '')},${clean(normalizePlatformString(a.platform || ''))},${clean(formatLanguageText(a.languages))},${clean(a.episodes_per_season || a.episodes_count || '')},${clean(a.cover_image || a.poster_url || '')}`;
       })
       .join('\n');
 

@@ -1,3 +1,5 @@
+import { normalizePlatformString, parseOptionalSeason } from './dataNormalization';
+
 export const ALLOWED_IMAGE_MIME_TYPES = [
   'image/jpeg',
   'image/png',
@@ -623,8 +625,8 @@ export interface SanitizedCommunitySubmission {
   banner_image: string;
   watch_url: string;
   rating: number;
-  episodes_count: number;
-  season: string;
+  episodes_count: number | null;
+  season: string | null;
   year: number;
   genres: string;
   languages: string;
@@ -716,9 +718,13 @@ export function validateAndSanitizeCommunitySubmission(
   }
 
   const rawEp = body.episodes_count ?? body.episodes;
-  const parsedEpisodes = rawEp !== undefined && rawEp !== '' ? parseInt(String(rawEp), 10) : 12;
-  if (!Number.isFinite(parsedEpisodes) || parsedEpisodes < 1 || parsedEpisodes > 5000) {
-    return { ok: false, status: 400, error: 'Episode count must be between 1 and 5000.' };
+  let parsedEpisodes: number | null = null;
+  if (rawEp !== undefined && rawEp !== null && String(rawEp).trim() !== '') {
+    const candidate = parseInt(String(rawEp).trim(), 10);
+    if (!Number.isFinite(candidate) || candidate < 1 || candidate > 5000) {
+      return { ok: false, status: 400, error: 'Episode count must be between 1 and 5000.' };
+    }
+    parsedEpisodes = candidate;
   }
 
   const parsedYear = body.year !== undefined && body.year !== '' ? parseInt(String(body.year), 10) : 2026;
@@ -737,6 +743,10 @@ export function validateAndSanitizeCommunitySubmission(
     return (stripped || fallback).slice(0, maxLen);
   };
 
+  const normalizedPlatform = normalizePlatformString(
+    body.platform ?? body.platforms ?? body['Streaming Partners']
+  ).slice(0, 150);
+
   return {
     ok: true,
     status: 200,
@@ -749,11 +759,11 @@ export function validateAndSanitizeCommunitySubmission(
       watch_url: watchCheck.url || '',
       rating: Number(parsedRating.toFixed(1)),
       episodes_count: parsedEpisodes,
-      season: cleanField(body.season, 'Spring', 30),
+      season: parseOptionalSeason(body.season, 30),
       year: parsedYear,
       genres: cleanField(Array.isArray(body.genres) ? body.genres.join(',') : body.genres, 'Action', 250),
       languages: cleanField(Array.isArray(body.languages) ? body.languages.join(',') : body.languages, 'Tamil, Hindi', 200),
-      platform: cleanField(Array.isArray(body.platform) ? body.platform.join(',') : body.platform, 'Crunchyroll', 150),
+      platform: normalizedPlatform,
       type: cleanField(body.type, 'TV Series', 40),
       studio: cleanField(body.studio, 'Unknown Studio', 100),
     },

@@ -7,6 +7,11 @@ import {
   checkAndRecordSubmissionRateLimit,
   validateAndSanitizeCommunitySubmission,
 } from '../../utils/submissionValidation';
+import {
+  normalizePlatformString,
+  parseOptionalEpisodesCount,
+  parseOptionalSeason,
+} from '../../utils/dataNormalization';
 import { getErrorMessage, sendTelegramAlert, type RouteContext } from './shared';
 
 interface PartnerEntry {
@@ -223,6 +228,18 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             : 'Airing';
       const finalSubmissionStatus = String(body.submissionStatus || 'approved');
 
+      const parsedEpisodes = parseOptionalEpisodesCount(body);
+      const parsedSeason = parseOptionalSeason(body);
+      const partnerNamesFromBody = Array.isArray(body.streaming_partners)
+        ? (body.streaming_partners as PartnerEntry[]).map((p) => p?.name).filter(Boolean)
+        : Array.isArray(body.platforms_data)
+          ? (body.platforms_data as PartnerEntry[]).map((p) => p?.name).filter(Boolean)
+          : [];
+      const normalizedPlatform =
+        normalizePlatformString(
+          body.platform ?? body.platforms ?? (partnerNamesFromBody.length > 0 ? partnerNamesFromBody : '')
+        ) || null;
+
       if (env.DB) {
         const slug = String(body.title).toLowerCase().replace(/[^a-z0-9]+/g, '-');
         try {
@@ -237,15 +254,15 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               safeCoverUrl,
               safeBannerUrl,
               parseFloat(String(body.rating)) || 8.5,
-              parseInt(String(body.episodes_count), 10) || 12,
+              parsedEpisodes,
               finalStatus,
               finalSubmissionStatus,
-              body.season || 'Spring',
+              parsedSeason,
               parseInt(String(body.year), 10) || 2026,
               body.genres || 'Action',
               0,
               body.languages || 'Tamil, Telugu, Hindi',
-              body.platform || 'Crunchyroll',
+              normalizedPlatform,
               resolvedType
             )
             .run();
@@ -262,9 +279,9 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               body.cover_image,
               body.banner_image || body.cover_image,
               parseFloat(String(body.rating)) || 8.5,
-              parseInt(String(body.episodes_count), 10) || 12,
+              parsedEpisodes,
               finalStatus,
-              body.season || 'Spring',
+              parsedSeason,
               parseInt(String(body.year), 10) || 2026,
               body.genres || 'Action',
               0
@@ -280,7 +297,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
         `⭐ *Rating:* ${body.rating || 8.5}/10\n` +
         `📊 *Status:* ${finalStatus}\n` +
         `🎙 *Languages:* ${body.languages || 'Tamil, Telugu, Hindi'}\n` +
-        `📺 *Platform:* ${body.platform || 'Crunchyroll'}\n\n` +
+        `📺 *Platform:* ${normalizedPlatform || 'Not specified'}\n\n` +
         `💬 _"${String(body.synopsis || '').slice(0, 120)}"_`;
       await sendTelegramAlert(env, tgMsg);
 
@@ -551,6 +568,25 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 ? (rawMixed as MixedEntry[]).map((m) => m.episodes || m.episodeCount || 0).join('|')
                 : null;
 
+          const normalizedPlatformUpdate =
+            body.platform !== undefined || body.platforms !== undefined
+              ? normalizePlatformString(body.platform ?? body.platforms) || null
+              : Array.isArray(cleanedPartners) && cleanedPartners.length > 0
+                ? normalizePlatformString((cleanedPartners as PartnerEntry[]).map((p) => p?.name).filter(Boolean)) || null
+                : null;
+          const updatedEpisodes =
+            body.episodes_count !== undefined || body.episodes !== undefined
+              ? parseOptionalEpisodesCount(body)
+              : null;
+          const updatedSeason =
+            body.season !== undefined || body.release_season !== undefined
+              ? parseOptionalSeason(body)
+              : null;
+          const parsedUpdateYear =
+            body.year !== undefined && body.year !== null && String(body.year).trim() !== ''
+              ? parseInt(String(body.year), 10)
+              : null;
+
           await env.DB.prepare(
             `UPDATE anime SET 
               title = COALESCE(?, title),
@@ -580,15 +616,15 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               body.synopsis || null,
               body.cover_image || null,
               body.banner_image || null,
-              body.rating !== undefined ? parseFloat(String(body.rating)) : null,
-              body.episodes_count !== undefined ? parseInt(String(body.episodes_count), 10) : null,
+              body.rating !== undefined && body.rating !== null && String(body.rating).trim() !== '' ? parseFloat(String(body.rating)) : null,
+              updatedEpisodes,
               incomingStatus || null,
               body.submissionStatus || null,
-              body.season || null,
-              body.year !== undefined ? parseInt(String(body.year), 10) : null,
+              updatedSeason,
+              parsedUpdateYear !== null && Number.isFinite(parsedUpdateYear) ? parsedUpdateYear : null,
               body.genres || null,
               body.languages || null,
-              body.platform || null,
+              normalizedPlatformUpdate,
               resolvedType,
               body.studio || null,
               partnersJson,
@@ -610,6 +646,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             success: true,
             id,
             status: incomingStatus,
+            platform: normalizedPlatformUpdate,
             platforms_data: partnersJson,
             streaming_partners: rawPartners,
             watch_url: resolvedWatchUrl,

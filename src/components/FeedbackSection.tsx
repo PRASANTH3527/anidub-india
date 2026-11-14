@@ -3,13 +3,16 @@ import { Plus, Send, CheckCircle2, Upload, X, Image as ImageIcon } from 'lucide-
 import { useToast } from './Toast';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { AniDubLogo } from './AniDubLogo';
+import { PRIMARY_SEO_LANGUAGES, getLanguageSlug } from '../utils/seoMeta';
 
 export interface FeedbackSectionProps {
   onSubmitDub?: () => void;
+  onNavigateLanguage?: (language: string) => void;
 }
 
 export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
-  onSubmitDub
+  onSubmitDub,
+  onNavigateLanguage
 }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -297,12 +300,38 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
       </div>
 
       {/* 5) FOOTER (40px below card) */}
-      <div className="mt-[40px] px-[24px] text-center flex flex-col items-center gap-3">
+      <footer className="mt-[40px] px-[24px] text-center flex flex-col items-center gap-4">
+        <nav
+          aria-label="Regional Dubbed Anime Languages"
+          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-neutral-400"
+        >
+          {PRIMARY_SEO_LANGUAGES.map((langName, idx) => {
+            const slug = getLanguageSlug(langName);
+            return (
+              <React.Fragment key={langName}>
+                {idx > 0 && <span aria-hidden="true" className="text-neutral-600">·</span>}
+                <a
+                  href={`/dubbed-anime/${slug}`}
+                  onClick={(e) => {
+                    if (onNavigateLanguage) {
+                      e.preventDefault();
+                      onNavigateLanguage(langName);
+                    }
+                  }}
+                  className="hover:text-white underline-offset-4 hover:underline transition-colors whitespace-nowrap"
+                >
+                  {langName} Dubbed Anime
+                </a>
+              </React.Fragment>
+            );
+          })}
+        </nav>
+
         <AniDubLogo variant="horizontal" size="sm" className="opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500" />
         <p className="text-[10px] leading-[16px] text-[#6b7280] max-w-sm">
           © 2026 AniDub India. All anime media belongs to their respective production companies. Licensed under fair-use catalog guidelines.
         </p>
-      </div>
+      </footer>
 
     </section>
   );

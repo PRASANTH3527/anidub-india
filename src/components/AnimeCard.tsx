@@ -28,7 +28,7 @@ export interface AnimeCardData {
   poster_url?: string;
   banner_image?: string;
   rating: number;
-  episodes_count?: number;
+  episodes_count?: number | null;
   status?: string;
   airing_status?: string;
   season?: string;

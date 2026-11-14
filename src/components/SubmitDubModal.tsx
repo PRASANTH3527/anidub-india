@@ -16,6 +16,7 @@ import {
 import { AniDubLogo } from './AniDubLogo';
 import { dbService } from '../services/databaseService';
 import { validateExternalImageUrl } from '../utils/submissionValidation';
+import { normalizePlatformString } from '../utils/dataNormalization';
 
 export interface SubmitDubModalProps {
   isOpen: boolean;
@@ -81,17 +82,18 @@ export const SubmitDubModal: React.FC<SubmitDubModalProps> = ({
     setError(null);
     setIsSubmitting(true);
 
+    const parsedEp = episodesCount.trim() !== '' ? parseInt(episodesCount, 10) : NaN;
     const payload = {
       title: title.trim(),
       synopsis: synopsis.trim(),
       cover_image: coverCheck.url || '',
       banner_image: bannerCheck.url || '',
       rating: parseFloat(rating) || 8.5,
-      episodes_count: parseInt(episodesCount) || 12,
+      episodes_count: Number.isFinite(parsedEp) && parsedEp > 0 ? parsedEp : null,
       status: 'pending',
       submissionStatus: 'pending',
       airing_status: status,
-      platform,
+      platform: normalizePlatformString(platform),
       languages: selectedLangs.join(','),
       genres: selectedGenres.join(',')
     };

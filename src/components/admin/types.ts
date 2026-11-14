@@ -37,7 +37,7 @@ export interface AdminAnimeRecord {
   image?: string;
   rating?: number | string | null;
   popularity?: number;
-  episodes_count?: number;
+  episodes_count?: number | null;
   episodes?: number | null;
   episodes_per_season?: string;
   status?: string;
@@ -45,7 +45,7 @@ export interface AdminAnimeRecord {
   submissionStatus?: string;
   approval_status?: string;
   is_published?: boolean | number;
-  season?: string;
+  season?: string | null;
   year?: number | null;
   release_year?: number;
   genres?: string;
