@@ -78,9 +78,19 @@ class DatabaseService {
     try {
       const { data } = await cloudflareApi.fetchCatalog({ page: 1, limit: 50 });
       const rawItems = data || [];
-      const items = rawItems.filter((item: any) => 
-        (item.submissionStatus === 'approved' || item.approval_status === 'approved' || item.is_published === 1)
-      );
+      const items: AnimeRecord[] = rawItems
+        .filter(
+          (item) =>
+            item.submissionStatus === 'approved' ||
+            item.approval_status === 'approved' ||
+            item.is_published === 1
+        )
+        .map((item) => ({
+          ...item,
+          id: Number(item.id || 0),
+          rating: item.rating !== undefined && item.rating !== null ? Number(item.rating) : undefined,
+          languages: Array.isArray(item.languages) ? item.languages.join(', ') : item.languages,
+        }));
       this.cache = items;
       this.cacheTimestamp = now;
       return items;
@@ -103,7 +113,13 @@ class DatabaseService {
     const page = Math.floor(Math.max(0, cursor) / safeLimit) + 1;
     const { data, meta } = await cloudflareApi.fetchCatalog({ page, limit: safeLimit });
     const nextCursor = meta.hasNextPage ? page * safeLimit : null;
-    return { data: data || [], nextCursor };
+    const mapped: AnimeRecord[] = (data || []).map((item) => ({
+      ...item,
+      id: Number(item.id || 0),
+      rating: item.rating !== undefined && item.rating !== null ? Number(item.rating) : undefined,
+      languages: Array.isArray(item.languages) ? item.languages.join(', ') : item.languages,
+    }));
+    return { data: mapped, nextCursor };
   }
 
   public async searchApprovedAnime(
@@ -135,7 +151,14 @@ class DatabaseService {
   public async getAnimeById(id: number): Promise<AnimeRecord | null> {
     try {
       const data = await cloudflareApi.getAnimeById(id);
-      if (data) return data;
+      if (data) {
+        return {
+          ...data,
+          id: Number(data.id || id),
+          rating: data.rating !== undefined && data.rating !== null ? Number(data.rating) : undefined,
+          languages: Array.isArray(data.languages) ? data.languages.join(', ') : data.languages,
+        };
+      }
     } catch (err) {
       console.warn(`Failed to fetch anime by id ${id} from API, checking local cache:`, err);
     }
@@ -169,7 +192,14 @@ class DatabaseService {
 
   public async getUserWatchlist(_userId: string): Promise<WatchlistEntry[]> {
     try {
-      return await cloudflareApi.fetchWatchlist() as WatchlistEntry[];
+      const items = await cloudflareApi.fetchWatchlist();
+      return items.map((item) => ({
+        id: Number(item.id || 0),
+        user_id: _userId,
+        anime_id: Number(item.anime_id || item.id || 0),
+        status: item.status,
+        created_at: typeof item.created_at === 'string' ? item.created_at : undefined,
+      }));
     } catch (err) {
       console.error('getUserWatchlist error:', err);
     }
@@ -192,14 +222,25 @@ class DatabaseService {
     const data = await cloudflareApi.submitReview(reviewData.anime_id, reviewData);
     if (data.success) {
       this.notifyListeners();
-      return data as any;
+      return data as unknown as DubReview;
     }
-    throw new Error((data as any).error || (data as any).message || 'Failed to submit review');
+    throw new Error(data.message || 'Failed to submit review');
   }
 
   public async getReviewsForAnime(animeId: number): Promise<DubReview[]> {
     try {
-      return await cloudflareApi.fetchReviews(animeId);
+      const rows = await cloudflareApi.fetchReviews(animeId);
+      return rows.map((row) => ({
+        id: row.id,
+        anime_id: row.anime_id,
+        author: row.author || row.user_name || 'Community Member',
+        rating: Number(row.rating || 0),
+        language: row.language || 'Hindi Dub',
+        comment: row.comment || '',
+        spoilers: row.spoilers,
+        likes: row.likes,
+        date: row.date || row.created_at,
+      }));
     } catch (err) {
       console.error('getReviewsForAnime error:', err);
     }

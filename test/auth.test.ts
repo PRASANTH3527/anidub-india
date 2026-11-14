@@ -448,7 +448,18 @@ test('Security headers (_headers), .gitignore, SEO assets, and non-sensitive rev
   assert.ok(indexHtml.includes('content="https://anidub.in/logo.png"'));
   assert.equal(indexHtml.includes('property="og:image" content="/logo.png"'), false);
 
-  const routeCode = fs.readFileSync(path.join(process.cwd(), 'functions/api/[[route]].ts'), 'utf-8');
+  const readCombinedRouteCode = () => {
+    const files: string[] = [path.join(process.cwd(), 'functions/api/[[route]].ts')];
+    const routesDir = path.join(process.cwd(), 'src/server/routes');
+    if (fs.existsSync(routesDir)) {
+      for (const entry of fs.readdirSync(routesDir)) {
+        if (entry.endsWith('.ts')) files.push(path.join(routesDir, entry));
+      }
+    }
+    return files.map((filePath) => fs.readFileSync(filePath, 'utf-8')).join('\n');
+  };
+
+  const routeCode = readCombinedRouteCode();
   assert.equal(/SELECT\s+\*\s+FROM\s+reviews/i.test(routeCode), false);
   assert.ok(routeCode.includes('SELECT id, anime_id, user_id, user_name, user_avatar, rating, language, comment, created_at FROM reviews'));
 });
@@ -506,7 +517,51 @@ test('Performance & code hygiene: no app/ Next.js leftovers, single animation li
   assert.ok(adminDash.includes('./AnalyticsDashboard'));
 
   // 4. ImgBB key is never appended as a URL query parameter (?key=)
-  const routeCode = fs.readFileSync(path.join(process.cwd(), 'functions/api/[[route]].ts'), 'utf-8');
-  assert.equal(routeCode.includes('api.imgbb.com/1/upload?key='), false);
+  const routeFiles = [
+    path.join(process.cwd(), 'functions/api/[[route]].ts'),
+    ...fs
+      .readdirSync(path.join(process.cwd(), 'src/server/routes'))
+      .filter((name) => name.endsWith('.ts'))
+      .map((name) => path.join(process.cwd(), 'src/server/routes', name)),
+  ];
+  const combinedRouteCode = routeFiles.map((f) => fs.readFileSync(f, 'utf-8')).join('\n');
+  assert.equal(combinedRouteCode.includes('api.imgbb.com/1/upload?key='), false);
 });
+
+test('Code maintainability & refactoring: modular AdminDashboard tabs, modular API routes, and consolidated components', () => {
+  // 1. AdminDashboard.tsx refactored into src/components/admin/* modules (down from >3600 lines)
+  const adminDashCode = fs.readFileSync(path.join(process.cwd(), 'src/components/AdminDashboard.tsx'), 'utf-8');
+  assert.ok(adminDashCode.split('\n').length < 2200, 'AdminDashboard.tsx should remain significantly reduced');
+  assert.ok(adminDashCode.includes('./admin/AdminOverviewTab'));
+  assert.ok(adminDashCode.includes('./admin/AdminCatalogTab'));
+  assert.ok(adminDashCode.includes('./admin/AdminSettingsTab'));
+
+  // 2. functions/api/[[route]].ts delegates to src/server/routes/*
+  const routerEntry = fs.readFileSync(path.join(process.cwd(), 'functions/api/[[route]].ts'), 'utf-8');
+  assert.ok(routerEntry.split('\n').length < 250, 'functions/api/[[route]].ts should be a concise modular router');
+  assert.ok(routerEntry.includes('handleAdminRoutes'));
+  assert.ok(routerEntry.includes('handleAnimeRoutes'));
+  assert.ok(routerEntry.includes('handleUserRoutes'));
+  assert.ok(routerEntry.includes('handleCommunityRoutes'));
+  assert.ok(routerEntry.includes('handleAnalyticsRoutes'));
+
+  // 3. Duplicate components consolidated
+  assert.equal(fs.existsSync(path.join(process.cwd(), 'src/components/AnimeModal.tsx')), false);
+  assert.equal(fs.existsSync(path.join(process.cwd(), 'src/components/AnimeDetailModal.tsx')), false);
+  assert.equal(fs.existsSync(path.join(process.cwd(), 'src/components/Profile.tsx')), false);
+  assert.equal(fs.existsSync(path.join(process.cwd(), 'src/components/CreateCollectionUI.tsx')), false);
+
+  const animeDetailCode = fs.readFileSync(path.join(process.cwd(), 'src/components/AnimeDetailPage.tsx'), 'utf-8');
+  assert.ok(animeDetailCode.includes('export const AnimeDetailPage'));
+  assert.ok(animeDetailCode.includes('export const AnimeDetailModal'));
+
+  const profileCode = fs.readFileSync(path.join(process.cwd(), 'src/components/ProfileView.tsx'), 'utf-8');
+  assert.ok(profileCode.includes('export function ProfileView'));
+  assert.ok(profileCode.includes('export { ProfileView as Profile }'));
+
+  const collectionCode = fs.readFileSync(path.join(process.cwd(), 'src/components/CreateCollectionModal.tsx'), 'utf-8');
+  assert.ok(collectionCode.includes('export const CreateCollectionModal'));
+  assert.ok(collectionCode.includes('export const CreateCollectionUI'));
+});
+
 

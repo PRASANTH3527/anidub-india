@@ -16,32 +16,168 @@ import {
   writeWatchlistToStorage,
 } from '../utils/watchlist';
 
+export interface PartnerEntry {
+  name?: string;
+  url?: string;
+  title?: string;
+  type?: string;
+  episodeCount?: number | string | null;
+}
+
+export interface MixedEntry {
+  type?: string;
+  name?: string;
+  episodes?: number | string | null;
+  episodeCount?: number | string | null;
+}
+
 export interface AnimePayload {
   id?: number | string;
+  _id?: number | string;
+  anime_id?: number | string;
   title: string;
+  hindiTitle?: string;
   slug?: string;
   synopsis?: string;
+  description?: string;
   cover_image?: string;
   banner_image?: string;
-  rating?: number;
+  posterUrl?: string;
+  poster_url?: string;
+  poster?: string;
+  image?: string;
+  rating?: number | string | null;
+  popularity?: number;
+  likes?: number;
+  likesCount?: number;
   episodes_count?: number;
+  episodes?: number | null;
+  episode_count?: number | null;
   status?: string;
+  airing_status?: string;
   submissionStatus?: string;
+  approval_status?: string;
+  is_published?: boolean | number;
   season?: string;
-  year?: number;
+  year?: number | null;
+  releaseYear?: number;
+  release_year?: number;
   genres?: string;
-  languages?: string;
+  genre?: string;
+  languages?: string | string[];
   platform?: string;
+  platforms?: string[] | string;
+  watch_url?: string;
+  streamUrl?: string;
   type?: string;
   Type?: string;
   studio?: string;
   episodes_per_season?: string;
-  mixedEntries?: any[];
-  mixed_entries?: any[];
-  streamingPartners?: any[];
-  streaming_partners?: any[];
-  platforms_data?: any;
-  [key: string]: any;
+  mixedEntries?: MixedEntry[] | string;
+  mixed_entries?: MixedEntry[] | string;
+  streamingPartners?: PartnerEntry[] | string;
+  streaming_partners?: PartnerEntry[] | string;
+  platforms_data?: Record<string, unknown> | PartnerEntry[] | string;
+  hindi?: boolean;
+  tamil?: boolean;
+  telugu?: boolean;
+  imdbID?: string;
+  imdb_id?: string;
+  imdbId?: string;
+  community_rating?: number;
+  communityRating?: number;
+  community_votes?: number;
+  communityVotes?: number;
+  user_rating?: number | null;
+  userRating?: number | null;
+  reviews?: AnimeReviewResponse[];
+  created_at?: string;
+}
+
+export interface AnimeReviewPayload {
+  rating?: number;
+  language?: string;
+  comment?: string;
+  user_name?: string;
+  user_avatar?: string;
+}
+
+export interface AnimeReviewResponse {
+  id: number;
+  anime_id: number;
+  user_id?: string;
+  author?: string;
+  user_name?: string;
+  user_avatar?: string;
+  rating: number;
+  language?: string;
+  comment?: string;
+  spoilers?: boolean;
+  likes?: number;
+  date?: string;
+  created_at?: string;
+}
+
+export interface FeedbackSubmitPayload {
+  name?: string;
+  email?: string;
+  feedback: string;
+  type?: string;
+  website?: string;
+}
+
+export interface FeedbackRecord {
+  id: number | string;
+  name?: string;
+  email?: string;
+  feedback: string;
+  type?: string;
+  status?: string;
+  created_at?: string;
+}
+
+export interface ChatMessagePayload {
+  id?: string | number;
+  user?: string;
+  username?: string;
+  user_avatar?: string;
+  avatar?: string;
+  message?: string;
+  text?: string;
+  room?: string;
+  time?: string;
+  timestamp?: number | string;
+  reactions?: Record<string, string[]>;
+  isAdmin?: boolean;
+  isReview?: boolean;
+  rating?: number | null;
+  language?: string | null;
+  clerk_user_id?: string;
+  user_id?: string;
+  userId?: string;
+}
+
+export interface ChatMessageRecord extends ChatMessagePayload {
+  user_id?: string;
+  created_at?: string;
+  is_admin?: boolean | number;
+}
+
+export interface TelegramStatusResponse {
+  configured: boolean;
+  hasToken?: boolean;
+  hasChatId?: boolean;
+  chatIdMasked?: string;
+  chatId?: string;
+  error?: string;
+}
+
+export interface HttpStatusError extends Error {
+  status?: number;
+  statusText?: string;
+  alreadyVoted?: boolean;
+  rawMessage?: string;
+  url?: string;
 }
 
 export interface FetchCatalogOptions {
@@ -167,7 +303,7 @@ class CloudflareApiService {
    * READ: Fetches paginated anime catalog from Cloudflare Worker / D1
    */
   public async fetchCatalog(options: FetchCatalogOptions = {}): Promise<{
-    data: any[];
+    data: AnimePayload[];
     meta: CatalogMeta;
     summary?: CatalogSummary | null;
     total: number;
@@ -265,7 +401,7 @@ class CloudflareApiService {
   /**
    * READ: Fetches single anime details by ID or slug from Cloudflare Worker / D1
    */
-  public async getAnimeById(id: number | string, _userId?: string): Promise<any> {
+  public async getAnimeById(id: number | string, _userId?: string): Promise<AnimePayload | null> {
     const endpoint = CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id);
     const res = await this.smartFetch(endpoint, {
       method: 'GET',
@@ -316,7 +452,7 @@ class CloudflareApiService {
   /**
    * UPLOAD / IMPORT CSV: Sends CSV text or array to backend import route
    */
-  public async uploadCSV(payload: { csvText?: string; animeList?: any[] } | string): Promise<{ success: boolean; count?: number; skipped?: number; insertedCount?: number; skippedCount?: number; skippedTitles?: string[]; addedTitles?: string[]; message?: string }> {
+  public async uploadCSV(payload: { csvText?: string; animeList?: Record<string, unknown>[] } | string): Promise<{ success: boolean; count?: number; skipped?: number; insertedCount?: number; skippedCount?: number; skippedTitles?: string[]; addedTitles?: string[]; message?: string }> {
     const endpoint = '/api/admin/import-csv';
     const bodyData = typeof payload === 'string' ? { csvText: payload } : payload;
 
@@ -344,7 +480,7 @@ class CloudflareApiService {
   /**
    * FETCH PENDING: Gets pending moderation queue items
    */
-  public async fetchPendingItems(): Promise<any[]> {
+  public async fetchPendingItems(): Promise<AnimePayload[]> {
     const endpoint = '/api/admin/pending';
     try {
       const res = await this.smartFetch(endpoint, {
@@ -559,12 +695,12 @@ class CloudflareApiService {
         errDetail = await res.text().catch(() => res.statusText);
         if (/already voted/i.test(errDetail)) isAlreadyVoted = true;
       }
-      const httpError = new Error(isAlreadyVoted ? 'Already voted' : `HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update like'} at ${endpoint}`);
-      (httpError as any).status = res.status;
-      (httpError as any).statusText = res.statusText;
-      (httpError as any).alreadyVoted = isAlreadyVoted;
-      (httpError as any).rawMessage = errDetail;
-      (httpError as any).url = endpoint;
+      const httpError: HttpStatusError = new Error(isAlreadyVoted ? 'Already voted' : `HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update like'} at ${endpoint}`);
+      httpError.status = res.status;
+      httpError.statusText = res.statusText;
+      httpError.alreadyVoted = isAlreadyVoted;
+      httpError.rawMessage = errDetail;
+      httpError.url = endpoint;
       throw httpError;
     }
 
@@ -601,12 +737,12 @@ class CloudflareApiService {
         errDetail = await res.text().catch(() => res.statusText);
         if (/already voted/i.test(errDetail)) isAlreadyVoted = true;
       }
-      const httpError = new Error(isAlreadyVoted ? 'Already voted' : `HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update upvote'} at ${endpoint}`);
-      (httpError as any).status = res.status;
-      (httpError as any).statusText = res.statusText;
-      (httpError as any).alreadyVoted = isAlreadyVoted;
-      (httpError as any).rawMessage = errDetail;
-      (httpError as any).url = endpoint;
+      const httpError: HttpStatusError = new Error(isAlreadyVoted ? 'Already voted' : `HTTP ${res.status} (${res.statusText}): ${errDetail || 'Failed to update upvote'} at ${endpoint}`);
+      httpError.status = res.status;
+      httpError.statusText = res.statusText;
+      httpError.alreadyVoted = isAlreadyVoted;
+      httpError.rawMessage = errDetail;
+      httpError.url = endpoint;
       throw httpError;
     }
 
@@ -753,7 +889,7 @@ class CloudflareApiService {
    */
   public async fetchWatchlistDetailed(explicitToken?: string | null): Promise<{
     ok: boolean;
-    items: any[];
+    items: AnimePayload[];
     ids: number[];
     unauthenticated?: boolean;
   }> {
@@ -796,7 +932,7 @@ class CloudflareApiService {
   /**
    * WATCHLIST: Fetches the user's watchlist from Cloudflare D1
    */
-  public async fetchWatchlist(explicitToken?: string | null): Promise<any[]> {
+  public async fetchWatchlist(explicitToken?: string | null): Promise<AnimePayload[]> {
     const res = await this.fetchWatchlistDetailed(explicitToken);
     return res.items;
   }
@@ -913,7 +1049,7 @@ class CloudflareApiService {
   /**
    * FEEDBACK: Submits user feedback or bug report
    */
-  public async submitFeedback(payload: any): Promise<{ success: boolean }> {
+  public async submitFeedback(payload: FeedbackSubmitPayload): Promise<{ success: boolean }> {
     try {
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.FEEDBACK, {
         method: 'POST',
@@ -929,7 +1065,7 @@ class CloudflareApiService {
   /**
    * CHAT: Fetches recent community chat messages
    */
-  public async fetchChatHistory(): Promise<any[]> {
+  public async fetchChatHistory(): Promise<ChatMessageRecord[]> {
     try {
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
         headers: { 'Accept': 'application/json' }
@@ -947,7 +1083,7 @@ class CloudflareApiService {
   /**
    * CHAT: Sends a new message or review to the community chat (User identity verified on backend from Clerk JWT)
    */
-  public async sendChatMessage(payload: any): Promise<{ success: boolean; message?: any; error?: string }> {
+  public async sendChatMessage(payload: ChatMessagePayload): Promise<{ success: boolean; message?: ChatMessageRecord; error?: string }> {
     try {
       const { clerk_user_id: _ignoredClerkId, user_id: _ignoredUserId, userId: _ignoredUid, ...safePayload } = payload || {};
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
@@ -1047,7 +1183,7 @@ class CloudflareApiService {
   /**
    * REVIEWS: Submits a new review for an anime
    */
-  public async submitReview(id: number | string, payload: any): Promise<{ success: boolean; message?: string }> {
+  public async submitReview(id: number | string, payload: AnimeReviewPayload): Promise<{ success: boolean; message?: string }> {
     try {
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.ANIME_REVIEWS(id), {
         method: 'POST',
@@ -1067,7 +1203,7 @@ class CloudflareApiService {
   /**
    * REVIEWS: Fetches reviews for a specific anime
    */
-  public async fetchReviews(id: number | string): Promise<any[]> {
+  public async fetchReviews(id: number | string): Promise<AnimeReviewResponse[]> {
     try {
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.ANIME_REVIEWS(id), {
         headers: this.getHeaders(false)
@@ -1123,7 +1259,7 @@ class CloudflareApiService {
   /**
    * TELEGRAM: Fetches bot configuration status
    */
-  public async fetchTelegramStatus(): Promise<any> {
+  public async fetchTelegramStatus(): Promise<TelegramStatusResponse> {
     try {
       const res = await this.smartFetch('/api/telegram/status');
       if (res.ok) return await res.json();
@@ -1136,7 +1272,7 @@ class CloudflareApiService {
   /**
    * TELEGRAM: Updates bot credentials
    */
-  public async updateTelegramSettings(payload: { token: string; chatId: string }): Promise<any> {
+  public async updateTelegramSettings(payload: { token: string; chatId: string }): Promise<{ success?: boolean; error?: string; message?: string }> {
     const res = await this.smartFetch('/api/telegram/settings', {
       method: 'POST',
       headers: this.getHeaders(true),
@@ -1148,7 +1284,7 @@ class CloudflareApiService {
   /**
    * TELEGRAM: Sends a test notification
    */
-  public async testTelegram(payload: any = {}): Promise<any> {
+  public async testTelegram(payload: Record<string, unknown> = {}): Promise<{ success?: boolean; error?: string; message?: string }> {
     const res = await this.smartFetch('/api/telegram/test', {
       method: 'POST',
       headers: this.getHeaders(false),
@@ -1160,7 +1296,7 @@ class CloudflareApiService {
   /**
    * FEEDBACK: Fetches all user feedback
    */
-  public async fetchFeedback(): Promise<any[]> {
+  public async fetchFeedback(): Promise<FeedbackRecord[]> {
     try {
       const res = await this.smartFetch('/api/feedback');
       if (res.ok) {
@@ -1194,7 +1330,7 @@ class CloudflareApiService {
   /**
    * GOD-MODE ANALYTICS: Track edge session, pageview, or event
    */
-  public async trackAnalytics(payload: any): Promise<boolean> {
+  public async trackAnalytics(payload: Record<string, unknown>): Promise<boolean> {
     try {
       const res = await this.smartFetch('/api/track', {
         method: 'POST',

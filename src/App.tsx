@@ -35,7 +35,7 @@ const ModalLoadingFallback = () => (
 const GodModeTracker = dynamic(() => import('./components/GodModeTracker').then(m => m.GodModeTracker), { ssr: false });
 const FeedbackSection = dynamic(() => import('./components/FeedbackSection').then(m => m.FeedbackSection), { ssr: false });
 const AdminDashboard = dynamic(() => import('./components/AdminDashboard').then(m => m.AdminDashboard), { loading: ViewLoadingFallback, ssr: false });
-const AnimeDetailModal = dynamic(() => import('./components/AnimeDetailModal').then(m => m.AnimeDetailModal), { loading: ModalLoadingFallback, ssr: false });
+const AnimeDetailModal = dynamic(() => import('./components/AnimeDetailPage').then(m => m.AnimeDetailModal), { loading: ModalLoadingFallback, ssr: false });
 const RouletteModal = dynamic(() => import('./components/RouletteModal').then(m => m.RouletteModal), { loading: ModalLoadingFallback, ssr: false });
 const CreateCollectionModal = dynamic(() => import('./components/CreateCollectionModal').then(m => m.CreateCollectionModal), { loading: ModalLoadingFallback, ssr: false });
 const DubInfoModal = dynamic(() => import('./components/DubInfoModal').then(m => m.DubInfoModal), { loading: ModalLoadingFallback, ssr: false });

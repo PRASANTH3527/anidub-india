@@ -134,7 +134,28 @@ test('Security Audit 3: Backend getAuth() & auth() cryptographically verify JWTs
   assert.equal(spoofedSession.isAdmin, false);
 });
 
+function readCombinedEdgeRouteCode(): string {
+  const files: string[] = [path.join(process.cwd(), 'functions/api/[[route]].ts')];
+  const routesDir = path.join(process.cwd(), 'src/server/routes');
+  if (fs.existsSync(routesDir)) {
+    for (const entry of fs.readdirSync(routesDir)) {
+      if (entry.endsWith('.ts')) {
+        files.push(path.join(routesDir, entry));
+      }
+    }
+  }
+  return files.map((filePath) => fs.readFileSync(filePath, 'utf-8')).join('\n');
+}
+
 test('Security Audit 4: ImgBB API key & hardcoded credentials are not exposed in source code, and routes enforce auth', () => {
+  const routeModulesDir = path.join(process.cwd(), 'src/server/routes');
+  const routeModuleFiles = fs.existsSync(routeModulesDir)
+    ? fs
+        .readdirSync(routeModulesDir)
+        .filter((name) => name.endsWith('.ts'))
+        .map((name) => path.join('src/server/routes', name))
+    : [];
+
   const filesToScan = [
     'src/utils/imgbb.ts',
     'src/utils/auth.ts',
@@ -144,6 +165,7 @@ test('Security Audit 4: ImgBB API key & hardcoded credentials are not exposed in
     'src/components/AdminLoginModal.tsx',
     'src/services/cloudflareApi.ts',
     'functions/api/[[route]].ts',
+    ...routeModuleFiles,
   ];
 
   for (const relPath of filesToScan) {
@@ -171,7 +193,7 @@ test('Security Audit 4: ImgBB API key & hardcoded credentials are not exposed in
     );
   }
 
-  const edgeRouteCode = fs.readFileSync(path.join(process.cwd(), 'functions/api/[[route]].ts'), 'utf-8');
+  const edgeRouteCode = readCombinedEdgeRouteCode();
   assert.ok(edgeRouteCode.includes('env.IMGBB_API_KEY'));
   assert.ok(edgeRouteCode.includes('await getAuth(request, env)'));
   assert.ok(edgeRouteCode.includes("path === '/api/upload'"));
@@ -179,13 +201,13 @@ test('Security Audit 4: ImgBB API key & hardcoded credentials are not exposed in
 });
 
 test('Security Audit 5: D1 Database Security (No raw client SQL) & User Actions extract userId strictly from session', () => {
-  const edgeRouteCode = fs.readFileSync(path.join(process.cwd(), 'functions/api/[[route]].ts'), 'utf-8');
+  const edgeRouteCode = readCombinedEdgeRouteCode();
   const apiClientCode = fs.readFileSync(path.join(process.cwd(), 'src/services/cloudflareApi.ts'), 'utf-8');
 
   assert.equal(
     edgeRouteCode.includes('env.DB.prepare(body.sql)'),
     false,
-    'functions/api/[[route]].ts must never execute raw client SQL via env.DB.prepare(body.sql)'
+    'API routes must never execute raw client SQL via env.DB.prepare(body.sql)'
   );
   assert.equal(
     apiClientCode.includes('JSON.stringify({ sql })'),
@@ -194,14 +216,14 @@ test('Security Audit 5: D1 Database Security (No raw client SQL) & User Actions 
   );
   assert.ok(
     edgeRouteCode.includes('if (body.sql !== undefined)'),
-    'functions/api/[[route]].ts D1 query endpoint must explicitly reject raw sql payloads'
+    'API D1 query endpoint must explicitly reject raw sql payloads'
   );
   assert.ok(edgeRouteCode.includes("getAuth(request, env)"));
 
   assert.equal(
     edgeRouteCode.includes("WHERE id = 'default_user'"),
     false,
-    'functions/api/[[route]].ts must not hardcode default_user for user profiles'
+    'API routes must not hardcode default_user for user profiles'
   );
   assert.equal(
     apiClientCode.includes("'x-user-id'"),
@@ -217,7 +239,7 @@ test('Security Audit 5: D1 Database Security (No raw client SQL) & User Actions 
 
 test('Security Audit 6: Cloudflare Pages Functions, env bindings & Feedback Protection', async () => {
   const authCode = fs.readFileSync(path.join(process.cwd(), 'src/utils/auth.ts'), 'utf-8');
-  const edgeRouteCode = fs.readFileSync(path.join(process.cwd(), 'functions/api/[[route]].ts'), 'utf-8');
+  const edgeRouteCode = readCombinedEdgeRouteCode();
 
   assert.equal(
     authCode.includes('process.env.'),
@@ -227,7 +249,7 @@ test('Security Audit 6: Cloudflare Pages Functions, env bindings & Feedback Prot
   assert.equal(
     edgeRouteCode.includes('process.env'),
     false,
-    'functions/api/[[route]].ts must use Cloudflare env bindings instead of process.env'
+    'API route handlers must use Cloudflare env bindings instead of process.env'
   );
   assert.equal(
     getAuthorizedAdminEmail({ ADMIN_EMAIL: 'cf-admin@anidub.in' }),

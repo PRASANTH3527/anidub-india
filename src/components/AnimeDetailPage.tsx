@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { 
   ArrowLeft, 
   Bookmark, 
@@ -23,13 +23,79 @@ import {
 } from 'lucide-react';
 import { Anime } from './CatalogView';
 import { cloudflareApi } from '../services/cloudflareApi';
-import { getCloudflareUrl, getCloudflareWsUrl } from '../config/cloudflare';
+import { getCloudflareWsUrl } from '../config/cloudflare';
 import { generateRandomUsername } from '../utils/randomUser';
 import { getVerifiedClerkUsername } from '../utils/chatIdentity';
 import { formatRelativeTime } from '../utils/timestamps';
-import { useUser, SignInButton } from '@clerk/nextjs';
+import { useUser } from '@clerk/nextjs';
 import { getClerkSessionToken } from '../lib/clerk';
 import { DualRating } from './DualRating';
+
+export interface AnimeReviewItem {
+  id: number | string;
+  author: string;
+  user_name?: string;
+  rating: number;
+  language: string;
+  comment: string;
+  date: string;
+  created_at?: string;
+  likes: number;
+  isLiked: boolean;
+  spoilers: boolean;
+  revealed: boolean;
+}
+
+export interface RichPlatformEntry {
+  name?: string;
+  url?: string;
+}
+
+export interface SeasonEntry {
+  name?: string;
+  episodes?: number | string;
+  episode_count?: number | string;
+}
+
+export interface AnimeDetailRecord extends Omit<Partial<Anime>, 'rating' | 'year'> {
+  popularity?: number;
+  likes?: number;
+  rating?: number | string | null;
+  year?: number | null;
+  studio?: string;
+  genre?: string;
+  watch_url?: string;
+  community_rating?: number;
+  communityRating?: number;
+  community_votes?: number;
+  communityVotes?: number;
+  user_rating?: number | null;
+  userRating?: number | null;
+  reviews?: Array<{
+    id?: number | string;
+    author?: string;
+    user_name?: string;
+    rating?: number | string;
+    language?: string;
+    comment?: string;
+    created_at?: string;
+    date?: string | number;
+    likes?: number;
+    spoilers?: boolean;
+  }>;
+  description?: string;
+  releaseYear?: number;
+  airing_status?: string;
+  streamUrl?: string;
+  platforms?: string[] | string;
+  platforms_data?: RichPlatformEntry[] | Record<string, unknown> | string;
+  seasons?: SeasonEntry[];
+  mixedEntries?: SeasonEntry[];
+  seasonsList?: SeasonEntry[];
+  episodes_count?: number;
+  episodes?: number;
+  episode_count?: number;
+}
 
 export interface AnimeDetailPageProps {
   animeId: number;
@@ -46,15 +112,15 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   onBack,
   watchlist,
   onToggleWatchlist,
-  onSelectAnime
+  onSelectAnime: _onSelectAnime
 }) => {
-  const { user, isSignedIn } = useUser();
-  const [details, setDetails] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { user } = useUser();
+  const [details, setDetails] = useState<AnimeDetailRecord | null>(null);
+  const [_loading, setLoading] = useState(true);
   const [upvotes, setUpvotes] = useState(0);
   const [currentRating, setCurrentRating] = useState<number | null>(null);
   const [isVoting, setIsVoting] = useState(false);
-  const [isRating, setIsRating] = useState(false);
+  const [_isRating, setIsRating] = useState(false);
   const [isWatched, setIsWatched] = useState(false);
 
   // Community Rating states
@@ -70,7 +136,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const [reviewLang, setReviewLang] = useState('Hindi Dub');
   const [reviewComment, setReviewComment] = useState('');
   const [hasSpoilers, setHasSpoilers] = useState(false);
-  const [reviewsList, setReviewsList] = useState<any[]>(() => {
+  const [reviewsList, setReviewsList] = useState<AnimeReviewItem[]>(() => {
     try {
       const saved = localStorage.getItem(`cf_reviews_${animeId}`);
       return saved ? JSON.parse(saved) : [];
@@ -94,9 +160,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   useEffect(() => {
     // Check watched status from localStorage
     try {
-      const watched = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
+      const watched: unknown[] = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
       const idNum = Number(animeId);
-      setIsWatched(watched.some((w: any) => Number(w) === idNum));
+      setIsWatched(watched.some((w) => Number(w) === idNum));
     } catch {
       setIsWatched(false);
     }
@@ -134,9 +200,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     try {
       const data = await cloudflareApi.getAnimeById(animeId, user?.id);
       if (data) {
-        setDetails(data);
-        if (data.popularity) setUpvotes(data.popularity);
-        if (data.rating) setCurrentRating(data.rating);
+        setDetails(data as AnimeDetailRecord);
+        if (data.popularity) setUpvotes(Number(data.popularity) || 0);
+        if (data.rating !== undefined && data.rating !== null) {
+          const parsedRating = Number(data.rating);
+          if (!Number.isNaN(parsedRating)) setCurrentRating(parsedRating);
+        }
         
         // Populate Community Rating data
         if (data.community_rating !== undefined || data.communityRating !== undefined) {
@@ -159,11 +228,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         }
 
         if (data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
-          const normalized = data.reviews.map((r: any) => ({
+          const normalized: AnimeReviewItem[] = data.reviews.map((r: NonNullable<AnimeDetailRecord['reviews']>[number]) => ({
             id: r.id || Date.now(),
             author: r.author || r.user_name || 'Indian Anime Fan',
             rating: Number(r.rating) || 8.5,
-            language: r.language || (r.comment?.match(/\[(.*?) Dub\]/)?.[1] ? `${r.comment.match(/\[(.*?) Dub\]/)[1]} Dub` : 'Hindi Dub'),
+            language: r.language || (r.comment?.match(/\[(.*?) Dub\]/)?.[1] ? `${r.comment.match(/\[(.*?) Dub\]/)?.[1]} Dub` : 'Hindi Dub'),
             comment: r.comment ? r.comment.replace(/^\[.*?\]\s*/, '') : '',
             date: formatRelativeTime(r.created_at || r.date || Date.now()),
             likes: r.likes || 1,
@@ -174,7 +243,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
           setReviewsList(prev => {
             const existingIds = new Set(prev.map(p => String(p.id)));
-            const newFromApi = normalized.filter((n: any) => !existingIds.has(String(n.id)));
+            const newFromApi = normalized.filter((n) => !existingIds.has(String(n.id)));
             const merged = [...prev, ...newFromApi];
             try {
               localStorage.setItem(`cf_reviews_${animeId}`, JSON.stringify(merged));
@@ -208,9 +277,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       showToast('🔥 Upvoted!');
     } finally {
       try {
-        const upvoted = JSON.parse(localStorage.getItem('cf_user_upvoted_ids') || '[]');
+        const upvoted: unknown[] = JSON.parse(localStorage.getItem('cf_user_upvoted_ids') || '[]');
         const idNum = Number(animeId);
-        if (!upvoted.some((u: any) => Number(u) === idNum)) {
+        if (!upvoted.some((u) => Number(u) === idNum)) {
           upvoted.push(idNum);
           localStorage.setItem('cf_user_upvoted_ids', JSON.stringify(upvoted));
         }
@@ -226,7 +295,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     // 1. Instant Optimistic UI Update
     setUserRating(val);
     const previousUserRating = userRating;
-    const previousCommunityRating = communityRating || (details?.rating || 8.5);
+    const previousCommunityRating = communityRating || Number(details?.rating || 8.5);
     const previousTotalVotes = communityVotes || 0;
 
     const newTotalVotes = previousUserRating ? previousTotalVotes : (previousTotalVotes + 1);
@@ -259,8 +328,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             setCommunityVotes(Number(res.totalVotes));
           }
         }
-      } catch (err: any) {
-        console.warn('Community rating persisted locally, sync note:', err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn('Community rating persisted locally, sync note:', message);
       } finally {
         setIsSubmittingRating(false);
       }
@@ -366,7 +436,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     showToast('Dub review submitted successfully!');
   };
 
-  const handleLikeReview = (id: number) => {
+  const handleLikeReview = (id: number | string) => {
     setReviewsList(reviewsList.map(r => {
       if (r.id === id) {
         const isLiked = !r.isLiked;
@@ -376,7 +446,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     }));
   };
 
-  const handleToggleSpoiler = (id: number) => {
+  const handleToggleSpoiler = (id: number | string) => {
     setReviewsList(reviewsList.map(r => {
       if (r.id === id) {
         return { ...r, revealed: !r.revealed };
@@ -396,13 +466,13 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     const nextWatched = !isWatched;
     setIsWatched(nextWatched);
     try {
-      const watched = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
+      const watched: unknown[] = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
       const idNum = Number(animeId);
       let updated;
       if (nextWatched) {
         updated = Array.from(new Set([...watched, idNum]));
       } else {
-        updated = watched.filter((w: any) => Number(w) !== idNum);
+        updated = watched.filter((w) => Number(w) !== idNum);
       }
       localStorage.setItem('cf_watched_anime_ids', JSON.stringify(updated));
     } catch (e) {
@@ -469,7 +539,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const handleOpenPlatform = (platform: { name: string; url: string }) => {
     setIsWatchOptionsOpen(false);
     
-    const ua = navigator.userAgent || navigator.vendor || (window as any).opera;
+    const ua = navigator.userAgent || navigator.vendor || (window as Window & { opera?: string }).opera || '';
     const isAndroid = /android/i.test(ua);
     const pName = platform.name.toLowerCase();
 
@@ -509,7 +579,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   })();
 
   const availablePlatforms = (() => {
-    let richPlatforms: any[] = [];
+    let richPlatforms: RichPlatformEntry[] = [];
     try {
       if (details?.platforms_data) {
         richPlatforms = typeof details.platforms_data === 'string' 
@@ -519,9 +589,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     } catch {}
 
     return Array.from<string>(new Set(rawPlatformsList)).map((pName) => {
-      const richMatch = Array.isArray(richPlatforms) && richPlatforms.find(rp => 
-        String(rp?.name || '').toLowerCase() === pName.toLowerCase()
-      );
+      const richMatch = Array.isArray(richPlatforms)
+        ? richPlatforms.find((rp) => String(rp?.name || '').toLowerCase() === pName.toLowerCase())
+        : undefined;
       const directUrl = richMatch?.url || (pName.toLowerCase() === String(details?.platform || '').toLowerCase() ? details?.watch_url : '');
       return getPlatformUrl(pName, title, directUrl);
     });
@@ -530,7 +600,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   // Calculate total episodes across all seasons using reduce
   const seasonsArray = details?.seasons || details?.mixedEntries || details?.seasonsList || [];
   const totalEpisodes = Array.isArray(seasonsArray) && seasonsArray.length > 0
-    ? seasonsArray.reduce((acc: number, season: any) => acc + Number(season.episodes || season.episode_count || 0), 0)
+    ? seasonsArray.reduce((acc: number, season: SeasonEntry) => acc + Number(season.episodes || season.episode_count || 0), 0)
     : (details?.episodes_count || details?.episodes || details?.episode_count || (type === 'Movie' ? 1 : null));
   
   const episodesText = totalEpisodes ? `${totalEpisodes} ${totalEpisodes === 1 ? 'Ep' : 'Eps'}` : null;
@@ -944,9 +1014,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         {/* DUAL RATING SYSTEM (GLOBAL SCORE & COMMUNITY SCORE) - PLACED DIRECTLY BELOW COMMUNITY DUB REVIEWS */}
         <div className="mt-8">
           <DualRating
-            globalRating={details?.rating || 8.5}
+            globalRating={details?.rating ? Number(details.rating) : 8.5}
             initialUserRating={userRating}
-            communityScore={communityRating || (details?.rating || 8.5)}
+            communityScore={communityRating || (details?.rating ? Number(details.rating) : 8.5)}
             totalVotes={communityVotes}
             onRate={handleCommunityRate}
             className="w-full"
@@ -1217,3 +1287,66 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     </div>
   );
 };
+
+export interface AnimeDetailModalProps {
+  animeId: number;
+  onClose: () => void;
+  watchlist: number[];
+  onToggleWatchlist: (animeId: number) => void;
+}
+
+export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
+  animeId,
+  onClose,
+  watchlist,
+  onToggleWatchlist
+}) => {
+  const shouldReduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-0 sm:p-4 md:p-6 font-sans">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        onClick={onClose}
+        className="fixed inset-0 bg-[#0f1115]/90 backdrop-blur-xl"
+      />
+
+      <motion.div
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 50 }}
+        animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 45 }}
+        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+        className="relative w-full max-w-5xl my-0 sm:my-6 rounded-none sm:rounded-3xl overflow-hidden shadow-2xl z-10 will-change-transform"
+      >
+        <AnimeDetailPage
+          animeId={animeId}
+          onClose={onClose}
+          onBack={onClose}
+          watchlist={watchlist}
+          onToggleWatchlist={onToggleWatchlist}
+        />
+      </motion.div>
+    </div>
+  );
+};
+
