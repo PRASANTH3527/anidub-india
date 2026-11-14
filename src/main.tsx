@@ -8,7 +8,7 @@ import './index.css';
 const PUBLISHABLE_KEY =
   (import.meta as any).env?.VITE_CLERK_PUBLISHABLE_KEY ||
   (import.meta as any).env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-  "pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bnRzLmRldiQ";
+  "pk_live_Y2xlcmsuYW5pZHViLWluZGlhLWExeS5wYWdlcy5kZXYk";
 
 if (!PUBLISHABLE_KEY) {
   throw new Error("Missing Publishable Key");
