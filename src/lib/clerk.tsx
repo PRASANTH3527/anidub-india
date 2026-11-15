@@ -42,14 +42,14 @@ const ClerkTokenSynchronizer: React.FC = () => {
 };
 
 /**
- * Official ClerkProvider wrapper with hardcoded production publishableKey.
+ * Official ClerkProvider wrapper with hardcoded Clerk test publishableKey.
  */
 export const ClerkProvider: React.FC<{
   publishableKey?: string;
   afterSignOutUrl?: string;
   children: React.ReactNode;
 }> = ({
-  publishableKey = "pk_live_Y2xlcmsuYW5pZHViLWluZGlhLWExeS5wYWdlcy5kZXYk",
+  publishableKey = "pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bnRzLmRldiQ",
   afterSignOutUrl = '/',
   children,
 }) => {

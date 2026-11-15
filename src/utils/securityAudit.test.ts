@@ -404,7 +404,7 @@ test('Security Audit 8: Vite envPrefix, runtime /api/config Clerk fallback, unif
   assert.ok(viteConfig.includes('VITE_CLERK_PUBLISHABLE_KEY'));
 
   const clerkLib = fs.readFileSync(path.join(process.cwd(), 'src/lib/clerk.tsx'), 'utf-8');
-  assert.ok(clerkLib.includes('pk_live_Y2xlcmsuYW5pZHViLWluZGlhLWExeS5wYWdlcy5kZXYk'));
+  assert.ok(clerkLib.includes('pk_test_Z2VudGxlLXRvdWNhbi00Njg2LmNsZXJrLmFjY291bnRzLmRldiQ'));
 
   const wranglerToml = fs.readFileSync(path.join(process.cwd(), 'wrangler.toml'), 'utf-8');
   assert.equal(wranglerToml.includes('main ='), false);
@@ -456,12 +456,12 @@ test('Security Audit 8: Vite envPrefix, runtime /api/config Clerk fallback, unif
     new Request('https://anidub.in/api/config'),
     {
       DB: null,
-      VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_dGVzdC5hbmkuY29tJA',
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_dGVzdC5hbmkuY29tJA',
     }
   );
   assert.equal(apiRes.status, 200);
   const apiJson: any = await apiRes.json();
-  assert.equal(apiJson.clerkPublishableKey, 'pk_live_dGVzdC5hbmkuY29tJA');
+  assert.equal(apiJson.clerkPublishableKey, 'pk_test_dGVzdC5hbmkuY29tJA');
 
   // Verify ChatRoom Durable Object class is explicitly exported from edge-entry.ts
   assert.equal(typeof edgeEntryModule.ChatRoom, 'function');
