@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { onRequest } from '../functions/api/[[route]].ts';
 
 function createSignedClerkJwt(sub: string, extraClaims: Record<string, unknown> = {}) {
@@ -561,4 +564,111 @@ test('POST, PUT, and GET /api/anime store and retrieve nested per-platform langu
       languages: ['Hindi', 'Malayalam'],
     },
   ]);
+});
+
+test('POST /api/admin/import-csv executes cleanly on SQLite schema without UNIQUE(title) and skips case-insensitive duplicates', async () => {
+  const { token, publicPem } = createSignedClerkJwt('admin_sqlite_csv_1', {
+    email: 'admin@anidub.in',
+    email_verified: true,
+  });
+
+  const sqlite = new DatabaseSync(':memory:');
+  sqlite.exec(`
+    CREATE TABLE anime (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      synopsis TEXT,
+      cover_image TEXT NOT NULL,
+      banner_image TEXT NOT NULL,
+      rating REAL DEFAULT 0.0,
+      episodes_count INTEGER DEFAULT 12,
+      status TEXT DEFAULT 'Airing',
+      airing_status TEXT DEFAULT 'Airing',
+      season TEXT DEFAULT 'Spring',
+      year INTEGER DEFAULT 2026,
+      genres TEXT NOT NULL,
+      popularity INTEGER DEFAULT 0,
+      languages TEXT DEFAULT 'HIN,TAM,TEL',
+      platform TEXT DEFAULT 'Crunchyroll',
+      type TEXT DEFAULT 'TV Series',
+      studio TEXT DEFAULT 'Unknown Studio',
+      submissionStatus TEXT DEFAULT 'approved',
+      approval_status TEXT DEFAULT 'approved',
+      is_published INTEGER DEFAULT 0,
+      episodes_per_season TEXT DEFAULT '',
+      mixedEntries TEXT DEFAULT ''
+    );
+  `);
+
+  sqlite
+    .prepare(
+      `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, genres)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run('Solo Leveling', 'solo-leveling', 'Arise.', '/logo.png', '/logo.png', 'Action');
+
+  const d1Wrapper = {
+    prepare(sql: string) {
+      let bindings: unknown[] = [];
+      return {
+        bind(...args: unknown[]) {
+          bindings = args;
+          return this;
+        },
+        async first() {
+          const stmt = sqlite.prepare(sql);
+          return (stmt.get(...(bindings as Array<string | number | null>)) as Record<string, unknown> | undefined) ?? null;
+        },
+        async all() {
+          const stmt = sqlite.prepare(sql);
+          return { results: stmt.all(...(bindings as Array<string | number | null>)) };
+        },
+        async run() {
+          const stmt = sqlite.prepare(sql);
+          const info = stmt.run(...(bindings as Array<string | number | null>));
+          return { meta: { last_row_id: Number(info.lastInsertRowid), changes: info.changes } };
+        },
+      };
+    },
+  };
+
+  const adminRoutesSrc = fs.readFileSync(path.join(process.cwd(), 'src/server/routes/adminRoutes.ts'), 'utf-8');
+  assert.equal(adminRoutesSrc.includes('ON CONFLICT(title)'), false, 'ON CONFLICT(title) must not exist in adminRoutes.ts');
+
+  const res = await onRequest({
+    request: new Request('https://anidub.in/api/admin/import-csv', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        animeList: [
+          { Title: 'solo leveling', Platform: 'Crunchyroll' },
+          { Title: 'New Dubbed Series', Platform: 'Netflix', Languages: 'Hindi|English' },
+        ],
+      }),
+    }),
+    env: {
+      ADMIN_EMAIL: 'admin@anidub.in',
+      CLERK_JWT_KEY: publicPem,
+      DB: d1Wrapper,
+    },
+  });
+
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as Record<string, unknown>;
+  assert.equal(body.success, true);
+  assert.equal(body.insertedCount, 1);
+  assert.equal(body.skippedCount, 1);
+  assert.deepEqual(body.skippedTitles, ['solo leveling']);
+
+  const allRows = sqlite.prepare('SELECT title, slug FROM anime ORDER BY id ASC').all() as Array<{
+    title: string;
+    slug: string;
+  }>;
+  assert.equal(allRows.length, 2);
+  assert.equal(allRows[1].title, 'New Dubbed Series');
+  sqlite.close();
 });
