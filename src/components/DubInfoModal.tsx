@@ -21,7 +21,7 @@ import { useUser } from '../lib/clerk';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 import { validateImageUpload } from '../utils/imgbb';
 import { validateExternalImageUrl } from '../utils/submissionValidation';
-import { normalizePlatformString } from '../utils/dataNormalization';
+import { normalizePlatformString, normalizePartnerLanguages } from '../utils/dataNormalization';
 
 interface DubInfoModalProps {
   isOpen: boolean;
@@ -32,6 +32,7 @@ interface DubInfoModalProps {
 }
 
 const ALL_LANGS: DubLanguage[] = ['Tamil', 'Telugu', 'Hindi', 'Malayalam', 'Kannada'];
+const PLATFORM_LANGS = ['Hindi', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'English'] as const;
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
 const AVAILABLE_GENRES = [
   'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Isekai', 
@@ -177,9 +178,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number | ''>(initialData?.episodes_count || '');
 
   // Helper to safely parse and reconstruct streaming partners from initialData
-  const parseStreamingPartners = (data: any) => {
-    if (!data) return [{ name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] as DubLanguage[] }];
-    const raw = data.streaming_partners || data.streamingPartners || data.platforms_data || data.platformsData;
+  const parseStreamingPartners = (data: any): { name: string; url: string; languages: string[] }[] => {
+    if (!data) return [{ name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] }];
+    const raw =
+      data.streaming_partners ||
+      data.streamingPartners ||
+      data.platforms_data ||
+      data.platformsData ||
+      data.watch_providers;
     let list: any[] = [];
     if (typeof raw === 'string' && raw.trim()) {
       try {
@@ -192,26 +198,28 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       list = raw;
     }
 
+    const fallbackLangs = normalizePartnerLanguages(data.languages);
+
     if (list.length > 0) {
       return list.map((item: any) => ({
-        name: item.name || item.platform || 'Crunchyroll',
-        url: item.url || item.watch_url || item.link || '',
-        languages: (Array.isArray(item.languages) 
-          ? item.languages 
-          : (typeof item.languages === 'string' ? item.languages.split(',').map((s: string) => s.trim()) : ['Tamil', 'Hindi'])) as DubLanguage[]
+        name: String(item.name || item.platform || 'Crunchyroll').trim() || 'Crunchyroll',
+        url: String(item.url || item.watch_url || item.link || '').trim(),
+        languages:
+          item.languages !== undefined
+            ? normalizePartnerLanguages(item.languages)
+            : fallbackLangs.length > 0
+              ? fallbackLangs
+              : ['Tamil', 'Hindi'],
       }));
     }
 
     const defaultPlat = data.platform || 'Crunchyroll';
     const defaultUrl = data.watch_url || data.watchUrl || '';
-    const defaultLangs = (Array.isArray(data.languages) 
-      ? data.languages 
-      : (data.languages || 'Tamil, Hindi').split(',').map((s: string) => s.trim())) as DubLanguage[];
 
     return [{
       name: defaultPlat,
       url: defaultUrl,
-      languages: defaultLangs
+      languages: fallbackLangs.length > 0 ? fallbackLangs : ['Tamil', 'Hindi']
     }];
   };
 
@@ -219,7 +227,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   const [streamingPartners, setStreamingPartners] = useState<{ 
     name: string; 
     url: string;
-    languages: DubLanguage[];
+    languages: string[];
   }[]>(() => parseStreamingPartners(initialData));
 
   const [statusState, setStatusState] = useState<string>(() => {
@@ -358,12 +366,12 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   };
 
   const addStreamingPartner = () => {
-    setStreamingPartners([...streamingPartners, { name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] }]);
+    setStreamingPartners(prev => [...prev, { name: 'Crunchyroll', url: '', languages: [] }]);
   };
 
   const removeStreamingPartner = (index: number) => {
     if (streamingPartners.length > 1) {
-      setStreamingPartners(streamingPartners.filter((_, i) => i !== index));
+      setStreamingPartners(prev => prev.filter((_, i) => i !== index));
     }
   };
 
@@ -375,6 +383,19 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }
       return updated;
     });
+  };
+
+  const toggleLangForPartner = (partnerIndex: number, lang: string) => {
+    setStreamingPartners(prev =>
+      prev.map((partner, idx) => {
+        if (idx !== partnerIndex) return partner;
+        const currentLangs = Array.isArray(partner.languages) ? partner.languages : [];
+        const nextLangs = currentLangs.includes(lang)
+          ? currentLangs.filter((l) => l !== lang)
+          : [...currentLangs, lang];
+        return { ...partner, languages: nextLangs };
+      })
+    );
   };
 
   const addEntry = () => {
@@ -464,10 +485,30 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }
     }
 
-    const rawLanguages = Array.from(new Set(
-      seasonDetails.flatMap(s => s.languages || [])
-    )) as DubLanguage[];
-    const derivedGlobalDubs = rawLanguages.length > 0 ? rawLanguages : (['Tamil', 'Hindi'] as DubLanguage[]);
+    const serializedPartners = streamingPartners.map((p) => {
+      const resolvedName = p.name || 'Crunchyroll';
+      return {
+        name: resolvedName,
+        platform: resolvedName,
+        url: (p.url || '').trim(),
+        languages: Array.isArray(p.languages)
+          ? Array.from(new Set(p.languages.map((l) => l.trim()).filter(Boolean)))
+          : [],
+      };
+    });
+
+    const partnerLanguages = Array.from(
+      new Set(serializedPartners.flatMap((p) => p.languages || []))
+    );
+    const seasonLanguages = Array.from(
+      new Set(seasonDetails.flatMap((s) => s.languages || []))
+    );
+    const derivedGlobalDubs =
+      partnerLanguages.length > 0
+        ? partnerLanguages
+        : seasonLanguages.length > 0
+          ? seasonLanguages
+          : ['Tamil', 'Hindi'];
 
     const rawPoster = (poster || formData.posterUrl || formData.poster || formData.image || formData.cover_image || '').trim();
     if (rawPoster) {
@@ -523,18 +564,11 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         airing_status: statusState,
         submissionStatus: resolvedSubmissionStatus,
         languages: derivedGlobalDubs.join(', '),
-        platform: normalizePlatformString(streamingPartners.map((p) => p.name).filter(Boolean)),
-        watch_url: (streamingPartners.find(p => p.url?.trim())?.url || streamingPartners[0]?.url || '').trim(),
-        streaming_partners: streamingPartners.map(p => ({
-          name: p.name || 'Crunchyroll',
-          url: (p.url || '').trim(),
-          languages: p.languages || derivedGlobalDubs
-        })),
-        platforms_data: streamingPartners.map(p => ({
-          name: p.name || 'Crunchyroll',
-          url: (p.url || '').trim(),
-          languages: p.languages || derivedGlobalDubs
-        })),
+        platform: normalizePlatformString(serializedPartners.map((p) => p.name).filter(Boolean)),
+        watch_url: (serializedPartners.find(p => p.url?.trim())?.url || serializedPartners[0]?.url || '').trim(),
+        streaming_partners: serializedPartners,
+        platforms_data: serializedPartners,
+        watch_providers: serializedPartners,
         mixed_entries: formattedMixedEntries,
         mixedEntries: formattedMixedEntries,
         episodes_per_season: episodesPerSeasonStr,
@@ -561,6 +595,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         id: initialData?.id || savedResult?.animeId || savedResult?.id,
         streaming_partners: payload.streaming_partners,
         platforms_data: payload.platforms_data,
+        watch_providers: payload.watch_providers,
         mixed_entries: formattedMixedEntries,
         mixedEntries: formattedMixedEntries,
         episodes_per_season: episodesPerSeasonStr,
@@ -823,7 +858,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                 {/* Streaming Partners */}
                 <div className="space-y-2">
                   <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                    <span>Streaming Partners (Multi-Link)</span>
+                    <span>Streaming Partners &amp; Per-Platform Dubs</span>
                     <button 
                       type="button" 
                       onClick={addStreamingPartner}
@@ -836,7 +871,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   
                   <div className="space-y-3">
                     {streamingPartners.map((partner, idx) => (
-                      <div key={`stream_partner_${idx}`} className="bg-[#141b29] border border-neutral-800 rounded-2xl p-3 space-y-2">
+                      <div key={`stream_partner_${idx}`} className="bg-[#141b29] border border-neutral-800 rounded-2xl p-3 space-y-2.5">
                         <div className="flex gap-2 items-start">
                           <div className="w-1/3">
                             <select
@@ -844,22 +879,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               onChange={(e) => updateStreamingPartner(idx, 'name', e.target.value)}
                               className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-2.5 py-2 text-[11px] text-white focus:outline-none focus:border-primary-theme cursor-pointer"
                             >
-                              <option value="Crunchyroll">Crunchyroll</option>
-                              <option value="Netflix">Netflix</option>
-                              <option value="JioCinema">JioCinema</option>
-                              <option value="JioHotstar">JioHotstar</option>
-                              <option value="YouTube">YouTube</option>
-                              <option value="YouTube (Muse India)">YouTube (Muse India)</option>
-                              <option value="YouTube (Ani-One)">YouTube (Ani-One)</option>
-                              <option value="Disney+ Hotstar">Disney+ Hotstar</option>
-                              <option value="Prime Video">Prime Video</option>
-                              <option value="Anime Times">Anime Times</option>
-                              <option value="Sony YAY!">Sony YAY!</option>
-                              <option value="Sony LIV">Sony LIV</option>
-                              <option value="Bilibili">Bilibili</option>
-                              <option value="Cartoon Network India">Cartoon Network India</option>
-                              <option value="ETV Bal Bharat">ETV Bal Bharat</option>
-                              <option value="Zee5">Zee5</option>
+                              {platformOptions.map((platOption) => (
+                                <option key={platOption} value={platOption}>{platOption}</option>
+                              ))}
                             </select>
                           </div>
                           <div className="flex-1 relative">
@@ -880,6 +902,53 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
+                        </div>
+
+                        {/* Per-Platform Language Selection Checkboxes */}
+                        <div className="pt-2 border-t border-white/5 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                              Languages on {partner.name || 'Platform'}
+                            </span>
+                            <span className="text-[10px] text-purple-300 font-semibold truncate max-w-[55%]">
+                              {partner.languages && partner.languages.length > 0
+                                ? partner.languages.join(', ')
+                                : 'Select dubs'}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {PLATFORM_LANGS.map((lang) => {
+                              const isChecked = Array.isArray(partner.languages) && partner.languages.includes(lang);
+                              return (
+                                <label
+                                  key={`partner_${idx}_lang_${lang}`}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer select-none ${
+                                    isChecked
+                                      ? 'bg-purple-600 text-white font-bold ring-1 ring-purple-400 shadow-sm'
+                                      : 'bg-[#121829] text-neutral-400 border border-neutral-700 hover:text-neutral-200 hover:border-neutral-600'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleLangForPartner(idx, lang)}
+                                    className="sr-only"
+                                  />
+                                  <span
+                                    aria-hidden="true"
+                                    className={`w-3 h-3 rounded flex items-center justify-center text-[9px] font-black border ${
+                                      isChecked
+                                        ? 'bg-white text-purple-700 border-white'
+                                        : 'border-neutral-600 bg-black/30 text-transparent'
+                                    }`}
+                                  >
+                                    ✓
+                                  </span>
+                                  <span>{lang}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     ))}

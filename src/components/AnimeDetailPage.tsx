@@ -48,7 +48,9 @@ export interface AnimeReviewItem {
 
 export interface RichPlatformEntry {
   name?: string;
+  platform?: string;
   url?: string;
+  languages?: string[];
 }
 
 export interface SeasonEntry {
@@ -508,7 +510,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const genres = details?.genre ? details.genre.split(',').map((g: string) => g.trim()) : ['Action', 'Fantasy', 'Adventure', 'Supernatural'];
 
   // Helper for platform URLs with direct series URLs and Android intent deep linking
-  const getPlatformUrl = (platformName: string, animeTitle: string, directUrl?: string) => {
+  const getPlatformUrl = (platformName: string, animeTitle: string, directUrl?: string, languages?: string[]) => {
     const p = platformName.toLowerCase();
     
     // 1. Check if direct streamUrl is provided in details
@@ -533,7 +535,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       }
     }
 
-    return { name: platformName, url: webUrl };
+    return { name: platformName, url: webUrl, languages: Array.isArray(languages) ? languages : [] };
   };
 
   const handleOpenPlatform = (platform: { name: string; url: string }) => {
@@ -590,10 +592,13 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
     return Array.from<string>(new Set(rawPlatformsList)).map((pName) => {
       const richMatch = Array.isArray(richPlatforms)
-        ? richPlatforms.find((rp) => String(rp?.name || '').toLowerCase() === pName.toLowerCase())
+        ? richPlatforms.find(
+            (rp) => String(rp?.name || rp?.platform || '').toLowerCase() === pName.toLowerCase()
+          )
         : undefined;
       const directUrl = richMatch?.url || (pName.toLowerCase() === String(details?.platform || '').toLowerCase() ? details?.watch_url : '');
-      return getPlatformUrl(pName, title, directUrl);
+      const partnerLangs = Array.isArray(richMatch?.languages) ? richMatch.languages : [];
+      return getPlatformUrl(pName, title, directUrl, partnerLangs);
     });
   })();
 
@@ -1235,7 +1240,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                           {plat.name}
                         </div>
                         <div className="text-[11px] text-neutral-400">
-                          Verified Indian Dubs • HD
+                          {plat.languages && plat.languages.length > 0
+                            ? `${plat.languages.join(', ')} Dubs • HD`
+                            : 'Verified Indian Dubs • HD'}
                         </div>
                       </div>
                     </div>

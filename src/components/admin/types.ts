@@ -11,7 +11,9 @@ export type AdminTabId =
 
 export interface StreamingPartnerPayload {
   name?: string;
+  platform?: string;
   url?: string;
+  languages?: string[];
 }
 
 export interface MixedSeasonEntry {
@@ -55,6 +57,7 @@ export interface AdminAnimeRecord {
   watch_url?: string;
   platforms_data?: StreamingPartnerPayload[] | string;
   streaming_partners?: StreamingPartnerPayload[];
+  watch_providers?: StreamingPartnerPayload[] | string;
   mixedEntries?: MixedSeasonEntry[] | string;
   mixed_entries?: MixedSeasonEntry[] | string;
   type?: string;

@@ -24,7 +24,9 @@ import {
 
 export interface PartnerEntry {
   name?: string;
+  platform?: string;
   url?: string;
+  languages?: string[];
   title?: string;
   type?: string;
   episodeCount?: number | string | null;
@@ -72,7 +74,7 @@ export interface AnimePayload {
   genre?: string;
   languages?: string | string[];
   platform?: string;
-  platforms?: string[] | string;
+  platforms?: string[] | PartnerEntry[] | string;
   watch_url?: string;
   streamUrl?: string;
   type?: string;
@@ -84,6 +86,7 @@ export interface AnimePayload {
   streamingPartners?: PartnerEntry[] | string;
   streaming_partners?: PartnerEntry[] | string;
   platforms_data?: Record<string, unknown> | PartnerEntry[] | string;
+  watch_providers?: PartnerEntry[] | string;
   hindi?: boolean;
   tamil?: boolean;
   telugu?: boolean;

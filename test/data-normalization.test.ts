@@ -129,6 +129,102 @@ test('POST /api/admin/import-csv preserves null season/episodes when omitted and
   assert.equal(insertedRows[2].episodes_per_season, '12|13');
 });
 
+test('POST /api/admin/import-csv checks duplicates ONLY by case-insensitive D1 title and ignores slug/watch_url', async () => {
+  const { token, publicPem } = createSignedClerkJwt('admin_csv_dedup_1', {
+    email: 'admin@anidub.in',
+    email_verified: true,
+  });
+
+  const existingDbRows = [
+    { id: 1, title: 'Solo Leveling', slug: 'solo-leveling', watch_url: 'https://watch.example/solo' },
+    { id: 2, title: 'Dr. Stone', slug: 'dr-stone', watch_url: 'https://watch.example/dr-stone' },
+  ];
+
+  const executedQueries: string[] = [];
+  const insertedTitles: string[] = [];
+  const insertedSlugs: string[] = [];
+
+  const mockDb = {
+    prepare(sql: string) {
+      let bindings: unknown[] = [];
+      return {
+        bind(...args: unknown[]) {
+          bindings = args;
+          return this;
+        },
+        async first() {
+          executedQueries.push(sql);
+          if (sql.includes('SELECT id FROM anime WHERE LOWER(title) = LOWER(?)')) {
+            const target = String(bindings[0] ?? '').toLowerCase();
+            const match = existingDbRows.find((r) => r.title.toLowerCase() === target);
+            return match ? { id: match.id } : null;
+          }
+          return null;
+        },
+        async all() {
+          executedQueries.push(sql);
+          return { results: [] };
+        },
+        async run() {
+          if (sql.includes('INSERT INTO anime')) {
+            const title = String(bindings[0]);
+            const slug = String(bindings[1]);
+            if (existingDbRows.some((r) => r.slug === slug)) {
+              throw new Error('UNIQUE constraint failed: anime.slug');
+            }
+            existingDbRows.push({ id: existingDbRows.length + 1, title, slug, watch_url: '' });
+            insertedTitles.push(title);
+            insertedSlugs.push(slug);
+          }
+          return { meta: { last_row_id: existingDbRows.length } };
+        },
+      };
+    },
+  };
+
+  const res = await onRequest({
+    request: new Request('https://anidub.in/api/admin/import-csv', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        animeList: [
+          { Title: 'solo leveling', slug: 'different-slug', watch_url: 'https://watch.example/other' }, // case-insensitive duplicate of Solo Leveling -> skip
+          { Title: 'Dr Stone', slug: 'dr-stone', watch_url: 'https://watch.example/dr-stone' }, // different title, same slug & watch_url -> MUST insert!
+          { Title: 'Brand New Anime', slug: 'solo-leveling', watch_url: 'https://watch.example/solo' }, // different title, matching slug & watch_url -> MUST insert!
+          { Title: 'brand new anime' }, // duplicate within same CSV batch -> skip
+        ],
+      }),
+    }),
+    env: {
+      ADMIN_EMAIL: 'admin@anidub.in',
+      CLERK_JWT_KEY: publicPem,
+      DB: mockDb,
+    },
+  });
+
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as Record<string, unknown>;
+  assert.equal(body.success, true);
+  assert.equal(body.insertedCount, 2);
+  assert.equal(body.skippedCount, 2);
+  assert.deepEqual(body.skippedTitles, ['solo leveling', 'brand new anime']);
+  assert.deepEqual(body.duplicates, ['solo leveling', 'brand new anime']);
+  assert.deepEqual(insertedTitles, ['Dr Stone', 'Brand New Anime']);
+  assert.ok(insertedSlugs[0].startsWith('dr-stone-'), 'Slug collision should disambiguate slug instead of rejecting non-duplicate title');
+  assert.ok(
+    executedQueries.some((q) => q.includes('SELECT id FROM anime WHERE LOWER(title) = LOWER(?)')),
+    'Must query D1 with case-insensitive title-only check'
+  );
+  assert.equal(
+    executedQueries.some((q) => q.includes('slug') && q.trim().toUpperCase().startsWith('SELECT')),
+    false,
+    'Must NOT query slug to determine duplicates'
+  );
+});
+
 test('POST /api/anime and PUT /api/anime/:id normalize platform strings and avoid hardcoded Spring/12', async () => {
   const { token, publicPem } = createSignedClerkJwt('admin_user_2', {
     email: 'admin@anidub.in',
@@ -301,4 +397,168 @@ test('/api/admin/normalize-platforms enforces admin auth and updates only non-no
   assert.equal(rows[2].platform, 'Ani-One|Crunchyroll|Netflix');
   assert.equal(rows[3].platform, null);
   assert.equal(rows[4].platform, '');
+});
+
+test('POST, PUT, and GET /api/anime store and retrieve nested per-platform language arrays', async () => {
+  const { token, publicPem } = createSignedClerkJwt('admin_platform_langs_1', {
+    email: 'admin@anidub.in',
+    email_verified: true,
+  });
+
+  const dbRow: Record<string, unknown> = {
+    id: 501,
+    title: 'Cyberpunk: Edgerunners',
+    slug: 'cyberpunk-edgerunners',
+    synopsis: 'Night City legend.',
+    cover_image: 'https://i.ibb.co/example/poster.jpg',
+    banner_image: 'https://i.ibb.co/example/poster.jpg',
+    rating: 8.6,
+    episodes_count: 10,
+    status: 'Completed',
+    submissionStatus: 'approved',
+    is_published: 1,
+    year: 2022,
+    genres: 'Action, Sci-Fi',
+    languages: '',
+    platform: '',
+    platforms_data: '',
+    watch_url: '',
+  };
+
+  const mockDb = {
+    prepare(sql: string) {
+      let bindings: unknown[] = [];
+      return {
+        bind(...args: unknown[]) {
+          bindings = args;
+          return this;
+        },
+        async first() {
+          if (sql.includes('SELECT COUNT(*) as total')) {
+            return { total: 1 };
+          }
+          if (sql.includes('SELECT * FROM anime WHERE')) {
+            return { ...dbRow };
+          }
+          return null;
+        },
+        async all() {
+          if (sql.includes('SELECT * FROM anime')) {
+            return { results: [{ ...dbRow }] };
+          }
+          return { results: [] };
+        },
+        async run() {
+          if (sql.includes('INSERT INTO anime')) {
+            dbRow.title = bindings[0];
+            dbRow.languages = bindings[13];
+            dbRow.platform = bindings[14];
+            dbRow.platforms_data = bindings[16];
+            dbRow.watch_url = bindings[17];
+            return { meta: { last_row_id: 501 } };
+          }
+          if (sql.includes('UPDATE anime SET')) {
+            dbRow.languages = bindings[11];
+            dbRow.platform = bindings[12];
+            dbRow.platforms_data = bindings[16];
+            dbRow.watch_url = bindings[18];
+            return { meta: { changes: 1 } };
+          }
+          return { meta: { changes: 0 } };
+        },
+      };
+    },
+  };
+
+  const env = {
+    ADMIN_EMAIL: 'admin@anidub.in',
+    CLERK_JWT_KEY: publicPem,
+    DB: mockDb,
+  };
+
+  // 1. POST /api/anime stores nested per-platform languages JSON
+  const createRes = await onRequest({
+    request: new Request('https://anidub.in/api/anime', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Cyberpunk: Edgerunners',
+        streaming_partners: [
+          { platform: 'Netflix', url: 'https://www.netflix.com/title/81054853', languages: ['Hindi', 'English'] },
+          { platform: 'Crunchyroll', url: 'https://www.crunchyroll.com/series/test', languages: ['Tamil', 'Telugu'] },
+        ],
+      }),
+    }),
+    env,
+  });
+
+  assert.equal(createRes.status, 201);
+  const createBody = (await createRes.json()) as Record<string, unknown>;
+  assert.equal(createBody.platform, 'Crunchyroll|Netflix');
+  assert.equal(createBody.languages, 'Hindi, English, Tamil, Telugu');
+  const storedJson = JSON.parse(String(dbRow.platforms_data)) as Array<Record<string, unknown>>;
+  assert.equal(storedJson.length, 2);
+  assert.deepEqual(storedJson[0], {
+    name: 'Netflix',
+    platform: 'Netflix',
+    url: 'https://www.netflix.com/title/81054853',
+    languages: ['Hindi', 'English'],
+  });
+  assert.deepEqual(storedJson[1], {
+    name: 'Crunchyroll',
+    platform: 'Crunchyroll',
+    url: 'https://www.crunchyroll.com/series/test',
+    languages: ['Tamil', 'Telugu'],
+  });
+
+  // 2. GET /api/anime & GET /api/anime/:id retrieve parsed per-platform language arrays
+  const listRes = await onRequest({
+    request: new Request('https://anidub.in/api/anime'),
+    env,
+  });
+  assert.equal(listRes.status, 200);
+  const listBody = (await listRes.json()) as { data: Array<Record<string, unknown>> };
+  assert.deepEqual(listBody.data[0].streaming_partners, storedJson);
+  assert.deepEqual(listBody.data[0].platforms_data, storedJson);
+
+  const detailRes = await onRequest({
+    request: new Request('https://anidub.in/api/anime/501'),
+    env,
+  });
+  assert.equal(detailRes.status, 200);
+  const detailBody = (await detailRes.json()) as Record<string, unknown>;
+  assert.deepEqual(detailBody.streaming_partners, storedJson);
+  assert.deepEqual(detailBody.platforms_data, storedJson);
+
+  // 3. PUT /api/anime/:id updates per-platform languages & derives aggregate languages
+  const updateRes = await onRequest({
+    request: new Request('https://anidub.in/api/anime/501', {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        platforms_data: [
+          { platform: 'Netflix', url: 'https://www.netflix.com/title/81054853', languages: ['Hindi', 'Malayalam'] },
+        ],
+      }),
+    }),
+    env,
+  });
+  assert.equal(updateRes.status, 200);
+  const updateBody = (await updateRes.json()) as Record<string, unknown>;
+  assert.equal(updateBody.platform, 'Netflix');
+  assert.equal(updateBody.languages, 'Hindi, Malayalam');
+  assert.deepEqual(updateBody.platforms_data, [
+    {
+      name: 'Netflix',
+      platform: 'Netflix',
+      url: 'https://www.netflix.com/title/81054853',
+      languages: ['Hindi', 'Malayalam'],
+    },
+  ]);
 });

@@ -179,3 +179,95 @@ export function parseCsvMixedEntriesAndEpisodesPerSeason(
 
   return { mixedEntries, episodesPerSeason };
 }
+
+export interface NormalizedStreamingPartner {
+  name: string;
+  platform: string;
+  url: string;
+  languages: string[];
+}
+
+/**
+ * Normalizes a per-platform languages value (array or comma/pipe-delimited string)
+ * into a deduplicated array of clean language names, preserving insertion order.
+ */
+export function normalizePartnerLanguages(rawLanguages: unknown): string[] {
+  const rawTokens: string[] = [];
+  if (Array.isArray(rawLanguages)) {
+    for (const item of rawLanguages) {
+      if (item !== null && item !== undefined) {
+        rawTokens.push(...String(item).split(/[,/|]+/));
+      }
+    }
+  } else if (typeof rawLanguages === 'string') {
+    rawTokens.push(...rawLanguages.split(/[,/|]+/));
+  }
+
+  const deduped = new Map<string, string>();
+  for (const token of rawTokens) {
+    const cleaned = token.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (!deduped.has(key)) {
+      deduped.set(key, cleaned);
+    }
+  }
+  return Array.from(deduped.values());
+}
+
+/**
+ * Normalizes nested streaming partner payloads (JSON string or array of objects)
+ * so every platform item preserves its name, platform alias, url, and languages array.
+ */
+export function normalizeStreamingPartners(rawPartners: unknown): NormalizedStreamingPartner[] {
+  let list: unknown[] = [];
+  if (Array.isArray(rawPartners)) {
+    list = rawPartners;
+  } else if (typeof rawPartners === 'string' && rawPartners.trim()) {
+    try {
+      const parsed = JSON.parse(rawPartners) as unknown;
+      if (Array.isArray(parsed)) {
+        list = parsed;
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  const normalized: NormalizedStreamingPartner[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Record<string, unknown>;
+    const rawName = String(rec.name ?? rec.platform ?? '').replace(/<[^>]*>/g, '').trim();
+    const rawUrl = String(rec.url ?? rec.watch_url ?? rec.link ?? '').trim();
+    const languages = normalizePartnerLanguages(rec.languages);
+    if (!rawName && !rawUrl && languages.length === 0) continue;
+    const resolvedName = rawName || 'Crunchyroll';
+    normalized.push({
+      name: resolvedName,
+      platform: resolvedName,
+      url: rawUrl,
+      languages,
+    });
+  }
+  return normalized;
+}
+
+/**
+ * Computes a deduplicated comma-separated global languages string across all
+ * streaming partner entries for catalog filtering and summary stats.
+ */
+export function deriveAggregateLanguagesFromPartners(partners: NormalizedStreamingPartner[]): string {
+  const deduped = new Map<string, string>();
+  for (const partner of partners) {
+    for (const lang of partner.languages || []) {
+      const cleaned = lang.trim();
+      if (!cleaned) continue;
+      const key = cleaned.toLowerCase();
+      if (!deduped.has(key)) {
+        deduped.set(key, cleaned);
+      }
+    }
+  }
+  return Array.from(deduped.values()).join(', ');
+}

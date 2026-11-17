@@ -9,6 +9,8 @@ import {
 } from '../../utils/submissionValidation';
 import {
   normalizePlatformString,
+  normalizeStreamingPartners,
+  deriveAggregateLanguagesFromPartners,
   parseOptionalEpisodesCount,
   parseOptionalSeason,
 } from '../../utils/dataNormalization';
@@ -16,7 +18,9 @@ import { getErrorMessage, sendTelegramAlert, type RouteContext } from './shared'
 
 interface PartnerEntry {
   name?: string;
+  platform?: string;
   url?: string;
+  languages?: string[];
 }
 
 interface MixedEntry {
@@ -121,7 +125,16 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           if (totalItems > 0) {
             const queryParams = [...params, limit, offset];
             const dataRes = await env.DB.prepare(`SELECT * FROM anime ${whereSql} ${orderSql} LIMIT ? OFFSET ?`).bind(...queryParams).all();
-            results = dataRes.results || [];
+            results = (dataRes.results || []).map((row) => {
+              const parsedPartners = normalizeStreamingPartners(row.streaming_partners || row.platforms_data);
+              if (parsedPartners.length === 0) return row;
+              return {
+                ...row,
+                streaming_partners: parsedPartners,
+                platforms_data: parsedPartners,
+                watch_providers: parsedPartners,
+              };
+            });
           }
 
           let summary: Record<string, unknown> | undefined;
@@ -228,24 +241,66 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             : 'Airing';
       const finalSubmissionStatus = String(body.submissionStatus || 'approved');
 
+      const rawPartners =
+        body.streaming_partners !== undefined
+          ? body.streaming_partners
+          : body.platforms_data !== undefined
+            ? body.platforms_data
+            : body.watch_providers !== undefined
+              ? body.watch_providers
+              : Array.isArray(body.platforms) && body.platforms.some((p) => p && typeof p === 'object')
+                ? body.platforms
+                : undefined;
+      const normalizedPartners = normalizeStreamingPartners(rawPartners);
+      const partnersJson = normalizedPartners.length > 0 ? JSON.stringify(normalizedPartners) : '';
+      const resolvedWatchUrl = String(
+        body.watch_url || normalizedPartners.find((p) => p.url)?.url || ''
+      ).trim();
+      const derivedPartnerLanguages = deriveAggregateLanguagesFromPartners(normalizedPartners);
+      const resolvedLanguages =
+        (typeof body.languages === 'string' && body.languages.trim()) ||
+        (Array.isArray(body.languages) && body.languages.length > 0 ? body.languages.join(', ') : '') ||
+        derivedPartnerLanguages ||
+        'Tamil, Telugu, Hindi';
+
+      const rawMixed =
+        body.mixed_entries !== undefined
+          ? body.mixed_entries
+          : body.mixedEntries !== undefined
+            ? body.mixedEntries
+            : null;
+      const mixedJson =
+        rawMixed !== undefined && rawMixed !== null
+          ? typeof rawMixed === 'string'
+            ? rawMixed
+            : JSON.stringify(rawMixed)
+          : '';
+      const episodesPerSeasonStr =
+        body.episodes_per_season !== undefined
+          ? String(body.episodes_per_season)
+          : Array.isArray(rawMixed)
+            ? (rawMixed as MixedEntry[]).map((m) => m.episodes || m.episodeCount || 0).join('|')
+            : '';
+
       const parsedEpisodes = parseOptionalEpisodesCount(body);
       const parsedSeason = parseOptionalSeason(body);
-      const partnerNamesFromBody = Array.isArray(body.streaming_partners)
-        ? (body.streaming_partners as PartnerEntry[]).map((p) => p?.name).filter(Boolean)
-        : Array.isArray(body.platforms_data)
-          ? (body.platforms_data as PartnerEntry[]).map((p) => p?.name).filter(Boolean)
-          : [];
+      const partnerNamesFromBody = normalizedPartners.map((p) => p.name).filter(Boolean);
       const normalizedPlatform =
         normalizePlatformString(
-          body.platform ?? body.platforms ?? (partnerNamesFromBody.length > 0 ? partnerNamesFromBody : '')
+          body.platform ??
+            (Array.isArray(body.platforms) && body.platforms.every((p) => typeof p === 'string')
+              ? body.platforms
+              : partnerNamesFromBody.length > 0
+                ? partnerNamesFromBody
+                : '')
         ) || null;
 
       if (env.DB) {
         const slug = String(body.title).toLowerCase().replace(/[^a-z0-9]+/g, '-');
         try {
           const insertRes = await env.DB.prepare(`
-            INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, platforms_data, watch_url, studio, mixedEntries, mixed_entries, episodes_per_season)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `)
             .bind(
               body.title,
@@ -261,9 +316,15 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               parseInt(String(body.year), 10) || 2026,
               body.genres || 'Action',
               0,
-              body.languages || 'Tamil, Telugu, Hindi',
+              resolvedLanguages,
               normalizedPlatform,
-              resolvedType
+              resolvedType,
+              partnersJson,
+              resolvedWatchUrl,
+              String(body.studio || 'Unknown Studio').trim() || 'Unknown Studio',
+              mixedJson,
+              mixedJson,
+              episodesPerSeasonStr
             )
             .run();
           createdId = insertRes.meta?.last_row_id || null;
@@ -296,12 +357,25 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
         `📌 *Title:* ${body.title}\n` +
         `⭐ *Rating:* ${body.rating || 8.5}/10\n` +
         `📊 *Status:* ${finalStatus}\n` +
-        `🎙 *Languages:* ${body.languages || 'Tamil, Telugu, Hindi'}\n` +
+        `🎙 *Languages:* ${resolvedLanguages}\n` +
         `📺 *Platform:* ${normalizedPlatform || 'Not specified'}\n\n` +
         `💬 _"${String(body.synopsis || '').slice(0, 120)}"_`;
       await sendTelegramAlert(env, tgMsg);
 
-      return jsonResponse({ success: true, animeId: createdId, id: createdId, status: finalStatus }, 201);
+      return jsonResponse(
+        {
+          success: true,
+          animeId: createdId,
+          id: createdId,
+          status: finalStatus,
+          platform: normalizedPlatform,
+          languages: resolvedLanguages,
+          platforms_data: normalizedPartners,
+          streaming_partners: normalizedPartners,
+          watch_providers: normalizedPartners,
+        },
+        201
+      );
     } catch (err) {
       return jsonResponse({ error: getErrorMessage(err) }, 500);
     }
@@ -419,15 +493,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             : 'SELECT * FROM anime WHERE (id = ? OR slug = ?) AND is_published = 1';
           const anime = await env.DB.prepare(query).bind(id, id).first();
           if (anime) {
-            let streamingPartners: PartnerEntry[] = [];
-            const rawP = anime.streaming_partners || anime.platforms_data;
-            if (rawP) {
-              try {
-                streamingPartners = typeof rawP === 'string' ? (JSON.parse(rawP) as PartnerEntry[]) : (rawP as PartnerEntry[]);
-              } catch {
-                streamingPartners = [];
-              }
-            }
+            const streamingPartners = normalizeStreamingPartners(anime.streaming_partners || anime.platforms_data);
             let mixedEntries: MixedEntry[] = [];
             const rawMixed = anime.mixed_entries || anime.mixedEntries;
             if (rawMixed) {
@@ -467,6 +533,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 ...anime,
                 streaming_partners: streamingPartners,
                 platforms_data: streamingPartners,
+                watch_providers: streamingPartners,
                 mixed_entries: mixedEntries,
                 mixedEntries,
                 episodes: episodes.results || [],
@@ -521,32 +588,33 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           const incomingStatus = String(body.status || body.airing_status || '').trim();
           const resolvedType = body.type || body.Type || null;
 
-          const rawPartners = body.streaming_partners !== undefined ? body.streaming_partners : body.platforms_data;
-          let cleanedPartners = rawPartners;
-          if (Array.isArray(rawPartners)) {
-            cleanedPartners = (rawPartners as PartnerEntry[]).map((p) => ({ ...p, url: p.url ? String(p.url).trim() : '' }));
-          } else if (typeof rawPartners === 'string' && rawPartners.trim()) {
-            try {
-              const parsed = JSON.parse(rawPartners) as unknown;
-              if (Array.isArray(parsed)) {
-                cleanedPartners = (parsed as PartnerEntry[]).map((p) => ({ ...p, url: p.url ? String(p.url).trim() : '' }));
-              }
-            } catch {
-              // Keep raw string if non-JSON
-            }
-          }
-          const partnersJson =
-            cleanedPartners !== undefined && cleanedPartners !== null
-              ? typeof cleanedPartners === 'string'
-                ? cleanedPartners
-                : JSON.stringify(cleanedPartners)
-              : null;
+          const rawPartners =
+            body.streaming_partners !== undefined
+              ? body.streaming_partners
+              : body.platforms_data !== undefined
+                ? body.platforms_data
+                : body.watch_providers !== undefined
+                  ? body.watch_providers
+                  : Array.isArray(body.platforms) && body.platforms.some((p) => p && typeof p === 'object')
+                    ? body.platforms
+                    : undefined;
+          const hasPartnersUpdate = rawPartners !== undefined;
+          const normalizedPartners = hasPartnersUpdate ? normalizeStreamingPartners(rawPartners) : [];
+          const partnersJson = hasPartnersUpdate
+            ? JSON.stringify(normalizedPartners)
+            : null;
+          const derivedPartnerLangs = hasPartnersUpdate
+            ? deriveAggregateLanguagesFromPartners(normalizedPartners)
+            : '';
+          const resolvedUpdateLanguages =
+            (typeof body.languages === 'string' && body.languages.trim()) ||
+            (Array.isArray(body.languages) && body.languages.length > 0 ? body.languages.join(', ') : '') ||
+            (derivedPartnerLangs || null);
 
           let resolvedWatchUrl: string | null =
             body.watch_url !== undefined ? (body.watch_url !== null ? String(body.watch_url).trim() : null) : null;
-          if (!resolvedWatchUrl && Array.isArray(cleanedPartners) && cleanedPartners.length > 0) {
-            const typedPartners = cleanedPartners as PartnerEntry[];
-            resolvedWatchUrl = String(typedPartners.find((p) => p.url?.trim())?.url || typedPartners[0]?.url || '').trim();
+          if (!resolvedWatchUrl && normalizedPartners.length > 0) {
+            resolvedWatchUrl = String(normalizedPartners.find((p) => p.url?.trim())?.url || normalizedPartners[0]?.url || '').trim();
           }
 
           const rawMixed =
@@ -569,10 +637,10 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 : null;
 
           const normalizedPlatformUpdate =
-            body.platform !== undefined || body.platforms !== undefined
+            body.platform !== undefined || (Array.isArray(body.platforms) && body.platforms.every((p) => typeof p === 'string')) || typeof body.platforms === 'string'
               ? normalizePlatformString(body.platform ?? body.platforms) || null
-              : Array.isArray(cleanedPartners) && cleanedPartners.length > 0
-                ? normalizePlatformString((cleanedPartners as PartnerEntry[]).map((p) => p?.name).filter(Boolean)) || null
+              : normalizedPartners.length > 0
+                ? normalizePlatformString(normalizedPartners.map((p) => p.name).filter(Boolean)) || null
                 : null;
           const updatedEpisodes =
             body.episodes_count !== undefined || body.episodes !== undefined
@@ -623,7 +691,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               updatedSeason,
               parsedUpdateYear !== null && Number.isFinite(parsedUpdateYear) ? parsedUpdateYear : null,
               body.genres || null,
-              body.languages || null,
+              resolvedUpdateLanguages,
               normalizedPlatformUpdate,
               resolvedType,
               body.studio || null,
@@ -646,9 +714,11 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             success: true,
             id,
             status: incomingStatus,
+            languages: resolvedUpdateLanguages,
             platform: normalizedPlatformUpdate,
-            platforms_data: partnersJson,
-            streaming_partners: rawPartners,
+            platforms_data: hasPartnersUpdate ? normalizedPartners : partnersJson,
+            streaming_partners: hasPartnersUpdate ? normalizedPartners : rawPartners,
+            watch_providers: hasPartnersUpdate ? normalizedPartners : undefined,
             watch_url: resolvedWatchUrl,
             mixed_entries: rawMixed,
             mixedEntries: rawMixed,

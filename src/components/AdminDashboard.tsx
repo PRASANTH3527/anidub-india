@@ -35,6 +35,8 @@ import Papa from 'papaparse';
 import { AniDubLogo } from './AniDubLogo';
 import {
   normalizePlatformString,
+  normalizeStreamingPartners,
+  deriveAggregateLanguagesFromPartners,
   parseCsvMixedEntriesAndEpisodesPerSeason,
   parseOptionalEpisodesCount,
   parseOptionalSeason,
@@ -748,86 +750,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               .replace(/(^-|-$)/g, ''),
           };
         })
-        .filter((r) => Boolean(r.title && r.slug !== 'untitled'));
+        .filter((r) => Boolean(r.title));
 
       addTerminalLog('CSV', `Cleaned ${cleanedRows.length} valid rows from CSV file.`);
 
-      const normalizeStr = (s: unknown) =>
-        String(s || '')
-          .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ')
-          .replace(/["'“”‘’]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .toLowerCase();
-      const simplifyKey = (s: unknown) => normalizeStr(s).replace(/[^a-z0-9]/g, '');
-
-      const existingTitleSet = new Set<string>();
-      const existingKeySet = new Set<string>();
-
-      catalog.forEach((c) => {
-        if (c?.title) {
-          existingTitleSet.add(normalizeStr(c.title));
-          existingKeySet.add(simplifyKey(c.title));
-        }
-      });
-
-      pendingItems.forEach((p) => {
-        if (p?.title) {
-          existingTitleSet.add(normalizeStr(p.title));
-          existingKeySet.add(simplifyKey(p.title));
-        }
-      });
-
-      const clientSkippedTitles: string[] = [];
-      const clientFilteredRows: typeof cleanedRows = [];
-      const seenInUpload = new Set<string>();
-      const seenKeysInUpload = new Set<string>();
-
-      for (const row of cleanedRows) {
-        const norm = normalizeStr(row.title);
-        const key = simplifyKey(row.title);
-        if (!norm || !key) continue;
-
-        const isDuplicate =
-          existingTitleSet.has(norm) ||
-          existingKeySet.has(key) ||
-          seenInUpload.has(norm) ||
-          seenKeysInUpload.has(key);
-        if (isDuplicate) {
-          clientSkippedTitles.push(row.title);
-          continue;
-        }
-
-        seenInUpload.add(norm);
-        seenKeysInUpload.add(key);
-        clientFilteredRows.push(row);
-      }
-
-      if (clientFilteredRows.length === 0) {
-        const allExistingMsg = `All ${clientSkippedTitles.length} anime already exist in the database! Skipped: ${clientSkippedTitles.slice(0, 3).join(', ')}${clientSkippedTitles.length > 3 ? ` (+${clientSkippedTitles.length - 3} more)` : ''}. 0 added to pending.`;
+      if (cleanedRows.length === 0) {
+        const emptyMsg = 'No valid anime rows with a title were found in the CSV file.';
         setImportedCount(0);
         setShowImportToast(true);
-        setSuccessMsg(allExistingMsg);
-        addTerminalLog(
-          'REJ',
-          `[DEDUPLICATION] All ${clientSkippedTitles.length} anime already exist in catalog or pending queue: ${clientSkippedTitles.join(', ')}`
-        );
-        setActiveAdminTab('pending');
+        setSuccessMsg(emptyMsg);
+        addTerminalLog('ERR', emptyMsg);
         setTimeout(() => {
           setShowImportToast(false);
           setSuccessMsg('');
-        }, 7000);
+        }, 5000);
         return;
       }
 
-      const res = await cloudflareApi.uploadCSV({ animeList: clientFilteredRows });
-      const backendAdded = res.insertedCount !== undefined ? res.insertedCount : res.count || clientFilteredRows.length;
-      const backendSkipped = res.skippedCount !== undefined ? res.skippedCount : 0;
-      const totalAdded = backendAdded;
-      const totalSkipped = clientSkippedTitles.length + backendSkipped;
-      const allSkippedTitles = Array.from(new Set([...clientSkippedTitles, ...(res.skippedTitles || [])]));
+      const res = await cloudflareApi.uploadCSV({ animeList: cleanedRows });
+      const totalAdded = res.insertedCount ?? res.count ?? 0;
+      const totalSkipped = res.skippedCount ?? 0;
+      const allSkippedTitles = Array.from(new Set(res.skippedTitles || []));
 
-      const feedbackMsg = `Upload complete: ${totalAdded} added to pending queue, ${totalSkipped} existing titles rejected.`;
+      const feedbackMsg =
+        res.message || `Upload complete: ${totalAdded} added to pending queue, ${totalSkipped} duplicate titles skipped.`;
 
       setImportedCount(totalAdded);
       setShowImportToast(true);
@@ -837,7 +783,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (allSkippedTitles.length > 0) {
         addTerminalLog(
           'REJ',
-          `Rejected existing/duplicate anime: ${allSkippedTitles.slice(0, 8).join(', ')}${allSkippedTitles.length > 8 ? ` (+${allSkippedTitles.length - 8} more)` : ''}`
+          `Skipped duplicate titles: ${allSkippedTitles.slice(0, 8).join(', ')}${allSkippedTitles.length > 8 ? ` (+${allSkippedTitles.length - 8} more)` : ''}`
         );
       }
 
@@ -1230,14 +1176,12 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
     const partnerSources =
       editedData.streaming_partners ||
       editedData.platforms_data ||
+      editedData.watch_providers ||
       editingAnime?.streaming_partners ||
-      editingAnime?.platforms_data;
-    const partnersArray = Array.isArray(partnerSources)
-      ? partnerSources.map((p) => ({
-          ...p,
-          url: p.url ? String(p.url).trim() : '',
-        }))
-      : [];
+      editingAnime?.platforms_data ||
+      editingAnime?.watch_providers;
+    const partnersArray = normalizeStreamingPartners(partnerSources);
+    const derivedPartnerLangs = deriveAggregateLanguagesFromPartners(partnersArray);
 
     const fullEditedData: AdminAnimeRecord = {
       ...editedData,
@@ -1251,15 +1195,21 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
       poster: editedData.posterUrl || editedData.poster || resolvedImage,
       posterUrl: editedData.posterUrl || resolvedImage,
       poster_url: editedData.posterUrl || resolvedImage,
+      languages: editedData.languages || derivedPartnerLangs || editingAnime?.languages,
       streaming_partners: partnersArray,
       platforms_data: partnersArray,
+      watch_providers: partnersArray,
       watch_url:
         editedData.watch_url !== undefined
           ? String(editedData.watch_url).trim()
           : editingAnime?.watch_url
             ? String(editingAnime.watch_url).trim()
             : '',
-      platform: editedData.platform || editingAnime?.platform || 'Crunchyroll',
+      platform:
+        editedData.platform ||
+        normalizePlatformString(partnersArray.map((p) => p.name).filter(Boolean)) ||
+        editingAnime?.platform ||
+        'Crunchyroll',
       mixed_entries:
         editedData.mixed_entries !== undefined
           ? editedData.mixed_entries

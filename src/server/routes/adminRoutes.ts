@@ -265,16 +265,6 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         return jsonResponse({ success: false, error: 'Empty CSV payload' }, 400);
       }
 
-      const normalizeTitle = (t: unknown): string =>
-        String(t || '')
-          .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ')
-          .replace(/["'“”‘’]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .toLowerCase();
-
-      const simplifyTitleKey = (t: unknown): string => normalizeTitle(t).replace(/[^a-z0-9]/g, '');
-
       const extractTitleFromRow = (r: CsvImportRow): string => {
         if (!r || typeof r !== 'object') return '';
         return String(
@@ -294,31 +284,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         ).trim();
       };
 
-      const existingNormalizedTitles = new Set<string>();
-      const existingSimplifiedKeys = new Set<string>();
-      const existingSlugs = new Set<string>();
-
-      if (env.DB) {
-        try {
-          const res = await env.DB.prepare('SELECT title, slug FROM anime').all();
-          const items = res && res.results ? res.results : [];
-          for (const item of items) {
-            if (item.title) {
-              existingNormalizedTitles.add(normalizeTitle(item.title));
-              existingSimplifiedKeys.add(simplifyTitleKey(item.title));
-            }
-            if (item.slug) {
-              existingSlugs.add(normalizeTitle(item.slug));
-              existingSimplifiedKeys.add(simplifyTitleKey(item.slug));
-            }
-          }
-        } catch (dbErr) {
-          console.warn('[D1 fetch existing titles warning]:', dbErr);
-        }
-      }
-
       const seenInThisUpload = new Set<string>();
-      const seenInThisUploadKeys = new Set<string>();
       const itemsToInsert: ProcessedImportRow[] = [];
       const skippedTitles: string[] = [];
       const addedTitles: string[] = [];
@@ -326,30 +292,35 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
       for (const row of rows) {
         const rawTitle = extractTitleFromRow(row);
-        const norm = normalizeTitle(rawTitle);
-        const key = simplifyTitleKey(rawTitle);
-
-        if (!norm || !key) {
+        if (!rawTitle) {
           skippedCount++;
           continue;
         }
 
-        const baseSlug = norm.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'anime';
-        const isAlreadyInDb =
-          existingNormalizedTitles.has(norm) || existingSimplifiedKeys.has(key) || existingSlugs.has(baseSlug);
-        const isDuplicateInBatch = seenInThisUpload.has(norm) || seenInThisUploadKeys.has(key);
-
-        if (isAlreadyInDb || isDuplicateInBatch) {
+        const lowerTitle = rawTitle.toLowerCase();
+        if (seenInThisUpload.has(lowerTitle)) {
           skippedCount++;
           skippedTitles.push(rawTitle);
+          console.warn(`[CSV Import Duplicate]: Skipping "${rawTitle}" (duplicate title in CSV batch)`);
           continue;
         }
 
-        seenInThisUpload.add(norm);
-        seenInThisUploadKeys.add(key);
-        existingNormalizedTitles.add(norm);
-        existingSimplifiedKeys.add(key);
-        existingSlugs.add(baseSlug);
+        let existingRow: { id?: unknown } | null = null;
+        if (env.DB) {
+          existingRow = await env.DB.prepare('SELECT id FROM anime WHERE LOWER(title) = LOWER(?) LIMIT 1')
+            .bind(rawTitle)
+            .first<{ id?: unknown }>();
+        }
+
+        if (existingRow) {
+          skippedCount++;
+          skippedTitles.push(rawTitle);
+          console.warn(`[CSV Import Duplicate]: Skipping "${rawTitle}" (already exists in D1, id=${String(existingRow.id ?? 'unknown')})`);
+          continue;
+        }
+
+        seenInThisUpload.add(lowerTitle);
+        const baseSlug = lowerTitle.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'anime';
 
         itemsToInsert.push({ ...row, resolvedTitle: rawTitle, resolvedSlug: baseSlug });
         addedTitles.push(rawTitle);
@@ -437,32 +408,61 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
               : '';
 
         if (env.DB) {
-          await env.DB.prepare(
-            `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(title) DO NOTHING`
-          )
-            .bind(
-              title,
-              slug,
-              synopsis,
-              cover_image,
-              banner_image,
-              rating,
-              epCount,
-              resolvedStatus,
-              resolvedStatus,
-              season,
-              year,
-              genres,
-              languages,
-              platform,
-              resolvedType,
-              studio,
-              episodesPerSeason,
-              mixedEntriesJson
-            )
-            .run();
+          const insertSql = `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`;
+          try {
+            await env.DB.prepare(insertSql)
+              .bind(
+                title,
+                slug,
+                synopsis,
+                cover_image,
+                banner_image,
+                rating,
+                epCount,
+                resolvedStatus,
+                resolvedStatus,
+                season,
+                year,
+                genres,
+                languages,
+                platform,
+                resolvedType,
+                studio,
+                episodesPerSeason,
+                mixedEntriesJson
+              )
+              .run();
+          } catch (insertErr) {
+            const errMsg = getErrorMessage(insertErr).toLowerCase();
+            if (errMsg.includes('unique') && errMsg.includes('slug')) {
+              const uniqueSlug = `${slug}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+              await env.DB.prepare(insertSql)
+                .bind(
+                  title,
+                  uniqueSlug,
+                  synopsis,
+                  cover_image,
+                  banner_image,
+                  rating,
+                  epCount,
+                  resolvedStatus,
+                  resolvedStatus,
+                  season,
+                  year,
+                  genres,
+                  languages,
+                  platform,
+                  resolvedType,
+                  studio,
+                  episodesPerSeason,
+                  mixedEntriesJson
+                )
+                .run();
+            } else {
+              throw insertErr;
+            }
+          }
         }
         insertedCount++;
       }
@@ -473,8 +473,9 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         insertedCount,
         skippedCount,
         skippedTitles,
+        duplicates: skippedTitles,
         addedTitles,
-        message: `Upload complete: ${insertedCount} added to pending queue, ${skippedCount} existing titles rejected.`,
+        message: `Upload complete: ${insertedCount} added to pending queue, ${skippedCount} duplicate titles skipped.`,
       });
     } catch (err) {
       return jsonResponse({ success: false, error: getErrorMessage(err) }, 500);
