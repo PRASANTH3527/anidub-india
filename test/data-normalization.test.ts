@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { onRequest } from '../functions/api/[[route]].ts';
+import { buildStreamingPartnersPayload } from '../src/utils/dataNormalization.ts';
 
 function createSignedClerkJwt(sub: string, extraClaims: Record<string, unknown> = {}) {
   const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
@@ -672,3 +673,45 @@ test('POST /api/admin/import-csv executes cleanly on SQLite schema without UNIQU
   assert.equal(allRows[1].title, 'New Dubbed Series');
   sqlite.close();
 });
+
+test('buildStreamingPartnersPayload auto-syncs single platform from global languages and keeps multi-platform languages independent', () => {
+  // 1. Single platform: auto-syncs global Mixed Entries languages even if platform had stale/empty array
+  const singleResult = buildStreamingPartnersPayload(
+    [{ name: 'Netflix', url: 'https://www.netflix.com/title/123', languages: ['English'] }],
+    ['Tamil', 'Hindi', 'Telugu']
+  );
+  assert.equal(singleResult.serializedPartners.length, 1);
+  assert.deepEqual(singleResult.serializedPartners[0], {
+    name: 'Netflix',
+    platform: 'Netflix',
+    url: 'https://www.netflix.com/title/123',
+    languages: ['Tamil', 'Hindi', 'Telugu'],
+  });
+  assert.deepEqual(singleResult.derivedGlobalDubs, ['Tamil', 'Hindi', 'Telugu']);
+
+  // 2. Multiple platforms (2+): preserves each platform's own selected languages
+  const multiResult = buildStreamingPartnersPayload(
+    [
+      { name: 'Netflix', url: 'https://www.netflix.com/title/123', languages: ['Hindi', 'English'] },
+      { name: 'Crunchyroll', url: 'https://www.crunchyroll.com/series/123', languages: ['Tamil', 'Telugu'] },
+    ],
+    ['Tamil', 'Hindi']
+  );
+  assert.equal(multiResult.serializedPartners.length, 2);
+  assert.deepEqual(multiResult.serializedPartners[0].languages, ['Hindi', 'English']);
+  assert.deepEqual(multiResult.serializedPartners[1].languages, ['Tamil', 'Telugu']);
+  assert.deepEqual(multiResult.derivedGlobalDubs, ['Hindi', 'English', 'Tamil', 'Telugu']);
+});
+
+test('DubInfoModal conditionally renders per-platform languages only when 2+ platforms exist and uses dynamic platform label', () => {
+  const modalSrc = fs.readFileSync(path.join(process.cwd(), 'src/components/DubInfoModal.tsx'), 'utf-8');
+  assert.ok(
+    modalSrc.includes('{streamingPartners.length > 1 && ('),
+    'Per-platform language checkboxes must be hidden when only 1 platform exists'
+  );
+  assert.ok(
+    modalSrc.includes('Languages on {activePlatformLabel}'),
+    'Per-platform label must dynamically reflect the selected platform name'
+  );
+});
+

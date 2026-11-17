@@ -271,3 +271,79 @@ export function deriveAggregateLanguagesFromPartners(partners: NormalizedStreami
   }
   return Array.from(deduped.values()).join(', ');
 }
+
+export interface StreamingPartnerInput {
+  name?: string;
+  platform?: string;
+  url?: string;
+  languages?: string[];
+}
+
+/**
+ * Serializes streaming partners for backend submission:
+ * - When there is only 1 platform, auto-syncs its `languages` array from the
+ *   globally selected languages (Mixed Entries 'Available Languages').
+ * - When there are 2+ platforms, preserves each platform's own selected
+ *   `languages` array and derives the global dubs union across all platforms.
+ */
+export function buildStreamingPartnersPayload(
+  partners: StreamingPartnerInput[],
+  globalLanguages: string[],
+  defaultPlatform = 'Crunchyroll',
+  fallbackLanguages: string[] = ['Tamil', 'Hindi']
+): {
+  serializedPartners: NormalizedStreamingPartner[];
+  derivedGlobalDubs: string[];
+} {
+  const cleanGlobalLangs = normalizePartnerLanguages(globalLanguages);
+  const cleanFallback = normalizePartnerLanguages(fallbackLanguages);
+  const resolvedGlobalOrFallback =
+    cleanGlobalLangs.length > 0 ? cleanGlobalLangs : cleanFallback;
+
+  if (!Array.isArray(partners) || partners.length === 0) {
+    return {
+      serializedPartners: [],
+      derivedGlobalDubs: resolvedGlobalOrFallback,
+    };
+  }
+
+  if (partners.length === 1) {
+    const p = partners[0] || {};
+    const resolvedName =
+      String(p.name || p.platform || defaultPlatform).trim() || defaultPlatform;
+    return {
+      serializedPartners: [
+        {
+          name: resolvedName,
+          platform: resolvedName,
+          url: String(p.url || '').trim(),
+          languages: resolvedGlobalOrFallback,
+        },
+      ],
+      derivedGlobalDubs: resolvedGlobalOrFallback,
+    };
+  }
+
+  const serializedPartners: NormalizedStreamingPartner[] = partners.map((p) => {
+    const resolvedName =
+      String(p?.name || p?.platform || defaultPlatform).trim() || defaultPlatform;
+    return {
+      name: resolvedName,
+      platform: resolvedName,
+      url: String(p?.url || '').trim(),
+      languages: normalizePartnerLanguages(p?.languages),
+    };
+  });
+
+  const partnerLanguages = normalizePartnerLanguages(
+    serializedPartners.flatMap((p) => p.languages)
+  );
+  const derivedGlobalDubs =
+    partnerLanguages.length > 0 ? partnerLanguages : resolvedGlobalOrFallback;
+
+  return {
+    serializedPartners,
+    derivedGlobalDubs,
+  };
+}
+

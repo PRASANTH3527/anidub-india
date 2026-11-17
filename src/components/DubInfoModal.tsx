@@ -21,7 +21,11 @@ import { useUser } from '../lib/clerk';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 import { validateImageUpload } from '../utils/imgbb';
 import { validateExternalImageUrl } from '../utils/submissionValidation';
-import { normalizePlatformString, normalizePartnerLanguages } from '../utils/dataNormalization';
+import {
+  normalizePlatformString,
+  normalizePartnerLanguages,
+  buildStreamingPartnersPayload,
+} from '../utils/dataNormalization';
 
 interface DubInfoModalProps {
   isOpen: boolean;
@@ -213,14 +217,19 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }));
     }
 
-    const defaultPlat = data.platform || 'Crunchyroll';
-    const defaultUrl = data.watch_url || data.watchUrl || '';
+    const rawPlatformStr = String(data.platform || '').trim();
+    const defaultUrl = String(data.watch_url || data.watchUrl || '').trim();
+    const splitPlatforms = rawPlatformStr
+      ? rawPlatformStr.split(/[|,]/).map((s) => s.trim()).filter(Boolean)
+      : [];
+    const platNames = splitPlatforms.length > 0 ? splitPlatforms : ['Crunchyroll'];
+    const initialLangs = fallbackLangs.length > 0 ? fallbackLangs : ['Tamil', 'Hindi'];
 
-    return [{
-      name: defaultPlat,
-      url: defaultUrl,
-      languages: fallbackLangs.length > 0 ? fallbackLangs : ['Tamil', 'Hindi']
-    }];
+    return platNames.map((platName, idx) => ({
+      name: platName,
+      url: idx === 0 ? defaultUrl : '',
+      languages: initialLangs,
+    }));
   };
 
   // Multi-Platform Links
@@ -366,7 +375,20 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   };
 
   const addStreamingPartner = () => {
-    setStreamingPartners(prev => [...prev, { name: 'Crunchyroll', url: '', languages: [] }]);
+    const globalSelectedLangs = Array.from(
+      new Set(seasonDetails.flatMap((s) => s.languages || []))
+    );
+    setStreamingPartners(prev => {
+      const updated = prev.map((partner, idx) => {
+        // When transitioning from 1 -> 2 platforms, sync the first platform's initial languages
+        // from the global Available Languages selection so it matches what was previously configured.
+        if (prev.length === 1 && idx === 0 && globalSelectedLangs.length > 0) {
+          return { ...partner, languages: globalSelectedLangs };
+        }
+        return partner;
+      });
+      return [...updated, { name: 'Crunchyroll', url: '', languages: [] }];
+    });
   };
 
   const removeStreamingPartner = (index: number) => {
@@ -485,30 +507,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }
     }
 
-    const serializedPartners = streamingPartners.map((p) => {
-      const resolvedName = p.name || 'Crunchyroll';
-      return {
-        name: resolvedName,
-        platform: resolvedName,
-        url: (p.url || '').trim(),
-        languages: Array.isArray(p.languages)
-          ? Array.from(new Set(p.languages.map((l) => l.trim()).filter(Boolean)))
-          : [],
-      };
-    });
-
-    const partnerLanguages = Array.from(
-      new Set(serializedPartners.flatMap((p) => p.languages || []))
-    );
     const seasonLanguages = Array.from(
       new Set(seasonDetails.flatMap((s) => s.languages || []))
     );
-    const derivedGlobalDubs =
-      partnerLanguages.length > 0
-        ? partnerLanguages
-        : seasonLanguages.length > 0
-          ? seasonLanguages
-          : ['Tamil', 'Hindi'];
+    const { serializedPartners, derivedGlobalDubs } = buildStreamingPartnersPayload(
+      streamingPartners,
+      seasonLanguages
+    );
 
     const rawPoster = (poster || formData.posterUrl || formData.poster || formData.image || formData.cover_image || '').trim();
     if (rawPoster) {
@@ -661,6 +666,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     'YouTube',
     'YouTube (Muse India)',
     'YouTube (Ani-One)',
+    'YouTube (Ani-One India)',
     'Disney+ Hotstar',
     'Prime Video',
     'Anime Times',
@@ -870,88 +876,98 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   </label>
                   
                   <div className="space-y-3">
-                    {streamingPartners.map((partner, idx) => (
-                      <div key={`stream_partner_${idx}`} className="bg-[#141b29] border border-neutral-800 rounded-2xl p-3 space-y-2.5">
-                        <div className="flex gap-2 items-start">
-                          <div className="w-1/3">
-                            <select
-                              value={partner.name}
-                              onChange={(e) => updateStreamingPartner(idx, 'name', e.target.value)}
-                              className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-2.5 py-2 text-[11px] text-white focus:outline-none focus:border-primary-theme cursor-pointer"
-                            >
-                              {platformOptions.map((platOption) => (
-                                <option key={platOption} value={platOption}>{platOption}</option>
-                              ))}
-                            </select>
+                    {streamingPartners.map((partner, idx) => {
+                      const selectOptions =
+                        partner.name && !platformOptions.includes(partner.name)
+                          ? [partner.name, ...platformOptions]
+                          : platformOptions;
+                      const activePlatformLabel = partner.name?.trim() || selectOptions[0] || 'Platform';
+
+                      return (
+                        <div key={`stream_partner_${idx}`} className="bg-[#141b29] border border-neutral-800 rounded-2xl p-3 space-y-2.5">
+                          <div className="flex gap-2 items-start">
+                            <div className="w-1/3">
+                              <select
+                                value={partner.name}
+                                onChange={(e) => updateStreamingPartner(idx, 'name', e.target.value)}
+                                className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-2.5 py-2 text-[11px] text-white focus:outline-none focus:border-primary-theme cursor-pointer"
+                              >
+                                {selectOptions.map((platOption) => (
+                                  <option key={platOption} value={platOption}>{platOption}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex-1 relative">
+                              <input
+                                type="url"
+                                value={partner.url}
+                                onChange={(e) => updateStreamingPartner(idx, 'url', e.target.value)}
+                                placeholder="Link (e.g. https://www.crunchyroll.com/...)"
+                                className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-[11px] text-white placeholder-neutral-600 focus:outline-none focus:border-primary-theme"
+                              />
+                            </div>
+                            {streamingPartners.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeStreamingPartner(idx)}
+                                className="p-2.5 rounded-xl bg-neutral-800/50 text-neutral-500 hover:text-purple-400 hover:bg-purple-950/25 transition-all cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
-                          <div className="flex-1 relative">
-                            <input
-                              type="url"
-                              value={partner.url}
-                              onChange={(e) => updateStreamingPartner(idx, 'url', e.target.value)}
-                              placeholder="Link (e.g. https://www.crunchyroll.com/...)"
-                              className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-[11px] text-white placeholder-neutral-600 focus:outline-none focus:border-primary-theme"
-                            />
-                          </div>
+
+                          {/* Per-Platform Language Selection Checkboxes (only shown when 2+ platforms exist) */}
                           {streamingPartners.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeStreamingPartner(idx)}
-                              className="p-2.5 rounded-xl bg-neutral-800/50 text-neutral-500 hover:text-purple-400 hover:bg-purple-950/25 transition-all cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="pt-2 border-t border-white/5 space-y-1.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                                  Languages on {activePlatformLabel}
+                                </span>
+                                <span className="text-[10px] text-purple-300 font-semibold truncate max-w-[55%]">
+                                  {partner.languages && partner.languages.length > 0
+                                    ? partner.languages.join(', ')
+                                    : 'Select dubs'}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {PLATFORM_LANGS.map((lang) => {
+                                  const isChecked = Array.isArray(partner.languages) && partner.languages.includes(lang);
+                                  return (
+                                    <label
+                                      key={`partner_${idx}_lang_${lang}`}
+                                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer select-none ${
+                                        isChecked
+                                          ? 'bg-purple-600 text-white font-bold ring-1 ring-purple-400 shadow-sm'
+                                          : 'bg-[#121829] text-neutral-400 border border-neutral-700 hover:text-neutral-200 hover:border-neutral-600'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => toggleLangForPartner(idx, lang)}
+                                        className="sr-only"
+                                      />
+                                      <span
+                                        aria-hidden="true"
+                                        className={`w-3 h-3 rounded flex items-center justify-center text-[9px] font-black border ${
+                                          isChecked
+                                            ? 'bg-white text-purple-700 border-white'
+                                            : 'border-neutral-600 bg-black/30 text-transparent'
+                                        }`}
+                                      >
+                                        ✓
+                                      </span>
+                                      <span>{lang}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           )}
                         </div>
-
-                        {/* Per-Platform Language Selection Checkboxes */}
-                        <div className="pt-2 border-t border-white/5 space-y-1.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
-                              Languages on {partner.name || 'Platform'}
-                            </span>
-                            <span className="text-[10px] text-purple-300 font-semibold truncate max-w-[55%]">
-                              {partner.languages && partner.languages.length > 0
-                                ? partner.languages.join(', ')
-                                : 'Select dubs'}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {PLATFORM_LANGS.map((lang) => {
-                              const isChecked = Array.isArray(partner.languages) && partner.languages.includes(lang);
-                              return (
-                                <label
-                                  key={`partner_${idx}_lang_${lang}`}
-                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer select-none ${
-                                    isChecked
-                                      ? 'bg-purple-600 text-white font-bold ring-1 ring-purple-400 shadow-sm'
-                                      : 'bg-[#121829] text-neutral-400 border border-neutral-700 hover:text-neutral-200 hover:border-neutral-600'
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => toggleLangForPartner(idx, lang)}
-                                    className="sr-only"
-                                  />
-                                  <span
-                                    aria-hidden="true"
-                                    className={`w-3 h-3 rounded flex items-center justify-center text-[9px] font-black border ${
-                                      isChecked
-                                        ? 'bg-white text-purple-700 border-white'
-                                        : 'border-neutral-600 bg-black/30 text-transparent'
-                                    }`}
-                                  >
-                                    ✓
-                                  </span>
-                                  <span>{lang}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
