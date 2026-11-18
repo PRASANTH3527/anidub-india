@@ -13,6 +13,8 @@ import { countAiringSimulcasts } from '../src/utils/schedule.js';
 import {
   normalizeSeasonEpisodeCount,
   normalizeLastVerifiedDate,
+  deriveSeasonEpisodeCountSummary,
+  deriveOfficialSourceUrlFromPartners,
 } from '../src/utils/dataNormalization.js';
 import { validateOfficialSourceUrl } from '../src/utils/submissionValidation.js';
 
@@ -800,4 +802,64 @@ test('P1-04: /api/admin/export-csv inspects schema via PRAGMA and falls back str
   assert.equal(lastSelect.includes('broadcast_day'), false);
   assert.equal(lastSelect.includes('broadcast_time'), false);
 });
+
+test('DubInfoModal cleanup: removes duplicate Season & Episode Count / Official Source Link boxes and auto-derives them on submit while keeping Last Verified Date', () => {
+  // 1. Mixed Entries -> season_episode_count auto-summary
+  assert.equal(
+    deriveSeasonEpisodeCountSummary([
+      { entryType: 'Season', episodes: '12' },
+      { entryType: 'Season', episodes: '12' },
+    ]),
+    '2 Seasons • 24 Episodes'
+  );
+  assert.equal(
+    deriveSeasonEpisodeCountSummary([{ entryType: 'Season', episodes: '28' }]),
+    '1 Season • 28 Episodes'
+  );
+  assert.equal(
+    deriveSeasonEpisodeCountSummary([{ entryType: 'Season', episodes: '' }]),
+    '1 Season'
+  );
+  assert.equal(
+    deriveSeasonEpisodeCountSummary([
+      { entryType: 'Season', episodes: '24' },
+      { entryType: 'OVA', episodes: '2' },
+      { entryType: 'Movie', episodes: '1' },
+    ]),
+    '1 Season, 1 Movie, 1 OVA • 27 Episodes'
+  );
+  assert.equal(
+    deriveSeasonEpisodeCountSummary([{ entryType: 'Movie', episodes: '1' }]),
+    '1 Movie'
+  );
+  assert.equal(deriveSeasonEpisodeCountSummary([]), '');
+
+  // 2. Streaming Partners -> official_source_url auto-extraction
+  assert.equal(
+    deriveOfficialSourceUrlFromPartners([
+      { name: 'Crunchyroll', url: 'https://www.crunchyroll.com/series/abc' },
+      { name: 'Netflix', url: 'https://www.netflix.com/title/123' },
+    ]),
+    'https://www.crunchyroll.com/series/abc'
+  );
+  assert.equal(
+    deriveOfficialSourceUrlFromPartners([
+      { name: 'Crunchyroll', url: '   ' },
+      { name: 'Netflix', url: '  https://www.netflix.com/title/123  ' },
+    ]),
+    'https://www.netflix.com/title/123'
+  );
+  assert.equal(deriveOfficialSourceUrlFromPartners([{ name: 'Crunchyroll', url: '' }]), '');
+  assert.equal(deriveOfficialSourceUrlFromPartners([]), '');
+
+  // 3. UI component source assertions
+  const modalSrc = fs.readFileSync(path.join(process.cwd(), 'src/components/DubInfoModal.tsx'), 'utf8');
+  assert.equal(modalSrc.includes('Season &amp; Episode Count'), false);
+  assert.equal(modalSrc.includes('Official Source Link'), false);
+  assert.ok(modalSrc.includes('Last Verified Date'));
+  assert.ok(modalSrc.includes('aria-label="Last Verified Date"'));
+  assert.ok(modalSrc.includes('deriveSeasonEpisodeCountSummary(mixedEntries)'));
+  assert.ok(modalSrc.includes('deriveOfficialSourceUrlFromPartners(serializedPartners)'));
+});
+
 

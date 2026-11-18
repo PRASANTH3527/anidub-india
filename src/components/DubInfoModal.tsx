@@ -27,8 +27,9 @@ import {
   buildStreamingPartnersPayload,
   normalizeBroadcastDay,
   normalizeBroadcastTime,
-  normalizeSeasonEpisodeCount,
   normalizeLastVerifiedDate,
+  deriveSeasonEpisodeCountSummary,
+  deriveOfficialSourceUrlFromPartners,
 } from '../utils/dataNormalization';
 
 interface DubInfoModalProps {
@@ -253,12 +254,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   });
   const [releaseDay, setReleaseDay] = useState<string>(() => normalizeBroadcastDay(initialData) || '');
   const [broadcastTime, setBroadcastTime] = useState<string>(() => normalizeBroadcastTime(initialData) || '');
-  const [seasonEpisodeCount, setSeasonEpisodeCount] = useState<string>(() =>
-    normalizeSeasonEpisodeCount(initialData)
-  );
-  const [officialSourceUrl, setOfficialSourceUrl] = useState<string>(() =>
-    String(initDataAny?.official_source_url || initDataAny?.officialSourceUrl || '').trim()
-  );
   const [lastVerifiedDate, setLastVerifiedDate] = useState<string>(() =>
     normalizeLastVerifiedDate(initialData)
   );
@@ -322,8 +317,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       // Re-populate streaming partners from initialData
       setStreamingPartners(parseStreamingPartners(initialData));
-      setSeasonEpisodeCount(normalizeSeasonEpisodeCount(initialData));
-      setOfficialSourceUrl(String(initDataAny?.official_source_url || initDataAny?.officialSourceUrl || '').trim());
       setLastVerifiedDate(normalizeLastVerifiedDate(initialData));
     } else {
       setTitle('');
@@ -336,8 +329,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       setStatusState('Airing');
       setReleaseDay('');
       setBroadcastTime('');
-      setSeasonEpisodeCount('');
-      setOfficialSourceUrl('');
       setLastVerifiedDate('');
       setStudio('');
       setGenres(['Action', 'Fantasy']);
@@ -560,14 +551,15 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }
     }
 
-    const sourceUrlCheck = validateOfficialSourceUrl(officialSourceUrl, 'Official Source Link');
+    const derivedOfficialSourceUrl = deriveOfficialSourceUrlFromPartners(serializedPartners);
+    const sourceUrlCheck = validateOfficialSourceUrl(derivedOfficialSourceUrl, 'Streaming Partner URL');
     if (!sourceUrlCheck.ok) {
-      toast.error('Invalid Official Source Link', sourceUrlCheck.error || 'Official Source Link must be a valid HTTP or HTTPS URL.');
+      toast.error('Invalid Streaming Partner URL', sourceUrlCheck.error || 'Primary streaming link must be a valid HTTP or HTTPS URL.');
       setIsSubmitting(false);
       return;
     }
 
-    const normalizedSeasonEpCount = normalizeSeasonEpisodeCount(seasonEpisodeCount);
+    const normalizedSeasonEpCount = deriveSeasonEpisodeCountSummary(mixedEntries);
     const normalizedVerifiedDate = normalizeLastVerifiedDate(lastVerifiedDate);
 
     const defaultCover = rawPoster || '/logo.png';
@@ -1308,49 +1300,25 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   </div>
                 </div>
 
-                {/* Season & Episode Count, Official Source Link, Last Verified Date */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-bold text-neutral-400 mb-1">Season &amp; Episode Count</label>
+                {/* Last Verified Date */}
+                <div>
+                  <label className="block font-bold text-neutral-400 mb-1">Last Verified Date</label>
+                  <div className="flex gap-2">
                     <input
-                      type="text"
-                      value={seasonEpisodeCount}
-                      onChange={(e) => setSeasonEpisodeCount(e.target.value)}
-                      placeholder="e.g. 2 Seasons • 24 Episodes"
-                      maxLength={100}
+                      type="date"
+                      value={lastVerifiedDate}
+                      onChange={(e) => setLastVerifiedDate(e.target.value)}
+                      aria-label="Last Verified Date"
                       className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-primary-theme"
                     />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-neutral-400 mb-1">Official Source Link</label>
-                    <input
-                      type="url"
-                      value={officialSourceUrl}
-                      onChange={(e) => setOfficialSourceUrl(e.target.value)}
-                      placeholder="https://www.crunchyroll.com/..."
-                      maxLength={1000}
-                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-primary-theme"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-neutral-400 mb-1">Last Verified Date</label>
-                    <div className="flex gap-1.5">
-                      <input
-                        type="date"
-                        value={lastVerifiedDate}
-                        onChange={(e) => setLastVerifiedDate(e.target.value)}
-                        aria-label="Last Verified Date"
-                        className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-primary-theme"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setLastVerifiedDate(new Date().toISOString().slice(0, 10))}
-                        className="px-2.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-neutral-700/80 text-[11px] font-bold text-cyan-300 shrink-0 cursor-pointer transition-colors"
-                        title="Set to today's date"
-                      >
-                        Today
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setLastVerifiedDate(new Date().toISOString().slice(0, 10))}
+                      className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-neutral-700/80 text-[11px] font-bold text-cyan-300 shrink-0 cursor-pointer transition-colors"
+                      title="Set to today's date"
+                    >
+                      Today
+                    </button>
                   </div>
                 </div>
 

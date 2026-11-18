@@ -550,4 +550,73 @@ export function normalizeLastVerifiedDate(input: unknown): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/**
+ * Summarizes Mixed Entries (Seasons, Movies, OVAs, ONAs, Specials) into a concise
+ * `season_episode_count` string (e.g. `'2 Seasons • 24 Episodes'`).
+ */
+export function deriveSeasonEpisodeCountSummary(entries: MixedEntryLike[]): string {
+  if (!Array.isArray(entries) || entries.length === 0) return '';
+
+  let seasons = 0;
+  let movies = 0;
+  let ovas = 0;
+  let onas = 0;
+  let specials = 0;
+  let totalEpisodes = 0;
+
+  for (const entry of entries) {
+    if (!entry) continue;
+    const rawType = String(entry.entryType || entry.type || 'Season').trim().toLowerCase();
+    if (rawType.includes('movie')) movies += 1;
+    else if (rawType.includes('ova')) ovas += 1;
+    else if (rawType.includes('ona')) onas += 1;
+    else if (rawType.includes('special')) specials += 1;
+    else seasons += 1;
+
+    const epRaw = entry.episodes ?? entry.episodeCount;
+    if (epRaw !== null && epRaw !== undefined && String(epRaw).trim() !== '') {
+      const epNum = Number(epRaw);
+      if (Number.isFinite(epNum) && epNum > 0) {
+        totalEpisodes += Math.floor(epNum);
+      }
+    }
+  }
+
+  const labelParts: string[] = [];
+  if (seasons > 0) labelParts.push(`${seasons} ${seasons === 1 ? 'Season' : 'Seasons'}`);
+  if (movies > 0) labelParts.push(`${movies} ${movies === 1 ? 'Movie' : 'Movies'}`);
+  if (ovas > 0) labelParts.push(`${ovas} ${ovas === 1 ? 'OVA' : 'OVAs'}`);
+  if (onas > 0) labelParts.push(`${onas} ${onas === 1 ? 'ONA' : 'ONAs'}`);
+  if (specials > 0) labelParts.push(`${specials} ${specials === 1 ? 'Special' : 'Specials'}`);
+
+  if (labelParts.length === 0) return '';
+
+  const isMovieOnlyWithSingleEach =
+    movies > 0 &&
+    seasons === 0 &&
+    ovas === 0 &&
+    onas === 0 &&
+    specials === 0 &&
+    totalEpisodes <= movies;
+
+  const summary =
+    totalEpisodes > 0 && !isMovieOnlyWithSingleEach
+      ? `${labelParts.join(', ')} • ${totalEpisodes} ${totalEpisodes === 1 ? 'Episode' : 'Episodes'}`
+      : labelParts.join(', ');
+
+  return normalizeSeasonEpisodeCount(summary);
+}
+
+/**
+ * Extracts the primary watch URL from Streaming Partners to populate `official_source_url`.
+ */
+export function deriveOfficialSourceUrlFromPartners(partners: StreamingPartnerInput[]): string {
+  if (!Array.isArray(partners) || partners.length === 0) return '';
+  for (const partner of partners) {
+    const candidate = String(partner?.url || '').trim();
+    if (candidate) return candidate;
+  }
+  return '';
+}
+
 
