@@ -319,70 +319,64 @@ export async function handleUserRoutes(ctx: RouteContext): Promise<Response | nu
 
     if (method === 'GET') {
       const animeIdParam = url.searchParams.get('anime_id') ?? url.searchParams.get('animeId');
+      if (!env.DB) {
+        return jsonResponse({ success: false, error: 'Database binding (DB) is not configured' }, 500, request, {
+          'Cache-Control': 'no-store',
+        });
+      }
       try {
-        if (env.DB) {
-          if (animeIdParam) {
-            const animeId = Number(animeIdParam);
-            if (!Number.isInteger(animeId) || animeId <= 0) {
-              return jsonResponse({ error: 'Valid anime_id query parameter required' }, 400, request);
-            }
-            const row = await env.DB.prepare(
-              'SELECT anime_id, season, episode, total_episodes, completed, updated_at FROM watch_progress WHERE user_id = ? AND anime_id = ?'
-            )
-              .bind(session.userId, animeId)
-              .first();
-            const normalizedRow = row
-              ? {
-                  animeId: Number(row.anime_id),
-                  season: Number(row.season || 1),
-                  episode: Number(row.episode || 0),
-                  totalEpisodes:
-                    row.total_episodes !== null && row.total_episodes !== undefined
-                      ? Number(row.total_episodes)
-                      : null,
-                  completed: Boolean(row.completed),
-                  updatedAt: String(row.updated_at || new Date().toISOString()),
-                }
-              : null;
-            return jsonResponse({ success: true, progress: normalizedRow }, 200, request, {
-              'Cache-Control': 'no-store',
-            });
+        if (animeIdParam) {
+          const animeId = Number(animeIdParam);
+          if (!Number.isInteger(animeId) || animeId <= 0) {
+            return jsonResponse({ error: 'Valid anime_id query parameter required' }, 400, request);
           }
-
-          const rows = await env.DB.prepare(
-            'SELECT anime_id, season, episode, total_episodes, completed, updated_at FROM watch_progress WHERE user_id = ? ORDER BY updated_at DESC LIMIT 200'
+          const row = await env.DB.prepare(
+            'SELECT anime_id, season, episode, total_episodes, completed, updated_at FROM watch_progress WHERE user_id = ? AND anime_id = ?'
           )
-            .bind(session.userId)
-            .all();
-          const normalizedList = (rows.results || []).map((r) => ({
-            animeId: Number(r.anime_id),
-            season: Number(r.season || 1),
-            episode: Number(r.episode || 0),
-            totalEpisodes:
-              r.total_episodes !== null && r.total_episodes !== undefined
-                ? Number(r.total_episodes)
-                : null,
-            completed: Boolean(r.completed),
-            updatedAt: String(r.updated_at || new Date().toISOString()),
-          }));
-          return jsonResponse({ success: true, progress: normalizedList }, 200, request, {
+            .bind(session.userId, animeId)
+            .first();
+          const normalizedRow = row
+            ? {
+                animeId: Number(row.anime_id),
+                season: Number(row.season || 1),
+                episode: Number(row.episode || 0),
+                totalEpisodes:
+                  row.total_episodes !== null && row.total_episodes !== undefined
+                    ? Number(row.total_episodes)
+                    : null,
+                completed: Boolean(row.completed),
+                updatedAt: String(row.updated_at || new Date().toISOString()),
+              }
+            : null;
+          return jsonResponse({ success: true, progress: normalizedRow }, 200, request, {
             'Cache-Control': 'no-store',
           });
         }
+
+        const rows = await env.DB.prepare(
+          'SELECT anime_id, season, episode, total_episodes, completed, updated_at FROM watch_progress WHERE user_id = ? ORDER BY updated_at DESC LIMIT 200'
+        )
+          .bind(session.userId)
+          .all();
+        const normalizedList = (rows.results || []).map((r) => ({
+          animeId: Number(r.anime_id),
+          season: Number(r.season || 1),
+          episode: Number(r.episode || 0),
+          totalEpisodes:
+            r.total_episodes !== null && r.total_episodes !== undefined
+              ? Number(r.total_episodes)
+              : null,
+          completed: Boolean(r.completed),
+          updatedAt: String(r.updated_at || new Date().toISOString()),
+        }));
+        return jsonResponse({ success: true, progress: normalizedList }, 200, request, {
+          'Cache-Control': 'no-store',
+        });
       } catch (err) {
-        const msg = getErrorMessage(err).toLowerCase();
-        if (msg.includes('no such table')) {
-          return jsonResponse({ success: true, progress: animeIdParam ? null : [] }, 200, request, {
-            'Cache-Control': 'no-store',
-          });
-        }
         return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request, {
           'Cache-Control': 'no-store',
         });
       }
-      return jsonResponse({ success: true, progress: animeIdParam ? null : [] }, 200, request, {
-        'Cache-Control': 'no-store',
-      });
     }
 
     if (method === 'PUT' || method === 'POST') {
@@ -409,27 +403,24 @@ export async function handleUserRoutes(ctx: RouteContext): Promise<Response | nu
         const completed = body.completed ? 1 : 0;
         const updatedAt = new Date().toISOString();
 
-        if (env.DB) {
-          try {
-            await env.DB.prepare(
-              `INSERT INTO watch_progress (user_id, anime_id, season, episode, total_episodes, completed, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(user_id, anime_id) DO UPDATE SET
-                 season = excluded.season,
-                 episode = excluded.episode,
-                 total_episodes = excluded.total_episodes,
-                 completed = excluded.completed,
-                 updated_at = excluded.updated_at`
-            )
-              .bind(session.userId, animeId, season, episode, totalEpisodes, completed, updatedAt)
-              .run();
-          } catch (dbErr) {
-            const msg = getErrorMessage(dbErr).toLowerCase();
-            if (!msg.includes('no such table')) {
-              throw dbErr;
-            }
-          }
+        if (!env.DB) {
+          return jsonResponse({ success: false, error: 'Database binding (DB) is not configured' }, 500, request, {
+            'Cache-Control': 'no-store',
+          });
         }
+
+        await env.DB.prepare(
+          `INSERT INTO watch_progress (user_id, anime_id, season, episode, total_episodes, completed, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(user_id, anime_id) DO UPDATE SET
+             season = excluded.season,
+             episode = excluded.episode,
+             total_episodes = excluded.total_episodes,
+             completed = excluded.completed,
+             updated_at = excluded.updated_at`
+        )
+          .bind(session.userId, animeId, season, episode, totalEpisodes, completed, updatedAt)
+          .run();
 
         return jsonResponse(
           {
@@ -460,18 +451,17 @@ export async function handleUserRoutes(ctx: RouteContext): Promise<Response | nu
       if (!Number.isInteger(animeId) || animeId <= 0) {
         return jsonResponse({ error: 'Valid anime_id query parameter is required' }, 400, request);
       }
+      if (!env.DB) {
+        return jsonResponse({ success: false, error: 'Database binding (DB) is not configured' }, 500, request, {
+          'Cache-Control': 'no-store',
+        });
+      }
       try {
-        if (env.DB) {
-          await env.DB.prepare('DELETE FROM watch_progress WHERE user_id = ? AND anime_id = ?')
-            .bind(session.userId, animeId)
-            .run();
-        }
+        await env.DB.prepare('DELETE FROM watch_progress WHERE user_id = ? AND anime_id = ?')
+          .bind(session.userId, animeId)
+          .run();
         return jsonResponse({ success: true, animeId }, 200, request, { 'Cache-Control': 'no-store' });
       } catch (err) {
-        const msg = getErrorMessage(err).toLowerCase();
-        if (msg.includes('no such table')) {
-          return jsonResponse({ success: true, animeId }, 200, request, { 'Cache-Control': 'no-store' });
-        }
         return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request, {
           'Cache-Control': 'no-store',
         });

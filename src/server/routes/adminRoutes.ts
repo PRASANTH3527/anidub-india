@@ -116,16 +116,72 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
       );
     }
     try {
+      const allExportColumns = [
+        'id',
+        'title',
+        'status',
+        'rating',
+        'episodes_count',
+        'year',
+        'genres',
+        'languages',
+        'platform',
+        'type',
+        'studio',
+        'broadcast_day',
+        'broadcast_time',
+        'season_episode_count',
+        'official_source_url',
+        'last_verified_date',
+      ] as const;
+      const legacyExportColumns = [
+        'id',
+        'title',
+        'status',
+        'rating',
+        'episodes_count',
+        'year',
+        'genres',
+        'languages',
+        'platform',
+        'type',
+        'studio',
+      ] as const;
+
       let rows: Record<string, unknown>[] = [];
       if (env.DB) {
+        let availableColumns: Set<string> | null = null;
         try {
-          rows = (await env.DB.prepare('SELECT id, title, status, rating, episodes_count, year, genres, languages, platform, type, studio, broadcast_day, broadcast_time, season_episode_count, official_source_url, last_verified_date FROM anime ORDER BY id ASC').all())?.results || [];
-        } catch (exportErr) {
-          if (!isMissingColumnError(exportErr)) throw exportErr;
-          rows = (await env.DB.prepare('SELECT id, title, status, rating, episodes_count, year, genres, languages, platform, type, studio, broadcast_day, broadcast_time FROM anime ORDER BY id ASC').all())?.results || [];
+          const pragmaRes = await env.DB.prepare('PRAGMA table_info(anime)').all();
+          const colNames = (pragmaRes?.results || [])
+            .map((col: Record<string, unknown>) => String(col.name || '').trim())
+            .filter(Boolean);
+          if (colNames.length > 0) {
+            availableColumns = new Set(colNames);
+          }
+        } catch {
+          // D1 mock implementations in tests may not support PRAGMA; fall back cleanly below
+        }
+
+        if (availableColumns) {
+          const existingCols = allExportColumns.filter((col) => availableColumns!.has(col));
+          const colsToQuery = existingCols.length > 0 ? existingCols : [...legacyExportColumns];
+          rows =
+            (await env.DB.prepare(`SELECT ${colsToQuery.join(', ')} FROM anime ORDER BY id ASC`).all())?.results || [];
+        } else {
+          try {
+            rows =
+              (await env.DB.prepare(`SELECT ${allExportColumns.join(', ')} FROM anime ORDER BY id ASC`).all())
+                ?.results || [];
+          } catch (exportErr) {
+            if (!isMissingColumnError(exportErr)) throw exportErr;
+            rows =
+              (await env.DB.prepare(`SELECT ${legacyExportColumns.join(', ')} FROM anime ORDER BY id ASC`).all())
+                ?.results || [];
+          }
         }
       }
-      const header = ['id', 'title', 'status', 'rating', 'episodes_count', 'year', 'genres', 'languages', 'platform', 'type', 'studio', 'broadcast_day', 'broadcast_time', 'season_episode_count', 'official_source_url', 'last_verified_date'];
+      const header = [...allExportColumns];
       const csvEscape = (val: unknown) => `"${String(val ?? '').replace(/"/g, '""')}"`;
       const csvLines = [
         header.join(','),
