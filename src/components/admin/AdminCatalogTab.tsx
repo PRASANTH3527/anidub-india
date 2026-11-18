@@ -236,6 +236,16 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
                         Studio: <span className="text-purple-300 font-sans">{anime.studio}</span>
                       </span>
                     )}
+                    {anime.season_episode_count && (
+                      <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[10px] font-mono">
+                        {anime.season_episode_count}
+                      </span>
+                    )}
+                    {anime.last_verified_date && (
+                      <span className="px-2 py-0.5 rounded-md bg-teal-500/15 border border-teal-500/30 text-teal-300 text-[10px] font-mono">
+                        Verified: {anime.last_verified_date}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

@@ -180,7 +180,11 @@ export async function handleAnalyticsRoutes(ctx: RouteContext): Promise<Response
   if (path === '/api/analytics/dashboard' && method === 'GET') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
     }
     try {
       const reqUrl = new URL(request.url);

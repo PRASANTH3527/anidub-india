@@ -142,3 +142,53 @@ export function mergeGuestAndServerWatchlist(
 
   return { mergedIds, toSyncIds };
 }
+
+/**
+ * Computes the unique positive anime IDs that are not yet present in the
+ * loaded in-memory collections so they can be fetched directly from D1 via ?ids=.
+ */
+export function findMissingAnimeIds(
+  requestedIdsRaw: unknown[],
+  knownItems: Array<{ id?: number | string | null }>
+): number[] {
+  const requestedIds = normalizeWatchlistIds(requestedIdsRaw);
+  const knownSet = new Set<number>();
+  for (const item of knownItems || []) {
+    const id = Number(item?.id);
+    if (Number.isInteger(id) && id > 0) {
+      knownSet.add(id);
+    }
+  }
+  return requestedIds.filter((id) => !knownSet.has(id));
+}
+
+/**
+ * Resolves full anime objects for an ordered list of IDs by combining paginated
+ * catalog items, batch-hydrated D1 records, and any local cached snapshot items.
+ */
+export function resolveHydratedAnimeList<T extends { id?: number | string | null }>(
+  orderedIdsRaw: unknown[],
+  sources: Array<T[]>
+): T[] {
+  const orderedIds = normalizeWatchlistIds(orderedIdsRaw);
+  if (orderedIds.length === 0) return [];
+
+  const byId = new Map<number, T>();
+  for (const list of sources) {
+    if (!Array.isArray(list)) continue;
+    for (const item of list) {
+      const id = Number(item?.id);
+      if (Number.isInteger(id) && id > 0 && !byId.has(id)) {
+        byId.set(id, item);
+      }
+    }
+  }
+
+  const resolved: T[] = [];
+  for (const id of orderedIds) {
+    const match = byId.get(id);
+    if (match) resolved.push(match);
+  }
+  return resolved;
+}
+

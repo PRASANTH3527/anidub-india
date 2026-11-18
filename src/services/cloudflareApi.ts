@@ -100,6 +100,13 @@ export interface AnimePayload {
   user_rating?: number | null;
   userRating?: number | null;
   reviews?: AnimeReviewResponse[];
+  broadcast_day?: string | null;
+  broadcast_time?: string | null;
+  releaseDay?: string;
+  airTime?: string;
+  season_episode_count?: string;
+  official_source_url?: string;
+  last_verified_date?: string;
   created_at?: string;
 }
 
@@ -217,6 +224,7 @@ export interface CatalogSummary {
   totalAnime: number;
   totalVotes: number;
   totalLanguages: number;
+  airingCount?: number;
   languagesList: string[];
   languagesString: string;
   languageFilters?: { label: string; value: string; count: number }[];
@@ -267,20 +275,17 @@ class CloudflareApiService {
                      text.includes('Cookie check');
 
       if (isHtml) {
-        if (options.method && options.method !== 'GET') {
-          return new Response(JSON.stringify({ 
-            success: false, 
-            error: 'Backend proxy returned an HTML page instead of JSON. Ensure session cookies are enabled.' 
-          }), {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Backend proxy returned an HTML page instead of JSON. Ensure session cookies or API workers are available.',
+            data: [],
+          }),
+          {
             status: 502,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
-        console.warn(`[smartFetch] Intercepted non-JSON response from ${url}. Returning empty JSON.`);
-        return new Response(JSON.stringify({ success: false, data: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        });
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
       }
 
       if (res.ok) {
@@ -289,16 +294,17 @@ class CloudflareApiService {
 
       return res;
     } catch (err: any) {
-      if (options.method && options.method !== 'GET') {
-        return new Response(JSON.stringify({ success: false, error: err.message || 'Network error' }), {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: err?.message || 'Network error communicating with backend API',
+          data: [],
+        }),
+        {
           status: 503,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      return new Response(JSON.stringify({ success: false, data: [] }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
     }
   }
 
@@ -409,6 +415,35 @@ class CloudflareApiService {
       page: meta.currentPage,
       totalPages: meta.totalPages
     };
+  }
+
+  /**
+   * READ BY IDS: Fetches full anime details for an array of saved IDs directly from D1 (bypasses pagination caps)
+   */
+  public async fetchAnimeByIds(ids: (number | string)[]): Promise<AnimePayload[]> {
+    const cleanIds = Array.from(
+      new Set(
+        (ids || [])
+          .map((raw) => Number(raw))
+          .filter((n) => Number.isInteger(n) && n > 0)
+      )
+    );
+    if (cleanIds.length === 0) return [];
+
+    try {
+      const endpoint = `${CLOUDFLARE_ENDPOINTS.CATALOG}?ids=${encodeURIComponent(cleanIds.join(','))}`;
+      const res = await this.smartFetch(endpoint, {
+        method: 'GET',
+        headers: this.getHeaders(false),
+      });
+      if (!res.ok) return [];
+      const json = await res.json().catch(() => ({ data: [] }));
+      if (Array.isArray(json.data)) return json.data;
+      if (Array.isArray(json)) return json;
+    } catch (err) {
+      console.warn('[fetchAnimeByIds Notice]:', err);
+    }
+    return [];
   }
 
   /**
@@ -1287,23 +1322,35 @@ class CloudflareApiService {
   }
 
   /**
-   * REPORT: Submits an issue report for an anime
+   * REPORT: Submits an issue report for an anime to POST /api/report
    */
-  public async reportIssue(payload: { animeTitle: string; reason: string; notes?: string }): Promise<{ success: boolean; deliveredToTelegram: boolean }> {
-    try {
-      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.REPORT, {
-        method: 'POST',
-        headers: this.getHeaders(false),
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-      throw new Error('Failed to submit report');
-    } catch (err: any) {
-      console.error('Report issue error:', err);
-      throw err;
+  public async reportIssue(payload: {
+    animeId?: number | string;
+    animeTitle: string;
+    issueType?: string;
+    reason?: string;
+    description?: string;
+    notes?: string;
+  }): Promise<{ success: boolean; reportId?: number | null; deliveredToTelegram?: boolean; error?: string }> {
+    const resolvedIssueType = payload.issueType || payload.reason || '';
+    const resolvedDescription = payload.description ?? payload.notes ?? '';
+    const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.REPORT, {
+      method: 'POST',
+      headers: this.getHeaders(false),
+      body: JSON.stringify({
+        animeId: payload.animeId,
+        animeTitle: payload.animeTitle,
+        issueType: resolvedIssueType,
+        reason: resolvedIssueType,
+        description: resolvedDescription,
+        notes: resolvedDescription,
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error || `Failed to submit report (HTTP ${res.status})`);
     }
+    return data;
   }
 
   /**
@@ -1496,6 +1543,63 @@ class CloudflareApiService {
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Failed to reset database' };
+    }
+  }
+
+  /**
+   * WATCH PROGRESS: Fetch saved watch progress from D1 for authenticated user
+   */
+  public async getWatchProgress(animeId?: number | string): Promise<{
+    animeId: number;
+    season: number;
+    episode: number;
+    totalEpisodes: number | null;
+    completed: boolean;
+    updatedAt: string;
+  } | null> {
+    if (!animeId) return null;
+    try {
+      const endpoint = `${CLOUDFLARE_ENDPOINTS.PROGRESS}?anime_id=${encodeURIComponent(String(animeId))}`;
+      const res = await this.smartFetch(endpoint, {
+        method: 'GET',
+        headers: this.getHeaders(true),
+      });
+      if (!res.ok) return null;
+      const json: any = await res.json().catch(() => null);
+      const row = json?.progress;
+      if (!row) return null;
+      return {
+        animeId: Number(row.anime_id ?? row.animeId ?? animeId),
+        season: Number(row.season) || 1,
+        episode: Number(row.episode) || 0,
+        totalEpisodes: row.total_episodes ?? row.totalEpisodes ?? null,
+        completed: Boolean(row.completed),
+        updatedAt: String(row.updated_at ?? row.updatedAt ?? new Date().toISOString()),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * WATCH PROGRESS: Persist episode & season progress to D1 for authenticated user
+   */
+  public async saveWatchProgress(payload: {
+    animeId: number;
+    season: number;
+    episode: number;
+    totalEpisodes?: number | null;
+    completed?: boolean;
+  }): Promise<boolean> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.PROGRESS, {
+        method: 'PUT',
+        headers: this.getHeaders(true),
+        body: JSON.stringify(payload),
+      });
+      return res.ok;
+    } catch {
+      return false;
     }
   }
 }

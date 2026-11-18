@@ -54,7 +54,8 @@ export const CLOUDFLARE_ENDPOINTS = {
   USER_STATS: '/api/user/stats',
   CHAT: '/api/chat',
   NOTIFICATIONS: '/api/notifications',
-  REPORT: '/api/report'
+  REPORT: '/api/report',
+  PROGRESS: '/api/progress'
 };
 
 /**
@@ -113,21 +114,16 @@ export const CHAT_WORKER_HTTP_URL = 'https://anime-chat.samayaprasanth0.workers.
 export const CHAT_WORKER_WS_URL = 'wss://anime-chat.samayaprasanth0.workers.dev';
 
 /**
- * Resolves full Cloudflare WebSocket URL pointing directly to the external
- * `anime-chat` Durable Object worker (`wss://anime-chat.samayaprasanth0.workers.dev`),
- * preserving the Clerk `?token=` query parameter for session authentication.
+ * Resolves full Cloudflare WebSocket URL pointing to the `anime-chat` Durable Object worker
+ * (`wss://anime-chat.samayaprasanth0.workers.dev`) or local/same-origin `/ws` endpoint
+ * WITHOUT embedding authentication tokens in the URL query string.
+ * Authentication happens post-connect via the initial `{ type: 'auth', token }` payload.
  */
-export function getCloudflareWsUrl(path: string, token?: string | null): string {
+export function getCloudflareWsUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const configuredWsBase =
-    CLOUDFLARE_API_URL && CLOUDFLARE_API_URL.trim() !== ''
-      ? CLOUDFLARE_API_URL.replace(/\/+$/, '').replace(/^http/, 'ws')
-      : CHAT_WORKER_WS_URL;
-  const baseWsUrl = `${configuredWsBase}${cleanPath}`;
-
-  if (token && token.trim()) {
-    const sep = baseWsUrl.includes('?') ? '&' : '?';
-    return `${baseWsUrl}${sep}token=${encodeURIComponent(token.trim())}`;
+  if (CLOUDFLARE_API_URL && CLOUDFLARE_API_URL.trim() !== '') {
+    const configuredWsBase = CLOUDFLARE_API_URL.replace(/\/+$/, '').replace(/^http/, 'ws');
+    return `${configuredWsBase}${cleanPath}`;
   }
-  return baseWsUrl;
+  return `${CHAT_WORKER_WS_URL}${cleanPath}`;
 }

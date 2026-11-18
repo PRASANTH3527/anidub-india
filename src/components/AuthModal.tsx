@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, LogIn, Mail, Lock, ShieldCheck, ArrowRight } from 'lucide-react';
+import { X, Mail, Lock, ShieldCheck, ArrowRight, AlertCircle, KeyRound } from 'lucide-react';
+import { useSignIn, useSignUp, useClerk } from '../lib/clerk';
 import { AniDubLogo } from './AniDubLogo';
 
 export interface AuthModalProps {
@@ -13,34 +14,132 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onLoginSuccess
 }) => {
+  const { signIn, isLoaded: isSignInLoaded, setActive: setSignInActive } = useSignIn();
+  const { signUp, isLoaded: isSignUpLoaded, setActive: setSignUpActive } = useSignUp();
+  const clerk = useClerk();
+
+  const [mode, setMode] = useState<'signin' | 'signup' | 'verify'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleGoogleLogin = () => {
-    setIsLoading(true);
-    setTimeout(() => {
-      const googleUser = { email: 'user@gmail.com', name: 'Google User' };
-      localStorage.setItem('cf_anime_user', JSON.stringify(googleUser));
-      if (onLoginSuccess) onLoginSuccess(googleUser);
-      setIsLoading(false);
-      onClose();
-    }, 800);
+  const extractClerkError = (err: any, fallback: string): string => {
+    const clerkFirst = err?.errors?.[0];
+    return (
+      clerkFirst?.longMessage ||
+      clerkFirst?.message ||
+      err?.message ||
+      fallback
+    );
   };
 
-  const handleEmailSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim() || !password.trim()) return;
+  const handleGoogleLogin = async () => {
+    setErrorMsg(null);
+    if (!isSignInLoaded || !signIn) {
+      if (clerk && typeof clerk.openSignIn === 'function') {
+        clerk.openSignIn();
+        onClose();
+        return;
+      }
+      setErrorMsg('Clerk authentication is still loading. Please try again.');
+      return;
+    }
+
     setIsLoading(true);
-    setTimeout(() => {
-      const emailUser = { email: email.trim(), name: email.split('@')[0] };
-      localStorage.setItem('cf_anime_user', JSON.stringify(emailUser));
-      if (onLoginSuccess) onLoginSuccess(emailUser);
+    try {
+      await signIn.authenticateWithRedirect({
+        strategy: 'oauth_google',
+        redirectUrl: window.location.origin,
+        redirectUrlComplete: window.location.href,
+      });
+    } catch (err: any) {
+      setErrorMsg(extractClerkError(err, 'Google sign-in could not be initiated.'));
       setIsLoading(false);
-      onClose();
-    }, 800);
+    }
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password.trim()) return;
+
+    if (mode === 'verify') {
+      if (!isSignUpLoaded || !signUp) return;
+      setIsLoading(true);
+      try {
+        const verificationResult = await signUp.attemptEmailAddressVerification({
+          code: verificationCode.trim(),
+        });
+        if (verificationResult.status === 'complete' && verificationResult.createdSessionId) {
+          await setSignUpActive({ session: verificationResult.createdSessionId });
+          onLoginSuccess?.({ email: cleanEmail, name: cleanEmail.split('@')[0] });
+          onClose();
+        } else {
+          setErrorMsg('Verification incomplete. Please double-check your code.');
+        }
+      } catch (err: any) {
+        setErrorMsg(extractClerkError(err, 'Verification code invalid or expired.'));
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    if (mode === 'signup') {
+      if (!isSignUpLoaded || !signUp) {
+        setErrorMsg('Clerk sign-up is still initializing. Please wait a moment.');
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const result = await signUp.create({
+          emailAddress: cleanEmail,
+          password,
+        });
+        if (result.status === 'complete' && result.createdSessionId) {
+          await setSignUpActive({ session: result.createdSessionId });
+          onLoginSuccess?.({ email: cleanEmail, name: cleanEmail.split('@')[0] });
+          onClose();
+        } else {
+          await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+          setMode('verify');
+        }
+      } catch (err: any) {
+        setErrorMsg(extractClerkError(err, 'Unable to register with that email and password.'));
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    if (!isSignInLoaded || !signIn) {
+      setErrorMsg('Clerk sign-in is still initializing. Please wait a moment.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await signIn.create({
+        identifier: cleanEmail,
+        password,
+      });
+      if (result.status === 'complete' && result.createdSessionId) {
+        await setSignInActive({ session: result.createdSessionId });
+        onLoginSuccess?.({ email: cleanEmail, name: cleanEmail.split('@')[0] });
+        onClose();
+      } else {
+        setErrorMsg('Additional verification is required to complete sign in.');
+      }
+    } catch (err: any) {
+      setErrorMsg(extractClerkError(err, 'Invalid email or password.'));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -55,7 +154,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <AniDubLogo variant="horizontal" size="sm" />
             <div>
               <h2 className="font-heading font-black text-lg text-white tracking-tight">
-                Sign in to Anidub India
+                {mode === 'signup'
+                  ? 'Create Anidub Account'
+                  : mode === 'verify'
+                    ? 'Verify Email Code'
+                    : 'Sign in to Anidub India'}
               </h2>
               <p className="text-neutral-400 text-xs mt-0.5">
                 Sync watchlist, custom collections & reviews across devices.
@@ -64,12 +167,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             className="w-8 h-8 rounded-xl bg-neutral-800/80 hover:bg-neutral-700 text-neutral-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* ERROR BANNER */}
+        {errorMsg && (
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
 
         {/* GOOGLE AUTH BUTTON */}
         <button
@@ -106,47 +218,88 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="h-px bg-neutral-800 flex-grow" />
         </div>
 
-        {/* CUSTOM EMAIL FORM */}
+        {/* CLERK EMAIL / PASSWORD FORM */}
         <form onSubmit={handleEmailSubmit} className="space-y-3">
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full bg-[#182032] border border-neutral-700 rounded-xl py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-accent-theme"
-              />
+          {mode === 'verify' ? (
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Verification Code</label>
+              <div className="relative">
+                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                <input
+                  type="text"
+                  required
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value)}
+                  placeholder="Enter 6-digit email code"
+                  className="w-full bg-[#182032] border border-neutral-700 rounded-xl py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-accent-theme"
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@example.com"
+                    className="w-full bg-[#182032] border border-neutral-700 rounded-xl py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-accent-theme"
+                  />
+                </div>
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-[#182032] border border-neutral-700 rounded-xl py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-accent-theme"
-              />
-            </div>
-          </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-[#182032] border border-neutral-700 rounded-xl py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-accent-theme"
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           <button
             type="submit"
             disabled={isLoading}
             className="w-full mt-2 py-2.5 rounded-xl btn-primary-theme text-white font-bold text-xs transition-colors cursor-pointer shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            <span>Sign In / Register</span>
+            <span>
+              {isLoading
+                ? 'Authenticating...'
+                : mode === 'verify'
+                  ? 'Verify Email'
+                  : mode === 'signup'
+                    ? 'Create Account'
+                    : 'Sign In with Email'}
+            </span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </form>
+
+        <div className="flex items-center justify-between text-[11px] text-neutral-400">
+          <button
+            type="button"
+            onClick={() => {
+              setErrorMsg(null);
+              setMode(mode === 'signin' ? 'signup' : 'signin');
+            }}
+            className="text-purple-400 hover:text-purple-300 font-semibold cursor-pointer"
+          >
+            {mode === 'signin' ? 'Need an account? Sign up' : 'Already have an account? Sign in'}
+          </button>
+          <span className="text-[10px] text-neutral-500">Powered by Clerk</span>
+        </div>
 
         <div className="text-center pt-2 border-t border-neutral-800 text-[10px] text-neutral-500 flex items-center justify-center gap-1.5">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />

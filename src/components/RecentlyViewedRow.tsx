@@ -9,6 +9,7 @@ import {
   Bookmark, 
   X
 } from 'lucide-react';
+import { parsePlatformList } from '../utils/dataNormalization';
 
 export interface RecentlyViewedAnime {
   id: number;
@@ -102,6 +103,7 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
             onClick={onClear}
             className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] font-bold bg-[#141b2c] hover:bg-rose-950/40 border border-neutral-800 hover:border-rose-900/50 text-neutral-400 hover:text-rose-300 transition-all cursor-pointer shadow-sm active:scale-95"
             title="Clear all recently viewed history"
+            aria-label="Clear all recently viewed history"
           >
             <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-400" />
             <span className="hidden xs:inline">Clear All</span>
@@ -165,6 +167,7 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
                           : 'bg-black/75 text-neutral-300 hover:text-white hover:bg-black/90 border border-neutral-700/80'
                       }`}
                       title={isSaved ? 'In Watchlist' : 'Add to Watchlist'}
+                      aria-label={isSaved ? `Remove ${anime.title} from Watchlist` : `Add ${anime.title} to Watchlist`}
                     >
                       <Bookmark className={`w-3 h-3 ${isSaved ? 'fill-current' : ''}`} />
                     </button>
@@ -203,8 +206,8 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
                     </span>
                   ))}
                   {anime.platform && (
-                    <span className="ml-auto px-1.5 py-0.5 rounded text-[8px] font-bold text-neutral-300 bg-neutral-900/90 border border-neutral-700/60 truncate max-w-[60px]">
-                      {anime.platform}
+                    <span className="ml-auto px-1.5 py-0.5 rounded text-[8px] font-bold text-neutral-300 bg-neutral-900/90 border border-neutral-700/60 truncate max-w-[72px]">
+                      {parsePlatformList(anime.platform)[0] || anime.platform}
                     </span>
                   )}
                 </div>

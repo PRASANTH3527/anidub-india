@@ -4,6 +4,8 @@ import {
   useUser as useOfficialUser,
   useAuth as useOfficialAuth,
   useClerk as useOfficialClerk,
+  useSignIn as useOfficialSignIn,
+  useSignUp as useOfficialSignUp,
   SignedIn as OfficialSignedIn,
   SignedOut as OfficialSignedOut,
   SignIn as OfficialSignIn,
@@ -81,6 +83,14 @@ export function useAuth() {
 
 export function useClerk() {
   return useOfficialClerk();
+}
+
+export function useSignIn() {
+  return useOfficialSignIn();
+}
+
+export function useSignUp() {
+  return useOfficialSignUp();
 }
 
 export const SignedIn: React.FC<{ children: React.ReactNode }> = ({ children }) => {

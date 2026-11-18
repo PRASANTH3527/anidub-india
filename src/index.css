@@ -7,6 +7,20 @@
   --primary-light: #c084fc;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 .btn-primary-theme {
   background: linear-gradient(to right, #9333ea, #6366f1);
   color: white;

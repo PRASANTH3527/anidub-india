@@ -33,7 +33,7 @@ export const Hero: React.FC<HeroProps> = ({
         <span className="truncate">Official Indian Dubbed Anime Directory</span>
         <span className="hidden sm:inline text-neutral-500">•</span>
         <span className="hidden sm:inline-flex items-center gap-1 text-emerald-400 font-bold shrink-0">
-          <ShieldCheck className="w-3 h-3" /> 100% Legal OTT
+          <ShieldCheck className="w-3 h-3" /> Verified Sources
         </span>
       </div>
 

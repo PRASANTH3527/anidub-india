@@ -15,6 +15,10 @@ export interface EnvBindings {
   ADMIN_EMAIL?: string;
   VITE_ADMIN_EMAIL?: string;
   NEXT_PUBLIC_ADMIN_EMAIL?: string;
+  ADMIN_USER_ID?: string;
+  ADMIN_USER_IDS?: string;
+  VITE_ADMIN_USER_ID?: string;
+  NEXT_PUBLIC_ADMIN_USER_ID?: string;
   CLERK_SECRET_KEY?: string;
   VITE_CLERK_SECRET_KEY?: string;
   NEXT_PUBLIC_CLERK_SECRET_KEY?: string;
@@ -93,19 +97,109 @@ export function getAuthorizedAdminEmail(env?: EnvBindings | null): string {
 }
 
 /**
- * Validates whether a Clerk user object, verified claims object, or email string belongs to the authorized Admin.
- * Strictly requires ADMIN_EMAIL (or VITE_ADMIN_EMAIL) to be configured in `env` bindings AND,
- * for user/claim objects, strictly requires the primary email to be verified (`verification.status === 'verified'` or `email_verified === true`).
+ * Returns configured Clerk Admin user IDs (`ADMIN_USER_ID`, `ADMIN_USER_IDS`, `VITE_ADMIN_USER_ID`, `NEXT_PUBLIC_ADMIN_USER_ID`).
+ * Supports comma-separated lists. Never trusts client-supplied headers.
  */
-export function isAuthorizedClerkAdmin(subject?: any, env?: EnvBindings | null): boolean {
-  const authorizedEmail = getAuthorizedAdminEmail(env);
-  if (!authorizedEmail || !subject) return false;
+export function getAuthorizedAdminUserIds(env?: EnvBindings | null): string[] {
+  const candidates: Array<string | undefined> = [
+    cleanEnvValue(env?.ADMIN_USER_ID),
+    cleanEnvValue(env?.ADMIN_USER_IDS),
+    cleanEnvValue(env?.VITE_ADMIN_USER_ID),
+    cleanEnvValue(env?.NEXT_PUBLIC_ADMIN_USER_ID),
+    getEnvBinding('ADMIN_USER_ID', env),
+    getEnvBinding('ADMIN_USER_IDS', env),
+    getEnvBinding('VITE_ADMIN_USER_ID', env),
+    getEnvBinding('NEXT_PUBLIC_ADMIN_USER_ID', env),
+  ];
 
-  if (typeof subject === 'string') {
-    return cleanEnvValue(subject).toLowerCase() === authorizedEmail;
+  try {
+    candidates.push(
+      cleanEnvValue((import.meta as any).env?.VITE_ADMIN_USER_ID),
+      cleanEnvValue((import.meta as any).env?.NEXT_PUBLIC_ADMIN_USER_ID),
+      cleanEnvValue((import.meta as any).env?.ADMIN_USER_ID)
+    );
+  } catch {
+    // import.meta.env may not exist in all runtimes
   }
 
-  if (subject.id === 'guest') return false;
+  const deduped = new Set<string>();
+  for (const raw of candidates) {
+    if (!raw) continue;
+    for (const part of raw.split(',')) {
+      const cleaned = cleanEnvValue(part);
+      if (cleaned) deduped.add(cleaned);
+    }
+  }
+  return Array.from(deduped);
+}
+
+/**
+ * Checks whether a verified Clerk user profile or verified JWT claims carries an authoritative admin role
+ * (`publicMetadata.role`, `public_metadata.role`, `role`, `org_role`, or `organizationMemberships`).
+ * Never inspects client-editable `unsafeMetadata`.
+ */
+export function hasVerifiedClerkAdminRole(subject?: any): boolean {
+  if (!subject || typeof subject !== 'object') return false;
+  if (subject.id === 'guest' || subject.sub === 'guest') return false;
+
+  const isAdminRoleString = (val: unknown): boolean => {
+    if (typeof val !== 'string') return false;
+    const norm = val.trim().toLowerCase();
+    return norm === 'admin' || norm === 'superadmin' || norm === 'org:admin';
+  };
+
+  if (
+    isAdminRoleString(subject.publicMetadata?.role) ||
+    isAdminRoleString(subject.public_metadata?.role) ||
+    isAdminRoleString(subject.role) ||
+    isAdminRoleString(subject.org_role)
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(subject.organizationMemberships)) {
+    for (const membership of subject.organizationMemberships) {
+      if (isAdminRoleString(membership?.role)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Validates whether a Clerk user object, verified claims object, userId string, or email string belongs to an authorized Admin.
+ * Authorizes via:
+ * 1. Exact Clerk user ID match against `ADMIN_USER_ID` / `ADMIN_USER_IDS` env bindings, OR
+ * 2. Authoritative Clerk role (`publicMetadata.role === 'admin' | 'superadmin'` or `org_role === 'org:admin'`), OR
+ * 3. Exact primary email match against `ADMIN_EMAIL` (with verified email `verification.status === 'verified'` or `email_verified === true`).
+ */
+export function isAuthorizedClerkAdmin(subject?: any, env?: EnvBindings | null): boolean {
+  if (!subject) return false;
+
+  const authorizedEmail = getAuthorizedAdminEmail(env);
+  const authorizedUserIds = getAuthorizedAdminUserIds(env);
+
+  if (typeof subject === 'string') {
+    const cleaned = cleanEnvValue(subject);
+    if (!cleaned) return false;
+    if (authorizedUserIds.includes(cleaned)) return true;
+    return Boolean(authorizedEmail && cleaned.toLowerCase() === authorizedEmail);
+  }
+
+  if (subject.id === 'guest' || subject.sub === 'guest') return false;
+
+  const candidateId = cleanEnvValue(subject.id || subject.userId || subject.sub);
+  if (candidateId && authorizedUserIds.includes(candidateId)) {
+    return true;
+  }
+
+  if (hasVerifiedClerkAdminRole(subject)) {
+    return true;
+  }
+
+  if (!authorizedEmail) return false;
   if (subject.email_verified === false) return false;
 
   // Clerk User / UserResource shape: require primary email AND verification.status === 'verified'
@@ -497,24 +591,25 @@ export async function getAuth(req?: any, env?: EnvBindings | null): Promise<Veri
     primaryEmailVerified = false;
   }
 
+  const authorizedUserIds = getAuthorizedAdminUserIds(resolvedEnv);
   const normalizedEmail = primaryEmail ? cleanEnvValue(primaryEmail).toLowerCase() : null;
-  const isAdmin = Boolean(
-    configuredAdminEmail &&
-      normalizedEmail &&
-      normalizedEmail === configuredAdminEmail &&
-      primaryEmailVerified === true
+  const matchesAdminId = Boolean(userId && authorizedUserIds.includes(userId));
+  const hasClerkAdminRole =
+    hasVerifiedClerkAdminRole(clerkUserObj) || hasVerifiedClerkAdminRole(verifiedPayload);
+  const matchesAdminEmail = Boolean(
+    configuredAdminEmail && normalizedEmail && normalizedEmail === configuredAdminEmail
   );
+  const matchesVerifiedAdminEmail = Boolean(matchesAdminEmail && primaryEmailVerified === true);
+  const isAdmin = matchesAdminId || hasClerkAdminRole || matchesVerifiedAdminEmail;
 
   let adminError: string | undefined;
   if (!isAdmin) {
-    if (!configuredAdminEmail) {
-      adminError = 'Missing ADMIN_EMAIL (or VITE_ADMIN_EMAIL) in env bindings';
+    if (matchesAdminEmail && !primaryEmailVerified) {
+      adminError = 'Forbidden: Primary email is not verified (email_verified === true required)';
     } else if (!normalizedEmail && userLookupError) {
       adminError = `Unauthorized: Unable to verify Clerk account email (${userLookupError})`;
-    } else if (!normalizedEmail || normalizedEmail !== configuredAdminEmail) {
+    } else {
       adminError = 'Forbidden: Unauthorized access';
-    } else if (!primaryEmailVerified) {
-      adminError = 'Forbidden: Primary email is not verified (email_verified === true required)';
     }
   }
 
@@ -552,9 +647,27 @@ export async function auth(req?: any, env?: EnvBindings | null): Promise<Verifie
 }
 
 /**
- * Extracts an explicit 3-part Clerk JWT from a chat payload (`body.token`),
- * `Authorization: Bearer <token>` header, or `?token=` query parameter (WebSocket),
- * without relying on cookies or automatic middleware.
+ * Detects whether an HTTP/WebSocket request illegally attempts to pass an auth token
+ * inside the URL query string (`?token=...`), which risks exposing JWTs in access logs.
+ */
+export function hasUrlQueryToken(req?: any): boolean {
+  try {
+    const rawUrl = req?.url || req?.originalUrl;
+    if (rawUrl && typeof rawUrl === 'string') {
+      const parsedUrl = new URL(rawUrl, 'http://localhost');
+      const queryToken = parsedUrl.searchParams.get('token');
+      return Boolean(queryToken && queryToken.trim().length > 0);
+    }
+  } catch {
+    // Ignore malformed URLs
+  }
+  return false;
+}
+
+/**
+ * Extracts an explicit 3-part Clerk JWT from a chat payload (`body.token`) or
+ * `Authorization: Bearer <token>` header without reading URL query parameters
+ * or relying on cookies.
  */
 export function extractExplicitChatToken(
   req?: any,
@@ -583,19 +696,6 @@ export function extractExplicitChatToken(
         return headerToken;
       }
     }
-  }
-
-  try {
-    const rawUrl = req?.url || req?.originalUrl;
-    if (rawUrl && typeof rawUrl === 'string') {
-      const parsedUrl = new URL(rawUrl, 'http://localhost');
-      const queryToken = parsedUrl.searchParams.get('token');
-      if (queryToken && queryToken.trim() && queryToken.trim().split('.').length === 3) {
-        return queryToken.trim();
-      }
-    }
-  } catch {
-    // Ignore malformed URLs
   }
 
   return null;
@@ -736,12 +836,16 @@ export async function verifyChatTokenDirect(
     primaryEmailVerified = false;
   }
 
+  const authorizedUserIds = getAuthorizedAdminUserIds(env);
   const normalizedEmail = primaryEmail ? cleanEnvValue(primaryEmail).toLowerCase() : null;
   const isAdmin = Boolean(
-    configuredAdminEmail &&
-      normalizedEmail &&
-      normalizedEmail === configuredAdminEmail &&
-      primaryEmailVerified === true
+    (userId && authorizedUserIds.includes(userId)) ||
+      hasVerifiedClerkAdminRole(clerkUserObj) ||
+      hasVerifiedClerkAdminRole(verifiedPayload) ||
+      (configuredAdminEmail &&
+        normalizedEmail &&
+        normalizedEmail === configuredAdminEmail &&
+        primaryEmailVerified === true)
   );
 
   const resolvedUsername =

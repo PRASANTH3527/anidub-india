@@ -1,6 +1,5 @@
-import React from 'react';
-import { Terminal, Minimize2, Maximize2, X } from 'lucide-react';
-import { getCloudflareUrl } from '../../config/cloudflare';
+import React, { useState } from 'react';
+import { Terminal, Minimize2, Maximize2, X, Loader2 } from 'lucide-react';
 import type { TerminalLogEntry } from './types';
 
 export interface AdminTerminalHudProps {
@@ -12,6 +11,7 @@ export interface AdminTerminalHudProps {
   onClose: () => void;
   onClearLogs: () => void;
   onAddLog: (level: string, msg: string) => void;
+  onRunProbe?: (probe: 'ping' | 'd1' | 'health') => Promise<void>;
 }
 
 export const AdminTerminalHud: React.FC<AdminTerminalHudProps> = ({
@@ -23,13 +23,31 @@ export const AdminTerminalHud: React.FC<AdminTerminalHudProps> = ({
   onClose,
   onClearLogs,
   onAddLog,
+  onRunProbe,
 }) => {
+  const [runningProbe, setRunningProbe] = useState<'ping' | 'd1' | 'health' | null>(null);
+
+  const triggerProbe = async (probe: 'ping' | 'd1' | 'health') => {
+    if (runningProbe) return;
+    if (onRunProbe) {
+      setRunningProbe(probe);
+      try {
+        await onRunProbe(probe);
+      } finally {
+        setRunningProbe(null);
+      }
+    } else {
+      onAddLog('WARN', 'Diagnostics handler not attached.');
+    }
+  };
+
   if (!isOpen) {
     return (
       <button
+        type="button"
         onClick={onToggleOpen}
         className="fixed bottom-20 md:bottom-5 right-4 md:right-5 z-40 bg-[#070b16]/90 backdrop-blur-xl border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 px-3.5 py-2 rounded-xl shadow-[0_0_25px_rgba(6,182,212,0.25)] flex items-center gap-2.5 text-xs font-mono font-bold cursor-pointer hover:scale-105 active:scale-95 transition-all group"
-        title="Open Simulated System Terminal"
+        title="Open Live System Terminal"
       >
         <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
         <Terminal className="w-4 h-4 text-cyan-400 group-hover:rotate-12 transition-transform" />
@@ -52,11 +70,12 @@ export const AdminTerminalHud: React.FC<AdminTerminalHudProps> = ({
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
           <div className="ml-2 text-xs font-mono font-bold text-cyan-300 flex items-center gap-2">
             <Terminal className="w-3.5 h-3.5 text-cyan-400" />
-            <span>edge-worker@anime-chat: ~ (LIVE_STREAM)</span>
+            <span>anidub-edge@cloudflare: ~ (LIVE_DIAGNOSTICS)</span>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
           <button
+            type="button"
             onClick={onToggleExpand}
             className="p-1 rounded-md text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
             title={isExpanded ? 'Collapse Terminal' : 'Expand Terminal'}
@@ -64,6 +83,7 @@ export const AdminTerminalHud: React.FC<AdminTerminalHudProps> = ({
             {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           </button>
           <button
+            type="button"
             onClick={onClose}
             className="p-1 rounded-md text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
             title="Close Terminal"
@@ -77,25 +97,35 @@ export const AdminTerminalHud: React.FC<AdminTerminalHudProps> = ({
         <div className="flex items-center gap-2">
           <span className="text-neutral-400 hidden sm:inline">PROBES:</span>
           <button
-            onClick={() => onAddLog('EDGE', `PING ${new URL(getCloudflareUrl('/')).hostname} (RTT 14ms, POP: BOM1)`)}
-            className="px-2 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 transition-colors cursor-pointer"
+            type="button"
+            onClick={() => triggerProbe('ping')}
+            disabled={runningProbe !== null}
+            className="px-2 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
           >
-            PING EDGE
+            {runningProbe === 'ping' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
+            <span>PING EDGE</span>
           </button>
           <button
-            onClick={() => onAddLog('D1', `KV Binding ANIME_DB: Total keys synchronized. Status 200 OK`)}
-            className="px-2 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 transition-colors cursor-pointer"
+            type="button"
+            onClick={() => triggerProbe('d1')}
+            disabled={runningProbe !== null}
+            className="px-2 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
           >
-            KV TEST
+            {runningProbe === 'd1' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
+            <span>D1 DIAGNOSTICS</span>
           </button>
           <button
-            onClick={() => onAddLog('SYS', `Telemetry health check passed: TLS 1.3, HTTP/2 multiplexing ACTIVE`)}
-            className="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 transition-colors cursor-pointer"
+            type="button"
+            onClick={() => triggerProbe('health')}
+            disabled={runningProbe !== null}
+            className="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
           >
-            HEALTH
+            {runningProbe === 'health' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
+            <span>CLERK & HEALTH</span>
           </button>
         </div>
         <button
+          type="button"
           onClick={onClearLogs}
           className="text-neutral-400 hover:text-neutral-200 transition-colors underline cursor-pointer"
         >
@@ -106,7 +136,7 @@ export const AdminTerminalHud: React.FC<AdminTerminalHudProps> = ({
       <div className="flex-1 p-3 overflow-y-auto space-y-1.5 font-mono text-[11px] bg-[#04060d] text-slate-300 select-text">
         {logs.length === 0 ? (
           <div className="text-neutral-500 italic py-4 text-center">
-            Log stream cleared. Waiting for Cloudflare edge events...
+            Log stream cleared. Click any live probe above to fetch D1 & Clerk diagnostics...
           </div>
         ) : (
           logs.map((log, idx) => {
@@ -117,6 +147,7 @@ export const AdminTerminalHud: React.FC<AdminTerminalHudProps> = ({
             else if (log.level === 'EDGE') badgeColor = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
             else if (log.level === 'D1') badgeColor = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
             else if (log.level === 'MUT') badgeColor = 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/40';
+            else if (log.level === 'CLERK') badgeColor = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
 
             return (
               <div key={`terminal-log-${log.id}-${idx}`} className="flex items-start gap-2 leading-relaxed">
@@ -130,7 +161,7 @@ export const AdminTerminalHud: React.FC<AdminTerminalHudProps> = ({
           })
         )}
         <div className="pt-2 text-cyan-400 flex items-center gap-1.5 text-xs">
-          <span className="text-emerald-400">admin@anime-chat</span>
+          <span className="text-emerald-400">admin@anidub-edge</span>
           <span className="text-neutral-500">:</span>
           <span className="text-purple-400">~</span>
           <span className="text-neutral-400">$</span>

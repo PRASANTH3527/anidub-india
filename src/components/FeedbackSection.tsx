@@ -141,7 +141,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   };
 
   return (
-    <section className="w-full max-w-2xl mx-auto overflow-hidden bg-[#0c101a] py-8 px-2 sm:px-4 md:px-6 box-border font-sans">
+    <section className="w-full max-w-2xl mx-auto overflow-x-clip bg-[#0c101a] py-8 px-3 sm:px-4 md:px-6 box-border font-sans">
       
       {/* 1) INTRO (centered) */}
       <div className="text-center px-2 sm:px-4">
@@ -268,6 +268,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                           <button
                             type="button"
                             onClick={handleRemoveImage}
+                            aria-label="Remove attached screenshot"
                             className="w-4 h-4 rounded-full bg-white/10 hover:bg-red-500/30 text-neutral-300 hover:text-red-300 flex items-center justify-center transition-all cursor-pointer shrink-0"
                             title="Remove image"
                           >
@@ -300,7 +301,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
       </div>
 
       {/* 5) FOOTER (40px below card) */}
-      <footer className="mt-[40px] px-[24px] text-center flex flex-col items-center gap-4">
+      <footer className="mt-[40px] px-3 sm:px-[24px] text-center flex flex-col items-center gap-4">
         <nav
           aria-label="Regional Dubbed Anime Languages"
           className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-neutral-400"

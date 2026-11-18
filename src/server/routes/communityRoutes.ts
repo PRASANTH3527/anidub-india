@@ -2,57 +2,82 @@ import {
   getAuth,
   verifyChatTokenDirect,
   extractExplicitChatToken,
+  hasUrlQueryToken,
   validateAndRateLimitFeedback,
   extractClientIp,
 } from '../../utils/auth';
 import { buildVerifiedChatIdentity, validateChatSender } from '../../utils/chatIdentity';
+import { buildRateLimitHeaders, checkChatRateLimit } from '../../utils/rateLimiter';
 import { getErrorMessage, sendTelegramAlert, type RouteContext } from './shared';
 
 export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response | null> {
   const { request, env, url, path, method, jsonResponse } = ctx;
 
   // 1. WebSocket Chat Handshake (/ws & /ws/api/chat/stream)
+  // Authentication is performed via initial post-connect WS `{ type: 'auth', token }` frame (never URL ?token=).
   if (path === '/ws' || path === '/ws/api/chat/stream') {
-    const explicitWsToken = extractExplicitChatToken(request);
-    const session = await verifyChatTokenDirect(explicitWsToken, env);
-    if (!session.userId) {
-      return jsonResponse({ error: session.error || 'Unauthorized: Active Clerk user session required for chat stream' }, 401, request);
+    if (hasUrlQueryToken(request)) {
+      return jsonResponse(
+        {
+          ok: false,
+          code: 'URL_TOKEN_FORBIDDEN',
+          error: 'Unauthorized: WebSocket authentication tokens must not be passed in URL query strings.',
+        },
+        401,
+        request
+      );
     }
 
-    const identity = buildVerifiedChatIdentity({
-      userId: session.userId,
-      username: session.username,
-      email: session.email,
-      isAdmin: session.isAdmin,
-      claims: session.claims,
-      clerkUser: session.clerkUser,
-    });
-    const requestedUsername = url.searchParams.get('username') || url.searchParams.get('user');
-    if (requestedUsername) {
-      const handshakeCheck = validateChatSender({
-        claimedUsername: requestedUsername,
-        identity,
-        env,
+    const authHeader = request.headers.get('Authorization') || request.headers.get('authorization');
+    const isWsUpgrade = request.headers.get('Upgrade')?.toLowerCase() === 'websocket';
+
+    if (authHeader || !isWsUpgrade) {
+      const explicitWsToken = extractExplicitChatToken(request);
+      const session = await verifyChatTokenDirect(explicitWsToken, env);
+      if (!session.userId) {
+        return jsonResponse({ error: session.error || 'Unauthorized: Active Clerk user session required for chat stream' }, 401, request);
+      }
+
+      const identity = buildVerifiedChatIdentity({
+        userId: session.userId,
+        username: session.username,
+        email: session.email,
+        isAdmin: session.isAdmin,
+        claims: session.claims,
+        clerkUser: session.clerkUser,
       });
-      if (!handshakeCheck.ok) {
-        return jsonResponse(
-          { ok: false, code: handshakeCheck.code, error: handshakeCheck.error },
-          handshakeCheck.status,
-          request
-        );
+      const requestedUsername = url.searchParams.get('username') || url.searchParams.get('user');
+      if (requestedUsername) {
+        const handshakeCheck = validateChatSender({
+          claimedUsername: requestedUsername,
+          identity,
+          env,
+        });
+        if (!handshakeCheck.ok) {
+          return jsonResponse(
+            { ok: false, code: handshakeCheck.code, error: handshakeCheck.error },
+            handshakeCheck.status,
+            request
+          );
+        }
+      }
+
+      if (!isWsUpgrade) {
+        return jsonResponse({ ok: true, userId: session.userId, username: identity?.username || null }, 200, request);
       }
     }
 
-    if (
-      env.CHAT_ROOM &&
-      typeof env.CHAT_ROOM.idFromName === 'function' &&
-      request.headers.get('Upgrade')?.toLowerCase() === 'websocket'
-    ) {
+    if (env.CHAT_ROOM && typeof env.CHAT_ROOM.idFromName === 'function' && isWsUpgrade) {
       const roomId = env.CHAT_ROOM.idFromName('global-chat');
       const roomStub = env.CHAT_ROOM.get(roomId);
       return roomStub.fetch(request);
     }
-    return jsonResponse({ ok: true, userId: session.userId, username: identity?.username || null }, 200, request);
+
+    return jsonResponse(
+      { ok: false, error: 'WebSocket Durable Object binding (CHAT_ROOM) unavailable.' },
+      503,
+      request
+    );
   }
 
   // 2. Notifications Polling & SSE Stream
@@ -85,10 +110,12 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
               ...m,
               isReview: Boolean(m.isReview),
             }));
-          } catch {
-            const fallbackRes = await env.DB.prepare('SELECT * FROM chat_messages ORDER BY id ASC LIMIT 150')
-              .all()
-              .catch(() => ({ results: [] }));
+          } catch (projErr) {
+            const errMsg = getErrorMessage(projErr).toLowerCase();
+            if (!errMsg.includes('no such column')) {
+              throw projErr;
+            }
+            const fallbackRes = await env.DB.prepare('SELECT * FROM chat_messages ORDER BY id ASC LIMIT 150').all();
             list = (fallbackRes.results || []).map((m) => ({
               id: m.id,
               user: m.user || m.username || 'Anonymous Fan',
@@ -102,11 +129,11 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
             }));
           }
 
-          return jsonResponse({ success: true, count: list.length, messages: list, data: list });
+          return jsonResponse({ success: true, count: list.length, messages: list, data: list }, 200, request);
         }
-        return jsonResponse({ success: true, count: 0, messages: [], data: [] });
+        return jsonResponse({ success: true, count: 0, messages: [], data: [] }, 200, request);
       } catch (err) {
-        return jsonResponse({ error: getErrorMessage(err), messages: [] }, 500);
+        return jsonResponse({ success: false, error: getErrorMessage(err), messages: [], data: [] }, 500, request);
       }
     }
 
@@ -173,6 +200,26 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
           );
         }
 
+        const chatRateLimit = await checkChatRateLimit({
+          request,
+          userId: session.userId,
+          messageText: String(rawText),
+          kv: env.RATE_LIMIT_KV ?? null,
+        });
+        const rlHeaders = buildRateLimitHeaders(chatRateLimit);
+        if (!chatRateLimit.allowed) {
+          return jsonResponse(
+            {
+              success: false,
+              code: chatRateLimit.reason === 'duplicate_spam' ? 'DUPLICATE_MESSAGE' : 'RATE_LIMITED',
+              error: chatRateLimit.error || 'Too many chat messages. Please slow down.',
+            },
+            429,
+            request,
+            rlHeaders
+          );
+        }
+
         const cleanUser = senderCheck.verifiedUsername.slice(0, 50);
         const cleanClerkId = session.userId;
         const cleanText = String(rawText).slice(0, 1000);
@@ -201,7 +248,9 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
                   success: false,
                   error: 'This username is already claimed by another user.',
                 },
-                400
+                400,
+                request,
+                rlHeaders
               );
             }
           } catch {
@@ -216,7 +265,11 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
               .bind(cleanUser, cleanText, cleanTimestamp, cleanRating, cleanLanguage, cleanIsReview, cleanClerkId, cleanAvatar)
               .run();
             insertedId = insertRes.meta?.last_row_id || Date.now();
-          } catch {
+          } catch (insertErr) {
+            const errMsg = getErrorMessage(insertErr).toLowerCase();
+            if (!errMsg.includes('no such column')) {
+              return jsonResponse({ success: false, error: getErrorMessage(insertErr) || 'Database insert failed' }, 500, request);
+            }
             try {
               const fallbackInsert = await env.DB.prepare(
                 'INSERT INTO chat_messages (user, text, timestamp) VALUES (?, ?, ?)'
@@ -225,7 +278,7 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
                 .run();
               insertedId = fallbackInsert.meta?.last_row_id || Date.now();
             } catch (fbErr) {
-              return jsonResponse({ error: getErrorMessage(fbErr) || 'Database insert failed' }, 500);
+              return jsonResponse({ success: false, error: getErrorMessage(fbErr) || 'Database insert failed' }, 500, request);
             }
           }
 
@@ -244,25 +297,32 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
                 avatar: cleanAvatar,
               },
             },
-            201
+            201,
+            request,
+            rlHeaders
           );
         }
 
-        return jsonResponse({
-          success: true,
-          message: {
-            id: Date.now(),
-            user: cleanUser,
-            text: cleanText,
-            timestamp: cleanTimestamp,
-            rating: cleanRating,
-            language: cleanLanguage,
-            isReview: Boolean(cleanIsReview),
-            clerk_user_id: cleanClerkId,
+        return jsonResponse(
+          {
+            success: true,
+            message: {
+              id: Date.now(),
+              user: cleanUser,
+              text: cleanText,
+              timestamp: cleanTimestamp,
+              rating: cleanRating,
+              language: cleanLanguage,
+              isReview: Boolean(cleanIsReview),
+              clerk_user_id: cleanClerkId,
+            },
           },
-        });
+          200,
+          request,
+          rlHeaders
+        );
       } catch (err) {
-        return jsonResponse({ error: getErrorMessage(err) }, 500);
+        return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
       }
     }
   }
@@ -303,7 +363,11 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
   if (path === '/api/feedback' && method === 'GET') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
     }
     try {
       if (env.DB) {
@@ -313,6 +377,153 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
       return jsonResponse({ feedback: [] });
     } catch (err) {
       return jsonResponse({ error: getErrorMessage(err) }, 500);
+    }
+  }
+
+  // 5b. DELETE /api/feedback/:id (Admin only)
+  const deleteFeedbackMatch = path.match(/^\/api\/feedback\/([0-9]+)\/?$/);
+  if (deleteFeedbackMatch && method === 'DELETE') {
+    const session = await getAuth(request, env);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
+    }
+    try {
+      const feedbackId = Number(deleteFeedbackMatch[1]);
+      if (env.DB) {
+        const delRes = await env.DB.prepare('DELETE FROM feedback WHERE id = ?').bind(feedbackId).run();
+        if (delRes?.meta?.changes === 0) {
+          return jsonResponse({ success: false, error: 'Feedback entry not found' }, 404, request);
+        }
+      }
+      return jsonResponse({ success: true, id: feedbackId }, 200, request);
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
+    }
+  }
+
+  // 6. POST /api/report (Stores anime issue reports in D1 reports table + optional Telegram notification)
+  if (path === '/api/report' && method === 'POST') {
+    try {
+      const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!body || typeof body !== 'object') {
+        return jsonResponse({ success: false, error: 'Invalid JSON report payload' }, 400, request);
+      }
+
+      const animeTitle = String(body.animeTitle || body.anime_title || '').trim().slice(0, 200);
+      const issueType = String(body.issueType || body.issue_type || body.reason || '').trim().slice(0, 150);
+      const description = String(body.description || body.notes || body.details || '').trim().slice(0, 2000);
+      const rawAnimeId = body.animeId ?? body.anime_id;
+      const numericAnimeId =
+        rawAnimeId !== undefined && rawAnimeId !== null && Number.isInteger(Number(rawAnimeId)) && Number(rawAnimeId) > 0
+          ? Number(rawAnimeId)
+          : null;
+
+      if (!animeTitle) {
+        return jsonResponse({ success: false, error: 'Anime title is required' }, 400, request);
+      }
+      if (!issueType) {
+        return jsonResponse({ success: false, error: 'Issue Type is required' }, 400, request);
+      }
+
+      const session = await getAuth(request, env).catch(() => ({
+        authenticated: false,
+        userId: null,
+        email: null,
+        username: null,
+        isAdmin: false,
+      }));
+      const reporterUserId = session.userId || null;
+
+      let reportId: number | null = null;
+      if (env.DB) {
+        try {
+          const insertRes = await env.DB.prepare(
+            'INSERT INTO reports (anime_id, anime_title, issue_type, description, reporter_user_id, status) VALUES (?, ?, ?, ?, ?, ?)'
+          )
+            .bind(numericAnimeId, animeTitle, issueType, description, reporterUserId, 'open')
+            .run();
+          reportId = insertRes.meta?.last_row_id || null;
+        } catch {
+          // Fallback to feedback table if reports migration has not yet been applied remotely
+          const fallbackText = `[REPORT: ${issueType}] ${animeTitle}${description ? ` — ${description}` : ''}`.slice(0, 2000);
+          const fbRes = await env.DB.prepare('INSERT INTO feedback (name_or_insta, email, feedback_text) VALUES (?, ?, ?)')
+            .bind(reporterUserId || 'Guest Reporter', session.email || null, fallbackText)
+            .run();
+          reportId = fbRes.meta?.last_row_id || null;
+        }
+
+        // Best-effort log write for Admin Terminal diagnostics
+        try {
+          await env.DB.prepare(
+            'INSERT INTO cloudflare_logs (service, event_type, status_code, latency_ms, details) VALUES (?, ?, ?, ?, ?)'
+          )
+            .bind('REPORT', 'POST /api/report', 201, 1, `${animeTitle} — ${issueType}`.slice(0, 240))
+            .run();
+        } catch {
+          // Ignore optional log table write failure
+        }
+      }
+
+      const deliveredToTelegram = Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID);
+      if (deliveredToTelegram) {
+        const tgMsg =
+          `🚩 *ANIME ISSUE REPORT*\n\n` +
+          `🎬 *Title:* ${animeTitle}${numericAnimeId ? ` (#${numericAnimeId})` : ''}\n` +
+          `⚠️ *Issue Type:* ${issueType}\n` +
+          `📝 *Description:* ${description || 'No additional notes provided.'}\n` +
+          `👤 *Reporter:* ${session.email || reporterUserId || 'Guest'}\n`;
+        await sendTelegramAlert(env, tgMsg);
+      }
+
+      return jsonResponse(
+        {
+          success: true,
+          reportId,
+          animeId: numericAnimeId,
+          animeTitle,
+          issueType,
+          description,
+          deliveredToTelegram,
+          message: 'Report submitted successfully',
+        },
+        201,
+        request
+      );
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
+    }
+  }
+
+  // 7. GET /api/admin/reports (Admin only)
+  if (path === '/api/admin/reports' && method === 'GET') {
+    const session = await getAuth(request, env);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
+    }
+    try {
+      if (env.DB) {
+        try {
+          const res = await env.DB.prepare('SELECT * FROM reports ORDER BY id DESC LIMIT 100').all();
+          return jsonResponse({ success: true, reports: res.results || [] }, 200, request);
+        } catch (repErr) {
+          const msg = getErrorMessage(repErr).toLowerCase();
+          if (msg.includes('no such table')) {
+            return jsonResponse({ success: true, reports: [] }, 200, request);
+          }
+          throw repErr;
+        }
+      }
+      return jsonResponse({ success: true, reports: [] }, 200, request);
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err), reports: [] }, 500, request);
     }
   }
 

@@ -139,10 +139,12 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
               </span>
 
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleWatchlist(featuredAnime.id);
                 }}
+                aria-label={watchlist.includes(featuredAnime.id) ? `Remove ${featuredAnime.title} from watchlist` : `Add ${featuredAnime.title} to watchlist`}
                 className={`w-8 h-8 rounded-full backdrop-blur-md border flex items-center justify-center transition-all ${
                   watchlist.includes(featuredAnime.id)
                     ? 'bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-600/30'
@@ -448,10 +450,12 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
 
                   {/* Bookmark Button */}
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       onToggleWatchlist(anime.id);
                     }}
+                    aria-label={isSaved ? `Remove ${anime.title} from watchlist` : `Add ${anime.title} to watchlist`}
                     className={`absolute top-2.5 right-2.5 w-7 h-7 rounded-full backdrop-blur-md border flex items-center justify-center transition-all ${
                       isSaved
                         ? 'bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-600/30'

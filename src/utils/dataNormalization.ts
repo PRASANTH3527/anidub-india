@@ -41,6 +41,57 @@ export function normalizePlatformString(rawPlatform: unknown): string {
     .join('|');
 }
 
+/**
+ * Splits a single or array platform representation (`"Crunchyroll|Netflix"`,
+ * `"Crunchyroll, Netflix"`, `"Netflix / JioCinema"`, `"Crunchyroll • Netflix"`,
+ * or `platforms_data` partner lists) into an ordered, case-insensitively
+ * deduplicated list of clean platform names.
+ */
+export function parsePlatformList(
+  rawPlatform: unknown,
+  rawPlatforms?: unknown,
+  rawPlatformsData?: unknown,
+  options: { defaultFallback?: string[] } = {}
+): string[] {
+  const deduped = new Map<string, string>();
+  const pushToken = (val: unknown) => {
+    if (val === null || val === undefined) return;
+    if (Array.isArray(val)) {
+      val.forEach(pushToken);
+      return;
+    }
+    if (typeof val === 'object') {
+      const rec = val as Record<string, unknown>;
+      pushToken(rec.name ?? rec.platform);
+      return;
+    }
+    const text = String(val);
+    for (const part of text.split(/[|,•/]+/)) {
+      const cleaned = part.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      if (!cleaned) continue;
+      const key = cleaned.toLowerCase();
+      if (!deduped.has(key)) {
+        deduped.set(key, cleaned);
+      }
+    }
+  };
+
+  pushToken(rawPlatforms);
+  pushToken(rawPlatform);
+
+  if (rawPlatformsData) {
+    const parsedPartners = normalizeStreamingPartners(rawPlatformsData);
+    for (const partner of parsedPartners) {
+      pushToken(partner.name || partner.platform);
+    }
+  }
+
+  if (deduped.size === 0 && Array.isArray(options.defaultFallback)) {
+    return [...options.defaultFallback];
+  }
+  return Array.from(deduped.values());
+}
+
 function isPlainRecord(val: unknown): val is Record<string, unknown> {
   return Boolean(val) && typeof val === 'object' && !Array.isArray(val);
 }
@@ -346,4 +397,157 @@ export function buildStreamingPartnersPayload(
     derivedGlobalDubs,
   };
 }
+
+export const CANONICAL_BROADCAST_DAYS = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+] as const;
+
+export type CanonicalBroadcastDay = (typeof CANONICAL_BROADCAST_DAYS)[number];
+
+const DAY_ALIAS_MAP: Record<string, CanonicalBroadcastDay> = {
+  mon: 'Monday',
+  monday: 'Monday',
+  tue: 'Tuesday',
+  tues: 'Tuesday',
+  tuesday: 'Tuesday',
+  wed: 'Wednesday',
+  wednesday: 'Wednesday',
+  thu: 'Thursday',
+  thur: 'Thursday',
+  thurs: 'Thursday',
+  thursday: 'Thursday',
+  fri: 'Friday',
+  friday: 'Friday',
+  sat: 'Saturday',
+  saturday: 'Saturday',
+  sun: 'Sunday',
+  sunday: 'Sunday',
+};
+
+/**
+ * Normalizes a broadcast day value into a canonical English weekday name
+ * ('Monday'..'Sunday'), or `null` when omitted, blank, or non-weekday (e.g. 'TBA').
+ */
+export function normalizeBroadcastDay(rawDay: unknown): CanonicalBroadcastDay | null {
+  const rawCandidate = isPlainRecord(rawDay)
+    ? rawDay.broadcast_day ??
+      rawDay.broadcastDay ??
+      rawDay.releaseDay ??
+      rawDay.release_day ??
+      rawDay['Broadcast Day'] ??
+      rawDay['Release Day']
+    : rawDay;
+
+  if (rawCandidate === null || rawCandidate === undefined) return null;
+  const cleaned = String(rawCandidate)
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  if (!cleaned) return null;
+
+  if (DAY_ALIAS_MAP[cleaned]) {
+    return DAY_ALIAS_MAP[cleaned];
+  }
+
+  for (const [alias, canonical] of Object.entries(DAY_ALIAS_MAP)) {
+    if (cleaned.startsWith(`${alias} `) || cleaned.endsWith(` ${alias}`)) {
+      return canonical;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Normalizes a verified broadcast air-time string (e.g. '06:30 PM IST').
+ * Returns `null` when omitted or blank instead of fabricating a fake default like '08:00 PM IST'.
+ */
+export function normalizeBroadcastTime(rawTime: unknown, maxLen = 40): string | null {
+  const rawCandidate = isPlainRecord(rawTime)
+    ? rawTime.broadcast_time ??
+      rawTime.broadcastTime ??
+      rawTime.airTime ??
+      rawTime.air_time ??
+      rawTime['Broadcast Time'] ??
+      rawTime['Air Time']
+    : rawTime;
+
+  if (rawCandidate === null || rawCandidate === undefined) return null;
+  const cleaned = String(rawCandidate)
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return null;
+  const lower = cleaned.toLowerCase();
+  if (lower === 'tba' || lower === 'none' || lower === 'null' || lower === 'n/a') {
+    return null;
+  }
+  return cleaned.slice(0, maxLen);
+}
+
+/**
+ * Normalizes season & episode summary count strings (e.g. '2 Seasons • 24 Episodes')
+ * from admin inputs, DB records, or CSV imports.
+ */
+export function normalizeSeasonEpisodeCount(input: unknown, maxLen = 100): string {
+  const rawCandidate = isPlainRecord(input)
+    ? input.season_episode_count ??
+      input.seasonEpisodeCount ??
+      input['Season & Episode Count'] ??
+      input['Seasons & Episodes'] ??
+      input['Season Episode Count']
+    : input;
+
+  if (rawCandidate === null || rawCandidate === undefined) return '';
+  const cleaned = String(rawCandidate)
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  return cleaned.slice(0, maxLen);
+}
+
+/**
+ * Normalizes a last-verified date into YYYY-MM-DD format when valid, or '' if empty/invalid.
+ */
+export function normalizeLastVerifiedDate(input: unknown): string {
+  const rawCandidate = isPlainRecord(input)
+    ? input.last_verified_date ??
+      input.lastVerifiedDate ??
+      input['Last Verified Date'] ??
+      input['Last Verified']
+    : input;
+
+  if (rawCandidate === null || rawCandidate === undefined) return '';
+  const cleaned = String(rawCandidate).replace(/<[^>]*>/g, '').trim();
+  if (!cleaned) return '';
+
+  const isoMatch = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
+  if (isoMatch) {
+    const year = Number(isoMatch[1]);
+    const month = Number(isoMatch[2]);
+    const day = Number(isoMatch[3]);
+    if (year >= 1990 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    }
+    return '';
+  }
+
+  const parsedMs = Date.parse(cleaned);
+  if (!Number.isFinite(parsedMs)) return '';
+  const d = new Date(parsedMs);
+  const yyyy = d.getUTCFullYear();
+  if (yyyy < 1990 || yyyy > 2100) return '';
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 

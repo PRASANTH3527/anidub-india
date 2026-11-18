@@ -1,4 +1,9 @@
-import { normalizePlatformString, parseOptionalSeason } from './dataNormalization';
+import {
+  normalizeBroadcastDay,
+  normalizeBroadcastTime,
+  normalizePlatformString,
+  parseOptionalSeason,
+} from './dataNormalization';
 
 export const ALLOWED_IMAGE_MIME_TYPES = [
   'image/jpeg',
@@ -393,6 +398,41 @@ export function validateOptionalExternalWebUrl(
   return { ok: true, url: parsed.toString() };
 }
 
+/**
+ * Validates optional official anime source URLs (http/https public URLs only).
+ */
+export function validateOfficialSourceUrl(
+  rawUrl: unknown,
+  fieldName = 'Official Source Link'
+): { ok: boolean; url?: string; error?: string } {
+  if (rawUrl === undefined || rawUrl === null || String(rawUrl).trim() === '') {
+    return { ok: true, url: '' };
+  }
+  if (typeof rawUrl !== 'string') {
+    return { ok: false, error: `${fieldName} must be a valid URL string.` };
+  }
+  const trimmed = rawUrl.trim();
+  if (trimmed.length > 1000) {
+    return { ok: false, error: `${fieldName} exceeds maximum length of 1000 characters.` };
+  }
+  if (/[\s\u0000-\u001F\u007F]/.test(trimmed)) {
+    return { ok: false, error: `${fieldName} contains invalid whitespace or control characters.` };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { ok: false, error: `${fieldName} must be a valid HTTP or HTTPS URL.` };
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return { ok: false, error: `${fieldName} must use HTTPS or HTTP.` };
+  }
+  if (parsed.username || parsed.password || isPrivateOrDisallowedHostname(parsed.hostname)) {
+    return { ok: false, error: `${fieldName} points to a disallowed or private host.` };
+  }
+  return { ok: true, url: parsed.toString() };
+}
+
 export const DEFAULT_MIN_ACCOUNT_AGE_MS = 5 * 60 * 1000; // 5 minutes
 export const DEFAULT_SUBMISSION_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 export const DEFAULT_MAX_USER_SUBMISSIONS_PER_WINDOW = 3;
@@ -492,6 +532,11 @@ export interface SubmissionRateLimitEntry {
 
 const defaultUserSubmissionStore = new Map<string, SubmissionRateLimitEntry>();
 const defaultIpSubmissionStore = new Map<string, SubmissionRateLimitEntry>();
+
+export function clearSubmissionRateLimitStores(): void {
+  defaultUserSubmissionStore.clear();
+  defaultIpSubmissionStore.clear();
+}
 
 /**
  * Checks & records per-user and per-IP sliding-window rate limits for community submissions.
@@ -633,6 +678,8 @@ export interface SanitizedCommunitySubmission {
   platform: string;
   type: string;
   studio: string;
+  broadcast_day: string | null;
+  broadcast_time: string | null;
 }
 
 const DEFAULT_SUBMISSION_COVER_URL = '/logo.png';
@@ -765,6 +812,8 @@ export function validateAndSanitizeCommunitySubmission(
       platform: normalizedPlatform,
       type: cleanField(body.type, 'TV Series', 40),
       studio: cleanField(body.studio, 'Unknown Studio', 100),
+      broadcast_day: normalizeBroadcastDay(body),
+      broadcast_time: normalizeBroadcastTime(body),
     },
   };
 }

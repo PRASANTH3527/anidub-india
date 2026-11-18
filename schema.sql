@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS anime (
   mixedEntries TEXT DEFAULT '',
   watch_url TEXT DEFAULT '',
   platforms_data TEXT DEFAULT '',
+  broadcast_day TEXT DEFAULT NULL,
+  broadcast_time TEXT DEFAULT NULL,
+  season_episode_count TEXT DEFAULT '',
+  official_source_url TEXT DEFAULT '',
+  last_verified_date TEXT DEFAULT '',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -238,4 +243,20 @@ CREATE INDEX IF NOT EXISTS idx_pageviews_session ON analytics_pageviews(session_
 CREATE INDEX IF NOT EXISTS idx_pageviews_path ON analytics_pageviews(path);
 CREATE INDEX IF NOT EXISTS idx_events_session ON analytics_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_events_type ON analytics_events(event_type);
+
+-- 11. Per-User Watch Progress Table
+CREATE TABLE IF NOT EXISTS watch_progress (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  anime_id INTEGER NOT NULL,
+  season INTEGER NOT NULL DEFAULT 1,
+  episode INTEGER NOT NULL DEFAULT 0,
+  total_episodes INTEGER,
+  completed INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, anime_id),
+  FOREIGN KEY (anime_id) REFERENCES anime(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_watch_progress_user ON watch_progress(user_id, updated_at DESC);
 

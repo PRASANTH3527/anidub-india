@@ -195,25 +195,12 @@ export function filterAnimeByLanguage<
   });
 }
 
+export function resolveCanonicalOrigin(_rawOrigin?: string): string {
+  return SITE_ORIGIN;
+}
+
 function resolveOrigin(rawOrigin?: string): string {
-  if (!rawOrigin || typeof rawOrigin !== 'string') return SITE_ORIGIN;
-  try {
-    const parsed = new URL(rawOrigin);
-    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
-      return parsed.origin;
-    }
-    if (
-      parsed.hostname === 'anidub.in' ||
-      parsed.hostname.endsWith('.anidub.in') ||
-      parsed.hostname.endsWith('.pages.dev') ||
-      parsed.hostname.endsWith('.workers.dev')
-    ) {
-      return SITE_ORIGIN;
-    }
-    return parsed.origin;
-  } catch {
-    return SITE_ORIGIN;
-  }
+  return resolveCanonicalOrigin(rawOrigin);
 }
 
 function resolveAbsoluteImageUrl(rawImage: unknown, origin: string): string {

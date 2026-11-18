@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Image from './OptimizedImage';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { 
@@ -10,11 +11,19 @@ import {
   Heart, 
   Bookmark, 
   Star,
-  Check
+  Loader2
 } from 'lucide-react';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { useToast } from './Toast';
 import { useUser } from '../lib/clerk';
+import { ReportModal } from './ReportModal';
+import {
+  isAnimeOffline,
+  saveAnimeForOffline,
+  removeAnimeFromOffline,
+  subscribeOfflineChanges,
+} from '../utils/offlineStorage';
+import { parsePlatformList } from '../utils/dataNormalization';
 
 export interface AnimeCardData {
   id: number;
@@ -80,7 +89,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   isUpvoted,
   onToggleUpvote,
   isTrending = true,
-  isCached = true
+  isCached
 }) => {
   const { user, isSignedIn } = useUser();
   const shouldReduceMotion = useReducedMotion();
@@ -101,9 +110,41 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   const [isVoting, setIsVoting] = useState(false);
   const [cardNotice, setCardNotice] = useState<string | null>(null);
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
+  const [isOfflineSaved, setIsOfflineSaved] = useState<boolean>(Boolean(isCached));
+  const [isDownloadingOffline, setIsDownloadingOffline] = useState<boolean>(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
 
   // Safe toast access
   const toast = useToast();
+
+  // Check real IndexedDB / Cache Storage offline availability
+  useEffect(() => {
+    let active = true;
+    const syncOfflineStatus = () => {
+      isAnimeOffline(anime.id)
+        .then((saved) => {
+          if (active) setIsOfflineSaved(saved);
+        })
+        .catch(() => {});
+    };
+
+    if (typeof isCached === 'boolean') {
+      setIsOfflineSaved(isCached);
+    } else {
+      syncOfflineStatus();
+    }
+
+    const unsubscribe = subscribeOfflineChanges((changedId) => {
+      if (changedId === undefined || Number(changedId) === Number(anime.id)) {
+        syncOfflineStatus();
+      }
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [anime.id, isCached]);
 
   // Defer vote status check until browser idle time so it never competes with above-the-fold LCP image downloads
   useEffect(() => {
@@ -187,11 +228,14 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
     code => !['JPN', 'JAP', 'JAPANESE', 'ENG', 'ENGLISH', 'ROMAJI'].includes(code)
   );
 
-  // Normalize platforms
-  const rawPlatforms = Array.isArray(anime.platform)
-    ? anime.platform
-    : (anime.platform || 'Crunchyroll').split(',').map(s => s.trim());
-  const displayedPlatforms = rawPlatforms.slice(0, 2);
+  // Normalize platforms cleanly (supports pipe, comma, slash, bullet strings and platforms_data)
+  const rawPlatforms = parsePlatformList(
+    anime.platform,
+    (anime as any).platforms,
+    (anime as any).platforms_data,
+    { defaultFallback: ['Crunchyroll'] }
+  );
+  const displayedPlatforms = rawPlatforms.slice(0, 3);
 
   const releaseYear = anime.releaseYear || anime.year || 2026;
   const animeType = anime.type || 'TV Series';
@@ -345,13 +389,54 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
     }
   };
 
+  const handleDownloadOfflineClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isDownloadingOffline) return;
+
+    setIsDownloadingOffline(true);
+    try {
+      if (isOfflineSaved) {
+        await removeAnimeFromOffline(anime.id);
+        setIsOfflineSaved(false);
+        showNotification('Offline Removed', `${anime.title} removed from offline storage.`, 'info');
+      } else {
+        const res = await saveAnimeForOffline({
+          ...anime,
+          cover_image: getCleanCover(),
+        });
+        if (res.success) {
+          setIsOfflineSaved(true);
+          showNotification('Downloaded', `${anime.title} saved for offline access.`, 'success');
+        } else {
+          showNotification('Download Failed', res.error || 'Could not cache anime offline.', 'warning');
+        }
+      }
+    } catch (err: any) {
+      showNotification('Download Failed', err?.message || 'Unable to save offline.', 'warning');
+    } finally {
+      setIsDownloadingOffline(false);
+    }
+  };
+
+  const handleReportClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsReportModalOpen(true);
+  };
+
   const handleShareClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    const shareUrl = anime.slug
+      ? `${window.location.origin}/anime/${anime.slug}`
+      : `${window.location.origin}/anime/${anime.id}`;
     if (navigator.share) {
       navigator.share({
         title: anime.title,
         text: `Watch ${anime.title} with regional Indian dubs!`,
-        url: window.location.href
+        url: shareUrl
+      }).catch(() => {});
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        showNotification('Link Copied', 'Share link copied to clipboard.', 'success');
       }).catch(() => {});
     }
   };
@@ -409,7 +494,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                 <span>Trending</span>
               </motion.div>
             )}
-            {isCached && (
+            {isOfflineSaved && (
               <motion.div 
                 initial={shouldReduceMotion ? false : { scale: 0.75, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -417,7 +502,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                 className="inline-flex items-center gap-1 bg-emerald-950/90 text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md border border-emerald-500/40 backdrop-blur-md"
               >
                 <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                <span>Offline Ready</span>
+                <span>Downloaded</span>
               </motion.div>
             )}
           </div>
@@ -426,29 +511,47 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
           <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
             {/* Desktop Only Buttons */}
             <motion.button
+              type="button"
               whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
               whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
-              onClick={(e) => { e.stopPropagation(); }}
-              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-all duration-200 shadow-md cursor-pointer"
-              title="Download for offline"
+              onClick={handleDownloadOfflineClick}
+              disabled={isDownloadingOffline}
+              data-offline-state={isOfflineSaved ? 'downloaded' : 'not-downloaded'}
+              className={`hidden sm:flex p-1.5 rounded-full backdrop-blur-md border transition-all duration-200 shadow-md cursor-pointer ${
+                isOfflineSaved
+                  ? 'bg-emerald-600/90 border-emerald-400/60 text-white'
+                  : 'bg-black/60 border-white/10 text-neutral-300 hover:text-white'
+              } ${isDownloadingOffline ? 'opacity-60' : ''}`}
+              title={isOfflineSaved ? 'Downloaded' : 'Download for offline'}
+              aria-label={isOfflineSaved ? 'Downloaded' : 'Download for offline'}
             >
-              <DownloadCloud className="w-3.5 h-3.5" />
+              {isDownloadingOffline ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : isOfflineSaved ? (
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              ) : (
+                <DownloadCloud className="w-3.5 h-3.5" />
+              )}
             </motion.button>
             <motion.button
+              type="button"
               whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
               whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
-              onClick={(e) => { e.stopPropagation(); }}
-              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-all duration-200 shadow-md cursor-pointer"
+              onClick={handleReportClick}
+              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-rose-400 transition-all duration-200 shadow-md cursor-pointer"
               title="Report info"
+              aria-label="Report info"
             >
               <Flag className="w-3.5 h-3.5" />
             </motion.button>
             <motion.button
+              type="button"
               whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
               whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={handleShareClick}
               className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-all duration-200 shadow-md cursor-pointer"
               title="Share"
+              aria-label="Share"
             >
               <Share2 className="w-3.5 h-3.5" />
             </motion.button>
@@ -464,6 +567,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
               )}
 
               <motion.button
+                type="button"
                 whileHover={shouldReduceMotion || internalLiked ? undefined : { scale: 1.1 }}
                 whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
                 onClick={handleLikeClick}
@@ -474,6 +578,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                     : 'bg-black/60 text-neutral-300 hover:text-primary-theme hover:scale-105 border-white/10 cursor-pointer'
                 } ${isLiking ? 'opacity-50 animate-pulse' : ''}`}
                 title={internalLiked ? 'Already liked from this IP' : 'Like (1 per IP)'}
+                aria-label={internalLiked ? `Already liked ${anime.title}` : `Like ${anime.title}`}
               >
                 <Heart className={`w-3.5 h-3.5 ${internalLiked ? 'fill-white text-white' : ''}`} />
               </motion.button>
@@ -481,6 +586,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 
             {/* Always Visible Watchlist Bookmark Button */}
             <motion.button
+              type="button"
               whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
               whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={handleBookmarkClick}
@@ -489,7 +595,8 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                   ? 'bg-primary-theme text-white shadow-lg' 
                   : 'bg-black/60 text-neutral-300 hover:text-white'
               }`}
-              title="Bookmark"
+              title={isBookmarked ? 'Remove from Watchlist' : 'Add to Watchlist'}
+              aria-label={isBookmarked ? `Remove ${anime.title} from Watchlist` : `Add ${anime.title} to Watchlist`}
             >
               <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-white text-white' : ''}`} />
             </motion.button>
@@ -667,6 +774,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                   onClick={handleLikeClick}
                   disabled={isLiking || internalLiked}
                   title={internalLiked ? 'Already liked from this device' : 'Like (1 vote per device)'}
+                  aria-label={`Like ${anime.title} (${internalHeartCount})`}
                   className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all duration-200 ${
                     internalLiked
                       ? 'bg-primary-theme/25 text-primary-theme border border-primary-theme/50 cursor-default'
@@ -686,6 +794,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                 onClick={handleUpvoteClick}
                 disabled={isVoting || internalUpvoted}
                 title={internalUpvoted ? 'Already upvoted from this device' : 'Upvote (1 vote per device)'}
+                aria-label={`Upvote ${anime.title} (${internalUpvoteCount})`}
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all duration-200 ${
                   internalUpvoted
                     ? 'bg-orange-500/25 text-orange-400 border border-orange-500/50 cursor-default'
@@ -699,6 +808,20 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
           </div>
         </div>
       </motion.div>
+
+      {isReportModalOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <ReportModal
+            animeId={anime.id}
+            animeTitle={anime.title}
+            onClose={() => setIsReportModalOpen(false)}
+            onSuccess={() =>
+              showNotification('Report Submitted', 'Thank you! Report saved for moderator review.', 'success')
+            }
+          />,
+          document.body
+        )}
     </motion.div>
   );
 };

@@ -139,8 +139,11 @@ export async function handleUserRoutes(ctx: RouteContext): Promise<Response | nu
           const res = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first();
           if (res) return jsonResponse(res, 200, request);
         }
-      } catch {
-        // Fallback to session claims
+      } catch (err) {
+        const msg = getErrorMessage(err).toLowerCase();
+        if (!msg.includes('no such table')) {
+          return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
+        }
       }
       return jsonResponse(
         {
@@ -300,6 +303,184 @@ export async function handleUserRoutes(ctx: RouteContext): Promise<Response | nu
     }
 
     return jsonResponse({ error: 'Method not allowed for /api/watchlist' }, 405, request, { 'Cache-Control': 'no-store' });
+  }
+
+  // 4. GET / PUT / DELETE /api/progress (Authenticated Watch Progress Tracker)
+  if (path === '/api/progress') {
+    const session = await getAuth(request, env);
+    if (!session.userId) {
+      return jsonResponse(
+        { error: session.error || 'Unauthorized: Active Clerk user session required' },
+        401,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    }
+
+    if (method === 'GET') {
+      const animeIdParam = url.searchParams.get('anime_id') ?? url.searchParams.get('animeId');
+      try {
+        if (env.DB) {
+          if (animeIdParam) {
+            const animeId = Number(animeIdParam);
+            if (!Number.isInteger(animeId) || animeId <= 0) {
+              return jsonResponse({ error: 'Valid anime_id query parameter required' }, 400, request);
+            }
+            const row = await env.DB.prepare(
+              'SELECT anime_id, season, episode, total_episodes, completed, updated_at FROM watch_progress WHERE user_id = ? AND anime_id = ?'
+            )
+              .bind(session.userId, animeId)
+              .first();
+            const normalizedRow = row
+              ? {
+                  animeId: Number(row.anime_id),
+                  season: Number(row.season || 1),
+                  episode: Number(row.episode || 0),
+                  totalEpisodes:
+                    row.total_episodes !== null && row.total_episodes !== undefined
+                      ? Number(row.total_episodes)
+                      : null,
+                  completed: Boolean(row.completed),
+                  updatedAt: String(row.updated_at || new Date().toISOString()),
+                }
+              : null;
+            return jsonResponse({ success: true, progress: normalizedRow }, 200, request, {
+              'Cache-Control': 'no-store',
+            });
+          }
+
+          const rows = await env.DB.prepare(
+            'SELECT anime_id, season, episode, total_episodes, completed, updated_at FROM watch_progress WHERE user_id = ? ORDER BY updated_at DESC LIMIT 200'
+          )
+            .bind(session.userId)
+            .all();
+          const normalizedList = (rows.results || []).map((r) => ({
+            animeId: Number(r.anime_id),
+            season: Number(r.season || 1),
+            episode: Number(r.episode || 0),
+            totalEpisodes:
+              r.total_episodes !== null && r.total_episodes !== undefined
+                ? Number(r.total_episodes)
+                : null,
+            completed: Boolean(r.completed),
+            updatedAt: String(r.updated_at || new Date().toISOString()),
+          }));
+          return jsonResponse({ success: true, progress: normalizedList }, 200, request, {
+            'Cache-Control': 'no-store',
+          });
+        }
+      } catch (err) {
+        const msg = getErrorMessage(err).toLowerCase();
+        if (msg.includes('no such table')) {
+          return jsonResponse({ success: true, progress: animeIdParam ? null : [] }, 200, request, {
+            'Cache-Control': 'no-store',
+          });
+        }
+        return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request, {
+          'Cache-Control': 'no-store',
+        });
+      }
+      return jsonResponse({ success: true, progress: animeIdParam ? null : [] }, 200, request, {
+        'Cache-Control': 'no-store',
+      });
+    }
+
+    if (method === 'PUT' || method === 'POST') {
+      try {
+        const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+        if (!body || typeof body !== 'object') {
+          return jsonResponse({ error: 'Invalid JSON watch progress payload' }, 400, request);
+        }
+        const animeId = Number(body.anime_id ?? body.animeId);
+        if (!Number.isInteger(animeId) || animeId <= 0) {
+          return jsonResponse({ error: 'Valid positive animeId is required' }, 400, request);
+        }
+        const rawSeason = Number(body.season ?? 1);
+        const season = Number.isFinite(rawSeason) && rawSeason >= 1 ? Math.min(Math.floor(rawSeason), 99) : 1;
+        const rawEpisode = Number(body.episode ?? 0);
+        const episode = Number.isFinite(rawEpisode) && rawEpisode >= 0 ? Math.min(Math.floor(rawEpisode), 9999) : 0;
+        const rawTotal = body.totalEpisodes ?? body.total_episodes;
+        const parsedTotal =
+          rawTotal !== null && rawTotal !== undefined && String(rawTotal).trim() !== ''
+            ? Math.floor(Number(rawTotal))
+            : null;
+        const totalEpisodes =
+          parsedTotal !== null && Number.isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : null;
+        const completed = body.completed ? 1 : 0;
+        const updatedAt = new Date().toISOString();
+
+        if (env.DB) {
+          try {
+            await env.DB.prepare(
+              `INSERT INTO watch_progress (user_id, anime_id, season, episode, total_episodes, completed, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(user_id, anime_id) DO UPDATE SET
+                 season = excluded.season,
+                 episode = excluded.episode,
+                 total_episodes = excluded.total_episodes,
+                 completed = excluded.completed,
+                 updated_at = excluded.updated_at`
+            )
+              .bind(session.userId, animeId, season, episode, totalEpisodes, completed, updatedAt)
+              .run();
+          } catch (dbErr) {
+            const msg = getErrorMessage(dbErr).toLowerCase();
+            if (!msg.includes('no such table')) {
+              throw dbErr;
+            }
+          }
+        }
+
+        return jsonResponse(
+          {
+            success: true,
+            progress: {
+              animeId,
+              season,
+              episode,
+              totalEpisodes,
+              completed: Boolean(completed),
+              updatedAt,
+            },
+          },
+          200,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
+      } catch (err) {
+        return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request, {
+          'Cache-Control': 'no-store',
+        });
+      }
+    }
+
+    if (method === 'DELETE') {
+      const animeIdParam = url.searchParams.get('anime_id') ?? url.searchParams.get('animeId');
+      const animeId = Number(animeIdParam);
+      if (!Number.isInteger(animeId) || animeId <= 0) {
+        return jsonResponse({ error: 'Valid anime_id query parameter is required' }, 400, request);
+      }
+      try {
+        if (env.DB) {
+          await env.DB.prepare('DELETE FROM watch_progress WHERE user_id = ? AND anime_id = ?')
+            .bind(session.userId, animeId)
+            .run();
+        }
+        return jsonResponse({ success: true, animeId }, 200, request, { 'Cache-Control': 'no-store' });
+      } catch (err) {
+        const msg = getErrorMessage(err).toLowerCase();
+        if (msg.includes('no such table')) {
+          return jsonResponse({ success: true, animeId }, 200, request, { 'Cache-Control': 'no-store' });
+        }
+        return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request, {
+          'Cache-Control': 'no-store',
+        });
+      }
+    }
+
+    return jsonResponse({ error: 'Method not allowed for /api/progress' }, 405, request, {
+      'Cache-Control': 'no-store',
+    });
   }
 
   return null;

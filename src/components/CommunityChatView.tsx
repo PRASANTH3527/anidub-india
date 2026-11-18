@@ -24,7 +24,7 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
   onNavigateToCatalog
 }) => {
   return (
-    <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6 animate-in fade-in duration-300">
+    <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6 overflow-x-clip box-border animate-in fade-in duration-300">
       
       {/* 1. HEADER BANNER */}
       <div className="bg-[#0c101c]/80 border border-white/[0.08] rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden backdrop-blur-xl">
@@ -69,7 +69,7 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* LEFT / CENTER: FULL LIVE CHAT COMPONENT */}
-        <div className="lg:col-span-8 space-y-4">
+        <div className="lg:col-span-8 space-y-4 min-w-0">
           <Suspense fallback={
             <div className="min-h-[420px] rounded-3xl bg-white/[0.03] border border-white/10 flex flex-col items-center justify-center p-8 space-y-3">
               <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
@@ -81,7 +81,7 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
         </div>
 
         {/* RIGHT: DUB CHANNELS, TOPICS & RULES SIDEBAR */}
-        <div className="lg:col-span-4 space-y-5">
+        <div className="lg:col-span-4 space-y-5 min-w-0">
           
           {/* Active Dub Topics Box */}
           <div className="bg-[#121829]/90 border border-white/10 rounded-3xl p-5 shadow-xl space-y-4 backdrop-blur-xl">

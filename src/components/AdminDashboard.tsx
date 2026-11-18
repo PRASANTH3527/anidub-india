@@ -40,6 +40,8 @@ import {
   parseCsvMixedEntriesAndEpisodesPerSeason,
   parseOptionalEpisodesCount,
   parseOptionalSeason,
+  normalizeSeasonEpisodeCount,
+  normalizeLastVerifiedDate,
 } from '../utils/dataNormalization';
 import { useUser, SignIn } from '../lib/clerk';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
@@ -91,7 +93,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const { isSignedIn, user: clerkUser } = useUser();
-  const isClerkAdminAuthorized = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
+  const isLocalClerkAdminAuthorized = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
+  const [serverAdminVerified, setServerAdminVerified] = useState<boolean | null>(null);
+  const isClerkAdminAuthorized = isLocalClerkAdminAuthorized || serverAdminVerified === true;
 
   const [catalog, setCatalog] = useState<AdminAnimeRecord[]>(() =>
     catalogList && catalogList.length > 0 ? catalogList : []
@@ -136,35 +140,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [isTerminalExpanded, setIsTerminalExpanded] = useState(false);
-  const [terminalLogs, setTerminalLogs] = useState<TerminalLogEntry[]>([
-    {
-      id: 'log-sys-init',
-      time: new Date().toLocaleTimeString(),
-      level: 'SYS',
-      msg: 'AniDub Edge Kernel initialized. Cloudflare D1 connected.',
-    },
-    {
-      id: 'log-edge-conn',
-      time: new Date().toLocaleTimeString(),
-      level: 'EDGE',
-      msg: `Link established: ${CLOUDFLARE_API_URL || 'Pages Native (Relative)'}`,
-    },
-    {
-      id: 'log-d1-mount',
-      time: new Date().toLocaleTimeString(),
-      level: 'D1',
-      msg: 'KV/D1 Catalog persistence mounted [DB: 75f053ab]',
-    },
-  ]);
+  const [terminalLogs, setTerminalLogs] = useState<TerminalLogEntry[]>([]);
 
   const addTerminalLog = (level: string, msg: string) => {
     const newEntry: TerminalLogEntry = {
-      id: Math.random().toString(36).substring(2, 9),
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
       time: new Date().toLocaleTimeString(),
       level,
       msg,
     };
-    setTerminalLogs((prev) => [newEntry, ...prev.slice(0, 59)]);
+    setTerminalLogs((prev) => [newEntry, ...prev.slice(0, 79)]);
+  };
+
+  const runRealTerminalProbe = async (probe: 'ping' | 'd1' | 'health' | 'full' = 'full') => {
+    if (probe === 'ping' || probe === 'full') {
+      const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      try {
+        const res = await fetch('/api/anime?limit=1', { cache: 'no-store' });
+        const rtt = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0);
+        addTerminalLog(
+          res.ok ? 'EDGE' : 'WARN',
+          `GET /api/anime?limit=1 -> HTTP ${res.status} (${rtt}ms RTT) [${window.location.host}]`
+        );
+      } catch (err: any) {
+        addTerminalLog('ERR', `Edge ping failed: ${err?.message || 'Network unreachable'}`);
+      }
+    }
+
+    if (probe === 'd1' || probe === 'health' || probe === 'full') {
+      const diagStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      const status = await cloudflareApi.fetchCloudflareStatus();
+      const apiRtt = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - diagStart);
+
+      if (!status) {
+        addTerminalLog('ERR', `Failed to fetch live diagnostics from /api/cloudflare/status (${apiRtt}ms)`);
+        return;
+      }
+
+      const d1 = status.services?.d1 || {};
+      const clerk = status.services?.clerk || {};
+      const imgbb = status.services?.imgbb || {};
+      const pages = status.services?.pages || {};
+
+      if (probe === 'd1' || probe === 'full') {
+        addTerminalLog(
+          d1.connected ? 'D1' : 'WARN',
+          `D1 [${d1.databaseName || 'anime-db'}] ${d1.status || 'Unknown'} (${d1.latencyMs ?? apiRtt}ms) | Active: ${d1.activeAnimeCount ?? 0} | Pending: ${d1.pendingAnimeCount ?? 0} | Total: ${d1.recordsCount ?? 0}`
+        );
+        addTerminalLog(
+          'D1',
+          `Tables -> Reviews: ${d1.reviewsCount ?? 0} | Reports: ${d1.reportsCount ?? 0} | Feedback: ${d1.feedbackCount ?? 0} | Watchlists: ${d1.watchlistCount ?? 0}`
+        );
+      }
+
+      if (probe === 'health' || probe === 'full') {
+        addTerminalLog(
+          clerk.configured && clerk.isAdmin ? 'CLERK' : 'WARN',
+          `Clerk Auth: ${clerk.status || 'Unknown'} | User: ${clerk.email || clerk.userId || 'None'} | SecretKey: ${clerk.configured ? 'SET' : 'MISSING'}`
+        );
+        addTerminalLog(
+          imgbb.apiKeyConfigured ? 'OK' : 'WARN',
+          `Edge POP: ${pages.region || 'EDGE'} | ImgBB CDN: ${imgbb.status || 'Unknown'} | API RTT: ${apiRtt}ms`
+        );
+      }
+
+      const recentLogs = Array.isArray(status.logs) ? status.logs.slice(0, 5) : [];
+      for (const entry of recentLogs) {
+        addTerminalLog(
+          String(entry.service || 'D1').toUpperCase(),
+          `${entry.event_type || 'DB_LOG'} [${entry.status_code ?? 200}] ${entry.latency_ms !== undefined ? `(${entry.latency_ms}ms) ` : ''}${entry.details || ''}`
+        );
+      }
+    }
   };
 
   // Cloud Infrastructure Settings
@@ -429,9 +476,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   useEffect(() => {
-    fetchAnime();
-    fetchFeedback();
-    fetchTelegramStatus();
+    if (!isSignedIn || !clerkUser) {
+      setServerAdminVerified(false);
+      return;
+    }
+    if (isLocalClerkAdminAuthorized) {
+      setServerAdminVerified(true);
+      return;
+    }
+    let cancelled = false;
+    setServerAdminVerified(null);
+    cloudflareApi
+      .verifyAdminDetailed()
+      .then((res) => {
+        if (!cancelled) setServerAdminVerified(Boolean(res.ok));
+      })
+      .catch(() => {
+        if (!cancelled) setServerAdminVerified(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, clerkUser?.id, isLocalClerkAdminAuthorized]);
+
+  useEffect(() => {
+    if (isClerkAdminAuthorized) {
+      fetchAnime();
+      fetchFeedback();
+      fetchTelegramStatus();
+      runRealTerminalProbe('full');
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -445,7 +519,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isClerkAdminAuthorized]);
 
   const handleApprovePending = async (itemId: number | string) => {
     const item = pendingItems.find((p) => p.id === itemId);
@@ -744,6 +818,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             mixed_entries: mixedEntries,
             mixedEntries,
             episodes_per_season: episodesPerSeason,
+            season_episode_count: normalizeSeasonEpisodeCount(row),
+            official_source_url: (
+              row['Official Source Link'] ||
+              row['Official Source URL'] ||
+              row['official_source_url'] ||
+              row['Source URL'] ||
+              ''
+            ).toString().trim(),
+            last_verified_date: normalizeLastVerifiedDate(row),
             slug: (rawTitle || 'untitled')
               .toLowerCase()
               .replace(/[^a-z0-9]+/g, '-')
@@ -810,11 +893,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleExportCsv = () => {
     const headers =
-      'Title,Type,Status,Studio,Release Year,Rating,Genres,Synopsis,Streaming Partners,Languages,Episodes,Cover Image\n';
+      'Title,Type,Status,Studio,Release Year,Rating,Genres,Synopsis,Streaming Partners,Languages,Episodes,Cover Image,Season & Episode Count,Official Source Link,Last Verified Date\n';
     const rows = catalog
       .map((a) => {
         const clean = (val: unknown) => `"${String(val ?? '').replace(/"/g, '""')}"`;
-        return `${clean(a.title)},${clean(a.type || a.Type || 'TV Series')},${clean(a.status || a.airing_status || 'Airing')},${clean(a.studio || '')},${clean(a.year || a.release_year || 2024)},${clean(a.rating || 8.5)},${clean(a.genres || a.genre || '')},${clean(a.synopsis || a.description || '')},${clean(normalizePlatformString(a.platform || ''))},${clean(formatLanguageText(a.languages))},${clean(a.episodes_per_season || a.episodes_count || '')},${clean(a.cover_image || a.poster_url || '')}`;
+        return `${clean(a.title)},${clean(a.type || a.Type || 'TV Series')},${clean(a.status || a.airing_status || 'Airing')},${clean(a.studio || '')},${clean(a.year || a.release_year || 2024)},${clean(a.rating || 8.5)},${clean(a.genres || a.genre || '')},${clean(a.synopsis || a.description || '')},${clean(normalizePlatformString(a.platform || ''))},${clean(formatLanguageText(a.languages))},${clean(a.episodes_per_season || a.episodes_count || '')},${clean(a.cover_image || a.poster_url || '')},${clean(a.season_episode_count || '')},${clean(a.official_source_url || '')},${clean(a.last_verified_date || '')}`;
       })
       .join('\n');
 
@@ -1226,6 +1309,18 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         editedData.episodes_per_season !== undefined
           ? editedData.episodes_per_season
           : editingAnime?.episodes_per_season || '',
+      season_episode_count:
+        editedData.season_episode_count !== undefined
+          ? normalizeSeasonEpisodeCount(editedData.season_episode_count)
+          : editingAnime?.season_episode_count || '',
+      official_source_url:
+        editedData.official_source_url !== undefined
+          ? String(editedData.official_source_url).trim()
+          : editingAnime?.official_source_url || '',
+      last_verified_date:
+        editedData.last_verified_date !== undefined
+          ? normalizeLastVerifiedDate(editedData.last_verified_date)
+          : editingAnime?.last_verified_date || '',
     };
 
     setCatalog((prev) => {
@@ -1317,7 +1412,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
       {
         id: 'act-term',
         title: 'Toggle Live System Terminal',
-        desc: 'Open simulated CLI & matrix logs stream',
+        desc: 'Open live D1, Edge & Clerk diagnostics log stream',
         icon: Terminal,
         action: () => {
           setIsTerminalOpen((prev) => !prev);
@@ -1401,16 +1496,25 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
   }, [commandPaletteQuery, catalog, pendingCount, feedbackList.length]);
 
   if (!isClerkAdminAuthorized) {
+    const isCheckingServerAdmin = Boolean(isSignedIn && clerkUser && serverAdminVerified === null);
     return (
       <div className="w-full min-h-screen bg-[#07090e] text-slate-100 flex flex-col items-center justify-center p-6">
         <div className="w-full max-w-md rounded-3xl bg-[#121829] border border-purple-500/30 p-8 shadow-2xl text-center space-y-5">
           <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mx-auto">
-            <ShieldAlert className="w-6 h-6 text-rose-400" />
+            {isCheckingServerAdmin ? (
+              <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+            ) : (
+              <ShieldAlert className="w-6 h-6 text-rose-400" />
+            )}
           </div>
           <div className="space-y-1.5">
-            <h2 className="text-lg font-black text-white">Protected Admin Route</h2>
+            <h2 className="text-lg font-black text-white">
+              {isCheckingServerAdmin ? 'Verifying Admin Session...' : 'Protected Admin Route'}
+            </h2>
             <p className="text-xs text-neutral-400">
-              Only the authorized Clerk Administrator can access <code className="text-purple-400">/admin</code>.
+              {isCheckingServerAdmin
+                ? 'Checking Clerk administrator permissions with the backend.'
+                : <>Only the authorized Clerk Administrator can access <code className="text-purple-400">/admin</code>.</>}
             </p>
           </div>
           {!isSignedIn && (
@@ -1444,7 +1548,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
   ];
 
   return (
-    <div className="w-full min-h-screen bg-[#07090e] text-slate-100 flex flex-col md:flex-row font-sans relative selection:bg-purple-500 selection:text-white overflow-x-hidden">
+    <div className="w-full min-h-screen bg-[#07090e] text-slate-100 flex flex-col md:flex-row font-sans relative selection:bg-purple-500 selection:text-white overflow-x-clip">
       <input
         ref={fileInputRef}
         type="file"
@@ -1552,7 +1656,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
             className={`w-full rounded-xl bg-cyan-950/20 hover:bg-cyan-950/40 border border-cyan-500/30 hover:border-cyan-400/60 p-2.5 transition-all duration-200 cursor-pointer flex items-center gap-2.5 text-left group ${
               isSidebarCollapsed ? 'justify-center' : 'justify-between'
             }`}
-            title="Open Simulated System Terminal"
+            title="Open Live System Terminal"
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-6 h-6 rounded-lg bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center shrink-0">
@@ -1910,11 +2014,15 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         isOpen={isTerminalOpen}
         isExpanded={isTerminalExpanded}
         logs={terminalLogs}
-        onToggleOpen={() => setIsTerminalOpen(true)}
+        onToggleOpen={() => {
+          setIsTerminalOpen(true);
+          runRealTerminalProbe('full');
+        }}
         onToggleExpand={() => setIsTerminalExpanded((prev) => !prev)}
         onClose={() => setIsTerminalOpen(false)}
         onClearLogs={() => setTerminalLogs([])}
         onAddLog={addTerminalLog}
+        onRunProbe={(probe) => runRealTerminalProbe(probe)}
       />
 
       <AdminCommandPalette

@@ -9,9 +9,12 @@ import { AniDubLogo } from './components/AniDubLogo';
 import { useUser, useAuth, useClerk, SignIn, getClerkSessionToken } from './lib/clerk';
 import { isAuthorizedClerkAdmin } from './utils/auth';
 import {
+  findMissingAnimeIds,
   mergeGuestAndServerWatchlist,
+  normalizeWatchlistIds,
   readWatchlistFromStorage,
   readWatchlistOwner,
+  resolveHydratedAnimeList,
   toggleWatchlistIdLocally,
   writeWatchlistToStorage,
 } from './utils/watchlist';
@@ -78,12 +81,22 @@ export default function App() {
   const prevSignedInRef = useRef<boolean>(false);
   const hydratedUserRef = useRef<string | null>(null);
 
-  // Recently viewed state (strictly real state - defaults to empty)
+  // Recently viewed state (supports stored IDs or object snapshots in cf_anime_recently_viewed, hydrated directly from D1)
   const [recentlyViewed, setRecentlyViewed] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('cf_anime_recently_viewed');
-      if (saved) return JSON.parse(saved);
-      return [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((item) =>
+          item && typeof item === 'object'
+            ? item
+            : Number.isInteger(Number(item)) && Number(item) > 0
+              ? { id: Number(item) }
+              : null
+        )
+        .filter(Boolean);
     } catch {
       return [];
     }
@@ -93,12 +106,16 @@ export default function App() {
   const [isRouletteOpen, setIsRouletteOpen] = useState(false);
   const [isCollectionOpen, setIsCollectionOpen] = useState(false);
   const [catalogList, setCatalogList] = useState<any[]>([]);
+  const [hydratedByIdList, setHydratedByIdList] = useState<any[]>([]);
+  const hydratedByIdFetchedRef = useRef<Set<number>>(new Set());
 
   const activeAnimeSlug = useMemo(() => {
     if (selectedAnimeId === null || selectedAnimeId === undefined) return undefined;
-    const found = catalogList.find(a => a.id === selectedAnimeId || String(a.id) === String(selectedAnimeId));
+    const found =
+      catalogList.find(a => a.id === selectedAnimeId || String(a.id) === String(selectedAnimeId)) ||
+      hydratedByIdList.find(a => a.id === selectedAnimeId || String(a.id) === String(selectedAnimeId));
     return found?.slug || undefined;
-  }, [selectedAnimeId, catalogList]);
+  }, [selectedAnimeId, catalogList, hydratedByIdList]);
 
   // Strict Clerk Admin Authentication State
   const { isSignedIn, user: clerkUser } = useUser();
@@ -358,6 +375,20 @@ export default function App() {
 
         if (cancelled) return;
         hydratedUserRef.current = clerkUser.id;
+        if (Array.isArray(serverRes.items) && serverRes.items.length > 0) {
+          setHydratedByIdList((prev) => {
+            const byId = new Map<number, any>();
+            for (const item of prev) byId.set(Number(item.id), item);
+            for (const item of serverRes.items) {
+              const idNum = Number(item.id);
+              if (Number.isInteger(idNum) && idNum > 0) {
+                hydratedByIdFetchedRef.current.add(idNum);
+                byId.set(idNum, item);
+              }
+            }
+            return Array.from(byId.values());
+          });
+        }
         const persisted = writeWatchlistToStorage(mergedIds, clerkUser.id);
         watchlistRef.current = persisted;
         setWatchlist(persisted);
@@ -372,8 +403,21 @@ export default function App() {
   }, [isSignedIn, clerkUser?.id, getToken]);
 
   const addToRecentlyViewed = useCallback((anime: any) => {
-    setRecentlyViewed(prev => {
-      const filtered = prev.filter(item => item.id !== anime.id);
+    const idNum = Number(anime?.id);
+    if (!Number.isInteger(idNum) || idNum <= 0) return;
+
+    setHydratedByIdList((prev) => {
+      const existingIdx = prev.findIndex((item) => Number(item.id) === idNum);
+      if (existingIdx >= 0) {
+        const copy = [...prev];
+        copy[existingIdx] = { ...copy[existingIdx], ...anime };
+        return copy;
+      }
+      return [anime, ...prev];
+    });
+
+    setRecentlyViewed((prev) => {
+      const filtered = prev.filter((item) => Number(item?.id) !== idNum);
       const updated = [anime, ...filtered].slice(0, 10);
       try {
         localStorage.setItem('cf_anime_recently_viewed', JSON.stringify(updated));
@@ -543,42 +587,73 @@ export default function App() {
     setActiveTab('home');
   };
 
-  // Verified real saved watchlist strictly matching actual catalog records
-  const realSavedWatchlist = React.useMemo(() => {
-    return catalogList.filter(anime => 
-      watchlist.some(wId => String(wId) === String(anime.id))
-    );
-  }, [catalogList, watchlist]);
+  const recentlyViewedIds = React.useMemo(
+    () => normalizeWatchlistIds(recentlyViewed),
+    [recentlyViewed]
+  );
 
-  // Verified real recently viewed strictly matching actual catalog records
-  const realRecentlyViewed = React.useMemo(() => {
-    return recentlyViewed.filter(rv => 
-      catalogList.some(a => String(a.id) === String(rv.id))
-    );
-  }, [catalogList, recentlyViewed]);
-
-  // AUTO-CLEANUP: If items disappear from catalog, remove them from source watchlist/recently-viewed states
+  const isMountedRef = useRef(true);
   useEffect(() => {
-    if (isCatalogLoading || catalogList.length === 0) return;
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
-    // 1. Cleanup Watchlist
-    const validWatchlist = watchlist.filter(wId => 
-      catalogList.some(a => String(a.id) === String(wId))
-    );
-    if (validWatchlist.length !== watchlist.length) {
-      watchlistRef.current = validWatchlist;
-      setWatchlist(validWatchlist);
-      writeWatchlistToStorage(validWatchlist, isSignedIn && clerkUser?.id ? clerkUser.id : 'guest');
-    }
+  // Hydrate missing Watchlist & Recently Viewed anime records directly from D1 (?ids=...)
+  useEffect(() => {
+    const allSavedIds = Array.from(new Set([...watchlist, ...recentlyViewedIds]));
+    if (allSavedIds.length === 0) return;
 
-    // 2. Cleanup Recently Viewed
-    const validRecentlyViewed = recentlyViewed.filter(rv => 
-      catalogList.some(a => String(a.id) === String(rv.id))
-    );
-    if (validRecentlyViewed.length !== recentlyViewed.length) {
-      setRecentlyViewed(validRecentlyViewed);
-    }
-  }, [catalogList, isCatalogLoading]);
+    const notHydratedYet = findMissingAnimeIds(allSavedIds, hydratedByIdList);
+    const idsToFetch = notHydratedYet.filter((id) => !hydratedByIdFetchedRef.current.has(id));
+
+    if (idsToFetch.length === 0) return;
+
+    idsToFetch.forEach((id) => hydratedByIdFetchedRef.current.add(id));
+
+    cloudflareApi
+      .fetchAnimeByIds(idsToFetch)
+      .then((fetchedItems) => {
+        if (!isMountedRef.current || !Array.isArray(fetchedItems) || fetchedItems.length === 0) return;
+        setHydratedByIdList((prev) => {
+          const byId = new Map<number, any>();
+          for (const item of prev) byId.set(Number(item.id), item);
+          for (const item of fetchedItems) {
+            const idNum = Number(item.id);
+            if (Number.isInteger(idNum) && idNum > 0) {
+              byId.set(idNum, item);
+            }
+          }
+          return Array.from(byId.values());
+        });
+      })
+      .catch((err) => {
+        idsToFetch.forEach((id) => hydratedByIdFetchedRef.current.delete(id));
+        console.warn('[Saved IDs Hydration Notice]:', err);
+      });
+  }, [watchlist, recentlyViewedIds, hydratedByIdList]);
+
+  const completeRecentlyViewed = React.useMemo(
+    () => recentlyViewed.filter((item) => Boolean(item && item.title)),
+    [recentlyViewed]
+  );
+
+  // Verified saved watchlist resolved from D1 hydrated items + loaded catalog (never dropped at 24-item pagination boundary)
+  const realSavedWatchlist = React.useMemo(
+    () => resolveHydratedAnimeList(watchlist, [hydratedByIdList, catalogList, completeRecentlyViewed]).filter(
+      (item) => Boolean(item && item.title)
+    ),
+    [watchlist, hydratedByIdList, catalogList, completeRecentlyViewed]
+  );
+
+  // Verified recently viewed resolved directly from D1 hydrated items + loaded catalog
+  const realRecentlyViewed = React.useMemo(
+    () => resolveHydratedAnimeList(recentlyViewedIds, [hydratedByIdList, catalogList, completeRecentlyViewed]).filter(
+      (item) => Boolean(item && item.title)
+    ),
+    [recentlyViewedIds, hydratedByIdList, catalogList, completeRecentlyViewed]
+  );
 
   const handleToggleLike = useCallback((animeId: number, _liked?: boolean, count?: number) => {
     setCatalogList(prev => prev.map(a => {
@@ -599,7 +674,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-primary-theme selection:text-white transition-colors duration-300 box-border">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-primary-theme selection:text-white transition-colors duration-300 box-border">
       
       {/* GOD-MODE FIRST-PARTY EDGE ANALYTICS & TELEMETRY TRACKER */}
       <Suspense fallback={null}>
@@ -610,7 +685,7 @@ export default function App() {
       <Navbar
         activeTab={activeTab}
         setActiveTab={handleNavigateTab}
-        watchlistCount={realSavedWatchlist.length}
+        watchlistCount={Math.max(watchlist.length, realSavedWatchlist.length)}
         onUnlockAdmin={() => {
           if (!isAdminAuthenticated || !isClerkAdmin) {
             setIsPasswordModalOpen(true);
@@ -685,7 +760,7 @@ export default function App() {
       )}
 
       {/* 3. MAIN CONTENT VIEWS WITH SMOOTH PAGE TRANSITIONS */}
-      <main className="flex-grow w-full max-w-full overflow-x-hidden pt-4 sm:pt-6 pb-12 sm:pb-16 transition-all duration-500 box-border">
+      <main className="flex-grow w-full max-w-full overflow-x-clip pt-4 sm:pt-6 pb-12 sm:pb-16 transition-all duration-500 box-border">
         <AnimatePresence mode="wait">
           <motion.div
             key={`page_view_${activeTab}_${activeTab === 'home' ? feedView : ''}`}
@@ -693,7 +768,7 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full"
+            className="w-full min-w-0 max-w-full overflow-x-clip"
           >
             {/* FOR YOU HEADER METADATA BLOCK (WHEN FORYOU FEED ACTIVE) */}
             {feedView === 'foryou' && (activeTab === 'home' || activeTab === 'catalog') && (
@@ -788,6 +863,7 @@ export default function App() {
                 <ProfileView
                   watchlist={watchlist}
                   catalogList={catalogList}
+                  savedAnimeItems={realSavedWatchlist}
                   onSelectAnime={(anime) => {
                     handleOpenAnime(anime.id);
                     addToRecentlyViewed(anime);

@@ -20,12 +20,20 @@ export interface NotificationItem {
   read?: boolean;
 }
 
+export interface NotificationPreferences {
+  newDubs: boolean;
+  simulcasts: boolean;
+  communityChat: boolean;
+}
+
 export interface NotificationContextType {
   notifications: NotificationItem[];
   unreadCount: number;
   isSoundEnabled: boolean;
   browserPermission: NotificationPermission | 'unsupported';
   isLiveConnected: boolean;
+  preferences: NotificationPreferences;
+  updatePreference: (key: keyof NotificationPreferences, value: boolean) => void;
   toggleSound: () => void;
   requestBrowserPermission: () => Promise<boolean>;
   markAllAsRead: () => void;
@@ -69,9 +77,26 @@ function playNotificationChime() {
 
 const STORAGE_KEY = 'anidub_community_notifications';
 const SOUND_KEY = 'anidub_notif_sound_enabled';
+const PREFS_KEY = 'anidub_notif_preferences_v1';
+
+const DEFAULT_PREFERENCES: NotificationPreferences = {
+  newDubs: true,
+  simulcasts: true,
+  communityChat: true,
+};
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { showToast } = useToast();
+
+  const [preferences, setPreferences] = useState<NotificationPreferences>(() => {
+    try {
+      const saved = localStorage.getItem(PREFS_KEY);
+      if (saved) {
+        return { ...DEFAULT_PREFERENCES, ...JSON.parse(saved) };
+      }
+    } catch {}
+    return DEFAULT_PREFERENCES;
+  });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     try {
@@ -164,9 +189,24 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     });
   }, []);
 
+  const updatePreference = useCallback((key: keyof NotificationPreferences, value: boolean) => {
+    setPreferences((prev) => {
+      const next = { ...prev, [key]: value };
+      try {
+        localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
   // Helper: Display in-app toast, audio chime, and optional browser notification
   const handleIncomingNotification = useCallback((payload: Partial<NotificationItem>) => {
     const type: ActivityType = (payload.type as ActivityType) || 'system';
+    const isDubUpdate = type === 'anime_approved';
+    const isCommunity = type === 'chat' || type === 'review';
+    if (isDubUpdate && !preferences.newDubs) return;
+    if (isCommunity && !preferences.communityChat) return;
+
     const title = payload.title || formatNotificationTitle({ type, ...payload });
     const message = payload.message || formatNotificationBody({ type, ...payload });
     const timestamp = payload.timestamp || new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
@@ -217,7 +257,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         });
       } catch {}
     }
-  }, [isSoundEnabled, showToast]);
+  }, [isSoundEnabled, preferences.communityChat, preferences.newDubs, showToast]);
 
   // Connect to SSE (/api/notifications/stream)
   useEffect(() => {
@@ -285,13 +325,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const token = await getClerkSessionToken();
         if (!token || !wsActive) return;
 
-        const ws = new WebSocket(getCloudflareWsUrl('/ws', token));
+        const ws = new WebSocket(getCloudflareWsUrl('/ws'));
         wsRef.current = ws;
+
+        ws.onopen = () => {
+          if (!wsActive) return;
+          ws.send(JSON.stringify({ type: 'auth', token }));
+        };
 
         ws.onmessage = (event) => {
           if (!wsActive) return;
           try {
             const data = JSON.parse(event.data);
+            if (data?.type === 'auth_ok' || data?.type === 'error') return;
             // If a new live review or chat arrived via Cloudflare WS
             if (data && (data.text || data.comment)) {
               // Avoid duplicate if it's the welcome greeting
@@ -429,6 +475,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         isSoundEnabled,
         browserPermission,
         isLiveConnected,
+        preferences,
+        updatePreference,
         toggleSound,
         requestBrowserPermission,
         markAllAsRead,

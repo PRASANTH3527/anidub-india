@@ -330,7 +330,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   );
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 overflow-x-hidden font-['Inter',sans-serif] text-slate-100 pb-10 box-border">
+    <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 overflow-x-clip font-['Inter',sans-serif] text-slate-100 pb-10 box-border">
       
       {/* 1. HERO SECTION */}
       <div className="text-center pt-6 sm:pt-8 px-2 sm:px-4 max-w-3xl mx-auto">
@@ -434,7 +434,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           />
           {effectiveSearch && (
             <button
+              type="button"
               onClick={() => handleSearchChange('')}
+              aria-label="Clear search query"
               className="absolute right-3 text-neutral-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
               title="Clear search"
             >
@@ -493,7 +495,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         ].map((item) => (
           <div 
             key={`catalog_filter_${item.label}`} 
-            className="relative flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 hover:border-purple-500/40 rounded-xl px-3 py-1.5 sm:py-2 transition-colors duration-200"
+            className="relative min-w-0 overflow-hidden flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 hover:border-purple-500/40 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 transition-colors duration-200"
           >
             <span className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-wider shrink-0 pr-1">
               {item.label}
@@ -502,6 +504,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
               <select
                 value={item.val}
                 onChange={(e) => item.set(e.target.value)}
+                aria-label={`Filter by ${item.label.toLowerCase()}`}
                 className="bg-transparent text-white text-xs sm:text-sm font-medium outline-none cursor-pointer text-right appearance-none w-full min-w-0 text-ellipsis pr-5 truncate"
               >
                 {item.opts.map(o => <option key={o} value={o} className="bg-[#1A1C29] text-white">{o}</option>)}
@@ -512,7 +515,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         ))}
         
         {/* Sort (Half width or grid item) */}
-        <div className="relative flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 hover:border-purple-500/40 rounded-xl px-3 py-1.5 sm:py-2 transition-colors duration-200">
+        <div className="relative min-w-0 overflow-hidden col-span-2 sm:col-span-1 flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 hover:border-purple-500/40 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 transition-colors duration-200">
           <span className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-wider shrink-0 pr-1">
             SORT
           </span>
@@ -629,7 +632,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 max-w-full">
               <button
                 type="button"
                 onClick={() => handlePageChange(paginationMeta.currentPage - 1)}

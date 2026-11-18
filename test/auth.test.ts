@@ -432,7 +432,10 @@ test('Security headers (_headers), .gitignore, SEO assets, and non-sensitive rev
   assert.ok(headersContent.includes('Referrer-Policy: strict-origin-when-cross-origin'));
   assert.ok(headersContent.includes('Strict-Transport-Security:'));
   assert.ok(headersContent.includes('Permissions-Policy:'));
-  assert.equal(headersContent.includes('Content-Security-Policy:'), false);
+  assert.ok(headersContent.includes('Content-Security-Policy:'));
+  assert.ok(headersContent.includes("default-src 'self'"));
+  assert.ok(headersContent.includes("object-src 'none'"));
+  assert.ok(headersContent.includes("frame-ancestors 'none'"));
 
   const gitignoreContent = fs.readFileSync(path.join(process.cwd(), '.gitignore'), 'utf-8');
   assert.ok(gitignoreContent.includes('.wrangler/'));

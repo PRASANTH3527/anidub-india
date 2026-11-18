@@ -91,6 +91,11 @@ export function getErrorMessage(err: unknown): string {
   return String(err);
 }
 
+export function isMissingColumnError(err: unknown): boolean {
+  const msg = getErrorMessage(err).toLowerCase();
+  return msg.includes('no such column') || msg.includes('has no column named');
+}
+
 export async function sendTelegramAlert(
   env: CloudflareEnv,
   text: string,

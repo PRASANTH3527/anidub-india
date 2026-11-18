@@ -152,6 +152,7 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
           <button
             type="button"
             onClick={() => onChange('')}
+            aria-label="Clear search query"
             className="p-1.5 rounded-xl hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors cursor-pointer"
             title="Clear search"
           >
@@ -162,6 +163,7 @@ export const VoiceSearchBar: React.FC<VoiceSearchBarProps> = ({
         <button
           type="button"
           onClick={handleMicClick}
+          aria-label={isListening ? 'Stop voice recognition' : 'Start voice search'}
           className={`relative p-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
             isListening
               ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50 ring-4 ring-purple-500/30 animate-pulse scale-105'

@@ -20,14 +20,19 @@ import {
   Upload,
   Download,
   Database,
+  Bell,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { Anime } from './CatalogView';
 import { AnimeCard } from './AnimeCard';
 import { useToast } from './Toast';
+import { useNotifications } from '../context/NotificationContext';
 
 export interface ProfileProps {
   watchlist?: number[];
   catalogList?: Anime[];
+  savedAnimeItems?: Anime[];
   onSelectAnime?: (anime: Anime) => void;
   onToggleWatchlist?: (animeId: number) => void;
   onOpenCreateCollection?: () => void;
@@ -117,6 +122,7 @@ const RICH_ANIME_AVATARS: AnimeAvatarOption[] = [
 export function ProfileView({
   watchlist = [],
   catalogList = [],
+  savedAnimeItems = [],
   onSelectAnime,
   onToggleWatchlist,
   onOpenCreateCollection,
@@ -124,6 +130,15 @@ export function ProfileView({
 }: ProfileProps) {
   const { user, isSignedIn } = useUser();
   const { showToast } = useToast();
+  const {
+    isSoundEnabled,
+    toggleSound,
+    browserPermission,
+    requestBrowserPermission,
+    preferences,
+    updatePreference,
+    triggerTestNotification,
+  } = useNotifications();
   const [copied, setCopied] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -189,7 +204,19 @@ export function ProfileView({
     }
   };
 
-  const savedAnimeList: Anime[] = catalogList.filter((anime) => watchlist.includes(anime.id));
+  const savedAnimeList: Anime[] = React.useMemo(() => {
+    const source = [...(savedAnimeItems || []), ...catalogList];
+    const byId = new Map<number, Anime>();
+    for (const item of source) {
+      const id = Number(item?.id);
+      if (Number.isInteger(id) && id > 0 && !byId.has(id)) {
+        byId.set(id, item);
+      }
+    }
+    return watchlist
+      .map((id) => byId.get(Number(id)))
+      .filter((item): item is Anime => Boolean(item));
+  }, [savedAnimeItems, catalogList, watchlist]);
 
   const preferredAudio = React.useMemo(() => {
     if (savedAnimeList.length === 0) return 'None saved yet';
@@ -254,19 +281,19 @@ export function ProfileView({
   });
 
   return (
-    <div className="relative w-full min-h-screen text-neutral-100 font-sans pb-24 overflow-hidden selection:bg-purple-500/30">
+    <div className="relative w-full max-w-full min-h-screen text-neutral-100 font-sans pb-24 overflow-x-clip selection:bg-purple-500/30">
       <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
         <div className="absolute -top-32 -left-32 w-[600px] h-[600px] bg-gradient-to-br from-purple-700/20 via-indigo-600/15 to-transparent blur-[140px] rounded-full transform -rotate-12" />
         <div className="absolute top-10 -right-28 w-[550px] h-[550px] bg-gradient-to-bl from-pink-600/15 via-purple-900/20 to-transparent blur-[150px] rounded-full" />
         <div className="absolute top-[45%] left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-indigo-500/10 blur-[160px] rounded-full pointer-events-none" />
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-10 sm:pt-14 space-y-8 relative z-10">
-        <div className="relative w-full bg-gradient-to-b from-[#14192b]/95 via-[#0e1220]/95 to-[#090b14]/98 rounded-3xl p-6 sm:p-10 border border-purple-500/20 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl overflow-hidden animate-in fade-in duration-300">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 pt-8 sm:pt-14 space-y-8 relative z-10">
+        <div className="relative w-full bg-gradient-to-b from-[#14192b]/95 via-[#0e1220]/95 to-[#090b14]/98 rounded-3xl p-5 sm:p-10 border border-purple-500/20 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl overflow-hidden animate-in fade-in duration-300">
           <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500 to-pink-500 opacity-80" />
           <div className="absolute -right-20 -bottom-20 w-80 h-80 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="absolute top-4 sm:top-6 right-4 sm:right-6 z-20">
+          <div className="absolute top-3 sm:top-6 right-3 sm:right-6 z-20">
             <SignedOut>
               <SignInButton mode="modal">
                 <button
@@ -292,7 +319,7 @@ export function ProfileView({
             </SignedIn>
           </div>
 
-          <div className="flex flex-col md:flex-row items-center md:items-start gap-6 sm:gap-8">
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-6 sm:gap-8 min-w-0">
             <div className="relative shrink-0">
               <div className="absolute -inset-1.5 rounded-3xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-500 opacity-70 blur-md animate-pulse" />
 
@@ -322,7 +349,7 @@ export function ProfileView({
               />
             </div>
 
-            <div className="flex-1 text-center md:text-left space-y-3 pt-2 sm:pt-0">
+            <div className="flex-1 min-w-0 w-full text-center md:text-left space-y-3 pt-2 sm:pt-0">
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold shadow-sm ${
                   isSignedIn
@@ -346,24 +373,24 @@ export function ProfileView({
                 )}
               </div>
 
-              <div className="flex items-center justify-center md:justify-start gap-2.5">
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-heading font-black text-white tracking-tight drop-shadow-md">
+              <div className="flex items-center justify-center md:justify-start gap-2.5 min-w-0 max-w-full">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-heading font-black text-white tracking-tight drop-shadow-md break-words max-w-full">
                   {displayName}
                 </h1>
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(true)}
                   title="Edit Display Name"
-                  className="p-1.5 rounded-lg text-neutral-400 hover:text-purple-300 hover:bg-white/5 transition-colors cursor-pointer active:scale-95"
+                  className="p-1.5 rounded-lg text-neutral-400 hover:text-purple-300 hover:bg-white/5 transition-colors cursor-pointer active:scale-95 shrink-0"
                   aria-label="Edit Display Name"
                 >
                   <Edit3 className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
 
-              <p className="text-neutral-400 text-xs sm:text-sm font-medium flex items-center justify-center md:justify-start gap-1.5 truncate">
+              <p className="text-neutral-400 text-xs sm:text-sm font-medium flex items-center justify-center md:justify-start gap-1.5 min-w-0 max-w-full">
                 <Mail className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
-                <span>{displaySubtitle}</span>
+                <span className="truncate">{displaySubtitle}</span>
               </p>
 
               <div className="pt-2 flex flex-wrap items-center justify-center md:justify-start gap-2.5 sm:gap-3">
@@ -409,6 +436,177 @@ export function ProfileView({
             </div>
           </div>
         </div>
+
+        {/* NOTIFICATION PREFERENCES SECTION */}
+        <section
+          aria-label="Notification Preferences"
+          className="rounded-3xl bg-[#111629]/85 border border-white/10 p-6 sm:p-7 space-y-5 shadow-xl"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-300">
+                <Bell className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-heading font-black text-white uppercase tracking-tight">
+                  Notification Preferences
+                </h2>
+                <p className="text-xs text-neutral-400">
+                  Manage sound chimes, browser push alerts, and dub release notifications
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => triggerTestNotification()}
+              aria-label="Send test notification"
+              className="px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-200 text-xs font-bold transition-colors cursor-pointer"
+            >
+              Send Test Alert
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Sound Chime Toggle */}
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 p-4">
+              <div className="flex items-center gap-3 min-w-0">
+                {isSoundEnabled ? (
+                  <Volume2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <VolumeX className="w-4 h-4 text-neutral-500 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-white">Notification Sound Chime</p>
+                  <p className="text-[11px] text-neutral-400">Play a gentle chime on live updates</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isSoundEnabled}
+                aria-label="Toggle notification sound chime"
+                onClick={toggleSound}
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                  isSoundEnabled ? 'bg-purple-600' : 'bg-neutral-700'
+                }`}
+              >
+                <span
+                  className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                    isSoundEnabled ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Browser Desktop Notifications */}
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 p-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <Bell className="w-4 h-4 text-purple-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-white">Desktop Push Alerts</p>
+                  <p className="text-[11px] text-neutral-400">
+                    Status:{' '}
+                    <span className="font-semibold text-neutral-200 capitalize">
+                      {browserPermission}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={requestBrowserPermission}
+                disabled={browserPermission === 'unsupported' || browserPermission === 'granted'}
+                aria-label="Enable browser push notifications"
+                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-50 text-xs font-bold text-white cursor-pointer shrink-0"
+              >
+                {browserPermission === 'granted'
+                  ? 'Enabled'
+                  : browserPermission === 'unsupported'
+                  ? 'Unsupported'
+                  : 'Enable'}
+              </button>
+            </div>
+
+            {/* New Dub Releases Category */}
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 p-4">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-white">New Dub Releases</p>
+                <p className="text-[11px] text-neutral-400">
+                  Notify when new Hindi, Tamil & Telugu dubs are added
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={preferences.newDubs}
+                aria-label="Toggle new dub releases notifications"
+                onClick={() => updatePreference('newDubs', !preferences.newDubs)}
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                  preferences.newDubs ? 'bg-purple-600' : 'bg-neutral-700'
+                }`}
+              >
+                <span
+                  className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                    preferences.newDubs ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Weekly Simulcast Alerts */}
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 p-4">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-white">Weekly Simulcast Drops</p>
+                <p className="text-[11px] text-neutral-400">
+                  Alerts for scheduled weekly dub episode drops
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={preferences.simulcasts}
+                aria-label="Toggle weekly simulcast notifications"
+                onClick={() => updatePreference('simulcasts', !preferences.simulcasts)}
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                  preferences.simulcasts ? 'bg-purple-600' : 'bg-neutral-700'
+                }`}
+              >
+                <span
+                  className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                    preferences.simulcasts ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Community Chat & Reviews */}
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 p-4 sm:col-span-2">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-white">Community Chat & Reviews</p>
+                <p className="text-[11px] text-neutral-400">
+                  Receive real-time alerts for new community reviews and chat highlights
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={preferences.communityChat}
+                aria-label="Toggle community chat and review notifications"
+                onClick={() => updatePreference('communityChat', !preferences.communityChat)}
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                  preferences.communityChat ? 'bg-purple-600' : 'bg-neutral-700'
+                }`}
+              >
+                <span
+                  className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                    preferences.communityChat ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </section>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">

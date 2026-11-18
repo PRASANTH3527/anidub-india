@@ -13,7 +13,12 @@ import {
   Hash,
   ArrowDown,
   Smile,
-  X
+  X,
+  Eye,
+  EyeOff,
+  Ban,
+  Flag,
+  MoreHorizontal
 } from 'lucide-react';
 import { getCloudflareWsUrl } from '../config/cloudflare';
 import { cloudflareApi } from '../services/cloudflareApi';
@@ -22,6 +27,20 @@ import { syncAndDeduplicateChatMessages } from '../utils/chatDeduplication';
 import { getVerifiedClerkUsername } from '../utils/chatIdentity';
 import { useAuth } from '@clerk/clerk-react';
 import { useUser } from '../lib/clerk';
+import {
+  blockChatUser,
+  unblockChatUser,
+  getBlockedChatUsers,
+  filterVisibleChatMessages,
+  formatSpoilerChatMessage,
+  stripSpoilerMarker,
+  isChatMessageSpoiler,
+} from '../utils/chatModeration';
+import {
+  getSpoilerProtectionEnabled,
+  setSpoilerProtectionEnabled,
+  SPOILER_PROTECTION_EVENT,
+} from '../utils/watchProgress';
 
 export interface ChatMessage {
   id: string | number;
@@ -153,10 +172,41 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
 
+  // Moderation & Spoiler Protection states
+  const [spoilerProtection, setSpoilerProtection] = useState<boolean>(() =>
+    getSpoilerProtectionEnabled()
+  );
+  const [isSpoilerDraft, setIsSpoilerDraft] = useState(false);
+  const [revealedMessageIds, setRevealedMessageIds] = useState<Record<string, boolean>>({});
+  const [blockedUsers, setBlockedUsers] = useState<string[]>(() => getBlockedChatUsers());
+  const [showBlockedManager, setShowBlockedManager] = useState(false);
+  const [openMenuMessageId, setOpenMenuMessageId] = useState<string | null>(null);
+  const [reportingMessage, setReportingMessage] = useState<ChatMessage | null>(null);
+  const [reportIssueType, setReportIssueType] = useState('Harassment or Abuse');
+  const [reportDescription, setReportDescription] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [moderationToast, setModerationToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    const syncSpoilerPref = () => {
+      const enabled = getSpoilerProtectionEnabled();
+      setSpoilerProtection(enabled);
+      if (enabled) {
+        setRevealedMessageIds({});
+      }
+    };
+    window.addEventListener(SPOILER_PROTECTION_EVENT, syncSpoilerPref);
+    return () => window.removeEventListener(SPOILER_PROTECTION_EVENT, syncSpoilerPref);
+  }, []);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
         setShowEmojiPicker(false);
+      }
+      const target = e.target as HTMLElement | null;
+      if (target && !target.closest('[data-chat-mod-menu]')) {
+        setOpenMenuMessageId(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -355,16 +405,19 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         }
 
         setConnectionStatus('connecting');
-        const baseWsUrl = getCloudflareWsUrl('/ws', token);
-        const wsUrl = verifiedClerkUsername
-          ? `${baseWsUrl}${baseWsUrl.includes('?') ? '&' : '?'}username=${encodeURIComponent(verifiedClerkUsername)}`
-          : baseWsUrl;
-
+        const wsUrl = getCloudflareWsUrl('/ws');
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
           if (!isSubscribed) return;
+          ws.send(
+            JSON.stringify({
+              type: 'auth',
+              token,
+              ...(verifiedClerkUsername ? { username: verifiedClerkUsername } : {}),
+            })
+          );
           setConnectionStatus('connected');
           reconnectAttemptsRef.current = 0;
         };
@@ -374,7 +427,12 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
           try {
             const data = JSON.parse(event.data);
 
-            // Handle explicit WebSocket server rejection / error events (e.g. username mismatch or reserved name)
+            if (data && data.type === 'auth_ok') {
+              setConnectionStatus('connected');
+              return;
+            }
+
+            // Handle explicit WebSocket server rejection / error events (e.g. username mismatch, reserved name, rate limit)
             if (data && (data.type === 'error' || (data.error && !data.text && !data.comment))) {
               const errorText = String(data.error || data.message || 'WebSocket message rejected by server.');
               setChatError(errorText);
@@ -595,11 +653,13 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         language: reviewLang
       });
     } else {
-      success = await sendMessage(trimmed);
+      const formattedText = formatSpoilerChatMessage(trimmed, isSpoilerDraft);
+      success = await sendMessage(formattedText);
     }
 
     if (success) {
       setInputMessage('');
+      setIsSpoilerDraft(false);
 
       // Ensure user's new message is scrolled into view within the container
       if (chatContainerRef.current) {
@@ -612,6 +672,62 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
           }
         }, 50);
       }
+    }
+  };
+
+  const handleToggleSpoilerShield = () => {
+    const next = !spoilerProtection;
+    setSpoilerProtection(next);
+    setSpoilerProtectionEnabled(next);
+    if (next) {
+      setRevealedMessageIds({});
+    }
+    setModerationToast(next ? 'Spoiler Shield enabled in Live Chat' : 'Spoiler Shield disabled');
+    setTimeout(() => setModerationToast(null), 3000);
+  };
+
+  const handleBlockChatUser = (username: string) => {
+    const updated = blockChatUser(username);
+    setBlockedUsers(updated);
+    setOpenMenuMessageId(null);
+    setModerationToast(`Blocked @${username}. Messages hidden.`);
+    setTimeout(() => setModerationToast(null), 3500);
+  };
+
+  const handleUnblockChatUser = (username: string) => {
+    const updated = unblockChatUser(username);
+    setBlockedUsers(updated);
+    if (updated.length === 0) {
+      setShowBlockedManager(false);
+    }
+    setModerationToast(`Unblocked @${username}`);
+    setTimeout(() => setModerationToast(null), 3000);
+  };
+
+  const handleSubmitUserReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportingMessage) return;
+    setIsSubmittingReport(true);
+    try {
+      const excerpt = stripSpoilerMarker(reportingMessage.text).slice(0, 160);
+      const result = await cloudflareApi.reportIssue({
+        animeId: 0,
+        animeTitle: 'Community Live Chat',
+        issueType: `Chat Report: ${reportIssueType}`,
+        description: `Reported user: @${reportingMessage.user}\nMessage ID: ${reportingMessage.id}\nExcerpt: "${excerpt}"\nDetails: ${reportDescription.trim() || 'No extra details provided'}`,
+      });
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to submit user report');
+      }
+      setModerationToast(`Reported @${reportingMessage.user} to moderators.`);
+      setTimeout(() => setModerationToast(null), 4000);
+      setReportingMessage(null);
+      setReportDescription('');
+    } catch (err: any) {
+      setChatError(err?.message || 'Unable to submit report right now.');
+      setTimeout(() => setChatError(null), 5000);
+    } finally {
+      setIsSubmittingReport(false);
     }
   };
 
@@ -633,6 +749,8 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
     const clean = name.replace(/[^a-zA-Z]/g, '');
     return (clean.slice(0, 2) || 'AF').toUpperCase();
   };
+
+  const visibleMessages = filterVisibleChatMessages(messages, blockedUsers);
 
   return (
     <div className={`bg-[#0a0e1a]/95 backdrop-blur-2xl border border-white/[0.08] rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col font-sans text-white overflow-hidden transition-all ${className || ''}`}>
@@ -664,6 +782,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                 <button
                   type="button"
                   onClick={handleRandomizeName}
+                  aria-label="Randomize guest display name"
                   className="text-[11px] text-neutral-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-md px-1.5 py-0.5 flex items-center gap-1 transition-colors cursor-pointer"
                   title="Sign in with Clerk to post (click to cycle guest tag)"
                 >
@@ -704,6 +823,39 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             </button>
           </div>
 
+          {/* Spoiler Protection Toggle */}
+          <button
+            type="button"
+            onClick={handleToggleSpoilerShield}
+            aria-pressed={spoilerProtection}
+            aria-label={spoilerProtection ? 'Disable spoiler protection' : 'Enable spoiler protection'}
+            className={`p-1.5 rounded-md border transition-all cursor-pointer flex items-center gap-1 ${
+              spoilerProtection
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                : 'bg-white/[0.03] border-white/[0.08] text-neutral-500 hover:text-neutral-300'
+            }`}
+            title={spoilerProtection ? 'Spoiler Shield: ON' : 'Spoiler Shield: OFF'}
+          >
+            {spoilerProtection ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+            <span className="hidden md:inline text-[10px] font-bold">
+              {spoilerProtection ? 'Spoiler ON' : 'Spoiler OFF'}
+            </span>
+          </button>
+
+          {/* Blocked Users Manager Button */}
+          {blockedUsers.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowBlockedManager((prev) => !prev)}
+              aria-label={`Manage ${blockedUsers.length} blocked users`}
+              className="px-2 py-1 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+              title="Manage blocked users"
+            >
+              <Ban className="w-3 h-3" />
+              <span>{blockedUsers.length}</span>
+            </button>
+          )}
+
           {/* Auto-scroll Button */}
           <button
             type="button"
@@ -737,11 +889,41 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         </div>
       </div>
 
-      {/* Sync Status Toast */}
-      {syncStatus && (
+      {/* Blocked Users Manager Drawer */}
+      {showBlockedManager && blockedUsers.length > 0 && (
+        <div className="px-3 py-2 bg-rose-950/30 border-b border-rose-500/20 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold text-rose-300">Blocked users:</span>
+            {blockedUsers.map((u) => (
+              <button
+                key={`blocked_${u}`}
+                type="button"
+                onClick={() => handleUnblockChatUser(u)}
+                aria-label={`Unblock ${u}`}
+                className="px-2 py-0.5 rounded-md bg-black/40 border border-rose-500/30 text-neutral-200 hover:text-white text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                title={`Unblock @${u}`}
+              >
+                <span>@{u}</span>
+                <X className="w-3 h-3 text-rose-400" />
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowBlockedManager(false)}
+            aria-label="Close blocked users panel"
+            className="text-[11px] text-neutral-400 hover:text-white cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+      )}
+
+      {/* Sync / Moderation Status Toast */}
+      {(syncStatus || moderationToast) && (
         <div className="text-[10px] font-medium text-emerald-400/90 bg-emerald-500/10 border-b border-emerald-500/15 px-3 py-1 flex items-center gap-1.5 animate-in fade-in duration-200">
           <CheckCircle2 className="w-3 h-3 shrink-0" />
-          <span>{syncStatus} — connected and synchronized.</span>
+          <span>{moderationToast || `${syncStatus} — connected and synchronized.`}</span>
         </div>
       )}
 
@@ -750,18 +932,27 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         ref={chatContainerRef}
         className="h-[390px] sm:h-[450px] md:h-[490px] overflow-y-auto overscroll-contain px-3 py-2 sm:px-4 sm:py-2.5 space-y-1 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20"
       >
-        {messages.length === 0 ? (
+        {visibleMessages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-neutral-400 p-6">
             <div className="w-9 h-9 rounded-xl bg-purple-950/40 border border-purple-500/20 flex items-center justify-center text-purple-400 shadow-sm">
               <Sparkles className="w-4 h-4" />
             </div>
             <h4 className="text-xs font-semibold text-neutral-200">Welcome to Live Chat!</h4>
-            <p className="text-[11px] max-w-xs text-neutral-400">Say hello or share your thoughts on regional anime dubs.</p>
+            <p className="text-[11px] max-w-xs text-neutral-400">
+              {messages.length > 0 && blockedUsers.length > 0
+                ? 'All current messages are from blocked users.'
+                : 'Say hello or share your thoughts on regional anime dubs.'}
+            </p>
           </div>
         ) : (
-          messages.map((msg) => {
+          visibleMessages.map((msg) => {
             const userColor = getUsernameColor(msg.user);
             const avatarStyle = getAvatarStyle(msg.user, msg.isReview);
+            const msgKey = String(msg.id);
+            const isSpoilerMsg = isChatMessageSpoiler(msg);
+            const shouldBlur = spoilerProtection && isSpoilerMsg && !revealedMessageIds[msgKey];
+            const cleanBody = stripSpoilerMarker(msg.text);
+            const isMenuOpen = openMenuMessageId === msgKey;
 
             return (
               <motion.div 
@@ -769,7 +960,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                 initial={{ opacity: 0, y: 12, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className="flex items-start gap-2.5 px-2 py-1 -mx-1.5 rounded-lg hover:bg-white/[0.025] transition-colors group"
+                className="relative flex items-start gap-2.5 px-2 py-1 -mx-1.5 rounded-lg hover:bg-white/[0.025] transition-colors group"
               >
                 {/* Refined Smaller Avatar with Subtle Border */}
                 <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-md sm:rounded-lg flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0 border shadow-xs ${avatarStyle} mt-0.5`}>
@@ -779,7 +970,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                 {/* Message Content */}
                 <div className="flex-1 min-w-0">
                   {/* Sender Header Line (tight vertical spacing, subtle faded timestamp) */}
-                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className={`text-[12px] sm:text-[13px] font-semibold ${userColor} hover:underline cursor-pointer tracking-tight`}>
                       {msg.user}
                     </span>
@@ -797,6 +988,13 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                       </span>
                     )}
 
+                    {isSpoilerMsg && (
+                      <span className="text-[9px] font-bold text-amber-300/90 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
+                        <EyeOff className="w-2.5 h-2.5" />
+                        <span>Spoiler</span>
+                      </span>
+                    )}
+
                     {msg.language && (
                       <span className="text-[9px] font-medium text-emerald-300/90 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.2 rounded">
                         {msg.language}
@@ -806,24 +1004,169 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                     <span className="text-[10px] text-neutral-500/70 font-mono ml-auto sm:ml-1 select-none">
                       {msg.timestamp}
                     </span>
+
+                    {/* Block / Report User Menu Button */}
+                    {!msg.isSelf && (
+                      <div className="relative ml-auto sm:ml-0" data-chat-mod-menu>
+                        <button
+                          type="button"
+                          onClick={() => setOpenMenuMessageId(isMenuOpen ? null : msgKey)}
+                          aria-label={`Moderate or report ${msg.user}`}
+                          aria-expanded={isMenuOpen}
+                          className="p-1 rounded-md text-neutral-500 hover:text-white hover:bg-white/10 transition-colors cursor-pointer sm:opacity-40 sm:group-hover:opacity-100 focus:opacity-100"
+                          title={`Block or Report @${msg.user}`}
+                        >
+                          <MoreHorizontal className="w-3.5 h-3.5" />
+                        </button>
+
+                        {isMenuOpen && (
+                          <div className="absolute right-0 top-full mt-1 w-40 rounded-xl bg-[#111626] border border-white/15 shadow-2xl py-1 z-40">
+                            <button
+                              type="button"
+                              onClick={() => handleBlockChatUser(msg.user)}
+                              aria-label={`Block user ${msg.user}`}
+                              className="w-full px-3 py-1.5 text-left text-xs text-rose-300 hover:bg-rose-500/15 flex items-center gap-2 cursor-pointer"
+                            >
+                              <Ban className="w-3.5 h-3.5 shrink-0" />
+                              <span>Block User</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReportingMessage(msg);
+                                setOpenMenuMessageId(null);
+                              }}
+                              aria-label={`Report user ${msg.user}`}
+                              className="w-full px-3 py-1.5 text-left text-xs text-amber-300 hover:bg-amber-500/15 flex items-center gap-2 cursor-pointer"
+                            >
+                              <Flag className="w-3.5 h-3.5 shrink-0" />
+                              <span>Report User</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Message Body (Tight Slack / Linear Typography) */}
-                  {msg.isReview ? (
-                    <div className="mt-0.5 text-xs text-amber-100/90 leading-relaxed border-l-2 border-amber-500/50 pl-2 py-0.5 bg-amber-500/[0.03] rounded-r break-words">
-                      {msg.text}
-                    </div>
-                  ) : (
-                    <p className="mt-0.5 text-xs sm:text-[13px] text-neutral-200/95 leading-snug break-words select-text font-normal">
-                      {msg.text}
-                    </p>
-                  )}
+                  {/* Message Body (with optional Spoiler Protection blur overlay) */}
+                  <div className="relative mt-0.5">
+                    {msg.isReview ? (
+                      <div
+                        className={`text-xs text-amber-100/90 leading-relaxed border-l-2 border-amber-500/50 pl-2 py-0.5 bg-amber-500/[0.03] rounded-r break-words transition-all ${
+                          shouldBlur ? 'blur-sm select-none opacity-45 pointer-events-none' : ''
+                        }`}
+                      >
+                        {cleanBody}
+                      </div>
+                    ) : (
+                      <p
+                        className={`text-xs sm:text-[13px] text-neutral-200/95 leading-snug break-words select-text font-normal transition-all ${
+                          shouldBlur ? 'blur-sm select-none opacity-45 pointer-events-none' : ''
+                        }`}
+                      >
+                        {cleanBody}
+                      </p>
+                    )}
+
+                    {shouldBlur && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRevealedMessageIds((prev) => ({ ...prev, [msgKey]: true }))
+                        }
+                        aria-label={`Reveal spoiler message from ${msg.user}`}
+                        className="mt-1 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-[11px] font-bold text-amber-300 inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>Spoiler Hidden — Click to Reveal</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             );
           })
         )}
       </div>
+
+      {/* Report User Inline Modal */}
+      {reportingMessage && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setReportingMessage(null)}
+        >
+          <form
+            onSubmit={handleSubmitUserReport}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl bg-[#0f1424] border border-white/15 p-5 shadow-2xl space-y-3.5"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-300">
+                <Flag className="w-4 h-4" />
+                <h4 className="text-sm font-bold text-white">Report @{reportingMessage.user}</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReportingMessage(null)}
+                aria-label="Close report user modal"
+                className="p-1 rounded-lg text-neutral-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-[11px] text-neutral-400 bg-black/40 border border-white/10 rounded-xl p-2.5 line-clamp-2">
+              "{stripSpoilerMarker(reportingMessage.text)}"
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-neutral-300">Reason</label>
+              <select
+                value={reportIssueType}
+                onChange={(e) => setReportIssueType(e.target.value)}
+                aria-label="Report reason"
+                className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400"
+              >
+                <option value="Harassment or Abuse">Harassment or Abuse</option>
+                <option value="Spam or Scam Links">Spam or Scam Links</option>
+                <option value="Unmarked Spoilers">Unmarked Spoilers</option>
+                <option value="Inappropriate Content">Inappropriate Content</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-neutral-300">Additional Details (Optional)</label>
+              <textarea
+                rows={2}
+                value={reportDescription}
+                onChange={(e) => setReportDescription(e.target.value)}
+                placeholder="Tell our moderators what happened..."
+                className="w-full bg-black/50 border border-white/15 rounded-xl p-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400 resize-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  handleBlockChatUser(reportingMessage.user);
+                  setReportingMessage(null);
+                }}
+                className="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-bold cursor-pointer"
+              >
+                Block & Close
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingReport}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingReport ? 'Submitting…' : 'Submit Report'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* 3. INPUT AREA POLISH (Streamlined, zero clutter, embedded emoji & send) */}
       <div className="p-2.5 sm:p-3 border-t border-white/[0.06] bg-black/20 space-y-2 relative">
@@ -888,6 +1231,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                 key={emoji}
                 type="button"
                 onClick={() => handleReactionClick(emoji)}
+                aria-label={`Insert ${emoji} reaction`}
                 className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 text-sm transition-all duration-150 hover:scale-125 active:scale-75 cursor-pointer"
                 title={`Add ${emoji}`}
               >
@@ -932,6 +1276,23 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             >
               <Smile className="w-4 h-4" />
             </button>
+
+            {mode === 'chat' && (
+              <button
+                type="button"
+                onClick={() => setIsSpoilerDraft((prev) => !prev)}
+                aria-pressed={isSpoilerDraft}
+                aria-label="Mark message as spoiler"
+                className={`px-2 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer shrink-0 mr-1.5 border ${
+                  isSpoilerDraft
+                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                    : 'bg-white/[0.04] border-white/10 text-neutral-400 hover:text-white'
+                }`}
+                title="Tag this message as a spoiler"
+              >
+                Spoiler
+              </button>
+            )}
 
             {/* Seamless Text Input with Dynamic 'Posting as...' in Placeholder */}
             <input 

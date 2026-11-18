@@ -93,18 +93,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isDirectoryActive = (activeTab === 'home' || activeTab === 'library' || activeTab === 'catalog') && !isForYouActive;
 
   return (
-    <header className="sticky top-0 z-40 w-full max-w-full bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 transition-colors box-border select-none">
-      <div className="w-full max-w-7xl mx-auto px-2.5 min-[390px]:px-3 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1.5 min-[390px]:gap-2 sm:gap-4">
+    <header className="sticky top-0 z-40 w-full max-w-full overflow-x-clip bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 transition-colors box-border select-none">
+      <div className="w-full max-w-7xl mx-auto px-2 min-[390px]:px-3 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1.5 min-[390px]:gap-2 sm:gap-4 min-w-0">
         
         {/* LEFT: BRAND LOGO (Natural width, transparent, no empty box or spacing artifacts) */}
-        <motion.div 
+        <motion.button 
+          type="button"
           onClick={handleLogoClick}
           initial={shouldReduceMotion ? false : { opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
           whileTap={shouldReduceMotion ? undefined : { scale: 0.94 }}
-          className="flex items-center cursor-pointer select-none group shrink-0"
+          className="flex items-center cursor-pointer select-none group shrink-0 max-w-[116px] sm:max-w-none bg-transparent border-0 p-0 overflow-hidden"
           title="ANIDUB INDIA - Home"
+          aria-label="ANIDUB INDIA - Home"
         >
           <AniDubLogo
             variant="horizontal"
@@ -112,20 +114,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             hideTrailingLine={true}
             className="h-6 sm:h-8 w-auto object-contain select-none shrink-0"
           />
-        </motion.div>
+        </motion.button>
 
         {/* CENTER SCROLLABLE NAVIGATION ICONS */}
-        <nav className="flex items-center flex-1 min-w-0 overflow-x-auto no-scrollbar py-1">
+        <nav className="flex items-center flex-1 min-w-0 max-w-full overflow-x-auto no-scrollbar py-1">
           <div className="flex items-center gap-0.5 min-[375px]:gap-1 min-[410px]:gap-1.5 sm:gap-1.5 ml-auto sm:ml-0 shrink-0">
           
           {/* 1. Compass (Directory) */}
           <motion.button
+            type="button"
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => {
               setActiveTab('home');
               if (setFeedView) setFeedView('library');
             }}
             title="Explore Catalog Directory"
+            aria-label="Explore Catalog Directory"
             className={`w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               isDirectoryActive
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
@@ -137,12 +141,14 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* 3. Sparkles (For You) */}
           <motion.button
+            type="button"
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => {
               setActiveTab('home');
               if (setFeedView) setFeedView('foryou');
             }}
             title="For You Recommendations"
+            aria-label="For You Recommendations"
             className={`w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               isForYouActive
                 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm'
@@ -157,6 +163,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => setActiveTab('watchlist')}
             title="My Saved Anime Watchlist"
+            aria-label="My Saved Anime Watchlist"
             className={`relative w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               activeTab === 'watchlist'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
@@ -173,9 +180,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* 5. Calendar (Schedule) */}
           <motion.button
+            type="button"
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => setActiveTab('schedule')}
             title="Weekly Simulcast Schedule"
+            aria-label="Weekly Simulcast Schedule"
             className={`w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               activeTab === 'schedule'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
@@ -187,9 +196,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* 5.5 MessageSquare (Live Community Chat) */}
           <motion.button
+            type="button"
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => setActiveTab('chat')}
             title="Live Community Chat & Dub Discussions"
+            aria-label="Live Community Chat & Dub Discussions"
             className={`relative w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               activeTab === 'chat'
                 ? 'bg-purple-600/30 text-purple-300 border border-purple-400 shadow-sm'
@@ -202,9 +213,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* 6. User / Avatar Profile */}
           <motion.button
+            type="button"
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => setActiveTab('profile')}
             title="User Profile"
+            aria-label="User Profile"
             className={`w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               activeTab === 'profile'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
@@ -229,9 +242,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* 7. Trophy (Tier List / Rankings) */}
           <motion.button
+            type="button"
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => setActiveTab('tierlist')}
             title="Anime Tier List & Community Rankings"
+            aria-label="Anime Tier List & Community Rankings"
             className={`flex w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
               activeTab === 'tierlist'
                 ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
@@ -243,11 +258,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* 8. Layers (Create Collection) */}
           <motion.button
+            type="button"
             whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
             onClick={() => {
               if (onOpenCollection) onOpenCollection();
             }}
             title="Create Shareable Anime Collection"
+            aria-label="Create Shareable Anime Collection"
             className="w-6 h-6 min-[375px]:w-7 min-[375px]:h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-xl text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50 transition-colors cursor-pointer shrink-0"
           >
             <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -260,10 +277,12 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Create List Button (LG screens) */}
           <motion.button
+            type="button"
             whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }}
             onClick={() => {
               if (onOpenCollection) onOpenCollection();
             }}
+            aria-label="Create Shareable Anime List"
             className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white text-xs font-bold shadow-md shadow-purple-950/30 transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -272,11 +291,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Cloud Sync Button (SM screens) */}
           <motion.button
+            type="button"
             whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }}
             onClick={() => {
               window.location.reload();
             }}
             title="Refresh Library"
+            aria-label="Refresh Library"
             className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-950/40 border border-purple-500/40 text-purple-300 hover:text-white hover:bg-purple-900/60 text-xs font-bold transition-colors shadow-sm cursor-pointer"
           >
             <Cloud className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
@@ -286,6 +307,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Admin Console Access - Stealth: Only visible once admin is unlocked/authenticated */}
           {isAdminAuthenticated && (
             <motion.button
+              type="button"
               whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
               onClick={() => {
                 setActiveTab(activeTab === 'admin' ? 'home' : 'admin');
@@ -296,6 +318,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'bg-purple-950/40 text-purple-300 border-purple-500/40 hover:text-white hover:bg-purple-900/60'
               }`}
               title="Admin Dashboard"
+              aria-label="Admin Dashboard"
             >
               <ShieldCheck className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400" />
             </motion.button>

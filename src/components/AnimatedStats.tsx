@@ -132,8 +132,8 @@ export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
           <div className="mt-0.5 sm:mt-1 flex items-center gap-1 sm:gap-1.5 text-[8.5px] xs:text-[9.5px] sm:text-xs text-emerald-400 font-medium">
             <CheckCircle2 className="w-2.5 h-2.5 xs:w-3 xs:h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
             <span className="truncate">
-              <span className="sm:hidden">100% Legal</span>
-              <span className="hidden sm:inline">100% Legal Dubs</span>
+              <span className="sm:hidden">Official</span>
+              <span className="hidden sm:inline">Official Streams</span>
             </span>
           </div>
         </div>

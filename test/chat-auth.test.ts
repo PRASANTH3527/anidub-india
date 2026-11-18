@@ -160,10 +160,16 @@ test('getVerifiedClerkUsername and validateChatSender enforce exact Clerk identi
   assert.equal(adminCheck.verifiedUsername, 'Admin');
 });
 
-test('ChatRoom Durable Object rejects unauthenticated upgrades, rejects spoofed WS messages, and emits error frame only to sender', async () => {
+test('ChatRoom Durable Object rejects URL ?token=, authenticates via initial { type: "auth" } payload, and rejects spoofed WS messages', async () => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
   const env = {
     ADMIN_EMAIL: 'admin@anidub.in',
-    CLERK_SECRET_KEY: 'sk_test_example',
+    CLERK_JWT_KEY: publicKey,
   };
 
   const connectedSockets: any[] = [];
@@ -172,28 +178,50 @@ test('ChatRoom Durable Object rejects unauthenticated upgrades, rejects spoofed 
   };
   const room = new ChatRoom(fakeState, env);
 
-  // Unauthenticated WebSocket upgrade must be rejected with 401
-  const unauthUpgradeReq = new Request('https://anidub.in/ws', {
+  // 1. Passing JWT token in URL query string must be rejected with 401 URL_TOKEN_FORBIDDEN
+  const urlTokenReq = new Request('https://anidub.in/ws?token=leaked.jwt.token', {
     headers: { Upgrade: 'websocket' },
   });
-  const unauthRes = await room.fetch(unauthUpgradeReq);
-  assert.equal(unauthRes.status, 401);
+  const urlTokenRes = await room.fetch(urlTokenReq);
+  assert.equal(urlTokenRes.status, 401);
+  const urlTokenJson: any = await urlTokenRes.json();
+  assert.equal(urlTokenJson.code, 'URL_TOKEN_FORBIDDEN');
 
-  const senderWs = createMockWebSocket();
+  // 2. Unauthenticated WS frame before sending `{ type: 'auth', token }` must be rejected with UNAUTHORIZED
+  const pendingWs = createMockWebSocket();
+  connectedSockets.push(pendingWs);
+  const preAuthRes = await room.processMessageForSocket(
+    pendingWs,
+    JSON.stringify({ id: 'msg_preauth', user: 'tamil_otaku', text: 'Too early!' })
+  );
+  assert.equal(preAuthRes.accepted, false);
+  assert.equal(preAuthRes.code, 'UNAUTHORIZED');
+
+  // 3. Initial `{ type: 'auth', token }` payload authenticates the socket cleanly
+  const validJwt = createSignedJwt(
+    {
+      sub: 'user_clerk_42',
+      sid: 'sess_42',
+      username: 'tamil_otaku',
+      email: 'tamil_otaku@example.com',
+      azp: 'https://anidub-india-a1y.pages.dev',
+    },
+    privateKey
+  );
+  const authRes = await room.processMessageForSocket(
+    pendingWs,
+    JSON.stringify({ type: 'auth', token: validJwt, username: 'tamil_otaku' })
+  );
+  assert.equal(authRes.accepted, true);
+  assert.equal(authRes.payload?.type, 'auth_ok');
+  assert.equal(authRes.payload?.user, 'tamil_otaku');
+
+  const senderWs = pendingWs;
   const bystanderWs = createMockWebSocket();
-  connectedSockets.push(senderWs, bystanderWs);
+  connectedSockets.push(bystanderWs);
 
-  const verifiedIdentity = buildVerifiedChatIdentity({
-    userId: 'user_clerk_42',
-    username: 'tamil_otaku',
-    email: 'tamil_otaku@example.com',
-    isAdmin: false,
-  });
-  assert.ok(verifiedIdentity);
-  room.attachVerifiedIdentity(senderWs, verifiedIdentity);
-
-  // Spoofed username payload -> rejected, error event sent to senderWs, nothing broadcast to bystanderWs
-  const spoofedRes = room.processMessageForSocket(
+  // 4. Spoofed username payload -> rejected, error event sent to senderWs, nothing broadcast to bystanderWs
+  const spoofedRes = await room.processMessageForSocket(
     senderWs,
     JSON.stringify({
       id: 'msg_spoof_1',
@@ -204,16 +232,15 @@ test('ChatRoom Durable Object rejects unauthenticated upgrades, rejects spoofed 
   assert.equal(spoofedRes.accepted, false);
   assert.equal(spoofedRes.code, 'RESERVED_USERNAME');
   assert.equal(bystanderWs.sent.length, 0);
-  assert.equal(senderWs.sent.length, 1);
 
-  const errFrame = JSON.parse(senderWs.sent[0]);
+  const errFrame = JSON.parse(senderWs.sent[senderWs.sent.length - 1]);
   assert.equal(errFrame.type, 'error');
   assert.equal(errFrame.code, 'RESERVED_USERNAME');
   assert.equal(errFrame.messageId, 'msg_spoof_1');
   assert.ok(errFrame.error.includes('reserved'));
 
-  // Mismatched non-reserved username -> rejected with USERNAME_MISMATCH
-  const mismatchRes = room.processMessageForSocket(
+  // 5. Mismatched non-reserved username -> rejected with USERNAME_MISMATCH
+  const mismatchRes = await room.processMessageForSocket(
     senderWs,
     JSON.stringify({
       id: 'msg_spoof_2',
@@ -224,10 +251,9 @@ test('ChatRoom Durable Object rejects unauthenticated upgrades, rejects spoofed 
   assert.equal(mismatchRes.accepted, false);
   assert.equal(mismatchRes.code, 'USERNAME_MISMATCH');
   assert.equal(bystanderWs.sent.length, 0);
-  assert.equal(senderWs.sent.length, 2);
 
-  // Valid verified username -> accepted and broadcasted to all connected sockets with server-stamped clerk_user_id
-  const validRes = room.processMessageForSocket(
+  // 6. Valid verified username -> accepted and broadcasted to all connected sockets with server-stamped clerk_user_id
+  const validRes = await room.processMessageForSocket(
     senderWs,
     JSON.stringify({
       id: 'msg_valid_1',
@@ -267,14 +293,27 @@ test('/api/chat POST and /ws enforce Clerk JWT auth and reject impersonation wit
   });
   assert.equal(unauthChatRes.status, 401);
 
-  // 2. Forged token on /ws -> 401
-  const forgedWsRes = await onRequest({
+  // 2. URL ?token= on /ws -> rejected with 401 URL_TOKEN_FORBIDDEN, and forged Bearer token -> 401
+  const urlTokenWsRes = await onRequest({
     request: new Request('https://anidub.in/ws?token=invalid.jwt.token&username=Admin', {
       headers: { Upgrade: 'websocket' },
     }),
     env,
   });
-  assert.equal(forgedWsRes.status, 401);
+  assert.equal(urlTokenWsRes.status, 401);
+  const urlTokenWsJson: any = await urlTokenWsRes.json();
+  assert.equal(urlTokenWsJson.code, 'URL_TOKEN_FORBIDDEN');
+
+  const forgedBearerWsRes = await onRequest({
+    request: new Request('https://anidub.in/ws', {
+      headers: {
+        Upgrade: 'websocket',
+        Authorization: 'Bearer invalid.jwt.token',
+      },
+    }),
+    env,
+  });
+  assert.equal(forgedBearerWsRes.status, 401);
 
   // 3. Valid signed Clerk user JWT attempting to impersonate "Admin" on POST /api/chat -> 403
   const regularJwt = createSignedJwt(
@@ -302,10 +341,13 @@ test('/api/chat POST and /ws enforce Clerk JWT auth and reject impersonation wit
   const spoofPostJson: any = await spoofPostRes.json();
   assert.equal(spoofPostJson.code, 'RESERVED_USERNAME');
 
-  // 4. Valid signed Clerk user JWT attempting to claim another user's username on /ws handshake -> 403
+  // 4. Valid signed Clerk user JWT attempting to claim another user's username on /ws handshake via Bearer header -> 403
   const spoofWsHandshake = await onRequest({
-    request: new Request(`https://anidub.in/ws?token=${encodeURIComponent(regularJwt)}&username=System`, {
-      headers: { Upgrade: 'websocket' },
+    request: new Request('https://anidub.in/ws?username=System', {
+      headers: {
+        Upgrade: 'websocket',
+        Authorization: `Bearer ${regularJwt}`,
+      },
     }),
     env,
   });
@@ -372,13 +414,14 @@ test('LiveChat.tsx and AnimeDetailPage.tsx enforce Clerk verified username and h
 
   const detailPageCode = fs.readFileSync(path.join(process.cwd(), 'src/components/AnimeDetailPage.tsx'), 'utf-8');
   assert.ok(detailPageCode.includes('getVerifiedClerkUsername(user)'));
-  assert.ok(detailPageCode.includes("errData?.type === 'error'"));
+  assert.ok(detailPageCode.includes("msgData?.type === 'error'"));
 });
 
-test('getCloudflareWsUrl targets anime-chat worker with ?token= and anime-chat worker sets CORS headers for anidub-india-a1y.pages.dev', async () => {
+test('getCloudflareWsUrl omits URL tokens and anime-chat worker sets CORS headers for anidub-india-a1y.pages.dev', async () => {
   const { getCloudflareWsUrl } = await import('../src/config/cloudflare');
-  const wsUrl = getCloudflareWsUrl('/ws', 'header.payload.sig');
-  assert.equal(wsUrl, 'wss://anime-chat.samayaprasanth0.workers.dev/ws?token=header.payload.sig');
+  const wsUrl = getCloudflareWsUrl('/ws');
+  assert.equal(wsUrl, 'wss://anime-chat.samayaprasanth0.workers.dev/ws');
+  assert.equal(wsUrl.includes('token='), false);
 
   const edgeModule = await import('../src/edge-entry');
   const preflightRes = await edgeModule.default.fetch(

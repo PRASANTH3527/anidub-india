@@ -20,11 +20,15 @@ import { useToast } from './Toast';
 import { useUser } from '../lib/clerk';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 import { validateImageUpload } from '../utils/imgbb';
-import { validateExternalImageUrl } from '../utils/submissionValidation';
+import { validateExternalImageUrl, validateOfficialSourceUrl } from '../utils/submissionValidation';
 import {
   normalizePlatformString,
   normalizePartnerLanguages,
   buildStreamingPartnersPayload,
+  normalizeBroadcastDay,
+  normalizeBroadcastTime,
+  normalizeSeasonEpisodeCount,
+  normalizeLastVerifiedDate,
 } from '../utils/dataNormalization';
 
 interface DubInfoModalProps {
@@ -241,10 +245,23 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
   const [statusState, setStatusState] = useState<string>(() => {
     const anime = (initialData || {}) as any;
-    const initialValue = anime.status === 'Completed' ? 'Completed' : 'Airing';
-    return initialValue;
+    const raw = String(anime.status || anime.airing_status || '').trim().toLowerCase();
+    if (raw.includes('complete')) return 'Completed';
+    if (raw.includes('upcoming')) return 'Upcoming';
+    if (raw.includes('ongoing')) return 'Ongoing';
+    return 'Airing';
   });
-  const [releaseDay, setReleaseDay] = useState<string>('Saturday');
+  const [releaseDay, setReleaseDay] = useState<string>(() => normalizeBroadcastDay(initialData) || '');
+  const [broadcastTime, setBroadcastTime] = useState<string>(() => normalizeBroadcastTime(initialData) || '');
+  const [seasonEpisodeCount, setSeasonEpisodeCount] = useState<string>(() =>
+    normalizeSeasonEpisodeCount(initialData)
+  );
+  const [officialSourceUrl, setOfficialSourceUrl] = useState<string>(() =>
+    String(initDataAny?.official_source_url || initDataAny?.officialSourceUrl || '').trim()
+  );
+  const [lastVerifiedDate, setLastVerifiedDate] = useState<string>(() =>
+    normalizeLastVerifiedDate(initialData)
+  );
 
   useEffect(() => {
     if (initialData) {
@@ -274,8 +291,18 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       // State Initialization: When the Edit Modal opens and sets its state, make sure the type property is explicitly included
       const anime = initialData as any;
       const rawStatusStr = String(initDataAny?.status || initDataAny?.airing_status || '').trim().toLowerCase();
-      const initialStatus = rawStatusStr.includes('complete') ? 'Completed' : (cleanType === 'Movie' ? 'Completed' : 'Airing');
+      const initialStatus = rawStatusStr.includes('complete')
+        ? 'Completed'
+        : rawStatusStr.includes('upcoming')
+          ? 'Upcoming'
+          : rawStatusStr.includes('ongoing')
+            ? 'Ongoing'
+            : cleanType === 'Movie'
+              ? 'Completed'
+              : 'Airing';
       setStatusState(initialStatus);
+      setReleaseDay(normalizeBroadcastDay(initDataAny) || '');
+      setBroadcastTime(normalizeBroadcastTime(initDataAny) || '');
 
       setFormData({ 
         ...anime, 
@@ -295,6 +322,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       // Re-populate streaming partners from initialData
       setStreamingPartners(parseStreamingPartners(initialData));
+      setSeasonEpisodeCount(normalizeSeasonEpisodeCount(initialData));
+      setOfficialSourceUrl(String(initDataAny?.official_source_url || initDataAny?.officialSourceUrl || '').trim());
+      setLastVerifiedDate(normalizeLastVerifiedDate(initialData));
     } else {
       setTitle('');
       setSynopsis('');
@@ -304,6 +334,11 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       setRating('');
       setType('TV Series');
       setStatusState('Airing');
+      setReleaseDay('');
+      setBroadcastTime('');
+      setSeasonEpisodeCount('');
+      setOfficialSourceUrl('');
+      setLastVerifiedDate('');
       setStudio('');
       setGenres(['Action', 'Fantasy']);
       setMixedEntries([
@@ -525,6 +560,16 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }
     }
 
+    const sourceUrlCheck = validateOfficialSourceUrl(officialSourceUrl, 'Official Source Link');
+    if (!sourceUrlCheck.ok) {
+      toast.error('Invalid Official Source Link', sourceUrlCheck.error || 'Official Source Link must be a valid HTTP or HTTPS URL.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const normalizedSeasonEpCount = normalizeSeasonEpisodeCount(seasonEpisodeCount);
+    const normalizedVerifiedDate = normalizeLastVerifiedDate(lastVerifiedDate);
+
     const defaultCover = rawPoster || '/logo.png';
 
     try {
@@ -557,6 +602,11 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }));
       const episodesPerSeasonStr = mixedEntries.map(e => e.episodes || 0).join('|');
 
+      const resolvedBroadcastDay =
+        statusState === 'Airing' || statusState === 'Ongoing' ? releaseDay.trim() || null : null;
+      const resolvedBroadcastTime =
+        statusState === 'Airing' || statusState === 'Ongoing' ? broadcastTime.trim() || null : null;
+
       const payload = {
         title: title.trim(),
         slug,
@@ -583,7 +633,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         genres: Array.isArray(genres) ? genres.join(',') : genres,
         popularity: 0,
         upvotes: 0,
-        studio: studio || 'Unknown Studio'
+        studio: studio || 'Unknown Studio',
+        broadcast_day: resolvedBroadcastDay,
+        broadcast_time: resolvedBroadcastTime,
+        releaseDay: resolvedBroadcastDay || '',
+        airTime: resolvedBroadcastTime || '',
+        season_episode_count: normalizedSeasonEpCount,
+        official_source_url: sourceUrlCheck.url || '',
+        last_verified_date: normalizedVerifiedDate,
       };
 
       let savedResult: any = null;
@@ -608,6 +665,11 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         platform: payload.platform,
         synopsis: synopsis.trim(),
         status: statusState,
+        broadcast_day: resolvedBroadcastDay,
+        broadcast_time: resolvedBroadcastTime,
+        season_episode_count: normalizedSeasonEpCount,
+        official_source_url: sourceUrlCheck.url || '',
+        last_verified_date: normalizedVerifiedDate,
         cover_image: defaultCover,
         image: defaultCover,
         poster: defaultCover,
@@ -971,66 +1033,87 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   </div>
                 </div>
 
-                {/* 3-Column Grid (Type, Status, Release Day) */}
+                {/* Broadcast Metadata Grid (Type, Status, Broadcast Day, Broadcast Time) */}
+                {(() => {
+                  const showScheduleFields = statusState === 'Airing' || statusState === 'Ongoing';
+                  return (
+                    <div className={`grid grid-cols-1 ${showScheduleFields ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2'} gap-3`}>
+                      <div>
+                        <label className="block font-bold text-neutral-300 mb-1">Type</label>
+                        <select 
+                          value={formData.type || type || 'TV Series'} 
+                          onChange={(e) => {
+                            const newType = e.target.value;
+                            setFormData((prev: any) => ({ ...prev, type: newType }));
+                            setType(newType);
+                            if (newType === 'Movie') {
+                              setStatusState('Completed');
+                              setFormData((prev: any) => ({ ...prev, status: 'Completed', airing_status: 'Completed' }));
+                            }
+                          }}
+                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
+                        >
+                          <option value="TV Series">TV Series</option>
+                          <option value="Movie">Movie</option>
+                          <option value="OVA/Special">OVA/Special</option>
+                        </select>
+                      </div>
 
-                <div className={`grid grid-cols-1 ${statusState === 'Ongoing' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
-                  <div>
-                    <label className="block font-bold text-neutral-300 mb-1">Type</label>
-                    <select 
-                      value={formData.type || type || 'TV Series'} 
-                      onChange={(e) => {
-                        const newType = e.target.value;
-                        setFormData((prev: any) => ({ ...prev, type: newType }));
-                        setType(newType);
-                        if (newType === 'Movie') {
-                          setStatusState('Completed');
-                          setFormData((prev: any) => ({ ...prev, status: 'Completed', airing_status: 'Completed' }));
-                        }
-                      }}
-                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
-                    >
-                      <option value="TV Series">TV Series</option>
-                      <option value="Movie">Movie</option>
-                      <option value="OVA/Special">OVA/Special</option>
-                    </select>
-                  </div>
+                      <div>
+                        <label className="block font-bold text-neutral-300 mb-1">Status</label>
+                        <select
+                          value={statusState}
+                          onChange={(e) => {
+                            const newStatus = e.target.value;
+                            setStatusState(newStatus);
+                            setFormData((prev: any) => ({ ...prev, status: newStatus, airing_status: newStatus }));
+                          }}
+                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
+                        >
+                          <option value="Airing">Airing</option>
+                          <option value="Completed">Completed</option>
+                          <option value="Ongoing">Ongoing (Simulcast)</option>
+                          <option value="Upcoming">Upcoming</option>
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className="block font-bold text-neutral-300 mb-1">Status</label>
-                    <select
-                      value={statusState}
-                      onChange={(e) => {
-                        const newStatus = e.target.value;
-                        setStatusState(newStatus);
-                        setFormData((prev: any) => ({ ...prev, status: newStatus, airing_status: newStatus }));
-                      }}
-                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
-                    >
-                      <option value="Airing">Airing</option>
-                      <option value="Completed">Completed</option>
-                      <option value="Ongoing">Ongoing (Simulcast)</option>
-                      <option value="Upcoming">Upcoming</option>
-                    </select>
-                  </div>
+                      {showScheduleFields && (
+                        <div>
+                          <label className="block font-bold text-neutral-300 mb-1">Broadcast Day</label>
+                          <select
+                            value={releaseDay}
+                            onChange={(e) => setReleaseDay(e.target.value)}
+                            aria-label="Broadcast Day"
+                            className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
+                          >
+                            <option value="">TBA / Unscheduled</option>
+                            {ALL_DAYS.map((day) => (
+                              <option key={day} value={day}>{day}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
-                  {statusState === 'Ongoing' && (
-                    <div>
-                      <label className="block font-bold text-neutral-300 mb-1">Release Day</label>
-                      <select
-                        value={releaseDay}
-                        onChange={(e) => setReleaseDay(e.target.value)}
-                        className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
-                      >
-                        {ALL_DAYS.map((day) => (
-                          <option key={day} value={day}>{day}</option>
-                        ))}
-                      </select>
+                      {showScheduleFields && (
+                        <div>
+                          <label className="block font-bold text-neutral-300 mb-1">Broadcast Time (IST)</label>
+                          <input
+                            type="text"
+                            value={broadcastTime}
+                            onChange={(e) => setBroadcastTime(e.target.value)}
+                            placeholder="e.g. 08:30 PM IST"
+                            aria-label="Broadcast Time"
+                            maxLength={40}
+                            className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none focus:border-primary-theme"
+                          />
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
-                {/* Ongoing Airing Status Box */}
-                {statusState === 'Ongoing' && (
+                {/* Currently Airing Box */}
+                {(statusState === 'Airing' || statusState === 'Ongoing') && (
                   <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider">
@@ -1222,6 +1305,52 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       placeholder="8.5"
                       className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none"
                     />
+                  </div>
+                </div>
+
+                {/* Season & Episode Count, Official Source Link, Last Verified Date */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-neutral-400 mb-1">Season &amp; Episode Count</label>
+                    <input
+                      type="text"
+                      value={seasonEpisodeCount}
+                      onChange={(e) => setSeasonEpisodeCount(e.target.value)}
+                      placeholder="e.g. 2 Seasons • 24 Episodes"
+                      maxLength={100}
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-primary-theme"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-neutral-400 mb-1">Official Source Link</label>
+                    <input
+                      type="url"
+                      value={officialSourceUrl}
+                      onChange={(e) => setOfficialSourceUrl(e.target.value)}
+                      placeholder="https://www.crunchyroll.com/..."
+                      maxLength={1000}
+                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-primary-theme"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-neutral-400 mb-1">Last Verified Date</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="date"
+                        value={lastVerifiedDate}
+                        onChange={(e) => setLastVerifiedDate(e.target.value)}
+                        aria-label="Last Verified Date"
+                        className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-primary-theme"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setLastVerifiedDate(new Date().toISOString().slice(0, 10))}
+                        className="px-2.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-neutral-700/80 text-[11px] font-bold text-cyan-300 shrink-0 cursor-pointer transition-colors"
+                        title="Set to today's date"
+                      >
+                        Today
+                      </button>
+                    </div>
                   </div>
                 </div>
 

@@ -1,11 +1,16 @@
 import { getAuth } from '../../utils/auth';
 import {
+  normalizeBroadcastDay,
+  normalizeBroadcastTime,
+  normalizeLastVerifiedDate,
   normalizePlatformString,
+  normalizeSeasonEpisodeCount,
   parseCsvMixedEntriesAndEpisodesPerSeason,
   parseOptionalEpisodesCount,
   parseOptionalSeason,
 } from '../../utils/dataNormalization';
-import { D1_DATABASE_ID, getErrorMessage, type RouteContext } from './shared';
+import { validateOfficialSourceUrl } from '../../utils/submissionValidation';
+import { D1_DATABASE_ID, getErrorMessage, isMissingColumnError, type RouteContext } from './shared';
 
 interface CsvImportRow {
   [key: string]: unknown;
@@ -104,13 +109,23 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
   if (path === '/api/admin/export-csv' && method === 'GET') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
     }
     try {
-      const rows = env.DB
-        ? (await env.DB.prepare('SELECT id, title, status, rating, episodes_count, year, genres, languages, platform, type, studio FROM anime ORDER BY id ASC').all())?.results || []
-        : [];
-      const header = ['id', 'title', 'status', 'rating', 'episodes_count', 'year', 'genres', 'languages', 'platform', 'type', 'studio'];
+      let rows: Record<string, unknown>[] = [];
+      if (env.DB) {
+        try {
+          rows = (await env.DB.prepare('SELECT id, title, status, rating, episodes_count, year, genres, languages, platform, type, studio, broadcast_day, broadcast_time, season_episode_count, official_source_url, last_verified_date FROM anime ORDER BY id ASC').all())?.results || [];
+        } catch (exportErr) {
+          if (!isMissingColumnError(exportErr)) throw exportErr;
+          rows = (await env.DB.prepare('SELECT id, title, status, rating, episodes_count, year, genres, languages, platform, type, studio, broadcast_day, broadcast_time FROM anime ORDER BY id ASC').all())?.results || [];
+        }
+      }
+      const header = ['id', 'title', 'status', 'rating', 'episodes_count', 'year', 'genres', 'languages', 'platform', 'type', 'studio', 'broadcast_day', 'broadcast_time', 'season_episode_count', 'official_source_url', 'last_verified_date'];
       const csvEscape = (val: unknown) => `"${String(val ?? '').replace(/"/g, '""')}"`;
       const csvLines = [
         header.join(','),
@@ -129,37 +144,151 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
     }
   }
 
-  // 3. GET /api/cloudflare/status
+  // 3. GET /api/cloudflare/status (Real D1 diagnostics, live anime counts, DB logs, and Clerk connection status)
   if (path === '/api/cloudflare/status') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
     }
-    return jsonResponse({
-      services: {
-        pages: { status: 'Operational', edgeLocations: '330+ Cities', region: 'Global Anycast' },
-        d1: {
-          status: 'Healthy',
-          databaseId: D1_DATABASE_ID,
-          databaseName: 'anime-db',
-          databaseSize: '48.0 KB',
-          recordsCount: 8,
+
+    const probeStart = Date.now();
+    const cfInfo = (request as { cf?: { colo?: string; country?: string } }).cf;
+    const cfColo = cfInfo?.colo || 'EDGE';
+    const cfCountry = cfInfo?.country || 'IN';
+
+    let totalAnimeCount = 0;
+    let activeAnimeCount = 0;
+    let pendingAnimeCount = 0;
+    let reviewsCount = 0;
+    let feedbackCount = 0;
+    let reportsCount = 0;
+    let watchlistCount = 0;
+    let d1Connected = false;
+    let dbLogs: Array<Record<string, unknown>> = [];
+
+    if (env.DB) {
+      try {
+        const countsRow = await env.DB.prepare(
+          `SELECT
+            COUNT(*) as totalCount,
+            SUM(CASE WHEN (is_published = 1 OR is_published = true) AND status != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL) THEN 1 ELSE 0 END) as activeCount,
+            SUM(CASE WHEN status = 'pending' OR submissionStatus = 'pending' OR approval_status = 'pending' THEN 1 ELSE 0 END) as pendingCount
+          FROM anime`
+        ).first<{ totalCount?: number; activeCount?: number; pendingCount?: number }>();
+
+        d1Connected = true;
+        totalAnimeCount = Number(countsRow?.totalCount || 0);
+        activeAnimeCount = Number(countsRow?.activeCount || 0);
+        pendingAnimeCount = Number(countsRow?.pendingCount || 0);
+
+        const [revRes, fbRes, repRes, wlRes, logsRes] = await Promise.all([
+          env.DB.prepare('SELECT COUNT(*) as cnt FROM reviews').first<{ cnt?: number }>().catch(() => null),
+          env.DB.prepare('SELECT COUNT(*) as cnt FROM feedback').first<{ cnt?: number }>().catch(() => null),
+          env.DB.prepare('SELECT COUNT(*) as cnt FROM reports').first<{ cnt?: number }>().catch(() => null),
+          env.DB.prepare('SELECT COUNT(*) as cnt FROM watchlist').first<{ cnt?: number }>().catch(() => null),
+          env.DB.prepare(
+            'SELECT id, timestamp, service, event_type, status_code, latency_ms, details FROM cloudflare_logs ORDER BY id DESC LIMIT 12'
+          )
+            .all()
+            .catch(() => ({ results: [] })),
+        ]);
+
+        reviewsCount = Number(revRes?.cnt || 0);
+        feedbackCount = Number(fbRes?.cnt || 0);
+        reportsCount = Number(repRes?.cnt || 0);
+        watchlistCount = Number(wlRes?.cnt || 0);
+        dbLogs = (logsRes?.results || []) as Array<Record<string, unknown>>;
+
+        if (dbLogs.length === 0) {
+          const recentAnimeRes = await env.DB.prepare(
+            'SELECT id, title, status, is_published, created_at FROM anime ORDER BY id DESC LIMIT 5'
+          )
+            .all()
+            .catch(() => ({ results: [] }));
+          dbLogs = (recentAnimeRes?.results || []).map((row) => ({
+            id: `anime-${String(row.id)}`,
+            timestamp: String(row.created_at || new Date().toISOString()),
+            service: 'D1',
+            event_type: 'ANIME_RECORD',
+            status_code: 200,
+            latency_ms: Math.max(1, Date.now() - probeStart),
+            details: `#${String(row.id)} "${String(row.title || 'Untitled')}" (${String(row.status || 'Airing')})`,
+          }));
+        }
+      } catch (dbErr) {
+        dbLogs = [
+          {
+            id: 'd1-err',
+            timestamp: new Date().toISOString(),
+            service: 'D1',
+            event_type: 'DB_QUERY_ERROR',
+            status_code: 500,
+            latency_ms: Math.max(1, Date.now() - probeStart),
+            details: getErrorMessage(dbErr),
+          },
+        ];
+      }
+    }
+
+    const d1LatencyMs = Math.max(1, Date.now() - probeStart);
+    const clerkConfigured = Boolean(env.CLERK_SECRET_KEY || env.CLERK_JWT_KEY);
+    const publishableKeyConfigured = Boolean(env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || env.VITE_CLERK_PUBLISHABLE_KEY);
+
+    return jsonResponse(
+      {
+        timestamp: new Date().toISOString(),
+        services: {
+          pages: {
+            status: 'Operational',
+            colo: cfColo,
+            country: cfCountry,
+            region: `${cfColo} (${cfCountry})`,
+          },
+          d1: {
+            status: env.DB ? (d1Connected ? 'Connected' : 'Error') : 'Unbound (No D1 Binding)',
+            connected: d1Connected,
+            databaseId: D1_DATABASE_ID,
+            databaseName: 'anime-db',
+            recordsCount: totalAnimeCount,
+            activeAnimeCount,
+            pendingAnimeCount,
+            reviewsCount,
+            feedbackCount,
+            reportsCount,
+            watchlistCount,
+            latencyMs: d1LatencyMs,
+          },
+          clerk: {
+            status: session.userId ? 'Connected & Verified' : 'Unauthenticated',
+            configured: clerkConfigured,
+            publishableKeyConfigured,
+            userId: session.userId,
+            email: session.email,
+            isAdmin: session.isAdmin,
+          },
+          imgbb: {
+            status: env.IMGBB_API_KEY ? 'Live API Connected' : 'API Key Not Configured',
+            provider: 'ImgBB Cloud CDN',
+            cardRequired: false,
+            apiKeyConfigured: Boolean(env.IMGBB_API_KEY),
+          },
+          workers: {
+            status: 'Running',
+            zone: 'Workers Functions API',
+            avgLatencyMs: `${d1LatencyMs}ms`,
+          },
         },
-        imgbb: {
-          status: 'Live API Connected',
-          provider: 'ImgBB Cloud CDN',
-          cardRequired: false,
-          apiKeyConfigured: Boolean(env.IMGBB_API_KEY),
-          uploadsTracked: 14,
-        },
-        workers: { status: 'Running', zone: 'Workers Functions API', avgLatencyMs: '11ms' },
+        schemaSql: `-- Cloudflare D1 Database ID: ${D1_DATABASE_ID}\n-- Active Titles: ${activeAnimeCount} | Pending: ${pendingAnimeCount} | Reports: ${reportsCount}`,
+        logs: dbLogs,
       },
-      schemaSql: `-- Cloudflare D1 Database ID: ${D1_DATABASE_ID}\n-- ImgBB API Key: Configured via Cloudflare env.IMGBB_API_KEY`,
-      logs: [
-        { id: 1, timestamp: new Date().toISOString(), service: 'D1', event_type: 'SELECT /api/anime', status_code: 200, latency_ms: 12, details: 'Catalog pagination query' },
-        { id: 2, timestamp: new Date().toISOString(), service: 'ImgBB', event_type: 'UPLOAD_POSTER', status_code: 200, latency_ms: 45, details: 'Uploaded to ImgBB CDN' },
-      ],
-    });
+      200,
+      request,
+      { 'Cache-Control': 'no-store' }
+    );
   }
 
   // 4. POST /api/cloudflare/d1/query - Parameterized D1 Query Endpoint (Rejects Raw SQL from Client)
@@ -233,7 +362,11 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
   if (path === '/api/admin/pending' && method === 'GET') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
     }
     try {
       if (env.DB) {
@@ -252,7 +385,11 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
   if (path === '/api/admin/import-csv' && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
     }
     try {
       const body = (await request.json()) as CsvImportRow | CsvImportRow[];
@@ -406,9 +543,18 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
             : typeof rawMixedInput === 'string'
               ? rawMixedInput
               : '';
+        const broadcastDay = normalizeBroadcastDay(row);
+        const broadcastTime = normalizeBroadcastTime(row);
+        const seasonEpisodeCount = normalizeSeasonEpisodeCount(row);
+        const rawSourceCandidate = row.official_source_url ?? row.officialSourceUrl ?? row['Official Source Link'] ?? '';
+        const sourceCheck = validateOfficialSourceUrl(rawSourceCandidate, 'Official Source Link');
+        const officialSourceUrl = sourceCheck.ok ? (sourceCheck.url || '') : '';
+        const lastVerifiedDate = normalizeLastVerifiedDate(row);
 
         if (env.DB) {
-          const insertSql = `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
+          const insertSql = `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries, broadcast_day, broadcast_time, season_episode_count, official_source_url, last_verified_date)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+          const legacyInsertSql = `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`;
           try {
             await env.DB.prepare(insertSql)
@@ -430,7 +576,12 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
                 resolvedType,
                 studio,
                 episodesPerSeason,
-                mixedEntriesJson
+                mixedEntriesJson,
+                broadcastDay,
+                broadcastTime,
+                seasonEpisodeCount,
+                officialSourceUrl,
+                lastVerifiedDate
               )
               .run();
           } catch (insertErr) {
@@ -441,6 +592,34 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
                 .bind(
                   title,
                   uniqueSlug,
+                  synopsis,
+                  cover_image,
+                  banner_image,
+                  rating,
+                  epCount,
+                  resolvedStatus,
+                  resolvedStatus,
+                  season,
+                  year,
+                  genres,
+                  languages,
+                  platform,
+                  resolvedType,
+                  studio,
+                  episodesPerSeason,
+                  mixedEntriesJson,
+                  broadcastDay,
+                  broadcastTime,
+                  seasonEpisodeCount,
+                  officialSourceUrl,
+                  lastVerifiedDate
+                )
+                .run();
+            } else if (isMissingColumnError(insertErr)) {
+              await env.DB.prepare(legacyInsertSql)
+                .bind(
+                  title,
+                  slug,
                   synopsis,
                   cover_image,
                   banner_image,
@@ -486,7 +665,11 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
   if (path === '/api/admin/clear-pending' && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
     }
     try {
       if (env.DB) {
@@ -503,30 +686,52 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
   if (approveMatch && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
     }
-    const id = approveMatch[1];
-    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-    const targetStatus = String(body.status || body.airing_status || '').trim() || 'Completed';
-    if (env.DB) {
-      await env.DB.prepare("UPDATE anime SET status = ?, submissionStatus = 'approved', approval_status = 'approved', is_published = 1 WHERE id = ?")
-        .bind(targetStatus, id)
-        .run();
+    try {
+      const id = approveMatch[1];
+      const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+      const targetStatus = String(body.status || body.airing_status || '').trim() || 'Completed';
+      if (env.DB) {
+        const res = await env.DB.prepare("UPDATE anime SET status = ?, submissionStatus = 'approved', approval_status = 'approved', is_published = 1 WHERE id = ?")
+          .bind(targetStatus, id)
+          .run();
+        if (res?.meta?.changes === 0) {
+          return jsonResponse({ success: false, error: 'Anime not found' }, 404, request);
+        }
+      }
+      return jsonResponse({ success: true, id, status: targetStatus, submissionStatus: 'approved', approval_status: 'approved', is_published: 1 }, 200, request);
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
     }
-    return jsonResponse({ success: true, id, status: targetStatus, submissionStatus: 'approved', approval_status: 'approved', is_published: 1 });
   }
 
   const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)\/?$/);
   if (rejectMatch && method === 'POST') {
     const session = await getAuth(request, env);
     if (!session.userId || !session.isAdmin) {
-      return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
     }
-    const id = rejectMatch[1];
-    if (env.DB) {
-      await env.DB.prepare('DELETE FROM anime WHERE id = ?').bind(id).run();
+    try {
+      const id = rejectMatch[1];
+      if (env.DB) {
+        const res = await env.DB.prepare('DELETE FROM anime WHERE id = ?').bind(id).run();
+        if (res?.meta?.changes === 0) {
+          return jsonResponse({ success: false, error: 'Anime not found' }, 404, request);
+        }
+      }
+      return jsonResponse({ success: true, id }, 200, request);
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
     }
-    return jsonResponse({ success: true, id });
   }
 
   // 9. POST /api/admin/reset-db (Admin only + strict "DELETE ALL" confirmation)

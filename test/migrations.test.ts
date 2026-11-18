@@ -73,6 +73,10 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     '0002_add_watchlist.sql',
     '0003_add_chat_messages.sql',
     '0004_add_community_submissions.sql',
+    '0005_add_reports.sql',
+    '0006_add_schedule_fields.sql',
+    '0007_add_watch_progress.sql',
+    '0008_add_anime_metadata_fields.sql',
   ]);
 
   const db = new DatabaseSync(':memory:');
@@ -97,10 +101,12 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     'community_submission_logs',
     'episodes',
     'feedback',
+    'reports',
     'reviews',
     'user_ratings',
     'user_votes',
     'users',
+    'watch_progress',
     'watchlist',
   ]) {
     assert.ok(
@@ -108,6 +114,16 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
       `Expected migrated schema to include table "${requiredTable}"`
     );
   }
+
+  const animeColumns = db
+    .prepare('PRAGMA table_info(anime);')
+    .all() as Array<{ name: string }>;
+  const animeColNames = animeColumns.map((c) => String(c.name));
+  assert.ok(animeColNames.includes('broadcast_day'));
+  assert.ok(animeColNames.includes('broadcast_time'));
+  assert.ok(animeColNames.includes('season_episode_count'));
+  assert.ok(animeColNames.includes('official_source_url'));
+  assert.ok(animeColNames.includes('last_verified_date'));
 
   db.close();
 });

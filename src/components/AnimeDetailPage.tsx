@@ -12,6 +12,7 @@ import {
   ExternalLink, 
   Send, 
   ThumbsUp, 
+  Eye,
   EyeOff, 
   ChevronDown, 
   ChevronUp, 
@@ -19,7 +20,10 @@ import {
   ShieldCheck,
   Flame,
   Volume2,
-  X
+  X,
+  Minus,
+  Plus,
+  Tv
 } from 'lucide-react';
 import { Anime } from './CatalogView';
 import { cloudflareApi } from '../services/cloudflareApi';
@@ -29,7 +33,19 @@ import { getVerifiedClerkUsername } from '../utils/chatIdentity';
 import { formatRelativeTime } from '../utils/timestamps';
 import { useUser, getClerkSessionToken } from '../lib/clerk';
 import { DualRating } from './DualRating';
+import { ReportModal } from './ReportModal';
 import { buildAnimeJsonLd } from '../utils/seoMeta';
+import { parsePlatformList } from '../utils/dataNormalization';
+import { validateOfficialSourceUrl } from '../utils/submissionValidation';
+import {
+  getAnimeWatchProgress,
+  saveAnimeWatchProgress,
+  computeWatchProgressPercent,
+  getSpoilerProtectionEnabled,
+  setSpoilerProtectionEnabled,
+  SPOILER_PROTECTION_EVENT,
+  type WatchProgressEntry,
+} from '../utils/watchProgress';
 
 export interface AnimeReviewItem {
   id: number | string;
@@ -97,6 +113,9 @@ export interface AnimeDetailRecord extends Omit<Partial<Anime>, 'rating' | 'year
   episodes_count?: number;
   episodes?: number;
   episode_count?: number;
+  season_episode_count?: string;
+  official_source_url?: string;
+  last_verified_date?: string;
 }
 
 export interface AnimeDetailPageProps {
@@ -154,19 +173,69 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [isSynopsisExpanded, setIsSynopsisExpanded] = useState(false);
 
+  // Watch Progress & Spoiler Protection states
+  const [watchProgress, setWatchProgress] = useState<WatchProgressEntry | null>(() =>
+    getAnimeWatchProgress(animeId)
+  );
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [spoilerProtection, setSpoilerProtection] = useState<boolean>(() =>
+    getSpoilerProtectionEnabled()
+  );
+  const [isSynopsisRevealed, setIsSynopsisRevealed] = useState(false);
+
+  useEffect(() => {
+    const syncSpoilerPref = () => {
+      const enabled = getSpoilerProtectionEnabled();
+      setSpoilerProtection(enabled);
+      if (enabled) {
+        setIsSynopsisRevealed(false);
+      }
+    };
+    window.addEventListener(SPOILER_PROTECTION_EVENT, syncSpoilerPref);
+    return () => window.removeEventListener(SPOILER_PROTECTION_EVENT, syncSpoilerPref);
+  }, []);
+
   const handleBack = () => {
     if (onBack) onBack();
     else if (onClose) onClose();
   };
 
   useEffect(() => {
+    setIsSynopsisRevealed(false);
+    // Load watch progress from localStorage
+    const localProgress = getAnimeWatchProgress(animeId);
+    setWatchProgress(localProgress);
+
     // Check watched status from localStorage
     try {
       const watched: unknown[] = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
       const idNum = Number(animeId);
-      setIsWatched(watched.some((w) => Number(w) === idNum));
+      setIsWatched(watched.some((w) => Number(w) === idNum) || Boolean(localProgress?.completed));
     } catch {
-      setIsWatched(false);
+      setIsWatched(Boolean(localProgress?.completed));
+    }
+
+    // Sync watch progress from D1 if signed in
+    if (user?.id) {
+      cloudflareApi
+        .getWatchProgress(animeId)
+        .then((remote) => {
+          if (remote) {
+            const normalizedRemote = saveAnimeWatchProgress(animeId, {
+              season: remote.season,
+              episode: remote.episode,
+              totalEpisodes: remote.totalEpisodes ?? localProgress?.totalEpisodes ?? null,
+              completed: remote.completed,
+            });
+            if (normalizedRemote) {
+              setWatchProgress(normalizedRemote);
+              if (normalizedRemote.completed) {
+                setIsWatched(true);
+              }
+            }
+          }
+        })
+        .catch(() => {});
     }
 
     // Check saved user rating locally
@@ -230,6 +299,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         }
 
         if (data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
+          const shieldActive = getSpoilerProtectionEnabled();
           const normalized: AnimeReviewItem[] = data.reviews.map((r: NonNullable<AnimeDetailRecord['reviews']>[number]) => ({
             id: r.id || Date.now(),
             author: r.author || r.user_name || 'Indian Anime Fan',
@@ -240,7 +310,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             likes: r.likes || 1,
             isLiked: false,
             spoilers: Boolean(r.spoilers),
-            revealed: true
+            revealed: !(Boolean(r.spoilers) && shieldActive)
           }));
 
           setReviewsList(prev => {
@@ -411,19 +481,30 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         try {
           const wsToken = await getClerkSessionToken();
           if (wsToken) {
-            const ws = new WebSocket(getCloudflareWsUrl('/ws', wsToken));
+            const ws = new WebSocket(getCloudflareWsUrl('/ws'));
+            let sentReview = false;
             ws.onopen = () => {
               ws.send(JSON.stringify({
-                id: `rev_${Date.now()}`,
-                ...chatPayload
+                type: 'auth',
+                token: wsToken,
+                username: currentUsername,
               }));
-              setTimeout(() => ws.close(), 800);
             };
             ws.onmessage = (event) => {
               try {
-                const errData = JSON.parse(event.data);
-                if (errData?.type === 'error' && errData?.error) {
-                  showToast(errData.error);
+                const msgData = JSON.parse(event.data);
+                if (msgData?.type === 'auth_ok' && !sentReview) {
+                  sentReview = true;
+                  ws.send(JSON.stringify({
+                    id: `rev_${Date.now()}`,
+                    ...chatPayload
+                  }));
+                  setTimeout(() => ws.close(), 800);
+                  return;
+                }
+                if (msgData?.type === 'error' && msgData?.error) {
+                  showToast(msgData.error);
+                  ws.close();
                 }
               } catch {}
             };
@@ -480,7 +561,103 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     } catch (e) {
       console.error(e);
     }
+    const maxEps = totalEpisodes && totalEpisodes > 0 ? totalEpisodes : (watchProgress?.episode || 1);
+    const saved = saveAnimeWatchProgress(animeId, {
+      season: watchProgress?.season ?? 1,
+      episode: nextWatched ? maxEps : Math.max(0, watchProgress?.episode ?? 0),
+      totalEpisodes: totalEpisodes ?? watchProgress?.totalEpisodes ?? null,
+      completed: nextWatched,
+    });
+    if (saved) {
+      setWatchProgress(saved);
+      if (user?.id) {
+        cloudflareApi
+          .saveWatchProgress({
+            animeId,
+            season: saved.season,
+            episode: saved.episode,
+            totalEpisodes: saved.totalEpisodes,
+            completed: saved.completed,
+          })
+          .catch(() => {});
+      }
+    }
     showToast(nextWatched ? 'Marked as Watched!' : 'Marked as uncompleted');
+  };
+
+  const handleUpdateWatchProgress = async (patch: {
+    season?: number;
+    episode?: number;
+    completed?: boolean;
+  }) => {
+    const prev = watchProgress || {
+      animeId: Number(animeId),
+      season: 1,
+      episode: 0,
+      totalEpisodes: totalEpisodes ?? null,
+      completed: false,
+      updatedAt: new Date().toISOString(),
+    };
+    const nextSeason = Math.max(1, patch.season ?? prev.season);
+    const nextEpisode = Math.max(0, patch.episode ?? prev.episode);
+    const cap = totalEpisodes && totalEpisodes > 0 ? totalEpisodes : null;
+    const clampedEpisode = cap ? Math.min(cap, nextEpisode) : nextEpisode;
+    const autoCompleted =
+      patch.completed !== undefined
+        ? patch.completed
+        : Boolean(cap && clampedEpisode >= cap);
+
+    const saved = saveAnimeWatchProgress(animeId, {
+      season: nextSeason,
+      episode: clampedEpisode,
+      totalEpisodes: cap ?? prev.totalEpisodes ?? null,
+      completed: autoCompleted,
+    });
+    if (!saved) return;
+    setWatchProgress(saved);
+
+    if (autoCompleted !== isWatched) {
+      setIsWatched(autoCompleted);
+      try {
+        const watched: unknown[] = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
+        const idNum = Number(animeId);
+        const updated = autoCompleted
+          ? Array.from(new Set([...watched, idNum]))
+          : watched.filter((w) => Number(w) !== idNum);
+        localStorage.setItem('cf_watched_anime_ids', JSON.stringify(updated));
+      } catch {}
+    }
+
+    if (user?.id) {
+      setIsSavingProgress(true);
+      cloudflareApi
+        .saveWatchProgress({
+          animeId,
+          season: saved.season,
+          episode: saved.episode,
+          totalEpisodes: saved.totalEpisodes,
+          completed: saved.completed,
+        })
+        .catch(() => {})
+        .finally(() => setIsSavingProgress(false));
+    }
+
+    showToast(`Saved progress: S${saved.season} • Ep ${saved.episode}`);
+  };
+
+  const handleToggleSpoilerProtection = () => {
+    const next = !spoilerProtection;
+    setSpoilerProtection(next);
+    setSpoilerProtectionEnabled(next);
+    setIsSynopsisRevealed(false);
+    setReviewsList((prev) =>
+      prev.map((r) => (r.spoilers ? { ...r, revealed: !next } : r))
+    );
+    showToast(
+      next
+        ? 'Spoiler Protection enabled — plot synopsis & spoiler messages blurred'
+        : 'Spoiler Protection turned off'
+    );
   };
 
   // Anime properties and fallbacks
@@ -568,17 +745,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     window.open(platform.url, '_blank', 'noopener,noreferrer');
   };
 
-  // Parse platforms list (supports 1 to 4+ platforms seamlessly)
-  const rawPlatformsList: string[] = (() => {
-    if (Array.isArray(details?.platforms) && details.platforms.length > 0) {
-      return details.platforms.map(String);
-    }
-    const platStr = details?.platform || details?.platforms || 'Crunchyroll';
-    if (typeof platStr === 'string') {
-      return platStr.split(/[,/•|]+/).map((s: string) => s.trim()).filter(Boolean);
-    }
-    return ['Crunchyroll'];
-  })();
+  // Parse platforms list cleanly (supports delimited strings, arrays, or rich platform objects)
+  const rawPlatformsList: string[] = useMemo(
+    () =>
+      parsePlatformList(details?.platform, details?.platforms, details?.platforms_data, {
+        defaultFallback: ['Crunchyroll'],
+      }),
+    [details?.platform, details?.platforms, details?.platforms_data]
+  );
 
   const availablePlatforms = (() => {
     let richPlatforms: RichPlatformEntry[] = [];
@@ -609,6 +783,25 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     : (details?.episodes_count || details?.episodes || details?.episode_count || (type === 'Movie' ? 1 : null));
   
   const episodesText = totalEpisodes ? `${totalEpisodes} ${totalEpisodes === 1 ? 'Ep' : 'Eps'}` : null;
+  const seasonEpisodeSummary = String(details?.season_episode_count || '').trim();
+  const lastVerifiedLabel = String(details?.last_verified_date || '').trim();
+  const officialSourceValidation = validateOfficialSourceUrl(details?.official_source_url, 'Official Source Link');
+  const officialSourceHref = officialSourceValidation.ok && officialSourceValidation.url ? officialSourceValidation.url : '';
+  const officialSourceLabel = useMemo(() => {
+    if (!officialSourceHref) return '';
+    try {
+      return new URL(officialSourceHref).hostname.replace(/^www\./, '');
+    } catch {
+      return 'Official Link';
+    }
+  }, [officialSourceHref]);
+  const activeSeason = watchProgress?.season ?? 1;
+  const activeEpisode = watchProgress?.episode ?? 0;
+  const progressPercent = computeWatchProgressPercent(
+    activeEpisode,
+    totalEpisodes ?? watchProgress?.totalEpisodes ?? null,
+    isWatched || Boolean(watchProgress?.completed)
+  );
 
   // FAQ Items
   const faqItems = [
@@ -666,7 +859,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   );
 
   return (
-    <div className="relative w-full min-h-screen bg-[#050507] text-neutral-100 font-sans pb-36 overflow-x-hidden selection:bg-purple-500/30">
+    <div className="relative w-full min-h-screen bg-[#050507] text-neutral-100 font-sans pb-36 overflow-x-clip selection:bg-purple-500/30">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: animeJsonLd }}
@@ -778,7 +971,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </div>
 
         {/* INLINE ACTION BAR */}
-        <div className="w-full max-w-md flex items-center justify-center gap-3 mb-4">
+        <div className="w-full max-w-md min-w-0 flex items-center justify-center gap-2 sm:gap-3 mb-4">
           {availablePlatforms.length > 0 && (
             <button
               type="button"
@@ -789,17 +982,18 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   setIsWatchOptionsOpen(true);
                 }
               }}
-              className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-6 py-3.5 rounded-full font-bold text-sm flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(168,85,247,0.4)] transition-all cursor-pointer"
+              className="flex-1 min-w-0 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-4 sm:px-6 py-3 sm:py-3.5 rounded-full font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(168,85,247,0.4)] transition-all cursor-pointer truncate"
             >
-              <Play size={18} className="fill-white" />
-              {availablePlatforms.length > 1 ? "Watch Options" : `Watch on ${availablePlatforms[0].name}`}
+              <Play size={16} className="fill-white shrink-0" />
+              <span className="truncate">{availablePlatforms.length > 1 ? "Watch Options" : `Watch on ${availablePlatforms[0].name}`}</span>
             </button>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
             <button
               type="button"
               onClick={() => onToggleWatchlist(animeId)}
+              aria-label={isBookmarked ? `Remove ${title} from watchlist` : `Add ${title} to watchlist`}
               className={`w-12 h-12 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 transition-all cursor-pointer ${
                 isBookmarked ? 'text-purple-400 bg-purple-500/20 border-purple-500/40' : 'text-white'
               }`}
@@ -811,6 +1005,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               type="button"
               onClick={handleVote}
               disabled={isVoting}
+              aria-label={`Upvote ${title}`}
               className="w-12 h-12 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 text-orange-400 transition-all relative cursor-pointer"
               title="Upvote Anime"
             >
@@ -844,25 +1039,178 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           </div>
         </div>
 
-        {/* SECTION 2: SYNOPSIS */}
+        {/* SECTION 1.5: WATCH PROGRESS TRACKER */}
+        <section
+          aria-label="Watch Progress Tracker"
+          className="mt-10 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-5 sm:p-6 shadow-xl space-y-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300">
+                <Tv className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-xs font-black uppercase tracking-widest text-purple-300">
+                  Watch Progress Tracker
+                </h2>
+                <p className="text-[11px] text-neutral-400">
+                  Season {activeSeason} • Episode {activeEpisode}
+                  {totalEpisodes ? ` of ${totalEpisodes}` : ''} ({progressPercent}%)
+                  {isSavingProgress ? ' • Syncing…' : ''}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleToggleWatched}
+              aria-pressed={isWatched}
+              aria-label={isWatched ? 'Mark series as unwatched' : 'Mark series as completed'}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold border inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                isWatched
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                  : 'bg-white/[0.04] border-white/10 text-neutral-300 hover:text-white'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{isWatched ? 'Completed' : 'Mark Completed'}</span>
+            </button>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-emerald-400 transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          {/* Season & Episode Controls */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div className="flex items-center justify-between rounded-2xl bg-black/35 border border-white/10 px-3.5 py-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                Season
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleUpdateWatchProgress({ season: Math.max(1, activeSeason - 1) })}
+                  aria-label="Decrease season"
+                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <span className="min-w-[2.25rem] text-center text-xs font-black text-white">
+                  S{activeSeason}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleUpdateWatchProgress({ season: activeSeason + 1 })}
+                  aria-label="Increase season"
+                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl bg-black/35 border border-white/10 px-3.5 py-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                Episode
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleUpdateWatchProgress({
+                      episode: Math.max(0, activeEpisode - 1),
+                      completed: false,
+                    })
+                  }
+                  aria-label="Previous episode"
+                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <span className="min-w-[3.25rem] text-center text-xs font-black text-white">
+                  Ep {activeEpisode}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleUpdateWatchProgress({ episode: activeEpisode + 1 })}
+                  aria-label="Next watched episode"
+                  className="w-7 h-7 rounded-lg bg-purple-600/80 hover:bg-purple-500 flex items-center justify-center text-white cursor-pointer shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 2: SYNOPSIS WITH SPOILER PROTECTION */}
         <div className="mt-12">
-          <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase mb-4 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
-            Synopsis
-          </h2>
-          <p className="text-sm sm:text-base text-neutral-200/90 leading-relaxed font-normal">
-            {isSynopsisExpanded || synopsis.length <= 280
-              ? synopsis
-              : `${synopsis.slice(0, 280)}...`}
-            {synopsis.length > 280 && (
-              <button
-                type="button"
-                onClick={() => setIsSynopsisExpanded(!isSynopsisExpanded)}
-                className="text-xs font-bold text-purple-400 hover:text-purple-300 ml-2 cursor-pointer transition-colors"
-              >
-                {isSynopsisExpanded ? 'Show less' : 'Read more'}
-              </button>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+              Synopsis
+            </h2>
+            <button
+              type="button"
+              onClick={handleToggleSpoilerProtection}
+              aria-pressed={spoilerProtection}
+              aria-label="Toggle spoiler protection"
+              className={`px-3 py-1 rounded-full text-[11px] font-bold border inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                spoilerProtection
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                  : 'bg-white/[0.04] border-white/10 text-neutral-400 hover:text-white'
+              }`}
+            >
+              {spoilerProtection ? (
+                <EyeOff className="w-3.5 h-3.5" />
+              ) : (
+                <Eye className="w-3.5 h-3.5" />
+              )}
+              <span>Spoiler Protection: {spoilerProtection ? 'ON' : 'OFF'}</span>
+            </button>
+          </div>
+
+          <div className="relative">
+            <p
+              className={`text-sm sm:text-base text-neutral-200/90 leading-relaxed font-normal transition-all duration-300 ${
+                spoilerProtection && !isSynopsisRevealed
+                  ? 'blur-md select-none opacity-60 pointer-events-none'
+                  : ''
+              }`}
+            >
+              {isSynopsisExpanded || synopsis.length <= 280
+                ? synopsis
+                : `${synopsis.slice(0, 280)}...`}
+              {synopsis.length > 280 && (!spoilerProtection || isSynopsisRevealed) && (
+                <button
+                  type="button"
+                  onClick={() => setIsSynopsisExpanded(!isSynopsisExpanded)}
+                  className="text-xs font-bold text-purple-400 hover:text-purple-300 ml-2 cursor-pointer transition-colors"
+                >
+                  {isSynopsisExpanded ? 'Show less' : 'Read more'}
+                </button>
+              )}
+            </p>
+
+            {spoilerProtection && !isSynopsisRevealed && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => setIsSynopsisRevealed(true)}
+                  aria-label="Reveal blurred synopsis"
+                  className="px-4 py-2 rounded-xl bg-black/85 border border-amber-500/40 text-amber-300 hover:text-white hover:border-amber-400 text-xs font-bold inline-flex items-center gap-2 shadow-xl backdrop-blur-md cursor-pointer transition-all"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Spoiler Shield Active — Click to Reveal Synopsis</span>
+                </button>
+              </div>
             )}
-          </p>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2 pt-4 text-xs">
             <span className="text-purple-300/60 text-[10px] font-bold tracking-widest uppercase mr-1">GENRES:</span>
             {genres.map((g: string, i: number) => (
@@ -878,30 +1226,58 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase mb-4 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
             Stream Specs
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-            <div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
+            <div className="min-w-0">
               <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">PLATFORMS</span>
               <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
                 <Play className="w-3.5 h-3.5 text-purple-400 fill-purple-400 shrink-0" />
                 <span className="truncate">{availablePlatforms.map(p => p.name).join(', ')}</span>
               </span>
             </div>
-            <div>
+            <div className="min-w-0">
               <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">AUDIO TRACK</span>
               <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                 <Volume2 className="w-3.5 h-3.5 shrink-0" />
-                <span>Dolby 5.1 / Stereo</span>
+                <span className="truncate">Dolby 5.1 / Stereo</span>
               </span>
             </div>
-            <div>
+            <div className="min-w-0">
               <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">STUDIO</span>
               <span className="text-xs font-bold text-white truncate block">{studio}</span>
             </div>
-            <div>
+            <div className="min-w-0">
               <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">VERIFICATION</span>
               <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                <span>100% Legal</span>
+                <span className="truncate">Verified Sources</span>
+              </span>
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">SEASONS &amp; EPISODES</span>
+              <span className="text-xs font-bold text-white truncate block">
+                {seasonEpisodeSummary || episodesText || 'Ongoing'}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">OFFICIAL SOURCE</span>
+              {officialSourceHref ? (
+                <a
+                  href={officialSourceHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-bold text-cyan-300 hover:text-cyan-200 inline-flex items-center gap-1 max-w-full truncate underline underline-offset-2"
+                >
+                  <span className="truncate">{officialSourceLabel || 'Official Site'}</span>
+                  <ExternalLink className="w-3 h-3 shrink-0" />
+                </a>
+              ) : (
+                <span className="text-xs font-bold text-white/75 truncate block">Official Licensee</span>
+              )}
+            </div>
+            <div className="min-w-0 col-span-2 sm:col-span-2">
+              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">LAST VERIFIED DATE</span>
+              <span className="text-xs font-bold text-teal-300 truncate block">
+                {lastVerifiedLabel || 'Catalog Active'}
               </span>
             </div>
           </div>
@@ -1107,26 +1483,26 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       </div>
 
       {/* 4. STICKY ACTION BAR */}
-      <div className="fixed bottom-6 left-4 right-4 max-w-md mx-auto z-50 backdrop-blur-3xl bg-black/40 border border-white/10 p-2.5 rounded-[2.5rem] flex items-center justify-between shadow-2xl">
+      <div className="fixed bottom-4 sm:bottom-6 left-3 right-3 sm:left-4 sm:right-4 w-auto max-w-[calc(100vw-1.5rem)] sm:max-w-md mx-auto z-50 backdrop-blur-3xl bg-black/40 border border-white/10 p-2 sm:p-2.5 gap-1.5 rounded-[2.5rem] flex items-center justify-between shadow-2xl overflow-hidden">
         {/* Watch Options Button */}
         <button
           type="button"
           onClick={() => setIsWatchOptionsOpen(true)}
-          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3.5 rounded-full font-bold shadow-[0_0_20px_rgba(168,85,247,0.5)] flex items-center justify-center gap-2 hover:opacity-95 transition-all cursor-pointer text-xs uppercase tracking-wider active:scale-95"
+          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3.5 sm:px-6 py-2.5 sm:py-3.5 rounded-full font-bold shadow-[0_0_20px_rgba(168,85,247,0.5)] flex items-center justify-center gap-1.5 sm:gap-2 hover:opacity-95 transition-all cursor-pointer text-[11px] sm:text-xs uppercase tracking-wider active:scale-95 min-w-0 shrink"
         >
-          <Play className="w-4 h-4 fill-white shrink-0" />
-          <span>Watch Options</span>
-          <ChevronUp className="w-3.5 h-3.5 opacity-80 shrink-0" />
+          <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-white shrink-0" />
+          <span className="truncate">Watch Options</span>
+          <ChevronUp className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-80 shrink-0" />
         </button>
 
         {/* Lightweight Icon Actions */}
-        <div className="flex items-center gap-1.5 pr-1">
+        <div className="flex items-center gap-1 sm:gap-1.5 pr-0.5 sm:pr-1 shrink-0">
           {/* Upvote Button with count */}
           <button
             type="button"
             onClick={handleVote}
             disabled={isVoting}
-            className={`h-11 px-3 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 active:scale-95 ${
+            className={`h-9 sm:h-11 px-2.5 sm:px-3 shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer disabled:opacity-50 active:scale-95 ${
               upvotes > 0
                 ? 'text-orange-400 border-orange-500/30 bg-orange-500/10'
                 : 'text-white/80 hover:text-white'
@@ -1144,7 +1520,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <button
             type="button"
             onClick={() => onToggleWatchlist(animeId)}
-            className={`w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
+            className={`w-9 h-9 sm:w-11 sm:h-11 shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
               isBookmarked
                 ? 'text-purple-400 border-purple-500/40 bg-purple-500/15'
                 : 'text-white/80 hover:text-white'
@@ -1159,7 +1535,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <button
             type="button"
             onClick={handleToggleWatched}
-            className={`w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
+            className={`w-9 h-9 sm:w-11 sm:h-11 shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
               isWatched
                 ? 'text-emerald-400 border-emerald-500/40 bg-emerald-500/15'
                 : 'text-white/80 hover:text-white'
@@ -1174,7 +1550,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <button
             type="button"
             onClick={handleShare}
-            className="w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all cursor-pointer active:scale-95"
+            className="w-9 h-9 sm:w-11 sm:h-11 shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all cursor-pointer active:scale-95"
             title="Share Anime"
             aria-label="Share"
           >
@@ -1208,6 +1584,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsWatchOptionsOpen(false)}
+                  aria-label="Close streaming platforms modal"
                   className="p-1 rounded-full text-neutral-400 hover:text-white cursor-pointer"
                 >
                   ✕
@@ -1267,71 +1644,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
       {/* REPORT ISSUE MODAL */}
       {isReportOpen && (
-        <div 
-          onClick={() => setIsReportOpen(false)}
-          className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-[#131926] border border-neutral-800 rounded-3xl p-6 shadow-2xl space-y-4"
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-black text-white flex items-center gap-2">
-                <Flag className="w-4 h-4 text-red-400" />
-                <span>Report an Issue</span>
-              </h3>
-              <button 
-                onClick={() => setIsReportOpen(false)}
-                className="text-neutral-400 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-neutral-400">
-              Found a broken streaming link or incorrect regional dub information for {title}? Let our moderation team know.
-            </p>
-
-            <div className="space-y-2">
-              <label className="block text-xs font-semibold text-neutral-300">Issue Type</label>
-              <select className="w-full bg-[#182032] border border-neutral-700 rounded-xl px-3 py-2 text-xs text-white">
-                <option>Broken / Expired OTT Streaming Link</option>
-                <option>Missing Regional Dub Audio (Hindi/Tamil/Telugu)</option>
-                <option>Incorrect Episode Count or Airing Status</option>
-                <option>Voice Actor / Studio Credits Mismatch</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-xs font-semibold text-neutral-300">Details</label>
-              <textarea 
-                rows={3}
-                placeholder="Describe what needs correction..."
-                className="w-full bg-[#182032] border border-neutral-700 rounded-xl p-3 text-xs text-white placeholder-neutral-500 focus:outline-none"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsReportOpen(false)}
-                className="px-4 py-2 rounded-xl bg-neutral-800 text-neutral-300 text-xs font-semibold hover:bg-neutral-700 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsReportOpen(false);
-                  showToast('Thank you! Your report has been submitted to moderators.');
-                }}
-                className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-500 cursor-pointer"
-              >
-                Submit Report
-              </button>
-            </div>
-          </div>
-        </div>
+        <ReportModal
+          animeId={animeId}
+          animeTitle={title}
+          onClose={() => setIsReportOpen(false)}
+          onSuccess={() => showToast('Thank you! Your report has been saved to D1 and sent to moderators.')}
+        />
       )}
 
     </div>
