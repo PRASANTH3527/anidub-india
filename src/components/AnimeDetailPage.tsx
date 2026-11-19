@@ -115,7 +115,6 @@ export interface AnimeDetailRecord extends Omit<Partial<Anime>, 'rating' | 'year
   episode_count?: number;
   season_episode_count?: string;
   official_source_url?: string;
-  last_verified_date?: string;
 }
 
 export interface AnimeDetailPageProps {
@@ -784,7 +783,6 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   
   const episodesText = totalEpisodes ? `${totalEpisodes} ${totalEpisodes === 1 ? 'Ep' : 'Eps'}` : null;
   const seasonEpisodeSummary = String(details?.season_episode_count || '').trim();
-  const lastVerifiedLabel = String(details?.last_verified_date || '').trim();
   const officialSourceValidation = validateOfficialSourceUrl(details?.official_source_url, 'Official Source Link');
   const officialSourceHref = officialSourceValidation.ok && officialSourceValidation.url ? officialSourceValidation.url : '';
   const officialSourceLabel = useMemo(() => {
@@ -1226,7 +1224,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase mb-4 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
             Stream Specs
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6">
             <div className="min-w-0">
               <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">PLATFORMS</span>
               <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
@@ -1273,12 +1271,6 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               ) : (
                 <span className="text-xs font-bold text-white/75 truncate block">Official Licensee</span>
               )}
-            </div>
-            <div className="min-w-0 col-span-2 sm:col-span-2">
-              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">LAST VERIFIED DATE</span>
-              <span className="text-xs font-bold text-teal-300 truncate block">
-                {lastVerifiedLabel || 'Catalog Active'}
-              </span>
             </div>
           </div>
         </div>

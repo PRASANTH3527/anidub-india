@@ -241,11 +241,6 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
                         {anime.season_episode_count}
                       </span>
                     )}
-                    {anime.last_verified_date && (
-                      <span className="px-2 py-0.5 rounded-md bg-teal-500/15 border border-teal-500/30 text-teal-300 text-[10px] font-mono">
-                        Verified: {anime.last_verified_date}
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>

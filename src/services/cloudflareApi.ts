@@ -106,7 +106,6 @@ export interface AnimePayload {
   airTime?: string;
   season_episode_count?: string;
   official_source_url?: string;
-  last_verified_date?: string;
   created_at?: string;
 }
 

@@ -515,42 +515,6 @@ export function normalizeSeasonEpisodeCount(input: unknown, maxLen = 100): strin
 }
 
 /**
- * Normalizes a last-verified date into YYYY-MM-DD format when valid, or '' if empty/invalid.
- */
-export function normalizeLastVerifiedDate(input: unknown): string {
-  const rawCandidate = isPlainRecord(input)
-    ? input.last_verified_date ??
-      input.lastVerifiedDate ??
-      input['Last Verified Date'] ??
-      input['Last Verified']
-    : input;
-
-  if (rawCandidate === null || rawCandidate === undefined) return '';
-  const cleaned = String(rawCandidate).replace(/<[^>]*>/g, '').trim();
-  if (!cleaned) return '';
-
-  const isoMatch = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
-  if (isoMatch) {
-    const year = Number(isoMatch[1]);
-    const month = Number(isoMatch[2]);
-    const day = Number(isoMatch[3]);
-    if (year >= 1990 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
-    }
-    return '';
-  }
-
-  const parsedMs = Date.parse(cleaned);
-  if (!Number.isFinite(parsedMs)) return '';
-  const d = new Date(parsedMs);
-  const yyyy = d.getUTCFullYear();
-  if (yyyy < 1990 || yyyy > 2100) return '';
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-/**
  * Summarizes Mixed Entries (Seasons, Movies, OVAs, ONAs, Specials) into a concise
  * `season_episode_count` string (e.g. `'2 Seasons • 24 Episodes'`).
  */

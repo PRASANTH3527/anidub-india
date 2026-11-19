@@ -27,7 +27,6 @@ import {
   buildStreamingPartnersPayload,
   normalizeBroadcastDay,
   normalizeBroadcastTime,
-  normalizeLastVerifiedDate,
   deriveSeasonEpisodeCountSummary,
   deriveOfficialSourceUrlFromPartners,
 } from '../utils/dataNormalization';
@@ -254,9 +253,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   });
   const [releaseDay, setReleaseDay] = useState<string>(() => normalizeBroadcastDay(initialData) || '');
   const [broadcastTime, setBroadcastTime] = useState<string>(() => normalizeBroadcastTime(initialData) || '');
-  const [lastVerifiedDate, setLastVerifiedDate] = useState<string>(() =>
-    normalizeLastVerifiedDate(initialData)
-  );
 
   useEffect(() => {
     if (initialData) {
@@ -317,7 +313,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
       // Re-populate streaming partners from initialData
       setStreamingPartners(parseStreamingPartners(initialData));
-      setLastVerifiedDate(normalizeLastVerifiedDate(initialData));
     } else {
       setTitle('');
       setSynopsis('');
@@ -329,7 +324,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       setStatusState('Airing');
       setReleaseDay('');
       setBroadcastTime('');
-      setLastVerifiedDate('');
       setStudio('');
       setGenres(['Action', 'Fantasy']);
       setMixedEntries([
@@ -560,7 +554,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     }
 
     const normalizedSeasonEpCount = deriveSeasonEpisodeCountSummary(mixedEntries);
-    const normalizedVerifiedDate = normalizeLastVerifiedDate(lastVerifiedDate);
 
     const defaultCover = rawPoster || '/logo.png';
 
@@ -632,7 +625,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         airTime: resolvedBroadcastTime || '',
         season_episode_count: normalizedSeasonEpCount,
         official_source_url: sourceUrlCheck.url || '',
-        last_verified_date: normalizedVerifiedDate,
       };
 
       let savedResult: any = null;
@@ -661,7 +653,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         broadcast_time: resolvedBroadcastTime,
         season_episode_count: normalizedSeasonEpCount,
         official_source_url: sourceUrlCheck.url || '',
-        last_verified_date: normalizedVerifiedDate,
         cover_image: defaultCover,
         image: defaultCover,
         poster: defaultCover,
@@ -1297,28 +1288,6 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       placeholder="8.5"
                       className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none"
                     />
-                  </div>
-                </div>
-
-                {/* Last Verified Date */}
-                <div>
-                  <label className="block font-bold text-neutral-400 mb-1">Last Verified Date</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="date"
-                      value={lastVerifiedDate}
-                      onChange={(e) => setLastVerifiedDate(e.target.value)}
-                      aria-label="Last Verified Date"
-                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-primary-theme"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setLastVerifiedDate(new Date().toISOString().slice(0, 10))}
-                      className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-neutral-700/80 text-[11px] font-bold text-cyan-300 shrink-0 cursor-pointer transition-colors"
-                      title="Set to today's date"
-                    >
-                      Today
-                    </button>
                   </div>
                 </div>
 

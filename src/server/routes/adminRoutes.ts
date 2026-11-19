@@ -2,7 +2,6 @@ import { getAuth } from '../../utils/auth';
 import {
   normalizeBroadcastDay,
   normalizeBroadcastTime,
-  normalizeLastVerifiedDate,
   normalizePlatformString,
   normalizeSeasonEpisodeCount,
   parseCsvMixedEntriesAndEpisodesPerSeason,
@@ -132,7 +131,6 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         'broadcast_time',
         'season_episode_count',
         'official_source_url',
-        'last_verified_date',
       ] as const;
       const legacyExportColumns = [
         'id',
@@ -605,11 +603,10 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         const rawSourceCandidate = row.official_source_url ?? row.officialSourceUrl ?? row['Official Source Link'] ?? '';
         const sourceCheck = validateOfficialSourceUrl(rawSourceCandidate, 'Official Source Link');
         const officialSourceUrl = sourceCheck.ok ? (sourceCheck.url || '') : '';
-        const lastVerifiedDate = normalizeLastVerifiedDate(row);
 
         if (env.DB) {
-          const insertSql = `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries, broadcast_day, broadcast_time, season_episode_count, official_source_url, last_verified_date)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+          const insertSql = `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries, broadcast_day, broadcast_time, season_episode_count, official_source_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
           const legacyInsertSql = `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`;
           try {
@@ -636,8 +633,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
                 broadcastDay,
                 broadcastTime,
                 seasonEpisodeCount,
-                officialSourceUrl,
-                lastVerifiedDate
+                officialSourceUrl
               )
               .run();
           } catch (insertErr) {
@@ -667,8 +663,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
                   broadcastDay,
                   broadcastTime,
                   seasonEpisodeCount,
-                  officialSourceUrl,
-                  lastVerifiedDate
+                  officialSourceUrl
                 )
                 .run();
             } else if (isMissingColumnError(insertErr)) {

@@ -11,7 +11,6 @@ import {
 import {
   normalizeBroadcastDay,
   normalizeBroadcastTime,
-  normalizeLastVerifiedDate,
   normalizePlatformString,
   normalizeSeasonEpisodeCount,
   normalizeStreamingPartners,
@@ -210,10 +209,11 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             const queryParams = [...params, limit, offset];
             const dataRes = await env.DB.prepare(`SELECT * FROM anime ${whereSql} ${orderSql} LIMIT ? OFFSET ?`).bind(...queryParams).all();
             results = (dataRes.results || []).map((row) => {
-              const parsedPartners = normalizeStreamingPartners(row.streaming_partners || row.platforms_data);
-              if (parsedPartners.length === 0) return row;
+              const { last_verified_date: _ignoredLastVerified, ...cleanRow } = row;
+              const parsedPartners = normalizeStreamingPartners(cleanRow.streaming_partners || cleanRow.platforms_data);
+              if (parsedPartners.length === 0) return cleanRow;
               return {
-                ...row,
+                ...cleanRow,
                 streaming_partners: parsedPartners,
                 platforms_data: parsedPartners,
                 watch_providers: parsedPartners,
@@ -406,7 +406,6 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
       }
       const seasonEpisodeCount = normalizeSeasonEpisodeCount(body);
       const officialSourceUrl = officialSourceCheck.url || '';
-      const lastVerifiedDate = normalizeLastVerifiedDate(body);
 
       const parsedEpisodes = parseOptionalEpisodesCount(body);
       const parsedSeason = parseOptionalSeason(body);
@@ -433,8 +432,8 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             : 1;
         try {
           const insertRes = await env.DB.prepare(`
-            INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, platforms_data, watch_url, studio, mixedEntries, mixed_entries, episodes_per_season, broadcast_day, broadcast_time, season_episode_count, official_source_url, last_verified_date, approval_status, is_published)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, platforms_data, watch_url, studio, mixedEntries, mixed_entries, episodes_per_season, broadcast_day, broadcast_time, season_episode_count, official_source_url, approval_status, is_published)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `)
             .bind(
               body.title,
@@ -463,7 +462,6 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               broadcastTime,
               seasonEpisodeCount,
               officialSourceUrl,
-              lastVerifiedDate,
               finalSubmissionStatus,
               finalIsPublished
             )
@@ -530,7 +528,6 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           broadcast_time: broadcastTime,
           season_episode_count: seasonEpisodeCount,
           official_source_url: officialSourceUrl,
-          last_verified_date: lastVerifiedDate,
           platforms_data: normalizedPartners,
           streaming_partners: normalizedPartners,
           watch_providers: normalizedPartners,
@@ -726,9 +723,10 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               // Optional rating aggregate fallback
             }
 
+            const { last_verified_date: _ignoredLastVerified, ...cleanAnime } = anime;
             return jsonResponse(
               {
-                ...anime,
+                ...cleanAnime,
                 streaming_partners: streamingPartners,
                 platforms_data: streamingPartners,
                 watch_providers: streamingPartners,
@@ -861,10 +859,6 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             body.official_source_url !== undefined ||
             body.officialSourceUrl !== undefined ||
             body['Official Source Link'] !== undefined;
-          const hasLastVerifiedUpdate =
-            body.last_verified_date !== undefined ||
-            body.lastVerifiedDate !== undefined ||
-            body['Last Verified Date'] !== undefined;
 
           let updatedOfficialSourceUrl = '';
           if (hasOfficialSourceUpdate) {
@@ -879,9 +873,6 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           }
           const updatedSeasonEpisodeCount = hasSeasonEpisodeCountUpdate
             ? normalizeSeasonEpisodeCount(body)
-            : '';
-          const updatedLastVerifiedDate = hasLastVerifiedUpdate
-            ? normalizeLastVerifiedDate(body)
             : '';
 
           const hasBroadcastDayUpdate =
@@ -924,8 +915,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 broadcast_day = CASE WHEN ? = 1 THEN ? ELSE broadcast_day END,
                 broadcast_time = CASE WHEN ? = 1 THEN ? ELSE broadcast_time END,
                 season_episode_count = CASE WHEN ? = 1 THEN ? ELSE season_episode_count END,
-                official_source_url = CASE WHEN ? = 1 THEN ? ELSE official_source_url END,
-                last_verified_date = CASE WHEN ? = 1 THEN ? ELSE last_verified_date END
+                official_source_url = CASE WHEN ? = 1 THEN ? ELSE official_source_url END
               WHERE id = ? OR slug = ?`
             )
               .bind(
@@ -962,8 +952,6 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 updatedSeasonEpisodeCount,
                 hasOfficialSourceUpdate ? 1 : 0,
                 updatedOfficialSourceUrl,
-                hasLastVerifiedUpdate ? 1 : 0,
-                updatedLastVerifiedDate,
                 id,
                 id
               )
@@ -1042,7 +1030,6 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             broadcast_time: updatedBroadcastTime,
             ...(hasSeasonEpisodeCountUpdate ? { season_episode_count: updatedSeasonEpisodeCount } : {}),
             ...(hasOfficialSourceUpdate ? { official_source_url: updatedOfficialSourceUrl } : {}),
-            ...(hasLastVerifiedUpdate ? { last_verified_date: updatedLastVerifiedDate } : {}),
             platforms_data: hasPartnersUpdate ? normalizedPartners : partnersJson,
             streaming_partners: hasPartnersUpdate ? normalizedPartners : rawPartners,
             watch_providers: hasPartnersUpdate ? normalizedPartners : undefined,

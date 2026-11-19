@@ -41,7 +41,6 @@ import {
   parseOptionalEpisodesCount,
   parseOptionalSeason,
   normalizeSeasonEpisodeCount,
-  normalizeLastVerifiedDate,
 } from '../utils/dataNormalization';
 import { useUser, SignIn } from '../lib/clerk';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
@@ -826,7 +825,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               row['Source URL'] ||
               ''
             ).toString().trim(),
-            last_verified_date: normalizeLastVerifiedDate(row),
             slug: (rawTitle || 'untitled')
               .toLowerCase()
               .replace(/[^a-z0-9]+/g, '-')
@@ -893,11 +891,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleExportCsv = () => {
     const headers =
-      'Title,Type,Status,Studio,Release Year,Rating,Genres,Synopsis,Streaming Partners,Languages,Episodes,Cover Image,Season & Episode Count,Official Source Link,Last Verified Date\n';
+      'Title,Type,Status,Studio,Release Year,Rating,Genres,Synopsis,Streaming Partners,Languages,Episodes,Cover Image,Season & Episode Count,Official Source Link\n';
     const rows = catalog
       .map((a) => {
         const clean = (val: unknown) => `"${String(val ?? '').replace(/"/g, '""')}"`;
-        return `${clean(a.title)},${clean(a.type || a.Type || 'TV Series')},${clean(a.status || a.airing_status || 'Airing')},${clean(a.studio || '')},${clean(a.year || a.release_year || 2024)},${clean(a.rating || 8.5)},${clean(a.genres || a.genre || '')},${clean(a.synopsis || a.description || '')},${clean(normalizePlatformString(a.platform || ''))},${clean(formatLanguageText(a.languages))},${clean(a.episodes_per_season || a.episodes_count || '')},${clean(a.cover_image || a.poster_url || '')},${clean(a.season_episode_count || '')},${clean(a.official_source_url || '')},${clean(a.last_verified_date || '')}`;
+        return `${clean(a.title)},${clean(a.type || a.Type || 'TV Series')},${clean(a.status || a.airing_status || 'Airing')},${clean(a.studio || '')},${clean(a.year || a.release_year || 2024)},${clean(a.rating || 8.5)},${clean(a.genres || a.genre || '')},${clean(a.synopsis || a.description || '')},${clean(normalizePlatformString(a.platform || ''))},${clean(formatLanguageText(a.languages))},${clean(a.episodes_per_season || a.episodes_count || '')},${clean(a.cover_image || a.poster_url || '')},${clean(a.season_episode_count || '')},${clean(a.official_source_url || '')}`;
       })
       .join('\n');
 
@@ -1317,10 +1315,6 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         editedData.official_source_url !== undefined
           ? String(editedData.official_source_url).trim()
           : editingAnime?.official_source_url || '',
-      last_verified_date:
-        editedData.last_verified_date !== undefined
-          ? normalizeLastVerifiedDate(editedData.last_verified_date)
-          : editingAnime?.last_verified_date || '',
     };
 
     setCatalog((prev) => {

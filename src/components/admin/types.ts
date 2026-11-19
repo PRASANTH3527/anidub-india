@@ -71,7 +71,6 @@ export interface AdminAnimeRecord {
   imdbId?: string;
   season_episode_count?: string;
   official_source_url?: string;
-  last_verified_date?: string;
 }
 
 export interface RatingCorrection {

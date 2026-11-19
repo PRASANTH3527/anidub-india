@@ -12,7 +12,6 @@ import {
 import { countAiringSimulcasts } from '../src/utils/schedule.js';
 import {
   normalizeSeasonEpisodeCount,
-  normalizeLastVerifiedDate,
   deriveSeasonEpisodeCountSummary,
   deriveOfficialSourceUrlFromPartners,
 } from '../src/utils/dataNormalization.js';
@@ -347,10 +346,8 @@ test('Simulcast count logic: counts Airing/Ongoing/Simulcast items dynamically a
   }
 });
 
-test('Anime metadata fields (season_episode_count, official_source_url, last_verified_date) validation, D1 CRUD, and CSV round-trip', async () => {
+test('Anime metadata fields (season_episode_count, official_source_url) validation, D1 CRUD, CSV round-trip, and last_verified_date exclusion', async () => {
   assert.equal(normalizeSeasonEpisodeCount('  2 Seasons • 24 Episodes  '), '2 Seasons • 24 Episodes');
-  assert.equal(normalizeLastVerifiedDate('2026-11-17T10:30:00Z'), '2026-11-17');
-  assert.equal(normalizeLastVerifiedDate('invalid-date'), '');
 
   assert.equal(validateOfficialSourceUrl('https://www.crunchyroll.com/series/abc').ok, true);
   assert.equal(validateOfficialSourceUrl('http://museasia.example.com/show').ok, true);
@@ -390,7 +387,7 @@ test('Anime metadata fields (season_episode_count, official_source_url, last_ver
     });
     assert.equal(badSourceRes.status, 400);
 
-    // 2. Create anime with all 3 new metadata fields
+    // 2. Create anime with metadata fields (last_verified_date ignored/omitted)
     const createRes = await onRequest({
       request: new Request('https://anidub.in/api/anime', {
         method: 'POST',
@@ -404,13 +401,13 @@ test('Anime metadata fields (season_episode_count, official_source_url, last_ver
           languages: 'Hindi, Tamil, Telugu',
           season_episode_count: '1 Season • 28 Episodes',
           official_source_url: 'https://www.crunchyroll.com/series/GG5H5XQX4/frieren-beyond-journeys-end',
-          last_verified_date: '2026-11-17',
         }),
       }),
       env,
     });
     assert.equal(createRes.status, 201);
     const created: any = await createRes.json();
+    assert.equal('last_verified_date' in created, false);
     const createdId = created.id || created.animeId;
 
     const getRes = await onRequest({
@@ -424,7 +421,7 @@ test('Anime metadata fields (season_episode_count, official_source_url, last_ver
       fetched.official_source_url,
       'https://www.crunchyroll.com/series/GG5H5XQX4/frieren-beyond-journeys-end'
     );
-    assert.equal(fetched.last_verified_date, '2026-11-17');
+    assert.equal('last_verified_date' in fetched, false);
 
     // 3. Update metadata fields via PUT
     const putRes = await onRequest({
@@ -438,12 +435,13 @@ test('Anime metadata fields (season_episode_count, official_source_url, last_ver
           title: 'Frieren: Beyond Journey End',
           season_episode_count: '2 Seasons • 40 Episodes',
           official_source_url: 'https://www.netflix.com/title/81726714',
-          last_verified_date: '2026-11-18',
         }),
       }),
       env,
     });
     assert.equal(putRes.status, 200);
+    const putJson: any = await putRes.json();
+    assert.equal('last_verified_date' in putJson, false);
 
     const updatedRes = await onRequest({
       request: new Request(`https://anidub.in/api/anime/${createdId}`),
@@ -452,9 +450,9 @@ test('Anime metadata fields (season_episode_count, official_source_url, last_ver
     const updated: any = await updatedRes.json();
     assert.equal(updated.season_episode_count, '2 Seasons • 40 Episodes');
     assert.equal(updated.official_source_url, 'https://www.netflix.com/title/81726714');
-    assert.equal(updated.last_verified_date, '2026-11-18');
+    assert.equal('last_verified_date' in updated, false);
 
-    // 4. CSV import & export include the new metadata columns
+    // 4. CSV import & export include season_episode_count and official_source_url, and exclude last_verified_date
     const csvImportRes = await onRequest({
       request: new Request('https://anidub.in/api/admin/import-csv', {
         method: 'POST',
@@ -470,7 +468,6 @@ test('Anime metadata fields (season_episode_count, official_source_url, last_ver
               languages: ['Hindi'],
               season_episode_count: '2 Seasons • 48 Episodes',
               official_source_url: 'https://www.netflix.com/title/81249833',
-              last_verified_date: '2026-11-16',
             },
           ],
         }),
@@ -489,7 +486,7 @@ test('Anime metadata fields (season_episode_count, official_source_url, last_ver
     const csvText = await csvExportRes.text();
     assert.ok(csvText.includes('season_episode_count'));
     assert.ok(csvText.includes('official_source_url'));
-    assert.ok(csvText.includes('last_verified_date'));
+    assert.equal(csvText.includes('last_verified_date'), false);
     assert.ok(csvText.includes('2 Seasons • 40 Episodes'));
     assert.ok(csvText.includes('2 Seasons • 48 Episodes'));
   } finally {
@@ -507,7 +504,8 @@ test('Mobile 390px overflow guards, ScheduleView simulcast binding, and preserve
   assert.ok(detailCode.includes('max-w-[calc(100vw-1.5rem)]'));
   assert.ok(detailCode.includes('SEASONS &amp; EPISODES'));
   assert.ok(detailCode.includes('OFFICIAL SOURCE'));
-  assert.ok(detailCode.includes('LAST VERIFIED DATE'));
+  assert.equal(detailCode.includes('LAST VERIFIED DATE'), false);
+  assert.equal(detailCode.includes('last_verified_date'), false);
 
   const scheduleCode = fs.readFileSync(path.join(process.cwd(), 'src/components/ScheduleView.tsx'), 'utf8');
   assert.ok(scheduleCode.includes('countAiringSimulcasts'));
@@ -803,7 +801,7 @@ test('P1-04: /api/admin/export-csv inspects schema via PRAGMA and falls back str
   assert.equal(lastSelect.includes('broadcast_time'), false);
 });
 
-test('DubInfoModal cleanup: removes duplicate Season & Episode Count / Official Source Link boxes and auto-derives them on submit while keeping Last Verified Date', () => {
+test('DubInfoModal & UI cleanup: removes Season & Episode Count, Official Source Link, and Last Verified Date boxes while auto-deriving season_episode_count and official_source_url', () => {
   // 1. Mixed Entries -> season_episode_count auto-summary
   assert.equal(
     deriveSeasonEpisodeCountSummary([
@@ -852,14 +850,21 @@ test('DubInfoModal cleanup: removes duplicate Season & Episode Count / Official 
   assert.equal(deriveOfficialSourceUrlFromPartners([{ name: 'Crunchyroll', url: '' }]), '');
   assert.equal(deriveOfficialSourceUrlFromPartners([]), '');
 
-  // 3. UI component source assertions
+  // 3. UI & backend complete removal assertions for Last Verified Date
   const modalSrc = fs.readFileSync(path.join(process.cwd(), 'src/components/DubInfoModal.tsx'), 'utf8');
   assert.equal(modalSrc.includes('Season &amp; Episode Count'), false);
   assert.equal(modalSrc.includes('Official Source Link'), false);
-  assert.ok(modalSrc.includes('Last Verified Date'));
-  assert.ok(modalSrc.includes('aria-label="Last Verified Date"'));
+  assert.equal(modalSrc.includes('Last Verified Date'), false);
+  assert.equal(modalSrc.includes('last_verified_date'), false);
   assert.ok(modalSrc.includes('deriveSeasonEpisodeCountSummary(mixedEntries)'));
   assert.ok(modalSrc.includes('deriveOfficialSourceUrlFromPartners(serializedPartners)'));
+
+  const catalogTabSrc = fs.readFileSync(path.join(process.cwd(), 'src/components/admin/AdminCatalogTab.tsx'), 'utf8');
+  assert.equal(catalogTabSrc.includes('last_verified_date'), false);
+  assert.equal(catalogTabSrc.includes('Verified:'), false);
+
+  const adminRoutesSrc = fs.readFileSync(path.join(process.cwd(), 'src/server/routes/adminRoutes.ts'), 'utf8');
+  assert.equal(adminRoutesSrc.includes('last_verified_date'), false);
 });
 
 
