@@ -432,7 +432,11 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
           "SELECT * FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' ORDER BY id DESC"
         ).all();
         const hydrated = ((res.results || []) as Array<Record<string, unknown>>).map((row) => {
-          const parsedPartners = normalizeStreamingPartners(row.platforms_data ?? row.streaming_partners);
+          const fromPlatformsData = normalizeStreamingPartners(row.platforms_data);
+          const parsedPartners =
+            fromPlatformsData.length > 0
+              ? fromPlatformsData
+              : normalizeStreamingPartners(row.streaming_partners);
           if (parsedPartners.length > 0) {
             return {
               ...row,
@@ -558,18 +562,27 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
             : String(row.languages || row.Languages || 'Tamil, Hindi').trim();
         const parsedLanguagesList = normalizePartnerLanguages(languages);
 
+        const firstNonEmptyPlatformString = (...candidates: unknown[]): unknown => {
+          for (const candidate of candidates) {
+            if (typeof candidate === 'string' && candidate.trim() !== '') {
+              return candidate;
+            }
+          }
+          return '';
+        };
         const rawPlatformInput =
           (Array.isArray(row.platforms_data) && row.platforms_data.length > 0 ? row.platforms_data : null) ??
           (Array.isArray(row.streaming_partners) && row.streaming_partners.length > 0 ? row.streaming_partners : null) ??
           (Array.isArray(row.watch_providers) && row.watch_providers.length > 0 ? row.watch_providers : null) ??
-          row.platforms ??
-          row.Platforms ??
-          row.platform ??
-          row.Platform ??
-          row['Streaming Partners'] ??
-          row.streaming_partners ??
-          row.platforms_data ??
-          '';
+          firstNonEmptyPlatformString(
+            row.platforms,
+            row.Platforms,
+            row.platform,
+            row.Platform,
+            row['Streaming Partners'],
+            row.streaming_partners,
+            row.platforms_data
+          );
         const rawWatchUrl = String(row.watch_url ?? row.watchUrl ?? row['Watch URL'] ?? '').trim();
         const {
           partners: parsedPartners,

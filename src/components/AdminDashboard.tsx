@@ -947,9 +947,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleDownloadTemplate = () => {
     const templateContent =
       'Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,platforms,Ratings,Synopsis,Seasons\n' +
-      'Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Prime Video::https://www.primevideo.com/detail/xyz|Netflix::https://www.netflix.com/in/title/123,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"\n' +
-      'Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll::https://www.crunchyroll.com/series/GY5P48XEY|Netflix::https://www.netflix.com/in/title/81091393,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"\n' +
-      'Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll::https://www.crunchyroll.com/series/GYEXQKJG6,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"\n';
+      'Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Prime Video|Netflix,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"\n' +
+      'Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll|Netflix,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"\n' +
+      'Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"\n';
     const blob = new Blob([templateContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -969,9 +969,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleCopySnippet = () => {
     const sample = `Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,platforms,Ratings,Synopsis,Seasons
-Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Prime Video::https://www.primevideo.com/detail/xyz|Netflix::https://www.netflix.com/in/title/123,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"
-Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll::https://www.crunchyroll.com/series/GY5P48XEY|Netflix::https://www.netflix.com/in/title/81091393,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"
-Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll::https://www.crunchyroll.com/series/GYEXQKJG6,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"`;
+Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Prime Video|Netflix,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"
+Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll|Netflix,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"
+Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"`;
     navigator.clipboard.writeText(sample);
     setHasCopiedSnippet(true);
     setTimeout(() => setHasCopiedSnippet(false), 2500);

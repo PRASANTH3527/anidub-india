@@ -129,7 +129,63 @@ test('parseCsvPlatformsField maintains backward compatibility for single-platfor
   assert.equal(singleWithInlineUrl.primaryUrl, 'https://www.primevideo.com/detail/single');
 });
 
-test('POST /api/admin/import-csv stores multi-platform partners & URLs in D1 and GET /api/admin/pending hydrates them for Edit modal', async () => {
+test('parseCsvPlatformsField supports multi-platform names without URLs and mixed link/linkless entries', () => {
+  const linklessMulti = parseCsvPlatformsField(
+    '  prime video | NETFLIX | crunchyroll  ',
+    ['Tamil', 'Hindi']
+  );
+  assert.deepEqual(linklessMulti.partners, [
+    {
+      name: 'Prime Video',
+      platform: 'Prime Video',
+      url: '',
+      languages: ['Tamil', 'Hindi'],
+    },
+    {
+      name: 'Netflix',
+      platform: 'Netflix',
+      url: '',
+      languages: ['Tamil', 'Hindi'],
+    },
+    {
+      name: 'Crunchyroll',
+      platform: 'Crunchyroll',
+      url: '',
+      languages: ['Tamil', 'Hindi'],
+    },
+  ]);
+  assert.equal(linklessMulti.platformString, 'Crunchyroll|Netflix|Prime Video');
+  assert.equal(linklessMulti.primaryUrl, '');
+
+  const mixedEntries = parseCsvPlatformsField(
+    'Prime Video|Netflix::https://www.netflix.com/in/title/123|Crunchyroll',
+    ['Hindi', 'Telugu']
+  );
+  assert.deepEqual(mixedEntries.partners, [
+    {
+      name: 'Prime Video',
+      platform: 'Prime Video',
+      url: '',
+      languages: ['Hindi', 'Telugu'],
+    },
+    {
+      name: 'Netflix',
+      platform: 'Netflix',
+      url: 'https://www.netflix.com/in/title/123',
+      languages: ['Hindi', 'Telugu'],
+    },
+    {
+      name: 'Crunchyroll',
+      platform: 'Crunchyroll',
+      url: '',
+      languages: ['Hindi', 'Telugu'],
+    },
+  ]);
+  assert.equal(mixedEntries.platformString, 'Crunchyroll|Netflix|Prime Video');
+  assert.equal(mixedEntries.primaryUrl, 'https://www.netflix.com/in/title/123');
+});
+
+test('POST /api/admin/import-csv stores linkless multi-platform and mixed URL partners in D1 and GET /api/admin/pending hydrates them', async () => {
   const { token, publicPem } = createSignedClerkJwt('admin_multi_plat_csv', {
     email: 'admin@anidub.in',
     email_verified: true,
@@ -216,19 +272,26 @@ test('POST /api/admin/import-csv stores multi-platform partners & URLs in D1 and
       body: JSON.stringify({
         animeList: [
           {
-            Title: 'Multi Platform CSV Anime',
-            Languages: 'Tamil|Telugu|Hindi',
+            Title: 'Multi Platform No Links Anime',
+            Languages: 'Tamil|Hindi',
             Genres: 'Action|Fantasy',
             Status: 'Completed',
-            platforms:
-              '  prime video :: https://www.primevideo.com/detail/xyz | NETFLIX :: https://www.netflix.com/in/title/123 ',
+            platforms: 'Prime Video|Netflix|Crunchyroll',
             Seasons: 'Season 1:12',
+          },
+          {
+            Title: 'Mixed Platform Links Anime',
+            Languages: 'Tamil|Telugu|Hindi',
+            Genres: 'Action',
+            Status: 'Airing',
+            platforms: '  prime video | NETFLIX :: https://www.netflix.com/in/title/123 ',
           },
           {
             Title: 'Single Platform Legacy Row',
             Languages: 'Hindi|Tamil',
             Genres: 'Adventure',
             Status: 'Airing',
+            platforms: '',
             Platform: 'crunchyroll',
           },
           {
@@ -247,7 +310,7 @@ test('POST /api/admin/import-csv stores multi-platform partners & URLs in D1 and
   assert.equal(importRes.status, 200);
   const importBody = (await importRes.json()) as Record<string, unknown>;
   assert.equal(importBody.success, true);
-  assert.equal(importBody.insertedCount, 3);
+  assert.equal(importBody.insertedCount, 4);
 
   const pendingRes = await onRequest({
     request: new Request('https://anidub.in/api/admin/pending', {
@@ -262,18 +325,30 @@ test('POST /api/admin/import-csv stores multi-platform partners & URLs in D1 and
     data: Array<Record<string, unknown>>;
   };
   assert.equal(pendingBody.success, true);
-  assert.equal(pendingBody.data.length, 3);
+  assert.equal(pendingBody.data.length, 4);
 
-  const multiRow = pendingBody.data.find((r) => r.title === 'Multi Platform CSV Anime');
-  assert.ok(multiRow, 'Multi-platform row should be present in pending queue');
-  assert.equal(multiRow.platform, 'Netflix|Prime Video');
-  assert.equal(multiRow.watch_url, 'https://www.primevideo.com/detail/xyz');
-  assert.equal(multiRow.official_source_url, 'https://www.primevideo.com/detail/xyz');
-  assert.deepEqual(multiRow.streaming_partners, [
+  const linklessRow = pendingBody.data.find((r) => r.title === 'Multi Platform No Links Anime');
+  assert.ok(linklessRow, 'Linkless multi-platform row should be present in pending queue');
+  assert.equal(linklessRow.platform, 'Crunchyroll|Netflix|Prime Video');
+  assert.equal(linklessRow.watch_url, '');
+  assert.equal(linklessRow.official_source_url, '');
+  assert.deepEqual(linklessRow.streaming_partners, [
+    { name: 'Prime Video', platform: 'Prime Video', url: '', languages: ['Tamil', 'Hindi'] },
+    { name: 'Netflix', platform: 'Netflix', url: '', languages: ['Tamil', 'Hindi'] },
+    { name: 'Crunchyroll', platform: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] },
+  ]);
+  assert.deepEqual(linklessRow.platforms_data, linklessRow.streaming_partners);
+
+  const mixedRow = pendingBody.data.find((r) => r.title === 'Mixed Platform Links Anime');
+  assert.ok(mixedRow, 'Mixed link/linkless row should be present in pending queue');
+  assert.equal(mixedRow.platform, 'Netflix|Prime Video');
+  assert.equal(mixedRow.watch_url, 'https://www.netflix.com/in/title/123');
+  assert.equal(mixedRow.official_source_url, 'https://www.netflix.com/in/title/123');
+  assert.deepEqual(mixedRow.streaming_partners, [
     {
       name: 'Prime Video',
       platform: 'Prime Video',
-      url: 'https://www.primevideo.com/detail/xyz',
+      url: '',
       languages: ['Tamil', 'Telugu', 'Hindi'],
     },
     {
@@ -283,7 +358,6 @@ test('POST /api/admin/import-csv stores multi-platform partners & URLs in D1 and
       languages: ['Tamil', 'Telugu', 'Hindi'],
     },
   ]);
-  assert.deepEqual(multiRow.platforms_data, multiRow.streaming_partners);
 
   const singleLegacyRow = pendingBody.data.find((r) => r.title === 'Single Platform Legacy Row');
   assert.ok(singleLegacyRow, 'Single-platform legacy row should be present');
@@ -313,7 +387,7 @@ test('POST /api/admin/import-csv stores multi-platform partners & URLs in D1 and
   sqlite.close();
 });
 
-test('AdminDashboard and AdminCsvHelpModal templates document the PlatformName::URL|PlatformName2::URL2 format', () => {
+test('AdminDashboard and AdminCsvHelpModal templates default to Prime Video|Netflix and document optional ::URL', () => {
   const dashboardSrc = fs.readFileSync(
     path.join(process.cwd(), 'src/components/AdminDashboard.tsx'),
     'utf-8'
@@ -323,18 +397,16 @@ test('AdminDashboard and AdminCsvHelpModal templates document the PlatformName::
     'utf-8'
   );
 
-  const samplePair =
-    'Prime Video::https://www.primevideo.com/detail/xyz|Netflix::https://www.netflix.com/in/title/123';
   assert.ok(
-    dashboardSrc.includes(samplePair),
-    'AdminDashboard CSV template/snippet must include PlatformName::URL|PlatformName2::URL2 example'
+    dashboardSrc.includes(',Prime Video|Netflix,'),
+    'AdminDashboard CSV template/snippet should default to Prime Video|Netflix format'
   );
   assert.ok(
-    helpModalSrc.includes(samplePair),
-    'AdminCsvHelpModal must document PlatformName::URL|PlatformName2::URL2 example'
+    helpModalSrc.includes('Prime Video|Netflix'),
+    'AdminCsvHelpModal should show simpler Prime Video|Netflix format by default'
   );
   assert.ok(
-    helpModalSrc.includes('PlatformName::URL|PlatformName2::URL2'),
-    'AdminCsvHelpModal must explain PlatformName::URL|PlatformName2::URL2 syntax'
+    helpModalSrc.includes('Prime Video|Netflix::https://...'),
+    'AdminCsvHelpModal should document optional ::URL mixed syntax'
   );
 });
