@@ -1,10 +1,14 @@
 import { getAuth } from '../../utils/auth';
 import {
+  deriveSeasonEpisodeCountSummary,
   normalizeBroadcastDay,
   normalizeBroadcastTime,
+  normalizePartnerLanguages,
   normalizePlatformString,
   normalizeSeasonEpisodeCount,
+  normalizeStreamingPartners,
   parseCsvMixedEntriesAndEpisodesPerSeason,
+  parseCsvPlatformsField,
   parseOptionalEpisodesCount,
   parseOptionalSeason,
 } from '../../utils/dataNormalization';
@@ -427,7 +431,18 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         const res = await env.DB.prepare(
           "SELECT * FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' ORDER BY id DESC"
         ).all();
-        return jsonResponse({ success: true, data: res.results || [], total: (res.results || []).length });
+        const hydrated = ((res.results || []) as Array<Record<string, unknown>>).map((row) => {
+          const parsedPartners = normalizeStreamingPartners(row.platforms_data ?? row.streaming_partners);
+          if (parsedPartners.length > 0) {
+            return {
+              ...row,
+              platforms_data: parsedPartners,
+              streaming_partners: parsedPartners,
+            };
+          }
+          return row;
+        });
+        return jsonResponse({ success: true, data: hydrated, total: hydrated.length });
       }
       return jsonResponse({ success: true, data: [], total: 0 });
     } catch (err) {
@@ -532,10 +547,6 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
                 .map((g) => g.trim())
                 .join(', ')
             : String(row.genres || row.Genres || 'Action, Fantasy').trim();
-        const platform =
-          normalizePlatformString(
-            row.platform ?? row.Platform ?? row['Streaming Partners'] ?? row.streaming_partners
-          ) || null;
         const season = parseOptionalSeason(row);
         const languages = Array.isArray(row.languages)
           ? row.languages.join(', ')
@@ -545,6 +556,29 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
                 .map((l) => l.trim())
                 .join(', ')
             : String(row.languages || row.Languages || 'Tamil, Hindi').trim();
+        const parsedLanguagesList = normalizePartnerLanguages(languages);
+
+        const rawPlatformInput =
+          (Array.isArray(row.platforms_data) && row.platforms_data.length > 0 ? row.platforms_data : null) ??
+          (Array.isArray(row.streaming_partners) && row.streaming_partners.length > 0 ? row.streaming_partners : null) ??
+          (Array.isArray(row.watch_providers) && row.watch_providers.length > 0 ? row.watch_providers : null) ??
+          row.platforms ??
+          row.Platforms ??
+          row.platform ??
+          row.Platform ??
+          row['Streaming Partners'] ??
+          row.streaming_partners ??
+          row.platforms_data ??
+          '';
+        const rawWatchUrl = String(row.watch_url ?? row.watchUrl ?? row['Watch URL'] ?? '').trim();
+        const {
+          partners: parsedPartners,
+          platformString,
+          primaryUrl,
+        } = parseCsvPlatformsField(rawPlatformInput, parsedLanguagesList, rawWatchUrl);
+        const platform = platformString || null;
+        const platformsDataJson = parsedPartners.length > 0 ? JSON.stringify(parsedPartners) : '[]';
+        const watchUrl = primaryUrl || '';
         const cover_image = String(
           row.cover_image ||
             row.poster_url ||
@@ -599,96 +633,88 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
               : '';
         const broadcastDay = normalizeBroadcastDay(row);
         const broadcastTime = normalizeBroadcastTime(row);
-        const seasonEpisodeCount = normalizeSeasonEpisodeCount(row);
-        const rawSourceCandidate = row.official_source_url ?? row.officialSourceUrl ?? row['Official Source Link'] ?? '';
+        const seasonEpisodeCount =
+          normalizeSeasonEpisodeCount(row) || deriveSeasonEpisodeCountSummary(mixedEntries);
+        const rawSourceCandidate =
+          row.official_source_url ?? row.officialSourceUrl ?? row['Official Source Link'] ?? watchUrl ?? '';
         const sourceCheck = validateOfficialSourceUrl(rawSourceCandidate, 'Official Source Link');
         const officialSourceUrl = sourceCheck.ok ? (sourceCheck.url || '') : '';
 
         if (env.DB) {
-          const insertSql = `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries, broadcast_day, broadcast_time, season_episode_count, official_source_url)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+          const buildBaseBindings = (targetSlug: string): unknown[] => [
+            title,
+            targetSlug,
+            synopsis,
+            cover_image,
+            banner_image,
+            rating,
+            epCount,
+            resolvedStatus,
+            resolvedStatus,
+            season,
+            year,
+            genres,
+            languages,
+            platform,
+            resolvedType,
+            studio,
+            episodesPerSeason,
+            mixedEntriesJson,
+          ];
+
+          const fullInsertSql = `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries, broadcast_day, broadcast_time, season_episode_count, official_source_url, platforms_data, streaming_partners, watch_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+          const partnersInsertSql = `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries, platforms_data, streaming_partners, watch_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
           const legacyInsertSql = `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, airing_status, submissionStatus, approval_status, is_published, season, year, genres, popularity, languages, platform, type, studio, episodes_per_season, mixedEntries)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`;
+
+          const executeWithSlugRetry = async (
+            sql: string,
+            extraBindings: unknown[]
+          ): Promise<void> => {
+            try {
+              await env.DB!.prepare(sql)
+                .bind(...buildBaseBindings(slug), ...extraBindings)
+                .run();
+            } catch (slugErr) {
+              const errMsg = getErrorMessage(slugErr).toLowerCase();
+              if (errMsg.includes('unique') && errMsg.includes('slug')) {
+                const uniqueSlug = `${slug}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+                await env.DB!.prepare(sql)
+                  .bind(...buildBaseBindings(uniqueSlug), ...extraBindings)
+                  .run();
+              } else {
+                throw slugErr;
+              }
+            }
+          };
+
           try {
-            await env.DB.prepare(insertSql)
-              .bind(
-                title,
-                slug,
-                synopsis,
-                cover_image,
-                banner_image,
-                rating,
-                epCount,
-                resolvedStatus,
-                resolvedStatus,
-                season,
-                year,
-                genres,
-                languages,
-                platform,
-                resolvedType,
-                studio,
-                episodesPerSeason,
-                mixedEntriesJson,
-                broadcastDay,
-                broadcastTime,
-                seasonEpisodeCount,
-                officialSourceUrl
-              )
-              .run();
+            await executeWithSlugRetry(fullInsertSql, [
+              broadcastDay,
+              broadcastTime,
+              seasonEpisodeCount,
+              officialSourceUrl,
+              platformsDataJson,
+              platformsDataJson,
+              watchUrl,
+            ]);
           } catch (insertErr) {
-            const errMsg = getErrorMessage(insertErr).toLowerCase();
-            if (errMsg.includes('unique') && errMsg.includes('slug')) {
-              const uniqueSlug = `${slug}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-              await env.DB.prepare(insertSql)
-                .bind(
-                  title,
-                  uniqueSlug,
-                  synopsis,
-                  cover_image,
-                  banner_image,
-                  rating,
-                  epCount,
-                  resolvedStatus,
-                  resolvedStatus,
-                  season,
-                  year,
-                  genres,
-                  languages,
-                  platform,
-                  resolvedType,
-                  studio,
-                  episodesPerSeason,
-                  mixedEntriesJson,
-                  broadcastDay,
-                  broadcastTime,
-                  seasonEpisodeCount,
-                  officialSourceUrl
-                )
-                .run();
-            } else if (isMissingColumnError(insertErr)) {
-              await env.DB.prepare(legacyInsertSql)
-                .bind(
-                  title,
-                  slug,
-                  synopsis,
-                  cover_image,
-                  banner_image,
-                  rating,
-                  epCount,
-                  resolvedStatus,
-                  resolvedStatus,
-                  season,
-                  year,
-                  genres,
-                  languages,
-                  platform,
-                  resolvedType,
-                  studio,
-                  episodesPerSeason,
-                  mixedEntriesJson
-                )
-                .run();
+            if (isMissingColumnError(insertErr)) {
+              try {
+                await executeWithSlugRetry(partnersInsertSql, [
+                  platformsDataJson,
+                  platformsDataJson,
+                  watchUrl,
+                ]);
+              } catch (partnersErr) {
+                if (isMissingColumnError(partnersErr)) {
+                  await executeWithSlugRetry(legacyInsertSql, []);
+                } else {
+                  throw partnersErr;
+                }
+              }
             } else {
               throw insertErr;
             }

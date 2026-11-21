@@ -37,7 +37,9 @@ import {
   normalizePlatformString,
   normalizeStreamingPartners,
   deriveAggregateLanguagesFromPartners,
+  deriveSeasonEpisodeCountSummary,
   parseCsvMixedEntriesAndEpisodesPerSeason,
+  parseCsvPlatformsField,
   parseOptionalEpisodesCount,
   parseOptionalSeason,
   normalizeSeasonEpisodeCount,
@@ -765,6 +767,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           const rawLanguages =
             row['Languages'] || row['languages'] || row['Language'] || row['language'] || row['Dub'] || row['dub'] || '';
+          const parsedLanguages = rawLanguages
+            .split('|')
+            .map((l) => l.trim())
+            .filter(Boolean);
           const rawGenres = row['Genres'] || row['genres'] || row['Genre'] || row['genre'] || '';
           const rawSeasons = row['Seasons'] || row['seasons'] || '';
 
@@ -777,9 +783,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           const parsedYear = parseInt(row['Release Year'] || row['year'] || row['Year'] || row['release_year'] || '', 10) || null;
           const parsedEpisodes = parseOptionalEpisodesCount(row, mixedEntries);
           const parsedSeason = parseOptionalSeason(row);
-          const normalizedPlatform = normalizePlatformString(
-            row['Platform'] || row['platform'] || row['Streaming Partners'] || row['streaming_partners'] || ''
-          );
+          const rawPlatformsCell =
+            row['platforms'] ||
+            row['Platforms'] ||
+            row['Platform'] ||
+            row['platform'] ||
+            row['Streaming Partners'] ||
+            row['streaming_partners'] ||
+            '';
+          const rawWatchUrl = (row['watch_url'] || row['Watch URL'] || '').toString().trim();
+          const {
+            partners: parsedPartners,
+            platformString: normalizedPlatform,
+            primaryUrl: derivedPlatformUrl,
+          } = parseCsvPlatformsField(rawPlatformsCell, parsedLanguages, rawWatchUrl);
+          const explicitOfficialSource = (
+            row['Official Source Link'] ||
+            row['Official Source URL'] ||
+            row['official_source_url'] ||
+            row['Source URL'] ||
+            ''
+          )
+            .toString()
+            .trim();
           const parsedRating =
             parseFloat(row['Ratings'] || row['ratings'] || row['Rating'] || row['rating'] || row['Score'] || '') || null;
           const status = String(row['Status'] || row['status'] || '')
@@ -794,10 +820,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             cover_image: rawPoster,
             year: parsedYear,
             season: parsedSeason,
-            languages: rawLanguages
-              .split('|')
-              .map((l) => l.trim())
-              .filter(Boolean),
+            languages: parsedLanguages,
             genres: rawGenres
               .split('|')
               .map((g) => g.trim())
@@ -809,6 +832,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             episodes: parsedEpisodes,
             episodes_count: parsedEpisodes,
             platform: normalizedPlatform,
+            platforms: rawPlatformsCell,
+            platforms_data: parsedPartners,
+            streaming_partners: parsedPartners,
+            watch_providers: parsedPartners,
+            watch_url: derivedPlatformUrl,
             rating: parsedRating,
             synopsis: (row['Synopsis'] || row['synopsis'] || row['Description'] || row['description'] || '').toString().trim(),
             approval_status: 'pending',
@@ -817,14 +845,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             mixed_entries: mixedEntries,
             mixedEntries,
             episodes_per_season: episodesPerSeason,
-            season_episode_count: normalizeSeasonEpisodeCount(row),
-            official_source_url: (
-              row['Official Source Link'] ||
-              row['Official Source URL'] ||
-              row['official_source_url'] ||
-              row['Source URL'] ||
-              ''
-            ).toString().trim(),
+            season_episode_count:
+              normalizeSeasonEpisodeCount(row) || deriveSeasonEpisodeCountSummary(mixedEntries),
+            official_source_url: explicitOfficialSource || derivedPlatformUrl,
             slug: (rawTitle || 'untitled')
               .toLowerCase()
               .replace(/[^a-z0-9]+/g, '-')
@@ -923,10 +946,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleDownloadTemplate = () => {
     const templateContent =
-      'Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,Platform,Ratings,Synopsis,Seasons\n' +
-      'Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Crunchyroll,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"\n' +
-      'Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"\n' +
-      'Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"\n';
+      'Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,platforms,Ratings,Synopsis,Seasons\n' +
+      'Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Prime Video::https://www.primevideo.com/detail/xyz|Netflix::https://www.netflix.com/in/title/123,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"\n' +
+      'Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll::https://www.crunchyroll.com/series/GY5P48XEY|Netflix::https://www.netflix.com/in/title/81091393,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"\n' +
+      'Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll::https://www.crunchyroll.com/series/GYEXQKJG6,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"\n';
     const blob = new Blob([templateContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -938,17 +961,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleCopyHeaders = () => {
-    const headers = 'Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,Platform,Ratings,Synopsis,Seasons';
+    const headers = 'Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,platforms,Ratings,Synopsis,Seasons';
     navigator.clipboard.writeText(headers);
     setHasCopiedHeaders(true);
     setTimeout(() => setHasCopiedHeaders(false), 2500);
   };
 
   const handleCopySnippet = () => {
-    const sample = `Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,Platform,Ratings,Synopsis,Seasons
-Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Crunchyroll,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"
-Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"
-Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"`;
+    const sample = `Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,platforms,Ratings,Synopsis,Seasons
+Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Prime Video::https://www.primevideo.com/detail/xyz|Netflix::https://www.netflix.com/in/title/123,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"
+Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll::https://www.crunchyroll.com/series/GY5P48XEY|Netflix::https://www.netflix.com/in/title/81091393,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"
+Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll::https://www.crunchyroll.com/series/GYEXQKJG6,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"`;
     navigator.clipboard.writeText(sample);
     setHasCopiedSnippet(true);
     setTimeout(() => setHasCopiedSnippet(false), 2500);

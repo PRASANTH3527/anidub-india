@@ -238,6 +238,159 @@ export interface NormalizedStreamingPartner {
   languages: string[];
 }
 
+export const CANONICAL_STREAMING_PLATFORMS = [
+  'Crunchyroll',
+  'Netflix',
+  'JioCinema',
+  'JioHotstar',
+  'YouTube',
+  'YouTube (Muse India)',
+  'YouTube (Ani-One)',
+  'YouTube (Ani-One India)',
+  'Disney+ Hotstar',
+  'Prime Video',
+  'Anime Times',
+  'Sony YAY!',
+  'Sony LIV',
+  'Bilibili',
+  'Cartoon Network India',
+  'ETV Bal Bharat',
+  'Zee5',
+] as const;
+
+const CANONICAL_PLATFORM_LOOKUP: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
+  for (const name of CANONICAL_STREAMING_PLATFORMS) {
+    map[name.toLowerCase()] = name;
+  }
+  // Unambiguous spacing/naming aliases
+  map['amazon prime'] = 'Prime Video';
+  map['amazon prime video'] = 'Prime Video';
+  map['primevideo'] = 'Prime Video';
+  map['jio hotstar'] = 'JioHotstar';
+  map['jio cinema'] = 'JioCinema';
+  map['disney hotstar'] = 'Disney+ Hotstar';
+  map['disney+hotstar'] = 'Disney+ Hotstar';
+  map['sony yay'] = 'Sony YAY!';
+  map['sonyliv'] = 'Sony LIV';
+  map['muse india'] = 'YouTube (Muse India)';
+  map['ani-one india'] = 'YouTube (Ani-One India)';
+  map['anione india'] = 'YouTube (Ani-One India)';
+  return map;
+})();
+
+/**
+ * Trims, collapses whitespace, and matches a platform name case-insensitively
+ * against the canonical UI dropdown options in DubInfoModal.
+ */
+export function matchCanonicalPlatformName(rawName: unknown): string {
+  if (rawName === null || rawName === undefined) return '';
+  const cleaned = String(rawName)
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  return CANONICAL_PLATFORM_LOOKUP[cleaned.toLowerCase()] ?? cleaned;
+}
+
+/**
+ * Parses a CSV `platforms` cell supporting:
+ * - Multi-platform with URLs: `PlatformName::URL|PlatformName2::URL2`
+ * - Single platform with URL: `Prime Video::https://www.primevideo.com/detail/xyz`
+ * - Backward-compatible single or pipe/comma-separated names without URLs: `Crunchyroll`, `JioHotstar|Crunchyroll`, `Netflix, Crunchyroll`
+ * - Already-structured partner arrays or JSON strings
+ *
+ * Trims names and URLs, matches platform names case-insensitively to canonical UI options,
+ * and returns the exact partner array structure used by D1 and DubInfoModal.
+ */
+export function parseCsvPlatformsField(
+  rawInput: unknown,
+  fallbackLanguages?: unknown,
+  fallbackWatchUrl?: unknown
+): {
+  partners: NormalizedStreamingPartner[];
+  platformString: string;
+  primaryUrl: string;
+} {
+  const cleanLangs = normalizePartnerLanguages(fallbackLanguages);
+  const cleanFallbackUrl =
+    typeof fallbackWatchUrl === 'string' ? fallbackWatchUrl.trim() : '';
+
+  const deduped = new Map<string, NormalizedStreamingPartner>();
+  const upsertPartner = (rawName: unknown, rawUrl: unknown, rawLangs?: unknown) => {
+    const canonicalName = matchCanonicalPlatformName(rawName);
+    if (!canonicalName) return;
+    const url = typeof rawUrl === 'string' ? rawUrl.trim() : String(rawUrl ?? '').trim();
+    const explicitLangs = normalizePartnerLanguages(rawLangs);
+    const languages = explicitLangs.length > 0 ? explicitLangs : [...cleanLangs];
+    const key = canonicalName.toLowerCase();
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, {
+        name: canonicalName,
+        platform: canonicalName,
+        url,
+        languages,
+      });
+    } else {
+      if (!existing.url && url) {
+        existing.url = url;
+      }
+      if (existing.languages.length === 0 && languages.length > 0) {
+        existing.languages = languages;
+      }
+    }
+  };
+
+  let handledStructured = false;
+  if (Array.isArray(rawInput)) {
+    handledStructured = true;
+    const normalized = normalizeStreamingPartners(rawInput);
+    for (const p of normalized) {
+      upsertPartner(p.name || p.platform, p.url, p.languages);
+    }
+  } else if (typeof rawInput === 'string' && rawInput.trim().startsWith('[')) {
+    const normalized = normalizeStreamingPartners(rawInput);
+    if (normalized.length > 0) {
+      handledStructured = true;
+      for (const p of normalized) {
+        upsertPartner(p.name || p.platform, p.url, p.languages);
+      }
+    }
+  }
+
+  if (!handledStructured && typeof rawInput === 'string' && rawInput.trim()) {
+    const text = rawInput.trim();
+    const segments = text.includes('::') ? text.split('|') : text.split(/[|,]/);
+    for (const seg of segments) {
+      const trimmedSeg = seg.trim();
+      if (!trimmedSeg) continue;
+      const sepIdx = trimmedSeg.indexOf('::');
+      if (sepIdx !== -1) {
+        const rawName = trimmedSeg.slice(0, sepIdx);
+        const rawUrl = trimmedSeg.slice(sepIdx + 2);
+        upsertPartner(rawName, rawUrl);
+      } else {
+        upsertPartner(trimmedSeg, '');
+      }
+    }
+  }
+
+  const partners = Array.from(deduped.values());
+  if (partners.length === 1 && !partners[0].url && cleanFallbackUrl) {
+    partners[0].url = cleanFallbackUrl;
+  }
+
+  const platformString = normalizePlatformString(partners.map((p) => p.name));
+  const primaryUrl = deriveOfficialSourceUrlFromPartners(partners) || cleanFallbackUrl;
+
+  return {
+    partners,
+    platformString,
+    primaryUrl,
+  };
+}
+
 /**
  * Normalizes a per-platform languages value (array or comma/pipe-delimited string)
  * into a deduplicated array of clean language names, preserving insertion order.

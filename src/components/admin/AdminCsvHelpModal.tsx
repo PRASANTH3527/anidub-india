@@ -81,7 +81,7 @@ export const AdminCsvHelpModal: React.FC<AdminCsvHelpModalProps> = ({
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/30 text-purple-200">Critical Rule</span>
                 </h4>
                 <p className="text-neutral-300 leading-relaxed text-xs">
-                  We use the pipe symbol <code className="px-1.5 py-0.5 rounded bg-purple-900/60 font-mono text-purple-300 font-bold border border-purple-500/40">|</code> to separate values in array fields (<strong className="text-white">Languages</strong>, <strong className="text-white">Genres</strong>, and <strong className="text-white">Seasons</strong>). This completely prevents common CSV column-shifting bugs where standard commas inside cells accidentally push data into subsequent columns!
+                  We use the pipe symbol <code className="px-1.5 py-0.5 rounded bg-purple-900/60 font-mono text-purple-300 font-bold border border-purple-500/40">|</code> to separate values in array fields (<strong className="text-white">Languages</strong>, <strong className="text-white">Genres</strong>, <strong className="text-white">platforms</strong>, and <strong className="text-white">Seasons</strong>). For streaming links, pair each platform with its URL using double colons <code className="px-1.5 py-0.5 rounded bg-cyan-900/60 font-mono text-cyan-300 font-bold border border-cyan-500/40">::</code> (<code className="text-cyan-200">PlatformName::URL|PlatformName2::URL2</code>).
                 </p>
               </div>
             </div>
@@ -102,7 +102,7 @@ export const AdminCsvHelpModal: React.FC<AdminCsvHelpModalProps> = ({
               </div>
 
               <div className="p-3 rounded-xl bg-black/60 border border-white/10 font-mono text-[11px] text-cyan-300 break-all select-all leading-relaxed">
-                Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,Platform,Ratings,Synopsis,Seasons
+                Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,platforms,Ratings,Synopsis,Seasons
               </div>
             </div>
 
@@ -187,12 +187,12 @@ export const AdminCsvHelpModal: React.FC<AdminCsvHelpModalProps> = ({
                       <td className="py-2.5 px-3 text-cyan-300">12</td>
                       <td className="py-2.5 px-3 text-neutral-400 font-sans">Total episodes count</td>
                     </tr>
-                    <tr className="hover:bg-white/[0.02]">
-                      <td className="py-2.5 px-3 font-bold text-white">Platform</td>
-                      <td className="py-2.5 px-3 text-neutral-300">Text</td>
+                    <tr className="hover:bg-cyan-500/5 bg-cyan-500/[0.02]">
+                      <td className="py-2.5 px-3 font-bold text-cyan-300">platforms</td>
+                      <td className="py-2.5 px-3 text-cyan-300 font-bold">Pipe &amp; Double-Colon (| / ::)</td>
                       <td className="py-2.5 px-3 text-neutral-400">Optional</td>
-                      <td className="py-2.5 px-3 text-cyan-300">Crunchyroll</td>
-                      <td className="py-2.5 px-3 text-neutral-400 font-sans">Crunchyroll, Netflix, JioCinema, etc.</td>
+                      <td className="py-2.5 px-3 text-cyan-200 font-bold">Prime Video::https://www.primevideo.com/detail/xyz|Netflix::https://www.netflix.com/in/title/123</td>
+                      <td className="py-2.5 px-3 text-neutral-300 font-sans">Populates Streaming Partners &amp; Per-Platform Dubs. Case-insensitive matching; single platform names/links also supported (legacy Platform header still accepted).</td>
                     </tr>
                     <tr className="hover:bg-white/[0.02]">
                       <td className="py-2.5 px-3 font-bold text-white">Ratings</td>
@@ -236,10 +236,10 @@ export const AdminCsvHelpModal: React.FC<AdminCsvHelpModalProps> = ({
               </div>
 
               <pre className="p-3.5 rounded-xl bg-black/80 border border-white/10 font-mono text-[10px] text-neutral-300 overflow-x-auto leading-relaxed select-all">
-                {`Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,Platform,Ratings,Synopsis,Seasons
-Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Crunchyroll,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"
-Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"
-Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"`}
+                {`Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,platforms,Ratings,Synopsis,Seasons
+Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Prime Video::https://www.primevideo.com/detail/xyz|Netflix::https://www.netflix.com/in/title/123,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"
+Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll::https://www.crunchyroll.com/series/GY5P48XEY|Netflix::https://www.netflix.com/in/title/81091393,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"
+Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll::https://www.crunchyroll.com/series/GYEXQKJG6,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"`}
               </pre>
             </div>
           </div>

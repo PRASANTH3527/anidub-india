@@ -22,8 +22,11 @@ import { isAuthorizedClerkAdmin } from '../utils/auth';
 import { validateImageUpload } from '../utils/imgbb';
 import { validateExternalImageUrl, validateOfficialSourceUrl } from '../utils/submissionValidation';
 import {
+  CANONICAL_STREAMING_PLATFORMS,
+  matchCanonicalPlatformName,
   normalizePlatformString,
   normalizePartnerLanguages,
+  parseCsvPlatformsField,
   buildStreamingPartnersPayload,
   normalizeBroadcastDay,
   normalizeBroadcastTime,
@@ -207,33 +210,35 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     }
 
     const fallbackLangs = normalizePartnerLanguages(data.languages);
+    const initialLangs = fallbackLangs.length > 0 ? fallbackLangs : ['Tamil', 'Hindi'];
 
     if (list.length > 0) {
       return list.map((item: any) => ({
-        name: String(item.name || item.platform || 'Crunchyroll').trim() || 'Crunchyroll',
+        name: matchCanonicalPlatformName(item.name || item.platform) || 'Crunchyroll',
         url: String(item.url || item.watch_url || item.link || '').trim(),
         languages:
           item.languages !== undefined
             ? normalizePartnerLanguages(item.languages)
-            : fallbackLangs.length > 0
-              ? fallbackLangs
-              : ['Tamil', 'Hindi'],
+            : initialLangs,
       }));
     }
 
-    const rawPlatformStr = String(data.platform || '').trim();
+    const rawPlatformStr = String(data.platforms || data.platform || '').trim();
     const defaultUrl = String(data.watch_url || data.watchUrl || '').trim();
-    const splitPlatforms = rawPlatformStr
-      ? rawPlatformStr.split(/[|,]/).map((s) => s.trim()).filter(Boolean)
-      : [];
-    const platNames = splitPlatforms.length > 0 ? splitPlatforms : ['Crunchyroll'];
-    const initialLangs = fallbackLangs.length > 0 ? fallbackLangs : ['Tamil', 'Hindi'];
+    const { partners: parsedFromPlatform } = parseCsvPlatformsField(
+      rawPlatformStr,
+      initialLangs,
+      defaultUrl
+    );
+    if (parsedFromPlatform.length > 0) {
+      return parsedFromPlatform.map((partner) => ({
+        name: partner.name,
+        url: partner.url,
+        languages: partner.languages.length > 0 ? partner.languages : initialLangs,
+      }));
+    }
 
-    return platNames.map((platName, idx) => ({
-      name: platName,
-      url: idx === 0 ? defaultUrl : '',
-      languages: initialLangs,
-    }));
+    return [{ name: 'Crunchyroll', url: defaultUrl, languages: initialLangs }];
   };
 
   // Multi-Platform Links
@@ -703,25 +708,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     }
   };
 
-  const platformOptions = [
-    'Crunchyroll',
-    'Netflix',
-    'JioCinema',
-    'JioHotstar',
-    'YouTube',
-    'YouTube (Muse India)',
-    'YouTube (Ani-One)',
-    'YouTube (Ani-One India)',
-    'Disney+ Hotstar',
-    'Prime Video',
-    'Anime Times',
-    'Sony YAY!',
-    'Sony LIV',
-    'Bilibili',
-    'Cartoon Network India',
-    'ETV Bal Bharat',
-    'Zee5'
-  ];
+  const platformOptions: string[] = [...CANONICAL_STREAMING_PLATFORMS];
 
   const shouldReduceMotion = useReducedMotion();
 
