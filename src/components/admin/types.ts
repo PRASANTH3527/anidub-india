@@ -4,6 +4,7 @@ export type AdminTabId =
   | 'overview'
   | 'pending'
   | 'catalog'
+  | 'radar'
   | 'feedback'
   | 'data_health'
   | 'analytics'

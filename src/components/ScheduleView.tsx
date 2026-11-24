@@ -275,9 +275,15 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
           {dayAnimeList.length === 0 ? (
             <div className="text-center py-16 bg-[#131926]/40 border border-neutral-800 rounded-3xl p-8 space-y-3">
               <Calendar className="w-10 h-10 text-neutral-600 mx-auto" />
-              <h3 className="text-base font-bold text-white">No Simulcasts Scheduled for {selectedDay}</h3>
+              <h3 className="text-base font-bold text-white">
+                {animeList.length === 0
+                  ? 'No verified broadcast slots yet'
+                  : `No verified broadcast slots for ${selectedDay}`}
+              </h3>
               <p className="text-xs text-neutral-400 max-w-sm mx-auto">
-                No dubbed anime have a verified broadcast slot on {selectedDay} matching your filters. Check another weekday or submit missing schedule info.
+                {animeList.length === 0
+                  ? 'Currently airing titles without verified broadcast days or times are listed below as TBA.'
+                  : `No dubbed anime have a verified broadcast slot on ${selectedDay} matching your filters. Check another weekday or submit missing schedule info.`}
               </p>
               {onOpenSubmitDubModal && (
                 <button
@@ -448,8 +454,9 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
     : [];
 
   const totalEps = anime.totalEpisodes || null;
-  const currentEp = anime.currentEpisode || 1;
-  const progressPercent = totalEps ? Math.min(Math.round((currentEp / totalEps) * 100), 100) : 60;
+  const currentEp = anime.currentEpisode && anime.currentEpisode > 0 ? anime.currentEpisode : null;
+  const progressPercent =
+    currentEp && totalEps ? Math.min(Math.round((currentEp / totalEps) * 100), 100) : null;
 
   if (mode === 'compact') {
     return (
@@ -482,7 +489,9 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
           <span className="truncate">
             {parsePlatformList(anime.platform, undefined, undefined, { defaultFallback: ['Crunchyroll'] }).join(', ')}
           </span>
-          <span className="font-bold text-purple-300 shrink-0">EP {currentEp}</span>
+          <span className="font-bold text-purple-300 shrink-0">
+            {currentEp ? `EP ${currentEp}` : 'TBA'}
+          </span>
         </div>
       </div>
     );
@@ -570,17 +579,25 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
 
       <div className="pt-2 border-t border-neutral-800/80 space-y-1.5">
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-neutral-400 font-medium">Broadcast Progress</span>
+          <span className="text-neutral-400 font-medium">Broadcast Status</span>
           <span className="text-white font-bold">
-            {totalEps ? `Episode ${currentEp} of ${totalEps}` : `Episode ${currentEp} (Ongoing)`}
+            {currentEp && totalEps
+              ? `Episode ${currentEp} of ${totalEps}`
+              : currentEp
+                ? `Episode ${currentEp} (Airing)`
+                : anime.broadcastDay
+                  ? `Airing • ${anime.broadcastDay}`
+                  : 'Airing • Broadcast Slot TBA'}
           </span>
         </div>
-        <div className="w-full h-1.5 rounded-full bg-neutral-800 overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
+        {progressPercent !== null && (
+          <div className="w-full h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between pt-1">

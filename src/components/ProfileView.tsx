@@ -3,7 +3,6 @@ import { SignedIn, SignedOut, SignInButton, SignOutButton, useUser } from '../li
 import {
   Trophy,
   ShieldCheck,
-  Share2,
   Plus,
   Edit3,
   LogOut,
@@ -28,6 +27,7 @@ import { Anime } from './CatalogView';
 import { AnimeCard } from './AnimeCard';
 import { useToast } from './Toast';
 import { useNotifications } from '../context/NotificationContext';
+import { PersonalAnimeStats } from './PersonalAnimeStats';
 
 export interface ProfileProps {
   watchlist?: number[];
@@ -139,7 +139,6 @@ export function ProfileView({
     updatePreference,
     triggerTestNotification,
   } = useNotifications();
-  const [copied, setCopied] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const [customName, setCustomName] = useState<string>(() => {
@@ -222,7 +221,10 @@ export function ProfileView({
     if (savedAnimeList.length === 0) return 'None saved yet';
     const langTally: Record<string, number> = {};
     savedAnimeList.forEach(anime => {
-      const langs = (anime.languages || '').split(/[,/|•+]+/).map((s: string) => s.trim()).filter(Boolean);
+      const rawLangs: unknown = (anime as any).languages ?? (anime as any).language;
+      const langs = Array.isArray(rawLangs)
+        ? rawLangs.map((s) => String(s || '').trim()).filter(Boolean)
+        : String(rawLangs || '').split(/[,/|•+]+/).map((s: string) => s.trim()).filter(Boolean);
       langs.forEach((l: string) => {
         const clean = l.replace(/Dub/i, '').trim();
         if (clean && !['Japanese', 'English', 'Romaji', 'Korean', 'Chinese'].includes(clean)) {
@@ -239,7 +241,10 @@ export function ProfileView({
     if (savedAnimeList.length === 0) return 'New Explorer';
     const genreTally: Record<string, number> = {};
     savedAnimeList.forEach(anime => {
-      const genres = (anime.genres || '').split(/[,/|]+/).map((s: string) => s.trim()).filter(Boolean);
+      const rawGenres: unknown = (anime as any).genres ?? (anime as any).genre;
+      const genres = Array.isArray(rawGenres)
+        ? rawGenres.map((s) => String(s || '').trim()).filter(Boolean)
+        : String(rawGenres || '').split(/[,/|]+/).map((s: string) => s.trim()).filter(Boolean);
       genres.forEach((g: string) => {
         if (g) genreTally[g] = (genreTally[g] || 0) + 1;
       });
@@ -256,17 +261,6 @@ export function ProfileView({
     if (count >= 1) return 'Active Voyager';
     return 'Community Member';
   }, [savedAnimeList.length]);
-
-  const handleShareProfile = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      showToast('Profile Shared', 'Profile link copied to clipboard!', 'success');
-      setTimeout(() => setCopied(false), 2000);
-    } else {
-      showToast('Share Profile', 'Profile link ready to share!', 'info');
-    }
-  };
 
   const activeAvatar = customAvatar || DEFAULT_AVATAR;
   const displayName = customName || (isSignedIn ? (user?.fullName || 'Anime Fan') : 'Guest');
@@ -394,15 +388,6 @@ export function ProfileView({
               </p>
 
               <div className="pt-2 flex flex-wrap items-center justify-center md:justify-start gap-2.5 sm:gap-3">
-                <button
-                  type="button"
-                  onClick={handleShareProfile}
-                  className="px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white font-bold text-xs transition-all flex items-center gap-2 cursor-pointer active:scale-95"
-                >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
-                  <span>{copied ? 'Copied Link' : 'Share Profile'}</span>
-                </button>
-
                 {onOpenCreateCollection && (
                   <button
                     type="button"
@@ -436,6 +421,15 @@ export function ProfileView({
             </div>
           </div>
         </div>
+
+        {/* PERSONAL ANIME STATS ("MY ANIME JOURNEY" DASHBOARD) */}
+        <PersonalAnimeStats
+          watchlist={watchlist}
+          catalogList={catalogList}
+          savedAnimeItems={savedAnimeList}
+          isSignedIn={Boolean(isSignedIn)}
+          onNavigateToCatalog={onNavigateToCatalog}
+        />
 
         {/* NOTIFICATION PREFERENCES SECTION */}
         <section

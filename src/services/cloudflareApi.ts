@@ -204,8 +204,13 @@ export interface FetchCatalogOptions {
   language?: string;
   genre?: string;
   platform?: string;
+  platforms?: string[];
   type?: string;
   status?: string;
+  episodeLength?: string;
+  minRating?: number;
+  fullyDubbed?: boolean;
+  freeLegal?: boolean;
   sort?: string;
   includePending?: boolean;
 }
@@ -230,6 +235,11 @@ export interface CatalogSummary {
 }
 
 class CloudflareApiService {
+  private catalogIndexCache: AnimePayload[] | null = null;
+  private catalogIndexCachedAt = 0;
+  private catalogIndexPromise: Promise<AnimePayload[]> | null = null;
+  private readonly CATALOG_INDEX_TTL_MS = 2 * 60 * 1000;
+
   /**
    * Performs a fetch with automatic absolute URL fallback for robustness.
    * If a relative path request fails (due to missing Pages Functions), 
@@ -338,8 +348,13 @@ class CloudflareApiService {
     if (options.language && options.language !== 'All') queryParams.set('language', options.language);
     if (options.genre && options.genre !== 'All' && options.genre !== 'All Genres') queryParams.set('genre', options.genre);
     if (options.platform && options.platform !== 'All' && options.platform !== 'All Platforms') queryParams.set('platform', options.platform);
+    if (options.platforms && options.platforms.length > 0) queryParams.set('platforms', options.platforms.join(','));
     if (options.type && options.type !== 'All' && options.type !== 'All Types') queryParams.set('type', options.type);
     if (options.status && options.status !== 'All' && options.status !== 'All Status') queryParams.set('status', options.status);
+    if (options.episodeLength && options.episodeLength !== 'any') queryParams.set('episodeLength', options.episodeLength);
+    if (options.minRating && options.minRating > 0) queryParams.set('minRating', String(options.minRating));
+    if (options.fullyDubbed) queryParams.set('fullyDubbed', 'true');
+    if (options.freeLegal) queryParams.set('freeLegal', 'true');
     if (options.sort) queryParams.set('sort', options.sort);
     if (options.includePending) queryParams.set('includePending', 'true');
 
@@ -446,10 +461,67 @@ class CloudflareApiService {
   }
 
   /**
+   * READ LIGHTWEIGHT FULL INDEX: Fetches all published anime with lightweight fields
+   * from `/api/anime/index` for Matchmaker, Tier List, Collections, and Roulette.
+   * Deduplicated & cached in memory for 2 minutes.
+   */
+  public async fetchCatalogIndex(forceRefresh: boolean = false): Promise<AnimePayload[]> {
+    const now = Date.now();
+    if (
+      !forceRefresh &&
+      this.catalogIndexCache &&
+      this.catalogIndexCache.length > 0 &&
+      now - this.catalogIndexCachedAt < this.CATALOG_INDEX_TTL_MS
+    ) {
+      return this.catalogIndexCache;
+    }
+
+    if (!forceRefresh && this.catalogIndexPromise) {
+      return this.catalogIndexPromise;
+    }
+
+    const reqPromise = (async () => {
+      try {
+        const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CATALOG_INDEX, {
+          method: 'GET',
+          headers: this.getHeaders(false),
+        });
+        if (!res.ok) return this.catalogIndexCache || [];
+        const json = await res.json().catch(() => ({ data: [] }));
+        const items: AnimePayload[] = Array.isArray(json?.data)
+          ? json.data
+          : Array.isArray(json)
+            ? json
+            : [];
+        if (items.length > 0) {
+          this.catalogIndexCache = items;
+          this.catalogIndexCachedAt = Date.now();
+        }
+        return items;
+      } catch (err) {
+        console.warn('[fetchCatalogIndex Notice]:', err);
+        return this.catalogIndexCache || [];
+      } finally {
+        this.catalogIndexPromise = null;
+      }
+    })();
+
+    this.catalogIndexPromise = reqPromise;
+    return reqPromise;
+  }
+
+  public clearCatalogIndexCache(): void {
+    this.catalogIndexCache = null;
+    this.catalogIndexCachedAt = 0;
+    this.catalogIndexPromise = null;
+  }
+
+  /**
    * READ: Fetches single anime details by ID or slug from Cloudflare Worker / D1
    */
   public async getAnimeById(id: number | string, _userId?: string): Promise<AnimePayload | null> {
-    const endpoint = CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id);
+    const safeSegment = encodeURIComponent(String(id).trim());
+    const endpoint = CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(safeSegment);
     const res = await this.smartFetch(endpoint, {
       method: 'GET',
       headers: this.getHeaders()
@@ -1581,6 +1653,42 @@ class CloudflareApiService {
   }
 
   /**
+   * WATCH PROGRESS: Fetch ALL saved watch progress rows from D1 for authenticated user
+   */
+  public async getAllWatchProgress(): Promise<
+    Array<{
+      animeId: number;
+      season: number;
+      episode: number;
+      totalEpisodes: number | null;
+      completed: boolean;
+      updatedAt: string;
+    }>
+  > {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.PROGRESS, {
+        method: 'GET',
+        headers: this.getHeaders(true),
+      });
+      if (!res.ok) return [];
+      const json: any = await res.json().catch(() => null);
+      const list = Array.isArray(json?.progress) ? json.progress : [];
+      return list
+        .map((row: any) => ({
+          animeId: Number(row.animeId ?? row.anime_id),
+          season: Number(row.season) || 1,
+          episode: Number(row.episode) || 0,
+          totalEpisodes: row.totalEpisodes ?? row.total_episodes ?? null,
+          completed: Boolean(row.completed),
+          updatedAt: String(row.updatedAt ?? row.updated_at ?? new Date().toISOString()),
+        }))
+        .filter((row: any) => Number.isInteger(row.animeId) && row.animeId > 0);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * WATCH PROGRESS: Persist episode & season progress to D1 for authenticated user
    */
   public async saveWatchProgress(payload: {
@@ -1599,6 +1707,179 @@ class CloudflareApiService {
       return res.ok;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * DUB RELEASE RADAR: Fetch upcoming & ongoing Indian dub lifecycle entries
+   */
+  public async fetchDubRadar(filters?: { language?: string; stage?: string }): Promise<any[]> {
+    try {
+      const params = new URLSearchParams();
+      if (filters?.language && filters.language !== 'All') {
+        params.set('language', filters.language);
+      }
+      if (filters?.stage && filters.stage !== 'All') {
+        params.set('stage', filters.stage);
+      }
+      const qs = params.toString();
+      const endpoint = qs ? `${CLOUDFLARE_ENDPOINTS.DUB_RADAR}?${qs}` : CLOUDFLARE_ENDPOINTS.DUB_RADAR;
+      const res = await this.smartFetch(endpoint, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return [];
+      const json: any = await res.json().catch(() => null);
+      return Array.isArray(json?.data) ? json.data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * DUB RELEASE RADAR (ADMIN): Create a new radar entry
+   */
+  public async createDubRadarEntry(payload: Record<string, unknown>): Promise<{
+    success: boolean;
+    entry?: any;
+    error?: string;
+  }> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.DUB_RADAR, {
+        method: 'POST',
+        headers: this.getHeaders(true),
+        body: JSON.stringify(payload),
+      });
+      const json: any = await res.json().catch(() => ({}));
+      if (!res.ok || json.success === false) {
+        return { success: false, error: json.error || `Failed to save radar entry (HTTP ${res.status})` };
+      }
+      return { success: true, entry: json.entry };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error saving radar entry' };
+    }
+  }
+
+  /**
+   * DUB RELEASE RADAR (ADMIN): Update an existing radar entry
+   */
+  public async updateDubRadarEntry(
+    id: number | string,
+    payload: Record<string, unknown>
+  ): Promise<{ success: boolean; entry?: any; error?: string }> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.DUB_RADAR_BY_ID(id), {
+        method: 'PUT',
+        headers: this.getHeaders(true),
+        body: JSON.stringify(payload),
+      });
+      const json: any = await res.json().catch(() => ({}));
+      if (!res.ok || json.success === false) {
+        return { success: false, error: json.error || `Failed to update radar entry (HTTP ${res.status})` };
+      }
+      return { success: true, entry: json.entry };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error updating radar entry' };
+    }
+  }
+
+  /**
+   * DUB RELEASE RADAR (ADMIN): Delete a radar entry
+   */
+  public async deleteDubRadarEntry(id: number | string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.DUB_RADAR_BY_ID(id), {
+        method: 'DELETE',
+        headers: this.getHeaders(true),
+      });
+      const json: any = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { success: false, error: json.error || `Failed to delete radar entry (HTTP ${res.status})` };
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error deleting radar entry' };
+    }
+  }
+
+  /**
+   * DUB REQUESTS: Fetch ranked public dub demand leaderboard
+   */
+  public async fetchDubRequests(language?: string): Promise<{
+    data: any[];
+    votedRequestIds: number[];
+  }> {
+    try {
+      const params = new URLSearchParams();
+      if (language && language !== 'All') {
+        params.set('language', language);
+      }
+      const qs = params.toString();
+      const endpoint = qs ? `${CLOUDFLARE_ENDPOINTS.DUB_REQUESTS}?${qs}` : CLOUDFLARE_ENDPOINTS.DUB_REQUESTS;
+      const res = await this.smartFetch(endpoint, {
+        method: 'GET',
+        headers: this.getHeaders(false),
+      });
+      if (!res.ok) return { data: [], votedRequestIds: [] };
+      const json: any = await res.json().catch(() => ({}));
+      return {
+        data: Array.isArray(json?.data) ? json.data : [],
+        votedRequestIds: Array.isArray(json?.votedRequestIds) ? json.votedRequestIds : [],
+      };
+    } catch {
+      return { data: [], votedRequestIds: [] };
+    }
+  }
+
+  /**
+   * DUB REQUESTS: Upvote an existing request OR submit a new dub request
+   */
+  public async voteOrSubmitDubRequest(payload: {
+    requestId?: number;
+    animeTitle?: string;
+    animeId?: number | null;
+    language?: string;
+    website?: string;
+  }): Promise<{
+    success: boolean;
+    alreadyVoted?: boolean;
+    created?: boolean;
+    mergedExisting?: boolean;
+    request?: any;
+    error?: string;
+  }> {
+    try {
+      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.DUB_REQUESTS_VOTE, {
+        method: 'POST',
+        headers: this.getHeaders(false),
+        body: JSON.stringify(payload),
+      });
+      const json: any = await res.json().catch(() => ({}));
+      if (res.status === 409 && json?.alreadyVoted) {
+        return {
+          success: false,
+          alreadyVoted: true,
+          request: json.request,
+          error: json.error || 'You already voted for this dub request.',
+        };
+      }
+      if (!res.ok || json.success === false) {
+        return {
+          success: false,
+          error: json.error || `Failed to submit vote (HTTP ${res.status})`,
+        };
+      }
+      return {
+        success: true,
+        created: Boolean(json.created),
+        mergedExisting: Boolean(json.mergedExisting),
+        request: json.request,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || 'Network error submitting dub request vote.',
+      };
     }
   }
 }

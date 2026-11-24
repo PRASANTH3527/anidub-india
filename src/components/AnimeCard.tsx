@@ -24,6 +24,9 @@ import {
   subscribeOfflineChanges,
 } from '../utils/offlineStorage';
 import { parsePlatformList } from '../utils/dataNormalization';
+import { isCanonicalAiring } from '../utils/animeStatus';
+
+const TRENDING_VOTE_THRESHOLD = 25;
 
 export interface AnimeCardData {
   id: number;
@@ -88,7 +91,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   onToggleLike,
   isUpvoted,
   onToggleUpvote,
-  isTrending = true,
+  isTrending,
   isCached
 }) => {
   const { user, isSignedIn } = useUser();
@@ -239,26 +242,22 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 
   const releaseYear = anime.releaseYear || anime.year || 2026;
   const animeType = anime.type || 'TV Series';
+  const isMovie = animeType.toLowerCase().includes('movie');
+  const movieDuration = String((anime as any).duration || '').trim();
+  const meetsTrendingThreshold =
+    isTrending !== false && internalUpvoteCount >= TRENDING_VOTE_THRESHOLD;
 
-  // Dynamic status badge resolution based on actual database status
-  const rawStatus = (anime.airing_status || '').trim();
+  // Dynamic status badge resolution based on canonical database status
   const getStatusBadge = () => {
-    if (!rawStatus || rawStatus.toLowerCase() === 'pending') return null;
-    const lower = rawStatus.toLowerCase();
-    
-    // ONLY display if status is "Ongoing", "Airing", or "Simulcast"
-    if (lower.includes('airing') || lower.includes('ongoing') || lower.includes('simulcast')) {
-      const displayLabel = lower.includes('ongoing') ? 'Ongoing' : 'Airing';
-      return {
-        label: displayLabel,
-        badgeClass: 'bg-emerald-950/80 text-emerald-400 border-emerald-700/50',
-        dotClass: 'bg-emerald-400',
-        pulse: true
-      };
-    }
-    
-    // Completely hide and do not render for Completed, Finished, Upcoming, etc.
-    return null;
+    if (!isCanonicalAiring(anime)) return null;
+    const rawAiring = `${anime.airing_status || ''} ${anime.status || ''}`.toLowerCase();
+    const displayLabel = rawAiring.includes('ongoing') ? 'Ongoing' : 'Airing';
+    return {
+      label: displayLabel,
+      badgeClass: 'bg-emerald-950/80 text-emerald-400 border-emerald-700/50',
+      dotClass: 'bg-emerald-400',
+      pulse: true
+    };
   };
 
   const statusBadge = getStatusBadge();
@@ -406,13 +405,13 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
         });
         if (res.success) {
           setIsOfflineSaved(true);
-          showNotification('Downloaded', `${anime.title} saved for offline access.`, 'success');
+          showNotification('Saved Offline', `${anime.title} info cached for offline browsing.`, 'success');
         } else {
-          showNotification('Download Failed', res.error || 'Could not cache anime offline.', 'warning');
+          showNotification('Offline Save Failed', res.error || 'Could not save anime info offline.', 'warning');
         }
       }
     } catch (err: any) {
-      showNotification('Download Failed', err?.message || 'Unable to save offline.', 'warning');
+      showNotification('Offline Save Failed', err?.message || 'Unable to save info offline.', 'warning');
     } finally {
       setIsDownloadingOffline(false);
     }
@@ -483,7 +482,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 
           {/* TOP-LEFT BADGES */}
           <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1.5 pointer-events-none">
-            {isTrending && (
+            {meetsTrendingThreshold && (
               <motion.div 
                 initial={shouldReduceMotion ? false : { scale: 0.75, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -502,7 +501,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                 className="inline-flex items-center gap-1 bg-emerald-950/90 text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md border border-emerald-500/40 backdrop-blur-md"
               >
                 <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                <span>Downloaded</span>
+                <span>Saved Offline</span>
               </motion.div>
             )}
           </div>
@@ -516,14 +515,14 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
               whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
               onClick={handleDownloadOfflineClick}
               disabled={isDownloadingOffline}
-              data-offline-state={isOfflineSaved ? 'downloaded' : 'not-downloaded'}
+              data-offline-state={isOfflineSaved ? 'saved' : 'not-saved'}
               className={`hidden sm:flex p-1.5 rounded-full backdrop-blur-md border transition-all duration-200 shadow-md cursor-pointer ${
                 isOfflineSaved
                   ? 'bg-emerald-600/90 border-emerald-400/60 text-white'
                   : 'bg-black/60 border-white/10 text-neutral-300 hover:text-white'
               } ${isDownloadingOffline ? 'opacity-60' : ''}`}
-              title={isOfflineSaved ? 'Downloaded' : 'Download for offline'}
-              aria-label={isOfflineSaved ? 'Downloaded' : 'Download for offline'}
+              title={isOfflineSaved ? 'Saved Offline' : 'Save Info Offline'}
+              aria-label={isOfflineSaved ? 'Saved Offline' : 'Save Info Offline'}
             >
               {isDownloadingOffline ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -704,15 +703,22 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 
             {/* Subtitle / Meta row */}
             <div className="flex items-center gap-2 text-[10px] text-neutral-400 mt-1">
-              <span>{animeType}</span>
+              <span>{isMovie ? 'Movie' : animeType}</span>
               <span>•</span>
               <span>{releaseYear}</span>
-              {totalEpisodes > 0 && (
+              {isMovie ? (
+                movieDuration ? (
+                  <>
+                    <span>•</span>
+                    <span>{movieDuration}</span>
+                  </>
+                ) : null
+              ) : totalEpisodes > 0 ? (
                 <>
                   <span>•</span>
-                  <span>{totalEpisodes} Eps</span>
+                  <span>{totalEpisodes === 1 ? '1 Ep' : `${totalEpisodes} Eps`}</span>
                 </>
-              )}
+              ) : null}
             </div>
           </div>
 

@@ -18,7 +18,21 @@ import {
   parseOptionalEpisodesCount,
   parseOptionalSeason,
 } from '../../utils/dataNormalization';
+import { normalizeAnimeStatusFields, resolveCanonicalAnimeStatus } from '../../utils/animeStatus';
+import { FREE_LEGAL_PLATFORM_PATTERNS, getPlatformSqlAliases } from '../../utils/ottHub';
 import { getErrorMessage, isMissingColumnError, sendTelegramAlert, type RouteContext } from './shared';
+
+const BASE_PUBLISHED_CLAUSE =
+  "(is_published = 1 OR is_published = true) AND LOWER(COALESCE(status, '')) != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL)";
+
+const SQL_IS_CANONICAL_AIRING =
+  "((LOWER(COALESCE(airing_status, '')) IN ('airing', 'ongoing', 'simulcast') OR LOWER(COALESCE(airing_status, '')) LIKE '%airing%' OR LOWER(COALESCE(airing_status, '')) LIKE '%ongoing%' OR LOWER(COALESCE(airing_status, '')) LIKE '%simulcast%') OR (TRIM(COALESCE(airing_status, '')) = '' AND (LOWER(COALESCE(status, '')) IN ('airing', 'ongoing', 'simulcast') OR LOWER(COALESCE(status, '')) LIKE '%airing%' OR LOWER(COALESCE(status, '')) LIKE '%ongoing%' OR LOWER(COALESCE(status, '')) LIKE '%simulcast%')))";
+
+const SQL_IS_CANONICAL_UPCOMING =
+  "(LOWER(COALESCE(airing_status, '')) LIKE '%upcoming%' OR (TRIM(COALESCE(airing_status, '')) = '' AND LOWER(COALESCE(status, '')) LIKE '%upcoming%'))";
+
+const SQL_IS_CANONICAL_COMPLETED =
+  `(NOT ${SQL_IS_CANONICAL_AIRING} AND NOT ${SQL_IS_CANONICAL_UPCOMING} AND LOWER(COALESCE(status, '')) != 'pending')`;
 
 interface PartnerEntry {
   name?: string;
@@ -36,6 +50,80 @@ interface MixedEntry {
 
 export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | null> {
   const { request, env, url, path, method, jsonResponse } = ctx;
+
+  // 0. GET /api/anime/index OR GET /api/anime?mode=index (Lightweight full published catalog index)
+  if (
+    method === 'GET' &&
+    (path === '/api/anime/index' ||
+      path === '/api/anime/index/' ||
+      (path === '/api/anime' && url.searchParams.get('mode') === 'index'))
+  ) {
+    try {
+      if (env.DB) {
+        let rows: Record<string, unknown>[] = [];
+        try {
+          const res = await env.DB.prepare(
+            `SELECT id, slug, title, cover_image, genres, languages, status, airing_status, rating, type, year, platform, popularity, episodes_count
+             FROM anime
+             WHERE ${BASE_PUBLISHED_CLAUSE}
+             ORDER BY popularity DESC, id DESC`
+          ).all();
+          rows = res.results || [];
+        } catch (colErr) {
+          if (!isMissingColumnError(colErr)) throw colErr;
+          const fallbackRes = await env.DB.prepare(
+            `SELECT id, slug, title, cover_image, genres, languages, status, rating, type, year, platform, popularity
+             FROM anime
+             WHERE ${BASE_PUBLISHED_CLAUSE}
+             ORDER BY popularity DESC, id DESC`
+          ).all();
+          rows = fallbackRes.results || [];
+        }
+
+        const lightweight = rows.map((row) => {
+          const canonicalStatus = resolveCanonicalAnimeStatus(row as Record<string, string | null | undefined>);
+          const coverUrl = typeof row.cover_image === 'string' ? row.cover_image : '';
+          const releaseYear = row.year ?? null;
+          return {
+            id: row.id,
+            slug: row.slug || null,
+            title: row.title,
+            cover_url: coverUrl,
+            cover_image: coverUrl,
+            genres: row.genres || '',
+            languages: row.languages || '',
+            status: canonicalStatus,
+            airing_status: canonicalStatus,
+            rating: row.rating !== undefined && row.rating !== null ? Number(row.rating) : 0,
+            type: row.type || 'TV Series',
+            release_year: releaseYear,
+            year: releaseYear,
+            platform: row.platform || '',
+            popularity: Number(row.popularity) || 0,
+            episodes_count: row.episodes_count !== undefined ? row.episodes_count : null,
+          };
+        });
+
+        return jsonResponse(
+          {
+            data: lightweight,
+            total: lightweight.length,
+            mode: 'index',
+          },
+          200,
+          request,
+          {
+            'Cache-Control': 'public, max-age=120, s-maxage=300, stale-while-revalidate=600',
+          }
+        );
+      }
+
+      return jsonResponse({ data: [], total: 0, mode: 'index' }, 200, request);
+    } catch (err) {
+      console.error('D1 Catalog Index Error:', err);
+      return jsonResponse({ data: [], total: 0, mode: 'index', error: getErrorMessage(err) }, 500, request);
+    }
+  }
 
   // 1. GET /api/anime (Catalog with server-side LIMIT/OFFSET pagination, filtering & search)
   if (path === '/api/anime' && method === 'GET') {
@@ -91,16 +179,21 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
       const genre = url.searchParams.get('genre');
       const language = url.searchParams.get('language');
       const platform = url.searchParams.get('platform');
+      const platformsParam = url.searchParams.get('platforms');
       const animeType = url.searchParams.get('type');
       const status = url.searchParams.get('status');
+      const episodeLength = url.searchParams.get('episodeLength');
+      const minRatingRaw = url.searchParams.get('minRating');
+      const minRating = minRatingRaw !== null && minRatingRaw !== '' ? Number(minRatingRaw) : 0;
+      const fullyDubbed = url.searchParams.get('fullyDubbed') === 'true';
+      const freeLegal = url.searchParams.get('freeLegal') === 'true';
       const rawSearch = url.searchParams.get('search');
       const search = rawSearch && !rawSearch.trim().toLowerCase().startsWith('/admin') ? rawSearch.trim() : '';
       const sort = url.searchParams.get('sort') || 'popularity';
 
       if (env.DB) {
         try {
-          const basePublishedClause =
-            "(is_published = 1 OR is_published = true) AND status != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL)";
+          const basePublishedClause = BASE_PUBLISHED_CLAUSE;
 
           if (requestedIds.length > 0) {
             const placeholders = requestedIds.map(() => '?').join(', ');
@@ -112,12 +205,14 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               .all();
             const rowMap = new Map<number, Record<string, unknown>>();
             for (const row of dataRes.results || []) {
-              const parsedPartners = normalizeStreamingPartners(row.streaming_partners || row.platforms_data);
+              const { last_verified_date: _ignoredLastVerified, ...cleanRow } = row;
+              const canonicalRow = normalizeAnimeStatusFields(cleanRow);
+              const parsedPartners = normalizeStreamingPartners(canonicalRow.streaming_partners || canonicalRow.platforms_data);
               const normalizedRow =
                 parsedPartners.length === 0
-                  ? row
+                  ? canonicalRow
                   : {
-                      ...row,
+                      ...canonicalRow,
                       streaming_partners: parsedPartners,
                       platforms_data: parsedPartners,
                       watch_providers: parsedPartners,
@@ -167,8 +262,35 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           }
 
           if (platform && platform !== 'All' && platform !== 'All Platforms') {
-            whereClauses.push("LOWER(COALESCE(platform, 'Crunchyroll')) LIKE ?");
-            params.push(`%${platform.trim().toLowerCase()}%`);
+            const platAliases = getPlatformSqlAliases(platform);
+            const platOr = platAliases
+              .map(
+                () =>
+                  "LOWER(COALESCE(platform, '') || ' ' || COALESCE(platforms_data, '') || ' ' || COALESCE(streaming_partners, '')) LIKE ?"
+              )
+              .join(' OR ');
+            whereClauses.push(`(${platOr})`);
+            params.push(...platAliases.map((a) => `%${a}%`));
+          }
+
+          if (platformsParam && platformsParam.trim()) {
+            const requestedPlatforms = platformsParam
+              .split(',')
+              .map((p) => p.trim())
+              .filter(Boolean);
+            const allAliases = Array.from(
+              new Set(requestedPlatforms.flatMap((p) => getPlatformSqlAliases(p)))
+            );
+            if (allAliases.length > 0) {
+              const multiOr = allAliases
+                .map(
+                  () =>
+                    "LOWER(COALESCE(platform, '') || ' ' || COALESCE(platforms_data, '') || ' ' || COALESCE(streaming_partners, '')) LIKE ?"
+                )
+                .join(' OR ');
+              whereClauses.push(`(${multiOr})`);
+              params.push(...allAliases.map((a) => `%${a}%`));
+            }
           }
 
           if (animeType && animeType !== 'All' && animeType !== 'All Types') {
@@ -178,14 +300,46 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
 
           if (status && status !== 'All' && status !== 'All Status') {
             const normStatus = status.trim().toLowerCase();
-            if (normStatus === 'airing') {
-              whereClauses.push("(LOWER(COALESCE(status, '')) IN ('airing', 'ongoing') OR LOWER(COALESCE(status, '')) LIKE '%airing%' OR LOWER(COALESCE(status, '')) LIKE '%ongoing%' OR LOWER(COALESCE(status, '')) LIKE '%simulcast%') AND LOWER(COALESCE(status, '')) NOT LIKE '%complete%' AND LOWER(COALESCE(status, '')) NOT LIKE '%finished%'");
-            } else if (normStatus === 'completed') {
-              whereClauses.push("(LOWER(COALESCE(status, '')) LIKE '%complete%' OR LOWER(COALESCE(status, '')) LIKE '%finished%')");
+            if (normStatus === 'airing' || normStatus === 'ongoing' || normStatus === 'simulcast') {
+              whereClauses.push(`${SQL_IS_CANONICAL_AIRING} AND LOWER(COALESCE(status, '')) != 'pending'`);
+            } else if (normStatus === 'upcoming') {
+              whereClauses.push(`${SQL_IS_CANONICAL_UPCOMING} AND LOWER(COALESCE(status, '')) != 'pending'`);
+            } else if (normStatus === 'completed' || normStatus === 'finished') {
+              whereClauses.push(SQL_IS_CANONICAL_COMPLETED);
             } else {
-              whereClauses.push("LOWER(COALESCE(status, '')) = ?");
-              params.push(normStatus);
+              whereClauses.push("(LOWER(COALESCE(airing_status, '')) = ? OR LOWER(COALESCE(status, '')) = ?)");
+              params.push(normStatus, normStatus);
             }
+          }
+
+          if (episodeLength && episodeLength !== 'any') {
+            if (episodeLength === '1-13') {
+              whereClauses.push('COALESCE(episodes_count, 0) >= 1 AND COALESCE(episodes_count, 0) <= 13');
+            } else if (episodeLength === '14-26') {
+              whereClauses.push('COALESCE(episodes_count, 0) >= 14 AND COALESCE(episodes_count, 0) <= 26');
+            } else if (episodeLength === '27-100') {
+              whereClauses.push('COALESCE(episodes_count, 0) >= 27 AND COALESCE(episodes_count, 0) <= 100');
+            } else if (episodeLength === '100+') {
+              whereClauses.push('COALESCE(episodes_count, 0) >= 100');
+            }
+          }
+
+          if (Number.isFinite(minRating) && minRating > 0) {
+            whereClauses.push('COALESCE(rating, 0) >= ?');
+            params.push(minRating);
+          }
+
+          if (fullyDubbed) {
+            whereClauses.push(`${SQL_IS_CANONICAL_COMPLETED} AND TRIM(COALESCE(languages, '')) != ''`);
+          }
+
+          if (freeLegal) {
+            const freeOr = FREE_LEGAL_PLATFORM_PATTERNS.map(
+              () =>
+                "LOWER(COALESCE(platform, '') || ' ' || COALESCE(platforms_data, '') || ' ' || COALESCE(streaming_partners, '')) LIKE ?"
+            ).join(' OR ');
+            whereClauses.push(`(${freeOr})`);
+            params.push(...FREE_LEGAL_PLATFORM_PATTERNS.map((p) => `%${p}%`));
           }
 
           if (search) {
@@ -210,10 +364,11 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             const dataRes = await env.DB.prepare(`SELECT * FROM anime ${whereSql} ${orderSql} LIMIT ? OFFSET ?`).bind(...queryParams).all();
             results = (dataRes.results || []).map((row) => {
               const { last_verified_date: _ignoredLastVerified, ...cleanRow } = row;
-              const parsedPartners = normalizeStreamingPartners(cleanRow.streaming_partners || cleanRow.platforms_data);
-              if (parsedPartners.length === 0) return cleanRow;
+              const canonicalRow = normalizeAnimeStatusFields(cleanRow);
+              const parsedPartners = normalizeStreamingPartners(canonicalRow.streaming_partners || canonicalRow.platforms_data);
+              if (parsedPartners.length === 0) return canonicalRow;
               return {
-                ...cleanRow,
+                ...canonicalRow,
                 streaming_partners: parsedPartners,
                 platforms_data: parsedPartners,
                 watch_providers: parsedPartners,
@@ -229,12 +384,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 COUNT(*) as totalAnime,
                 COALESCE(SUM(MAX(0, CASE WHEN upvotes > 0 THEN upvotes ELSE COALESCE(popularity, 0) END)), 0) as totalVotes,
                 COALESCE(SUM(CASE
-                  WHEN (LOWER(COALESCE(status, '')) IN ('airing', 'ongoing')
-                    OR LOWER(COALESCE(status, '')) LIKE '%airing%'
-                    OR LOWER(COALESCE(status, '')) LIKE '%ongoing%'
-                    OR LOWER(COALESCE(status, '')) LIKE '%simulcast%')
-                    AND LOWER(COALESCE(status, '')) NOT LIKE '%complete%'
-                    AND LOWER(COALESCE(status, '')) NOT LIKE '%finished%'
+                  WHEN ${SQL_IS_CANONICAL_AIRING}
                     AND LOWER(COALESCE(status, '')) != 'pending'
                   THEN 1 ELSE 0 END), 0) as airingCount
               FROM anime ${summaryWhere}`
@@ -683,10 +833,17 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
       try {
         if (env.DB) {
           const session = await getAuth(request, env);
-          const query = session.isAdmin
-            ? 'SELECT * FROM anime WHERE id = ? OR slug = ?'
-            : 'SELECT * FROM anime WHERE (id = ? OR slug = ?) AND is_published = 1';
-          const anime = await env.DB.prepare(query).bind(id, id).first();
+          const cleanLookup = decodeURIComponent(id).trim();
+          const primaryQuery = session.isAdmin
+            ? 'SELECT * FROM anime WHERE id = ? OR slug = ? LIMIT 1'
+            : "SELECT * FROM anime WHERE (id = ? OR slug = ?) AND is_published = 1 AND LOWER(COALESCE(status, '')) != 'pending' LIMIT 1";
+          let anime = await env.DB.prepare(primaryQuery).bind(cleanLookup, cleanLookup).first();
+          if (!anime && cleanLookup) {
+            const ciQuery = session.isAdmin
+              ? 'SELECT * FROM anime WHERE LOWER(slug) = LOWER(?) LIMIT 1'
+              : `SELECT * FROM anime WHERE LOWER(slug) = LOWER(?) AND ${BASE_PUBLISHED_CLAUSE} LIMIT 1`;
+            anime = await env.DB.prepare(ciQuery).bind(cleanLookup).first();
+          }
           if (anime) {
             const streamingPartners = normalizeStreamingPartners(anime.streaming_partners || anime.platforms_data);
             let mixedEntries: MixedEntry[] = [];
@@ -723,7 +880,8 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               // Optional rating aggregate fallback
             }
 
-            const { last_verified_date: _ignoredLastVerified, ...cleanAnime } = anime;
+            const { last_verified_date: _ignoredLastVerified, ...cleanAnimeRaw } = anime;
+            const cleanAnime = normalizeAnimeStatusFields(cleanAnimeRaw);
             return jsonResponse(
               {
                 ...cleanAnime,
@@ -752,10 +910,10 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           }
         }
       } catch (err) {
-        return jsonResponse({ error: getErrorMessage(err) }, 500);
+        return jsonResponse({ error: getErrorMessage(err) }, 500, request);
       }
 
-      return jsonResponse({ error: 'Anime not found' }, 404);
+      return jsonResponse({ error: 'Anime not found' }, 404, request);
     }
 
     if (method === 'PUT' || method === 'PATCH') {

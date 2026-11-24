@@ -329,8 +329,15 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
         </nav>
 
         <AniDubLogo variant="horizontal" size="sm" className="opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500" />
-        <p className="text-[10px] leading-[16px] text-[#6b7280] max-w-sm">
-          © 2026 AniDub India. All anime media belongs to their respective production companies. Licensed under fair-use catalog guidelines.
+        <p className="text-[11px] leading-[17px] text-[#94a3b8] max-w-xl">
+          © 2026 AniDub India — Indian Dubbed Anime Discovery &amp; Streaming Guide. AniDub India is an independent informational directory and does not host or stream video files. All anime titles, artwork, and trademarks belong to their respective studios and rights holders.
+        </p>
+        <p className="text-[10px] leading-[16px] text-[#6b7280] max-w-xl">
+          Rights-holder attribution, DMCA/takedown requests, or privacy inquiries: contact{' '}
+          <a href="mailto:legal@anidub.in" className="text-purple-400 hover:text-purple-300 underline underline-offset-2">
+            legal@anidub.in
+          </a>
+          . No personal data is sold; see our Privacy &amp; Takedown Policy via email request.
         </p>
       </footer>
 

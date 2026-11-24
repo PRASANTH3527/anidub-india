@@ -159,11 +159,13 @@ test('Step 3.2 Accessibility & UI Text: replaces "100% Legal" claims and enforce
     assert.equal(content.includes('100% Legal'), false, `${relPath} must not contain "100% Legal"`);
   }
 
-  assert.ok(
-    fs.readFileSync(path.join(process.cwd(), 'src/components/Hero.tsx'), 'utf-8').includes('Verified Sources')
+  assert.equal(
+    fs.readFileSync(path.join(process.cwd(), 'src/components/Hero.tsx'), 'utf-8').includes('Verified Sources'),
+    false
   );
-  assert.ok(
-    fs.readFileSync(path.join(process.cwd(), 'src/components/AnimeDetailPage.tsx'), 'utf-8').includes('Verified Sources')
+  assert.equal(
+    fs.readFileSync(path.join(process.cwd(), 'src/components/AnimeDetailPage.tsx'), 'utf-8').includes('Verified Sources'),
+    false
   );
   assert.ok(
     fs.readFileSync(path.join(process.cwd(), 'src/components/ScheduleView.tsx'), 'utf-8').includes('Official Streams')

@@ -37,6 +37,8 @@ import { ReportModal } from './ReportModal';
 import { buildAnimeJsonLd } from '../utils/seoMeta';
 import { parsePlatformList } from '../utils/dataNormalization';
 import { validateOfficialSourceUrl } from '../utils/submissionValidation';
+import { resolveCanonicalAnimeStatus } from '../utils/animeStatus';
+import { buildDubProgressBreakdown } from '../utils/dubProgress';
 import {
   getAnimeWatchProgress,
   saveAnimeWatchProgress,
@@ -115,10 +117,15 @@ export interface AnimeDetailRecord extends Omit<Partial<Anime>, 'rating' | 'year
   episode_count?: number;
   season_episode_count?: string;
   official_source_url?: string;
+  audio_spec?: string | null;
+  duration?: string | null;
+  dub_matrix?: unknown;
 }
 
 export interface AnimeDetailPageProps {
-  animeId: number;
+  animeId: number | string;
+  initialAnime?: AnimeDetailRecord | null;
+  onResolvedAnime?: (anime: AnimeDetailRecord) => void;
   onClose?: () => void;
   onBack?: () => void;
   watchlist: number[];
@@ -128,6 +135,8 @@ export interface AnimeDetailPageProps {
 
 export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   animeId,
+  initialAnime = null,
+  onResolvedAnime,
   onClose,
   onBack,
   watchlist,
@@ -135,13 +144,20 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   onSelectAnime: _onSelectAnime
 }) => {
   const { user } = useUser();
-  const [details, setDetails] = useState<AnimeDetailRecord | null>(null);
-  const [_loading, setLoading] = useState(true);
-  const [upvotes, setUpvotes] = useState(0);
-  const [currentRating, setCurrentRating] = useState<number | null>(null);
+  const [details, setDetails] = useState<AnimeDetailRecord | null>(initialAnime);
+  const [loading, setLoading] = useState(!initialAnime);
+  const [notFound, setNotFound] = useState(false);
+  const [selectedDubSeasonIdx, setSelectedDubSeasonIdx] = useState(0);
+  const [upvotes, setUpvotes] = useState(Number(initialAnime?.popularity) || 0);
+  const [currentRating, setCurrentRating] = useState<number | null>(
+    initialAnime?.rating !== undefined && initialAnime?.rating !== null && !Number.isNaN(Number(initialAnime.rating))
+      ? Number(initialAnime.rating)
+      : null
+  );
   const [isVoting, setIsVoting] = useState(false);
   const [_isRating, setIsRating] = useState(false);
   const [isWatched, setIsWatched] = useState(false);
+  const numericAnimeId = Number(details?.id ?? animeId) || 0;
 
   // Community Rating states
   const [communityRating, setCommunityRating] = useState<number>(0);
@@ -267,10 +283,15 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
   const fetchDetails = async () => {
     setLoading(true);
+    setNotFound(false);
+    setSelectedDubSeasonIdx(0);
     try {
       const data = await cloudflareApi.getAnimeById(animeId, user?.id);
       if (data) {
-        setDetails(data as AnimeDetailRecord);
+        const record = data as AnimeDetailRecord;
+        setDetails(record);
+        setNotFound(false);
+        onResolvedAnime?.(record);
         if (data.popularity) setUpvotes(Number(data.popularity) || 0);
         if (data.rating !== undefined && data.rating !== null) {
           const parsedRating = Number(data.rating);
@@ -322,9 +343,15 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             return merged.length > 0 ? merged : normalized;
           });
         }
+      } else if (!initialAnime) {
+        setDetails(null);
+        setNotFound(true);
       }
     } catch (err) {
       console.error('Failed to fetch anime details from Cloudflare:', err);
+      if (!initialAnime) {
+        setNotFound(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -538,11 +565,18 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   };
 
   const handleShare = () => {
-    navigator.clipboard?.writeText(window.location.href);
+    const shareSlug = details?.slug || animeId;
+    const shareUrl =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/anime/${encodeURIComponent(String(shareSlug))}`
+        : '';
+    if (shareUrl) {
+      navigator.clipboard?.writeText(shareUrl);
+    }
     showToast('Link copied to clipboard!');
   };
 
-  const isBookmarked = watchlist.map(Number).includes(Number(animeId));
+  const isBookmarked = watchlist.map(Number).includes(numericAnimeId);
 
   const handleToggleWatched = () => {
     const nextWatched = !isWatched;
@@ -572,7 +606,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       if (user?.id) {
         cloudflareApi
           .saveWatchProgress({
-            animeId,
+            animeId: saved.animeId,
             season: saved.season,
             episode: saved.episode,
             totalEpisodes: saved.totalEpisodes,
@@ -631,7 +665,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       setIsSavingProgress(true);
       cloudflareApi
         .saveWatchProgress({
-          animeId,
+          animeId: saved.animeId,
           season: saved.season,
           episode: saved.episode,
           totalEpisodes: saved.totalEpisodes,
@@ -667,8 +701,17 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const synopsis = rawSynopsis.replace(/Imported via standardized CSV format\.?/gi, '').trim() || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
   const releaseYear = details?.releaseYear || details?.year || 2024;
   const type = details?.type || 'TV Series';
-  const status = details?.airing_status || details?.status || (type === 'Movie' ? 'Completed' : 'Airing');
+  const isMovie = String(type).toLowerCase().includes('movie');
+  const status = resolveCanonicalAnimeStatus(details);
   const studio = details?.studio || 'Animation Studio';
+  const verifiedAudioSpec = typeof details?.audio_spec === 'string' && details.audio_spec.trim() ? details.audio_spec.trim() : '';
+  const movieDuration = typeof details?.duration === 'string' && details.duration.trim() ? details.duration.trim() : '';
+  const dubProgress = useMemo(
+    () => buildDubProgressBreakdown((details as Record<string, unknown> | null) ?? null),
+    [details]
+  );
+  const activeDubSeason =
+    dubProgress.seasons[selectedDubSeasonIdx] || dubProgress.overall;
   
   // Exclude non-Indian languages from dub badges (strictly exclude Japanese, English, Romaji, etc.)
   const rawLanguages = details?.languages ? details.languages.split(',').map((l: string) => l.trim()) : ['Hindi', 'Tamil', 'Telugu', 'Malayalam'];
@@ -775,13 +818,16 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     });
   })();
 
-  // Calculate total episodes across all seasons using reduce
+  // Calculate total episodes across all seasons using reduce (movies should never fabricate "1 Ep")
   const seasonsArray = details?.seasons || details?.mixedEntries || details?.seasonsList || [];
-  const totalEpisodes = Array.isArray(seasonsArray) && seasonsArray.length > 0
+  const rawTotalEpisodes = Array.isArray(seasonsArray) && seasonsArray.length > 0
     ? seasonsArray.reduce((acc: number, season: SeasonEntry) => acc + Number(season.episodes || season.episode_count || 0), 0)
-    : (details?.episodes_count || details?.episodes || details?.episode_count || (type === 'Movie' ? 1 : null));
-  
-  const episodesText = totalEpisodes ? `${totalEpisodes} ${totalEpisodes === 1 ? 'Ep' : 'Eps'}` : null;
+    : (details?.episodes_count || details?.episodes || details?.episode_count || null);
+  const totalEpisodes = isMovie ? null : (rawTotalEpisodes ? Number(rawTotalEpisodes) : null);
+
+  const episodesText = isMovie
+    ? (movieDuration || null)
+    : (totalEpisodes ? `${totalEpisodes} ${totalEpisodes === 1 ? 'Ep' : 'Eps'}` : null);
   const seasonEpisodeSummary = String(details?.season_episode_count || '').trim();
   const officialSourceValidation = validateOfficialSourceUrl(details?.official_source_url, 'Official Source Link');
   const officialSourceHref = officialSourceValidation.ok && officialSourceValidation.url ? officialSourceValidation.url : '';
@@ -855,6 +901,29 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       upvotes,
     ]
   );
+
+  if (!loading && notFound) {
+    return (
+      <div className="relative w-full min-h-[70vh] bg-[#050507] text-neutral-100 font-sans flex flex-col items-center justify-center px-6 py-16 text-center">
+        <div className="max-w-md w-full rounded-3xl bg-[#111726] border border-white/10 p-8 shadow-2xl space-y-4">
+          <div className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-extrabold uppercase tracking-wider">
+            404 • Not Found
+          </div>
+          <h1 className="text-2xl font-black text-white">Anime Not Found</h1>
+          <p className="text-sm text-neutral-400 leading-relaxed">
+            We couldn&apos;t find a published anime matching <span className="text-white font-semibold">&ldquo;{String(animeId)}&rdquo;</span> in the AniDub India catalog.
+          </p>
+          <button
+            type="button"
+            onClick={handleBack}
+            className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-bold transition-all cursor-pointer shadow-lg"
+          >
+            Back to Catalog
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full min-h-screen bg-[#050507] text-neutral-100 font-sans pb-36 overflow-x-clip selection:bg-purple-500/30">
@@ -990,7 +1059,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <div className="flex gap-2 shrink-0">
             <button
               type="button"
-              onClick={() => onToggleWatchlist(animeId)}
+              onClick={() => numericAnimeId > 0 && onToggleWatchlist(numericAnimeId)}
               aria-label={isBookmarked ? `Remove ${title} from watchlist` : `Add ${title} to watchlist`}
               className={`w-12 h-12 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 transition-all cursor-pointer ${
                 isBookmarked ? 'text-purple-400 bg-purple-500/20 border-purple-500/40' : 'text-white'
@@ -1019,23 +1088,103 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       {/* 3. NAKED CONTENT FLOW (100% CARDLESS & BOXLESS) */}
       <div className="relative z-10 max-w-2xl mx-auto px-4 sm:px-6">
 
-        {/* SECTION 1: AVAILABLE REGIONAL DUBS */}
-        <div className="mt-12">
-          <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase mb-4 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
-            Available Dubs
-          </h2>
-          <div className="flex flex-wrap gap-x-6 gap-y-3">
-            {displayLanguages.map((lang: string, idx: number) => (
-              <div
-                key={`detail_lang_${lang}_${idx}`}
-                className="flex items-center gap-2 text-sm font-bold text-white tracking-wide"
-              >
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] animate-pulse" />
-                <span>{lang}</span>
+        {/* SECTION 1: VISUAL DUB PROGRESS BARS (PER INDIAN LANGUAGE & SEASON) */}
+        <section
+          aria-label="Indian Dub Availability and Progress"
+          className="mt-12 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-5 sm:p-6 shadow-xl space-y-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+                Indian Dub Availability &amp; Progress
+              </h2>
+              <p className="text-[11px] text-neutral-400 mt-0.5">
+                Color-coded regional audio status across major Indian languages
+              </p>
+            </div>
+
+            {dubProgress.hasMultipleSeasons && (
+              <div className="flex items-center gap-1.5 flex-wrap" role="tablist" aria-label="Dub progress seasons">
+                {dubProgress.seasons.map((season, idx) => {
+                  const isActive = idx === selectedDubSeasonIdx;
+                  return (
+                    <button
+                      key={season.seasonKey}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => setSelectedDubSeasonIdx(idx)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-purple-600/30 border-purple-400/60 text-white'
+                          : 'bg-black/30 border-white/10 text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      {season.seasonLabel}
+                    </button>
+                  );
+                })}
               </div>
-            ))}
+            )}
           </div>
-        </div>
+
+          <div className="space-y-3" data-testid="dub-progress-bars">
+            {activeDubSeason.languages.map((row) => {
+              const barColorClass =
+                row.status === 'complete'
+                  ? 'bg-gradient-to-r from-emerald-500 to-green-400'
+                  : row.status === 'partial'
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                    : row.status === 'available'
+                      ? 'bg-gradient-to-r from-emerald-500/80 to-teal-400/80'
+                      : 'bg-neutral-700/60';
+
+              const badgeColorClass =
+                row.status === 'complete'
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                  : row.status === 'partial'
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                    : row.status === 'available'
+                      ? 'bg-teal-500/15 border-teal-500/35 text-teal-300'
+                      : 'bg-neutral-800/70 border-neutral-700/60 text-neutral-400';
+
+              return (
+                <div key={`dub_bar_${activeDubSeason.seasonKey}_${row.language}`} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${
+                          row.status === 'complete' || row.status === 'available'
+                            ? 'bg-emerald-400'
+                            : row.status === 'partial'
+                              ? 'bg-amber-400'
+                              : 'bg-neutral-600'
+                        }`}
+                      />
+                      <span className={`font-bold ${row.status === 'unavailable' ? 'text-neutral-500' : 'text-white'}`}>
+                        {row.language}
+                      </span>
+                      <span className="text-[11px] text-neutral-400 truncate">
+                        — {row.label}
+                      </span>
+                    </div>
+
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${badgeColorClass}`}>
+                      {row.badgeText}
+                    </span>
+                  </div>
+
+                  <div className="w-full h-2 rounded-full bg-white/[0.07] overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${barColorClass}`}
+                      style={{ width: `${row.status === 'unavailable' ? 0 : row.percent}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
         {/* SECTION 1.5: WATCH PROGRESS TRACKER */}
         <section
@@ -1232,46 +1381,44 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 <span className="truncate">{availablePlatforms.map(p => p.name).join(', ')}</span>
               </span>
             </div>
-            <div className="min-w-0">
-              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">AUDIO TRACK</span>
-              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                <Volume2 className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Dolby 5.1 / Stereo</span>
-              </span>
-            </div>
+            {verifiedAudioSpec && (
+              <div className="min-w-0">
+                <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">AUDIO TRACK</span>
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <Volume2 className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{verifiedAudioSpec}</span>
+                </span>
+              </div>
+            )}
             <div className="min-w-0">
               <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">STUDIO</span>
               <span className="text-xs font-bold text-white truncate block">{studio}</span>
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">VERIFICATION</span>
-              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Verified Sources</span>
+              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">
+                {isMovie ? 'FORMAT' : <>SEASONS &amp; EPISODES</>}
               </span>
-            </div>
-            <div className="min-w-0">
-              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">SEASONS &amp; EPISODES</span>
               <span className="text-xs font-bold text-white truncate block">
-                {seasonEpisodeSummary || episodesText || 'Ongoing'}
+                {isMovie
+                  ? (movieDuration ? `Movie • ${movieDuration}` : 'Movie')
+                  : (seasonEpisodeSummary || episodesText || (status === 'Airing' ? 'Ongoing' : 'TBA'))}
               </span>
             </div>
-            <div className="min-w-0">
-              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">OFFICIAL SOURCE</span>
-              {officialSourceHref ? (
+            {officialSourceHref && (
+              <div className="min-w-0">
+                <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">OFFICIAL SOURCE</span>
                 <a
                   href={officialSourceHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs font-bold text-cyan-300 hover:text-cyan-200 inline-flex items-center gap-1 max-w-full truncate underline underline-offset-2"
                 >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                   <span className="truncate">{officialSourceLabel || 'Official Site'}</span>
                   <ExternalLink className="w-3 h-3 shrink-0" />
                 </a>
-              ) : (
-                <span className="text-xs font-bold text-white/75 truncate block">Official Licensee</span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1511,7 +1658,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           {/* Watchlist Button */}
           <button
             type="button"
-            onClick={() => onToggleWatchlist(animeId)}
+            onClick={() => numericAnimeId > 0 && onToggleWatchlist(numericAnimeId)}
             className={`w-9 h-9 sm:w-11 sm:h-11 shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
               isBookmarked
                 ? 'text-purple-400 border-purple-500/40 bg-purple-500/15'
@@ -1610,8 +1757,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                         </div>
                         <div className="text-[11px] text-neutral-400">
                           {plat.languages && plat.languages.length > 0
-                            ? `${plat.languages.join(', ')} Dubs • HD`
-                            : 'Verified Indian Dubs • HD'}
+                            ? `${plat.languages.join(', ')} Dubs`
+                            : 'Regional Indian Dub Audio'}
                         </div>
                       </div>
                     </div>
@@ -1635,9 +1782,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       </AnimatePresence>
 
       {/* REPORT ISSUE MODAL */}
-      {isReportOpen && (
+      {isReportOpen && numericAnimeId > 0 && (
         <ReportModal
-          animeId={animeId}
+          animeId={numericAnimeId}
           animeTitle={title}
           onClose={() => setIsReportOpen(false)}
           onSuccess={() => showToast('Thank you! Your report has been saved to D1 and sent to moderators.')}
@@ -1649,7 +1796,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 };
 
 export interface AnimeDetailModalProps {
-  animeId: number;
+  animeId: number | string;
+  initialAnime?: AnimeDetailRecord | null;
+  onResolvedAnime?: (anime: AnimeDetailRecord) => void;
   onClose: () => void;
   watchlist: number[];
   onToggleWatchlist: (animeId: number) => void;
@@ -1657,6 +1806,8 @@ export interface AnimeDetailModalProps {
 
 export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   animeId,
+  initialAnime = null,
+  onResolvedAnime,
   onClose,
   watchlist,
   onToggleWatchlist
@@ -1700,6 +1851,8 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
       >
         <AnimeDetailPage
           animeId={animeId}
+          initialAnime={initialAnime}
+          onResolvedAnime={onResolvedAnime}
           onClose={onClose}
           onBack={onClose}
           watchlist={watchlist}

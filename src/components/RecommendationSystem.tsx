@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anime } from './CatalogView';
+import { isCanonicalAiring } from '../utils/animeStatus';
+import { matchesSelectedPlatforms } from '../utils/ottHub';
 
 export interface RecommendationSystemProps {
   catalogList: Anime[];
@@ -31,6 +33,9 @@ export interface RecommendationSystemProps {
   watchlist?: number[];
   onToggleWatchlist?: (animeId: number) => void;
   onNavigateCatalog?: () => void;
+  mySubscriptions?: string[];
+  mySubscriptionsEnabled?: boolean;
+  onToggleMySubscriptionsEnabled?: (enabled: boolean) => void;
 }
 
 interface OptionItem {
@@ -78,7 +83,10 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
   onSelectAnime,
   watchlist = [],
   onToggleWatchlist,
-  onNavigateCatalog
+  onNavigateCatalog,
+  mySubscriptions = [],
+  mySubscriptionsEnabled = false,
+  onToggleMySubscriptionsEnabled,
 }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedVibes, setSelectedVibes] = useState<string[]>(['action']);
@@ -106,9 +114,15 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
     }
   };
 
+  // Filter candidate pool by My Subscriptions when enabled
+  const usingSubscriptionFilter = Boolean(mySubscriptionsEnabled && mySubscriptions.length > 0);
+  const eligibleCatalog = usingSubscriptionFilter
+    ? catalogList.filter((anime) => matchesSelectedPlatforms(anime as any, mySubscriptions))
+    : catalogList;
+
   // Match calculations
   const calculateMatches = () => {
-    return catalogList.map((anime) => {
+    return eligibleCatalog.map((anime) => {
       let score = 50;
 
       // 1. Vibe / Genre matching
@@ -155,7 +169,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
         score += 15;
       } else if (selectedLength === 'medium' && (anime.episodes_count || 12) >= 20) {
         score += 15;
-      } else if (selectedLength === 'airing' && (anime.status || '').toLowerCase() === 'airing') {
+      } else if (selectedLength === 'airing' && isCanonicalAiring(anime as any)) {
         score += 15;
       }
 
@@ -207,6 +221,22 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
         <p className="text-neutral-400 text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
           Find your next binge in seconds. Tell us your vibe, preferred Indian regional dub audio, and authorized streaming platform.
         </p>
+
+        {usingSubscriptionFilter && (
+          <div className="pt-2 inline-flex flex-wrap items-center justify-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-emerald-200 text-[11px] font-bold">
+            <Tv className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Filtered to your OTTs: {mySubscriptions.join(', ')} ({eligibleCatalog.length} titles)</span>
+            {onToggleMySubscriptionsEnabled && (
+              <button
+                type="button"
+                onClick={() => onToggleMySubscriptionsEnabled(false)}
+                className="underline text-emerald-300 hover:text-white ml-1 cursor-pointer"
+              >
+                Show all
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 2. STEPPER PROGRESS */}

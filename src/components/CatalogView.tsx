@@ -4,18 +4,31 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Dices, 
   Layers, 
   Sparkles, 
   Loader2,
   Search,
+  SlidersHorizontal,
+  Star,
+  CheckCircle2,
+  Tv,
   X
 } from 'lucide-react';
 import { calculatePagination, filterAndSortCatalog, getVisiblePageNumbers } from '../utils/pagination';
 import { AnimeCard } from './AnimeCard';
 import { AnimatedStats } from './AnimatedStats';
+import { OttHubSection } from './OttHubSection';
 import { cloudflareApi, type CatalogMeta, type CatalogSummary } from '../services/cloudflareApi';
 import { calculateCatalogStats, computeDynamicLanguageFilters } from '../utils/languages';
+import {
+  applySmartFilters,
+  buildActiveFilterChips,
+  EPISODE_LENGTH_OPTIONS,
+  type EpisodeLengthBucket,
+  type ActiveFilterChip,
+} from '../utils/smartFilters';
 import { SkeletonGrid } from './SkeletonGrid';
 import { proxyUrl } from '../utils/imgbb';
 import { translate, SupportedLanguage } from '../utils/i18n';
@@ -46,6 +59,7 @@ export interface Anime {
 
 export interface CatalogViewProps {
   catalogList?: any[];
+  fullCatalogIndex?: any[];
   onSelectAnime: (anime: Anime) => void;
   searchQuery: string;
   setSearchQuery?: (query: string) => void;
@@ -60,6 +74,11 @@ export interface CatalogViewProps {
   onClearRecentlyViewed?: () => void;
   onRemoveRecentlyViewedItem?: (id: number) => void;
   uiLanguage?: SupportedLanguage;
+  mySubscriptions?: string[];
+  mySubscriptionsEnabled?: boolean;
+  onToggleSubscriptionPlatform?: (platformId: string) => void;
+  onToggleMySubscriptionsEnabled?: (enabled: boolean) => void;
+  onClearSubscriptions?: () => void;
 }
 
 export const FALLBACK_SEED_ANIME: Anime[] = [];
@@ -102,6 +121,7 @@ const SORTS = [
 
 const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   catalogList,
+  fullCatalogIndex = [],
   onSelectAnime,
   searchQuery,
   setSearchQuery,
@@ -115,7 +135,12 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   recentlyViewed = [],
   onClearRecentlyViewed,
   onRemoveRecentlyViewedItem,
-  uiLanguage = 'en'
+  uiLanguage = 'en',
+  mySubscriptions = [],
+  mySubscriptionsEnabled = false,
+  onToggleSubscriptionPlatform,
+  onToggleMySubscriptionsEnabled,
+  onClearSubscriptions,
 }) => {
   const lang = uiLanguage || 'en';
   const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(catalogList || []);
@@ -171,6 +196,11 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   const [selectedType, setSelectedType] = useState('All Types');
   const [selectedStatus, setSelectedStatus] = useState('All Status');
   const [selectedSort, setSelectedSort] = useState('popularity');
+  const [episodeLength, setEpisodeLength] = useState<EpisodeLengthBucket>('any');
+  const [minRating, setMinRating] = useState<number>(0);
+  const [fullyDubbedOnly, setFullyDubbedOnly] = useState<boolean>(false);
+  const [freeLegalOnly, setFreeLegalOnly] = useState<boolean>(false);
+  const [isSmartFilterOpen, setIsSmartFilterOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
 
   // Server-Side Pagination States
@@ -194,10 +224,28 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     return () => clearTimeout(timer);
   }, [effectiveSearch]);
 
+  const activeSubscriptionPlatforms = useMemo(
+    () => (mySubscriptionsEnabled && mySubscriptions.length > 0 ? mySubscriptions : []),
+    [mySubscriptionsEnabled, mySubscriptions]
+  );
+
   // Reset to page 1 when filters or search change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedLanguage, selectedGenre, selectedPlatform, selectedType, selectedStatus, selectedSort, debouncedSearch]);
+  }, [
+    selectedLanguage,
+    selectedGenre,
+    selectedPlatform,
+    selectedType,
+    selectedStatus,
+    selectedSort,
+    debouncedSearch,
+    episodeLength,
+    minRating,
+    fullyDubbedOnly,
+    freeLegalOnly,
+    activeSubscriptionPlatforms,
+  ]);
 
   const fetchCatalogPage = useCallback(async (pageToFetch: number) => {
     setLoading(true);
@@ -212,6 +260,11 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         type: selectedType,
         status: selectedStatus,
         sort: selectedSort,
+        episodeLength,
+        minRating,
+        fullyDubbed: fullyDubbedOnly,
+        freeLegal: freeLegalOnly,
+        platforms: activeSubscriptionPlatforms,
       });
 
       const data = response?.data || [];
@@ -221,14 +274,19 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         setCatalogSummary(response.summary);
       }
 
+      const fallbackSource =
+        fullCatalogIndex && fullCatalogIndex.length > 0
+          ? fullCatalogIndex
+          : (catalogList || []);
+
       if (data.length > 0 || (meta && meta.totalItems > 0)) {
         const approvedOnly = data.filter((item: any) =>
           item.status !== 'pending' && item.submissionStatus !== 'pending'
         );
         const normalized = approvedOnly.map((item: any) => ({
           ...item,
-          cover_image: proxyUrl(item.cover_image),
-          banner_image: proxyUrl(item.banner_image),
+          cover_image: proxyUrl(item.cover_image || item.cover_url),
+          banner_image: proxyUrl(item.banner_image || item.cover_image || item.cover_url),
           languages: item.languages || '',
           platform: item.platform || 'Crunchyroll',
           type: item.type || 'TV Series'
@@ -237,9 +295,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         if (meta) {
           setPaginationMeta(meta);
         }
-      } else if (catalogList && catalogList.length > 0) {
-        // Offline / preloaded fallback if backend DB has no rows
-        const offlineFiltered = filterAndSortCatalog(catalogList, {
+      } else if (!meta && fallbackSource.length > 0) {
+        // Offline / preloaded fallback if backend API was unavailable
+        const baseFiltered = filterAndSortCatalog(fallbackSource, {
           language: selectedLanguage,
           genre: selectedGenre === 'All Genres' ? 'All' : selectedGenre,
           platform: selectedPlatform === 'All Platforms' ? 'All' : selectedPlatform,
@@ -248,8 +306,17 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           search: debouncedSearch,
           sort: selectedSort,
         });
-        const calc = calculatePagination(offlineFiltered.length, pageToFetch, CATALOG_PAGE_SIZE);
-        setRawAnimeList(offlineFiltered.slice(calc.offset, calc.offset + calc.limit));
+        const smartFiltered = applySmartFilters(baseFiltered, {
+          episodeLength,
+          minRating,
+          fullyDubbedOnly,
+          freeLegalOnly,
+          selectedLanguage,
+          mySubscriptions,
+          mySubscriptionsEnabled,
+        });
+        const calc = calculatePagination(smartFiltered.length, pageToFetch, CATALOG_PAGE_SIZE);
+        setRawAnimeList(smartFiltered.slice(calc.offset, calc.offset + calc.limit));
         setPaginationMeta({
           currentPage: calc.page,
           totalPages: calc.totalPages,
@@ -281,6 +348,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     }
   }, [
     catalogList,
+    fullCatalogIndex,
     debouncedSearch,
     selectedLanguage,
     selectedGenre,
@@ -288,11 +356,106 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     selectedType,
     selectedStatus,
     selectedSort,
+    episodeLength,
+    minRating,
+    fullyDubbedOnly,
+    freeLegalOnly,
+    activeSubscriptionPlatforms,
+    mySubscriptions,
+    mySubscriptionsEnabled,
   ]);
 
   useEffect(() => {
     fetchCatalogPage(currentPage);
   }, [currentPage, fetchCatalogPage]);
+
+  const activeFilterChips = useMemo(
+    () =>
+      buildActiveFilterChips({
+        search: effectiveSearch,
+        language: selectedLanguage,
+        genre: selectedGenre,
+        platform: selectedPlatform,
+        type: selectedType,
+        status: selectedStatus,
+        episodeLength,
+        minRating,
+        fullyDubbedOnly,
+        freeLegalOnly,
+        mySubscriptionsEnabled,
+        mySubscriptions,
+      }),
+    [
+      effectiveSearch,
+      selectedLanguage,
+      selectedGenre,
+      selectedPlatform,
+      selectedType,
+      selectedStatus,
+      episodeLength,
+      minRating,
+      fullyDubbedOnly,
+      freeLegalOnly,
+      mySubscriptionsEnabled,
+      mySubscriptions,
+    ]
+  );
+
+  const handleClearAllFilters = useCallback(() => {
+    setSelectedLanguage('All');
+    setSelectedGenre('All Genres');
+    setSelectedPlatform('All Platforms');
+    setSelectedType('All Types');
+    setSelectedStatus('All Status');
+    setEpisodeLength('any');
+    setMinRating(0);
+    setFullyDubbedOnly(false);
+    setFreeLegalOnly(false);
+    handleSearchChange('');
+    onToggleMySubscriptionsEnabled?.(false);
+    setCurrentPage(1);
+  }, [onToggleMySubscriptionsEnabled]);
+
+  const handleRemoveChip = useCallback(
+    (chip: ActiveFilterChip) => {
+      switch (chip.category) {
+        case 'search':
+          handleSearchChange('');
+          break;
+        case 'language':
+          setSelectedLanguage('All');
+          break;
+        case 'genre':
+          setSelectedGenre('All Genres');
+          break;
+        case 'platform':
+          setSelectedPlatform('All Platforms');
+          break;
+        case 'type':
+          setSelectedType('All Types');
+          break;
+        case 'status':
+          setSelectedStatus('All Status');
+          break;
+        case 'episodeLength':
+          setEpisodeLength('any');
+          break;
+        case 'minRating':
+          setMinRating(0);
+          break;
+        case 'fullyDubbedOnly':
+          setFullyDubbedOnly(false);
+          break;
+        case 'freeLegalOnly':
+          setFreeLegalOnly(false);
+          break;
+        case 'mySubscriptions':
+          onToggleMySubscriptionsEnabled?.(false);
+          break;
+      }
+    },
+    [onToggleMySubscriptionsEnabled]
+  );
 
   const displayedAnime = rawAnimeList;
 
@@ -338,11 +501,11 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         {/* Top Badge Pill */}
         <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-purple-900/40 border border-purple-500/30 text-purple-200 text-[11px] font-medium shadow-sm mb-5 sm:mb-6">
           <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-          <span>Official Indian Dubbed Anime Directory</span>
+          <span>Indian Dubbed Anime Discovery &amp; Streaming Guide</span>
         </div>
 
         <h1 className="text-xl sm:text-3xl font-extrabold text-[#FF4500] mb-2 tracking-wide uppercase">
-          ANIDUB INDIA OFFICIAL WEBSITE
+          ANIDUB INDIA
         </h1>
         <h2 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white mb-4 leading-tight">
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-[#FF4500]">
@@ -421,6 +584,24 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         </div>
       )}
 
+      {/* 2.7 OTT INTELLIGENCE HUB & MY SUBSCRIPTIONS QUICK FILTER */}
+      <OttHubSection
+        catalogIndex={fullCatalogIndex && fullCatalogIndex.length > 0 ? fullCatalogIndex : statsSourceList}
+        selectedPlatform={selectedPlatform}
+        onSelectPlatform={(platformName) => {
+          setSelectedPlatform(platformName);
+          if (platformName !== 'All Platforms') {
+            gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }}
+        mySubscriptions={mySubscriptions}
+        mySubscriptionsEnabled={mySubscriptionsEnabled}
+        onToggleSubscriptionPlatform={(id) => onToggleSubscriptionPlatform?.(id)}
+        onToggleMySubscriptionsEnabled={(enabled) => onToggleMySubscriptionsEnabled?.(enabled)}
+        onClearSubscriptions={() => onClearSubscriptions?.()}
+        onSelectAnime={(a) => onSelectAnime(a as any)}
+      />
+
       {/* 2.8 DEDICATED ANIME SEARCH BOX */}
       <div className="px-0.5 sm:px-2 md:px-0 mt-6">
         <div className="relative flex items-center">
@@ -429,7 +610,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             type="text"
             value={effectiveSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Search anime by title, voice actor, studio, genre..."
+            placeholder="Search anime by title, synopsis, studio, genre..."
             className="w-full bg-[#131926]/90 border border-neutral-700/80 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-2xl pl-10 pr-10 py-2.5 sm:py-3 text-xs sm:text-sm text-white placeholder-neutral-500 outline-none transition-all shadow-md shadow-black/40"
           />
           {effectiveSearch && (
@@ -523,6 +704,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             <select
               value={selectedSort}
               onChange={(e) => setSelectedSort(e.target.value)}
+              aria-label="Sort catalog"
               className="bg-transparent text-white text-xs sm:text-sm font-medium outline-none cursor-pointer text-right appearance-none w-full min-w-0 text-ellipsis pr-5 truncate"
             >
               {SORTS.map(s => <option key={s.value} value={s.value} className="bg-[#1A1C29] text-white">{s.label}</option>)}
@@ -530,6 +712,161 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             <ChevronDown className="absolute right-0 w-3.5 h-3.5 text-gray-400 pointer-events-none shrink-0" />
           </div>
         </div>
+      </div>
+
+      {/* 4.5 ADVANCED SMART FILTER ENGINE (EPISODE LENGTH, RATING SLIDER & QUICK TOGGLES) */}
+      <div className="px-0.5 sm:px-2 md:px-0 mt-3 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setIsSmartFilterOpen((prev) => !prev)}
+            aria-expanded={isSmartFilterOpen}
+            aria-label="Toggle Smart Filters"
+            className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer inline-flex items-center gap-2 ${
+              isSmartFilterOpen || episodeLength !== 'any' || minRating > 0 || fullyDubbedOnly || freeLegalOnly
+                ? 'bg-purple-600/25 border-purple-400/60 text-white'
+                : 'bg-[#141b29] border-[#242d46] text-slate-300 hover:text-white hover:border-purple-500/40'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-purple-400" />
+            <span>Smart Filters</span>
+            {(episodeLength !== 'any' || minRating > 0 || fullyDubbedOnly || freeLegalOnly) && (
+              <span className="px-1.5 py-0.5 rounded-full bg-purple-500 text-white text-[10px] font-black">
+                {[episodeLength !== 'any', minRating > 0, fullyDubbedOnly, freeLegalOnly].filter(Boolean).length}
+              </span>
+            )}
+            {isSmartFilterOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+
+          {/* Quick Inline Toggles always reachable */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setFullyDubbedOnly((prev) => !prev)}
+              aria-pressed={fullyDubbedOnly}
+              className={`min-h-[36px] px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                fullyDubbedOnly
+                  ? 'bg-emerald-600/25 border-emerald-400/60 text-emerald-200'
+                  : 'bg-[#141b29] border-[#242d46] text-slate-300 hover:text-white'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Fully Dubbed Only</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFreeLegalOnly((prev) => !prev)}
+              aria-pressed={freeLegalOnly}
+              className={`min-h-[36px] px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                freeLegalOnly
+                  ? 'bg-cyan-600/25 border-cyan-400/60 text-cyan-200'
+                  : 'bg-[#141b29] border-[#242d46] text-slate-300 hover:text-white'
+              }`}
+            >
+              <Tv className="w-3.5 h-3.5" />
+              <span>Free Legal Streaming Only</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Expandable Smart Filter Drawer */}
+        {isSmartFilterOpen && (
+          <div
+            data-testid="smart-filter-drawer"
+            className="rounded-2xl bg-[#131926]/95 border border-[#242d46] p-4 grid grid-cols-1 md:grid-cols-2 gap-4 shadow-xl"
+          >
+            {/* Episode Length Buckets */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+                Episode Length
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {EPISODE_LENGTH_OPTIONS.map((opt) => {
+                  const active = episodeLength === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setEpisodeLength(opt.id)}
+                      aria-pressed={active}
+                      className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                        active
+                          ? 'bg-purple-600/30 border-purple-400/70 text-white'
+                          : 'bg-[#0e1422] border-[#222b42] text-slate-300 hover:text-white hover:border-slate-600'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Minimum Rating Slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="smart-filter-min-rating"
+                  className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5"
+                >
+                  <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                  <span>Minimum Catalog Score</span>
+                </label>
+                <span className="text-xs font-black text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-lg">
+                  {minRating > 0 ? `${minRating.toFixed(1)} / 10` : 'Any Rating'}
+                </span>
+              </div>
+              <input
+                id="smart-filter-min-rating"
+                type="range"
+                min={0}
+                max={10}
+                step={0.5}
+                value={minRating}
+                onChange={(e) => setMinRating(parseFloat(e.target.value))}
+                className="w-full accent-purple-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+              />
+              <div className="flex justify-between text-[10px] text-slate-500 font-semibold">
+                <span>0</span>
+                <span>5.0</span>
+                <span>7.5</span>
+                <span>10</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active Filter Chips & Clear All */}
+        {activeFilterChips.length > 0 && (
+          <div
+            data-testid="active-filter-chips"
+            className="flex flex-wrap items-center gap-1.5 pt-0.5"
+          >
+            <span className="text-[11px] font-bold text-slate-400 mr-1">
+              {paginationMeta.totalItems} {paginationMeta.totalItems === 1 ? 'match' : 'matches'}:
+            </span>
+            {activeFilterChips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={() => handleRemoveChip(chip)}
+                aria-label={`Remove filter ${chip.label}`}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/15 border border-purple-500/40 text-[11px] font-bold text-purple-200 hover:bg-purple-500/25 hover:text-white transition-colors cursor-pointer"
+              >
+                <span>{chip.label}</span>
+                <X className="w-3 h-3" />
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={handleClearAllFilters}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/35 text-[11px] font-bold text-rose-300 hover:bg-rose-500/25 transition-colors cursor-pointer"
+            >
+              <span>Clear All</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 6. FOR YOU METADATA BANNER */}
@@ -579,15 +916,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           <div className="text-center py-16 bg-slate-900/50 rounded-2xl border border-slate-800">
             <p className="text-slate-400 text-xs">No anime matches your selected filters.</p>
             <button
-              onClick={() => {
-                setSelectedLanguage('All');
-                setSelectedGenre('All Genres');
-                setSelectedPlatform('All Platforms');
-                setSelectedType('All Types');
-                setSelectedStatus('All Status');
-                handleSearchChange('');
-                setCurrentPage(1);
-              }}
+              onClick={handleClearAllFilters}
               className="mt-3 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-md"
             >
               Reset All Filters

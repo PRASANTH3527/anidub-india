@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Dices, ShieldCheck, Layers } from 'lucide-react';
+import { Sparkles, Dices, Layers } from 'lucide-react';
 import { motion } from 'motion/react';
 import { SupportedLanguage, translate } from '../utils/i18n';
 import { AniDubLogo } from './AniDubLogo';
@@ -30,11 +30,7 @@ export const Hero: React.FC<HeroProps> = ({
       {/* Top micro badge */}
       <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-full badge-primary-theme text-[11px] sm:text-xs font-semibold mb-4 sm:mb-5 shadow-inner border border-primary-theme/30 max-w-full">
         <Sparkles className="w-3.5 h-3.5 text-accent-theme animate-pulse shrink-0" />
-        <span className="truncate">Official Indian Dubbed Anime Directory</span>
-        <span className="hidden sm:inline text-neutral-500">•</span>
-        <span className="hidden sm:inline-flex items-center gap-1 text-emerald-400 font-bold shrink-0">
-          <ShieldCheck className="w-3 h-3" /> Verified Sources
-        </span>
+        <span className="truncate">Indian Dubbed Anime Discovery &amp; Streaming Guide</span>
       </div>
 
       {/* Primary Brand Logo Integration */}
@@ -52,20 +48,20 @@ export const Hero: React.FC<HeroProps> = ({
         </motion.div>
       </div>
 
-      {/* Homepage Main H1 forcefully targeting "Anidub India Official Website" */}
+      {/* Homepage Main H1 */}
       <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black font-heading tracking-tight text-white leading-snug sm:leading-tight mb-4 break-words">
         <span className="block text-lg sm:text-2xl lg:text-3xl text-[#ff5722] font-black uppercase tracking-wider mb-2">
-          Anidub India Official Website
+          ANIDUB INDIA
         </span>
         <span className="text-white">
-          The Premier Destination for{' '}
+          Indian Dubbed Anime{' '}
         </span>
         <br className="hidden sm:inline" />
         <span 
           className="bg-clip-text text-transparent inline-block"
           style={{ background: 'var(--primary-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
         >
-          Anime Streaming &amp; Dubbing in India
+          Discovery &amp; Streaming Guide
         </span>
       </h1>
 
@@ -73,7 +69,7 @@ export const Hero: React.FC<HeroProps> = ({
       <p className="text-xs sm:text-sm md:text-base text-neutral-300 max-w-2xl mx-auto font-normal leading-relaxed sm:leading-loose px-2 mb-2">
         {lang === 'ta'
           ? 'இந்தியாவில் தமிழ், தெலுங்கு, இந்தி, மலையாளம் மற்றும் கன்னடம் ஆகிய மொழிகளில் அதிகாரப்பூர்வமாக டப் செய்யப்பட்ட அனிமே தொடர்களைக் கண்டறியுங்கள்.'
-          : 'Discover officially dubbed anime in Tamil, Telugu, Hindi, Malayalam, and Kannada — streaming legally on Crunchyroll, Netflix, JioHotstar, and JioCinema.'}
+          : 'Explore where to legally watch Tamil, Telugu, Hindi, Malayalam, and Kannada dubbed anime across Crunchyroll, Netflix, JioHotstar, Prime Video, and Muse India.'}
       </p>
 
       {/* Visually Distinct 'Surprise Me' Roulette Trigger & 'Create Collection' Action */}

@@ -25,6 +25,7 @@ import {
   ChevronRight,
   PanelLeftClose,
   PanelLeft,
+  Radio,
 } from 'lucide-react';
 import { DubInfoModal } from './DubInfoModal';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
@@ -51,6 +52,7 @@ import { AdminPendingTab } from './admin/AdminPendingTab';
 import { AdminCatalogTab } from './admin/AdminCatalogTab';
 import { AdminDataHealthTab } from './admin/AdminDataHealthTab';
 import { AdminFeedbackTab } from './admin/AdminFeedbackTab';
+import { AdminDubRadarTab } from './admin/AdminDubRadarTab';
 import { AdminSettingsTab } from './admin/AdminSettingsTab';
 import { AdminTerminalHud } from './admin/AdminTerminalHud';
 import { AdminCommandPalette } from './admin/AdminCommandPalette';
@@ -1558,6 +1560,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
     { id: 'overview' as const, label: 'Overview', icon: Sliders },
     { id: 'pending' as const, label: 'Pending Reviews', count: pendingCount, icon: Inbox },
     { id: 'catalog' as const, label: 'Anime Catalog', count: catalog.length, icon: Database },
+    { id: 'radar' as const, label: 'Dub Radar', icon: Radio },
     { id: 'feedback' as const, label: 'User Feedback', count: feedbackList.length, icon: Inbox },
     { id: 'data_health' as const, label: 'IMDb & Diagnostics', icon: Shield },
     { id: 'analytics' as const, label: 'Edge Analytics', icon: Activity },
@@ -1969,6 +1972,10 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                   onOpenEditModal={handleOpenEditModal}
                   onDeleteAnime={handleDeleteCatalogAnime}
                 />
+              )}
+
+              {activeAdminTab === 'radar' && (
+                <AdminDubRadarTab catalog={catalog} onLog={addTerminalLog} />
               )}
 
               {activeAdminTab === 'data_health' && (

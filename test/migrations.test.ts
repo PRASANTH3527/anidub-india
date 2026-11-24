@@ -77,6 +77,8 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     '0006_add_schedule_fields.sql',
     '0007_add_watch_progress.sql',
     '0008_add_anime_metadata_fields.sql',
+    '0009_sync_canonical_airing_status.sql',
+    '0010_add_dub_radar_and_requests.sql',
   ]);
 
   const db = new DatabaseSync(':memory:');
@@ -99,6 +101,9 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     'chat_messages',
     'cloudflare_logs',
     'community_submission_logs',
+    'dub_radar',
+    'dub_request_votes',
+    'dub_requests',
     'episodes',
     'feedback',
     'reports',

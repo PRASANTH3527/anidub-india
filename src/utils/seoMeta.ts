@@ -335,10 +335,10 @@ export function buildAnimeJsonLd(
 export function buildDefaultSeoMeta(originInput?: string): SeoMetaPayload {
   const origin = resolveOrigin(originInput);
   const description =
-    'Discover 100+ Indian-dubbed anime with Hindi, Tamil, and Telugu regional audio dubs on ANIDUB INDIA. The premier destination for legal anime streaming in India.';
+    'Indian Dubbed Anime Discovery & Streaming Guide. Find Hindi, Tamil, Telugu, Malayalam, and Kannada dubbed anime with official OTT streaming links on ANIDUB INDIA.';
   return {
-    title: 'ANIDUB INDIA | The Premier Destination for Anime Streaming & Dubbing in India',
-    ogTitle: 'ANIDUB INDIA | Anime Streaming & Dubbing',
+    title: 'ANIDUB INDIA | Indian Dubbed Anime Discovery & Streaming Guide',
+    ogTitle: 'ANIDUB INDIA | Indian Dubbed Anime Discovery & Streaming Guide',
     description,
     image: DEFAULT_OG_IMAGE,
     canonicalUrl: `${origin}/`,
@@ -550,11 +550,12 @@ export async function resolveAnimeSeoResponse(params: {
   let animeRow: Record<string, unknown> | null = null;
   if (db && idOrSlug) {
     try {
+      const cleanLookup = decodeURIComponent(idOrSlug).trim();
       animeRow = await db
         .prepare(
-          "SELECT id, title, slug, synopsis, cover_image, banner_image, languages, year, rating, type, studio, genres, episodes_count, popularity FROM anime WHERE (id = ? OR slug = ?) AND (is_published = 1 OR is_published = true) AND status != 'pending' LIMIT 1"
+          "SELECT id, title, slug, synopsis, cover_image, banner_image, languages, year, rating, type, studio, genres, episodes_count, popularity FROM anime WHERE (id = ? OR slug = ? OR LOWER(slug) = LOWER(?)) AND is_published = 1 AND (status IS NULL OR status != 'pending') LIMIT 1"
         )
-        .bind(idOrSlug, idOrSlug)
+        .bind(cleanLookup, cleanLookup, cleanLookup)
         .first();
     } catch {
       animeRow = null;

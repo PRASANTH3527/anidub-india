@@ -364,7 +364,7 @@ test('functions/anime/[id].ts injects published anime metadata from D1 and never
   const pendingHtml = await pendingRes.text();
   assert.equal(pendingHtml.includes('Top Secret Pending Anime'), false);
   assert.equal(pendingHtml.includes('https://cdn.anidub.in/posters/secret.jpg'), false);
-  assert.ok(pendingHtml.includes('ANIDUB INDIA | The Premier Destination'));
+  assert.ok(pendingHtml.includes('ANIDUB INDIA | Indian Dubbed Anime Discovery'));
 });
 
 test('functions/dubbed-anime/[language].ts and src/edge-entry.ts rewrite language & anime pages via HTMLRewriter', async () => {

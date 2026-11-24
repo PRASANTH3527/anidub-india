@@ -95,11 +95,11 @@ export const DualRating: React.FC<DualRatingProps> = ({
 
           {/* Dual Score Cards Row */}
           <div className="grid grid-cols-2 gap-3">
-            {/* 1. GLOBAL RATING (Read-only) */}
+            {/* 1. CATALOG SCORE (Read-only) */}
             <div className="flex flex-col p-3 rounded-xl bg-gradient-to-br from-amber-500/15 to-amber-500/5 border border-amber-500/25 shadow-[0_0_15px_rgba(245,158,11,0.08)] text-left">
               <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-amber-300">
                 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]" />
-                <span>Global Score</span>
+                <span>Catalog Score</span>
               </div>
               <div className="mt-1.5 flex items-baseline gap-1">
                 <span className="text-2xl sm:text-3xl font-black text-white tracking-tight drop-shadow-md">
@@ -109,7 +109,7 @@ export const DualRating: React.FC<DualRatingProps> = ({
               </div>
               <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-200/70">
                 <ShieldCheck className="w-3 h-3 text-amber-400 shrink-0" />
-                <span>Official Rating</span>
+                <span>Catalog Score</span>
               </div>
             </div>
 

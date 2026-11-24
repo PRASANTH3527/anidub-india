@@ -20,24 +20,35 @@ export const RouletteModal: React.FC<RouletteModalProps> = ({
   const [isSpinning, setIsSpinning] = useState(true);
   const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
 
+  const intervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasRolledRef = React.useRef(false);
+
   const rollRoulette = () => {
     if (!animeList.length) return;
+    if (intervalRef.current) clearInterval(intervalRef.current);
     setIsSpinning(true);
     let counter = 0;
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       const randomIndex = Math.floor(Math.random() * animeList.length);
       setSelectedAnime(animeList[randomIndex]);
       counter++;
       if (counter > 15) {
-        clearInterval(interval);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = null;
         setIsSpinning(false);
       }
     }, 100);
   };
 
   useEffect(() => {
-    rollRoulette();
-  }, [animeList]);
+    if (!hasRolledRef.current && animeList.length > 0) {
+      hasRolledRef.current = true;
+      rollRoulette();
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [animeList.length]);
 
   const isSaved = selectedAnime ? watchlist.includes(selectedAnime.id) : false;
 

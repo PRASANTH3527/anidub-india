@@ -5,6 +5,7 @@ import {
   normalizeBroadcastTime,
   normalizePlatformString,
 } from './dataNormalization';
+import { isCanonicalAiring, resolveCanonicalAnimeStatus } from './animeStatus';
 
 export { CANONICAL_BROADCAST_DAYS as SCHEDULE_DAYS, type CanonicalBroadcastDay as DayName };
 
@@ -12,10 +13,11 @@ export interface NormalizedScheduleItem {
   id: number | string;
   title: string;
   status: string;
+  airing_status?: string;
   broadcastDay: CanonicalBroadcastDay | null;
   airTime: string | null;
   displayAirTime: string;
-  currentEpisode: number;
+  currentEpisode: number | null;
   totalEpisodes: number | null;
   platform: string;
   languages: string | string[];
@@ -27,8 +29,9 @@ export interface NormalizedScheduleItem {
 
 /**
  * Normalizes catalog/D1 anime records into verified Weekly Schedule entries.
- * - Preserves ONLY verified `broadcast_day` and `broadcast_time` values from D1/admin.
- * - Never fabricates modulo weekdays (`DAYS[idx % 7]`) or fake `'08:00 PM IST'` defaults.
+ * - Uses canonical lifecycle status so titles with `airing_status='Airing'` are never hidden.
+ * - Preserves ONLY verified `broadcast_day`, `broadcast_time`, and episode numbers from D1/admin.
+ * - Never fabricates modulo weekdays, fake air times, or invented Episode 1 numbers.
  */
 export function buildVerifiedScheduleData(rawItems: any[]): {
   allSimulcasts: NormalizedScheduleItem[];
@@ -53,11 +56,7 @@ export function buildVerifiedScheduleData(rawItems: any[]): {
   const unscheduledItems: NormalizedScheduleItem[] = [];
 
   for (const anime of dedupedById.values()) {
-    const rawStatus = `${anime.status || ''} ${anime.airing_status || ''}`.toLowerCase();
-    const isOngoing =
-      rawStatus.includes('airing') ||
-      rawStatus.includes('ongoing') ||
-      rawStatus.includes('simulcast');
+    const isOngoing = isCanonicalAiring(anime);
     const verifiedDay = normalizeBroadcastDay(anime);
 
     if (!isOngoing && !verifiedDay) {
@@ -71,11 +70,11 @@ export function buildVerifiedScheduleData(rawItems: any[]): {
         ? Math.floor(Number(totalEpsRaw))
         : null;
     const currentEp =
-      anime.currentEpisode && Number(anime.currentEpisode) > 0
+      anime.currentEpisode !== undefined && anime.currentEpisode !== null && Number(anime.currentEpisode) > 0
         ? Math.floor(Number(anime.currentEpisode))
-        : anime.latestEpisode && Number(anime.latestEpisode) > 0
+        : anime.latestEpisode !== undefined && anime.latestEpisode !== null && Number(anime.latestEpisode) > 0
           ? Math.floor(Number(anime.latestEpisode))
-          : 1;
+          : null;
 
     const cleanPlatform =
       normalizePlatformString(anime.platform) ||
@@ -84,8 +83,12 @@ export function buildVerifiedScheduleData(rawItems: any[]): {
         : '') ||
       'OTT Simulcast';
 
+    const canonicalStatus = resolveCanonicalAnimeStatus(anime);
+
     const item: NormalizedScheduleItem = {
       ...anime,
+      status: canonicalStatus,
+      airing_status: canonicalStatus,
       broadcastDay: verifiedDay,
       broadcast_day: verifiedDay,
       airTime: verifiedTime,
@@ -127,16 +130,7 @@ export function countAiringSimulcasts(
       if (seenKeys.has(key)) continue;
       seenKeys.add(key);
 
-      const statusText = `${item.status || ''} ${item.airing_status || ''}`.toLowerCase();
-      if (!statusText.trim()) continue;
-      const isPending = statusText.includes('pending');
-      const isFinished = statusText.includes('complete') || statusText.includes('finished');
-      const isAiring =
-        statusText.includes('airing') ||
-        statusText.includes('ongoing') ||
-        statusText.includes('simulcast');
-
-      if (!isPending && !isFinished && isAiring) {
+      if (isCanonicalAiring(item)) {
         localCount++;
       }
     }

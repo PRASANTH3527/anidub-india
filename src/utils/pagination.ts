@@ -1,6 +1,7 @@
 /**
  * Pure pagination and catalog filtering logic for Cloudflare D1 queries
  */
+import { filterCatalogByStatus } from './animeStatus';
 
 export interface PaginationResult {
   page: number;
@@ -217,19 +218,9 @@ export function filterAndSortCatalog<T extends {
     );
   }
 
-  // Status filter
-  if (options.status && options.status !== 'All') {
-    const targetStatus = options.status.toLowerCase();
-    filtered = filtered.filter(item => {
-      const itemStatus = ((item as any).airing_status || item.status || '').toLowerCase();
-      if (targetStatus === 'airing') {
-        return itemStatus === 'airing' || itemStatus === 'ongoing' || itemStatus.includes('simulcast');
-      }
-      if (targetStatus === 'completed') {
-        return itemStatus.includes('complete') || itemStatus.includes('finished');
-      }
-      return itemStatus === targetStatus;
-    });
+  // Status filter (canonical reconciliation of D1 airing_status + status)
+  if (options.status && options.status !== 'All' && options.status !== 'All Status') {
+    filtered = filterCatalogByStatus(filtered as any[], options.status) as T[];
   }
 
   // Search filter (ignores secret admin commands starting with /admin)

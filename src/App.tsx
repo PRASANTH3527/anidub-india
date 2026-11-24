@@ -27,6 +27,12 @@ import {
   updateDocumentSeoMeta,
 } from './utils/seoMeta';
 import { normalizeLanguageName } from './utils/languages';
+import {
+  readMySubscriptions,
+  writeMySubscriptions,
+  readMySubscriptionsEnabled,
+  writeMySubscriptionsEnabled,
+} from './utils/ottHub';
 
 const ViewLoadingFallback = () => (
   <div className="w-full min-h-[50vh] flex flex-col items-center justify-center p-8 space-y-3">
@@ -56,6 +62,8 @@ const AnimeTierListMaker = lazy(() => import('./components/AnimeTierListMaker').
 const RecommendationSystem = lazy(() => import('./components/RecommendationSystem').then(m => ({ default: m.RecommendationSystem })));
 const CommunityChatView = lazy(() => import('./components/CommunityChatView').then(m => ({ default: m.CommunityChatView })));
 const LanguageLandingView = lazy(() => import('./components/LanguageLandingView').then(m => ({ default: m.LanguageLandingView })));
+const DubRadarView = lazy(() => import('./components/DubRadarView').then(m => ({ default: m.DubRadarView })));
+const DubRequestsView = lazy(() => import('./components/DubRequestsView').then(m => ({ default: m.DubRequestsView })));
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -103,19 +111,122 @@ export default function App() {
   });
 
   const [selectedAnimeId, setSelectedAnimeId] = useState<number | null>(null);
+  const [selectedAnimeRecord, setSelectedAnimeRecord] = useState<any | null>(null);
+  const [deepLinkLoading, setDeepLinkLoading] = useState(false);
+  const [deepLinkNotFoundSlug, setDeepLinkNotFoundSlug] = useState<string | null>(null);
+  const deepLinkRequestIdRef = useRef(0);
+
   const [isRouletteOpen, setIsRouletteOpen] = useState(false);
   const [isCollectionOpen, setIsCollectionOpen] = useState(false);
   const [catalogList, setCatalogList] = useState<any[]>([]);
+  const [fullCatalogIndex, setFullCatalogIndex] = useState<any[]>([]);
+  const fullCatalogFetchStartedRef = useRef(false);
   const [hydratedByIdList, setHydratedByIdList] = useState<any[]>([]);
   const hydratedByIdFetchedRef = useRef<Set<number>>(new Set());
 
+  // Shared "My Subscriptions" OTT filter state (persisted in localStorage)
+  const [mySubscriptions, setMySubscriptions] = useState<string[]>(() => readMySubscriptions());
+  const [mySubscriptionsEnabled, setMySubscriptionsEnabled] = useState<boolean>(() =>
+    readMySubscriptionsEnabled()
+  );
+
+  const handleToggleSubscriptionPlatform = useCallback((platformId: string) => {
+    setMySubscriptions((prev) => {
+      const exists = prev.includes(platformId);
+      const next = exists ? prev.filter((p) => p !== platformId) : [...prev, platformId];
+      const saved = writeMySubscriptions(next);
+      // Auto-enable filter when user picks their first OTT platform
+      if (!exists && prev.length === 0) {
+        setMySubscriptionsEnabled(writeMySubscriptionsEnabled(true));
+      }
+      if (saved.length === 0) {
+        setMySubscriptionsEnabled(writeMySubscriptionsEnabled(false));
+      }
+      return saved;
+    });
+  }, []);
+
+  const handleToggleMySubscriptionsEnabled = useCallback((enabled: boolean) => {
+    setMySubscriptionsEnabled(writeMySubscriptionsEnabled(enabled));
+  }, []);
+
+  const handleClearSubscriptions = useCallback(() => {
+    setMySubscriptions(writeMySubscriptions([]));
+    setMySubscriptionsEnabled(writeMySubscriptionsEnabled(false));
+  }, []);
+
+  const ensureFullCatalogIndex = useCallback(async () => {
+    if (fullCatalogFetchStartedRef.current) return;
+    fullCatalogFetchStartedRef.current = true;
+    try {
+      const items = await cloudflareApi.fetchCatalogIndex();
+      if (Array.isArray(items) && items.length > 0) {
+        setFullCatalogIndex(items);
+      } else {
+        fullCatalogFetchStartedRef.current = false;
+      }
+    } catch {
+      fullCatalogFetchStartedRef.current = false;
+    }
+  }, []);
+
+  // Lazy-load lightweight full catalog index for discovery tools, OTT Hub counts, Matchmaker, Tier List, Collections & Roulette
+  useEffect(() => {
+    if (
+      activeTab === 'recommendations' ||
+      activeTab === 'tierlist' ||
+      activeTab === 'schedule' ||
+      activeTab === 'radar' ||
+      activeTab === 'requests' ||
+      activeTab === 'profile' ||
+      feedView === 'foryou' ||
+      isRouletteOpen ||
+      isCollectionOpen
+    ) {
+      void ensureFullCatalogIndex();
+      return;
+    }
+    // Also warm the lightweight index in the background shortly after mount so OTT Hub stats show all 221+ titles
+    const timer = window.setTimeout(() => {
+      void ensureFullCatalogIndex();
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, feedView, isRouletteOpen, isCollectionOpen, ensureFullCatalogIndex]);
+
+  const effectiveFullCatalog = useMemo(
+    () => (fullCatalogIndex.length > 0 ? fullCatalogIndex : catalogList),
+    [fullCatalogIndex, catalogList]
+  );
+
+  const findLoadedAnimeBySlugOrId = useCallback(
+    (slugOrId: string | number) => {
+      const target = String(slugOrId).trim();
+      const targetLower = target.toLowerCase();
+      const pools = [
+        selectedAnimeRecord ? [selectedAnimeRecord] : [],
+        catalogList,
+        fullCatalogIndex,
+        hydratedByIdList,
+      ];
+      for (const pool of pools) {
+        const match = pool.find(
+          (a: any) =>
+            a &&
+            (String(a.id) === target ||
+              (a.slug && String(a.slug).toLowerCase() === targetLower))
+        );
+        if (match) return match;
+      }
+      return null;
+    },
+    [selectedAnimeRecord, catalogList, fullCatalogIndex, hydratedByIdList]
+  );
+
   const activeAnimeSlug = useMemo(() => {
     if (selectedAnimeId === null || selectedAnimeId === undefined) return undefined;
-    const found =
-      catalogList.find(a => a.id === selectedAnimeId || String(a.id) === String(selectedAnimeId)) ||
-      hydratedByIdList.find(a => a.id === selectedAnimeId || String(a.id) === String(selectedAnimeId));
+    const found = findLoadedAnimeBySlugOrId(selectedAnimeId);
     return found?.slug || undefined;
-  }, [selectedAnimeId, catalogList, hydratedByIdList]);
+  }, [selectedAnimeId, findLoadedAnimeBySlugOrId]);
 
   // Strict Clerk Admin Authentication State
   const { isSignedIn, user: clerkUser } = useUser();
@@ -142,6 +253,8 @@ export default function App() {
           catalog: '/',
           watchlist: '/watchlist',
           schedule: '/schedule',
+          radar: '/dub-radar',
+          requests: '/dub-requests',
           chat: '/chat',
           tierlist: '/tierlist',
           recommendations: '/recommendations',
@@ -171,29 +284,128 @@ export default function App() {
     }
   }, []);
 
-  // Deep-link and history navigation handler
-  const handleOpenAnime = useCallback((animeId: number | null) => {
-    setSelectedAnimeId(animeId);
-    if (typeof window !== 'undefined') {
-      if (animeId !== null) {
-        const found = catalogList.find(a => a.id === animeId || String(a.id) === String(animeId));
-        const targetPath = found?.slug ? `/anime/${found.slug}` : `/anime/${animeId}`;
-        if (window.location.pathname !== targetPath) {
-          window.history.pushState({ animeId }, '', targetPath);
+  const resolveDeepLinkAnime = useCallback(
+    async (slugOrId: string) => {
+      const clean = decodeURIComponent(String(slugOrId || '').trim());
+      if (!clean) return;
+
+      const localMatch = findLoadedAnimeBySlugOrId(clean);
+      if (localMatch && Number(localMatch.id) > 0) {
+        setDeepLinkNotFoundSlug(null);
+        setDeepLinkLoading(false);
+        setSelectedAnimeRecord(localMatch);
+        setSelectedAnimeId(Number(localMatch.id));
+        if (typeof window !== 'undefined' && localMatch.slug) {
+          const canonicalPath = `/anime/${localMatch.slug}`;
+          if (window.location.pathname !== canonicalPath) {
+            window.history.replaceState({ animeId: localMatch.id, slug: localMatch.slug }, '', canonicalPath);
+          }
         }
-      } else {
-        if (window.location.pathname.startsWith('/anime/')) {
+        return;
+      }
+
+      const reqId = ++deepLinkRequestIdRef.current;
+      setDeepLinkLoading(true);
+      setDeepLinkNotFoundSlug(null);
+      try {
+        const fetched = await cloudflareApi.getAnimeById(clean);
+        if (reqId !== deepLinkRequestIdRef.current) return;
+        if (fetched && Number(fetched.id) > 0) {
+          const idNum = Number(fetched.id);
+          setSelectedAnimeRecord(fetched);
+          setSelectedAnimeId(idNum);
+          setDeepLinkNotFoundSlug(null);
+          setHydratedByIdList((prev) => {
+            if (prev.some((item) => Number(item.id) === idNum)) return prev;
+            return [fetched, ...prev];
+          });
+          if (typeof window !== 'undefined' && fetched.slug) {
+            const canonicalPath = `/anime/${fetched.slug}`;
+            if (window.location.pathname !== canonicalPath) {
+              window.history.replaceState({ animeId: idNum, slug: fetched.slug }, '', canonicalPath);
+            }
+          }
+        } else {
+          setSelectedAnimeId(null);
+          setSelectedAnimeRecord(null);
+          setDeepLinkNotFoundSlug(clean);
+        }
+      } catch {
+        if (reqId !== deepLinkRequestIdRef.current) return;
+        setSelectedAnimeId(null);
+        setSelectedAnimeRecord(null);
+        setDeepLinkNotFoundSlug(clean);
+      } finally {
+        if (reqId === deepLinkRequestIdRef.current) {
+          setDeepLinkLoading(false);
+        }
+      }
+    },
+    [findLoadedAnimeBySlugOrId]
+  );
+
+  // Deep-link and history navigation handler (always preserves slug in URL when available)
+  const handleOpenAnime = useCallback(
+    (animeOrId: number | string | { id: number; slug?: string } | null) => {
+      setDeepLinkNotFoundSlug(null);
+      setDeepLinkLoading(false);
+
+      if (animeOrId === null || animeOrId === undefined) {
+        setSelectedAnimeId(null);
+        setSelectedAnimeRecord(null);
+        if (typeof window !== 'undefined' && window.location.pathname.startsWith('/anime/')) {
           const fallbackPath =
             activeTab === 'language' && selectedSeoLanguage
               ? `/dubbed-anime/${getLanguageSlug(selectedSeoLanguage)}`
               : '/';
           window.history.pushState(null, '', fallbackPath);
         }
+        return;
       }
-    }
-  }, [catalogList, activeTab, selectedSeoLanguage]);
 
-  // Handle URL deep-links on initial load and catalog ready
+      if (typeof animeOrId === 'object') {
+        const idNum = Number(animeOrId.id);
+        const found = findLoadedAnimeBySlugOrId(idNum);
+        const resolvedRecord = { ...(found || {}), ...animeOrId };
+        const resolvedSlug = resolvedRecord.slug || found?.slug;
+        setSelectedAnimeRecord(resolvedRecord);
+        setSelectedAnimeId(idNum);
+        if (typeof window !== 'undefined') {
+          const targetPath = resolvedSlug ? `/anime/${resolvedSlug}` : `/anime/${idNum}`;
+          if (window.location.pathname !== targetPath) {
+            window.history.pushState({ animeId: idNum, slug: resolvedSlug }, '', targetPath);
+          }
+        }
+        return;
+      }
+
+      const found = findLoadedAnimeBySlugOrId(animeOrId);
+      if (found && Number(found.id) > 0) {
+        const idNum = Number(found.id);
+        setSelectedAnimeRecord(found);
+        setSelectedAnimeId(idNum);
+        if (typeof window !== 'undefined') {
+          const targetPath = found.slug ? `/anime/${found.slug}` : `/anime/${idNum}`;
+          if (window.location.pathname !== targetPath) {
+            window.history.pushState({ animeId: idNum, slug: found.slug }, '', targetPath);
+          }
+        }
+        return;
+      }
+
+      // Not yet in loaded lists: fetch directly from /api/anime/:slugOrId
+      if (typeof window !== 'undefined') {
+        const targetPath = `/anime/${animeOrId}`;
+        if (window.location.pathname !== targetPath) {
+          window.history.pushState({ animeId: animeOrId }, '', targetPath);
+        }
+      }
+      void resolveDeepLinkAnime(String(animeOrId));
+    },
+    [findLoadedAnimeBySlugOrId, resolveDeepLinkAnime, activeTab, selectedSeoLanguage]
+  );
+
+  // Handle URL deep-links on initial load
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const pathname = window.location.pathname;
@@ -207,12 +419,7 @@ export default function App() {
     if (pathname.startsWith('/anime/')) {
       const slugOrId = pathname.replace(/^\/anime\//, '').split('/')[0].split('?')[0];
       if (slugOrId) {
-        if (catalogList.length > 0) {
-          const matched = catalogList.find(a => a.slug === slugOrId || String(a.id) === slugOrId);
-          if (matched && selectedAnimeId !== matched.id) {
-            setSelectedAnimeId(matched.id);
-          }
-        }
+        void resolveDeepLinkAnime(slugOrId);
       }
     } else if (pathname === '/admin' || pathname === '/admin/analytics') {
       if (isAdminAuthenticated) {
@@ -225,6 +432,10 @@ export default function App() {
       setActiveTab('watchlist');
     } else if (pathname === '/schedule') {
       setActiveTab('schedule');
+    } else if (pathname === '/dub-radar' || pathname === '/radar') {
+      setActiveTab('radar');
+    } else if (pathname === '/dub-requests' || pathname === '/requests') {
+      setActiveTab('requests');
     } else if (pathname === '/chat') {
       setActiveTab('chat');
     } else if (pathname === '/tierlist') {
@@ -234,9 +445,9 @@ export default function App() {
     } else if (pathname === '/profile') {
       setActiveTab('profile');
     }
-  }, [catalogList, isAdminAuthenticated]);
+  }, [isAdminAuthenticated]);
 
-  // Handle browser back and forward buttons
+  // Handle browser back and forward buttons cleanly (including deep-links outside first 24)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handlePopState = () => {
@@ -244,6 +455,8 @@ export default function App() {
       const languageMatch = parseLanguageFromPath(pathname);
       if (languageMatch) {
         setSelectedAnimeId(null);
+        setSelectedAnimeRecord(null);
+        setDeepLinkNotFoundSlug(null);
         setSelectedSeoLanguage(languageMatch.language);
         setActiveTab('language');
         return;
@@ -251,12 +464,14 @@ export default function App() {
 
       if (pathname.startsWith('/anime/')) {
         const slugOrId = pathname.replace(/^\/anime\//, '').split('/')[0].split('?')[0];
-        const matched = catalogList.find(a => a.slug === slugOrId || String(a.id) === slugOrId);
-        if (matched) {
-          setSelectedAnimeId(matched.id);
+        if (slugOrId) {
+          void resolveDeepLinkAnime(slugOrId);
         }
       } else {
         setSelectedAnimeId(null);
+        setSelectedAnimeRecord(null);
+        setDeepLinkNotFoundSlug(null);
+        setDeepLinkLoading(false);
         setSelectedSeoLanguage(null);
         if (pathname === '/admin' && isAdminAuthenticated) {
           setActiveTab('admin');
@@ -264,6 +479,10 @@ export default function App() {
           setActiveTab('watchlist');
         } else if (pathname === '/schedule') {
           setActiveTab('schedule');
+        } else if (pathname === '/dub-radar' || pathname === '/radar') {
+          setActiveTab('radar');
+        } else if (pathname === '/dub-requests' || pathname === '/requests') {
+          setActiveTab('requests');
         } else if (pathname === '/chat') {
           setActiveTab('chat');
         } else if (pathname === '/tierlist') {
@@ -279,7 +498,7 @@ export default function App() {
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [catalogList, isAdminAuthenticated]);
+  }, [resolveDeepLinkAnime, isAdminAuthenticated]);
 
   // Keep document SEO <title>, <meta>, OpenGraph, and canonical URL synchronized on client transitions
   useEffect(() => {
@@ -287,11 +506,9 @@ export default function App() {
     const origin = window.location.origin;
 
     if (selectedAnimeId !== null) {
-      const matched = catalogList.find(
-        (a) => a.id === selectedAnimeId || String(a.id) === String(selectedAnimeId)
-      );
+      const matched = findLoadedAnimeBySlugOrId(selectedAnimeId);
       if (matched) {
-        updateDocumentSeoMeta(buildAnimeSeoMeta(matched, origin, String(selectedAnimeId)));
+        updateDocumentSeoMeta(buildAnimeSeoMeta(matched, origin, String(matched.slug || selectedAnimeId)));
         return;
       }
     }
@@ -302,7 +519,7 @@ export default function App() {
     }
 
     updateDocumentSeoMeta(buildDefaultSeoMeta(origin));
-  }, [activeTab, selectedSeoLanguage, selectedAnimeId, catalogList]);
+  }, [activeTab, selectedSeoLanguage, selectedAnimeId, findLoadedAnimeBySlugOrId]);
 
   useEffect(() => {
     fetchCatalogList();
@@ -760,7 +977,7 @@ export default function App() {
       )}
 
       {/* 3. MAIN CONTENT VIEWS WITH SMOOTH PAGE TRANSITIONS */}
-      <main className="flex-grow w-full max-w-full overflow-x-clip pt-4 sm:pt-6 pb-12 sm:pb-16 transition-all duration-500 box-border">
+      <main className="flex-grow w-full max-w-full overflow-x-clip pt-4 sm:pt-6 pb-24 sm:pb-16 transition-all duration-500 box-border">
         <AnimatePresence mode="wait">
           <motion.div
             key={`page_view_${activeTab}_${activeTab === 'home' ? feedView : ''}`}
@@ -786,8 +1003,9 @@ export default function App() {
             {(activeTab === 'home' || activeTab === 'catalog') && feedView !== 'foryou' && (
               <CatalogView
                 catalogList={catalogList}
+                fullCatalogIndex={effectiveFullCatalog}
                 onSelectAnime={(anime) => {
-                  handleOpenAnime(anime.id);
+                  handleOpenAnime(anime);
                   addToRecentlyViewed(anime);
                 }}
                 searchQuery={searchQuery}
@@ -803,6 +1021,11 @@ export default function App() {
                 onClearRecentlyViewed={handleClearRecentlyViewed}
                 onRemoveRecentlyViewedItem={handleRemoveRecentlyViewedItem}
                 uiLanguage={currentLang as any}
+                mySubscriptions={mySubscriptions}
+                mySubscriptionsEnabled={mySubscriptionsEnabled}
+                onToggleSubscriptionPlatform={handleToggleSubscriptionPlatform}
+                onToggleMySubscriptionsEnabled={handleToggleMySubscriptionsEnabled}
+                onClearSubscriptions={handleClearSubscriptions}
               />
             )}
 
@@ -810,9 +1033,9 @@ export default function App() {
             {(activeTab === 'recommendations' || ((activeTab === 'home' || activeTab === 'catalog') && feedView === 'foryou')) && (
               <Suspense fallback={<ViewLoadingFallback />}>
                 <RecommendationSystem
-                  catalogList={catalogList}
+                  catalogList={effectiveFullCatalog}
                   onSelectAnime={(anime) => {
-                    handleOpenAnime(anime.id);
+                    handleOpenAnime(anime);
                     addToRecentlyViewed(anime);
                   }}
                   watchlist={watchlist}
@@ -821,6 +1044,9 @@ export default function App() {
                     setActiveTab('home');
                     setFeedView('library');
                   }}
+                  mySubscriptions={mySubscriptions}
+                  mySubscriptionsEnabled={mySubscriptionsEnabled}
+                  onToggleMySubscriptionsEnabled={handleToggleMySubscriptionsEnabled}
                 />
               </Suspense>
             )}
@@ -831,7 +1057,7 @@ export default function App() {
                 <WatchlistView
                   watchlist={realSavedWatchlist}
                   onSelectAnime={(anime) => {
-                    handleOpenAnime(anime.id);
+                    handleOpenAnime(anime);
                     addToRecentlyViewed(anime);
                   }}
                   onToggleWatchlist={handleToggleWatchlist}
@@ -846,13 +1072,38 @@ export default function App() {
               <Suspense fallback={<ViewLoadingFallback />}>
                 <WeeklyScheduleView
                   onSelectAnime={(anime) => {
-                    handleOpenAnime(anime.id);
+                    handleOpenAnime(anime);
                     addToRecentlyViewed(anime);
                   }}
                   watchlist={watchlist}
                   onToggleWatchlist={handleToggleWatchlist}
                   onOpenSubmitDubModal={() => setIsDubModalOpen(true)}
-                  catalogList={catalogList}
+                  catalogList={effectiveFullCatalog}
+                />
+              </Suspense>
+            )}
+
+            {/* DUB RELEASE RADAR VIEW (INDIAN DUB LIFECYCLE TRACKER) */}
+            {activeTab === 'radar' && (
+              <Suspense fallback={<ViewLoadingFallback />}>
+                <DubRadarView
+                  catalogList={effectiveFullCatalog}
+                  onSelectAnime={(anime) => {
+                    handleOpenAnime(anime);
+                    addToRecentlyViewed(anime);
+                  }}
+                  onNavigateRequests={() => handleNavigateTab('requests')}
+                  onNavigateHome={() => handleNavigateTab('home')}
+                />
+              </Suspense>
+            )}
+
+            {/* DUB REQUESTS VIEW (PUBLIC DEMAND VOTING DASHBOARD) */}
+            {activeTab === 'requests' && (
+              <Suspense fallback={<ViewLoadingFallback />}>
+                <DubRequestsView
+                  catalogList={effectiveFullCatalog}
+                  onNavigateRadar={() => handleNavigateTab('radar')}
                 />
               </Suspense>
             )}
@@ -862,10 +1113,10 @@ export default function App() {
               <Suspense fallback={<ViewLoadingFallback />}>
                 <ProfileView
                   watchlist={watchlist}
-                  catalogList={catalogList}
+                  catalogList={effectiveFullCatalog}
                   savedAnimeItems={realSavedWatchlist}
                   onSelectAnime={(anime) => {
-                    handleOpenAnime(anime.id);
+                    handleOpenAnime(anime);
                     addToRecentlyViewed(anime);
                   }}
                   onToggleWatchlist={handleToggleWatchlist}
@@ -879,9 +1130,9 @@ export default function App() {
             {activeTab === 'tierlist' && (
               <Suspense fallback={<ViewLoadingFallback />}>
                 <AnimeTierListMaker
-                  catalogList={catalogList}
+                  catalogList={effectiveFullCatalog}
                   onSelectAnime={(anime) => {
-                    handleOpenAnime(anime.id);
+                    handleOpenAnime(anime);
                     addToRecentlyViewed(anime);
                   }}
                   onNavigateHome={() => setActiveTab('home')}
@@ -894,10 +1145,10 @@ export default function App() {
               <Suspense fallback={<ViewLoadingFallback />}>
                 <LanguageLandingView
                   language={selectedSeoLanguage}
-                  catalogList={catalogList}
+                  catalogList={effectiveFullCatalog}
                   watchlist={watchlist}
                   onSelectAnime={(anime) => {
-                    handleOpenAnime(anime.id);
+                    handleOpenAnime(anime);
                     addToRecentlyViewed(anime);
                   }}
                   onToggleWatchlist={handleToggleWatchlist}
@@ -915,7 +1166,7 @@ export default function App() {
                 <CommunityChatView
                   onNavigateToCatalog={() => handleNavigateTab('home')}
                   onSelectAnime={(anime) => {
-                    handleOpenAnime(anime.id);
+                    handleOpenAnime(anime);
                     addToRecentlyViewed(anime);
                   }}
                 />
@@ -936,12 +1187,60 @@ export default function App() {
 
       {/* MODALS WITH SPRING ANIMATEPRESENCE */}
       <AnimatePresence>
+        {/* 0. Deep-Link Loading Indicator */}
+        {deepLinkLoading && selectedAnimeId === null && (
+          <ModalLoadingFallback key="deep-link-loading" />
+        )}
+
+        {/* 0.5 Deep-Link 404 Not Found Modal */}
+        {deepLinkNotFoundSlug && selectedAnimeId === null && !deepLinkLoading && (
+          <div
+            key="anime-not-found-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Anime Not Found"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0f1115]/90 backdrop-blur-xl"
+          >
+            <div className="max-w-md w-full rounded-3xl bg-[#111726] border border-white/10 p-8 shadow-2xl text-center space-y-4">
+              <div className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-extrabold uppercase tracking-wider">
+                404 • Not Found
+              </div>
+              <h2 className="text-2xl font-black text-white">Anime Not Found</h2>
+              <p className="text-sm text-neutral-400 leading-relaxed">
+                We couldn&apos;t find a published anime matching{' '}
+                <span className="text-white font-semibold">&ldquo;{deepLinkNotFoundSlug}&rdquo;</span> in the AniDub India catalog.
+              </p>
+              <button
+                type="button"
+                onClick={() => handleOpenAnime(null)}
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-bold transition-all cursor-pointer shadow-lg"
+              >
+                Back to Catalog
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 1. Anime Detail Modal */}
         {selectedAnimeId !== null && (
           <Suspense fallback={<ModalLoadingFallback />}>
             <AnimeDetailModal
               key="anime-detail-modal"
               animeId={selectedAnimeId}
+              initialAnime={selectedAnimeRecord}
+              onResolvedAnime={(resolved) => {
+                setSelectedAnimeRecord(resolved);
+                if (typeof window !== 'undefined' && resolved?.slug) {
+                  const canonicalPath = `/anime/${resolved.slug}`;
+                  if (window.location.pathname !== canonicalPath) {
+                    window.history.replaceState(
+                      { animeId: resolved.id, slug: resolved.slug },
+                      '',
+                      canonicalPath
+                    );
+                  }
+                }
+              }}
               onClose={() => handleOpenAnime(null)}
               watchlist={watchlist}
               onToggleWatchlist={handleToggleWatchlist}
@@ -954,10 +1253,10 @@ export default function App() {
           <Suspense fallback={<ModalLoadingFallback />}>
             <RouletteModal
               key="roulette-modal"
-              animeList={catalogList}
+              animeList={effectiveFullCatalog}
               onClose={() => setIsRouletteOpen(false)}
               onSelectAnime={(anime) => {
-                handleOpenAnime(anime.id);
+                handleOpenAnime(anime);
                 addToRecentlyViewed(anime);
               }}
             />
@@ -969,7 +1268,7 @@ export default function App() {
           <Suspense fallback={<ModalLoadingFallback />}>
             <CreateCollectionModal
               key="collection-modal"
-              animeList={catalogList}
+              animeList={effectiveFullCatalog}
               onClose={() => setIsCollectionOpen(false)}
             />
           </Suspense>
