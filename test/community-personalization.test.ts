@@ -6,13 +6,6 @@ import { DatabaseSync } from 'node:sqlite';
 import { onRequest as apiOnRequest } from '../functions/api/[[route]]';
 import { resetDubRequestRateLimitBucketsForTest } from '../src/server/routes/radarRequestsRoutes';
 import {
-  DUB_RADAR_STAGES,
-  buildCatalogFallbackRadarEntries,
-  filterDubRadarEntries,
-  getDubRadarStageIndex,
-  validateDubRadarPayload,
-} from '../src/utils/dubRadar';
-import {
   DUB_REQUEST_LANGUAGES,
   normalizeRequestTitle,
   sortAndFilterDubRequests,
@@ -64,122 +57,6 @@ function createMigratedSqliteDb(): DatabaseSync {
   }
   return db;
 }
-
-test('Feature 1: Dub Release Radar stages, filtering, validation, and honest catalog fallback', () => {
-  assert.deepEqual(DUB_RADAR_STAGES, [
-    'Official Announcement',
-    'Production Confirmed',
-    'Release Scheduled',
-    'Partially Available',
-    'Fully Available',
-  ]);
-  assert.equal(getDubRadarStageIndex('Official Announcement'), 0);
-  assert.equal(getDubRadarStageIndex('Release Scheduled'), 2);
-  assert.equal(getDubRadarStageIndex('Fully Available'), 4);
-
-  const valid = validateDubRadarPayload({
-    anime_title: 'Solo Leveling Season 2',
-    languages: ['Hindi', 'Tamil', 'Telugu'],
-    platform: 'Crunchyroll',
-    stage: 'Release Scheduled',
-    release_date: 'Jan 2026',
-    source_url: 'https://www.crunchyroll.com/news/solo-leveling',
-  });
-  assert.equal(valid.ok, true);
-
-  const invalidStage = validateDubRadarPayload({
-    anime_title: 'Test Anime',
-    languages: ['Tamil'],
-    stage: 'Rumor Only',
-  });
-  assert.equal(invalidStage.ok, false);
-
-  const invalidLang = validateDubRadarPayload({
-    anime_title: 'Test Anime',
-    languages: ['Japanese'],
-    stage: 'Official Announcement',
-  });
-  assert.equal(invalidLang.ok, false);
-
-  // Honest catalog fallback never invents release dates
-  const fallback = buildCatalogFallbackRadarEntries([
-    {
-      id: 11,
-      title: 'Dandadan',
-      status: 'Completed',
-      airing_status: 'Airing',
-      languages: 'Hindi, Tamil',
-      platform: 'Netflix',
-    },
-    {
-      id: 12,
-      title: 'Finished Show',
-      status: 'Completed',
-      airing_status: 'Completed',
-      languages: 'Hindi',
-      platform: 'Crunchyroll',
-    },
-  ]);
-  assert.equal(fallback.length, 1);
-  assert.equal(fallback[0].stage, 'Partially Available');
-  assert.equal(fallback[0].release_date, '');
-
-  const filtered = filterDubRadarEntries(fallback, {
-    language: 'Tamil',
-    stage: 'Partially Available',
-  });
-  assert.equal(filtered.length, 1);
-  assert.equal(
-    filterDubRadarEntries(fallback, { language: 'Kannada', stage: 'All' }).length,
-    0
-  );
-});
-
-test('Feature 1 API: /api/dub-radar GET filtering and Admin Clerk auth guard on POST', async () => {
-  const db = createMigratedSqliteDb();
-  const env = { DB: createSqliteD1Wrapper(db) };
-
-  // Seed 2 radar entries directly into migrated dub_radar table
-  db.prepare(
-    `INSERT INTO dub_radar (anime_title, languages, platform, stage, release_date, source_url, notes)
-     VALUES ('Dandadan S2', 'Hindi, Tamil', 'Netflix', 'Production Confirmed', '', 'https://netflix.com/title/123', 'Studio casting confirmed'),
-            ('Sakamoto Days', 'Hindi, Tamil, Telugu', 'Netflix', 'Release Scheduled', 'July 2026', 'https://netflix.com/title/456', 'Simuldub confirmed')`
-  ).run();
-
-  const getAllRes = await apiOnRequest({
-    request: new Request('https://anidub.in/api/dub-radar'),
-    env,
-  } as any);
-  assert.equal(getAllRes.status, 200);
-  const allJson = (await getAllRes.json()) as any;
-  assert.equal(allJson.data.length, 2);
-
-  const getFilteredRes = await apiOnRequest({
-    request: new Request('https://anidub.in/api/dub-radar?language=Telugu&stage=Release%20Scheduled'),
-    env,
-  } as any);
-  assert.equal(getFilteredRes.status, 200);
-  const filteredJson = (await getFilteredRes.json()) as any;
-  assert.equal(filteredJson.data.length, 1);
-  assert.equal(filteredJson.data[0].anime_title, 'Sakamoto Days');
-
-  // Unauthenticated POST must be rejected with 401
-  const unauthPost = await apiOnRequest({
-    request: new Request('https://anidub.in/api/dub-radar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        anime_title: 'Unauthorized Entry',
-        languages: ['Tamil'],
-        stage: 'Official Announcement',
-      }),
-    }),
-    env,
-  } as any);
-  assert.equal(unauthPost.status, 401);
-
-  db.close();
-});
 
 test('Feature 2: Dub Request Voting validation, honeypot spam trap, and live SQLite deduplication + ranking', async () => {
   resetDubRequestRateLimitBucketsForTest();
@@ -361,7 +238,7 @@ test('Feature 3: Personal Anime Stats ("My Anime Journey") computes honest metri
 
   assert.equal(stats.hasLoggedActivity, true);
   assert.equal(stats.completedCount, 2); // #1 and #3
-  assert.equal(stats.episodesWatched, 17); // 12 + 5 (never invents episodes for legacy watched #3)
+  assert.equal(stats.episodesWatched, 17); // 12 + 5
   assert.equal(stats.watchingCount, 1); // #2
   assert.equal(stats.planToWatchCount, 1); // #4
 
@@ -370,11 +247,11 @@ test('Feature 3: Personal Anime Stats ("My Anime Journey") computes honest metri
   assert.equal(stats.favoriteGenres[0].count, 3);
   assert.equal(stats.favoriteGenres[0].percent, 100);
 
-  // Preferred Indian dub languages (Japanese & English excluded; percentages sum to 100%)
+  // Preferred Indian dub languages
   const langNames = stats.preferredLanguages.map((l) => l.language);
   assert.equal(langNames.includes('Japanese'), false);
   assert.equal(langNames.includes('English'), false);
-  assert.equal(stats.preferredLanguages[0].language, 'Tamil'); // 3 mentions out of 6 = 50%
+  assert.equal(stats.preferredLanguages[0].language, 'Tamil');
   assert.equal(stats.preferredLanguages[0].percent, 50);
   const sumPct = stats.preferredLanguages.reduce((sum, l) => sum + l.percent, 0);
   assert.equal(sumPct, 100);

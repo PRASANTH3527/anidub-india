@@ -62,8 +62,8 @@ const AnimeTierListMaker = lazy(() => import('./components/AnimeTierListMaker').
 const RecommendationSystem = lazy(() => import('./components/RecommendationSystem').then(m => ({ default: m.RecommendationSystem })));
 const CommunityChatView = lazy(() => import('./components/CommunityChatView').then(m => ({ default: m.CommunityChatView })));
 const LanguageLandingView = lazy(() => import('./components/LanguageLandingView').then(m => ({ default: m.LanguageLandingView })));
-const DubRadarView = lazy(() => import('./components/DubRadarView').then(m => ({ default: m.DubRadarView })));
 const DubRequestsView = lazy(() => import('./components/DubRequestsView').then(m => ({ default: m.DubRequestsView })));
+
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -177,7 +177,7 @@ export default function App() {
       activeTab === 'tierlist' ||
       activeTab === 'schedule' ||
       activeTab === 'radar' ||
-      activeTab === 'requests' ||
+
       activeTab === 'profile' ||
       feedView === 'foryou' ||
       isRouletteOpen ||
@@ -254,7 +254,7 @@ export default function App() {
           watchlist: '/watchlist',
           schedule: '/schedule',
           radar: '/dub-radar',
-          requests: '/dub-requests',
+
           chat: '/chat',
           tierlist: '/tierlist',
           recommendations: '/recommendations',
@@ -433,11 +433,13 @@ export default function App() {
     } else if (pathname === '/schedule') {
       setActiveTab('schedule');
     } else if (pathname === '/dub-radar' || pathname === '/radar') {
-      setActiveTab('radar');
+      setActiveTab('home');
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', '/');
+      }
     } else if (pathname === '/dub-requests' || pathname === '/requests') {
-      setActiveTab('requests');
+      setActiveTab('dub-requests');
     } else if (pathname === '/chat') {
-      setActiveTab('chat');
     } else if (pathname === '/tierlist') {
       setActiveTab('tierlist');
     } else if (pathname === '/recommendations') {
@@ -480,11 +482,13 @@ export default function App() {
         } else if (pathname === '/schedule') {
           setActiveTab('schedule');
         } else if (pathname === '/dub-radar' || pathname === '/radar') {
-          setActiveTab('radar');
+          setActiveTab('home');
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', '/');
+          }
         } else if (pathname === '/dub-requests' || pathname === '/requests') {
-          setActiveTab('requests');
+          setActiveTab('dub-requests');
         } else if (pathname === '/chat') {
-          setActiveTab('chat');
         } else if (pathname === '/tierlist') {
           setActiveTab('tierlist');
         } else if (pathname === '/recommendations') {
@@ -1083,30 +1087,17 @@ export default function App() {
               </Suspense>
             )}
 
-            {/* DUB RELEASE RADAR VIEW (INDIAN DUB LIFECYCLE TRACKER) */}
-            {activeTab === 'radar' && (
+            {/* DUB REQUESTS VIEW (PUBLIC DEMAND DASHBOARD) */}
+            {activeTab === 'dub-requests' && (
               <Suspense fallback={<ViewLoadingFallback />}>
-                <DubRadarView
-                  catalogList={effectiveFullCatalog}
-                  onSelectAnime={(anime) => {
-                    handleOpenAnime(anime);
-                    addToRecentlyViewed(anime);
-                  }}
-                  onNavigateRequests={() => handleNavigateTab('requests')}
-                  onNavigateHome={() => handleNavigateTab('home')}
+                <DubRequestsView
+                  onNavigate={(tab) => setActiveTab(tab)}
+                  onOpenCatalog={() => setActiveTab('home')}
                 />
               </Suspense>
             )}
 
-            {/* DUB REQUESTS VIEW (PUBLIC DEMAND VOTING DASHBOARD) */}
-            {activeTab === 'requests' && (
-              <Suspense fallback={<ViewLoadingFallback />}>
-                <DubRequestsView
-                  catalogList={effectiveFullCatalog}
-                  onNavigateRadar={() => handleNavigateTab('radar')}
-                />
-              </Suspense>
-            )}
+
 
             {/* PROFILE VIEW */}
             {activeTab === 'profile' && (

@@ -1,568 +1,420 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Megaphone,
-  ThumbsUp,
-  Plus,
-  Search,
-  Check,
-  X,
-  Trophy,
-  Radio,
-  Loader2,
+import React, { useState, useEffect } from 'react';
+import { 
+  Megaphone, 
+  ThumbsUp, 
+  Plus, 
+  Search, 
+  Filter, 
+  CheckCircle2, 
+  AlertCircle, 
   Sparkles,
+  Flame,
+  Globe2,
+  Tv
 } from 'lucide-react';
-import { cloudflareApi } from '../services/cloudflareApi';
-import {
-  DUB_REQUEST_LANGUAGES,
-  markDubRequestVotedLocally,
-  readVotedDubRequestIds,
-  sortAndFilterDubRequests,
-  type DubRequestItem,
+import { 
+  DUB_REQUEST_LANGUAGES, 
+  type DubRequestItem, 
   type DubRequestLanguage,
+  sortAndFilterDubRequests,
+  readVotedDubRequestIds,
+  markDubRequestVotedLocally
 } from '../utils/dubRequests';
+import { cloudflareApi } from '../services/cloudflareApi';
 
 interface DubRequestsViewProps {
-  catalogList: any[];
-  onNavigateRadar?: () => void;
+  onNavigate?: (tab: string) => void;
+  onOpenCatalog?: () => void;
 }
 
-const LANG_BADGE_CLASSES: Record<DubRequestLanguage, string> = {
-  Hindi: 'bg-purple-500/15 text-purple-300 border-purple-500/35',
-  Tamil: 'bg-amber-500/15 text-amber-300 border-amber-500/35',
-  Telugu: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/35',
-  Malayalam: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35',
-  Kannada: 'bg-rose-500/15 text-rose-300 border-rose-500/35',
-};
-
-export const DubRequestsView: React.FC<DubRequestsViewProps> = ({
-  catalogList,
-  onNavigateRadar,
-}) => {
+export const DubRequestsView: React.FC<DubRequestsViewProps> = ({ onNavigate, onOpenCatalog }) => {
   const [requests, setRequests] = useState<DubRequestItem[]>([]);
-  const [votedIds, setVotedIds] = useState<number[]>(() => readVotedDubRequestIds());
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [votingId, setVotingId] = useState<number | null>(null);
-  const [notice, setNotice] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(
-    null
-  );
-
-  // Request a Dub modal state
+  const [votedIds, setVotedIds] = useState<number[]>([]);
+  
+  // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newAnimeId, setNewAnimeId] = useState<number | null>(null);
-  const [newLanguage, setNewLanguage] = useState<DubRequestLanguage>('Tamil');
+  const [animeTitleInput, setAnimeTitleInput] = useState('');
+  const [languageInput, setLanguageInput] = useState<DubRequestLanguage>('Tamil');
   const [honeypotWebsite, setHoneypotWebsite] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccessMsg, setSubmitSuccessMsg] = useState<string | null>(null);
 
-  const showNotice = (type: 'success' | 'info' | 'error', text: string) => {
-    setNotice({ type, text });
-    window.setTimeout(() => {
-      setNotice((curr) => (curr?.text === text ? null : curr));
-    }, 4000);
+  const loadRequests = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await cloudflareApi.fetchDubRequests(selectedLanguage === 'All' ? undefined : selectedLanguage);
+      if (res.success && Array.isArray(res.data)) {
+        const localVoted = readVotedDubRequestIds();
+        setVotedIds(localVoted);
+        const marked = res.data.map((item) => ({
+          ...item,
+          hasVoted: localVoted.includes(item.id) || item.hasVoted,
+        }));
+        setRequests(marked);
+      } else {
+        setError(res.error || 'Failed to load dub requests leaderboard.');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Network error loading dub requests.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    cloudflareApi
-      .fetchDubRequests()
-      .then((res) => {
-        if (cancelled) return;
-        setRequests(res.data || []);
-        const mergedVoted = Array.from(
-          new Set([...readVotedDubRequestIds(), ...(res.votedRequestIds || [])])
-        );
-        setVotedIds(mergedVoted);
-      })
-      .catch(() => {
-        if (!cancelled) setRequests([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    loadRequests();
+  }, [selectedLanguage]);
 
-  const votedSet = useMemo(() => new Set(votedIds), [votedIds]);
-
-  const rankedRequests = useMemo(() => {
-    const hydrated = requests.map((item) => ({
-      ...item,
-      hasVoted: Boolean(item.hasVoted || votedSet.has(item.id)),
-    }));
-    return sortAndFilterDubRequests(hydrated, {
-      language: selectedLanguage,
-      search: searchQuery,
-    });
-  }, [requests, votedSet, selectedLanguage, searchQuery]);
-
-  const totalVotesCast = useMemo(
-    () => requests.reduce((sum, r) => sum + (Number(r.vote_count) || 0), 0),
-    [requests]
-  );
-
-  // Quick title suggestions from loaded catalog for the Request modal
-  const titleSuggestions = useMemo(() => {
-    const q = newTitle.trim().toLowerCase();
-    if (q.length < 2 || !Array.isArray(catalogList)) return [];
-    return catalogList
-      .filter((a) => a?.title && String(a.title).toLowerCase().includes(q))
-      .slice(0, 5);
-  }, [newTitle, catalogList]);
-
-  const handleUpvote = async (item: DubRequestItem) => {
-    if (votingId !== null || votedSet.has(item.id)) return;
-    setVotingId(item.id);
-
+  const handleVote = async (requestId: number) => {
+    if (votedIds.includes(requestId)) return;
     try {
-      const res = await cloudflareApi.voteOrSubmitDubRequest({ requestId: item.id });
+      const res = await cloudflareApi.voteOrSubmitDubRequest({ requestId });
       if (res.success && res.request) {
-        const nextVoted = markDubRequestVotedLocally(item.id);
-        setVotedIds((prev) => Array.from(new Set([...prev, ...nextVoted, item.id])));
+        const nextVoted = markDubRequestVotedLocally(requestId);
+        setVotedIds(nextVoted);
         setRequests((prev) =>
-          prev.map((row) =>
-            row.id === item.id
-              ? { ...row, vote_count: res.request.vote_count, hasVoted: true }
-              : row
-          )
+          prev.map((r) => (r.id === requestId ? { ...res.request!, hasVoted: true } : r))
         );
-        showNotice('success', `Upvoted ${item.anime_title} (${item.language} Dub)!`);
-      } else if (res.alreadyVoted) {
-        const nextVoted = markDubRequestVotedLocally(item.id);
-        setVotedIds((prev) => Array.from(new Set([...prev, ...nextVoted, item.id])));
-        showNotice('info', res.error || 'You already voted for this dub request.');
       } else {
-        showNotice('error', res.error || 'Could not record vote right now.');
+        alert(res.error || 'Failed to record vote.');
       }
-    } finally {
-      setVotingId(null);
+    } catch (err: any) {
+      alert(err?.message || 'Error recording vote.');
     }
   };
 
-  const handleSubmitNewRequest = async (e: React.FormEvent) => {
+  const handleNewRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setModalError(null);
-    const trimmedTitle = newTitle.trim();
-    if (trimmedTitle.length < 2) {
-      setModalError('Please enter an anime title (at least 2 characters).');
+    if (submitting) return;
+    setSubmitError(null);
+    setSubmitSuccessMsg(null);
+
+    if (!animeTitleInput.trim()) {
+      setSubmitError('Please enter an anime title.');
       return;
     }
 
-    setIsSubmitting(true);
+    setSubmitting(true);
     try {
       const res = await cloudflareApi.voteOrSubmitDubRequest({
-        animeTitle: trimmedTitle,
-        animeId: newAnimeId,
-        language: newLanguage,
-        website: honeypotWebsite,
+        animeTitle: animeTitleInput.trim(),
+        language: languageInput,
+        website: honeypotWebsite, // honeypot
       });
 
       if (res.success && res.request) {
-        const reqItem: DubRequestItem = res.request;
-        const nextVoted = markDubRequestVotedLocally(reqItem.id);
-        setVotedIds((prev) => Array.from(new Set([...prev, ...nextVoted, reqItem.id])));
-        setRequests((prev) => {
-          const exists = prev.some((r) => r.id === reqItem.id);
-          if (exists) {
-            return prev.map((r) => (r.id === reqItem.id ? { ...r, ...reqItem, hasVoted: true } : r));
-          }
-          return [{ ...reqItem, hasVoted: true }, ...prev];
-        });
-        setIsModalOpen(false);
-        setNewTitle('');
-        setNewAnimeId(null);
+        const createdId = res.request.id;
+        const nextVoted = markDubRequestVotedLocally(createdId);
+        setVotedIds(nextVoted);
+        setSubmitSuccessMsg(res.mergedExisting ? 'Your request was merged into existing demand and upvoted!' : 'Dub request submitted and upvoted successfully!');
+        setAnimeTitleInput('');
         setHoneypotWebsite('');
-        showNotice(
-          'success',
-          res.mergedExisting
-            ? `Added your vote to the existing ${reqItem.anime_title} (${reqItem.language}) request!`
-            : `Submitted ${reqItem.anime_title} for ${reqItem.language} Dub demand leaderboard!`
-        );
-      } else if (res.alreadyVoted) {
-        if (res.request?.id) {
-          markDubRequestVotedLocally(res.request.id);
-          setVotedIds((prev) => Array.from(new Set([...prev, res.request.id])));
-        }
-        setModalError(res.error || 'You already voted for this anime & language.');
+        setTimeout(() => {
+          setIsModalOpen(false);
+          setSubmitSuccessMsg(null);
+          loadRequests();
+        }, 1200);
       } else {
-        setModalError(res.error || 'Failed to submit dub request.');
+        setSubmitError(res.error || 'Failed to submit dub request.');
       }
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Network error submitting request.');
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   };
 
+  const filteredRequests = sortAndFilterDubRequests(requests, {
+    language: selectedLanguage,
+    search: searchQuery,
+  });
+
   return (
-    <div
-      data-testid="dub-requests-view"
-      className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 box-border"
-    >
-      {/* HERO HEADER */}
-      <section className="rounded-3xl bg-gradient-to-br from-[#14172a] via-[#101524] to-[#1a1228] border border-white/10 p-5 sm:p-7 shadow-2xl relative overflow-hidden">
-        <div className="absolute -top-20 -right-16 w-60 h-60 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-2 max-w-xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/35 text-amber-300 text-[11px] font-black uppercase tracking-wider">
-              <Megaphone className="w-3.5 h-3.5" />
-              <span>Public Demand Dashboard</span>
+    <div className="min-h-screen bg-slate-950 text-slate-100 pb-24 pt-6 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header Banner */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-purple-900/40 via-indigo-950/50 to-slate-900 border border-purple-500/20 p-6 sm:p-8 mb-8 shadow-2xl">
+          <div className="absolute -right-10 -bottom-10 opacity-10 pointer-events-none">
+            <Megaphone className="w-64 h-64 text-purple-400" />
+          </div>
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-semibold mb-3">
+                <Flame className="w-3.5 h-3.5 text-orange-400 animate-pulse" /> Public Demand Dashboard
+              </div>
+              <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mb-2">
+                Indian Dub Requests Leaderboard
+              </h1>
+              <p className="text-slate-300 text-sm sm:text-base max-w-2xl">
+                Vote for the anime series you want officially dubbed in Tamil, Hindi, Telugu, Malayalam, or Kannada. Help streaming platforms prioritize fan demand!
+              </p>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-heading font-black text-white tracking-tight">
-              Indian Dub Requests
-            </h1>
-            <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed">
-              Vote for the anime you want officially dubbed in Tamil, Hindi, Telugu, Malayalam, or Kannada. One verified vote per user/device keeps demand rankings genuine.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <button
-              type="button"
-              onClick={() => {
-                setModalError(null);
-                setIsModalOpen(true);
-              }}
-              data-testid="open-request-dub-modal"
-              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-neutral-950 text-xs font-black inline-flex items-center gap-2 shadow-lg shadow-amber-950/40 transition-all cursor-pointer active:scale-95"
+              onClick={() => setIsModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-xl shadow-lg shadow-purple-600/30 transition-all transform hover:-translate-y-0.5 active:translate-y-0 text-sm sm:text-base"
             >
-              <Plus className="w-4 h-4" />
-              <span>Request a Dub</span>
+              <Plus className="w-5 h-5" /> Request a Dub
             </button>
-
-            {onNavigateRadar && (
-              <button
-                type="button"
-                onClick={onNavigateRadar}
-                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-neutral-200 text-xs font-bold inline-flex items-center gap-2 transition-colors cursor-pointer"
-              >
-                <Radio className="w-4 h-4 text-purple-400" />
-                <span>Dub Radar</span>
-              </button>
-            )}
           </div>
         </div>
 
-        {/* QUICK METRICS */}
-        <div className="relative z-10 mt-5 pt-4 border-t border-white/10 flex flex-wrap items-center gap-4 text-xs text-neutral-300">
-          <div className="inline-flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-amber-400" />
-            <span>
-              <strong className="text-white tabular-nums">{requests.length}</strong> requested dubs
-            </span>
-          </div>
-          <span className="text-neutral-600">•</span>
-          <div className="inline-flex items-center gap-2">
-            <ThumbsUp className="w-4 h-4 text-purple-400" />
-            <span>
-              <strong className="text-white tabular-nums">{totalVotesCast}</strong> community votes
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* FEEDBACK NOTICE */}
-      {notice && (
-        <div
-          role="status"
-          className={`rounded-2xl px-4 py-3 border text-xs font-bold flex items-center justify-between gap-3 ${
-            notice.type === 'success'
-              ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-200'
-              : notice.type === 'info'
-                ? 'bg-sky-500/15 border-sky-500/35 text-sky-200'
-                : 'bg-rose-500/15 border-rose-500/35 text-rose-200'
-          }`}
-        >
-          <span>{notice.text}</span>
-          <button
-            type="button"
-            onClick={() => setNotice(null)}
-            className="p-1 rounded-lg hover:bg-white/10 cursor-pointer"
-            aria-label="Dismiss notice"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      {/* LANGUAGE FILTER & SEARCH */}
-      <section className="rounded-2xl bg-[#101524] border border-white/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {['All', ...DUB_REQUEST_LANGUAGES].map((lang) => {
-            const active = selectedLanguage === lang;
-            return (
+        {/* Filters & Search Bar */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-8 bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-lg backdrop-blur-md">
+          {/* Language Tabs */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 scrollbar-none">
+            <button
+              onClick={() => setSelectedLanguage('All')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
+                selectedLanguage === 'All'
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              All Languages
+            </button>
+            {DUB_REQUEST_LANGUAGES.map((lang) => (
               <button
                 key={lang}
-                type="button"
                 onClick={() => setSelectedLanguage(lang)}
-                className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                  active
-                    ? 'bg-purple-600 text-white border-purple-400 shadow-sm'
-                    : 'bg-white/[0.03] text-neutral-300 border-white/10 hover:border-white/25 hover:text-white'
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
+                  selectedLanguage === lang
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                    : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'
                 }`}
               >
-                {lang === 'All' ? 'All Languages' : lang}
+                {lang} Dub
               </button>
-            );
-          })}
-        </div>
-
-        <div className="relative w-full sm:w-64">
-          <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search requested anime..."
-            aria-label="Search requested anime"
-            className="w-full min-h-[40px] pl-9 pr-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400"
-          />
-        </div>
-      </section>
-
-      {/* RANKED LEADERBOARD */}
-      {loading ? (
-        <div className="rounded-3xl bg-[#101524] border border-white/10 p-12 flex flex-col items-center justify-center gap-3 text-neutral-400">
-          <Loader2 className="w-7 h-7 text-amber-400 animate-spin" />
-          <span className="text-xs font-medium">Loading Dub Request Leaderboard...</span>
-        </div>
-      ) : rankedRequests.length === 0 ? (
-        <div className="rounded-3xl bg-[#101524] border border-white/10 p-10 text-center space-y-4">
-          <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300">
-            <Sparkles className="w-6 h-6" />
+            ))}
           </div>
-          <div className="space-y-1 max-w-md mx-auto">
-            <h2 className="text-base font-black text-white">No dub requests yet for this filter</h2>
-            <p className="text-xs text-neutral-400">
-              Be the first fan to request an Indian dub and kick off the community vote!
+
+          {/* Search Box */}
+          <div className="relative min-w-[260px]">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search requested anime..."
+              className="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Content Section */}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <div key={n} className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 h-36 animate-pulse" />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="bg-rose-950/30 border border-rose-800/50 rounded-2xl p-8 text-center max-w-xl mx-auto">
+            <AlertCircle className="w-12 h-12 text-rose-400 mx-auto mb-3" />
+            <h3 className="text-lg font-semibold text-rose-200 mb-1">Failed to Load Leaderboard</h3>
+            <p className="text-slate-400 text-sm mb-4">{error}</p>
+            <button
+              onClick={loadRequests}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-medium transition-all"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : filteredRequests.length === 0 ? (
+          <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-12 text-center max-w-xl mx-auto">
+            <Megaphone className="w-12 h-12 text-purple-400/60 mx-auto mb-3" />
+            <h3 className="text-lg font-semibold text-slate-200 mb-1">No Dub Requests Found</h3>
+            <p className="text-slate-400 text-sm mb-6">
+              {searchQuery || selectedLanguage !== 'All'
+                ? 'No requests match your current filters.'
+                : 'Be the first fan to request an anime dub for the Indian community!'}
             </p>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white font-medium px-5 py-2.5 rounded-xl text-sm transition-all"
+            >
+              <Plus className="w-4 h-4" /> Submit First Request
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setModalError(null);
-              setIsModalOpen(true);
-            }}
-            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-neutral-950 text-xs font-black inline-flex items-center gap-2 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Request a Dub</span>
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-          {rankedRequests.map((item, idx) => {
-            const rank = idx + 1;
-            const hasVoted = Boolean(item.hasVoted || votedSet.has(item.id));
-            const isVotingThis = votingId === item.id;
-            const rankBadgeClass =
-              rank === 1
-                ? 'bg-amber-500/20 text-amber-300 border-amber-400/50'
-                : rank === 2
-                  ? 'bg-slate-300/15 text-slate-200 border-slate-300/35'
-                  : rank === 3
-                    ? 'bg-orange-500/20 text-orange-300 border-orange-400/45'
-                    : 'bg-white/[0.04] text-neutral-400 border-white/10';
-
-            return (
-              <div
-                key={item.id}
-                className="rounded-2xl bg-[#101524] border border-white/10 hover:border-purple-500/35 px-4 py-3.5 flex items-center justify-between gap-3 transition-colors"
-              >
-                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                  <div
-                    className={`w-10 h-10 rounded-xl border flex items-center justify-center font-heading font-black text-xs shrink-0 tabular-nums ${rankBadgeClass}`}
-                  >
-                    #{rank}
-                  </div>
-
-                  <div className="min-w-0 space-y-1">
-                    <h2 className="text-sm sm:text-base font-bold text-white truncate">
-                      {item.anime_title}
-                    </h2>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`px-2 py-0.5 rounded-md border text-[10px] font-black uppercase tracking-wider ${
-                          LANG_BADGE_CLASSES[item.language] ||
-                          'bg-white/10 text-neutral-200 border-white/15'
-                        }`}
-                      >
-                        {item.language} Dub
-                      </span>
-                      <span className="text-[11px] text-neutral-400 tabular-nums">
-                        {item.vote_count} {item.vote_count === 1 ? 'vote' : 'votes'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={hasVoted || isVotingThis}
-                  onClick={() => void handleUpvote(item)}
-                  aria-label={
-                    hasVoted
-                      ? `Voted for ${item.anime_title} in ${item.language}`
-                      : `Upvote ${item.anime_title} in ${item.language}`
-                  }
-                  className={`min-h-[44px] px-3.5 sm:px-4 py-2 rounded-xl border text-xs font-black inline-flex items-center gap-2 shrink-0 transition-all tabular-nums ${
-                    hasVoted
-                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 cursor-default'
-                      : 'bg-purple-600/20 hover:bg-purple-600/35 border-purple-500/40 text-purple-200 hover:text-white cursor-pointer active:scale-95'
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredRequests.map((item, index) => {
+              const rank = index + 1;
+              const isTopThree = rank <= 3;
+              return (
+                <div
+                  key={item.id}
+                  className={`relative group bg-slate-900/70 border rounded-2xl p-5 transition-all hover:border-purple-500/50 hover:bg-slate-900 shadow-lg flex flex-col justify-between ${
+                    isTopThree ? 'border-purple-500/30 bg-gradient-to-b from-purple-950/20 to-slate-900/80' : 'border-slate-800'
                   }`}
                 >
-                  {isVotingThis ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : hasVoted ? (
-                    <Check className="w-4 h-4" />
-                  ) : (
-                    <ThumbsUp className="w-4 h-4" />
-                  )}
-                  <span>{hasVoted ? 'Voted' : 'Upvote'}</span>
-                  <span className="px-1.5 py-0.5 rounded-md bg-black/30 text-[11px]">
-                    {item.vote_count}
-                  </span>
+                  <div>
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
+                            rank === 1
+                              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30'
+                              : rank === 2
+                              ? 'bg-slate-300 text-slate-950 shadow-md'
+                              : rank === 3
+                              ? 'bg-amber-700 text-white shadow-md'
+                              : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          #{rank}
+                        </span>
+                        <span className="px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold">
+                          {item.language} Dub
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-purple-400 text-xs font-medium">
+                        <Flame className="w-3.5 h-3.5 text-orange-400" />
+                        <span>{item.vote_count} votes</span>
+                      </div>
+                    </div>
+
+                    <h3 className="text-lg font-bold text-white group-hover:text-purple-300 transition-colors mb-2 line-clamp-2">
+                      {item.anime_title}
+                    </h3>
+                  </div>
+
+                  <div className="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-between">
+                    <span className="text-xs text-slate-500">
+                      Community Demand Rank #{rank}
+                    </span>
+                    <button
+                      onClick={() => handleVote(item.id)}
+                      disabled={item.hasVoted}
+                      className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+                        item.hasVoted
+                          ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 cursor-default'
+                          : 'bg-purple-600/20 hover:bg-purple-600 border border-purple-500/30 text-purple-200 hover:text-white shadow-sm'
+                      }`}
+                    >
+                      {item.hasVoted ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Voted
+                        </>
+                      ) : (
+                        <>
+                          <ThumbsUp className="w-3.5 h-3.5" /> Upvote
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Modal for Requesting a Dub */}
+        {isModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    <Megaphone className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white">Request an Anime Dub</h3>
+                </div>
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="text-slate-400 hover:text-white text-xl font-bold p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                >
+                  &times;
                 </button>
               </div>
-            );
-          })}
-        </div>
-      )}
 
-      {/* REQUEST A DUB MODAL */}
-      {isModalOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Request a Dub"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
-        >
-          <div className="w-full max-w-md rounded-3xl bg-[#111728] border border-white/15 p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-heading font-black text-white">Request an Indian Dub</h2>
-                <p className="text-xs text-neutral-400 mt-0.5">
-                  Submit an anime & language to add or boost it on the public demand board.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                aria-label="Close request modal"
-                className="min-w-[40px] min-h-[40px] rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+              <p className="text-slate-400 text-xs sm:text-sm mb-6">
+                Tell the community and streaming platforms which anime series you want to see dubbed in Indian regional languages.
+              </p>
 
-            <form onSubmit={handleSubmitNewRequest} className="space-y-4">
-              {/* Honeypot field hidden from human users */}
-              <div className="hidden" aria-hidden="true">
-                <label htmlFor="dub-req-website">Website</label>
-                <input
-                  id="dub-req-website"
-                  type="text"
-                  tabIndex={-1}
-                  autoComplete="off"
-                  value={honeypotWebsite}
-                  onChange={(e) => setHoneypotWebsite(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="dub-request-title-input"
-                  className="text-xs font-bold text-neutral-200 block"
-                >
-                  Anime Title
-                </label>
-                <input
-                  id="dub-request-title-input"
-                  type="text"
-                  required
-                  maxLength={120}
-                  value={newTitle}
-                  onChange={(e) => {
-                    setNewTitle(e.target.value);
-                    setNewAnimeId(null);
-                  }}
-                  placeholder="e.g. Monster, Vinland Saga, Bleach: TYBW..."
-                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/15 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400"
-                />
-
-                {titleSuggestions.length > 0 && newAnimeId === null && (
-                  <div className="rounded-xl bg-[#0b101d] border border-white/10 divide-y divide-white/5 overflow-hidden">
-                    {titleSuggestions.map((anime: any) => (
-                      <button
-                        key={anime.id}
-                        type="button"
-                        onClick={() => {
-                          setNewTitle(String(anime.title));
-                          setNewAnimeId(Number(anime.id) || null);
-                        }}
-                        className="w-full px-3 py-2 text-left text-xs text-neutral-200 hover:bg-purple-600/20 flex items-center justify-between gap-2 cursor-pointer"
-                      >
-                        <span className="truncate">{anime.title}</span>
-                        <span className="text-[10px] text-neutral-500 shrink-0">In catalog</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <span className="text-xs font-bold text-neutral-200 block">Requested Dub Language</span>
-                <div className="grid grid-cols-3 gap-2">
-                  {DUB_REQUEST_LANGUAGES.map((lang) => {
-                    const active = newLanguage === lang;
-                    return (
-                      <button
-                        key={`modal_lang_${lang}`}
-                        type="button"
-                        onClick={() => setNewLanguage(lang)}
-                        className={`min-h-[40px] px-2.5 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                          active
-                            ? 'bg-purple-600 text-white border-purple-400 shadow-sm'
-                            : 'bg-black/40 text-neutral-300 border-white/10 hover:border-white/25'
-                        }`}
-                      >
-                        {lang}
-                      </button>
-                    );
-                  })}
+              {submitError && (
+                <div className="mb-4 p-3 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs">
+                  {submitError}
                 </div>
-              </div>
-
-              {modalError && (
-                <p className="text-xs font-semibold text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-xl px-3 py-2">
-                  {modalError}
-                </p>
               )}
 
-              <div className="flex items-center justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="min-h-[44px] px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-bold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="min-h-[44px] px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-neutral-950 text-xs font-black inline-flex items-center gap-2 cursor-pointer disabled:opacity-60"
-                >
-                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
-                  <span>Submit &amp; Vote</span>
-                </button>
-              </div>
-            </form>
+              {submitSuccessMsg && (
+                <div className="mb-4 p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span>{submitSuccessMsg}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleNewRequestSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Anime Title <span className="text-purple-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={animeTitleInput}
+                    onChange={(e) => setAnimeTitleInput(e.target.value)}
+                    placeholder="e.g. Vinland Saga, Monster, Haikyu!!"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Target Indian Language <span className="text-purple-400">*</span>
+                  </label>
+                  <select
+                    value={languageInput}
+                    onChange={(e) => setLanguageInput(e.target.value as DubRequestLanguage)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-purple-500 transition-all"
+                  >
+                    {DUB_REQUEST_LANGUAGES.map((lang) => (
+                      <option key={lang} value={lang}>
+                        {lang} Dub
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Honeypot field (hidden from real users) */}
+                <div className="hidden" aria-hidden="true">
+                  <label>Website</label>
+                  <input
+                    type="text"
+                    value={honeypotWebsite}
+                    onChange={(e) => setHoneypotWebsite(e.target.value)}
+                    tabIndex={-1}
+                    autoComplete="off"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold shadow-lg shadow-purple-600/30 transition-all disabled:opacity-50"
+                  >
+                    {submitting ? 'Submitting...' : 'Submit & Upvote'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

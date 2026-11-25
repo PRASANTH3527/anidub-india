@@ -1711,141 +1711,39 @@ class CloudflareApiService {
   }
 
   /**
-   * DUB RELEASE RADAR: Fetch upcoming & ongoing Indian dub lifecycle entries
+   * DUB REQUESTS: Fetch public demand leaderboard
    */
-  public async fetchDubRadar(filters?: { language?: string; stage?: string }): Promise<any[]> {
+  public async fetchDubRequests(language?: string): Promise<{ success: boolean; data: any[]; error?: string }> {
     try {
-      const params = new URLSearchParams();
-      if (filters?.language && filters.language !== 'All') {
-        params.set('language', filters.language);
-      }
-      if (filters?.stage && filters.stage !== 'All') {
-        params.set('stage', filters.stage);
-      }
-      const qs = params.toString();
-      const endpoint = qs ? `${CLOUDFLARE_ENDPOINTS.DUB_RADAR}?${qs}` : CLOUDFLARE_ENDPOINTS.DUB_RADAR;
-      const res = await this.smartFetch(endpoint, {
+      const url = language && language !== 'All' ? `${CLOUDFLARE_ENDPOINTS.DUB_REQUESTS}?language=${encodeURIComponent(language)}` : CLOUDFLARE_ENDPOINTS.DUB_REQUESTS;
+      const res = await this.smartFetch(url, {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
-      if (!res.ok) return [];
       const json: any = await res.json().catch(() => null);
-      return Array.isArray(json?.data) ? json.data : [];
-    } catch {
-      return [];
-    }
-  }
-
-  /**
-   * DUB RELEASE RADAR (ADMIN): Create a new radar entry
-   */
-  public async createDubRadarEntry(payload: Record<string, unknown>): Promise<{
-    success: boolean;
-    entry?: any;
-    error?: string;
-  }> {
-    try {
-      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.DUB_RADAR, {
-        method: 'POST',
-        headers: this.getHeaders(true),
-        body: JSON.stringify(payload),
-      });
-      const json: any = await res.json().catch(() => ({}));
-      if (!res.ok || json.success === false) {
-        return { success: false, error: json.error || `Failed to save radar entry (HTTP ${res.status})` };
-      }
-      return { success: true, entry: json.entry };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Network error saving radar entry' };
-    }
-  }
-
-  /**
-   * DUB RELEASE RADAR (ADMIN): Update an existing radar entry
-   */
-  public async updateDubRadarEntry(
-    id: number | string,
-    payload: Record<string, unknown>
-  ): Promise<{ success: boolean; entry?: any; error?: string }> {
-    try {
-      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.DUB_RADAR_BY_ID(id), {
-        method: 'PUT',
-        headers: this.getHeaders(true),
-        body: JSON.stringify(payload),
-      });
-      const json: any = await res.json().catch(() => ({}));
-      if (!res.ok || json.success === false) {
-        return { success: false, error: json.error || `Failed to update radar entry (HTTP ${res.status})` };
-      }
-      return { success: true, entry: json.entry };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Network error updating radar entry' };
-    }
-  }
-
-  /**
-   * DUB RELEASE RADAR (ADMIN): Delete a radar entry
-   */
-  public async deleteDubRadarEntry(id: number | string): Promise<{ success: boolean; error?: string }> {
-    try {
-      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.DUB_RADAR_BY_ID(id), {
-        method: 'DELETE',
-        headers: this.getHeaders(true),
-      });
-      const json: any = await res.json().catch(() => ({}));
       if (!res.ok) {
-        return { success: false, error: json.error || `Failed to delete radar entry (HTTP ${res.status})` };
+        return { success: false, data: [], error: json?.error || `Failed to load dub requests (HTTP ${res.status})` };
       }
-      return { success: true };
+      return { success: true, data: Array.isArray(json?.data) ? json.data : [] };
     } catch (err: any) {
-      return { success: false, error: err?.message || 'Network error deleting radar entry' };
+      return { success: false, data: [], error: err?.message || 'Network error loading dub requests' };
     }
   }
 
   /**
-   * DUB REQUESTS: Fetch ranked public dub demand leaderboard
-   */
-  public async fetchDubRequests(language?: string): Promise<{
-    data: any[];
-    votedRequestIds: number[];
-  }> {
-    try {
-      const params = new URLSearchParams();
-      if (language && language !== 'All') {
-        params.set('language', language);
-      }
-      const qs = params.toString();
-      const endpoint = qs ? `${CLOUDFLARE_ENDPOINTS.DUB_REQUESTS}?${qs}` : CLOUDFLARE_ENDPOINTS.DUB_REQUESTS;
-      const res = await this.smartFetch(endpoint, {
-        method: 'GET',
-        headers: this.getHeaders(false),
-      });
-      if (!res.ok) return { data: [], votedRequestIds: [] };
-      const json: any = await res.json().catch(() => ({}));
-      return {
-        data: Array.isArray(json?.data) ? json.data : [],
-        votedRequestIds: Array.isArray(json?.votedRequestIds) ? json.votedRequestIds : [],
-      };
-    } catch {
-      return { data: [], votedRequestIds: [] };
-    }
-  }
-
-  /**
-   * DUB REQUESTS: Upvote an existing request OR submit a new dub request
+   * DUB REQUESTS: Vote or submit a new dub request
    */
   public async voteOrSubmitDubRequest(payload: {
-    requestId?: number;
     animeTitle?: string;
-    animeId?: number | null;
+    animeId?: number;
     language?: string;
+    requestId?: number;
     website?: string;
   }): Promise<{
     success: boolean;
-    alreadyVoted?: boolean;
-    created?: boolean;
-    mergedExisting?: boolean;
     request?: any;
+    alreadyVoted?: boolean;
+    mergedExisting?: boolean;
     error?: string;
   }> {
     try {
@@ -1855,31 +1753,21 @@ class CloudflareApiService {
         body: JSON.stringify(payload),
       });
       const json: any = await res.json().catch(() => ({}));
-      if (res.status === 409 && json?.alreadyVoted) {
+      if (!res.ok) {
         return {
           success: false,
-          alreadyVoted: true,
-          request: json.request,
-          error: json.error || 'You already voted for this dub request.',
-        };
-      }
-      if (!res.ok || json.success === false) {
-        return {
-          success: false,
-          error: json.error || `Failed to submit vote (HTTP ${res.status})`,
+          error: json.error || `Failed to process request vote (HTTP ${res.status})`,
+          alreadyVoted: json.alreadyVoted,
         };
       }
       return {
         success: true,
-        created: Boolean(json.created),
-        mergedExisting: Boolean(json.mergedExisting),
         request: json.request,
+        alreadyVoted: json.alreadyVoted,
+        mergedExisting: json.mergedExisting,
       };
     } catch (err: any) {
-      return {
-        success: false,
-        error: err?.message || 'Network error submitting dub request vote.',
-      };
+      return { success: false, error: err?.message || 'Network error submitting vote' };
     }
   }
 }
