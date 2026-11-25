@@ -146,7 +146,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
 
             <div className="space-y-2">
               <label htmlFor="report-field-select" className="text-xs font-bold text-neutral-300 uppercase tracking-wider block">
-                Which field is wrong?
+                Issue Type (Specific Field)
               </label>
 
               {/* Quick Field Selector Chips */}
@@ -191,7 +191,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
 
             <div className="space-y-1.5">
               <label htmlFor="report-description" className="text-xs font-bold text-neutral-300 uppercase tracking-wider block">
-                Correction Note
+                Description
               </label>
               <textarea
                 id="report-description"

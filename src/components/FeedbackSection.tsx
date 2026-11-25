@@ -36,7 +36,6 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [screenshot, setScreenshot] = useState<string | null>(null);
-  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState('');
   const [fileSize, setFileSize] = useState('');
   const [isDragging, setIsDragging] = useState(false);
@@ -59,7 +58,6 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
       return;
     }
 
-    setScreenshotFile(file);
     setFileName(file.name);
     const sizeKb = Math.round(file.size / 1024);
     setFileSize(sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`);
@@ -100,7 +98,6 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   const handleRemoveImage = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setScreenshot(null);
-    setScreenshotFile(null);
     setFileName('');
     setFileSize('');
     setFileError(null);
@@ -208,28 +205,33 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
             <span className="text-xs text-neutral-400">Official Indian Dubbed Anime Directory</span>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs">
-            {PRIMARY_SEO_LANGUAGES.map((lang) => (
-              <a
-                key={lang}
-                href={`/languages/${getLanguageSlug(lang)}`}
-                onClick={(e) => {
-                  if (onNavigateLanguage) {
-                    e.preventDefault();
-                    onNavigateLanguage(lang);
-                  }
-                }}
-                className="text-neutral-400 hover:text-purple-300 transition-colors font-medium"
-              >
-                {lang} Dubs
-              </a>
-            ))}
+          <div className="flex flex-col sm:items-end gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+              Regional Dubbed Anime Languages
+            </span>
+            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-4 gap-y-1.5 text-xs">
+              {PRIMARY_SEO_LANGUAGES.map((lang) => (
+                <a
+                  key={lang}
+                  href={`/dubbed-anime/${getLanguageSlug(lang)}`}
+                  onClick={(e) => {
+                    if (onNavigateLanguage) {
+                      e.preventDefault();
+                      onNavigateLanguage(lang);
+                    }
+                  }}
+                  className="text-neutral-400 hover:text-purple-300 transition-colors font-medium"
+                >
+                  {lang} Dubs
+                </a>
+              ))}
+            </div>
           </div>
         </div>
 
         <div className="mt-5 pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-neutral-500">
           <p className="text-center sm:text-left">
-            © {new Date().getFullYear()} AniDub India. Legal OTT discovery directory — we do not host video streams.
+            © {new Date().getFullYear()} AniDub India. Legal OTT discovery directory — we do not host video streams. Rights-holder requests are honored promptly.
           </p>
           <div className="flex items-center gap-4 font-semibold">
             <a

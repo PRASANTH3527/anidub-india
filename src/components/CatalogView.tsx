@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense, lazy } from 'react';
-import { motion } from 'motion/react';
 import { 
   AlertTriangle,
   ChevronDown,
@@ -22,14 +21,13 @@ import {
   WifiOff,
   X
 } from 'lucide-react';
-import { calculatePagination, filterAndSortCatalog, getVisiblePageNumbers } from '../utils/pagination';
+import { getVisiblePageNumbers } from '../utils/pagination';
 import { AnimeCard } from './AnimeCard';
 import { OttHubSection } from './OttHubSection';
 import { LatestDubUpdatesCard } from './LatestDubUpdatesCard';
 import { cloudflareApi, type CatalogMeta, type CatalogSummary } from '../services/cloudflareApi';
 import { computeDynamicLanguageFilters } from '../utils/languages';
 import {
-  applySmartFilters,
   buildActiveFilterChips,
   EPISODE_LENGTH_OPTIONS,
   type EpisodeLengthBucket,
@@ -37,7 +35,7 @@ import {
 } from '../utils/smartFilters';
 import { SkeletonGrid } from './SkeletonGrid';
 import { proxyUrl } from '../utils/imgbb';
-import { translate, SupportedLanguage } from '../utils/i18n';
+import type { SupportedLanguage } from '../utils/i18n';
 import { CANONICAL_OTT_FILTER_OPTIONS } from '../utils/ottHub';
 import {
   addRecentSearch,
@@ -136,16 +134,13 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   onToggleLike,
   onToggleUpvote,
   onOpenRoulette,
-  onOpenExplore,
   onOpenRecommendations,
   onOpenCompare,
   userId = null,
-  mode = 'home',
   feedView = 'library',
   recentlyViewed = [],
   onClearRecentlyViewed,
   onRemoveRecentlyViewedItem,
-  uiLanguage = 'en',
   mySubscriptions = [],
   mySubscriptionsEnabled = false,
   onToggleSubscriptionPlatform,
@@ -153,8 +148,6 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   onClearSubscriptions,
 }) => {
   const toast = useToast();
-  const isHomeMode = mode === 'home';
-  const lang = uiLanguage || 'en';
   const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(catalogList || []);
 
   // Parse initial shareable URL query params once on mount
@@ -239,7 +232,6 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   const [fullyDubbedOnly, setFullyDubbedOnly] = useState<boolean>(false);
   const [freeLegalOnly, setFreeLegalOnly] = useState<boolean>(false);
   const [isSmartFilterOpen, setIsSmartFilterOpen] = useState<boolean>(false);
-  const [showMoreHomeLanguages, setShowMoreHomeLanguages] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
   const [catalogStatus, setCatalogStatus] = useState<'loading' | 'success' | 'empty' | 'error' | 'offline'>('loading');
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -255,7 +247,6 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   const [recentSearches, setRecentSearches] = useState<string[]>(() =>
     readRecentSearches(userId)
   );
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   const setSelectedLanguage = useCallback(
     (nextLang: string) => {
@@ -621,192 +612,17 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     rangeStart + Math.max(0, displayedAnime.length - 1)
   );
 
-  const quickHomeLanguages = useMemo(() => {
-    const primary = ['All', 'Tamil', 'Hindi', 'Telugu'];
-    const mapByVal = new Map(dynamicLanguageFilters.map((f) => [f.value.toLowerCase(), f]));
-    const primaryItems = primary.map((val) => {
-      const found = mapByVal.get(val.toLowerCase());
-      return found || { label: val === 'All' ? 'All' : val, value: val, count: 0 };
-    });
-    const extraItems = dynamicLanguageFilters.filter(
-      (f) => !primary.some((p) => p.toLowerCase() === f.value.toLowerCase())
-    );
-    return { primaryItems, extraItems };
-  }, [dynamicLanguageFilters]);
-
   return (
-    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 overflow-x-clip font-sans text-slate-100 pb-8 box-border">
-      {/* 1. COMPACT SEARCH-FIRST HEADER (HOME vs EXPLORE) */}
-      {isHomeMode ? (
-        <header className="pt-4 sm:pt-6 pb-3 max-w-3xl mx-auto">
-          <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight text-center line-clamp-2">
-            {translate('hero.title', lang)}
-          </h1>
-
-          {/* Search Bar immediately below 2-line hero (English + Japanese/Romaji alias search + Recent Searches) */}
-          <div className="mt-3.5 relative">
-            <div className="relative flex items-center">
-              <Search className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none shrink-0" />
-              <input
-                type="text"
-                value={effectiveSearch}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setTimeout(() => setIsSearchFocused(false), 160)}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Search English or Japanese title..."
-                aria-label="Search dubbed anime"
-                className="w-full h-11 sm:h-12 bg-[#131926] border border-white/15 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-xl pl-10 pr-10 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
-              />
-              {effectiveSearch && (
-                <button
-                  type="button"
-                  onClick={() => handleSearchChange('')}
-                  aria-label="Clear search query"
-                  className="absolute right-3 text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Recent Searches Tray */}
-            {isSearchFocused && recentSearches.length > 0 && (
-              <div
-                data-testid="recent-searches-bar"
-                className="mt-2 p-2.5 rounded-xl bg-[#101624] border border-white/15 shadow-xl space-y-2"
-              >
-                <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1">
-                  <span className="inline-flex items-center gap-1 font-semibold">
-                    <Clock className="w-3 h-3 text-purple-400" />
-                    Recent Searches
-                  </span>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => setRecentSearches(clearRecentSearches(userId))}
-                    className="text-neutral-400 hover:text-rose-300 font-semibold cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {recentSearches.map((term) => (
-                    <div
-                      key={`recent_home_${term}`}
-                      className="inline-flex items-center rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-200 overflow-hidden"
-                    >
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => {
-                          handleSearchChange(term);
-                          setIsSearchFocused(false);
-                        }}
-                        className="px-2.5 py-1 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-                      >
-                        {term}
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Remove recent search ${term}`}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => setRecentSearches(removeRecentSearch(term, userId))}
-                        className="px-1.5 py-1 text-neutral-500 hover:text-rose-300 hover:bg-white/10 transition-colors cursor-pointer"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Quick Language Buttons: All, Tamil, Hindi, Telugu, More */}
-          <div className="mt-3 flex items-center justify-center gap-1.5 flex-wrap">
-            {quickHomeLanguages.primaryItems.map((item) => {
-              const active = selectedLanguage.toLowerCase() === item.value.toLowerCase();
-              return (
-                <button
-                  key={`home_lang_${item.value}`}
-                  type="button"
-                  onClick={() => setSelectedLanguage(item.value)}
-                  className={`min-h-[36px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
-                    active
-                      ? 'bg-purple-600 text-white border border-purple-400/60'
-                      : 'bg-[#131926] text-neutral-300 border border-white/10 hover:border-white/25 hover:text-white'
-                  }`}
-                >
-                  {item.value === 'All' ? 'All' : item.value}
-                </button>
-              );
-            })}
-
-            {quickHomeLanguages.extraItems.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowMoreHomeLanguages((prev) => !prev)}
-                aria-expanded={showMoreHomeLanguages}
-                className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap border ${
-                  showMoreHomeLanguages ||
-                  quickHomeLanguages.extraItems.some(
-                    (f) => f.value.toLowerCase() === selectedLanguage.toLowerCase()
-                  )
-                    ? 'bg-purple-600/25 text-purple-200 border-purple-400/50'
-                    : 'bg-[#131926] text-neutral-300 border-white/10 hover:border-white/25 hover:text-white'
-                }`}
-              >
-                <span>More</span>
-                {showMoreHomeLanguages ? (
-                  <ChevronUp className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                )}
-              </button>
-            )}
-
-            {onOpenExplore && (
-              <button
-                type="button"
-                onClick={onOpenExplore}
-                className="min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-semibold text-purple-300 hover:text-white bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span>Filters</span>
-              </button>
-            )}
-          </div>
-
-          {showMoreHomeLanguages && quickHomeLanguages.extraItems.length > 0 && (
-            <div className="mt-2 flex items-center justify-center gap-1.5 flex-wrap">
-              {quickHomeLanguages.extraItems.map((item) => {
-                const active = selectedLanguage.toLowerCase() === item.value.toLowerCase();
-                return (
-                  <button
-                    key={`home_extra_lang_${item.value}`}
-                    type="button"
-                    onClick={() => setSelectedLanguage(item.value)}
-                    className={`min-h-[34px] px-3 py-1 rounded-xl text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                      active
-                        ? 'bg-purple-600 text-white border border-purple-400/60'
-                        : 'bg-[#131926] text-neutral-300 border border-white/10 hover:text-white'
-                    }`}
-                  >
-                    {item.value}
-                    {item.count > 0 ? ` (${item.count})` : ''}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </header>
-      ) : (
-        /* EXPLORE MODE: Full Catalog Header + Random Anime + OTT Coverage + Full Filters */
-        <div className="pt-5 sm:pt-7 space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
-                <Compass className="w-6 h-6 text-purple-400 shrink-0" />
+    <div
+      aria-label="Indian Dubbed Anime Discovery Catalog"
+      className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 overflow-x-clip font-sans text-slate-100 pb-8 box-border"
+    >
+      {/* 1. UNIFIED EXPLORE CATALOG HEADER + RANDOM ANIME + OTT COVERAGE + FULL FILTERS */}
+      <div className="pt-5 sm:pt-7 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
+              <Compass className="w-6 h-6 text-purple-400 shrink-0" />
                 <span>Explore Dubbed Anime</span>
               </h1>
               <p className="text-xs sm:text-sm text-neutral-400 mt-1">
@@ -852,8 +668,6 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
               <input
                 type="text"
                 value={effectiveSearch}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setTimeout(() => setIsSearchFocused(false), 160)}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder="Search by English/Japanese title, alias (e.g. Shingeki no Kyojin, JJK), studio, genre..."
                 className="w-full h-11 bg-[#131926] border border-white/15 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-xl pl-10 pr-10 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
@@ -965,10 +779,8 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             onSelectAnime={(a) => onSelectAnime(a as any)}
           />
         </div>
-      )}
 
-      {/* 4. FILTER & SORT DROPDOWNS GRID (Shown in Explore mode, or hidden cleanly on Homepage) */}
-      {!isHomeMode && (
+      {/* 4. FILTER & SORT DROPDOWNS GRID */}
       <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3">
         
         {/* Render Dropdowns */}
@@ -1017,10 +829,8 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </div>
         </div>
       </div>
-      )}
 
-      {/* 4.5 ADVANCED SMART FILTER ENGINE (Explore mode only) */}
-      {!isHomeMode && (
+      {/* 4.5 ADVANCED SMART FILTER ENGINE */}
       <div className="mt-3 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button
@@ -1182,7 +992,6 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </div>
         )}
       </div>
-      )}
 
       {/* 6. FOR YOU METADATA BANNER */}
       {feedView === 'foryou' && (
@@ -1200,7 +1009,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       )}
 
       {/* 7. Catalog List Grid with Server-Side Pagination */}
-      <div ref={gridTopRef} className={`${isHomeMode ? 'pt-3 sm:pt-4' : 'pt-6 sm:pt-8'}`}>
+      <div ref={gridTopRef} className="pt-6 sm:pt-8">
         {/* 1. GRID HEADER ROW */}
         <div className="flex items-center justify-between mb-3.5">
           <div className="flex items-center space-x-1.5 text-xs">

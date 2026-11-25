@@ -2,9 +2,9 @@ import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense, laz
 import { motion, AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
 import { CatalogView } from './components/CatalogView';
-import { Bookmark, ShieldCheck, Star, Heart, Tv, Database, Frown, Loader2, LogOut, ShieldAlert } from 'lucide-react';
+import { ShieldCheck, Loader2, LogOut, ShieldAlert } from 'lucide-react';
 import { cloudflareApi } from './services/cloudflareApi';
-import { getCloudflareUrl, CLOUDFLARE_API_URL } from './config/cloudflare';
+import { getCloudflareUrl } from './config/cloudflare';
 import { AniDubLogo } from './components/AniDubLogo';
 import { useUser, useAuth, useClerk, SignIn, getClerkSessionToken } from './lib/clerk';
 import { isAuthorizedClerkAdmin } from './utils/auth';
@@ -77,7 +77,7 @@ const CompareAnimeModal = lazy(() => import('./components/CompareAnimeModal').th
 
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('explore');
   const [selectedSeoLanguage, setSelectedSeoLanguage] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     const parsed = parseLanguageFromPath(window.location.pathname);
@@ -288,14 +288,14 @@ export default function App() {
   );
 
   const handleNavigateTab = useCallback((nextTab: string) => {
-    setActiveTab(nextTab);
-    if (nextTab !== 'language') {
+    const resolvedTab = nextTab === 'home' ? 'explore' : nextTab;
+    setActiveTab(resolvedTab);
+    if (resolvedTab !== 'language') {
       setSelectedSeoLanguage(null);
       if (typeof window !== 'undefined') {
         const pathByTab: Record<string, string> = {
-          home: '/',
-          explore: '/explore',
-          catalog: '/explore',
+          explore: '/',
+          catalog: '/',
           watchlist: '/watchlist',
           schedule: '/schedule',
           chat: '/chat',
@@ -476,8 +476,11 @@ export default function App() {
       } else {
         setIsPasswordModalOpen(true);
       }
-    } else if (pathname === '/explore' || pathname === '/catalog') {
+    } else if (pathname === '/explore' || pathname === '/catalog' || pathname === '/home') {
       setActiveTab('explore');
+      if (pathname === '/home' && typeof window !== 'undefined') {
+        window.history.replaceState(null, '', '/');
+      }
     } else if (pathname === '/watchlist' || pathname === '/library') {
       setActiveTab('watchlist');
     } else if (pathname === '/schedule') {
@@ -491,12 +494,12 @@ export default function App() {
     } else if (pathname === '/compare') {
       setIsCompareOpen(true);
     } else if (pathname === '/dub-radar' || pathname === '/radar') {
-      setActiveTab('home');
+      setActiveTab('explore');
       if (typeof window !== 'undefined') {
         window.history.replaceState(null, '', '/');
       }
     } else if (pathname === '/dub-requests' || pathname === '/requests') {
-      setActiveTab('home');
+      setActiveTab('explore');
       if (typeof window !== 'undefined') {
         window.history.replaceState(null, '', '/');
       }
@@ -539,7 +542,7 @@ export default function App() {
         setSelectedSeoLanguage(null);
         if (pathname === '/admin' && isAdminAuthenticated) {
           setActiveTab('admin');
-        } else if (pathname === '/explore' || pathname === '/catalog') {
+        } else if (pathname === '/explore' || pathname === '/catalog' || pathname === '/home') {
           setActiveTab('explore');
         } else if (pathname === '/watchlist' || pathname === '/library') {
           setActiveTab('watchlist');
@@ -552,12 +555,12 @@ export default function App() {
         } else if (pathname === '/feedback') {
           setActiveTab('feedback');
         } else if (pathname === '/dub-radar' || pathname === '/radar') {
-          setActiveTab('home');
+          setActiveTab('explore');
           if (typeof window !== 'undefined') {
             window.history.replaceState(null, '', '/');
           }
         } else if (pathname === '/dub-requests' || pathname === '/requests') {
-          setActiveTab('home');
+          setActiveTab('explore');
           if (typeof window !== 'undefined') {
             window.history.replaceState(null, '', '/');
           }
@@ -570,7 +573,7 @@ export default function App() {
         } else if (pathname === '/profile') {
           setActiveTab('profile');
         } else if (pathname === '/') {
-          setActiveTab('home');
+          setActiveTab('explore');
         }
       }
     };
@@ -816,7 +819,7 @@ export default function App() {
       setIsServerClerkAdmin(false);
       setIsAdminAuthenticated(false);
       if (activeTab === 'admin') {
-        setActiveTab('home');
+        setActiveTab('explore');
       }
       return;
     }
@@ -851,7 +854,7 @@ export default function App() {
         setIsServerClerkAdmin(false);
         setIsAdminAuthenticated(false);
         setAdminAuthError(`Backend Error: ${backendError}`);
-        if (activeTab === 'admin') setActiveTab('home');
+        if (activeTab === 'admin') setActiveTab('explore');
       } catch (err: any) {
         if (!cancelled) {
           setAdminAuthError(`Backend Error: ${err?.message || 'Unable to verify Clerk Admin session.'}`);
@@ -907,7 +910,7 @@ export default function App() {
     } catch {}
 
     setIsAdminAuthenticated(false);
-    setActiveTab('home');
+    setActiveTab('explore');
   };
 
   const recentlyViewedIds = React.useMemo(
@@ -1020,7 +1023,7 @@ export default function App() {
             if (activeTab !== 'admin') {
               handleNavigateTab('admin');
             } else {
-              handleNavigateTab('home');
+              handleNavigateTab('explore');
             }
           }
         }}
@@ -1082,7 +1085,7 @@ export default function App() {
               }
             }}
             onLogout={handleAdminLogout}
-            onNavigateHome={() => setActiveTab('home')}
+            onNavigateHome={() => handleNavigateTab('explore')}
           />
         </Suspense>
       )}
@@ -1091,7 +1094,7 @@ export default function App() {
       <main className="flex-grow w-full max-w-full overflow-x-clip pt-4 sm:pt-6 pb-24 sm:pb-16 transition-all duration-500 box-border">
         <AnimatePresence mode="wait">
           <motion.div
-            key={`page_view_${activeTab}_${activeTab === 'home' ? feedView : ''}`}
+            key={`page_view_${activeTab}_${activeTab === 'explore' ? feedView : ''}`}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
@@ -1099,7 +1102,7 @@ export default function App() {
             className="w-full min-w-0 max-w-full overflow-x-clip"
           >
             {/* FOR YOU HEADER METADATA BLOCK (WHEN FORYOU FEED ACTIVE) */}
-            {feedView === 'foryou' && (activeTab === 'home' || activeTab === 'catalog') && (
+            {feedView === 'foryou' && (activeTab === 'explore' || activeTab === 'catalog') && (
               <div className="w-full max-w-5xl mx-auto px-4 mb-6">
                 <div className="p-5 rounded-3xl bg-primary-theme/5 border border-primary-theme/10 flex items-center justify-between">
                   <div>
@@ -1110,10 +1113,10 @@ export default function App() {
               </div>
             )}
 
-            {/* MAIN CATALOG & EXPLORE VIEW */}
-            {(activeTab === 'home' || activeTab === 'explore' || activeTab === 'catalog') && feedView !== 'foryou' && (
+            {/* MAIN EXPLORE CATALOG VIEW */}
+            {(activeTab === 'explore' || activeTab === 'catalog') && feedView !== 'foryou' && (
               <CatalogView
-                mode={activeTab === 'explore' || activeTab === 'catalog' ? 'explore' : 'home'}
+                mode="explore"
                 catalogList={catalogList}
                 fullCatalogIndex={effectiveFullCatalog}
                 onSelectAnime={(anime) => {
@@ -1146,7 +1149,7 @@ export default function App() {
             )}
 
             {/* INTERACTIVE RECOMMENDATION SYSTEM (FOR YOU / MATCHMAKER) */}
-            {(activeTab === 'recommendations' || activeTab === 'foryou' || ((activeTab === 'home' || activeTab === 'catalog') && feedView === 'foryou')) && (
+            {(activeTab === 'recommendations' || activeTab === 'foryou' || ((activeTab === 'explore' || activeTab === 'catalog') && feedView === 'foryou')) && (
               <Suspense fallback={<ViewLoadingFallback />}>
                 <RecommendationSystem
                   catalogList={effectiveFullCatalog}
@@ -1157,7 +1160,7 @@ export default function App() {
                   watchlist={watchlist}
                   onToggleWatchlist={handleToggleWatchlist}
                   onNavigateCatalog={() => {
-                    handleNavigateTab('home');
+                    handleNavigateTab('explore');
                     setFeedView('library');
                   }}
                   mySubscriptions={mySubscriptions}
@@ -1177,7 +1180,7 @@ export default function App() {
                     addToRecentlyViewed(anime);
                   }}
                   onToggleWatchlist={handleToggleWatchlist}
-                  onNavigateToCatalog={() => handleNavigateTab('home')}
+                  onNavigateToCatalog={() => handleNavigateTab('explore')}
                   onOpenCreateCollection={() => setIsCollectionOpen(true)}
                   onOpenCompare={() => handleOpenCompare(null)}
                   isSignedIn={Boolean(isSignedIn)}
@@ -1219,7 +1222,7 @@ export default function App() {
                   }}
                   onToggleWatchlist={handleToggleWatchlist}
                   onOpenCreateCollection={() => setIsCollectionOpen(true)}
-                  onNavigateToCatalog={() => setActiveTab('home')}
+                  onNavigateToCatalog={() => handleNavigateTab('explore')}
                 />
               </Suspense>
             )}
@@ -1233,7 +1236,7 @@ export default function App() {
                     handleOpenAnime(anime);
                     addToRecentlyViewed(anime);
                   }}
-                  onNavigateHome={() => setActiveTab('home')}
+                  onNavigateHome={() => handleNavigateTab('explore')}
                 />
               </Suspense>
             )}
@@ -1253,7 +1256,7 @@ export default function App() {
                   onToggleLike={handleToggleLike}
                   onToggleUpvote={handleToggleUpvote}
                   onNavigateLanguage={handleNavigateLanguage}
-                  onNavigateHome={() => handleNavigateTab('home')}
+                  onNavigateHome={() => handleNavigateTab('explore')}
                 />
               </Suspense>
             )}
@@ -1262,7 +1265,7 @@ export default function App() {
             {activeTab === 'chat' && (
               <Suspense fallback={<ViewLoadingFallback />}>
                 <CommunityChatView
-                  onNavigateToCatalog={() => handleNavigateTab('home')}
+                  onNavigateToCatalog={() => handleNavigateTab('explore')}
                   onSelectAnime={(anime) => {
                     handleOpenAnime(anime);
                     addToRecentlyViewed(anime);
@@ -1289,7 +1292,7 @@ export default function App() {
               <Suspense fallback={<ViewLoadingFallback />}>
                 <LegalPage
                   page={activeTab === 'copyright' ? 'copyright' : 'privacy'}
-                  onNavigateHome={() => handleNavigateTab('home')}
+                  onNavigateHome={() => handleNavigateTab('explore')}
                   onSwitchLegalPage={(nextPage) => handleNavigateTab(nextPage)}
                   onOpenFeedback={() => handleNavigateTab('feedback')}
                 />

@@ -1144,7 +1144,8 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 broadcast_day = CASE WHEN ? = 1 THEN ? ELSE broadcast_day END,
                 broadcast_time = CASE WHEN ? = 1 THEN ? ELSE broadcast_time END,
                 season_episode_count = CASE WHEN ? = 1 THEN ? ELSE season_episode_count END,
-                official_source_url = CASE WHEN ? = 1 THEN ? ELSE official_source_url END
+                official_source_url = CASE WHEN ? = 1 THEN ? ELSE official_source_url END,
+                last_verified_at = COALESCE(?, last_verified_at)
               WHERE id = ? OR slug = ?`
             )
               .bind(
@@ -1181,6 +1182,11 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 updatedSeasonEpisodeCount,
                 hasOfficialSourceUpdate ? 1 : 0,
                 updatedOfficialSourceUrl,
+                body.last_verified_at !== undefined
+                  ? String(body.last_verified_at || '').trim().slice(0, 40) || null
+                  : (resolvedUpdateLanguages || normalizedPlatformUpdate || updatedEpisodes !== null
+                      ? new Date().toISOString().slice(0, 10)
+                      : null),
                 id,
                 id
               )
@@ -1270,7 +1276,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               ? String(body.last_verified_at || '').trim().slice(0, 40)
               : new Date().toISOString().slice(0, 10);
 
-          if (hasFranchiseUpdate || resolvedUpdateLanguages || normalizedPlatformUpdate || updatedEpisodes !== null) {
+          if (hasFranchiseUpdate) {
             try {
               await env.DB.prepare(
                 `UPDATE anime SET

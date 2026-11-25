@@ -79,6 +79,7 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     '0008_add_anime_metadata_fields.sql',
     '0009_sync_canonical_airing_status.sql',
     '0010_add_dub_radar_and_requests.sql',
+    '0011_p0_p2_upgrades.sql',
   ]);
 
   const db = new DatabaseSync(':memory:');
@@ -95,6 +96,7 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
 
   for (const requiredTable of [
     'anime',
+    'anime_follows',
     'analytics_events',
     'analytics_pageviews',
     'analytics_sessions',
@@ -104,8 +106,10 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     'dub_radar',
     'dub_request_votes',
     'dub_requests',
+    'dub_updates',
     'episodes',
     'feedback',
+    'in_app_alerts',
     'reports',
     'reviews',
     'user_ratings',

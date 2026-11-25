@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useUser } from '../lib/clerk';
 import {
-  Home,
   Compass,
   Bookmark,
   Calendar,
@@ -86,7 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       logoClickCountRef.current = 0;
     }, 1600);
 
-    setActiveTab('home');
+    setActiveTab('explore');
     if (setFeedView) setFeedView('library');
   };
 
@@ -96,7 +95,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     if (setFeedView && feed) setFeedView(feed);
   };
 
-  const isHomeActive = activeTab === 'home';
   const isExploreActive = activeTab === 'explore' || activeTab === 'catalog';
   const isScheduleActive = activeTab === 'schedule';
   const isLibraryActive = activeTab === 'watchlist' || activeTab === 'library';
@@ -111,7 +109,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     activeTab === 'admin';
 
   const primaryDesktopItems = [
-    { id: 'home', label: 'Home', icon: Home, active: isHomeActive, onClick: () => navigate('home', 'library') },
     { id: 'explore', label: 'Explore', icon: Compass, active: isExploreActive, onClick: () => navigate('explore', 'library') },
     { id: 'schedule', label: 'Schedule', icon: Calendar, active: isScheduleActive, onClick: () => navigate('schedule') },
     {
@@ -133,7 +130,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   const primaryMobileTabs = [
-    { id: 'home', label: 'Home', icon: Home, active: isHomeActive, onClick: () => navigate('home', 'library') },
     { id: 'explore', label: 'Explore', icon: Compass, active: isExploreActive, onClick: () => navigate('explore', 'library') },
     { id: 'schedule', label: 'Schedule', icon: Calendar, active: isScheduleActive, onClick: () => navigate('schedule') },
     {
@@ -414,12 +410,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </nav>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR (5 Clear Predictable Destinations) */}
-      <div
+      {/* MOBILE BOTTOM NAVIGATION BAR (4 Clear Predictable Destinations) */}
+      <nav
+        aria-label="Mobile primary navigation"
         className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#090d16]/95 backdrop-blur-xl border-t border-white/10"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <div className="grid grid-cols-5 h-16 px-1">
+        <div className="grid grid-cols-4 h-16 px-1">
           {primaryMobileTabs.map((item) => {
             const Icon = item.icon;
             return (
@@ -429,7 +426,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={item.onClick}
                 aria-current={item.active ? 'page' : undefined}
                 aria-label={item.label}
-                className={`relative flex flex-col items-center justify-center gap-1 min-h-[44px] rounded-xl transition-colors cursor-pointer ${
+                className={`relative flex flex-col items-center justify-center gap-1 min-w-[44px] min-h-[44px] rounded-xl transition-colors cursor-pointer ${
                   item.active ? 'text-purple-300' : 'text-neutral-400 hover:text-neutral-200'
                 }`}
               >
@@ -446,7 +443,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             );
           })}
         </div>
-      </div>
+      </nav>
     </>
   );
 };

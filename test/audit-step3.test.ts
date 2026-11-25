@@ -27,6 +27,7 @@ import {
   setSpoilerProtectionEnabled,
   containsSpoilerContent,
 } from '../src/utils/watchProgress';
+import { getScopedStorageKey } from '../src/utils/accountIsolation';
 import {
   BLOCKED_CHAT_USERS_STORAGE_KEY,
   getBlockedChatUsers,
@@ -205,7 +206,7 @@ test('Step 3.3 Watch Progress & Spoiler Protection: local persistence, D1 /api/p
     assert.equal(fetched?.season, 2);
     assert.equal(fetched?.episode, 8);
     assert.equal(Object.keys(getAllWatchProgress()).length, 1);
-    assert.ok((globalThis as any).localStorage.getItem(WATCH_PROGRESS_STORAGE_KEY));
+    assert.ok((globalThis as any).localStorage.getItem(getScopedStorageKey(WATCH_PROGRESS_STORAGE_KEY)));
 
     clearAnimeWatchProgress(42);
     assert.equal(getAnimeWatchProgress(42), null);
@@ -214,7 +215,10 @@ test('Step 3.3 Watch Progress & Spoiler Protection: local persistence, D1 /api/p
     assert.equal(getSpoilerProtectionEnabled(), false);
     setSpoilerProtectionEnabled(true);
     assert.equal(getSpoilerProtectionEnabled(), true);
-    assert.equal((globalThis as any).localStorage.getItem(SPOILER_PROTECTION_STORAGE_KEY), 'true');
+    assert.equal(
+      (globalThis as any).localStorage.getItem(getScopedStorageKey(SPOILER_PROTECTION_STORAGE_KEY)),
+      'true'
+    );
 
     assert.equal(containsSpoilerContent('[SPOILER] Gojo gets sealed in Shibuya'), true);
     assert.equal(containsSpoilerContent('Great Hindi dubbing by the voice cast!'), false);

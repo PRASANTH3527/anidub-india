@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { motion } from 'motion/react';
 import Image from './OptimizedImage';
 import {
   CheckCircle2,
@@ -9,6 +9,7 @@ import {
   Bookmark,
   Star,
   MoreVertical,
+  Flame,
 } from 'lucide-react';
 import { useToast } from './Toast';
 import { ReportModal } from './ReportModal';
@@ -18,10 +19,11 @@ import {
   removeAnimeFromOffline,
   subscribeOfflineChanges,
 } from '../utils/offlineStorage';
-import { parsePlatformList } from '../utils/dataNormalization';
 import { normalizeCanonicalOttList } from '../utils/ottHub';
 import { isCanonicalAiring } from '../utils/animeStatus';
 import { normalizeLanguageName, isExcludedLanguage } from '../utils/languages';
+
+const TRENDING_VOTE_THRESHOLD = 100;
 
 export interface AnimeCardData {
   id: number;
@@ -109,10 +111,13 @@ function extractCompactLanguageCodes(rawLangs: unknown): string[] {
 const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   anime,
   onSelect,
+  index,
   priority = false,
   isBookmarked = false,
   onToggleBookmark,
+  isTrending = false,
 }) => {
+  const isPriorityCard = Boolean(priority || (typeof index === 'number' && index < 4));
   const toast = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -171,6 +176,12 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   const isAiring = isCanonicalAiring(anime);
   const numericRating = Number(anime.rating);
   const hasRating = Number.isFinite(numericRating) && numericRating > 0;
+  const animeType = anime.type || 'TV Series';
+  const isMovie = animeType.toLowerCase() === 'movie';
+  const displayTypeLabel = isMovie ? 'Movie' : animeType;
+  const showTrendingBadge = Boolean(
+    isTrending && Number(anime.popularity || 0) >= TRENDING_VOTE_THRESHOLD
+  );
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -214,6 +225,12 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 
   return (
     <>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        className="h-full"
+      >
       <article
         onClick={() => onSelect(anime)}
         role="button"
@@ -231,7 +248,11 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
           <Image
             src={posterSrc}
             alt={anime.title}
-            priority={priority}
+            width={300}
+            height={400}
+            priority={isPriorityCard}
+            loading={isPriorityCard ? "eager" : "lazy"}
+            sizes="(max-width: 640px) 48vw, (max-width: 1024px) 24vw, 220px"
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           />
 
@@ -249,6 +270,12 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
             {isAiring && (
               <span className="px-2 py-0.5 rounded-lg bg-emerald-600/90 text-white text-[10px] font-bold uppercase tracking-wide shadow-sm">
                 Airing
+              </span>
+            )}
+            {showTrendingBadge && (
+              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-orange-600/90 text-white text-[10px] font-bold uppercase tracking-wide shadow-sm">
+                <Flame className="w-2.5 h-2.5" />
+                Hot
               </span>
             )}
           </div>
@@ -355,24 +382,26 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
               {primaryPlatformLabel}
               {extraPlatformCount > 0 ? ` +${extraPlatformCount}` : ''}
             </span>
-            {anime.year ? (
+            {isMovie ? (
+              <span className="text-neutral-400 font-semibold shrink-0">{displayTypeLabel}</span>
+            ) : anime.year ? (
               <span className="text-neutral-500 font-medium tabular-nums shrink-0">{anime.year}</span>
-            ) : null}
+            ) : (
+              <span className="text-neutral-500 font-medium shrink-0">{displayTypeLabel}</span>
+            )}
           </div>
         </div>
       </article>
+      </motion.div>
 
-      {showReportModal &&
-        typeof document !== 'undefined' &&
-        createPortal(
-          <ReportModal
-            isOpen={showReportModal}
-            onClose={() => setShowReportModal(false)}
-            animeId={anime.id}
-            animeTitle={anime.title}
-          />,
-          document.body
-        )}
+      {showReportModal && (
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          animeId={anime.id}
+          animeTitle={anime.title}
+        />
+      )}
     </>
   );
 };
