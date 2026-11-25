@@ -473,5 +473,199 @@ export async function handleUserRoutes(ctx: RouteContext): Promise<Response | nu
     });
   }
 
+  // 5. GET / POST / DELETE /api/follows (P2 #5 Authenticated Anime Follow System)
+  if (path === '/api/follows') {
+    const session = await getAuth(request, env);
+    if (!session.userId) {
+      return jsonResponse(
+        { error: session.error || 'Unauthorized: Active Clerk user session required' },
+        401,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    }
+
+    if (method === 'GET') {
+      if (!env.DB) {
+        return jsonResponse({ success: true, follows: [], data: [] }, 200, request, { 'Cache-Control': 'no-store' });
+      }
+      try {
+        const res = await env.DB.prepare(
+          `SELECT f.anime_id, f.created_at, a.title, a.slug, a.cover_image, a.languages, a.platform
+           FROM anime_follows f
+           LEFT JOIN anime a ON a.id = f.anime_id
+           WHERE f.user_id = ?
+           ORDER BY f.id DESC`
+        )
+          .bind(session.userId)
+          .all();
+        const rows = res.results || [];
+        const followIds = rows
+          .map((r) => Number(r.anime_id))
+          .filter((id) => Number.isInteger(id) && id > 0);
+        return jsonResponse({ success: true, follows: followIds, data: rows }, 200, request, {
+          'Cache-Control': 'no-store',
+        });
+      } catch (err) {
+        if (getErrorMessage(err).toLowerCase().includes('no such table')) {
+          return jsonResponse({ success: true, follows: [], data: [] }, 200, request, { 'Cache-Control': 'no-store' });
+        }
+        return jsonResponse({ success: false, error: getErrorMessage(err), follows: [], data: [] }, 500, request, {
+          'Cache-Control': 'no-store',
+        });
+      }
+    }
+
+    if (method === 'POST') {
+      try {
+        const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+        const animeId = Number(
+          body.anime_id ?? body.animeId ?? url.searchParams.get('anime_id') ?? url.searchParams.get('animeId')
+        );
+        if (!Number.isInteger(animeId) || animeId <= 0) {
+          return jsonResponse({ success: false, error: 'Valid positive anime_id is required' }, 400, request, {
+            'Cache-Control': 'no-store',
+          });
+        }
+        if (env.DB) {
+          await env.DB.prepare(
+            `INSERT INTO anime_follows (user_id, anime_id) VALUES (?, ?)
+             ON CONFLICT(user_id, anime_id) DO NOTHING`
+          )
+            .bind(session.userId, animeId)
+            .run();
+        }
+        return jsonResponse({ success: true, following: true, anime_id: animeId }, 200, request, {
+          'Cache-Control': 'no-store',
+        });
+      } catch (err) {
+        return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request, {
+          'Cache-Control': 'no-store',
+        });
+      }
+    }
+
+    if (method === 'DELETE') {
+      try {
+        const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+        const animeId = Number(
+          url.searchParams.get('anime_id') ??
+            url.searchParams.get('animeId') ??
+            body.anime_id ??
+            body.animeId
+        );
+        if (!Number.isInteger(animeId) || animeId <= 0) {
+          return jsonResponse({ success: false, error: 'Valid positive anime_id is required' }, 400, request, {
+            'Cache-Control': 'no-store',
+          });
+        }
+        if (env.DB) {
+          await env.DB.prepare('DELETE FROM anime_follows WHERE user_id = ? AND anime_id = ?')
+            .bind(session.userId, animeId)
+            .run();
+        }
+        return jsonResponse({ success: true, following: false, anime_id: animeId }, 200, request, {
+          'Cache-Control': 'no-store',
+        });
+      } catch (err) {
+        return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request, {
+          'Cache-Control': 'no-store',
+        });
+      }
+    }
+
+    return jsonResponse({ error: 'Method not allowed for /api/follows' }, 405, request, {
+      'Cache-Control': 'no-store',
+    });
+  }
+
+  // 6. GET /api/alerts & POST /api/alerts/read (P2 #5 Real D1 In-App Alerts Inbox)
+  if (path === '/api/alerts' && method === 'GET') {
+    const session = await getAuth(request, env);
+    if (!session.userId) {
+      return jsonResponse(
+        { error: session.error || 'Unauthorized: Active Clerk user session required' },
+        401,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    }
+    if (!env.DB) {
+      return jsonResponse({ success: true, alerts: [], unreadCount: 0 }, 200, request, {
+        'Cache-Control': 'no-store',
+      });
+    }
+    try {
+      const res = await env.DB.prepare(
+        `SELECT id, anime_id, anime_title, update_type, message, is_read, created_at
+         FROM in_app_alerts
+         WHERE user_id = ?
+         ORDER BY id DESC
+         LIMIT 30`
+      )
+        .bind(session.userId)
+        .all();
+      const alerts = (res.results || []).map((row) => ({
+        id: Number(row.id),
+        anime_id: row.anime_id ? Number(row.anime_id) : null,
+        anime_title: String(row.anime_title || ''),
+        update_type: String(row.update_type || 'update'),
+        message: String(row.message || ''),
+        is_read: Boolean(row.is_read),
+        created_at: String(row.created_at || ''),
+      }));
+      const unreadCount = alerts.filter((a) => !a.is_read).length;
+      return jsonResponse({ success: true, alerts, unreadCount }, 200, request, {
+        'Cache-Control': 'no-store',
+      });
+    } catch (err) {
+      if (getErrorMessage(err).toLowerCase().includes('no such table')) {
+        return jsonResponse({ success: true, alerts: [], unreadCount: 0 }, 200, request, {
+          'Cache-Control': 'no-store',
+        });
+      }
+      return jsonResponse({ success: false, error: getErrorMessage(err), alerts: [], unreadCount: 0 }, 500, request, {
+        'Cache-Control': 'no-store',
+      });
+    }
+  }
+
+  if (path === '/api/alerts/read' && method === 'POST') {
+    const session = await getAuth(request, env);
+    if (!session.userId) {
+      return jsonResponse(
+        { error: session.error || 'Unauthorized: Active Clerk user session required' },
+        401,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    }
+    if (!env.DB) {
+      return jsonResponse({ success: true }, 200, request, { 'Cache-Control': 'no-store' });
+    }
+    try {
+      const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+      const alertId = Number(body.alertId ?? body.id);
+      if (Number.isInteger(alertId) && alertId > 0) {
+        await env.DB.prepare('UPDATE in_app_alerts SET is_read = 1 WHERE id = ? AND user_id = ?')
+          .bind(alertId, session.userId)
+          .run();
+      } else {
+        await env.DB.prepare('UPDATE in_app_alerts SET is_read = 1 WHERE user_id = ?')
+          .bind(session.userId)
+          .run();
+      }
+      return jsonResponse({ success: true }, 200, request, { 'Cache-Control': 'no-store' });
+    } catch (err) {
+      if (getErrorMessage(err).toLowerCase().includes('no such table')) {
+        return jsonResponse({ success: true }, 200, request, { 'Cache-Control': 'no-store' });
+      }
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request, {
+        'Cache-Control': 'no-store',
+      });
+    }
+  }
+
   return null;
 }
+

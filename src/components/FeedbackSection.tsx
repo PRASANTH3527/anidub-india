@@ -1,5 +1,15 @@
 import React, { useState, useRef } from 'react';
-import { Plus, Send, CheckCircle2, Upload, X, Image as ImageIcon } from 'lucide-react';
+import {
+  Plus,
+  Send,
+  CheckCircle2,
+  Upload,
+  X,
+  Image as ImageIcon,
+  AlertCircle,
+  RefreshCw,
+  MessageSquare,
+} from 'lucide-react';
 import { useToast } from './Toast';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { AniDubLogo } from './AniDubLogo';
@@ -8,11 +18,15 @@ import { PRIMARY_SEO_LANGUAGES, getLanguageSlug } from '../utils/seoMeta';
 export interface FeedbackSectionProps {
   onSubmitDub?: () => void;
   onNavigateLanguage?: (language: string) => void;
+  onOpenFeedbackPage?: () => void;
+  mode?: 'full' | 'footer';
 }
 
 export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   onSubmitDub,
-  onNavigateLanguage
+  onNavigateLanguage,
+  onOpenFeedbackPage,
+  mode = 'full',
 }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -24,19 +38,20 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
 
-  // Safe top-level toast hook access
   const toast = useToast();
-
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageFile = (file: File) => {
+    setFileError(null);
     if (!file.type.startsWith('image/')) {
-      alert('Please upload a valid image file (PNG, JPG, WebP, etc.).');
+      setFileError('Please upload a valid image file (PNG, JPG, WebP, etc.).');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      alert('Screenshot size must be under 5MB.');
+      setFileError('Screenshot size must be under 5MB.');
       return;
     }
 
@@ -84,39 +99,38 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
     setScreenshotFile(null);
     setFileName('');
     setFileSize('');
+    setFileError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitFeedbackRequest = async () => {
     if (!message.trim()) return;
     setIsSubmitting(true);
+    setSubmitError(null);
 
     try {
-      const formData = new FormData();
-      formData.append('name', name.trim() || 'Anonymous');
-      formData.append('email', email.trim() || '');
-      formData.append('message', message.trim());
-      formData.append('feedback', message.trim());
-      if (screenshotFile) {
-        formData.append('screenshot', screenshotFile);
-      } else if (screenshot) {
-        formData.append('screenshot_data', screenshot);
-      }
-
       const payload = {
         name: name.trim() || 'Anonymous',
         email: email.trim() || '',
-        message: message.trim(),
         feedback: message.trim(),
-        screenshot: screenshot || null
+        ...(screenshot ? { screenshot } : {}),
       };
 
-      await cloudflareApi.submitFeedback(payload);
+      const res = await cloudflareApi.submitFeedback(payload);
 
-      setIsSubmitting(false);
+      if (!res || !res.success) {
+        const errMsg =
+          res?.error || 'Could not submit your feedback right now. Your message has been kept below so you can retry.';
+        setSubmitError(errMsg);
+        if (toast?.error) {
+          toast.error('Submission Failed', errMsg);
+        }
+        return;
+      }
+
+      // ONLY clear inputs and show success state on verified 2xx response
       setSubmitted(true);
       setName('');
       setEmail('');
@@ -124,223 +138,303 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
       handleRemoveImage();
 
       if (toast?.success) {
-        toast.success('Feedback Submitted!', 'Thank you for helping us improve regional anime dubs.');
+        toast.success('Feedback Submitted', 'Thank you for helping us improve regional anime dubs.');
       }
 
-      setTimeout(() => setSubmitted(false), 4000);
-    } catch (err) {
-      console.warn('Feedback submission error:', err);
+      setTimeout(() => setSubmitted(false), 5000);
+    } catch (err: any) {
+      const errMsg =
+        err?.message || 'Network error while sending feedback. Your message has been preserved — please retry.';
+      setSubmitError(errMsg);
+      if (toast?.error) {
+        toast.error('Submission Failed', errMsg);
+      }
+    } finally {
       setIsSubmitting(false);
-      setSubmitted(true);
-      setName('');
-      setEmail('');
-      setMessage('');
-      handleRemoveImage();
-      setTimeout(() => setSubmitted(false), 4000);
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitFeedbackRequest();
+  };
+
+  // Compact footer mode for main catalog/discovery views (keeps full feedback form dedicated to /feedback)
+  if (mode === 'footer') {
+    return (
+      <footer className="w-full max-w-6xl mx-auto px-3 sm:px-6 pt-8 pb-6 mt-10 border-t border-white/10 font-sans">
+        <div className="rounded-2xl bg-[#0d111a]/90 border border-white/10 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="space-y-1.5 max-w-xl">
+            <h3 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
+              Know a missing dub?
+            </h3>
+            <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed">
+              Submit verified Indian dub info with an official streaming link, or share feedback to help keep the directory accurate.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {onSubmitDub && (
+              <button
+                type="button"
+                onClick={onSubmitDub}
+                className="min-h-[42px] px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs sm:text-sm font-bold inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4 shrink-0" />
+                <span>Submit an Anime or Dub</span>
+              </button>
+            )}
+            {onOpenFeedbackPage && (
+              <button
+                type="button"
+                onClick={onOpenFeedbackPage}
+                className="min-h-[42px] px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-200 hover:text-white text-xs sm:text-sm font-semibold inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <MessageSquare className="w-4 h-4 shrink-0 text-purple-400" />
+                <span>Share Feedback</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Language Quick Links & Copyright */}
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+          <div className="flex items-center gap-3">
+            <AniDubLogo size="sm" showText={true} />
+            <span className="text-xs text-neutral-500 hidden sm:inline">•</span>
+            <span className="text-xs text-neutral-400">Official Indian Dubbed Anime Directory</span>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs">
+            {PRIMARY_SEO_LANGUAGES.map((lang) => (
+              <a
+                key={lang}
+                href={`/languages/${getLanguageSlug(lang)}`}
+                onClick={(e) => {
+                  if (onNavigateLanguage) {
+                    e.preventDefault();
+                    onNavigateLanguage(lang);
+                  }
+                }}
+                className="text-neutral-400 hover:text-purple-300 transition-colors font-medium"
+              >
+                {lang} Dubs
+              </a>
+            ))}
+          </div>
+        </div>
+
+        <p className="mt-5 pt-4 border-t border-white/5 text-center text-[11px] text-neutral-500">
+          © {new Date().getFullYear()} AniDub India. Informational directory linking exclusively to official legal streaming platforms.
+        </p>
+      </footer>
+    );
+  }
+
+  // Dedicated Full Feedback & Community Contribution Page
   return (
-    <section className="w-full max-w-2xl mx-auto overflow-x-clip bg-[#0c101a] py-8 px-3 sm:px-4 md:px-6 box-border font-sans">
-      
-      {/* 1) INTRO (centered) */}
+    <section className="w-full max-w-2xl mx-auto overflow-x-clip py-8 px-3 sm:px-4 md:px-6 box-border font-sans">
+      {/* 1) INTRO */}
       <div className="text-center px-2 sm:px-4">
-        <h3 className="text-[22px] font-[800] tracking-[-0.03em] text-white">
+        <h2 className="text-2xl font-extrabold tracking-tight text-white">
           Know a missing dub?
-        </h3>
-        <p className="mt-[12px] text-[13px] leading-[20px] text-[#94a3b8] max-w-full mx-auto">
-          Help us build the ultimate Indian anime directory by contributing new titles or regional audio info.
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-neutral-400 max-w-lg mx-auto">
+          Help keep AniDub India accurate by submitting new dubbed titles or sending us feedback and bug reports.
         </p>
       </div>
 
-      {/* 2) SUBMIT BUTTON (20px below paragraph) */}
-      <div className="mt-[20px] px-2 sm:px-4">
-        <button
-          type="button"
-          onClick={onSubmitDub}
-          className="w-full h-[64px] rounded-[24px] bg-gradient-to-r from-[#9d1df5] via-[#c026d3] to-[#e60088] shadow-[0_10px_40px_rgba(147,51,234,.45)] flex items-center justify-center gap-[12px] cursor-pointer active:scale-[0.98] transition-all group"
-        >
-          <div className="w-[32px] h-[32px] rounded-[10px] bg-[rgba(255,255,255,.2)] flex items-center justify-center group-hover:rotate-90 transition-transform">
-            <Plus className="w-[18px] h-[18px] text-white" />
-          </div>
-          <span className="text-[16px] font-bold text-white tracking-tight">Submit an Anime or Dub</span>
-        </button>
-      </div>
+      {/* 2) SUBMIT BUTTON */}
+      {onSubmitDub && (
+        <div className="mt-5 px-2 sm:px-4">
+          <button
+            type="button"
+            onClick={onSubmitDub}
+            className="w-full min-h-[48px] bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors active:scale-[0.99] cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>Submit an Anime or Dub</span>
+          </button>
+        </div>
+      )}
 
-      {/* 3) DIVIDER (20px below button) */}
-      <div className="mt-[20px] h-[16px] flex items-center justify-center gap-[16px]">
-        <div className="w-[32px] h-[1px] bg-[#2a2d3a]" />
-        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#9ca3af]">COMMUNITY DRIVEN</span>
-        <div className="w-[32px] h-[1px] bg-[#2a2d3a]" />
-      </div>
+      {/* 3) FEEDBACK FORM CARD */}
+      <div className="mt-8 w-full bg-[#131926] border border-[#242d46] rounded-2xl p-5 sm:p-6">
+        <div className="text-left mb-5">
+          <h3 className="text-lg font-extrabold text-white tracking-tight">
+            Share your feedback
+          </h3>
+          <p className="mt-1.5 text-xs text-neutral-400 leading-relaxed">
+            Report broken links, suggest missing features, or tell us how we can improve the directory.
+          </p>
+        </div>
 
-      {/* 4) FEEDBACK CARD (40px below divider) */}
-      <div className="mt-[40px] px-1 sm:px-4">
-        <div className="rounded-[24px] p-[24px] bg-[#0e1220] border border-[#202638] shadow-2xl text-left">
-          <div className="space-y-[4px]">
-            <h3 className="text-[18px] leading-[28px] font-bold text-white tracking-[-0.02em]">Share your feedback</h3>
-            <p className="text-[12px] leading-[16px] text-[#8b93a7]">Have a suggestion or spotted something? Let us know.</p>
-          </div>
-
-          {submitted ? (
-            <div className="mt-[20px] bg-emerald-950/40 border border-emerald-800/50 rounded-[16px] p-4 text-center space-y-2 animate-fadeIn">
-              <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-              <h4 className="font-bold text-sm text-white">Thank You for Your Feedback!</h4>
-              <p className="text-xs text-neutral-300">
-                Our database editors have received your submission and will verify the regional OTT licensing details.
-              </p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="mt-[20px] space-y-[16px]">
+        {submitError && (
+          <div
+            role="alert"
+            className="mb-5 p-4 rounded-xl bg-rose-500/10 border border-rose-500/35 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+          >
+            <div className="flex items-start gap-2.5 text-xs text-rose-200">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <div>
-                <label className="block text-[12px] font-medium leading-[16px] text-[#d1d5db] mb-[6px]">
-                  Your name or Insta ID (optional)
+                <p className="font-bold text-rose-300">Feedback could not be delivered</p>
+                <p className="text-rose-200/85 mt-0.5">{submitError}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={submitFeedbackRequest}
+              disabled={isSubmitting || !message.trim()}
+              className="px-3.5 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-200 text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
+              <span>Retry</span>
+            </button>
+          </div>
+        )}
+
+        {submitted ? (
+          <div className="py-10 text-center space-y-3" role="status">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center mx-auto text-emerald-400">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <h4 className="font-bold text-lg text-white">Feedback Received</h4>
+            <p className="text-xs text-neutral-400 max-w-sm mx-auto leading-relaxed">
+              Thank you! Your message has been saved and routed to the AniDub India moderation team.
+            </p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5 text-left">
+                <label className="text-xs font-semibold text-neutral-300 block">
+                  Your Name (optional)
                 </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. @animefan_india"
-                  className="w-full h-[38px] rounded-[16px] px-[16px] bg-[#141929] border border-[#2a3045] text-[12px] text-white placeholder-[#6b7280] focus:border-[#a855f7] focus:ring-3 focus:ring-[rgba(168,85,247,.25)] focus:outline-none transition-all"
+                  placeholder="Enter your name"
+                  className="w-full h-11 bg-[#0b0e18] border border-[#2a344d] focus:border-purple-500 rounded-xl px-3.5 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
                 />
               </div>
-
-              <div>
-                <label className="block text-[12px] font-medium leading-[16px] text-[#d1d5db] mb-[6px]">
-                  Email ID (optional)
+              <div className="space-y-1.5 text-left">
+                <label className="text-xs font-semibold text-neutral-300 block">
+                  Email (optional)
                 </label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. you@gmail.com"
-                  className="w-full h-[38px] rounded-[16px] px-[16px] bg-[#141929] border border-[#2a3045] text-[12px] text-white placeholder-[#6b7280] focus:border-[#a855f7] focus:ring-3 focus:ring-[rgba(168,85,247,.25)] focus:outline-none transition-all"
+                  placeholder="For follow-up replies"
+                  className="w-full h-11 bg-[#0b0e18] border border-[#2a344d] focus:border-purple-500 rounded-xl px-3.5 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
                 />
               </div>
+            </div>
 
-              <div>
-                <label className="block text-[12px] font-medium leading-[16px] text-[#d1d5db] mb-[6px]">
-                  Your feedback <span className="text-[#f43f5e]">*</span>
-                </label>
-                
-                {/* Unified Chat-Style Input Box */}
-                <div className="rounded-[16px] bg-[#141929] border border-[#2a3045] focus-within:border-[#a855f7] focus-within:ring-3 focus-within:ring-[rgba(168,85,247,.25)] transition-all overflow-hidden">
-                  <textarea
-                    required
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="What can we improve? Any missing dubs, bugs, or ideas..."
-                    className="w-full min-h-[72px] p-[14px] bg-transparent text-[12px] text-white placeholder-[#6b7280] focus:outline-none resize-none"
-                  />
+            <div className="space-y-1.5 text-left">
+              <label className="text-xs font-semibold text-neutral-300 block">
+                Your Message <span className="text-purple-400">*</span>
+              </label>
+              <textarea
+                rows={4}
+                required
+                value={message}
+                onChange={(e) => {
+                  setMessage(e.target.value);
+                  if (submitError) setSubmitError(null);
+                }}
+                placeholder="Tell us what needs fixing or how we can improve AniDub India..."
+                className="w-full bg-[#0b0e18] border border-[#2a344d] focus:border-purple-500 rounded-xl p-3.5 text-sm text-white placeholder-neutral-500 outline-none transition-colors resize-none leading-relaxed"
+              />
+            </div>
 
-                  {/* Hidden File Input */}
-                  <input 
-                    type="file"
-                    ref={fileInputRef}
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
-
-                  {/* Toolbar footer inside input box */}
-                  <div className="px-3 py-2 bg-[#101422] border-t border-[#23283b] flex items-center justify-between gap-2">
-                    {!screenshot ? (
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium text-neutral-400 hover:text-purple-300 hover:bg-purple-500/10 transition-all cursor-pointer"
-                        title="Attach screenshot"
-                      >
-                        <ImageIcon className="w-4 h-4 text-purple-400" />
-                        <span>Attach screenshot</span>
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-white/5 border border-white/10 min-w-0">
-                          <img 
-                            src={screenshot} 
-                            alt="Preview" 
-                            className="w-5 h-5 rounded object-cover shrink-0" 
-                          />
-                          <span className="text-[10px] text-neutral-200 truncate max-w-[140px]">
-                            {fileName || 'Screenshot.png'}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={handleRemoveImage}
-                            aria-label="Remove attached screenshot"
-                            className="w-4 h-4 rounded-full bg-white/10 hover:bg-red-500/30 text-neutral-300 hover:text-red-300 flex items-center justify-center transition-all cursor-pointer shrink-0"
-                            title="Remove image"
-                          >
-                            <X className="w-2.5 h-2.5" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    <span className="text-[10px] text-neutral-500">
-                      Optional
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-[24px]">
-                <button
-                  type="submit"
-                  disabled={!message.trim() || isSubmitting}
-                  className="w-full h-[36px] rounded-[14px] bg-gradient-to-r from-[#7e22ce] to-[#9333ea] shadow-[0_6px_16px_rgba(91,33,182,.35)] text-[12px] font-semibold text-white flex items-center justify-center gap-[8px] transition-all duration-300 hover:scale-[1.02] active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            {/* Optional Screenshot Upload */}
+            <div className="space-y-1.5 text-left">
+              <label className="text-xs font-semibold text-neutral-300 block">
+                Screenshot (optional, max 5MB)
+              </label>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                className="hidden"
+              />
+              {fileError && (
+                <p className="text-xs text-rose-400 font-medium">{fileError}</p>
+              )}
+              {!screenshot ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`w-full py-5 px-4 border border-dashed rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                    isDragging
+                      ? 'border-purple-400 bg-purple-500/10'
+                      : 'border-[#2a344d] bg-[#0b0e18]/60 hover:border-purple-500/50'
+                  }`}
                 >
-                  <span>{isSubmitting ? 'Submitting feedback...' : 'Submit feedback'}</span>
-                  <Send className="w-[14px] h-[14px]" />
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
+                  <Upload className="w-4 h-4 text-neutral-400" />
+                  <span className="text-xs text-neutral-300 font-medium">
+                    Click to attach or drag a screenshot here
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[#0b0e18] border border-purple-500/35">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <img
+                      src={screenshot}
+                      alt="Screenshot preview"
+                      className="w-10 h-10 rounded-lg object-cover border border-white/10 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        <span className="truncate">{fileName}</span>
+                      </p>
+                      <p className="text-[11px] text-neutral-400">{fileSize}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    aria-label="Remove screenshot"
+                    className="p-2 rounded-lg text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting || !message.trim()}
+              className="w-full min-h-[46px] bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {isSubmitting ? (
+                <span>Submitting...</span>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span>Send Feedback</span>
+                </>
+              )}
+            </button>
+          </form>
+        )}
       </div>
 
-      {/* 5) FOOTER (40px below card) */}
-      <footer className="mt-[40px] px-3 sm:px-[24px] text-center flex flex-col items-center gap-4">
-        <nav
-          aria-label="Regional Dubbed Anime Languages"
-          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-neutral-400"
-        >
-          {PRIMARY_SEO_LANGUAGES.map((langName, idx) => {
-            const slug = getLanguageSlug(langName);
-            return (
-              <React.Fragment key={langName}>
-                {idx > 0 && <span aria-hidden="true" className="text-neutral-600">·</span>}
-                <a
-                  href={`/dubbed-anime/${slug}`}
-                  onClick={(e) => {
-                    if (onNavigateLanguage) {
-                      e.preventDefault();
-                      onNavigateLanguage(langName);
-                    }
-                  }}
-                  className="hover:text-white underline-offset-4 hover:underline transition-colors whitespace-nowrap"
-                >
-                  {langName} Dubbed Anime
-                </a>
-              </React.Fragment>
-            );
-          })}
-        </nav>
-
-        <AniDubLogo variant="horizontal" size="sm" className="opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500" />
-        <p className="text-[11px] leading-[17px] text-[#94a3b8] max-w-xl">
-          © 2026 AniDub India — Indian Dubbed Anime Discovery &amp; Streaming Guide. AniDub India is an independent informational directory and does not host or stream video files. All anime titles, artwork, and trademarks belong to their respective studios and rights holders.
+      {/* Footer note */}
+      <div className="mt-8 pt-6 border-t border-white/10 text-center space-y-3">
+        <div className="flex justify-center">
+          <AniDubLogo size="sm" showText={true} />
+        </div>
+        <p className="text-xs text-neutral-500">
+          © {new Date().getFullYear()} AniDub India — Official Indian Dubbed Anime Directory
         </p>
-        <p className="text-[10px] leading-[16px] text-[#6b7280] max-w-xl">
-          Rights-holder attribution, DMCA/takedown requests, or privacy inquiries: contact{' '}
-          <a href="mailto:legal@anidub.in" className="text-purple-400 hover:text-purple-300 underline underline-offset-2">
-            legal@anidub.in
-          </a>
-          . No personal data is sold; see our Privacy &amp; Takedown Policy via email request.
-        </p>
-      </footer>
-
+      </div>
     </section>
   );
 };

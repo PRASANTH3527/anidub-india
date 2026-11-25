@@ -96,16 +96,54 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
     });
   }
 
+  // 2b. GET /api/dub-updates (P2 #2 Recent Verified Dub Updates Feed)
+  if (path === '/api/dub-updates' && method === 'GET') {
+    const rawLimit = parseInt(url.searchParams.get('limit') || '15', 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 50) : 15;
+    if (!env.DB) {
+      return jsonResponse({ success: true, updates: [], data: [] }, 200, request);
+    }
+    try {
+      const res = await env.DB.prepare(
+        'SELECT id, anime_id, anime_title, update_type, summary, created_at FROM dub_updates ORDER BY id DESC LIMIT ?'
+      )
+        .bind(limit)
+        .all();
+      const updates = res.results || [];
+      return jsonResponse({ success: true, count: updates.length, updates, data: updates }, 200, request, {
+        'Cache-Control': 'public, max-age=30',
+      });
+    } catch (err) {
+      const msg = getErrorMessage(err).toLowerCase();
+      if (msg.includes('no such table')) {
+        return jsonResponse({ success: true, count: 0, updates: [], data: [] }, 200, request);
+      }
+      return jsonResponse({ success: false, error: getErrorMessage(err), updates: [], data: [] }, 500, request);
+    }
+  }
+
   // 3. GET / POST /api/chat & /api/chat/messages
   if (path === '/api/chat' || path === '/api/chat/messages') {
     if (method === 'GET') {
       try {
         if (env.DB) {
+          const rawLimit = parseInt(url.searchParams.get('limit') || '50', 10);
+          const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 50;
+          const rawBeforeId = url.searchParams.get('beforeId') ?? url.searchParams.get('before_id');
+          const parsedBeforeId = rawBeforeId ? parseInt(rawBeforeId, 10) : NaN;
+          const beforeId = Number.isInteger(parsedBeforeId) && parsedBeforeId > 0 ? parsedBeforeId : null;
+          const fetchLimit = limit + 1;
+
           let list: Record<string, unknown>[] = [];
           try {
-            const res = await env.DB.prepare(
-              'SELECT id, user, text, timestamp, rating, language, isReview, clerk_user_id, avatar, created_at FROM chat_messages ORDER BY id ASC LIMIT 150'
-            ).all();
+            const stmt = beforeId
+              ? env.DB.prepare(
+                  'SELECT id, user, text, timestamp, rating, language, isReview, clerk_user_id, avatar, created_at FROM chat_messages WHERE id < ? ORDER BY id DESC LIMIT ?'
+                ).bind(beforeId, fetchLimit)
+              : env.DB.prepare(
+                  'SELECT id, user, text, timestamp, rating, language, isReview, clerk_user_id, avatar, created_at FROM chat_messages ORDER BY id DESC LIMIT ?'
+                ).bind(fetchLimit);
+            const res = await stmt.all();
             list = (res.results || []).map((m) => ({
               ...m,
               isReview: Boolean(m.isReview),
@@ -115,7 +153,13 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
             if (!errMsg.includes('no such column')) {
               throw projErr;
             }
-            const fallbackRes = await env.DB.prepare('SELECT * FROM chat_messages ORDER BY id ASC LIMIT 150').all();
+            const fallbackStmt = beforeId
+              ? env.DB.prepare('SELECT * FROM chat_messages WHERE id < ? ORDER BY id DESC LIMIT ?').bind(
+                  beforeId,
+                  fetchLimit
+                )
+              : env.DB.prepare('SELECT * FROM chat_messages ORDER BY id DESC LIMIT ?').bind(fetchLimit);
+            const fallbackRes = await fallbackStmt.all();
             list = (fallbackRes.results || []).map((m) => ({
               id: m.id,
               user: m.user || m.username || 'Anonymous Fan',
@@ -129,11 +173,36 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
             }));
           }
 
-          return jsonResponse({ success: true, count: list.length, messages: list, data: list }, 200, request);
+          const hasMore = list.length > limit;
+          const pageDescending = hasMore ? list.slice(0, limit) : list;
+          const chronological = [...pageDescending].reverse();
+          const oldestId = chronological.length > 0 ? Number(chronological[0].id) : null;
+          const nextBeforeId = hasMore && oldestId && Number.isFinite(oldestId) ? oldestId : null;
+
+          return jsonResponse(
+            {
+              success: true,
+              count: chronological.length,
+              hasMore,
+              nextBeforeId,
+              messages: chronological,
+              data: chronological,
+            },
+            200,
+            request
+          );
         }
-        return jsonResponse({ success: true, count: 0, messages: [], data: [] }, 200, request);
+        return jsonResponse(
+          { success: true, count: 0, hasMore: false, nextBeforeId: null, messages: [], data: [] },
+          200,
+          request
+        );
       } catch (err) {
-        return jsonResponse({ success: false, error: getErrorMessage(err), messages: [], data: [] }, 500, request);
+        return jsonResponse(
+          { success: false, error: getErrorMessage(err), hasMore: false, nextBeforeId: null, messages: [], data: [] },
+          500,
+          request
+        );
       }
     }
 

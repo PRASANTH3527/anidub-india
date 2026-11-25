@@ -487,7 +487,7 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
 
         <div className="flex items-center justify-between text-[9px] text-neutral-400 gap-2">
           <span className="truncate">
-            {parsePlatformList(anime.platform, undefined, undefined, { defaultFallback: ['Crunchyroll'] }).join(', ')}
+            {parsePlatformList(anime.platform, undefined, undefined, { defaultFallback: [] }).join(', ') || 'Not verified'}
           </span>
           <span className="font-bold text-purple-300 shrink-0">
             {currentEp ? `EP ${currentEp}` : 'TBA'}
@@ -558,7 +558,7 @@ const AiringAnimeCard: React.FC<AiringAnimeCardProps> = ({
             </span>
             <span>•</span>
             <span className="text-neutral-300">
-              {parsePlatformList(anime.platform, undefined, undefined, { defaultFallback: ['Crunchyroll'] }).join(', ')}
+              {parsePlatformList(anime.platform, undefined, undefined, { defaultFallback: [] }).join(', ') || 'Not verified'}
             </span>
           </div>
 

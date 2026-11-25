@@ -70,7 +70,7 @@ export const AnimeDNAProfile: React.FC<AnimeDNAProfileProps> = ({
   // Studio / Platform tally
   const platformMap: Record<string, number> = {};
   watchlist.forEach(anime => {
-    const plat = anime.platform || 'Crunchyroll';
+    const plat = anime.platform || 'Not verified';
     platformMap[plat] = (platformMap[plat] || 0) + 1;
   });
 

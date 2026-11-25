@@ -13,8 +13,11 @@ import {
 import {
   MAJOR_INDIAN_OTTS,
   computeOttHubStats,
+  calculateSubscriptionCoverage,
   type OttHubItemStat,
 } from '../utils/ottHub';
+
+const COVERAGE_LANGUAGES = ['All', 'Tamil', 'Hindi', 'Telugu', 'Malayalam', 'Kannada'] as const;
 
 export interface OttHubSectionProps {
   catalogIndex: any[];
@@ -26,6 +29,7 @@ export interface OttHubSectionProps {
   onToggleMySubscriptionsEnabled: (enabled: boolean) => void;
   onClearSubscriptions: () => void;
   onSelectAnime?: (anime: any) => void;
+  activeLanguage?: string;
 }
 
 export const OttHubSection: React.FC<OttHubSectionProps> = ({
@@ -38,12 +42,21 @@ export const OttHubSection: React.FC<OttHubSectionProps> = ({
   onToggleMySubscriptionsEnabled,
   onClearSubscriptions,
   onSelectAnime,
+  activeLanguage = 'All',
 }) => {
   const [isHubExpanded, setIsHubExpanded] = useState(false);
+  const [coverageLanguage, setCoverageLanguage] = useState<string>(() =>
+    COVERAGE_LANGUAGES.includes(activeLanguage as any) ? activeLanguage : 'Tamil'
+  );
 
   const hubStats: OttHubItemStat[] = useMemo(
     () => computeOttHubStats(catalogIndex),
     [catalogIndex]
+  );
+
+  const coverage = useMemo(
+    () => calculateSubscriptionCoverage(catalogIndex, mySubscriptions, coverageLanguage),
+    [catalogIndex, mySubscriptions, coverageLanguage]
   );
 
   return (
@@ -61,7 +74,7 @@ export const OttHubSection: React.FC<OttHubSectionProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-xs sm:text-sm font-extrabold text-white tracking-tight">
-                  My Subscriptions &amp; OTT Hub
+                  My Subscriptions &amp; OTT Coverage
                 </h2>
                 {mySubscriptionsEnabled && mySubscriptions.length > 0 && (
                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
@@ -70,7 +83,7 @@ export const OttHubSection: React.FC<OttHubSectionProps> = ({
                 )}
               </div>
               <p className="text-[11px] text-neutral-400">
-                Select the legal OTT apps you subscribe to filter catalog &amp; recommendations
+                Select your legal OTT apps to filter titles and calculate dub coverage
               </p>
             </div>
           </div>
@@ -80,7 +93,6 @@ export const OttHubSection: React.FC<OttHubSectionProps> = ({
               type="button"
               onClick={() => {
                 if (!mySubscriptionsEnabled && mySubscriptions.length === 0) {
-                  // Auto-open hub or prompt selection by toggling with helpful default hint
                   onToggleMySubscriptionsEnabled(true);
                 } else {
                   onToggleMySubscriptionsEnabled(!mySubscriptionsEnabled);
@@ -162,6 +174,65 @@ export const OttHubSection: React.FC<OttHubSectionProps> = ({
             Pick one or more OTT platforms above to filter the catalog by your subscriptions.
           </p>
         )}
+
+        {/* P2 #5: Subscription Coverage Calculator */}
+        <div
+          data-testid="subscription-coverage-calculator"
+          className="mt-3.5 pt-3.5 border-t border-white/10 space-y-2.5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] font-bold text-neutral-300">
+              Subscription Coverage Calculator
+            </span>
+            <div className="flex items-center gap-1 flex-wrap">
+              {COVERAGE_LANGUAGES.map((lang) => (
+                <button
+                  key={`cov_lang_${lang}`}
+                  type="button"
+                  onClick={() => setCoverageLanguage(lang)}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer ${
+                    coverageLanguage === lang
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-[#0e1422] text-neutral-400 hover:text-white border border-white/10'
+                  }`}
+                >
+                  {lang}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {mySubscriptions.length === 0 ? (
+            <p className="text-xs text-neutral-400">
+              Select your OTT subscriptions above to see what percentage of{' '}
+              <strong className="text-neutral-200">{coverage.language}</strong> dubbed anime they cover
+              {coverage.totalCount > 0 ? ` (${coverage.totalCount} indexed titles)` : ''}.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-neutral-200">
+                  Your{' '}
+                  <strong className="text-white tabular-nums">
+                    {mySubscriptions.length} selected {mySubscriptions.length === 1 ? 'OTT' : 'OTTs'}
+                  </strong>{' '}
+                  cover{' '}
+                  <strong className="text-emerald-300 tabular-nums">{coverage.percentage}%</strong>{' '}
+                  <span className="text-neutral-400 tabular-nums">
+                    ({coverage.coveredCount} of {coverage.totalCount})
+                  </span>{' '}
+                  of <strong className="text-white">{coverage.language}</strong> dubbed anime
+                </span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-purple-500 to-emerald-400 transition-all duration-300"
+                  style={{ width: `${Math.min(100, Math.max(0, coverage.percentage))}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 2. OTT INTELLIGENCE HUB BRANDED CARDS */}

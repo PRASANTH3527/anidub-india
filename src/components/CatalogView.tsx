@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react';
 import { motion } from 'motion/react';
 import { 
+  AlertTriangle,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Compass,
   Dices, 
-  Layers, 
+  RefreshCw,
   Sparkles, 
   Loader2,
   Search,
@@ -14,14 +16,15 @@ import {
   Star,
   CheckCircle2,
   Tv,
+  WifiOff,
   X
 } from 'lucide-react';
 import { calculatePagination, filterAndSortCatalog, getVisiblePageNumbers } from '../utils/pagination';
 import { AnimeCard } from './AnimeCard';
-import { AnimatedStats } from './AnimatedStats';
 import { OttHubSection } from './OttHubSection';
+import { LatestDubUpdatesCard } from './LatestDubUpdatesCard';
 import { cloudflareApi, type CatalogMeta, type CatalogSummary } from '../services/cloudflareApi';
-import { calculateCatalogStats, computeDynamicLanguageFilters } from '../utils/languages';
+import { computeDynamicLanguageFilters } from '../utils/languages';
 import {
   applySmartFilters,
   buildActiveFilterChips,
@@ -69,6 +72,9 @@ export interface CatalogViewProps {
   onToggleUpvote?: (animeId: number, upvoted: boolean, count: number) => void;
   onOpenRoulette: () => void;
   onOpenCollection: () => void;
+  onOpenExplore?: () => void;
+  onOpenRecommendations?: () => void;
+  mode?: 'home' | 'explore';
   feedView?: string;
   recentlyViewed?: any[];
   onClearRecentlyViewed?: () => void;
@@ -130,7 +136,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   onToggleLike,
   onToggleUpvote,
   onOpenRoulette,
-  onOpenCollection,
+  onOpenExplore,
+  onOpenRecommendations,
+  mode = 'home',
   feedView = 'library',
   recentlyViewed = [],
   onClearRecentlyViewed,
@@ -142,6 +150,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   onToggleMySubscriptionsEnabled,
   onClearSubscriptions,
 }) => {
+  const isHomeMode = mode === 'home';
   const lang = uiLanguage || 'en';
   const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(catalogList || []);
   const [internalSearch, setInternalSearch] = useState(searchQuery || '');
@@ -201,7 +210,10 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   const [fullyDubbedOnly, setFullyDubbedOnly] = useState<boolean>(false);
   const [freeLegalOnly, setFreeLegalOnly] = useState<boolean>(false);
   const [isSmartFilterOpen, setIsSmartFilterOpen] = useState<boolean>(false);
+  const [showMoreHomeLanguages, setShowMoreHomeLanguages] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
+  const [catalogStatus, setCatalogStatus] = useState<'loading' | 'success' | 'empty' | 'error' | 'offline'>('loading');
+  const [catalogError, setCatalogError] = useState<string | null>(null);
 
   // Server-Side Pagination States
   const [currentPage, setCurrentPage] = useState(1);
@@ -249,6 +261,8 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
 
   const fetchCatalogPage = useCallback(async (pageToFetch: number) => {
     setLoading(true);
+    setCatalogStatus('loading');
+    setCatalogError(null);
     try {
       const response = await cloudflareApi.fetchCatalog({
         page: pageToFetch,
@@ -267,66 +281,46 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         platforms: activeSubscriptionPlatforms,
       });
 
-      const data = response?.data || [];
-      const meta = response?.meta;
+      if (!response.ok) {
+        const nextStatus = response.status === 'offline' ? 'offline' : 'error';
+        setCatalogStatus(nextStatus);
+        setCatalogError(
+          response.error ||
+            (nextStatus === 'offline'
+              ? 'You appear to be offline. Reconnect and tap Retry.'
+              : 'Unable to load the anime catalog right now. Please try again.')
+        );
+        setRawAnimeList([]);
+        return;
+      }
 
-      if (response?.summary) {
+      const data = response.data || [];
+      const meta = response.meta;
+
+      if (response.summary) {
         setCatalogSummary(response.summary);
       }
 
-      const fallbackSource =
-        fullCatalogIndex && fullCatalogIndex.length > 0
-          ? fullCatalogIndex
-          : (catalogList || []);
-
       if (data.length > 0 || (meta && meta.totalItems > 0)) {
-        const approvedOnly = data.filter((item: any) =>
-          item.status !== 'pending' && item.submissionStatus !== 'pending'
+        const approvedOnly = data.filter(
+          (item: any) => item.status !== 'pending' && item.submissionStatus !== 'pending'
         );
         const normalized = approvedOnly.map((item: any) => ({
           ...item,
           cover_image: proxyUrl(item.cover_image || item.cover_url),
           banner_image: proxyUrl(item.banner_image || item.cover_image || item.cover_url),
           languages: item.languages || '',
-          platform: item.platform || 'Crunchyroll',
-          type: item.type || 'TV Series'
+          platform: item.platform || '',
+          type: item.type || 'TV Series',
         }));
         setRawAnimeList(normalized);
+        setCatalogStatus(normalized.length === 0 ? 'empty' : 'success');
         if (meta) {
           setPaginationMeta(meta);
         }
-      } else if (!meta && fallbackSource.length > 0) {
-        // Offline / preloaded fallback if backend API was unavailable
-        const baseFiltered = filterAndSortCatalog(fallbackSource, {
-          language: selectedLanguage,
-          genre: selectedGenre === 'All Genres' ? 'All' : selectedGenre,
-          platform: selectedPlatform === 'All Platforms' ? 'All' : selectedPlatform,
-          type: selectedType === 'All Types' ? 'All' : selectedType,
-          status: selectedStatus === 'All Status' ? 'All' : selectedStatus,
-          search: debouncedSearch,
-          sort: selectedSort,
-        });
-        const smartFiltered = applySmartFilters(baseFiltered, {
-          episodeLength,
-          minRating,
-          fullyDubbedOnly,
-          freeLegalOnly,
-          selectedLanguage,
-          mySubscriptions,
-          mySubscriptionsEnabled,
-        });
-        const calc = calculatePagination(smartFiltered.length, pageToFetch, CATALOG_PAGE_SIZE);
-        setRawAnimeList(smartFiltered.slice(calc.offset, calc.offset + calc.limit));
-        setPaginationMeta({
-          currentPage: calc.page,
-          totalPages: calc.totalPages,
-          totalItems: calc.total,
-          limit: calc.limit,
-          hasNextPage: calc.hasNextPage,
-          hasPrevPage: calc.hasPrevPage,
-        });
       } else {
         setRawAnimeList([]);
+        setCatalogStatus('empty');
         if (meta) {
           setPaginationMeta(meta);
         } else {
@@ -340,15 +334,20 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           });
         }
       }
-    } catch (err) {
+    } catch (err: any) {
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
       console.warn('Failed fetching paginated catalog from Cloudflare:', err);
+      setCatalogStatus(offline ? 'offline' : 'error');
+      setCatalogError(
+        offline
+          ? 'You appear to be offline. Reconnect and try again.'
+          : err?.message || 'Unable to connect to the catalog API. Please retry.'
+      );
       setRawAnimeList([]);
     } finally {
       setLoading(false);
     }
   }, [
-    catalogList,
-    fullCatalogIndex,
     debouncedSearch,
     selectedLanguage,
     selectedGenre,
@@ -361,8 +360,6 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     fullyDubbedOnly,
     freeLegalOnly,
     activeSubscriptionPlatforms,
-    mySubscriptions,
-    mySubscriptionsEnabled,
   ]);
 
   useEffect(() => {
@@ -492,180 +489,247 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     rangeStart + Math.max(0, displayedAnime.length - 1)
   );
 
+  const quickHomeLanguages = useMemo(() => {
+    const primary = ['All', 'Tamil', 'Hindi', 'Telugu'];
+    const mapByVal = new Map(dynamicLanguageFilters.map((f) => [f.value.toLowerCase(), f]));
+    const primaryItems = primary.map((val) => {
+      const found = mapByVal.get(val.toLowerCase());
+      return found || { label: val === 'All' ? 'All' : val, value: val, count: 0 };
+    });
+    const extraItems = dynamicLanguageFilters.filter(
+      (f) => !primary.some((p) => p.toLowerCase() === f.value.toLowerCase())
+    );
+    return { primaryItems, extraItems };
+  }, [dynamicLanguageFilters]);
+
   return (
-    <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 overflow-x-clip font-['Inter',sans-serif] text-slate-100 pb-10 box-border">
-      
-      {/* 1. HERO SECTION */}
-      <div className="text-center pt-6 sm:pt-8 px-2 sm:px-4 max-w-3xl mx-auto">
-        
-        {/* Top Badge Pill */}
-        <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-purple-900/40 border border-purple-500/30 text-purple-200 text-[11px] font-medium shadow-sm mb-5 sm:mb-6">
-          <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-          <span>Indian Dubbed Anime Discovery &amp; Streaming Guide</span>
-        </div>
-
-        <h1 className="text-xl sm:text-3xl font-extrabold text-[#FF4500] mb-2 tracking-wide uppercase">
-          ANIDUB INDIA
-        </h1>
-        <h2 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white mb-4 leading-tight">
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-[#FF4500]">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 overflow-x-clip font-sans text-slate-100 pb-8 box-border">
+      {/* 1. COMPACT SEARCH-FIRST HEADER (HOME vs EXPLORE) */}
+      {isHomeMode ? (
+        <header className="pt-4 sm:pt-6 pb-3 max-w-3xl mx-auto">
+          <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight text-center line-clamp-2">
             {translate('hero.title', lang)}
-          </span>
-        </h2>
+          </h1>
 
-        {/* Hero Subtitle */}
-        <p className="text-xs sm:text-sm text-[#94a3b8] leading-relaxed max-w-xl mx-auto mb-6 sm:mb-8">
-          {translate('hero.subtitle', lang)}
-        </p>
+          {/* Search Bar immediately below 2-line hero */}
+          <div className="mt-3.5 relative flex items-center">
+            <Search className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none shrink-0" />
+            <input
+              type="text"
+              value={effectiveSearch}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search anime, language, or OTT..."
+              aria-label="Search dubbed anime"
+              className="w-full h-11 sm:h-12 bg-[#131926] border border-white/15 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-xl pl-10 pr-10 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
+            />
+            {effectiveSearch && (
+              <button
+                type="button"
+                onClick={() => handleSearchChange('')}
+                aria-label="Clear search query"
+                className="absolute right-3 text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
 
-        {/* Action Buttons */}
-        <div className="max-w-md mx-auto w-full space-y-3">
-          {/* CTA Button 1: Surprise Me Roulette */}
-          <button
-            onClick={onOpenRoulette}
-            className="w-full flex items-center justify-center gap-3 rounded-full bg-gradient-to-r from-[#f59e0b] via-[#ea580c] to-[#9333ea] px-5 py-3.5 shadow-[0_6px_25px_rgba(234,88,12,0.4)] transition-all duration-300 hover:scale-[1.02] active:scale-95 cursor-pointer"
-          >
-            <Dices className="w-5 h-5 text-white" />
-            <span className="text-[15px] font-extrabold text-white">{translate('surpriseMe', lang)}</span>
-            <span className="bg-black/30 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase text-white inline-flex items-center gap-1 shrink-0">
-              🎲 {translate('randomPick', lang)}
-            </span>
-          </button>
+          {/* Quick Language Buttons: All, Tamil, Hindi, Telugu, More */}
+          <div className="mt-3 flex items-center justify-center gap-1.5 flex-wrap">
+            {quickHomeLanguages.primaryItems.map((item) => {
+              const active = selectedLanguage.toLowerCase() === item.value.toLowerCase();
+              return (
+                <button
+                  key={`home_lang_${item.value}`}
+                  type="button"
+                  onClick={() => setSelectedLanguage(item.value)}
+                  className={`min-h-[36px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                    active
+                      ? 'bg-purple-600 text-white border border-purple-400/60'
+                      : 'bg-[#131926] text-neutral-300 border border-white/10 hover:border-white/25 hover:text-white'
+                  }`}
+                >
+                  {item.value === 'All' ? 'All' : item.value}
+                </button>
+              );
+            })}
 
-          {/* CTA Button 2: Create Collection */}
-          <button
-            onClick={onOpenCollection}
-            className="w-full bg-[#111524] border border-[#262d47] hover:border-purple-500/40 rounded-full px-5 py-2.5 inline-flex items-center justify-center gap-2.5 transition-all duration-300 hover:scale-[1.02] active:scale-95 cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-white" />
-              <span className="text-[13px] font-bold text-white">{translate('createCollection', lang)}</span>
+            {quickHomeLanguages.extraItems.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowMoreHomeLanguages((prev) => !prev)}
+                aria-expanded={showMoreHomeLanguages}
+                className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap border ${
+                  showMoreHomeLanguages ||
+                  quickHomeLanguages.extraItems.some(
+                    (f) => f.value.toLowerCase() === selectedLanguage.toLowerCase()
+                  )
+                    ? 'bg-purple-600/25 text-purple-200 border-purple-400/50'
+                    : 'bg-[#131926] text-neutral-300 border-white/10 hover:border-white/25 hover:text-white'
+                }`}
+              >
+                <span>More</span>
+                {showMoreHomeLanguages ? (
+                  <ChevronUp className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+
+            {onOpenExplore && (
+              <button
+                type="button"
+                onClick={onOpenExplore}
+                className="min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-semibold text-purple-300 hover:text-white bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>Filters</span>
+              </button>
+            )}
+          </div>
+
+          {showMoreHomeLanguages && quickHomeLanguages.extraItems.length > 0 && (
+            <div className="mt-2 flex items-center justify-center gap-1.5 flex-wrap">
+              {quickHomeLanguages.extraItems.map((item) => {
+                const active = selectedLanguage.toLowerCase() === item.value.toLowerCase();
+                return (
+                  <button
+                    key={`home_extra_lang_${item.value}`}
+                    type="button"
+                    onClick={() => setSelectedLanguage(item.value)}
+                    className={`min-h-[34px] px-3 py-1 rounded-xl text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                      active
+                        ? 'bg-purple-600 text-white border border-purple-400/60'
+                        : 'bg-[#131926] text-neutral-300 border border-white/10 hover:text-white'
+                    }`}
+                  >
+                    {item.value}
+                    {item.count > 0 ? ` (${item.count})` : ''}
+                  </button>
+                );
+              })}
             </div>
-            <span className="bg-[#1e1436] border border-[#7e22ce] text-[#c084fc] text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full tracking-wide">
-              SHAREABLE
-            </span>
-          </button>
-        </div>
-      </div>
+          )}
+        </header>
+      ) : (
+        /* EXPLORE MODE: Full Catalog Header + Random Anime + OTT Coverage + Full Filters */
+        <div className="pt-5 sm:pt-7 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
+                <Compass className="w-6 h-6 text-purple-400 shrink-0" />
+                <span>Explore Dubbed Anime</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-neutral-400 mt-1">
+                Filter verified Indian anime dubs by language, OTT platform, genre, and status.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              <button
+                type="button"
+                onClick={onOpenRoulette}
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-purple-600 hover:from-amber-500 hover:to-purple-500 text-white text-xs font-bold inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <Dices className="w-4 h-4 shrink-0" />
+                <span>Random Anime</span>
+              </button>
+              {onOpenRecommendations && (
+                <button
+                  type="button"
+                  onClick={onOpenRecommendations}
+                  className="min-h-[40px] px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-neutral-200 hover:text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span>Find Your Next Anime</span>
+                </button>
+              )}
+            </div>
+          </div>
 
-      {/* 2. ANIMATED STATS CARDS ROW (DYNAMIC REAL STATS) */}
-      <div className="mt-8">
-        {(() => {
-          const stats = catalogSummary
-            ? catalogSummary
-            : calculateCatalogStats(statsSourceList);
-
-          return (
-            <AnimatedStats
-              animeList={statsSourceList}
-              totalAnime={stats.totalAnime}
-              totalVotes={stats.totalVotes}
-              totalLanguages={stats.totalLanguages}
-              languagesList={stats.languagesList}
-              languagesString={stats.languagesString}
+          {/* Dedicated Explore Search Box */}
+          <div className="relative flex items-center">
+            <Search className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none shrink-0" />
+            <input
+              type="text"
+              value={effectiveSearch}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search anime by title, synopsis, studio, genre..."
+              className="w-full h-11 bg-[#131926] border border-white/15 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-xl pl-10 pr-10 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
             />
-          );
-        })()}
-      </div>
+            {effectiveSearch && (
+              <button
+                type="button"
+                onClick={() => handleSearchChange('')}
+                aria-label="Clear search query"
+                className="absolute right-3 text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
 
-      {/* 2.5 RECENTLY VIEWED ROW */}
-      {recentlyViewed && recentlyViewed.length > 0 && (
-        <div className="mt-2 px-1">
-          <Suspense fallback={null}>
-            <RecentlyViewedRow
-              items={recentlyViewed}
-              onSelectAnime={(a) => onSelectAnime(a as any)}
-              onClear={onClearRecentlyViewed || (() => {})}
-              onRemoveItem={onRemoveRecentlyViewedItem}
-              watchlist={watchlist}
-              onToggleWatchlist={onToggleWatchlist}
-            />
-          </Suspense>
+          {/* Regional Dub Audio Filter Strip */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-[11px] font-bold uppercase text-neutral-400 tracking-wider">
+                Regional Dub Audio
+              </span>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+              {dynamicLanguageFilters.map((langItem) => {
+                const active =
+                  selectedLanguage.toLowerCase() === langItem.value.toLowerCase() ||
+                  (selectedLanguage === 'All' && langItem.value === 'All');
+                return (
+                  <button
+                    key={langItem.value}
+                    type="button"
+                    onClick={() => setSelectedLanguage(langItem.value)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+                      active
+                        ? 'bg-purple-600 text-white border border-purple-400/60'
+                        : 'bg-[#131926] border border-white/10 hover:border-white/25 text-neutral-300 hover:text-white'
+                    }`}
+                  >
+                    <span>{langItem.label}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold tabular-nums ${
+                        active ? 'bg-black/30 text-white' : 'bg-black/40 text-neutral-400'
+                      }`}
+                    >
+                      {langItem.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* OTT Intelligence Hub & Subscription Coverage Calculator */}
+          <OttHubSection
+            catalogIndex={fullCatalogIndex && fullCatalogIndex.length > 0 ? fullCatalogIndex : statsSourceList}
+            selectedPlatform={selectedPlatform}
+            activeLanguage={selectedLanguage}
+            onSelectPlatform={(platformName) => {
+              setSelectedPlatform(platformName);
+              if (platformName !== 'All Platforms') {
+                gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }
+            }}
+            mySubscriptions={mySubscriptions}
+            mySubscriptionsEnabled={mySubscriptionsEnabled}
+            onToggleSubscriptionPlatform={(id) => onToggleSubscriptionPlatform?.(id)}
+            onToggleMySubscriptionsEnabled={(enabled) => onToggleMySubscriptionsEnabled?.(enabled)}
+            onClearSubscriptions={() => onClearSubscriptions?.()}
+            onSelectAnime={(a) => onSelectAnime(a as any)}
+          />
         </div>
       )}
 
-      {/* 2.7 OTT INTELLIGENCE HUB & MY SUBSCRIPTIONS QUICK FILTER */}
-      <OttHubSection
-        catalogIndex={fullCatalogIndex && fullCatalogIndex.length > 0 ? fullCatalogIndex : statsSourceList}
-        selectedPlatform={selectedPlatform}
-        onSelectPlatform={(platformName) => {
-          setSelectedPlatform(platformName);
-          if (platformName !== 'All Platforms') {
-            gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        }}
-        mySubscriptions={mySubscriptions}
-        mySubscriptionsEnabled={mySubscriptionsEnabled}
-        onToggleSubscriptionPlatform={(id) => onToggleSubscriptionPlatform?.(id)}
-        onToggleMySubscriptionsEnabled={(enabled) => onToggleMySubscriptionsEnabled?.(enabled)}
-        onClearSubscriptions={() => onClearSubscriptions?.()}
-        onSelectAnime={(a) => onSelectAnime(a as any)}
-      />
-
-      {/* 2.8 DEDICATED ANIME SEARCH BOX */}
-      <div className="px-0.5 sm:px-2 md:px-0 mt-6">
-        <div className="relative flex items-center">
-          <Search className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none shrink-0" />
-          <input
-            type="text"
-            value={effectiveSearch}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Search anime by title, synopsis, studio, genre..."
-            className="w-full bg-[#131926]/90 border border-neutral-700/80 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-2xl pl-10 pr-10 py-2.5 sm:py-3 text-xs sm:text-sm text-white placeholder-neutral-500 outline-none transition-all shadow-md shadow-black/40"
-          />
-          {effectiveSearch && (
-            <button
-              type="button"
-              onClick={() => handleSearchChange('')}
-              aria-label="Clear search query"
-              className="absolute right-3 text-neutral-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
-              title="Clear search"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-        {effectiveSearch && (
-          <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1 pt-1.5 font-mono">
-            <span>Filtering for: "{effectiveSearch}"</span>
-            <span className="text-purple-300 font-bold">{paginationMeta.totalItems} matching titles</span>
-          </div>
-        )}
-      </div>
-
-      {/* 3. REGIONAL DUB AUDIO FILTER PILLS */}
-      <div className="px-0.5 sm:px-2 md:px-0 mt-6">
-        <div className="flex items-center gap-1.5 mb-2.5">
-          <Sparkles className="w-3.5 h-3.5 text-[#a855f7]" />
-          <span className="text-[11px] font-extrabold uppercase text-[#94a3b8] tracking-wider">
-            REGIONAL DUB AUDIO
-          </span>
-        </div>
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1.5 pt-0.5">
-          {dynamicLanguageFilters.map((lang) => {
-            const active = selectedLanguage.toLowerCase() === lang.value.toLowerCase() || (selectedLanguage === 'All' && lang.value === 'All');
-            return (
-              <button
-                key={lang.value}
-                onClick={() => setSelectedLanguage(lang.value)}
-                className={`flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[12px] font-bold shrink-0 transition-all duration-300 cursor-pointer active:scale-95 hover:scale-105 ${
-                  active
-                    ? 'bg-gradient-to-r from-[#9333ea] to-[#6366f1] text-white shadow-[0_3px_12px_rgba(147,51,234,0.4)] ring-1 ring-purple-400/50'
-                    : 'bg-[#141b29] border border-[#20273c] hover:border-neutral-700 text-[#cbd5e1] hover:text-white'
-                }`}
-              >
-                <span>{lang.label}</span>
-                <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${active ? 'bg-black/35 text-white' : 'bg-[#0a0d16] text-[#94a3b8]'}`}>
-                  {lang.count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 4. FILTER & SORT DROPDOWNS GRID */}
-      <div className="px-0.5 sm:px-2 md:px-0 mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3">
+      {/* 4. FILTER & SORT DROPDOWNS GRID (Shown in Explore mode, or hidden cleanly on Homepage) */}
+      {!isHomeMode && (
+      <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3">
         
         {/* Render Dropdowns */}
         {[
@@ -713,9 +777,11 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </div>
         </div>
       </div>
+      )}
 
-      {/* 4.5 ADVANCED SMART FILTER ENGINE (EPISODE LENGTH, RATING SLIDER & QUICK TOGGLES) */}
-      <div className="px-0.5 sm:px-2 md:px-0 mt-3 space-y-3">
+      {/* 4.5 ADVANCED SMART FILTER ENGINE (Explore mode only) */}
+      {!isHomeMode && (
+      <div className="mt-3 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
@@ -885,48 +951,86 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       )}
 
       {/* 7. Catalog List Grid with Server-Side Pagination */}
-      <div ref={gridTopRef} className="pt-6 sm:pt-8 px-0.5 sm:px-2 md:px-0">
-        
+      <div ref={gridTopRef} className={`${isHomeMode ? 'pt-3 sm:pt-4' : 'pt-6 sm:pt-8'}`}>
         {/* 1. GRID HEADER ROW */}
-        <div className="flex items-center justify-between mb-4 px-0.5">
-          <div className="flex items-center space-x-1.5 text-[12px]">
-            <Sparkles className="w-[14px] h-[14px] text-[#a855f7]" />
-            <span className="text-[#94a3b8]">
-              {paginationMeta.totalItems > 0 ? (
+        <div className="flex items-center justify-between mb-3.5">
+          <div className="flex items-center space-x-1.5 text-xs">
+            <span className="text-neutral-400">
+              {catalogStatus === 'error' || catalogStatus === 'offline' ? (
+                <span className="text-rose-300 font-semibold">
+                  {catalogStatus === 'offline' ? 'Offline — unable to reach catalog' : 'Unable to load catalog'}
+                </span>
+              ) : paginationMeta.totalItems > 0 ? (
                 <>
-                  Showing <strong className="text-white font-bold">{rangeStart}–{rangeEnd}</strong> of <strong className="text-white font-bold">{paginationMeta.totalItems}</strong> Titles
+                  Showing <strong className="text-white font-bold tabular-nums">{rangeStart}–{rangeEnd}</strong> of{' '}
+                  <strong className="text-white font-bold tabular-nums">{paginationMeta.totalItems}</strong> Titles
                 </>
+              ) : loading ? (
+                <span>Loading catalog...</span>
               ) : (
                 <>
-                  Showing <strong className="text-white font-bold">0</strong> Titles
+                  Showing <strong className="text-white font-bold tabular-nums">0</strong> Titles
                 </>
               )}
             </span>
           </div>
-          <span className="text-[11px] text-[#64748b]">
-            Page {paginationMeta.currentPage} of {paginationMeta.totalPages}
-          </span>
+          {catalogStatus !== 'error' && catalogStatus !== 'offline' && (
+            <span className="text-[11px] text-neutral-500 tabular-nums">
+              Page {paginationMeta.currentPage} of {paginationMeta.totalPages}
+            </span>
+          )}
         </div>
 
         {loading ? (
           <div className="space-y-4">
             <SkeletonGrid count={8} />
           </div>
+        ) : catalogStatus === 'error' || catalogStatus === 'offline' ? (
+          <div
+            role="alert"
+            data-testid="catalog-error-banner"
+            className="p-6 sm:p-8 rounded-2xl bg-rose-500/10 border border-rose-500/35 text-center space-y-3 max-w-xl mx-auto my-6"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 flex items-center justify-center mx-auto">
+              {catalogStatus === 'offline' ? (
+                <WifiOff className="w-6 h-6" />
+              ) : (
+                <AlertTriangle className="w-6 h-6" />
+              )}
+            </div>
+            <h3 className="text-base font-bold text-white">
+              {catalogStatus === 'offline' ? 'You are currently offline' : 'Failed to load anime catalog'}
+            </h3>
+            <p className="text-xs text-rose-200/85 max-w-md mx-auto leading-relaxed">
+              {catalogError || 'The catalog service could not be reached. Please check your connection and retry.'}
+            </p>
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => fetchCatalogPage(currentPage)}
+                className="min-h-[42px] px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold inline-flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Retry</span>
+              </button>
+            </div>
+          </div>
         ) : displayedAnime.length === 0 ? (
-          <div className="text-center py-16 bg-slate-900/50 rounded-2xl border border-slate-800">
-            <p className="text-slate-400 text-xs">No anime matches your selected filters.</p>
+          <div className="text-center py-14 bg-[#101522] rounded-2xl border border-white/10 space-y-3">
+            <p className="text-neutral-300 text-sm font-semibold">No anime matches your selected filters.</p>
+            <p className="text-neutral-500 text-xs">Try clearing a language, platform, or search filter.</p>
             <button
+              type="button"
               onClick={handleClearAllFilters}
-              className="mt-3 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-md"
+              className="mt-2 min-h-[40px] px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors cursor-pointer"
             >
               Reset All Filters
             </button>
           </div>
         ) : (
-          /* 2. CARD CONTAINER USING AnimeCard WITH RESPONSIVE COLUMNS & COMPACT MOBILE GAPS */
-          <div 
+          <div
             key={`catalog_grid_${paginationMeta.currentPage}_${selectedLanguage}_${selectedGenre}_${selectedPlatform}_${selectedType}_${selectedStatus}_${selectedSort}`}
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3.5 md:gap-4.5"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-4"
           >
             {displayedAnime.map((anime, idx) => {
               const isWatchlisted = watchlist.map(Number).includes(Number(anime.id));
@@ -1017,6 +1121,37 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         )}
       </div>
 
+      {/* P2 #2: Compact Latest Dub Updates Feed (below catalog so above-the-fold stays search-first) */}
+      <LatestDubUpdatesCard
+        className="mt-8"
+        limit={6}
+        onSelectAnime={(animeId) => {
+          const found =
+            displayedAnime.find((a) => String(a.id) === String(animeId)) ||
+            (fullCatalogIndex || []).find((a: any) => String(a.id) === String(animeId));
+          if (found) {
+            onSelectAnime(found as any);
+          } else {
+            onSelectAnime({ id: Number(animeId) } as any);
+          }
+        }}
+      />
+
+      {/* Recently Viewed Row (kept below catalog on Homepage so cards show above the fold) */}
+      {recentlyViewed && recentlyViewed.length > 0 && (
+        <div className="mt-8">
+          <Suspense fallback={null}>
+            <RecentlyViewedRow
+              items={recentlyViewed}
+              onSelectAnime={(a) => onSelectAnime(a as any)}
+              onClear={onClearRecentlyViewed || (() => {})}
+              onRemoveItem={onRemoveRecentlyViewedItem}
+              watchlist={watchlist}
+              onToggleWatchlist={onToggleWatchlist}
+            />
+          </Suspense>
+        </div>
+      )}
     </div>
   );
 };

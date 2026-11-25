@@ -1,207 +1,99 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Tv, Flame, Languages, CheckCircle2, TrendingUp, Sparkles } from 'lucide-react';
-import { extractUniqueLanguagesFromAnimeList, formatLanguagesBulletList, isExcludedLanguage } from '../utils/languages';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, useInView } from 'motion/react';
+import { Tv, Globe2 } from 'lucide-react';
+import { translate, SupportedLanguage } from '../utils/i18n';
 
-export interface AnimatedStatsProps {
-  totalAnime?: number;
+interface AnimatedStatsProps {
+  totalAnime: number;
   totalVotes?: number;
   totalLanguages?: number;
-  languagesList?: string[];
-  languagesString?: string;
-  animeList?: any[];
+  currentLang?: string;
 }
 
-export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
-  totalAnime = 0,
-  totalVotes = 0,
-  totalLanguages,
-  languagesList,
-  languagesString,
-  animeList = []
-}) => {
-  // Extract and normalize unique Indian regional languages (strictly filtering out Japanese, English, Romaji, Korean, Chinese)
-  const dynamicLanguages = useMemo(() => {
-    let sourceList: string[] = [];
-    if (languagesList && Array.isArray(languagesList) && languagesList.length > 0) {
-      sourceList = languagesList;
-    } else if (animeList && Array.isArray(animeList) && animeList.length > 0) {
-      sourceList = extractUniqueLanguagesFromAnimeList(animeList);
-    }
-    
-    // Strict enforcement of language filter as requested
-    const strictlyFiltered = sourceList.filter(
-      (lang: any) => typeof lang === 'string' && 
-        !['Japanese', 'English', 'Romaji', 'Korean', 'Chinese'].includes(lang.trim()) && 
-        !isExcludedLanguage(lang)
-    );
+const Counter: React.FC<{ value: number; suffix?: string }> = ({ value, suffix = '' }) => {
+  const [count, setCount] = useState(0);
+  const ref = useRef<HTMLSpanElement>(null);
+  const isInView = useInView(ref, { once: true, amount: 0.3 });
 
-    return Array.from(new Set(strictlyFiltered));
-  }, [animeList, languagesList]);
-
-  // Determine final target counts
-  const targetAnimeCount = (animeList && animeList.length > 0 && totalAnime === 0)
-    ? animeList.length
-    : totalAnime;
-
-  const targetVotesCount = (animeList && animeList.length > 0 && totalVotes === 0)
-    ? animeList.reduce((acc, curr) => {
-        const popularity = Number(curr.popularity) || 0;
-        const upvotes = Number(curr.upvotes) || 0;
-        const effectiveUpvotes = upvotes !== undefined && upvotes !== null && upvotes > 0 ? Number(upvotes) : popularity;
-        return acc + Math.max(0, effectiveUpvotes);
-      }, 0)
-    : totalVotes;
-
-  // Use dynamic count of regional languages so non-regional dubs are never counted
-  const targetLangCount = dynamicLanguages.length;
-
-  const displayLanguagesString = useMemo(() => {
-    if (dynamicLanguages.length > 0) {
-      return formatLanguagesBulletList(dynamicLanguages);
-    }
-    if (languagesString && typeof languagesString === 'string') {
-      const tokens = languagesString.split(/[•,/|]+/).map(s => s.trim()).filter(Boolean);
-      const filtered = tokens.filter(
-        lang => !['Japanese', 'English', 'Romaji', 'Korean', 'Chinese'].includes(lang.trim()) && !isExcludedLanguage(lang)
-      );
-      if (filtered.length > 0) {
-        return formatLanguagesBulletList(Array.from(new Set(filtered)));
-      }
-    }
-    return 'None';
-  }, [languagesString, dynamicLanguages]);
-
-  const [animeCount, setAnimeCount] = useState(0);
-  const [votesCount, setVotesCount] = useState(0);
-  const [langCount, setLangCount] = useState(0);
-
-  // Smooth number count-up effect on mount or when stats change
   useEffect(() => {
-    const duration = 1000; // ms
-    const frameRate = 30;
-    const totalFrames = Math.round(duration / (1000 / frameRate));
+    if (!isInView) return;
+    let start = 0;
+    const duration = 900;
+    const frameDuration = 1000 / 60;
+    const totalFrames = Math.round(duration / frameDuration);
+    const easeOutQuad = (t: number) => t * (2 - t);
+
     let frame = 0;
-
-    const timer = setInterval(() => {
+    const counter = setInterval(() => {
       frame++;
-      const progress = Math.min(frame / totalFrames, 1);
-      // Ease out cubic
-      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      const progress = easeOutQuad(frame / totalFrames);
+      const currentCount = Math.round(value * progress);
+      setCount(currentCount);
 
-      setAnimeCount(Math.round(targetAnimeCount * easeProgress));
-      setVotesCount(Math.round(targetVotesCount * easeProgress));
-      setLangCount(Math.round(targetLangCount * easeProgress));
-
-      if (frame >= totalFrames) {
-        clearInterval(timer);
+      if (frame === totalFrames) {
+        clearInterval(counter);
+        setCount(value);
       }
-    }, 1000 / frameRate);
+    }, frameDuration);
 
-    return () => clearInterval(timer);
-  }, [targetAnimeCount, targetVotesCount, targetLangCount]);
-
-  const formattedVotes = votesCount >= 1000 
-    ? `${(votesCount / 1000).toFixed(1).replace(/\.0$/, '')}k` 
-    : `${votesCount.toLocaleString()}`;
+    return () => clearInterval(counter);
+  }, [value, isInView]);
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-0.5 sm:px-2 md:px-0 mb-3 sm:mb-6 box-border">
-      <div className="grid grid-cols-3 gap-1.5 sm:gap-3.5 md:gap-4 w-full box-border">
-        
-        {/* CARD 1: TOTAL ANIME */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-primary-theme/30 rounded-xl sm:rounded-2xl p-2 sm:p-3.5 md:p-5 shadow-lg hover:border-primary-theme/50 transition-all duration-300 group flex flex-col justify-between min-w-0 box-border">
-          {/* Subtle Background Accent Glow */}
-          <div className="absolute -top-10 -right-10 w-24 h-24 bg-primary-theme/10 rounded-full blur-2xl pointer-events-none group-hover:bg-primary-theme/20 transition-all duration-500" />
-          
-          <div className="flex items-center justify-between gap-1 mb-1">
-            <span className="text-[9.5px] sm:text-xs font-bold uppercase tracking-wider text-neutral-400 truncate leading-tight">
-              Dubbed Titles
-            </span>
-            <div className="w-4 h-4 xs:w-5 xs:h-5 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-primary-theme/20 border border-primary-theme/30 text-primary-theme flex items-center justify-center shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-110">
-              <Tv className="w-2.5 h-2.5 xs:w-3 xs:h-3 sm:w-4 sm:h-4" />
+    <span ref={ref} className="tabular-nums">
+      {count.toLocaleString()}
+      {suffix}
+    </span>
+  );
+};
+
+export const AnimatedStats: React.FC<AnimatedStatsProps> = ({
+  totalAnime,
+  totalLanguages = 8,
+  currentLang = 'en',
+}) => {
+  const lang = (currentLang as SupportedLanguage) || 'en';
+  const stats = [
+    {
+      label: translate('stats.anime', lang),
+      value: totalAnime,
+      suffix: '+',
+      icon: <Tv className="w-5 h-5 text-purple-400" />,
+      bg: 'bg-purple-500/10 border-purple-500/20',
+    },
+    {
+      label: translate('stats.languages', lang),
+      value: totalLanguages,
+      suffix: '',
+      icon: <Globe2 className="w-5 h-5 text-cyan-400" />,
+      bg: 'bg-cyan-500/10 border-cyan-500/20',
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 my-4 max-w-xl mx-auto">
+      {stats.map((stat, idx) => (
+        <motion.div
+          key={idx}
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.35, delay: idx * 0.08 }}
+          className="relative bg-[#131926]/80 border border-white/10 rounded-2xl p-4 flex items-center gap-3.5"
+        >
+          <div className={`w-10 h-10 rounded-xl border ${stat.bg} flex items-center justify-center shrink-0`}>
+            {stat.icon}
+          </div>
+          <div className="text-left min-w-0">
+            <div className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              <Counter value={stat.value} suffix={stat.suffix} />
+            </div>
+            <div className="text-xs font-semibold text-neutral-400 truncate">
+              {stat.label}
             </div>
           </div>
-
-          <div className="my-0.5 sm:my-2">
-            <div className="font-heading font-black text-sm xs:text-base sm:text-2xl md:text-3xl lg:text-4xl text-white tracking-tight flex items-baseline gap-0.5">
-              <span>{animeCount}</span>
-              <span className="text-primary-theme text-[10px] xs:text-xs sm:text-lg md:text-xl font-bold">+</span>
-            </div>
-          </div>
-
-          <div className="mt-0.5 sm:mt-1 flex items-center gap-1 sm:gap-1.5 text-[8.5px] xs:text-[9.5px] sm:text-xs text-emerald-400 font-medium">
-            <CheckCircle2 className="w-2.5 h-2.5 xs:w-3 xs:h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-            <span className="truncate">
-              <span className="sm:hidden">Official</span>
-              <span className="hidden sm:inline">Official Streams</span>
-            </span>
-          </div>
-        </div>
-
-        {/* CARD 2: COMMUNITY VOTES */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-orange-500/30 rounded-xl sm:rounded-2xl p-2 sm:p-3.5 md:p-5 shadow-lg hover:border-orange-500/50 transition-all duration-300 group flex flex-col justify-between min-w-0 box-border">
-          {/* Subtle Background Accent Glow */}
-          <div className="absolute -top-10 -right-10 w-24 h-24 bg-orange-500/10 rounded-full blur-2xl pointer-events-none group-hover:bg-orange-500/20 transition-all duration-500" />
-          
-          <div className="flex items-center justify-between gap-1 mb-1">
-            <span className="text-[9.5px] sm:text-xs font-bold uppercase tracking-wider text-neutral-400 truncate leading-tight">
-              Community
-            </span>
-            <div className="w-4 h-4 xs:w-5 xs:h-5 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-orange-600/20 border border-orange-500/30 text-orange-400 flex items-center justify-center shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-110">
-              <Flame className="w-2.5 h-2.5 xs:w-3 xs:h-3 sm:w-4 sm:h-4" />
-            </div>
-          </div>
-
-          <div className="my-0.5 sm:my-2">
-            <div className="font-heading font-black text-sm xs:text-base sm:text-2xl md:text-3xl lg:text-4xl text-white tracking-tight flex items-baseline gap-1">
-              <span>{formattedVotes}</span>
-              <span className="text-orange-400 text-[10px] xs:text-xs sm:text-base">🔥</span>
-            </div>
-          </div>
-
-          <div className="mt-0.5 sm:mt-1 flex items-center gap-1 sm:gap-1.5 text-[8.5px] xs:text-[9.5px] sm:text-xs text-orange-400/90 font-medium">
-            <TrendingUp className="w-2.5 h-2.5 xs:w-3 xs:h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-            <span className="truncate">
-              <span className="sm:hidden">Upvotes</span>
-              <span className="hidden sm:inline">Community Upvotes</span>
-            </span>
-          </div>
-        </div>
-
-        {/* CARD 3: LANGUAGES SUPPORTED (DYNAMIC FROM LOADED ANIME) */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#121829]/95 to-[#0e1322]/95 border border-sky-500/30 rounded-xl sm:rounded-2xl p-2 sm:p-3.5 md:p-5 shadow-lg hover:border-sky-500/50 transition-all duration-300 group flex flex-col justify-between min-w-0 box-border">
-          {/* Subtle Background Accent Glow */}
-          <div className="absolute -top-10 -right-10 w-24 h-24 bg-sky-500/10 rounded-full blur-2xl pointer-events-none group-hover:bg-sky-500/20 transition-all duration-500" />
-          
-          <div className="flex items-center justify-between gap-1 mb-1">
-            <span className="text-[9.5px] sm:text-xs font-bold uppercase tracking-wider text-neutral-400 truncate leading-tight">
-              Languages
-            </span>
-            <div className="w-4 h-4 xs:w-5 xs:h-5 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-sky-600/20 border border-sky-500/30 text-sky-400 flex items-center justify-center shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-110">
-              <Languages className="w-2.5 h-2.5 xs:w-3 xs:h-3 sm:w-4 sm:h-4" />
-            </div>
-          </div>
-
-          <div className="my-0.5 sm:my-2">
-            <div className="font-heading font-black text-sm xs:text-base sm:text-2xl md:text-3xl lg:text-4xl text-white tracking-tight flex items-baseline gap-1">
-              <span>{langCount}</span>
-              <span className="text-sky-400 text-[9px] xs:text-[10px] sm:text-base md:text-lg font-bold truncate">
-                <span className="sm:hidden">{langCount === 1 ? 'Lang' : 'Langs'}</span>
-                <span className="hidden sm:inline">{langCount === 1 ? 'Language' : 'Languages'}</span>
-              </span>
-            </div>
-          </div>
-
-          <div 
-            className="mt-0.5 sm:mt-1 flex items-center gap-1 sm:gap-1.5 text-[8.5px] xs:text-[9.5px] sm:text-xs text-sky-300/80 font-medium overflow-hidden"
-            title={displayLanguagesString}
-          >
-            <Sparkles className="w-2.5 h-2.5 xs:w-3 xs:h-3 sm:w-3.5 sm:h-3.5 shrink-0 text-sky-400" />
-            <span className="truncate">{displayLanguagesString}</span>
-          </div>
-        </div>
-
-      </div>
+        </motion.div>
+      ))}
     </div>
   );
 };

@@ -294,3 +294,70 @@ export function writeMySubscriptionsEnabled(enabled: boolean): boolean {
   } catch {}
   return val;
 }
+
+export interface SubscriptionCoverageResult {
+  language: string;
+  selectedPlatforms: string[];
+  coveredCount: number;
+  totalCount: number;
+  percentage: number;
+}
+
+/**
+ * Calculates exact percentage and count of dubbed anime (for a given language or all languages)
+ * covered by the user's selected OTT subscriptions.
+ */
+export function calculateSubscriptionCoverage<
+  T extends {
+    languages?: unknown;
+    platform?: unknown;
+    platforms?: unknown;
+    platforms_data?: unknown;
+    streaming_partners?: unknown;
+  },
+>(
+  catalog: T[],
+  selectedPlatforms: string[],
+  language = 'All'
+): SubscriptionCoverageResult {
+  const safeCatalog = Array.isArray(catalog) ? catalog : [];
+  const cleanLang = (language || 'All').trim();
+  const filterByLang = cleanLang && cleanLang.toLowerCase() !== 'all';
+
+  const matchingLangCatalog = filterByLang
+    ? safeCatalog.filter((anime) => {
+        const raw = anime.languages;
+        const langStr = Array.isArray(raw) ? raw.join(',') : String(raw || '');
+        return langStr.toLowerCase().includes(cleanLang.toLowerCase());
+      })
+    : safeCatalog;
+
+  const totalCount = matchingLangCatalog.length;
+  const cleanSelected = Array.isArray(selectedPlatforms)
+    ? selectedPlatforms.map(String).filter(Boolean)
+    : [];
+
+  if (totalCount === 0 || cleanSelected.length === 0) {
+    return {
+      language: filterByLang ? cleanLang : 'All Indian',
+      selectedPlatforms: cleanSelected,
+      coveredCount: 0,
+      totalCount,
+      percentage: 0,
+    };
+  }
+
+  const coveredCount = matchingLangCatalog.filter((anime) =>
+    matchesSelectedPlatforms(anime, cleanSelected)
+  ).length;
+  const percentage = Math.round((coveredCount / totalCount) * 100);
+
+  return {
+    language: filterByLang ? cleanLang : 'All Indian',
+    selectedPlatforms: cleanSelected,
+    coveredCount,
+    totalCount,
+    percentage,
+  };
+}
+

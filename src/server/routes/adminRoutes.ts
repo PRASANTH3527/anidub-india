@@ -13,6 +13,7 @@ import {
   parseOptionalSeason,
 } from '../../utils/dataNormalization';
 import { validateOfficialSourceUrl } from '../../utils/submissionValidation';
+import { classifyLinkHealthStatus, isSafePublicHttpUrl, type LinkHealthStatus } from '../../utils/linkHealth';
 import { D1_DATABASE_ID, getErrorMessage, isMissingColumnError, type RouteContext } from './shared';
 
 interface CsvImportRow {
@@ -106,6 +107,178 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   if (path === '/api/admin/logout' && method === 'POST') {
     return jsonResponse({ success: true }, 200, request);
+  }
+
+  // 1b. POST /api/admin/check-links (P2 #4 SSRF-safe Official OTT Link Health Checker)
+  if (path === '/api/admin/check-links' && method === 'POST') {
+    const session = await getAuth(request, env);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse(
+        {
+          success: false,
+          error:
+            session.error ||
+            (!session.userId
+              ? 'Unauthorized: Valid Clerk Admin session required'
+              : 'Forbidden: Admin access required'),
+        },
+        !session.userId ? 401 : 403,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    }
+
+    if (!env.DB) {
+      return jsonResponse({ success: false, error: 'Database binding (DB) is not configured' }, 500, request);
+    }
+
+    try {
+      const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+      const rawLimit = Number(body.limit ?? 20);
+      const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 30) : 20;
+
+      let rows: Record<string, unknown>[] = [];
+      try {
+        const res = await env.DB.prepare(
+          `SELECT id, title, platform, watch_url, official_source_url, platforms_data
+           FROM anime
+           WHERE is_published = 1
+           ORDER BY id DESC
+           LIMIT ?`
+        )
+          .bind(limit)
+          .all();
+        rows = res.results || [];
+      } catch (colErr) {
+        if (!isMissingColumnError(colErr)) throw colErr;
+        const fallback = await env.DB.prepare(
+          `SELECT id, title, platform, watch_url, platforms_data
+           FROM anime
+           WHERE is_published = 1
+           ORDER BY id DESC
+           LIMIT ?`
+        )
+          .bind(limit)
+          .all();
+        rows = fallback.results || [];
+      }
+
+      const targets: Array<{ animeId: number; title: string; platform: string; url: string }> = [];
+      const seenKeys = new Set<string>();
+
+      for (const row of rows) {
+        const animeId = Number(row.id);
+        const title = String(row.title || 'Untitled');
+        const fallbackPlatform = String(row.platform || 'Not verified').split('|')[0].trim() || 'Not verified';
+
+        const addTarget = (platformName: string, rawUrl: unknown) => {
+          const clean = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+          if (!clean) return;
+          const key = `${animeId}:${clean}`;
+          if (seenKeys.has(key)) return;
+          seenKeys.add(key);
+          targets.push({
+            animeId,
+            title,
+            platform: platformName || fallbackPlatform,
+            url: clean,
+          });
+        };
+
+        if (row.platforms_data) {
+          const partners = normalizeStreamingPartners(row.platforms_data);
+          for (const p of partners) {
+            if (p.url) addTarget(p.name || fallbackPlatform, p.url);
+          }
+        }
+        addTarget(fallbackPlatform, row.watch_url);
+        addTarget(fallbackPlatform, row.official_source_url);
+      }
+
+      const boundedTargets = targets.slice(0, 25);
+      const results: Array<{
+        animeId: number;
+        title: string;
+        platform: string;
+        url: string;
+        status: LinkHealthStatus;
+        httpStatus: number | null;
+        detail: string;
+      }> = [];
+
+      for (const target of boundedTargets) {
+        const safeCheck = isSafePublicHttpUrl(target.url);
+        if (!safeCheck.ok || !safeCheck.url) {
+          results.push({
+            ...target,
+            status: 'Unverified',
+            httpStatus: null,
+            detail: safeCheck.reason || 'Blocked unsafe URL',
+          });
+          continue;
+        }
+
+        try {
+          let probeRes = await fetch(safeCheck.url, {
+            method: 'HEAD',
+            redirect: 'manual',
+            signal: AbortSignal.timeout(4500),
+          });
+          if (probeRes.status === 405 || probeRes.status === 501) {
+            probeRes = await fetch(safeCheck.url, {
+              method: 'GET',
+              redirect: 'manual',
+              signal: AbortSignal.timeout(4500),
+            });
+          }
+          const classified = classifyLinkHealthStatus(probeRes.status, {
+            locationHeader: probeRes.headers.get('location'),
+          });
+          results.push({
+            ...target,
+            status: classified.status,
+            httpStatus: probeRes.status,
+            detail: classified.detail,
+          });
+        } catch (fetchErr) {
+          const classified = classifyLinkHealthStatus(null, {
+            errorMessage: getErrorMessage(fetchErr),
+          });
+          results.push({
+            ...target,
+            status: classified.status,
+            httpStatus: null,
+            detail: classified.detail,
+          });
+        }
+      }
+
+      const summary = {
+        total: results.length,
+        active: results.filter((r) => r.status === 'Active').length,
+        redirected: results.filter((r) => r.status === 'Redirected').length,
+        broken: results.filter((r) => r.status === 'Broken').length,
+        regionRestricted: results.filter((r) => r.status === 'Region-restricted').length,
+        unverified: results.filter((r) => r.status === 'Unverified').length,
+      };
+
+      return jsonResponse(
+        {
+          success: true,
+          checkedAt: new Date().toISOString(),
+          note: 'HTTP 200 only confirms the URL responds. Audio and dub availability still require manual verification.',
+          summary,
+          results,
+        },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request, {
+        'Cache-Control': 'no-store',
+      });
+    }
   }
 
   // 2. GET /api/admin/export-csv

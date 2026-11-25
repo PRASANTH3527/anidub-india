@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
 import { useUser } from '../lib/clerk';
-import { 
-  Compass, 
-  Sparkles, 
-  Bookmark, 
-  Calendar, 
-  Layers, 
+import {
+  Home,
+  Compass,
+  Bookmark,
+  Calendar,
   Trophy,
-  Cloud,
-  Plus,
   User,
   MessageSquare,
   ShieldCheck,
   Shield,
+  MoreHorizontal,
+  Sparkles,
+  Plus,
+  MessageCircleHeart,
+  ChevronDown,
+  X,
 } from 'lucide-react';
 import { AniDubLogo } from './AniDubLogo';
 
@@ -24,6 +26,7 @@ interface NavbarProps {
   onUnlockAdmin: () => void;
   onOpenCollection?: () => void;
   onSelectAnime?: (id: number) => void;
+  onSubmitDub?: () => void;
   feedView?: string;
   setFeedView?: (view: string) => void;
   isAdminAuthenticated?: boolean;
@@ -31,6 +34,7 @@ interface NavbarProps {
   userAvatar?: string;
   currentLang?: string;
   setCurrentLang?: (lang: string) => void;
+  unreadAlertsCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -38,33 +42,27 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   watchlistCount,
   onUnlockAdmin,
-  onOpenCollection,
-  onSelectAnime,
-  feedView = 'library',
+  onSubmitDub,
   setFeedView,
   isAdminAuthenticated,
-  onLogout,
   userAvatar,
-  currentLang = 'en',
-  setCurrentLang
+  unreadAlertsCount = 0,
 }) => {
-  const shouldReduceMotion = useReducedMotion();
   const { user } = useUser();
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('theme');
-    if (saved) return saved === 'dark';
-    return true; // Default dark
-  });
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    if (moreMenuOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
     }
-  }, [isDarkMode]);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [moreMenuOpen]);
 
   const logoClickCountRef = useRef(0);
   const logoClickTimerRef = useRef<any>(null);
@@ -83,379 +81,324 @@ export const Navbar: React.FC<NavbarProps> = ({
       logoClickCountRef.current = 0;
     }, 1600);
 
-    if (activeTab !== 'home') {
-      setActiveTab('home');
-      if (setFeedView) setFeedView('library');
-    }
+    setActiveTab('home');
+    if (setFeedView) setFeedView('library');
   };
 
-  const isForYouActive = activeTab === 'foryou' || feedView === 'foryou';
-  const isDirectoryActive = (activeTab === 'home' || activeTab === 'library' || activeTab === 'catalog') && !isForYouActive;
+  const navigate = (tab: string, feed?: string) => {
+    setMoreMenuOpen(false);
+    setActiveTab(tab);
+    if (setFeedView && feed) setFeedView(feed);
+  };
+
+  const isHomeActive = activeTab === 'home';
+  const isExploreActive = activeTab === 'explore' || activeTab === 'catalog';
+  const isScheduleActive = activeTab === 'schedule';
+  const isLibraryActive = activeTab === 'watchlist' || activeTab === 'library';
+  const isProfileActive = activeTab === 'profile';
+  const isChatActive = activeTab === 'chat';
+  const isMoreActive =
+    activeTab === 'foryou' ||
+    activeTab === 'tierlist' ||
+    activeTab === 'feedback' ||
+    activeTab === 'admin';
+
+  const primaryDesktopItems = [
+    { id: 'home', label: 'Home', icon: Home, active: isHomeActive, onClick: () => navigate('home', 'library') },
+    { id: 'explore', label: 'Explore', icon: Compass, active: isExploreActive, onClick: () => navigate('explore', 'library') },
+    { id: 'schedule', label: 'Schedule', icon: Calendar, active: isScheduleActive, onClick: () => navigate('schedule') },
+    {
+      id: 'watchlist',
+      label: 'Library',
+      icon: Bookmark,
+      active: isLibraryActive,
+      badge: watchlistCount > 0 ? watchlistCount : undefined,
+      onClick: () => navigate('watchlist'),
+    },
+    {
+      id: 'profile',
+      label: 'Profile',
+      icon: User,
+      active: isProfileActive,
+      badge: unreadAlertsCount > 0 ? unreadAlertsCount : undefined,
+      onClick: () => navigate('profile'),
+    },
+  ];
+
+  const primaryMobileTabs = [
+    { id: 'home', label: 'Home', icon: Home, active: isHomeActive, onClick: () => navigate('home', 'library') },
+    { id: 'explore', label: 'Explore', icon: Compass, active: isExploreActive, onClick: () => navigate('explore', 'library') },
+    { id: 'schedule', label: 'Schedule', icon: Calendar, active: isScheduleActive, onClick: () => navigate('schedule') },
+    {
+      id: 'watchlist',
+      label: 'Library',
+      icon: Bookmark,
+      active: isLibraryActive,
+      badge: watchlistCount > 0 ? watchlistCount : undefined,
+      onClick: () => navigate('watchlist'),
+    },
+    {
+      id: 'profile',
+      label: 'Profile',
+      icon: User,
+      active: isProfileActive,
+      badge: unreadAlertsCount > 0 ? unreadAlertsCount : undefined,
+      onClick: () => navigate('profile'),
+    },
+  ];
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full max-w-full overflow-x-clip bg-[#0b0f17]/95 backdrop-blur-xl border-b border-neutral-800/80 transition-colors box-border select-none">
-        <div className="w-full max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4 min-w-0">
-          
-          {/* LEFT: BRAND LOGO */}
-          <motion.button 
+      <nav className="sticky top-0 z-50 w-full bg-[#090d16]/95 backdrop-blur-xl border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-3">
+          {/* ZONE 1: Brand */}
+          <button
             type="button"
             onClick={handleLogoClick}
-            initial={shouldReduceMotion ? false : { opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: "easeOut" }}
-            whileTap={shouldReduceMotion ? undefined : { scale: 0.94 }}
-            className="flex items-center cursor-pointer select-none group shrink-0 min-h-[44px] max-w-[140px] sm:max-w-none bg-transparent border-0 p-0 overflow-hidden"
-            title="ANIDUB INDIA - Home"
-            aria-label="ANIDUB INDIA - Home"
+            className="flex items-center gap-2 select-none cursor-pointer shrink-0 focus:outline-none"
+            aria-label="AniDub India Home"
           >
-            <AniDubLogo
-              variant="horizontal"
-              size="sm"
-              hideTrailingLine={true}
-              className="h-6 sm:h-8 w-auto object-contain select-none shrink-0"
-            />
-          </motion.button>
+            <AniDubLogo size="md" showText={true} />
+          </button>
 
-          {/* MOBILE TOP QUICK ACTIONS (>=44x44px touch targets for Dub Radar, Requests, Schedule, Admin) */}
-          <div className="flex sm:hidden items-center gap-0.5 shrink-0">
+          {/* ZONE 2: Desktop Primary Navigation (Visible Text Labels) */}
+          <div className="hidden md:flex items-center gap-1">
+            {primaryDesktopItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={item.onClick}
+                  aria-current={item.active ? 'page' : undefined}
+                  className={`relative h-10 px-3.5 rounded-xl text-sm font-semibold inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    item.active
+                      ? 'bg-purple-600/20 text-white border border-purple-500/40'
+                      : 'text-neutral-300 hover:text-white hover:bg-white/5 border border-transparent'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 shrink-0 ${item.active ? 'text-purple-300' : 'text-neutral-400'}`} />
+                  <span>{item.label}</span>
+                  {item.badge !== undefined && (
+                    <span className="px-1.5 py-0.5 rounded-md bg-purple-600 text-white text-[10px] font-bold leading-none tabular-nums">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-
-
-
-            <motion.button
+          {/* ZONE 3: Community Chat Shortcut + More Menu + Admin */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0" ref={moreMenuRef}>
+            <button
               type="button"
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }}
-              onClick={() => setActiveTab('schedule')}
-              title="Weekly Simulcast Schedule"
-              aria-label="Weekly Simulcast Schedule"
-              className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-                activeTab === 'schedule'
-                  ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
-                  : 'text-neutral-300 hover:text-white hover:bg-neutral-800/50'
+              onClick={() => navigate('chat')}
+              aria-label="Community Chat"
+              title="Community Chat"
+              className={`min-h-[40px] px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer border ${
+                isChatActive
+                  ? 'bg-purple-600/20 text-white border-purple-500/40'
+                  : 'bg-white/5 text-neutral-300 hover:text-white hover:bg-white/10 border-white/10'
               }`}
             >
-              <Calendar className="w-5 h-5" />
-            </motion.button>
+              <MessageSquare className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Chat</span>
+            </button>
 
             {isAdminAuthenticated && (
-              <motion.button
+              <button
                 type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }}
-                onClick={() => setActiveTab(activeTab === 'admin' ? 'home' : 'admin')}
-                className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl transition-colors cursor-pointer border shrink-0 ${
-                  activeTab === 'admin'
-                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm'
-                    : 'bg-purple-950/40 text-purple-300 border-purple-500/40'
-                }`}
-                title="Admin Dashboard"
+                onClick={onUnlockAdmin}
                 aria-label="Admin Dashboard"
+                title="Admin Dashboard"
+                className={`min-h-[40px] px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer border ${
+                  activeTab === 'admin'
+                    ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
+                    : 'bg-white/5 text-amber-300 hover:bg-amber-500/15 border-white/10'
+                }`}
               >
-                <ShieldCheck className="w-5 h-5 text-amber-400" />
-              </motion.button>
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                <span className="hidden lg:inline">Admin</span>
+              </button>
             )}
-          </div>
 
-          {/* DESKTOP NAVIGATION ICONS (sm and up) */}
-          <nav aria-label="Primary Navigation" className="hidden sm:flex items-center flex-1 min-w-0 max-w-full overflow-x-auto no-scrollbar py-1">
-            <div className="flex items-center gap-1.5 shrink-0">
-              {/* 1. Compass (Directory) */}
-              <motion.button
+            {/* More Dropdown */}
+            <div className="relative">
+              <button
                 type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => {
-                  setActiveTab('home');
-                  if (setFeedView) setFeedView('library');
-                }}
-                title="Explore Catalog Directory"
-                aria-label="Explore Catalog Directory"
-                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-                  isDirectoryActive
-                    ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
-                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
+                onClick={() => setMoreMenuOpen((prev) => !prev)}
+                aria-expanded={moreMenuOpen}
+                aria-haspopup="menu"
+                aria-label="More navigation options"
+                className={`min-h-[40px] px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer border ${
+                  moreMenuOpen || isMoreActive
+                    ? 'bg-purple-600/20 text-white border-purple-500/40'
+                    : 'bg-white/5 text-neutral-300 hover:text-white hover:bg-white/10 border-white/10'
                 }`}
               >
-                <Compass className="w-5 h-5" />
-              </motion.button>
-
-              {/* 2. Sparkles (For You / Matchmaker) */}
-              <motion.button
-                type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => {
-                  setActiveTab('home');
-                  if (setFeedView) setFeedView('foryou');
-                }}
-                title="For You Matchmaker"
-                aria-label="For You Matchmaker"
-                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-                  isForYouActive
-                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm'
-                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-                }`}
-              >
-                <Sparkles className="w-5 h-5" />
-              </motion.button>
-
-              {/* 3. Bookmark (Watchlist with Badge) */}
-              <motion.button
-                type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => setActiveTab('watchlist')}
-                title="My Saved Anime Watchlist"
-                aria-label="My Saved Anime Watchlist"
-                className={`relative w-10 h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-                  activeTab === 'watchlist'
-                    ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
-                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-                }`}
-              >
-                <Bookmark className="w-5 h-5" />
-                {watchlistCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 btn-primary-theme text-white text-[9px] font-black rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5 shadow-md">
-                    {watchlistCount}
-                  </span>
+                {moreMenuOpen ? (
+                  <X className="w-4 h-4 shrink-0" />
+                ) : (
+                  <MoreHorizontal className="w-4 h-4 shrink-0" />
                 )}
-              </motion.button>
+                <span className="hidden sm:inline">More</span>
+                <ChevronDown className={`w-3.5 h-3.5 hidden sm:block transition-transform ${moreMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
 
-              {/* 4. Calendar (Schedule) */}
-              <motion.button
-                type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => setActiveTab('schedule')}
-                title="Weekly Simulcast Schedule"
-                aria-label="Weekly Simulcast Schedule"
-                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-                  activeTab === 'schedule'
-                    ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
-                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-                }`}
-              >
-                <Calendar className="w-5 h-5" />
-              </motion.button>
+              {moreMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-2 w-60 rounded-2xl bg-[#101624] border border-white/15 shadow-2xl p-1.5 z-50"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => navigate('foryou', 'foryou')}
+                    className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      activeTab === 'foryou'
+                        ? 'bg-purple-600/20 text-white'
+                        : 'text-neutral-200 hover:bg-white/5'
+                    }`}
+                  >
+                    <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                    <div>
+                      <div>Find Your Next Anime</div>
+                      <div className="text-[10px] text-neutral-400 font-normal">Filter by language &amp; OTT</div>
+                    </div>
+                  </button>
 
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => navigate('chat')}
+                    className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      isChatActive ? 'bg-purple-600/20 text-white' : 'text-neutral-200 hover:bg-white/5'
+                    }`}
+                  >
+                    <MessageSquare className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <div>
+                      <div>Community Chat</div>
+                      <div className="text-[10px] text-neutral-400 font-normal">Live Indian dub discussions</div>
+                    </div>
+                  </button>
 
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => navigate('tierlist')}
+                    className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      activeTab === 'tierlist' ? 'bg-purple-600/20 text-white' : 'text-neutral-200 hover:bg-white/5'
+                    }`}
+                  >
+                    <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div>
+                      <div>Tier List Maker</div>
+                      <div className="text-[10px] text-neutral-400 font-normal">Rank your favorite dubs</div>
+                    </div>
+                  </button>
 
+                  <div className="my-1.5 border-t border-white/10" />
 
-
-              {/* 5. MessageSquare (Live Community Chat) */}
-              <motion.button
-                type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => setActiveTab('chat')}
-                title="Live Community Chat & Dub Discussions"
-                aria-label="Live Community Chat & Dub Discussions"
-                className={`relative w-10 h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-                  activeTab === 'chat'
-                    ? 'bg-purple-600/30 text-purple-300 border border-purple-400 shadow-sm'
-                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-                }`}
-              >
-                <MessageSquare className="w-5 h-5" />
-                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-              </motion.button>
-
-              {/* 6. User / Avatar Profile */}
-              <motion.button
-                type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => setActiveTab('profile')}
-                title="User Profile"
-                aria-label="User Profile"
-                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-                  activeTab === 'profile'
-                    ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
-                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-                }`}
-              >
-                <div className="w-6 h-6 lg:w-7 lg:h-7 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white text-xs font-bold overflow-hidden shadow-sm">
-                  {user ? (
-                    <img 
-                      src={localStorage.getItem('anidub_anime_avatar') || 'https://s4.anilist.co/file/anilistcdn/character/large/b127691-9zqh1xpIubn7.png'} 
-                      alt="Profile" 
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
+                  {onSubmitDub && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenuOpen(false);
+                        onSubmitDub();
                       }}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <User className="w-3.5 h-3.5" />
+                      className="w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-neutral-200 hover:bg-white/5 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>Submit an Anime or Dub</span>
+                    </button>
                   )}
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => navigate('feedback')}
+                    className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      activeTab === 'feedback' ? 'bg-purple-600/20 text-white' : 'text-neutral-200 hover:bg-white/5'
+                    }`}
+                  >
+                    <MessageCircleHeart className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>Share Feedback</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMoreMenuOpen(false);
+                      onUnlockAdmin();
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-neutral-300 hover:bg-white/5 flex items-center gap-2.5 transition-colors cursor-pointer"
+                  >
+                    {isAdminAuthenticated ? (
+                      <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                    ) : (
+                      <Shield className="w-4 h-4 text-neutral-400 shrink-0" />
+                    )}
+                    <span>Admin Dashboard</span>
+                  </button>
                 </div>
-              </motion.button>
-
-              {/* 7. Trophy (Tier List / Rankings) */}
-              <motion.button
-                type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => setActiveTab('tierlist')}
-                title="Anime Tier List & Community Rankings"
-                aria-label="Anime Tier List & Community Rankings"
-                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-                  activeTab === 'tierlist'
-                    ? 'bg-[var(--primary-accent)]/20 text-accent-theme border border-primary-theme shadow-sm'
-                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-                }`}
-              >
-                <Trophy className="w-5 h-5" />
-              </motion.button>
-
-              {/* 8. Layers (Create Collection) */}
-              <motion.button
-                type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => {
-                  if (onOpenCollection) onOpenCollection();
-                }}
-                title="Create Shareable Anime Collection"
-                aria-label="Create Shareable Anime Collection"
-                className="w-10 h-10 flex items-center justify-center rounded-xl text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50 transition-colors cursor-pointer shrink-0"
-              >
-                <Layers className="w-5 h-5" />
-              </motion.button>
+              )}
             </div>
-          </nav>
 
-          {/* DESKTOP RIGHT UTILITY ACTIONS */}
-          <div className="hidden sm:flex items-center gap-2 shrink-0">
-            <motion.button
-              type="button"
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }}
-              onClick={() => {
-                if (onOpenCollection) onOpenCollection();
-              }}
-              aria-label="Create Shareable Anime List"
-              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white text-xs font-bold shadow-md shadow-purple-950/30 transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create List</span>
-            </motion.button>
-
-            <motion.button
-              type="button"
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }}
-              onClick={() => {
-                window.location.reload();
-              }}
-              title="Refresh Library"
-              aria-label="Refresh Library"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-950/40 border border-purple-500/40 text-purple-300 hover:text-white hover:bg-purple-900/60 text-xs font-bold transition-colors shadow-sm cursor-pointer"
-            >
-              <Cloud className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
-              <span>Sync</span>
-            </motion.button>
-
-            {isAdminAuthenticated && (
-              <motion.button
+            {/* User Avatar quick shortcut on desktop */}
+            {(user?.imageUrl || userAvatar) && (
+              <button
                 type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => {
-                  setActiveTab(activeTab === 'admin' ? 'home' : 'admin');
-                }}
-                className={`p-2 rounded-xl transition-colors cursor-pointer border ${
-                  activeTab === 'admin'
-                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm'
-                    : 'bg-purple-950/40 text-purple-300 border-purple-500/40 hover:text-white hover:bg-purple-900/60'
-                }`}
-                title="Admin Dashboard"
-                aria-label="Admin Dashboard"
+                onClick={() => navigate('profile')}
+                aria-label="Open Profile"
+                className="hidden sm:flex w-9 h-9 rounded-full overflow-hidden border border-white/15 hover:border-purple-400 transition-colors cursor-pointer shrink-0"
               >
-                <ShieldCheck className="w-4.5 h-4.5 text-amber-400" />
-              </motion.button>
+                <img
+                  src={user?.imageUrl || userAvatar}
+                  alt="Profile"
+                  className="w-full h-full object-cover"
+                />
+              </button>
             )}
           </div>
-        </div>
-      </header>
-
-      {/* MOBILE 5-TAB BOTTOM NAVIGATION BAR (>=44x44px touch targets with visible labels) */}
-      <nav
-        aria-label="Mobile primary navigation"
-        data-testid="mobile-bottom-nav"
-        className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0b0f17]/95 backdrop-blur-xl border-t border-neutral-800/90 px-1 pb-[env(safe-area-inset-bottom,0px)] select-none"
-      >
-        <div className="grid grid-cols-5 items-center max-w-md mx-auto">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('home');
-              if (setFeedView) setFeedView('library');
-            }}
-            aria-label="Home"
-            aria-current={isDirectoryActive ? 'page' : undefined}
-            className={`min-h-[52px] min-w-[44px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition-colors cursor-pointer ${
-              isDirectoryActive ? 'text-purple-400' : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            <Compass className="w-5 h-5" />
-            <span>Home</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('home');
-              if (setFeedView) setFeedView('foryou');
-            }}
-            aria-label="Explore Matchmaker"
-            aria-current={isForYouActive ? 'page' : undefined}
-            className={`min-h-[52px] min-w-[44px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition-colors cursor-pointer ${
-              isForYouActive ? 'text-amber-400' : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            <Sparkles className="w-5 h-5" />
-            <span>Explore</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('watchlist')}
-            aria-label="Watchlist"
-            aria-current={activeTab === 'watchlist' ? 'page' : undefined}
-            className={`relative min-h-[52px] min-w-[44px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition-colors cursor-pointer ${
-              activeTab === 'watchlist' ? 'text-purple-400' : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            <span className="relative">
-              <Bookmark className="w-5 h-5" />
-              {watchlistCount > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 btn-primary-theme text-white text-[9px] font-black rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-0.5 shadow-md">
-                  {watchlistCount}
-                </span>
-              )}
-            </span>
-            <span>Watchlist</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('chat')}
-            aria-label="Community Chat"
-            aria-current={activeTab === 'chat' ? 'page' : undefined}
-            className={`relative min-h-[52px] min-w-[44px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition-colors cursor-pointer ${
-              activeTab === 'chat' ? 'text-purple-400' : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            <span className="relative">
-              <MessageSquare className="w-5 h-5" />
-              <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-emerald-400" />
-            </span>
-            <span>Chat</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('profile')}
-            aria-label="Profile"
-            aria-current={activeTab === 'profile' ? 'page' : undefined}
-            className={`min-h-[52px] min-w-[44px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition-colors cursor-pointer ${
-              activeTab === 'profile' ? 'text-purple-400' : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            <User className="w-5 h-5" />
-            <span>Profile</span>
-          </button>
         </div>
       </nav>
+
+      {/* MOBILE BOTTOM NAVIGATION BAR (5 Clear Predictable Destinations) */}
+      <div
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#090d16]/95 backdrop-blur-xl border-t border-white/10"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <div className="grid grid-cols-5 h-16 px-1">
+          {primaryMobileTabs.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={item.onClick}
+                aria-current={item.active ? 'page' : undefined}
+                aria-label={item.label}
+                className={`relative flex flex-col items-center justify-center gap-1 min-h-[44px] rounded-xl transition-colors cursor-pointer ${
+                  item.active ? 'text-purple-300' : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <div className="relative">
+                  <Icon className="w-5 h-5" />
+                  {item.badge !== undefined && (
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-purple-600 text-white text-[9px] font-bold flex items-center justify-center tabular-nums">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] font-semibold leading-none">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </>
   );
 };

@@ -106,6 +106,22 @@ export interface AnimePayload {
   airTime?: string;
   season_episode_count?: string;
   official_source_url?: string;
+  last_verified_at?: string | null;
+  franchise_id?: string;
+  relation_type?: string;
+  sequence_number?: number | null;
+  franchise_entries?: Array<{
+    id: number | string;
+    title: string;
+    slug?: string;
+    cover_image?: string;
+    year?: number | null;
+    type?: string;
+    languages?: string;
+    relation_type?: string;
+    sequence_number?: number | null;
+    status?: string;
+  }>;
   created_at?: string;
 }
 
@@ -113,6 +129,9 @@ export interface AnimeReviewPayload {
   rating?: number;
   language?: string;
   comment?: string;
+  spoiler?: boolean;
+  spoilers?: boolean;
+  is_spoiler?: boolean;
   user_name?: string;
   user_avatar?: string;
 }
@@ -127,10 +146,56 @@ export interface AnimeReviewResponse {
   rating: number;
   language?: string;
   comment?: string;
+  is_spoiler?: boolean;
   spoilers?: boolean;
   likes?: number;
   date?: string;
   created_at?: string;
+}
+
+export interface DubUpdateRecord {
+  id: number;
+  anime_id: number | null;
+  anime_title: string;
+  update_type: string;
+  summary: string;
+  created_at: string;
+}
+
+export interface InAppAlertRecord {
+  id: number;
+  anime_id: number | null;
+  anime_title: string;
+  update_type: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface AdminLinkCheckItem {
+  animeId: number;
+  title: string;
+  platform: string;
+  url: string;
+  status: 'Active' | 'Redirected' | 'Broken' | 'Region-restricted' | 'Unverified';
+  httpStatus: number | null;
+  detail: string;
+}
+
+export interface AdminLinkCheckResponse {
+  success: boolean;
+  checkedAt?: string;
+  note?: string;
+  error?: string;
+  summary?: {
+    total: number;
+    active: number;
+    redirected: number;
+    broken: number;
+    regionRestricted: number;
+    unverified: number;
+  };
+  results: AdminLinkCheckItem[];
 }
 
 export interface FeedbackSubmitPayload {
@@ -331,6 +396,9 @@ class CloudflareApiService {
    * READ: Fetches paginated anime catalog from Cloudflare Worker / D1
    */
   public async fetchCatalog(options: FetchCatalogOptions = {}): Promise<{
+    ok: boolean;
+    status: 'success' | 'empty' | 'error' | 'offline';
+    error: string | null;
     data: AnimePayload[];
     meta: CatalogMeta;
     summary?: CatalogSummary | null;
@@ -371,21 +439,65 @@ class CloudflareApiService {
       hasPrevPage: requestedPage > 1,
     };
 
-    const res = await this.smartFetch(endpoint, {
-      method: 'GET',
-      headers: this.getHeaders(Boolean(options.includePending))
-    });
+    const isBrowserOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      console.warn(`[API Notice] GET ${url} received status ${res.status}: ${errText}.`);
+    if (isBrowserOffline()) {
       return {
+        ok: false,
+        status: 'offline',
+        error: 'You appear to be offline. Reconnect to the internet and retry.',
         data: [],
         meta: fallbackMeta,
         summary: null,
         total: 0,
         page: requestedPage,
-        totalPages: 1
+        totalPages: 1,
+      };
+    }
+
+    let res: Response;
+    try {
+      res = await this.smartFetch(endpoint, {
+        method: 'GET',
+        headers: this.getHeaders(Boolean(options.includePending)),
+      });
+    } catch (networkErr: any) {
+      const offline = isBrowserOffline();
+      return {
+        ok: false,
+        status: offline ? 'offline' : 'error',
+        error: offline
+          ? 'You appear to be offline. Check your connection and try again.'
+          : networkErr?.message || 'Unable to reach the catalog server. Please try again.',
+        data: [],
+        meta: fallbackMeta,
+        summary: null,
+        total: 0,
+        page: requestedPage,
+        totalPages: 1,
+      };
+    }
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      let serverMsg = '';
+      try {
+        const parsedErr = JSON.parse(errText);
+        serverMsg = parsedErr.error || parsedErr.message || '';
+      } catch {
+        serverMsg = errText.slice(0, 140);
+      }
+      console.warn(`[API Notice] GET ${url} received status ${res.status}: ${errText}.`);
+      return {
+        ok: false,
+        status: 'error',
+        error: serverMsg || `Catalog server returned HTTP ${res.status}. Please retry.`,
+        data: [],
+        meta: fallbackMeta,
+        summary: null,
+        total: 0,
+        page: requestedPage,
+        totalPages: 1,
       };
     }
 
@@ -393,19 +505,38 @@ class CloudflareApiService {
     if (!contentType.includes('application/json')) {
       console.warn(`[API Notice] Received non-JSON content type (${contentType}) from ${url}.`);
       return {
+        ok: false,
+        status: 'error',
+        error: 'Catalog API returned an unexpected response format. Please retry.',
         data: [],
         meta: fallbackMeta,
         summary: null,
         total: 0,
         page: requestedPage,
-        totalPages: 1
+        totalPages: 1,
       };
     }
 
-    const json = await res.json().catch(() => ({ data: [] }));
-    const data = json.data || (Array.isArray(json) ? json : []);
-    const rawMeta = json.meta || {};
-    const rawPag = json.pagination || {};
+    let json: any;
+    try {
+      json = await res.json();
+    } catch {
+      return {
+        ok: false,
+        status: 'error',
+        error: 'Failed to parse catalog response. Please retry.',
+        data: [],
+        meta: fallbackMeta,
+        summary: null,
+        total: 0,
+        page: requestedPage,
+        totalPages: 1,
+      };
+    }
+
+    const data = json?.data || (Array.isArray(json) ? json : []);
+    const rawMeta = json?.meta || {};
+    const rawPag = json?.pagination || {};
 
     const currentPage = Number(rawMeta.currentPage ?? rawPag.page ?? requestedPage) || 1;
     const totalItems = Number(rawMeta.totalItems ?? rawPag.total ?? data.length) || 0;
@@ -422,12 +553,15 @@ class CloudflareApiService {
     };
 
     return {
+      ok: true,
+      status: data.length === 0 ? 'empty' : 'success',
+      error: null,
       data,
       meta,
-      summary: json.summary || null,
+      summary: json?.summary || null,
       total: meta.totalItems,
       page: meta.currentPage,
-      totalPages: meta.totalPages
+      totalPages: meta.totalPages,
     };
   }
 
@@ -1166,37 +1300,96 @@ class CloudflareApiService {
   }
 
   /**
-   * FEEDBACK: Submits user feedback or bug report
+   * FEEDBACK: Submits user feedback or bug report (honest 2xx verification, detailed error reporting)
    */
-  public async submitFeedback(payload: FeedbackSubmitPayload): Promise<{ success: boolean }> {
+  public async submitFeedback(
+    payload: FeedbackSubmitPayload
+  ): Promise<{ success: boolean; error?: string; status?: number }> {
     try {
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.FEEDBACK, {
         method: 'POST',
         headers: this.getHeaders(false),
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
-      return { success: res.ok };
-    } catch {
-      return { success: false };
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success !== false) {
+        return { success: true, status: res.status };
+      }
+      return {
+        success: false,
+        status: res.status,
+        error: data?.error || data?.message || `Server returned HTTP ${res.status}. Please try again.`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || 'Network error while submitting feedback. Your message has been preserved.',
+      };
     }
   }
 
   /**
-   * CHAT: Fetches recent community chat messages
+   * CHAT: Fetches paginated community chat messages (latest 50 first, cursor pagination via beforeId)
    */
-  public async fetchChatHistory(): Promise<ChatMessageRecord[]> {
+  public async fetchChatHistoryPage(options?: {
+    limit?: number;
+    beforeId?: number | null;
+  }): Promise<{
+    ok: boolean;
+    messages: ChatMessageRecord[];
+    hasMore: boolean;
+    nextBeforeId: number | null;
+    error?: string;
+  }> {
     try {
-      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CHAT, {
-        headers: { 'Accept': 'application/json' }
+      const qs = new URLSearchParams();
+      if (options?.limit && options.limit > 0) qs.set('limit', String(Math.min(options.limit, 100)));
+      if (options?.beforeId && options.beforeId > 0) qs.set('beforeId', String(options.beforeId));
+      const query = qs.toString();
+      const endpoint = `${CLOUDFLARE_ENDPOINTS.CHAT}${query ? `?${query}` : ''}`;
+      const res = await this.smartFetch(endpoint, {
+        headers: { Accept: 'application/json' },
       });
       if (res.ok) {
-        const data = await res.json();
-        return Array.isArray(data) ? data : (data.messages || data.data || []);
+        const data = await res.json().catch(() => ({}));
+        const messages: ChatMessageRecord[] = Array.isArray(data)
+          ? data
+          : data.messages || data.data || [];
+        return {
+          ok: true,
+          messages,
+          hasMore: Boolean(data?.hasMore),
+          nextBeforeId:
+            data?.nextBeforeId !== undefined && data?.nextBeforeId !== null
+              ? Number(data.nextBeforeId)
+              : null,
+        };
       }
-    } catch (err) {
+      return {
+        ok: false,
+        messages: [],
+        hasMore: false,
+        nextBeforeId: null,
+        error: `Chat server returned HTTP ${res.status}`,
+      };
+    } catch (err: any) {
       console.warn('Failed to fetch chat history:', err);
+      return {
+        ok: false,
+        messages: [],
+        hasMore: false,
+        nextBeforeId: null,
+        error: err?.message || 'Failed to load chat history',
+      };
     }
-    return [];
+  }
+
+  /**
+   * CHAT: Fetches recent community chat messages (backwards-compatible wrapper)
+   */
+  public async fetchChatHistory(options?: { limit?: number; beforeId?: number | null }): Promise<ChatMessageRecord[]> {
+    const page = await this.fetchChatHistoryPage(options);
+    return page.messages;
   }
 
   /**
@@ -1337,19 +1530,34 @@ class CloudflareApiService {
   }
 
   /**
-   * REVIEWS: Submits a new review for an anime
+   * REVIEWS: Submits a new review for an anime (persists spoiler flag and returns server confirmation)
    */
-  public async submitReview(id: number | string, payload: AnimeReviewPayload): Promise<{ success: boolean; message?: string }> {
+  public async submitReview(
+    id: number | string,
+    payload: AnimeReviewPayload
+  ): Promise<{ success: boolean; message?: string; review?: AnimeReviewResponse }> {
+    const isSpoiler = Boolean(payload.spoiler ?? payload.spoilers ?? payload.is_spoiler);
+    const requestPayload = {
+      ...payload,
+      spoiler: isSpoiler,
+      spoilers: isSpoiler,
+      is_spoiler: isSpoiler,
+    };
     try {
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.ANIME_REVIEWS(id), {
         method: 'POST',
         headers: this.getHeaders(false),
-        body: JSON.stringify(payload)
+        body: JSON.stringify(requestPayload),
       });
-      if (res.ok) {
-        return await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success !== false) {
+        return {
+          success: true,
+          message: data?.message || 'Review published',
+          review: data?.review,
+        };
       }
-      throw new Error('Failed to submit review');
+      throw new Error(data?.error || data?.message || `Failed to submit review (HTTP ${res.status})`);
     } catch (err: any) {
       console.error('Submit review error:', err);
       throw err;
@@ -1707,6 +1915,193 @@ class CloudflareApiService {
       return res.ok;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * P2 #2: Fetch recent verified dub updates logged by Admin updates
+   */
+  public async fetchDubUpdates(limit = 12): Promise<DubUpdateRecord[]> {
+    try {
+      const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 50);
+      const res = await this.smartFetch(`/api/dub-updates?limit=${safeLimit}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return [];
+      const data = await res.json().catch(() => ({}));
+      return Array.isArray(data?.updates) ? data.updates : Array.isArray(data?.data) ? data.data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * P2 #5: Authenticated Anime Follows
+   */
+  public async fetchFollows(explicitToken?: string | null): Promise<{ ok: boolean; follows: number[]; data: any[] }> {
+    try {
+      const token = explicitToken || (await getClerkSessionToken());
+      if (!token) return { ok: false, follows: [], data: [] };
+      const res = await this.smartFetch('/api/follows', {
+        method: 'GET',
+        headers: {
+          ...this.getHeaders(false),
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) return { ok: false, follows: [], data: [] };
+      const json = await res.json().catch(() => ({}));
+      return {
+        ok: true,
+        follows: Array.isArray(json?.follows) ? json.follows.map(Number).filter(Number.isFinite) : [],
+        data: Array.isArray(json?.data) ? json.data : [],
+      };
+    } catch {
+      return { ok: false, follows: [], data: [] };
+    }
+  }
+
+  public async followAnime(
+    animeId: number | string,
+    explicitToken?: string | null
+  ): Promise<{ success: boolean; following: boolean; error?: string }> {
+    const idNum = Number(animeId);
+    if (!Number.isInteger(idNum) || idNum <= 0) {
+      return { success: false, following: false, error: 'Invalid anime ID' };
+    }
+    try {
+      const token = explicitToken || (await getClerkSessionToken());
+      if (!token) return { success: false, following: false, error: 'Sign in required' };
+      const res = await this.smartFetch('/api/follows', {
+        method: 'POST',
+        headers: {
+          ...this.getHeaders(false),
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ anime_id: idNum }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.success !== false) {
+        return { success: true, following: true };
+      }
+      return { success: false, following: false, error: json?.error || 'Failed to follow anime' };
+    } catch (err: any) {
+      return { success: false, following: false, error: err?.message || 'Network error' };
+    }
+  }
+
+  public async unfollowAnime(
+    animeId: number | string,
+    explicitToken?: string | null
+  ): Promise<{ success: boolean; following: boolean; error?: string }> {
+    const idNum = Number(animeId);
+    if (!Number.isInteger(idNum) || idNum <= 0) {
+      return { success: false, following: false, error: 'Invalid anime ID' };
+    }
+    try {
+      const token = explicitToken || (await getClerkSessionToken());
+      if (!token) return { success: false, following: true, error: 'Sign in required' };
+      const res = await this.smartFetch(`/api/follows?anime_id=${idNum}`, {
+        method: 'DELETE',
+        headers: {
+          ...this.getHeaders(false),
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ anime_id: idNum }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.success !== false) {
+        return { success: true, following: false };
+      }
+      return { success: false, following: true, error: json?.error || 'Failed to unfollow anime' };
+    } catch (err: any) {
+      return { success: false, following: true, error: err?.message || 'Network error' };
+    }
+  }
+
+  /**
+   * P2 #5: Real D1 In-App Alerts Inbox
+   */
+  public async fetchAlerts(
+    explicitToken?: string | null
+  ): Promise<{ ok: boolean; alerts: InAppAlertRecord[]; unreadCount: number }> {
+    try {
+      const token = explicitToken || (await getClerkSessionToken());
+      if (!token) return { ok: false, alerts: [], unreadCount: 0 };
+      const res = await this.smartFetch('/api/alerts', {
+        method: 'GET',
+        headers: {
+          ...this.getHeaders(false),
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) return { ok: false, alerts: [], unreadCount: 0 };
+      const json = await res.json().catch(() => ({}));
+      const alerts: InAppAlertRecord[] = Array.isArray(json?.alerts) ? json.alerts : [];
+      const unreadCount =
+        typeof json?.unreadCount === 'number'
+          ? json.unreadCount
+          : alerts.filter((a) => !a.is_read).length;
+      return { ok: true, alerts, unreadCount };
+    } catch {
+      return { ok: false, alerts: [], unreadCount: 0 };
+    }
+  }
+
+  public async markAlertsRead(alertId?: number, explicitToken?: string | null): Promise<boolean> {
+    try {
+      const token = explicitToken || (await getClerkSessionToken());
+      if (!token) return false;
+      const res = await this.smartFetch('/api/alerts/read', {
+        method: 'POST',
+        headers: {
+          ...this.getHeaders(false),
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(alertId ? { alertId } : { all: true }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * P2 #4: Admin Official Link Health Checker
+   */
+  public async checkAdminLinks(options?: { limit?: number }): Promise<AdminLinkCheckResponse> {
+    try {
+      const token = await getClerkSessionToken();
+      const res = await this.smartFetch('/api/admin/check-links', {
+        method: 'POST',
+        headers: {
+          ...this.getHeaders(true),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ limit: options?.limit ?? 20 }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.success) {
+        return {
+          success: true,
+          checkedAt: json.checkedAt,
+          note: json.note,
+          summary: json.summary,
+          results: Array.isArray(json.results) ? json.results : [],
+        };
+      }
+      return {
+        success: false,
+        error: json?.error || `Link check failed (HTTP ${res.status})`,
+        results: [],
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || 'Unable to run link health check',
+        results: [],
+      };
     }
   }
 }

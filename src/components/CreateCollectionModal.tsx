@@ -425,7 +425,7 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                         {anime.title}
                       </h4>
                       <p className="text-[10px] text-neutral-400 mt-0.5">
-                        {anime.type || 'TV Series'} • {anime.platform || 'Crunchyroll'}
+                        {anime.type || 'TV Series'} • {anime.platform || 'Not verified'}
                       </p>
                     </div>
 

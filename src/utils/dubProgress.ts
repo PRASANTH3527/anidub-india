@@ -484,3 +484,171 @@ export function buildDubProgressBreakdown(anime: Record<string, unknown> | null 
     overall,
   };
 }
+
+export type DubMatrixCellStatus = 'complete' | 'partial' | 'unverified_count' | 'unavailable';
+
+export interface DubMatrixCell {
+  status: DubMatrixCellStatus;
+  episodesDubbed: number | null;
+  totalEpisodes: number | null;
+  displayText: string;
+}
+
+export interface DubAvailabilityMatrix {
+  seasons: Array<{
+    seasonKey: string;
+    seasonLabel: string;
+    totalEpisodes: number | null;
+  }>;
+  languages: string[];
+  cells: Record<string, Record<string, DubMatrixCell>>;
+  platforms: string[];
+  region: string;
+  lastVerifiedDate: string | null;
+  hasAnyVerifiedCount: boolean;
+}
+
+function formatVerifiedDate(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return trimmed;
+  return parsed.toLocaleDateString('en-IN', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function extractVerifiedPlatformsFromRecord(anime: Record<string, unknown>): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  const add = (val: string) => {
+    const clean = val.trim();
+    if (!clean) return;
+    const lower = clean.toLowerCase();
+    if (lower === 'unknown' || lower === 'not verified' || lower === 'n/a') return;
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      names.push(clean);
+    }
+  };
+
+  const parsedPartners = safeJsonParse(anime.platforms_data ?? anime.streaming_partners ?? anime.watch_providers);
+  if (Array.isArray(parsedPartners)) {
+    for (const p of parsedPartners) {
+      if (p && typeof p === 'object') {
+        const name = String((p as Record<string, unknown>).name || (p as Record<string, unknown>).platform || '').trim();
+        if (name) add(name);
+      }
+    }
+  }
+  if (typeof anime.platform === 'string') {
+    for (const tok of anime.platform.split(/[|,]+/)) {
+      add(tok);
+    }
+  }
+  return names;
+}
+
+/**
+ * Builds a normalized Season x Language x OTT availability matrix.
+ * Strictly honest: displays "12/12" (complete) or "8/12" (partial) ONLY when
+ * verified in D1; otherwise shows "Count not verified" for available dubs
+ * and "—" for unavailable cells.
+ */
+export function buildDubAvailabilityMatrix(
+  anime: Record<string, unknown> | null | undefined
+): DubAvailabilityMatrix {
+  const breakdown = buildDubProgressBreakdown(anime);
+  const rawRecord = (anime && typeof anime === 'object' ? anime : {}) as Record<string, unknown>;
+
+  const seasons = breakdown.seasons.map((s) => ({
+    seasonKey: s.seasonKey,
+    seasonLabel: s.seasonKey === 'overall' ? 'Season 1 / Series' : s.seasonLabel,
+    totalEpisodes: s.totalEpisodes,
+  }));
+
+  // Collect all languages that appear across any season, keeping core Indian order first
+  const activeLanguageSet = new Set<string>();
+  for (const s of breakdown.seasons) {
+    for (const l of s.languages) {
+      if (l.status !== 'unavailable') {
+        activeLanguageSet.add(l.language);
+      }
+    }
+  }
+
+  const orderedLanguages: string[] = [];
+  for (const core of CORE_INDIAN_DUB_LANGUAGES) {
+    if (activeLanguageSet.has(core)) orderedLanguages.push(core);
+  }
+  for (const lang of activeLanguageSet) {
+    if (!orderedLanguages.includes(lang)) orderedLanguages.push(lang);
+  }
+  // If no languages were marked available at all, still show Hindi/Tamil/Telugu as Unknown rows
+  const languages = orderedLanguages.length > 0 ? orderedLanguages : ['Hindi', 'Tamil', 'Telugu'];
+
+  const cells: Record<string, Record<string, DubMatrixCell>> = {};
+  let hasAnyVerifiedCount = false;
+
+  for (const lang of languages) {
+    cells[lang] = {};
+    for (const season of breakdown.seasons) {
+      const row = season.languages.find((l) => l.language === lang);
+      if (!row || row.status === 'unavailable') {
+        cells[lang][season.seasonKey] = {
+          status: 'unavailable',
+          episodesDubbed: null,
+          totalEpisodes: season.totalEpisodes,
+          displayText: 'Unknown',
+        };
+      } else if (row.status === 'complete' && row.episodesDubbed !== null && row.totalEpisodes !== null) {
+        hasAnyVerifiedCount = true;
+        cells[lang][season.seasonKey] = {
+          status: 'complete',
+          episodesDubbed: row.episodesDubbed,
+          totalEpisodes: row.totalEpisodes,
+          displayText: `${row.episodesDubbed}/${row.totalEpisodes}`,
+        };
+      } else if (row.status === 'partial' && row.episodesDubbed !== null) {
+        hasAnyVerifiedCount = true;
+        cells[lang][season.seasonKey] = {
+          status: 'partial',
+          episodesDubbed: row.episodesDubbed,
+          totalEpisodes: row.totalEpisodes,
+          displayText:
+            row.totalEpisodes !== null
+              ? `${row.episodesDubbed}/${row.totalEpisodes}`
+              : `${row.episodesDubbed} eps`,
+        };
+      } else {
+        cells[lang][season.seasonKey] = {
+          status: 'unverified_count',
+          episodesDubbed: null,
+          totalEpisodes: row.totalEpisodes ?? season.totalEpisodes,
+          displayText: 'Count not verified',
+        };
+      }
+    }
+  }
+
+  const lastVerifiedDate = formatVerifiedDate(
+    rawRecord.last_verified_at ??
+      rawRecord.last_verified_date ??
+      rawRecord.updated_at ??
+      rawRecord.created_at
+  );
+
+  return {
+    seasons,
+    languages,
+    cells,
+    platforms: extractVerifiedPlatformsFromRecord(rawRecord),
+    region: 'India',
+    lastVerifiedDate,
+    hasAnyVerifiedCount,
+  };
+}
+

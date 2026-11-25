@@ -19,9 +19,9 @@ export interface TranslationSet {
 
 export const TRANSLATIONS: Record<LanguageCode, TranslationSet> = {
   en: {
-    hero_title: 'The Premier Destination for Anime Streaming & Dubbing in India',
+    hero_title: 'Find anime in your language',
     hero_subtitle: 'Official Indian Dubbed Anime Directory',
-    surprise_me: 'Surprise Me Roulette',
+    surprise_me: 'Random Anime',
     search_placeholder: 'Search anime dubs...',
     catalog_title: 'Anime Catalog',
     trending_now: 'Trending Now',

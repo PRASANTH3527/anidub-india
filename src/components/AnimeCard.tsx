@@ -1,21 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Image from './OptimizedImage';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { 
-  Flame, 
-  CheckCircle2, 
-  DownloadCloud, 
-  Flag, 
-  Share2, 
-  Heart, 
-  Bookmark, 
+import {
+  CheckCircle2,
+  DownloadCloud,
+  Flag,
+  Share2,
+  Bookmark,
   Star,
-  Loader2
+  MoreVertical,
 } from 'lucide-react';
-import { cloudflareApi } from '../services/cloudflareApi';
 import { useToast } from './Toast';
-import { useUser } from '../lib/clerk';
 import { ReportModal } from './ReportModal';
 import {
   isAnimeOffline,
@@ -25,8 +20,7 @@ import {
 } from '../utils/offlineStorage';
 import { parsePlatformList } from '../utils/dataNormalization';
 import { isCanonicalAiring } from '../utils/animeStatus';
-
-const TRENDING_VOTE_THRESHOLD = 25;
+import { normalizeLanguageName, isExcludedLanguage } from '../utils/languages';
 
 export interface AnimeCardData {
   id: number;
@@ -50,6 +44,8 @@ export interface AnimeCardData {
   popularity?: number;
   languages?: string | string[];
   platform?: string | string[];
+  platforms_data?: unknown;
+  streaming_partners?: unknown;
   type?: string;
   likesCount?: number;
 }
@@ -69,766 +65,309 @@ export interface AnimeCardProps {
   isCached?: boolean;
 }
 
-export const ParallaxCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ 
-  children, 
-  className = '' 
-}) => {
-  return (
-    <div className={`h-full ${className}`}>
-      {children}
-    </div>
-  );
+export const ParallaxCard: React.FC<{ children: React.ReactNode; className?: string }> = ({
+  children,
+  className = '',
+}) => <div className={`h-full ${className}`}>{children}</div>;
+
+const LANG_ABBR: Record<string, string> = {
+  Tamil: 'TAM',
+  Hindi: 'HIN',
+  Telugu: 'TEL',
+  Malayalam: 'MAL',
+  Kannada: 'KAN',
+  Bengali: 'BEN',
+  Marathi: 'MAR',
+  Punjabi: 'PUN',
+  Gujarati: 'GUJ',
 };
+
+function extractCompactLanguageCodes(rawLangs: unknown): string[] {
+  const tokens: string[] = [];
+  if (Array.isArray(rawLangs)) {
+    for (const item of rawLangs) {
+      if (typeof item === 'string') tokens.push(...item.split(/[,/|•+]+/));
+    }
+  } else if (typeof rawLangs === 'string') {
+    tokens.push(...rawLangs.split(/[,/|•+]+/));
+  }
+  const codes: string[] = [];
+  const seen = new Set<string>();
+  for (const token of tokens) {
+    const norm = normalizeLanguageName(token);
+    if (!norm || isExcludedLanguage(norm)) continue;
+    const code = LANG_ABBR[norm] || norm.slice(0, 3).toUpperCase();
+    if (!seen.has(code)) {
+      seen.add(code);
+      codes.push(code);
+    }
+  }
+  return codes;
+}
 
 const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   anime,
   onSelect,
-  index = 0,
-  priority,
+  priority = false,
   isBookmarked = false,
   onToggleBookmark,
-  isLiked,
-  onToggleLike,
-  isUpvoted,
-  onToggleUpvote,
-  isTrending,
-  isCached
 }) => {
-  const { user, isSignedIn } = useUser();
-  const shouldReduceMotion = useReducedMotion();
-  const isPriorityCard = priority !== undefined ? priority : index < 4;
-  const staggerDelay = shouldReduceMotion || isPriorityCard ? 0 : Math.min((index % 12) * 0.05, 0.4);
-  // Real Clerk-Based Vote States
-  const [internalLiked, setInternalLiked] = useState<boolean>(Boolean(isLiked));
-  const [internalUpvoted, setInternalUpvoted] = useState<boolean>(Boolean(isUpvoted));
-
-  const [internalHeartCount, setInternalHeartCount] = useState<number>(
-    Number(anime.likesCount) || 0
-  );
-  const [internalUpvoteCount, setInternalUpvoteCount] = useState<number>(
-    Number(anime.popularity) || 0
-  );
-
-  const [isLiking, setIsLiking] = useState(false);
-  const [isVoting, setIsVoting] = useState(false);
-  const [cardNotice, setCardNotice] = useState<string | null>(null);
-  const [showLikeAnimation, setShowLikeAnimation] = useState(false);
-  const [isOfflineSaved, setIsOfflineSaved] = useState<boolean>(Boolean(isCached));
-  const [isDownloadingOffline, setIsDownloadingOffline] = useState<boolean>(false);
-  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
-
-  // Safe toast access
   const toast = useToast();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [offlineSaved, setOfflineSaved] = useState(() => isAnimeOffline(anime.id));
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Check real IndexedDB / Cache Storage offline availability
   useEffect(() => {
-    let active = true;
-    const syncOfflineStatus = () => {
-      isAnimeOffline(anime.id)
-        .then((saved) => {
-          if (active) setIsOfflineSaved(saved);
-        })
-        .catch(() => {});
-    };
-
-    if (typeof isCached === 'boolean') {
-      setIsOfflineSaved(isCached);
-    } else {
-      syncOfflineStatus();
-    }
-
-    const unsubscribe = subscribeOfflineChanges((changedId) => {
-      if (changedId === undefined || Number(changedId) === Number(anime.id)) {
-        syncOfflineStatus();
-      }
+    setOfflineSaved(isAnimeOffline(anime.id));
+    return subscribeOfflineChanges(() => {
+      setOfflineSaved(isAnimeOffline(anime.id));
     });
+  }, [anime.id]);
 
-    return () => {
-      active = false;
-      unsubscribe();
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
     };
-  }, [anime.id, isCached]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
 
-  // Defer vote status check until browser idle time so it never competes with above-the-fold LCP image downloads
-  useEffect(() => {
-    if (!user?.id) return;
-    let isMounted = true;
-    const timer = setTimeout(() => {
-      cloudflareApi.checkVoteStatus(anime.id, user?.id).then((status) => {
-        if (isMounted) {
-          if (status.hasLiked) setInternalLiked(true);
-          if (status.hasUpvoted) setInternalUpvoted(true);
-        }
-      }).catch(() => {});
-    }, 1200);
+  const posterSrc =
+    anime.cover_image ||
+    anime.posterUrl ||
+    anime.poster_url ||
+    anime.poster ||
+    anime.image ||
+    '/logo.png';
 
-    return () => {
-      isMounted = false;
-      clearTimeout(timer);
-    };
-  }, [anime.id, user?.id]);
-
-  // Sync state when props change
-  useEffect(() => {
-    setInternalHeartCount(Number(anime.likesCount) || 0);
-  }, [anime.likesCount]);
-
-  useEffect(() => {
-    setInternalUpvoteCount(Number(anime.popularity) || 0);
-  }, [anime.popularity]);
-
-  useEffect(() => {
-    if (typeof isLiked === 'boolean') {
-      setInternalLiked(isLiked);
-    }
-  }, [isLiked]);
-
-  useEffect(() => {
-    if (typeof isUpvoted === 'boolean') {
-      setInternalUpvoted(isUpvoted);
-    }
-  }, [isUpvoted]);
-
-  const showNotification = (title: string, message: string, type: 'success' | 'warning' | 'info' = 'warning') => {
-    setCardNotice(message);
-    if (toast) {
-      if (type === 'success') toast.success(title, message);
-      else if (type === 'warning') toast.error(title, message);
-      else toast.info(title, message);
-    }
-    setTimeout(() => {
-      setCardNotice(null);
-    }, 2800);
-  };
-
-  // Parse, normalize, and strictly deduplicate languages using Set
-  const parsedLanguages = Array.isArray(anime.languages)
-    ? anime.languages
-    : typeof anime.languages === 'string' && anime.languages.trim().length > 0
-      ? anime.languages.split(/[,/|•+]+/).map(s => s.trim()).filter(Boolean)
-      : [];
-
-  const canonicalLanguages = parsedLanguages
-    .map(lang => {
-      const clean = String(lang).trim().toUpperCase().replace(/^[^A-Z]+|[^A-Z]+$/g, '');
-      if (!clean) return '';
-      if (clean.includes('HIN') || clean === 'HI') return 'HIN';
-      if (clean.includes('TAM') || clean === 'TA') return 'TAM';
-      if (clean.includes('TEL') || clean === 'TE') return 'TEL';
-      if (clean.includes('MAL') || clean === 'ML' || clean === 'MA') return 'MAL';
-      if (clean.includes('KAN') || clean === 'KN' || clean === 'KA') return 'KAN';
-      if (clean.includes('BEN') || clean === 'BN' || clean === 'BE') return 'BEN';
-      if (clean.includes('MAR') || clean === 'MR') return 'MAR';
-      if (clean.includes('GUJ') || clean === 'GU') return 'GUJ';
-      if (clean.includes('PUN') || clean === 'PAN' || clean === 'PA') return 'PUN';
-      if (clean.includes('ENG') || clean === 'EN') return 'ENG';
-      if (clean.includes('JAP') || clean.includes('JPN') || clean === 'JA') return 'JPN';
-      return clean.slice(0, 3);
-    })
-    .filter(Boolean);
-
-  const uniqueLanguages = [...new Set(canonicalLanguages)].filter(
-    code => !['JPN', 'JAP', 'JAPANESE', 'ENG', 'ENGLISH', 'ROMAJI'].includes(code)
-  );
-
-  // Normalize platforms cleanly (supports pipe, comma, slash, bullet strings and platforms_data)
-  const rawPlatforms = parsePlatformList(
+  // P0 #3: Never guess Crunchyroll when platform is missing
+  const platforms = parsePlatformList(
     anime.platform,
-    (anime as any).platforms,
-    (anime as any).platforms_data,
-    { defaultFallback: ['Crunchyroll'] }
+    undefined,
+    anime.platforms_data ?? anime.streaming_partners,
+    { defaultFallback: [] }
   );
-  const displayedPlatforms = rawPlatforms.slice(0, 3);
+  const primaryPlatformLabel = platforms.length > 0 ? platforms[0] : 'Not verified';
+  const extraPlatformCount = platforms.length > 1 ? platforms.length - 1 : 0;
 
-  const releaseYear = anime.releaseYear || anime.year || 2026;
-  const animeType = anime.type || 'TV Series';
-  const isMovie = animeType.toLowerCase().includes('movie');
-  const movieDuration = String((anime as any).duration || '').trim();
-  const meetsTrendingThreshold =
-    isTrending !== false && internalUpvoteCount >= TRENDING_VOTE_THRESHOLD;
+  const langCodes = extractCompactLanguageCodes(anime.languages);
+  const visibleLangCodes = langCodes.slice(0, 3);
+  const extraLangCount = langCodes.length > 3 ? langCodes.length - 3 : 0;
+  const compactLangText =
+    visibleLangCodes.length > 0
+      ? `${visibleLangCodes.join(' • ')}${extraLangCount > 0 ? ` +${extraLangCount}` : ''}`
+      : 'Dub info unverified';
 
-  // Dynamic status badge resolution based on canonical database status
-  const getStatusBadge = () => {
-    if (!isCanonicalAiring(anime)) return null;
-    const rawAiring = `${anime.airing_status || ''} ${anime.status || ''}`.toLowerCase();
-    const displayLabel = rawAiring.includes('ongoing') ? 'Ongoing' : 'Airing';
-    return {
-      label: displayLabel,
-      badgeClass: 'bg-emerald-950/80 text-emerald-400 border-emerald-700/50',
-      dotClass: 'bg-emerald-400',
-      pulse: true
-    };
-  };
+  const isAiring = isCanonicalAiring(anime);
+  const numericRating = Number(anime.rating);
+  const hasRating = Number.isFinite(numericRating) && numericRating > 0;
 
-  const statusBadge = getStatusBadge();
-
-  // Calculate total episodes across all seasons using reduce
-  const seasonsArray = (anime as any).seasons || (anime as any).mixedEntries || (anime as any).seasonsList || [];
-  const totalEpisodes = Array.isArray(seasonsArray) && seasonsArray.length > 0
-    ? seasonsArray.reduce((acc: number, season: any) => acc + Number(season.episodes || season.episode_count || 0), 0)
-    : Number(anime.episodes_count || (anime as any).episodes || (anime as any).episode_count || 0);
-
-  const getCleanCover = () => {
-    const directUrl = anime.cover_image || (anime as any).posterUrl || (anime as any).image || (anime as any).poster || (anime as any).poster_url;
-    if (directUrl && typeof directUrl === 'string' && directUrl.trim().length > 0) {
-      return directUrl.trim();
-    }
-    return '/logo.png';
-  };
-
-  // 1-Vote per Clerk user like handler
-  const handleLikeClick = async (e: React.MouseEvent) => {
+  const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
-
-    // Trigger the fun anime chibi like micro-interaction
-    setShowLikeAnimation(true);
-    setTimeout(() => {
-      setShowLikeAnimation(false);
-    }, 700);
-
-    if (isLiking) return;
-
-    if (!isSignedIn || !user) {
-      showNotification('Sign In Required', 'Please sign in with Clerk to like anime.', 'warning');
-      return;
-    }
-
-    if (internalLiked) {
-      showNotification('Already Voted', 'You have already liked this anime.', 'warning');
-      return;
-    }
-
-    setIsLiking(true);
-
+    setMenuOpen(false);
+    const shareUrl = `${window.location.origin}/anime/${anime.slug || anime.id}`;
     try {
-      const res = await cloudflareApi.likeAnime(anime.id, {
-        action: 'like',
-        delta: 1,
-        userId: user.id
-      });
-      const updatedCount = (res && typeof res.likes === 'number') 
-        ? res.likes 
-        : (res && typeof res.likesCount === 'number') 
-          ? res.likesCount 
-          : (internalHeartCount + 1);
-
-      setInternalLiked(true);
-      setInternalHeartCount(updatedCount);
-      if (onToggleLike) {
-        onToggleLike(anime.id, true, updatedCount);
-      }
-      showNotification('Vote Recorded', `Liked ${anime.title}!`, 'success');
-    } catch (error: any) {
-      const isAlreadyVoted = error?.alreadyVoted || /already voted/i.test(error?.message || '');
-      if (isAlreadyVoted) {
-        setInternalLiked(true);
-        showNotification('Already Voted', 'You have already voted for this anime.', 'warning');
-      } else {
-        console.error(`[AnimeCard] Failed to sync like for anime #${anime.id}:`, error);
-        showNotification('Vote Failed', error?.message || 'Could not register vote.', 'warning');
-      }
-    } finally {
-      setIsLiking(false);
-    }
-  };
-
-  // 1-Vote per Clerk user upvote handler
-  const handleUpvoteClick = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isVoting) return;
-
-    if (!isSignedIn || !user) {
-      showNotification('Sign In Required', 'Please sign in with Clerk to upvote anime.', 'warning');
-      return;
-    }
-
-    if (internalUpvoted) {
-      showNotification('Already Voted', 'You have already upvoted this anime.', 'warning');
-      return;
-    }
-
-    setIsVoting(true);
-
-    try {
-      const res = await cloudflareApi.upvoteAnime(anime.id, {
-        action: 'up',
-        delta: 1,
-        userId: user.id
-      });
-      const updatedCount = (res && typeof res.upvotes === 'number') 
-        ? res.upvotes 
-        : (res && typeof res.popularity === 'number') 
-          ? res.popularity 
-          : (internalUpvoteCount + 1);
-
-      setInternalUpvoted(true);
-      setInternalUpvoteCount(updatedCount);
-      if (onToggleUpvote) {
-        onToggleUpvote(anime.id, true, updatedCount);
-      }
-      showNotification('Vote Recorded', `Upvoted ${anime.title}!`, 'success');
-    } catch (error: any) {
-      const isAlreadyVoted = error?.alreadyVoted || /already voted/i.test(error?.message || '');
-      if (isAlreadyVoted) {
-        setInternalUpvoted(true);
-        showNotification('Already Voted', 'You have already upvoted this anime.', 'warning');
-      } else {
-        console.error(`[AnimeCard] Failed to sync upvote for anime #${anime.id}:`, error);
-        showNotification('Vote Failed', error?.message || 'Could not register upvote.', 'warning');
-      }
-    } finally {
-      setIsVoting(false);
-    }
-  };
-
-  const handleBookmarkClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (onToggleBookmark) {
-      onToggleBookmark(anime.id);
-    }
-  };
-
-  const handleDownloadOfflineClick = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isDownloadingOffline) return;
-
-    setIsDownloadingOffline(true);
-    try {
-      if (isOfflineSaved) {
-        await removeAnimeFromOffline(anime.id);
-        setIsOfflineSaved(false);
-        showNotification('Offline Removed', `${anime.title} removed from offline storage.`, 'info');
-      } else {
-        const res = await saveAnimeForOffline({
-          ...anime,
-          cover_image: getCleanCover(),
+      if (navigator.share) {
+        await navigator.share({
+          title: `${anime.title} — AniDub India`,
+          text: `Check verified Indian dub availability for ${anime.title} on AniDub India.`,
+          url: shareUrl,
         });
-        if (res.success) {
-          setIsOfflineSaved(true);
-          showNotification('Saved Offline', `${anime.title} info cached for offline browsing.`, 'success');
-        } else {
-          showNotification('Offline Save Failed', res.error || 'Could not save anime info offline.', 'warning');
-        }
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+        toast?.success('Link Copied', `Share link for ${anime.title} copied to clipboard.`);
       }
-    } catch (err: any) {
-      showNotification('Offline Save Failed', err?.message || 'Unable to save info offline.', 'warning');
-    } finally {
-      setIsDownloadingOffline(false);
+    } catch {
+      // User cancelled native share
     }
   };
 
-  const handleReportClick = (e: React.MouseEvent) => {
+  const handleToggleOffline = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsReportModalOpen(true);
+    setMenuOpen(false);
+    if (offlineSaved) {
+      removeAnimeFromOffline(anime.id);
+      setOfflineSaved(false);
+      toast?.info('Removed Offline Copy', `${anime.title} removed from offline info cache.`);
+    } else {
+      saveAnimeForOffline(anime as any);
+      setOfflineSaved(true);
+      toast?.success('Saved Offline', `${anime.title} info saved for offline viewing.`);
+    }
   };
 
-  const handleShareClick = (e: React.MouseEvent) => {
+  const handleReport = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const shareUrl = anime.slug
-      ? `${window.location.origin}/anime/${anime.slug}`
-      : `${window.location.origin}/anime/${anime.id}`;
-    if (navigator.share) {
-      navigator.share({
-        title: anime.title,
-        text: `Watch ${anime.title} with regional Indian dubs!`,
-        url: shareUrl
-      }).catch(() => {});
-    } else if (navigator.clipboard) {
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        showNotification('Link Copied', 'Share link copied to clipboard.', 'success');
-      }).catch(() => {});
-    }
+    setMenuOpen(false);
+    setShowReportModal(true);
   };
 
   return (
-    <motion.div
-      initial={shouldReduceMotion || isPriorityCard ? false : { opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ 
-        duration: 0.25, 
-        ease: "easeOut",
-        delay: staggerDelay 
-      }}
-      className="h-full"
-    >
-      <motion.div 
+    <>
+      <article
         onClick={() => onSelect(anime)}
-        whileHover={shouldReduceMotion ? undefined : { y: -4, transition: { duration: 0.2 } }}
-        whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
-        className="group relative flex flex-col h-full bg-[#131926] cursor-pointer select-none rounded-2xl border border-neutral-800/60 hover:border-purple-500/40 shadow-lg will-change-transform"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect(anime);
+          }
+        }}
+        className="group relative h-full flex flex-col rounded-2xl bg-[#101522] border border-white/10 hover:border-purple-500/45 overflow-hidden transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500/60"
       >
-        {/* CARD NOTIFICATION BADGE */}
-        {cardNotice && (
-          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-3 py-1 bg-neutral-900/95 border border-purple-500/60 text-white text-[10px] font-bold rounded-full shadow-2xl backdrop-blur-md pointer-events-none text-center whitespace-nowrap">
-            {cardNotice}
-          </div>
-        )}
-
-        {/* POSTER CONTAINER */}
-        <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
+        {/* Uniform 3:4 Poster Container */}
+        <div className="relative aspect-[3/4] w-full bg-[#0a0e18] overflow-hidden shrink-0">
           <Image
-            src={getCleanCover()}
+            src={posterSrc}
             alt={anime.title}
-            priority={isPriorityCard}
-            loading={isPriorityCard ? undefined : "lazy"}
-            sizes="(max-width: 640px) 48vw, (max-width: 768px) 32vw, (max-width: 1024px) 24vw, 200px"
-            width={300}
-            height={420}
-            quality={75}
-            className="w-full h-full object-cover object-center sm:group-hover:scale-105 transition-transform duration-300"
+            priority={priority}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           />
-          {/* Bottom gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0d121c] via-transparent to-black/40 pointer-events-none" />
 
-          {/* TOP-LEFT BADGES */}
-          <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1.5 pointer-events-none">
-            {meetsTrendingThreshold && (
-              <motion.div 
-                initial={shouldReduceMotion ? false : { scale: 0.75, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring", stiffness: 400, damping: 22, delay: staggerDelay + 0.05 }}
-                className="inline-flex items-center gap-1 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shadow-lg border border-purple-400/40"
-              >
-                <Flame className="w-3 h-3 fill-current text-amber-200" />
-                <span>Trending</span>
-              </motion.div>
+          {/* Subtle bottom readability gradient */}
+          <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#101522] via-[#101522]/40 to-transparent pointer-events-none" />
+
+          {/* Top-Left: Status / Rating badge */}
+          <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+            {hasRating && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-black/75 backdrop-blur-md border border-white/10 text-[11px] font-bold text-amber-300 tabular-nums">
+                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                {numericRating.toFixed(1)}
+              </span>
             )}
-            {isOfflineSaved && (
-              <motion.div 
-                initial={shouldReduceMotion ? false : { scale: 0.75, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring", stiffness: 400, damping: 22, delay: staggerDelay + 0.1 }}
-                className="inline-flex items-center gap-1 bg-emerald-950/90 text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md border border-emerald-500/40 backdrop-blur-md"
-              >
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                <span>Saved Offline</span>
-              </motion.div>
+            {isAiring && (
+              <span className="px-2 py-1 rounded-lg bg-emerald-600/85 text-white text-[10px] font-bold uppercase tracking-wide">
+                Airing
+              </span>
             )}
           </div>
 
-          {/* TOP-RIGHT ACTION BUTTONS */}
-          <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
-            {/* Desktop Only Buttons */}
-            <motion.button
-              type="button"
-              whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
-              onClick={handleDownloadOfflineClick}
-              disabled={isDownloadingOffline}
-              data-offline-state={isOfflineSaved ? 'saved' : 'not-saved'}
-              className={`hidden sm:flex p-1.5 rounded-full backdrop-blur-md border transition-all duration-200 shadow-md cursor-pointer ${
-                isOfflineSaved
-                  ? 'bg-emerald-600/90 border-emerald-400/60 text-white'
-                  : 'bg-black/60 border-white/10 text-neutral-300 hover:text-white'
-              } ${isDownloadingOffline ? 'opacity-60' : ''}`}
-              title={isOfflineSaved ? 'Saved Offline' : 'Save Info Offline'}
-              aria-label={isOfflineSaved ? 'Saved Offline' : 'Save Info Offline'}
-            >
-              {isDownloadingOffline ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : isOfflineSaved ? (
-                <CheckCircle2 className="w-3.5 h-3.5" />
-              ) : (
-                <DownloadCloud className="w-3.5 h-3.5" />
-              )}
-            </motion.button>
-            <motion.button
-              type="button"
-              whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
-              onClick={handleReportClick}
-              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-rose-400 transition-all duration-200 shadow-md cursor-pointer"
-              title="Report info"
-              aria-label="Report info"
-            >
-              <Flag className="w-3.5 h-3.5" />
-            </motion.button>
-            <motion.button
-              type="button"
-              whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
-              onClick={handleShareClick}
-              className="hidden sm:flex p-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-neutral-300 hover:text-white transition-all duration-200 shadow-md cursor-pointer"
-              title="Share"
-              aria-label="Share"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-            </motion.button>
+          {/* Top-Right: Single Primary Action (Save/Bookmark) + Clean Overflow Menu */}
+          <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5" ref={menuRef}>
+            {onToggleBookmark && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleBookmark(anime.id);
+                }}
+                aria-label={isBookmarked ? `Remove ${anime.title} from Library` : `Save ${anime.title} to Library`}
+                aria-pressed={isBookmarked}
+                className={`w-9 h-9 rounded-xl backdrop-blur-md border flex items-center justify-center transition-colors cursor-pointer ${
+                  isBookmarked
+                    ? 'bg-purple-600 border-purple-400 text-white'
+                    : 'bg-black/70 border-white/15 text-neutral-200 hover:bg-black/90 hover:text-white'
+                }`}
+              >
+                <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
+              </button>
+            )}
 
-            {/* Always Visible Like Button with Pure Tailwind Pop-up Micro-interaction */}
             <div className="relative">
-              {showLikeAnimation && (
-                <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none whitespace-nowrap select-none">
-                  <div className="px-3 py-1 rounded-full bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 text-xs font-black text-white shadow-2xl shadow-pink-500/50 border border-white/50 transition-all duration-700 ease-out opacity-100 translate-y-0 scale-100">
-                    (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧ 💖
-                  </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen((prev) => !prev);
+                }}
+                aria-label={`More actions for ${anime.title}`}
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
+                className="w-9 h-9 rounded-xl bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/15 text-neutral-200 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+
+              {menuOpen && (
+                <div
+                  role="menu"
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute right-0 mt-1.5 w-44 rounded-xl bg-[#0e1422] border border-white/15 shadow-2xl p-1 z-30"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleShare}
+                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-neutral-200 hover:bg-white/10 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+                    <span>Share Link</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleToggleOffline}
+                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-neutral-200 hover:bg-white/10 flex items-center gap-2 cursor-pointer"
+                  >
+                    {offlineSaved ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <DownloadCloud className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
+                    )}
+                    <span>{offlineSaved ? 'Saved Offline' : 'Save Info Offline'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleReport}
+                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-rose-300 hover:bg-rose-500/15 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Flag className="w-3.5 h-3.5 shrink-0" />
+                    <span>Report Issue</span>
+                  </button>
                 </div>
               )}
-
-              <motion.button
-                type="button"
-                whileHover={shouldReduceMotion || internalLiked ? undefined : { scale: 1.1 }}
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
-                onClick={handleLikeClick}
-                disabled={isLiking || internalLiked}
-                className={`p-1.5 rounded-full backdrop-blur-md border transition-all duration-200 shadow-md ${
-                  internalLiked 
-                    ? 'bg-primary-theme text-white border-primary-light/50 shadow-lg shadow-purple-950/40 cursor-default' 
-                    : 'bg-black/60 text-neutral-300 hover:text-primary-theme hover:scale-105 border-white/10 cursor-pointer'
-                } ${isLiking ? 'opacity-50 animate-pulse' : ''}`}
-                title={internalLiked ? 'Already liked from this IP' : 'Like (1 per IP)'}
-                aria-label={internalLiked ? `Already liked ${anime.title}` : `Like ${anime.title}`}
-              >
-                <Heart className={`w-3.5 h-3.5 ${internalLiked ? 'fill-white text-white' : ''}`} />
-              </motion.button>
             </div>
-
-            {/* Always Visible Watchlist Bookmark Button */}
-            <motion.button
-              type="button"
-              whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.88 }}
-              onClick={handleBookmarkClick}
-              className={`p-1.5 rounded-full backdrop-blur-md border border-white/10 shadow-md transition-all duration-200 hover:scale-105 active:scale-90 cursor-pointer ${
-                isBookmarked 
-                  ? 'bg-primary-theme text-white shadow-lg' 
-                  : 'bg-black/60 text-neutral-300 hover:text-white'
-              }`}
-              title={isBookmarked ? 'Remove from Watchlist' : 'Add to Watchlist'}
-              aria-label={isBookmarked ? `Remove ${anime.title} from Watchlist` : `Add ${anime.title} to Watchlist`}
-            >
-              <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-white text-white' : ''}`} />
-            </motion.button>
-          </div>
-
-          {/* POSTER BOTTOM STATS */}
-          <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between text-[11px] font-bold text-white/90 pointer-events-none">
-            {/* Left Rating Pill */}
-            <div className="flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-md backdrop-blur-sm border border-white/10 shadow-sm">
-              <Star className="w-3 h-3 text-orange-500 fill-orange-500" />
-              <span className="text-orange-400 font-black">RATING</span>
-              <span>{anime.rating ? `${anime.rating.toFixed(1)}/10` : 'N/A'}</span>
-            </div>
-
-            {/* Dynamic Status Badge (uses real database status) */}
-            {statusBadge && (
-              <motion.div 
-                initial={shouldReduceMotion ? false : { scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring", stiffness: 400, damping: 22, delay: staggerDelay + 0.15 }}
-                className={`flex items-center gap-1 border px-1.5 py-0.5 rounded text-[10px] font-semibold shadow-sm backdrop-blur-sm ${statusBadge.badgeClass}`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.dotClass} ${statusBadge.pulse ? 'animate-pulse' : ''}`} />
-                <span>{statusBadge.label}</span>
-              </motion.div>
-            )}
           </div>
         </div>
 
-        {/* INFO SECTION */}
-        <div className="p-3 sm:p-3.5 flex flex-col justify-between flex-grow min-w-0">
-          <div>
-            {/* Dub Badges (Strictly Deduplicated) */}
-            <div className="flex flex-wrap gap-1 mb-2">
-              {uniqueLanguages.map((code, idx) => {
-                let badgeClass = 'bg-[#059669] text-emerald-100';
-                let shortLabel = 'Hin';
-
-                switch (code) {
-                  case 'HIN':
-                    badgeClass = 'bg-[#059669] text-emerald-100';
-                    shortLabel = 'Hin';
-                    break;
-                  case 'TAM':
-                    badgeClass = 'bg-[#b45309] text-amber-100';
-                    shortLabel = 'Tam';
-                    break;
-                  case 'TEL':
-                    badgeClass = 'bg-[#0284c7] text-sky-100';
-                    shortLabel = 'Tel';
-                    break;
-                  case 'MAL':
-                    badgeClass = 'bg-[#7c3aed] text-purple-100';
-                    shortLabel = 'Mal';
-                    break;
-                  case 'KAN':
-                    badgeClass = 'bg-indigo-600 text-indigo-100';
-                    shortLabel = 'Kan';
-                    break;
-                  case 'BEN':
-                    badgeClass = 'bg-pink-600 text-pink-100';
-                    shortLabel = 'Ben';
-                    break;
-                  case 'MAR':
-                    badgeClass = 'bg-orange-600 text-orange-100';
-                    shortLabel = 'Mar';
-                    break;
-                  case 'GUJ':
-                    badgeClass = 'bg-teal-600 text-teal-100';
-                    shortLabel = 'Guj';
-                    break;
-                  case 'PUN':
-                    badgeClass = 'bg-amber-700 text-amber-100';
-                    shortLabel = 'Pun';
-                    break;
-                  case 'ENG':
-                    badgeClass = 'bg-slate-700 text-slate-200';
-                    shortLabel = 'Eng';
-                    break;
-                  case 'JPN':
-                    badgeClass = 'bg-red-900 text-red-200';
-                    shortLabel = 'Jpn';
-                    break;
-                  default:
-                    badgeClass = 'bg-neutral-800 text-neutral-200 border-neutral-700';
-                    shortLabel = code.charAt(0) + code.slice(1).toLowerCase();
-                    break;
-                }
-
-                return (
-                  <span
-                    key={`card_${anime.id}_code_${code}_${idx}`}
-                    className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm border border-white/5 ${badgeClass}`}
-                  >
-                    {shortLabel}
-                  </span>
-                );
-              })}
-            </div>
-
-            {/* Title */}
-            <h3 className="font-bold text-sm text-neutral-100 line-clamp-1 group-hover:text-primary-theme transition-colors leading-snug">
+        {/* Clean Metadata Body (Uniform Height) */}
+        <div className="p-3 sm:p-3.5 flex flex-col flex-1 justify-between gap-2">
+          <div className="space-y-1.5">
+            <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 min-h-[2.5rem] group-hover:text-purple-200 transition-colors">
               {anime.title}
             </h3>
 
-            {/* Subtitle / Meta row */}
-            <div className="flex items-center gap-2 text-[10px] text-neutral-400 mt-1">
-              <span>{isMovie ? 'Movie' : animeType}</span>
-              <span>•</span>
-              <span>{releaseYear}</span>
-              {isMovie ? (
-                movieDuration ? (
-                  <>
-                    <span>•</span>
-                    <span>{movieDuration}</span>
-                  </>
-                ) : null
-              ) : totalEpisodes > 0 ? (
-                <>
-                  <span>•</span>
-                  <span>{totalEpisodes === 1 ? '1 Ep' : `${totalEpisodes} Eps`}</span>
-                </>
-              ) : null}
-            </div>
+            {/* Compact Language Summary */}
+            <p className="text-[11px] font-semibold tracking-wide text-purple-300 truncate">
+              {compactLangText}
+            </p>
           </div>
 
-          {/* Bottom Bar */}
-          <div className="mt-3 pt-2 border-t border-neutral-800/70 flex items-center justify-between gap-2">
-            {/* Left Platforms */}
-            <div className="flex items-center gap-1 min-w-0 overflow-hidden">
-              {displayedPlatforms.map((plat, idx) => (
-                <span
-                  key={`card_${anime.id}_plat_${plat}_${idx}`}
-                  className="text-[9px] font-semibold bg-[#1a2133] text-neutral-400 px-1.5 py-0.5 rounded truncate"
-                >
-                  {plat}
-                </span>
-              ))}
-            </div>
-
-            {/* Right Counters */}
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              {/* Heart Counter Button */}
-              <div className="relative">
-                <AnimatePresence>
-                  {showLikeAnimation && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.2, y: 5 }}
-                      animate={{ opacity: 1, scale: 1.15, y: -42 }}
-                      exit={{ opacity: 0, scale: 0.6, y: -62 }}
-                      transition={{ 
-                        type: "spring", 
-                        stiffness: 480, 
-                        damping: 18,
-                        duration: 0.9 
-                      }}
-                      className="absolute -top-2 left-1/2 -translate-x-1/2 pointer-events-none z-50 flex flex-col items-center select-none"
-                    >
-                      <div className="px-2 py-0.5 rounded-full bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 text-[8px] font-black text-white shadow-lg shadow-pink-500/40 flex items-center gap-0.5 mb-1 whitespace-nowrap border border-pink-300/40">
-                        <span>💖</span>
-                        <span>Sugoi!</span>
-                      </div>
-                      <div className="relative w-9 h-9 flex items-center justify-center">
-                        <img
-                          src="https://api.dicebear.com/9.x/fun-emoji/svg?seed=AnyaChibiLove&backgroundColor=b6e3f4,ffd5dc,ffdfbf"
-                          alt="Anime Chibi"
-                          width={32}
-                          height={32}
-                          loading="lazy"
-                          decoding="async"
-                          className="w-8 h-8 object-contain drop-shadow-[0_4px_8px_rgba(244,63,94,0.5)] transform -rotate-6"
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <motion.button
-                  type="button"
-                  whileHover={shouldReduceMotion ? undefined : { scale: 1.06 }}
-                  whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                  onClick={handleLikeClick}
-                  disabled={isLiking || internalLiked}
-                  title={internalLiked ? 'Already liked from this device' : 'Like (1 vote per device)'}
-                  aria-label={`Like ${anime.title} (${internalHeartCount})`}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all duration-200 ${
-                    internalLiked
-                      ? 'bg-primary-theme/25 text-primary-theme border border-primary-theme/50 cursor-default'
-                      : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:border-purple-500/40 cursor-pointer'
-                  } ${isLiking ? 'opacity-50' : ''}`}
-                >
-                  <Heart className={`w-3 h-3 ${internalLiked ? 'fill-current' : ''}`} />
-                  <span>{internalHeartCount}</span>
-                </motion.button>
-              </div>
-
-              {/* Upvote Counter Button */}
-              <motion.button
-                type="button"
-                whileHover={shouldReduceMotion ? undefined : { scale: 1.06 }}
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={handleUpvoteClick}
-                disabled={isVoting || internalUpvoted}
-                title={internalUpvoted ? 'Already upvoted from this device' : 'Upvote (1 vote per device)'}
-                aria-label={`Upvote ${anime.title} (${internalUpvoteCount})`}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black transition-all duration-200 ${
-                  internalUpvoted
-                    ? 'bg-orange-500/25 text-orange-400 border border-orange-500/50 cursor-default'
-                    : 'bg-[#161d2f] text-neutral-400 border border-neutral-800 hover:border-orange-500/40 cursor-pointer'
-                } ${isVoting ? 'opacity-50' : ''}`}
-              >
-                <Flame className={`w-3 h-3 ${internalUpvoted ? 'fill-current' : ''}`} />
-                <span>{internalUpvoteCount}</span>
-              </motion.button>
-            </div>
+          {/* Honest OTT Platform Footer */}
+          <div className="pt-2 border-t border-white/8 flex items-center justify-between gap-2 text-[11px]">
+            <span
+              className={`font-medium truncate ${
+                primaryPlatformLabel === 'Not verified' ? 'text-neutral-500 italic' : 'text-neutral-300'
+              }`}
+            >
+              {primaryPlatformLabel}
+              {extraPlatformCount > 0 ? ` +${extraPlatformCount}` : ''}
+            </span>
+            {anime.year ? (
+              <span className="text-neutral-500 font-medium tabular-nums shrink-0">{anime.year}</span>
+            ) : null}
           </div>
         </div>
-      </motion.div>
+      </article>
 
-      {isReportModalOpen &&
+      {showReportModal &&
         typeof document !== 'undefined' &&
         createPortal(
           <ReportModal
+            isOpen={showReportModal}
+            onClose={() => setShowReportModal(false)}
             animeId={anime.id}
             animeTitle={anime.title}
-            onClose={() => setIsReportModalOpen(false)}
-            onSuccess={() =>
-              showNotification('Report Submitted', 'Thank you! Report saved for moderator review.', 'success')
-            }
           />,
           document.body
         )}
-    </motion.div>
+    </>
   );
 };
 

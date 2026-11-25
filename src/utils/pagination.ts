@@ -189,7 +189,7 @@ export function filterAndSortCatalog<T extends {
   if (options.language && options.language !== 'All') {
     const langKey = options.language.toUpperCase().substring(0, 3); // 'HIN', 'TAM', 'TEL'
     filtered = filtered.filter(item => {
-      const langs = (item.languages || 'HIN,TAM,TEL').toUpperCase();
+      const langs = (item.languages || '').toUpperCase();
       return langs.includes(langKey) || langs.includes(options.language!.toUpperCase());
     });
   }
@@ -206,7 +206,7 @@ export function filterAndSortCatalog<T extends {
   if (options.platform && options.platform !== 'All') {
     const targetPlatform = options.platform.toLowerCase();
     filtered = filtered.filter(item => 
-      (item.platform || 'Crunchyroll').toLowerCase().includes(targetPlatform)
+      (item.platform || '').toLowerCase().includes(targetPlatform)
     );
   }
 
