@@ -19,6 +19,8 @@ export interface FeedbackSectionProps {
   onSubmitDub?: () => void;
   onNavigateLanguage?: (language: string) => void;
   onOpenFeedbackPage?: () => void;
+  onOpenPrivacy?: () => void;
+  onOpenCopyright?: () => void;
   mode?: 'full' | 'footer';
 }
 
@@ -26,6 +28,8 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   onSubmitDub,
   onNavigateLanguage,
   onOpenFeedbackPage,
+  onOpenPrivacy,
+  onOpenCopyright,
   mode = 'full',
 }) => {
   const [name, setName] = useState('');
@@ -223,9 +227,37 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
           </div>
         </div>
 
-        <p className="mt-5 pt-4 border-t border-white/5 text-center text-[11px] text-neutral-500">
-          © {new Date().getFullYear()} AniDub India. Informational directory linking exclusively to official legal streaming platforms.
-        </p>
+        <div className="mt-5 pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-neutral-500">
+          <p className="text-center sm:text-left">
+            © {new Date().getFullYear()} AniDub India. Legal OTT discovery directory — we do not host video streams.
+          </p>
+          <div className="flex items-center gap-4 font-semibold">
+            <a
+              href="/privacy"
+              onClick={(e) => {
+                if (onOpenPrivacy) {
+                  e.preventDefault();
+                  onOpenPrivacy();
+                }
+              }}
+              className="text-neutral-400 hover:text-purple-300 transition-colors"
+            >
+              Privacy Policy
+            </a>
+            <a
+              href="/copyright"
+              onClick={(e) => {
+                if (onOpenCopyright) {
+                  e.preventDefault();
+                  onOpenCopyright();
+                }
+              }}
+              className="text-neutral-400 hover:text-purple-300 transition-colors"
+            >
+              Copyright &amp; Takedown
+            </a>
+          </div>
+        </div>
       </footer>
     );
   }
@@ -431,8 +463,35 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
         <div className="flex justify-center">
           <AniDubLogo size="sm" showText={true} />
         </div>
+        <div className="flex items-center justify-center gap-4 text-xs font-semibold">
+          <a
+            href="/privacy"
+            onClick={(e) => {
+              if (onOpenPrivacy) {
+                e.preventDefault();
+                onOpenPrivacy();
+              }
+            }}
+            className="text-neutral-400 hover:text-purple-300 transition-colors"
+          >
+            Privacy Policy
+          </a>
+          <span className="text-neutral-600">•</span>
+          <a
+            href="/copyright"
+            onClick={(e) => {
+              if (onOpenCopyright) {
+                e.preventDefault();
+                onOpenCopyright();
+              }
+            }}
+            className="text-neutral-400 hover:text-purple-300 transition-colors"
+          >
+            Copyright &amp; Takedown
+          </a>
+        </div>
         <p className="text-xs text-neutral-500">
-          © {new Date().getFullYear()} AniDub India — Official Indian Dubbed Anime Directory
+          © {new Date().getFullYear()} AniDub India — Legal Indian Dubbed Anime Discovery Directory
         </p>
       </div>
     </section>

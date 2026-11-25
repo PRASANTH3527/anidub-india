@@ -483,7 +483,14 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
       }
 
       const animeTitle = String(body.animeTitle || body.anime_title || '').trim().slice(0, 200);
-      const issueType = String(body.issueType || body.issue_type || body.reason || '').trim().slice(0, 150);
+      const rawField = String(body.field || body.targetField || body.reportField || '').trim().slice(0, 60);
+      const rawIssueType = String(body.issueType || body.issue_type || body.reason || '').trim().slice(0, 150);
+      const issueType = rawField
+        ? (rawIssueType && rawIssueType.toLowerCase() !== rawField.toLowerCase()
+            ? `[${rawField}] ${rawIssueType}`
+            : rawField
+          ).slice(0, 150)
+        : rawIssueType;
       const description = String(body.description || body.notes || body.details || '').trim().slice(0, 2000);
       const rawAnimeId = body.animeId ?? body.anime_id;
       const numericAnimeId =
@@ -495,7 +502,7 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
         return jsonResponse({ success: false, error: 'Anime title is required' }, 400, request);
       }
       if (!issueType) {
-        return jsonResponse({ success: false, error: 'Issue Type is required' }, 400, request);
+        return jsonResponse({ success: false, error: 'Please select which field needs correction' }, 400, request);
       }
 
       const session = await getAuth(request, env).catch(() => ({
@@ -542,8 +549,9 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
         const tgMsg =
           `🚩 *ANIME ISSUE REPORT*\n\n` +
           `🎬 *Title:* ${animeTitle}${numericAnimeId ? ` (#${numericAnimeId})` : ''}\n` +
-          `⚠️ *Issue Type:* ${issueType}\n` +
-          `📝 *Description:* ${description || 'No additional notes provided.'}\n` +
+          (rawField ? `🎯 *Field:* ${rawField}\n` : '') +
+          `⚠️ *Issue:* ${issueType}\n` +
+          `📝 *Note:* ${description || 'No additional notes provided.'}\n` +
           `👤 *Reporter:* ${session.email || reporterUserId || 'Guest'}\n`;
         await sendTelegramAlert(env, tgMsg);
       }
@@ -554,6 +562,7 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
           reportId,
           animeId: numericAnimeId,
           animeTitle,
+          field: rawField || null,
           issueType,
           description,
           deliveredToTelegram,

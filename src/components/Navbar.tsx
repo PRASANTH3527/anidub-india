@@ -16,8 +16,11 @@ import {
   MessageCircleHeart,
   ChevronDown,
   X,
+  Scale,
+  FileText,
 } from 'lucide-react';
 import { AniDubLogo } from './AniDubLogo';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface NavbarProps {
   activeTab: string;
@@ -25,6 +28,7 @@ interface NavbarProps {
   watchlistCount: number;
   onUnlockAdmin: () => void;
   onOpenCollection?: () => void;
+  onOpenCompare?: () => void;
   onSelectAnime?: (id: number) => void;
   onSubmitDub?: () => void;
   feedView?: string;
@@ -42,6 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   watchlistCount,
   onUnlockAdmin,
+  onOpenCompare,
   onSubmitDub,
   setFeedView,
   isAdminAuthenticated,
@@ -101,6 +106,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     activeTab === 'foryou' ||
     activeTab === 'tierlist' ||
     activeTab === 'feedback' ||
+    activeTab === 'privacy' ||
+    activeTab === 'copyright' ||
     activeTab === 'admin';
 
   const primaryDesktopItems = [
@@ -189,8 +196,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             })}
           </div>
 
-          {/* ZONE 3: Community Chat Shortcut + More Menu + Admin */}
+          {/* ZONE 3: Install App + Community Chat Shortcut + More Menu + Admin */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0" ref={moreMenuRef}>
+            <div className="hidden lg:block">
+              <PWAInstallButton variant="button" />
+            </div>
+
             <button
               type="button"
               onClick={() => navigate('chat')}
@@ -283,6 +294,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </div>
                   </button>
 
+                  {onOpenCompare && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenuOpen(false);
+                        onOpenCompare();
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-neutral-200 hover:bg-white/5 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <Scale className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <div>
+                        <div>Compare Anime</div>
+                        <div className="text-[10px] text-neutral-400 font-normal">Side-by-side dubs &amp; OTTs</div>
+                      </div>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     role="menuitem"
@@ -297,6 +326,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <div className="text-[10px] text-neutral-400 font-normal">Rank your favorite dubs</div>
                     </div>
                   </button>
+
+                  <PWAInstallButton
+                    variant="menu-item"
+                    onActionComplete={() => setMoreMenuOpen(false)}
+                  />
 
                   <div className="my-1.5 border-t border-white/10" />
 
@@ -325,6 +359,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                   >
                     <MessageCircleHeart className="w-4 h-4 text-rose-400 shrink-0" />
                     <span>Share Feedback</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => navigate('privacy')}
+                    className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      activeTab === 'privacy' || activeTab === 'copyright'
+                        ? 'bg-purple-600/20 text-white'
+                        : 'text-neutral-300 hover:bg-white/5'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4 text-neutral-400 shrink-0" />
+                    <span>Privacy &amp; Copyright</span>
                   </button>
 
                   <button

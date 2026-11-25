@@ -278,6 +278,7 @@ export interface FetchCatalogOptions {
   freeLegal?: boolean;
   sort?: string;
   includePending?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface CatalogMeta {
@@ -368,6 +369,9 @@ class CloudflareApiService {
 
       return res;
     } catch (err: any) {
+      if (err?.name === 'AbortError' || options.signal?.aborted) {
+        throw err;
+      }
       return new Response(
         JSON.stringify({
           success: false,
@@ -460,8 +464,12 @@ class CloudflareApiService {
       res = await this.smartFetch(endpoint, {
         method: 'GET',
         headers: this.getHeaders(Boolean(options.includePending)),
+        signal: options.signal,
       });
     } catch (networkErr: any) {
+      if (networkErr?.name === 'AbortError' || options.signal?.aborted) {
+        throw networkErr;
+      }
       const offline = isBrowserOffline();
       return {
         ok: false,
@@ -1606,12 +1614,14 @@ class CloudflareApiService {
   public async reportIssue(payload: {
     animeId?: number | string;
     animeTitle: string;
+    field?: string;
     issueType?: string;
     reason?: string;
     description?: string;
     notes?: string;
   }): Promise<{ success: boolean; reportId?: number | null; deliveredToTelegram?: boolean; error?: string }> {
-    const resolvedIssueType = payload.issueType || payload.reason || '';
+    const resolvedField = payload.field ? String(payload.field).trim() : '';
+    const resolvedIssueType = payload.issueType || payload.reason || resolvedField || '';
     const resolvedDescription = payload.description ?? payload.notes ?? '';
     const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.REPORT, {
       method: 'POST',
@@ -1619,6 +1629,7 @@ class CloudflareApiService {
       body: JSON.stringify({
         animeId: payload.animeId,
         animeTitle: payload.animeTitle,
+        field: resolvedField || undefined,
         issueType: resolvedIssueType,
         reason: resolvedIssueType,
         description: resolvedDescription,

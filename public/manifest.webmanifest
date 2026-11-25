@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "AniDub India — Indian Dubbed Anime Directory",
+  "short_name": "AniDub IN",
+  "description": "Legal Indian dubbed anime discovery directory for Hindi, Tamil, Telugu, Malayalam, and Kannada dubs on official OTT platforms.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0b0f17",
+  "background_color": "#0b0f17",
+  "categories": ["entertainment", "lifestyle"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

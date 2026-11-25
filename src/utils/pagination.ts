@@ -2,6 +2,8 @@
  * Pure pagination and catalog filtering logic for Cloudflare D1 queries
  */
 import { filterCatalogByStatus } from './animeStatus';
+import { matchesAnimeSearchQuery } from './searchFilterState';
+import { matchesSelectedPlatforms } from './ottHub';
 
 export interface PaginationResult {
   page: number;
@@ -202,12 +204,9 @@ export function filterAndSortCatalog<T extends {
     );
   }
 
-  // Platform filter
-  if (options.platform && options.platform !== 'All') {
-    const targetPlatform = options.platform.toLowerCase();
-    filtered = filtered.filter(item => 
-      (item.platform || '').toLowerCase().includes(targetPlatform)
-    );
+  // Platform filter (canonical OTT alias aware, never fabricates unverified availability)
+  if (options.platform && options.platform !== 'All' && options.platform !== 'All Platforms') {
+    filtered = filtered.filter((item) => matchesSelectedPlatforms(item as any, [options.platform!]));
   }
 
   // Type filter
@@ -223,14 +222,9 @@ export function filterAndSortCatalog<T extends {
     filtered = filterCatalogByStatus(filtered as any[], options.status) as T[];
   }
 
-  // Search filter (ignores secret admin commands starting with /admin)
+  // Search filter (supports English + Japanese/Romaji/alias titles, ignores secret /admin commands)
   if (options.search && options.search.trim() && !options.search.trim().toLowerCase().startsWith('/admin')) {
-    const q = options.search.toLowerCase().trim();
-    filtered = filtered.filter(item => 
-      item.title.toLowerCase().includes(q) ||
-      (item.synopsis && item.synopsis.toLowerCase().includes(q)) ||
-      item.genres.toLowerCase().includes(q)
-    );
+    filtered = filtered.filter((item) => matchesAnimeSearchQuery(item as any, options.search!));
   }
 
   // Sort

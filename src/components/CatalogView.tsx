@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense, lazy } from 'react';
 import { motion } from 'motion/react';
 import { 
   AlertTriangle,
@@ -6,9 +6,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Clock,
   Compass,
   Dices, 
   RefreshCw,
+  Scale,
+  Share2,
   Sparkles, 
   Loader2,
   Search,
@@ -35,6 +38,19 @@ import {
 import { SkeletonGrid } from './SkeletonGrid';
 import { proxyUrl } from '../utils/imgbb';
 import { translate, SupportedLanguage } from '../utils/i18n';
+import { CANONICAL_OTT_FILTER_OPTIONS } from '../utils/ottHub';
+import {
+  addRecentSearch,
+  buildShareableFilterQuery,
+  clearRecentSearches,
+  parseFiltersFromSearchParams,
+  readPreferredLanguage,
+  readRecentSearches,
+  removeRecentSearch,
+  writePreferredLanguage,
+} from '../utils/searchFilterState';
+import { ACCOUNT_CHANGED_EVENT } from '../utils/accountIsolation';
+import { useToast } from './Toast';
 
 const RecentlyViewedRow = lazy(() => import('./RecentlyViewedRow').then(m => ({ default: m.RecentlyViewedRow })));
 
@@ -74,6 +90,8 @@ export interface CatalogViewProps {
   onOpenCollection: () => void;
   onOpenExplore?: () => void;
   onOpenRecommendations?: () => void;
+  onOpenCompare?: () => void;
+  userId?: string | null;
   mode?: 'home' | 'explore';
   feedView?: string;
   recentlyViewed?: any[];
@@ -97,25 +115,7 @@ const GENRES = [
   'Music', 'Military', 'Historical', 'Martial Arts', 'Ecchi', 'Gourmet', 'Workplace',
   'School', 'Mythology', 'Parody'
 ];
-const PLATFORMS = [
-  'All Platforms',
-  'Crunchyroll',
-  'Netflix',
-  'JioCinema',
-  'JioHotstar',
-  'YouTube',
-  'YouTube (Muse India)',
-  'YouTube (Ani-One)',
-  'Disney+ Hotstar',
-  'Prime Video',
-  'Anime Times',
-  'Sony YAY!',
-  'Sony LIV',
-  'Bilibili',
-  'Cartoon Network India',
-  'ETV Bal Bharat',
-  'Zee5'
-];
+const PLATFORMS: string[] = [...CANONICAL_OTT_FILTER_OPTIONS];
 const TYPES = ['All Types', 'TV Series', 'Movie', 'OVA', 'Special'];
 const STATUSES = ['All Status', 'Airing', 'Completed', 'Upcoming'];
 const SORTS = [
@@ -138,6 +138,8 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   onOpenRoulette,
   onOpenExplore,
   onOpenRecommendations,
+  onOpenCompare,
+  userId = null,
   mode = 'home',
   feedView = 'library',
   recentlyViewed = [],
@@ -150,10 +152,27 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   onToggleMySubscriptionsEnabled,
   onClearSubscriptions,
 }) => {
+  const toast = useToast();
   const isHomeMode = mode === 'home';
   const lang = uiLanguage || 'en';
   const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(catalogList || []);
-  const [internalSearch, setInternalSearch] = useState(searchQuery || '');
+
+  // Parse initial shareable URL query params once on mount
+  const initialUrlFilters = useMemo(() => {
+    if (typeof window === 'undefined') return {};
+    return parseFiltersFromSearchParams(window.location.search);
+  }, []);
+
+  const [internalSearch, setInternalSearch] = useState(
+    () => initialUrlFilters.search || searchQuery || ''
+  );
+
+  // Sync URL ?q= into parent searchQuery on initial load if present
+  useEffect(() => {
+    if (initialUrlFilters.search && setSearchQuery && !searchQuery) {
+      setSearchQuery(initialUrlFilters.search);
+    }
+  }, [initialUrlFilters.search]);
 
   // Keep internalSearch in sync with prop
   useEffect(() => {
@@ -162,19 +181,16 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
 
   const effectiveSearch = setSearchQuery ? searchQuery : internalSearch;
 
-  const handleSearchChange = (val: string) => {
-    setInternalSearch(val);
-    if (setSearchQuery) {
-      setSearchQuery(val);
-    }
-  };
-  
-  // Sync rawAnimeList whenever catalogList prop updates from parent
-  useEffect(() => {
-    if (catalogList) {
-      setRawAnimeList(catalogList);
-    }
-  }, [catalogList]);
+  const handleSearchChange = useCallback(
+    (val: string) => {
+      setInternalSearch(val);
+      if (setSearchQuery) {
+        setSearchQuery(val);
+      }
+    },
+    [setSearchQuery]
+  );
+
 
   const handleLike = useCallback((animeId: number, liked?: boolean, newCount?: number) => {
     setRawAnimeList(prev => prev.map(a => {
@@ -198,13 +214,26 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
 
   const CATALOG_PAGE_SIZE = 12;
 
-  // Filter States
-  const [selectedLanguage, setSelectedLanguage] = useState('All');
-  const [selectedGenre, setSelectedGenre] = useState('All Genres');
-  const [selectedPlatform, setSelectedPlatform] = useState('All Platforms');
-  const [selectedType, setSelectedType] = useState('All Types');
-  const [selectedStatus, setSelectedStatus] = useState('All Status');
-  const [selectedSort, setSelectedSort] = useState('popularity');
+  // Filter States (URL params take priority, then persisted saved language preference)
+  const [selectedLanguage, setSelectedLanguageState] = useState<string>(() => {
+    if (initialUrlFilters.language) return initialUrlFilters.language;
+    return readPreferredLanguage(userId);
+  });
+  const [selectedGenre, setSelectedGenre] = useState<string>(
+    () => initialUrlFilters.genre || 'All Genres'
+  );
+  const [selectedPlatform, setSelectedPlatform] = useState<string>(
+    () => initialUrlFilters.platform || 'All Platforms'
+  );
+  const [selectedType, setSelectedType] = useState<string>(
+    () => initialUrlFilters.type || 'All Types'
+  );
+  const [selectedStatus, setSelectedStatus] = useState<string>(
+    () => initialUrlFilters.status || 'All Status'
+  );
+  const [selectedSort, setSelectedSort] = useState<string>(
+    () => initialUrlFilters.sort || 'popularity'
+  );
   const [episodeLength, setEpisodeLength] = useState<EpisodeLengthBucket>('any');
   const [minRating, setMinRating] = useState<number>(0);
   const [fullyDubbedOnly, setFullyDubbedOnly] = useState<boolean>(false);
@@ -214,6 +243,43 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [catalogStatus, setCatalogStatus] = useState<'loading' | 'success' | 'empty' | 'error' | 'offline'>('loading');
   const [catalogError, setCatalogError] = useState<string | null>(null);
+
+  // Seed rawAnimeList from parent catalogList only while initial fetch is pending and local list is empty
+  useEffect(() => {
+    if (catalogList && catalogList.length > 0 && rawAnimeList.length === 0 && catalogStatus === 'loading') {
+      setRawAnimeList(catalogList);
+    }
+  }, [catalogList, rawAnimeList.length, catalogStatus]);
+
+  // Recent searches (account-scoped)
+  const [recentSearches, setRecentSearches] = useState<string[]>(() =>
+    readRecentSearches(userId)
+  );
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+  const setSelectedLanguage = useCallback(
+    (nextLang: string) => {
+      const persisted = writePreferredLanguage(nextLang, userId);
+      setSelectedLanguageState(persisted);
+    },
+    [userId]
+  );
+
+  // Re-hydrate account-scoped preferred language & recent searches on account change/logout
+  useEffect(() => {
+    const syncScopedPrefs = () => {
+      const urlParsed =
+        typeof window !== 'undefined'
+          ? parseFiltersFromSearchParams(window.location.search)
+          : {};
+      if (!urlParsed.language) {
+        setSelectedLanguageState(readPreferredLanguage(userId));
+      }
+      setRecentSearches(readRecentSearches(userId));
+    };
+    window.addEventListener(ACCOUNT_CHANGED_EVENT, syncScopedPrefs);
+    return () => window.removeEventListener(ACCOUNT_CHANGED_EVENT, syncScopedPrefs);
+  }, [userId]);
 
   // Server-Side Pagination States
   const [currentPage, setCurrentPage] = useState(1);
@@ -227,14 +293,63 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     hasPrevPage: false,
   });
   const [catalogSummary, setCatalogSummary] = useState<CatalogSummary | null>(null);
-  const gridTopRef = React.useRef<HTMLDivElement | null>(null);
+  const gridTopRef = useRef<HTMLDivElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
+      const trimmed = (effectiveSearch || '').trim();
       setDebouncedSearch(effectiveSearch || '');
-    }, 250);
+      if (trimmed.length >= 2) {
+        setRecentSearches(addRecentSearch(trimmed, userId));
+      }
+    }, 260);
     return () => clearTimeout(timer);
-  }, [effectiveSearch]);
+  }, [effectiveSearch, userId]);
+
+  // Sync active catalog filters to shareable URL query string
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const pathname = window.location.pathname;
+    if (pathname !== '/' && pathname !== '/explore' && pathname !== '/catalog') return;
+
+    const queryStr = buildShareableFilterQuery({
+      search: debouncedSearch,
+      language: selectedLanguage,
+      platform: selectedPlatform,
+      genre: selectedGenre,
+      type: selectedType,
+      status: selectedStatus,
+      sort: selectedSort,
+    });
+
+    const nextUrl = queryStr ? `${pathname}?${queryStr}` : pathname;
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState(window.history.state, '', nextUrl);
+    }
+  }, [
+    debouncedSearch,
+    selectedLanguage,
+    selectedPlatform,
+    selectedGenre,
+    selectedType,
+    selectedStatus,
+    selectedSort,
+  ]);
+
+  const handleShareFilterUrl = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    const shareUrl = window.location.href;
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+        toast?.success('Filter Link Copied', 'Shareable catalog URL copied to your clipboard.');
+      }
+    } catch {
+      toast?.info('Share URL', shareUrl);
+    }
+  }, [toast]);
 
   const activeSubscriptionPlatforms = useMemo(
     () => (mySubscriptionsEnabled && mySubscriptions.length > 0 ? mySubscriptions : []),
@@ -260,6 +375,12 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   ]);
 
   const fetchCatalogPage = useCallback(async (pageToFetch: number) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true);
     setCatalogStatus('loading');
     setCatalogError(null);
@@ -279,7 +400,10 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         fullyDubbed: fullyDubbedOnly,
         freeLegal: freeLegalOnly,
         platforms: activeSubscriptionPlatforms,
+        signal: controller.signal,
       });
+
+      if (controller.signal.aborted) return;
 
       if (!response.ok) {
         const nextStatus = response.status === 'offline' ? 'offline' : 'error';
@@ -335,6 +459,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         }
       }
     } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted) {
+        return;
+      }
       const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
       console.warn('Failed fetching paginated catalog from Cloudflare:', err);
       setCatalogStatus(offline ? 'offline' : 'error');
@@ -345,7 +472,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       );
       setRawAnimeList([]);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, [
     debouncedSearch,
@@ -364,6 +493,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
 
   useEffect(() => {
     fetchCatalogPage(currentPage);
+    return () => {
+      abortControllerRef.current?.abort();
+    };
   }, [currentPage, fetchCatalogPage]);
 
   const activeFilterChips = useMemo(
@@ -511,26 +643,82 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             {translate('hero.title', lang)}
           </h1>
 
-          {/* Search Bar immediately below 2-line hero */}
-          <div className="mt-3.5 relative flex items-center">
-            <Search className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none shrink-0" />
-            <input
-              type="text"
-              value={effectiveSearch}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search anime, language, or OTT..."
-              aria-label="Search dubbed anime"
-              className="w-full h-11 sm:h-12 bg-[#131926] border border-white/15 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-xl pl-10 pr-10 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
-            />
-            {effectiveSearch && (
-              <button
-                type="button"
-                onClick={() => handleSearchChange('')}
-                aria-label="Clear search query"
-                className="absolute right-3 text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+          {/* Search Bar immediately below 2-line hero (English + Japanese/Romaji alias search + Recent Searches) */}
+          <div className="mt-3.5 relative">
+            <div className="relative flex items-center">
+              <Search className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none shrink-0" />
+              <input
+                type="text"
+                value={effectiveSearch}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setTimeout(() => setIsSearchFocused(false), 160)}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Search English or Japanese title..."
+                aria-label="Search dubbed anime"
+                className="w-full h-11 sm:h-12 bg-[#131926] border border-white/15 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-xl pl-10 pr-10 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
+              />
+              {effectiveSearch && (
+                <button
+                  type="button"
+                  onClick={() => handleSearchChange('')}
+                  aria-label="Clear search query"
+                  className="absolute right-3 text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Recent Searches Tray */}
+            {isSearchFocused && recentSearches.length > 0 && (
+              <div
+                data-testid="recent-searches-bar"
+                className="mt-2 p-2.5 rounded-xl bg-[#101624] border border-white/15 shadow-xl space-y-2"
               >
-                <X className="w-4 h-4" />
-              </button>
+                <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1">
+                  <span className="inline-flex items-center gap-1 font-semibold">
+                    <Clock className="w-3 h-3 text-purple-400" />
+                    Recent Searches
+                  </span>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setRecentSearches(clearRecentSearches(userId))}
+                    className="text-neutral-400 hover:text-rose-300 font-semibold cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {recentSearches.map((term) => (
+                    <div
+                      key={`recent_home_${term}`}
+                      className="inline-flex items-center rounded-lg bg-white/5 border border-white/10 text-xs text-neutral-200 overflow-hidden"
+                    >
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          handleSearchChange(term);
+                          setIsSearchFocused(false);
+                        }}
+                        className="px-2.5 py-1 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                      >
+                        {term}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Remove recent search ${term}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => setRecentSearches(removeRecentSearch(term, userId))}
+                        className="px-1.5 py-1 text-neutral-500 hover:text-rose-300 hover:bg-white/10 transition-colors cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
@@ -626,6 +814,16 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap shrink-0">
+              {onOpenCompare && (
+                <button
+                  type="button"
+                  onClick={onOpenCompare}
+                  className="min-h-[40px] px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-neutral-200 hover:text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <Scale className="w-4 h-4 text-indigo-400 shrink-0" />
+                  <span>Compare Anime</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onOpenRoulette}
@@ -647,25 +845,67 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             </div>
           </div>
 
-          {/* Dedicated Explore Search Box */}
-          <div className="relative flex items-center">
-            <Search className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none shrink-0" />
-            <input
-              type="text"
-              value={effectiveSearch}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search anime by title, synopsis, studio, genre..."
-              className="w-full h-11 bg-[#131926] border border-white/15 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-xl pl-10 pr-10 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
-            />
-            {effectiveSearch && (
-              <button
-                type="button"
-                onClick={() => handleSearchChange('')}
-                aria-label="Clear search query"
-                className="absolute right-3 text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          {/* Dedicated Explore Search Box + Recent Searches */}
+          <div className="space-y-2">
+            <div className="relative flex items-center">
+              <Search className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none shrink-0" />
+              <input
+                type="text"
+                value={effectiveSearch}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setTimeout(() => setIsSearchFocused(false), 160)}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Search by English/Japanese title, alias (e.g. Shingeki no Kyojin, JJK), studio, genre..."
+                className="w-full h-11 bg-[#131926] border border-white/15 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-xl pl-10 pr-10 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
+              />
+              {effectiveSearch && (
+                <button
+                  type="button"
+                  onClick={() => handleSearchChange('')}
+                  aria-label="Clear search query"
+                  className="absolute right-3 text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {recentSearches.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 mr-1">
+                  <Clock className="w-3 h-3 text-purple-400" />
+                  Recent:
+                </span>
+                {recentSearches.slice(0, 6).map((term) => (
+                  <div
+                    key={`recent_explore_${term}`}
+                    className="inline-flex items-center rounded-lg bg-[#131926] border border-white/10 text-neutral-200 overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleSearchChange(term)}
+                      className="px-2.5 py-1 hover:bg-white/10 hover:text-white text-[11px] font-medium transition-colors cursor-pointer"
+                    >
+                      {term}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Remove recent search ${term}`}
+                      onClick={() => setRecentSearches(removeRecentSearch(term, userId))}
+                      className="px-1.5 py-1 text-neutral-500 hover:text-rose-300 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setRecentSearches(clearRecentSearches(userId))}
+                  className="text-[11px] text-neutral-500 hover:text-rose-300 font-semibold ml-1 cursor-pointer"
+                >
+                  Clear all
+                </button>
+              </div>
             )}
           </div>
 
@@ -926,6 +1166,14 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             ))}
             <button
               type="button"
+              onClick={handleShareFilterUrl}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 border border-white/15 text-[11px] font-bold text-neutral-200 hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <Share2 className="w-3 h-3 text-purple-300" />
+              <span>Share Link</span>
+            </button>
+            <button
+              type="button"
               onClick={handleClearAllFilters}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/35 text-[11px] font-bold text-rose-300 hover:bg-rose-500/25 transition-colors cursor-pointer"
             >
@@ -934,6 +1182,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* 6. FOR YOU METADATA BANNER */}
       {feedView === 'foryou' && (

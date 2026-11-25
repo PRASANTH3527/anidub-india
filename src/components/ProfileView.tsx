@@ -28,6 +28,18 @@ import { AnimeCard } from './AnimeCard';
 import { useToast } from './Toast';
 import { useNotifications } from '../context/NotificationContext';
 import { PersonalAnimeStats } from './PersonalAnimeStats';
+import {
+  ACCOUNT_CHANGED_EVENT,
+  readScopedString,
+  removeScopedKey,
+  writeScopedString,
+} from '../utils/accountIsolation';
+import {
+  buildWatchlistCsv,
+  downloadCsvFile,
+  readLibraryStatusMap,
+} from '../utils/libraryStatus';
+import { getAllWatchProgress } from '../utils/watchProgress';
 
 export interface ProfileProps {
   watchlist?: number[];
@@ -141,21 +153,28 @@ export function ProfileView({
   } = useNotifications();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const [customName, setCustomName] = useState<string>(() => {
-    try {
-      return localStorage.getItem('anidub_custom_name') || '';
-    } catch {
-      return '';
-    }
-  });
+  const activeUserId = isSignedIn ? (user?.id ?? null) : null;
 
-  const [customAvatar, setCustomAvatar] = useState<string>(() => {
-    try {
-      return localStorage.getItem('anidub_anime_avatar') || DEFAULT_AVATAR;
-    } catch {
-      return DEFAULT_AVATAR;
-    }
-  });
+  const [customName, setCustomName] = useState<string>(() =>
+    readScopedString('anidub_custom_name', activeUserId, '')
+  );
+
+  const [customAvatar, setCustomAvatar] = useState<string>(() =>
+    readScopedString('anidub_anime_avatar', activeUserId, DEFAULT_AVATAR) || DEFAULT_AVATAR
+  );
+
+  // Strict Account Data Isolation: re-hydrate scoped profile identity when user signs in, switches, or logs out
+  useEffect(() => {
+    const syncProfileScope = () => {
+      setCustomName(readScopedString('anidub_custom_name', activeUserId, ''));
+      setCustomAvatar(
+        readScopedString('anidub_anime_avatar', activeUserId, DEFAULT_AVATAR) || DEFAULT_AVATAR
+      );
+    };
+    syncProfileScope();
+    window.addEventListener(ACCOUNT_CHANGED_EVENT, syncProfileScope);
+    return () => window.removeEventListener(ACCOUNT_CHANGED_EVENT, syncProfileScope);
+  }, [activeUserId]);
 
   const [modalInputName, setModalInputName] = useState('');
   const [modalSelectedAvatar, setModalSelectedAvatar] = useState('');
@@ -183,11 +202,11 @@ export function ProfileView({
 
     try {
       if (cleanName) {
-        localStorage.setItem('anidub_custom_name', cleanName);
+        writeScopedString('anidub_custom_name', cleanName, activeUserId);
       } else {
-        localStorage.removeItem('anidub_custom_name');
+        removeScopedKey('anidub_custom_name', activeUserId);
       }
-      localStorage.setItem('anidub_anime_avatar', finalAvatar);
+      writeScopedString('anidub_anime_avatar', finalAvatar, activeUserId);
       window.dispatchEvent(new Event('storage'));
     } catch {}
 
@@ -398,6 +417,28 @@ export function ProfileView({
                     <span>New Collection</span>
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (savedAnimeList.length === 0) {
+                      showToast('Watchlist Empty', 'Save at least one anime before exporting to CSV.', 'info');
+                      return;
+                    }
+                    const csv = buildWatchlistCsv(
+                      savedAnimeList as any,
+                      readLibraryStatusMap(activeUserId),
+                      getAllWatchProgress(undefined, activeUserId)
+                    );
+                    const dateTag = new Date().toISOString().slice(0, 10);
+                    downloadCsvFile(csv, `anidub-india-watchlist-${dateTag}.csv`);
+                    showToast('Watchlist Exported', `Downloaded ${savedAnimeList.length} saved titles as CSV.`, 'success');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-600/15 hover:bg-emerald-600/25 border border-emerald-500/35 text-emerald-300 hover:text-emerald-200 font-bold text-xs transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export Watchlist (CSV)</span>
+                </button>
               </div>
             </div>
           </div>

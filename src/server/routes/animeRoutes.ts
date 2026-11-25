@@ -20,6 +20,7 @@ import {
 } from '../../utils/dataNormalization';
 import { normalizeAnimeStatusFields, resolveCanonicalAnimeStatus } from '../../utils/animeStatus';
 import { FREE_LEGAL_PLATFORM_PATTERNS, getPlatformSqlAliases } from '../../utils/ottHub';
+import { expandSearchQueryVariants } from '../../utils/searchFilterState';
 import { getErrorMessage, isMissingColumnError, sendTelegramAlert, type RouteContext } from './shared';
 
 const BASE_PUBLISHED_CLAUSE =
@@ -250,7 +251,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           if (language && language !== 'All') {
             const langPatterns = buildLanguageLikePatterns(language);
             if (langPatterns.length > 0) {
-              const langOr = langPatterns.map(() => "LOWER(COALESCE(languages, 'HIN,TAM,TEL')) LIKE ?").join(' OR ');
+              const langOr = langPatterns.map(() => "LOWER(COALESCE(languages, '')) LIKE ?").join(' OR ');
               whereClauses.push(`(${langOr})`);
               params.push(...langPatterns);
             }
@@ -343,9 +344,18 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           }
 
           if (search) {
-            const likeSearch = `%${search.toLowerCase()}%`;
-            whereClauses.push("(LOWER(title) LIKE ? OR LOWER(COALESCE(synopsis, '')) LIKE ? OR LOWER(COALESCE(genres, '')) LIKE ? OR LOWER(COALESCE(studio, '')) LIKE ?)");
-            params.push(likeSearch, likeSearch, likeSearch, likeSearch);
+            const variants = expandSearchQueryVariants(search);
+            const variantClauses: string[] = [];
+            for (const variant of variants) {
+              const likeSearch = `%${variant.toLowerCase()}%`;
+              variantClauses.push(
+                "(LOWER(title) LIKE ? OR LOWER(COALESCE(slug, '')) LIKE ? OR LOWER(COALESCE(synopsis, '')) LIKE ? OR LOWER(COALESCE(genres, '')) LIKE ? OR LOWER(COALESCE(studio, '')) LIKE ?)"
+              );
+              params.push(likeSearch, likeSearch, likeSearch, likeSearch, likeSearch);
+            }
+            if (variantClauses.length > 0) {
+              whereClauses.push(`(${variantClauses.join(' OR ')})`);
+            }
           }
 
           const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';

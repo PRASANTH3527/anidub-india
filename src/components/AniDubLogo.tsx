@@ -5,6 +5,7 @@ export interface AniDubLogoProps {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
   showSubtitle?: boolean;
+  showText?: boolean;
   animated?: boolean;
   hideTrailingLine?: boolean;
 }
@@ -14,9 +15,11 @@ export const AniDubLogo: React.FC<AniDubLogoProps> = ({
   size = 'md',
   className = '',
   showSubtitle = true,
+  showText = true,
   animated = false,
   hideTrailingLine = false,
 }) => {
+  const effectiveVariant = showText === false ? 'icon' : variant;
   // Height sizing presets
   const heightClasses = {
     horizontal: {
@@ -42,10 +45,10 @@ export const AniDubLogo: React.FC<AniDubLogoProps> = ({
     }
   };
 
-  const selectedHeight = heightClasses[variant][size];
+  const selectedHeight = heightClasses[effectiveVariant][size];
 
   // 1. ICON ONLY VARIANT
-  if (variant === 'icon') {
+  if (effectiveVariant === 'icon') {
     return (
       <svg
         viewBox="0 0 110 80"
@@ -86,7 +89,7 @@ export const AniDubLogo: React.FC<AniDubLogoProps> = ({
 
   // 2. STACKED VARIANT (Icon Centered on Top, ANIDUB in Middle, INDIA with Right Accent Line Below)
   // Perfectly matching the user's design reference
-  if (variant === 'stacked') {
+  if (effectiveVariant === 'stacked') {
     return (
       <div className={`flex flex-col items-center justify-center select-none ${className}`}>
         <svg

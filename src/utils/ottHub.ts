@@ -5,6 +5,12 @@
  */
 
 import { parsePlatformList } from './dataNormalization';
+import {
+  readScopedJson,
+  readScopedString,
+  writeScopedJson,
+  writeScopedString,
+} from './accountIsolation';
 
 export interface OttPlatformConfig {
   id: string;
@@ -120,18 +126,130 @@ export interface OttHubItemStat {
   }>;
 }
 
+export const CANONICAL_OTT_FILTER_OPTIONS = [
+  'All Platforms',
+  'Crunchyroll',
+  'Netflix',
+  'JioHotstar',
+  'Prime Video',
+  'Anime Times',
+  'Muse India',
+  'Ani-One India',
+  'YouTube',
+  'Sony LIV',
+  'Sony YAY!',
+  'Zee5',
+  'Cartoon Network India',
+  'ETV Bal Bharat',
+  'Bilibili',
+] as const;
+
+const CANONICAL_OTT_ALIAS_MAP: Record<string, string> = {
+  crunchyroll: 'Crunchyroll',
+  'crunchyroll india': 'Crunchyroll',
+  netflix: 'Netflix',
+  'netflix india': 'Netflix',
+  jiohotstar: 'JioHotstar',
+  'jio hotstar': 'JioHotstar',
+  jiocinema: 'JioHotstar',
+  'jio cinema': 'JioHotstar',
+  hotstar: 'JioHotstar',
+  'disney+ hotstar': 'JioHotstar',
+  'disney+hotstar': 'JioHotstar',
+  'disney hotstar': 'JioHotstar',
+  'disney+': 'JioHotstar',
+  'prime video': 'Prime Video',
+  'amazon prime': 'Prime Video',
+  'amazon prime video': 'Prime Video',
+  primevideo: 'Prime Video',
+  prime: 'Prime Video',
+  'anime times': 'Anime Times',
+  animetimes: 'Anime Times',
+  'anime times india': 'Anime Times',
+  'muse india': 'Muse India',
+  'youtube (muse india)': 'Muse India',
+  'muse asia': 'Muse India',
+  muse: 'Muse India',
+  'ani-one': 'Ani-One India',
+  'ani-one india': 'Ani-One India',
+  'anione india': 'Ani-One India',
+  anione: 'Ani-One India',
+  'youtube (ani-one)': 'Ani-One India',
+  'youtube (ani-one india)': 'Ani-One India',
+  youtube: 'YouTube',
+  'sony liv': 'Sony LIV',
+  sonyliv: 'Sony LIV',
+  'sony yay': 'Sony YAY!',
+  'sony yay!': 'Sony YAY!',
+  zee5: 'Zee5',
+  bilibili: 'Bilibili',
+  'cartoon network india': 'Cartoon Network India',
+  'etv bal bharat': 'ETV Bal Bharat',
+};
+
+/**
+ * Normalizes legacy/variant OTT platform names (e.g. JioCinema, Disney+ Hotstar -> JioHotstar;
+ * Amazon Prime Video -> Prime Video; SonyLIV -> Sony LIV) into consistent canonical labels.
+ * Strictly returns '' for empty, unknown placeholder, or unverified values — never fabricates a platform.
+ */
+export function normalizeCanonicalOttName(rawName: unknown): string {
+  if (rawName === null || rawName === undefined) return '';
+  const cleaned = String(rawName)
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  const lower = cleaned.toLowerCase();
+  if (
+    lower === 'unknown' ||
+    lower === 'tba' ||
+    lower === 'n/a' ||
+    lower === 'none' ||
+    lower === 'not verified' ||
+    lower === 'unverified'
+  ) {
+    return '';
+  }
+  return CANONICAL_OTT_ALIAS_MAP[lower] || cleaned;
+}
+
+/**
+ * Extracts and deduplicates canonical OTT platform labels for an anime record.
+ * Returns an empty array [] if no verified platform data is present (never defaults to Crunchyroll).
+ */
+export function normalizeCanonicalOttList(anime: {
+  platform?: unknown;
+  platforms?: unknown;
+  platforms_data?: unknown;
+  streaming_partners?: unknown;
+}): string[] {
+  const rawList = parsePlatformList(
+    anime.platform,
+    anime.platforms,
+    anime.platforms_data ?? anime.streaming_partners,
+    { defaultFallback: [] }
+  );
+  const seen = new Set<string>();
+  const canonical: string[] = [];
+  for (const raw of rawList) {
+    const norm = normalizeCanonicalOttName(raw);
+    if (!norm) continue;
+    const key = norm.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      canonical.push(norm);
+    }
+  }
+  return canonical;
+}
+
 export function extractAnimePlatformsNormalized(anime: {
   platform?: unknown;
   platforms?: unknown;
   platforms_data?: unknown;
   streaming_partners?: unknown;
 }): string[] {
-  return parsePlatformList(
-    anime.platform,
-    anime.platforms,
-    anime.platforms_data ?? anime.streaming_partners,
-    { defaultFallback: [] }
-  );
+  return normalizeCanonicalOttList(anime);
 }
 
 export function matchesPlatformConfig(animePlatforms: string[], config: OttPlatformConfig): boolean {
@@ -243,29 +361,34 @@ export function computeOttHubStats<
   });
 }
 
-export function readMySubscriptions(): string[] {
+export function readMySubscriptions(userId?: string | null): string[] {
   try {
-    if (typeof localStorage === 'undefined') return [];
-    const raw = localStorage.getItem(MY_SUBSCRIPTIONS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
+    const parsed = readScopedJson<unknown>(MY_SUBSCRIPTIONS_STORAGE_KEY, [], userId);
     if (!Array.isArray(parsed)) return [];
     const validIds = new Set(MAJOR_INDIAN_OTTS.map((p) => p.id));
     return Array.from(
-      new Set(parsed.map(String).filter((id) => validIds.has(id)))
+      new Set(
+        parsed
+          .map((item) => normalizeCanonicalOttName(item) || String(item))
+          .filter((id) => validIds.has(id))
+      )
     );
   } catch {
     return [];
   }
 }
 
-export function writeMySubscriptions(platforms: string[]): string[] {
+export function writeMySubscriptions(platforms: string[], userId?: string | null): string[] {
   const validIds = new Set(MAJOR_INDIAN_OTTS.map((p) => p.id));
-  const clean = Array.from(new Set((platforms || []).map(String).filter((id) => validIds.has(id))));
+  const clean = Array.from(
+    new Set(
+      (platforms || [])
+        .map((item) => normalizeCanonicalOttName(item) || String(item))
+        .filter((id) => validIds.has(id))
+    )
+  );
   try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(MY_SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(clean));
-    }
+    writeScopedJson(MY_SUBSCRIPTIONS_STORAGE_KEY, clean, userId);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(MY_SUBSCRIPTIONS_EVENT, { detail: { platforms: clean } }));
     }
@@ -273,21 +396,18 @@ export function writeMySubscriptions(platforms: string[]): string[] {
   return clean;
 }
 
-export function readMySubscriptionsEnabled(): boolean {
+export function readMySubscriptionsEnabled(userId?: string | null): boolean {
   try {
-    if (typeof localStorage === 'undefined') return false;
-    return localStorage.getItem(MY_SUBSCRIPTIONS_ENABLED_KEY) === 'true';
+    return readScopedString(MY_SUBSCRIPTIONS_ENABLED_KEY, userId, 'false') === 'true';
   } catch {
     return false;
   }
 }
 
-export function writeMySubscriptionsEnabled(enabled: boolean): boolean {
+export function writeMySubscriptionsEnabled(enabled: boolean, userId?: string | null): boolean {
   const val = Boolean(enabled);
   try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(MY_SUBSCRIPTIONS_ENABLED_KEY, val ? 'true' : 'false');
-    }
+    writeScopedString(MY_SUBSCRIPTIONS_ENABLED_KEY, val ? 'true' : 'false', userId);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(MY_SUBSCRIPTIONS_EVENT, { detail: { enabled: val } }));
     }

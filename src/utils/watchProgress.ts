@@ -1,3 +1,10 @@
+import {
+  readScopedJson,
+  readScopedString,
+  writeScopedJson,
+  writeScopedString,
+} from './accountIsolation';
+
 export const WATCH_PROGRESS_STORAGE_KEY = 'cf_watch_progress_v1';
 export const WATCHED_IDS_STORAGE_KEY = 'cf_watched_anime_ids';
 export const SPOILER_PROTECTION_STORAGE_KEY = 'anidub_spoiler_protection_v1';
@@ -82,12 +89,10 @@ export function computeWatchProgressPercent(
   return Math.min(95, episode * 8);
 }
 
-function readLegacyWatchedIds(storage?: Storage | null): Set<number> {
+function readLegacyWatchedIds(storage?: Storage | null, userId?: string | null): Set<number> {
   if (!storage) return new Set();
   try {
-    const raw = storage.getItem(WATCHED_IDS_STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
+    const parsed = readScopedJson<unknown>(WATCHED_IDS_STORAGE_KEY, [], userId, storage);
     if (!Array.isArray(parsed)) return new Set();
     return new Set(parsed.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0));
   } catch {
@@ -95,29 +100,35 @@ function readLegacyWatchedIds(storage?: Storage | null): Set<number> {
   }
 }
 
-function syncLegacyWatchedFlag(animeId: number, completed: boolean, storage?: Storage | null): void {
+function syncLegacyWatchedFlag(
+  animeId: number,
+  completed: boolean,
+  storage?: Storage | null,
+  userId?: string | null
+): void {
   if (!storage) return;
   try {
-    const ids = readLegacyWatchedIds(storage);
+    const ids = readLegacyWatchedIds(storage, userId);
     if (completed) {
       ids.add(animeId);
     } else {
       ids.delete(animeId);
     }
-    storage.setItem(WATCHED_IDS_STORAGE_KEY, JSON.stringify(Array.from(ids)));
+    writeScopedJson(WATCHED_IDS_STORAGE_KEY, Array.from(ids), userId, storage);
   } catch {}
 }
 
-export function getAllWatchProgress(storage?: Storage | null): Record<number, WatchProgressEntry> {
+export function getAllWatchProgress(
+  storage?: Storage | null,
+  userId?: string | null
+): Record<number, WatchProgressEntry> {
   const targetStorage = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
   if (!targetStorage) return {};
   try {
-    const raw = targetStorage.getItem(WATCH_PROGRESS_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
+    const parsed = readScopedJson<unknown>(WATCH_PROGRESS_STORAGE_KEY, {}, userId, targetStorage);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     const result: Record<number, WatchProgressEntry> = {};
-    for (const [key, val] of Object.entries(parsed)) {
+    for (const [key, val] of Object.entries(parsed as Record<string, unknown>)) {
       const normalized = normalizeWatchProgressEntry(key, (val || {}) as WatchProgressInput);
       if (normalized) {
         result[normalized.animeId] = normalized;
@@ -131,15 +142,16 @@ export function getAllWatchProgress(storage?: Storage | null): Record<number, Wa
 
 export function getAnimeWatchProgress(
   animeId: number | string,
-  storage?: Storage | null
+  storage?: Storage | null,
+  userId?: string | null
 ): WatchProgressEntry | null {
   const numericId = Number(animeId);
   if (!Number.isInteger(numericId) || numericId <= 0) return null;
   const targetStorage = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
-  const all = getAllWatchProgress(targetStorage);
+  const all = getAllWatchProgress(targetStorage, userId);
   if (all[numericId]) return all[numericId];
 
-  const legacyWatched = readLegacyWatchedIds(targetStorage);
+  const legacyWatched = readLegacyWatchedIds(targetStorage, userId);
   if (legacyWatched.has(numericId)) {
     return {
       animeId: numericId,
@@ -156,44 +168,49 @@ export function getAnimeWatchProgress(
 export function saveAnimeWatchProgress(
   animeId: number | string,
   input: WatchProgressInput,
-  storage?: Storage | null
+  storage?: Storage | null,
+  userId?: string | null
 ): WatchProgressEntry | null {
   const normalized = normalizeWatchProgressEntry(animeId, input);
   if (!normalized) return null;
   const targetStorage = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
   if (targetStorage) {
-    const all = getAllWatchProgress(targetStorage);
+    const all = getAllWatchProgress(targetStorage, userId);
     all[normalized.animeId] = normalized;
     try {
-      targetStorage.setItem(WATCH_PROGRESS_STORAGE_KEY, JSON.stringify(all));
+      writeScopedJson(WATCH_PROGRESS_STORAGE_KEY, all, userId, targetStorage);
     } catch {}
-    syncLegacyWatchedFlag(normalized.animeId, normalized.completed, targetStorage);
+    syncLegacyWatchedFlag(normalized.animeId, normalized.completed, targetStorage, userId);
   }
   return normalized;
 }
 
 export function clearAnimeWatchProgress(
   animeId: number | string,
-  storage?: Storage | null
+  storage?: Storage | null,
+  userId?: string | null
 ): boolean {
   const numericId = Number(animeId);
   if (!Number.isInteger(numericId) || numericId <= 0) return false;
   const targetStorage = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
   if (!targetStorage) return false;
-  const all = getAllWatchProgress(targetStorage);
+  const all = getAllWatchProgress(targetStorage, userId);
   delete all[numericId];
   try {
-    targetStorage.setItem(WATCH_PROGRESS_STORAGE_KEY, JSON.stringify(all));
+    writeScopedJson(WATCH_PROGRESS_STORAGE_KEY, all, userId, targetStorage);
   } catch {}
-  syncLegacyWatchedFlag(numericId, false, targetStorage);
+  syncLegacyWatchedFlag(numericId, false, targetStorage, userId);
   return true;
 }
 
-export function getSpoilerProtectionEnabled(storage?: Storage | null): boolean {
+export function getSpoilerProtectionEnabled(
+  storage?: Storage | null,
+  userId?: string | null
+): boolean {
   const targetStorage = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
   if (!targetStorage) return false;
   try {
-    const raw = targetStorage.getItem(SPOILER_PROTECTION_STORAGE_KEY);
+    const raw = readScopedString(SPOILER_PROTECTION_STORAGE_KEY, userId, '', targetStorage);
     return raw === 'true' || raw === '1';
   } catch {
     return false;
@@ -202,12 +219,13 @@ export function getSpoilerProtectionEnabled(storage?: Storage | null): boolean {
 
 export function setSpoilerProtectionEnabled(
   enabled: boolean,
-  storage?: Storage | null
+  storage?: Storage | null,
+  userId?: string | null
 ): boolean {
   const targetStorage = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
   if (targetStorage) {
     try {
-      targetStorage.setItem(SPOILER_PROTECTION_STORAGE_KEY, String(Boolean(enabled)));
+      writeScopedString(SPOILER_PROTECTION_STORAGE_KEY, String(Boolean(enabled)), userId, targetStorage);
     } catch {}
   }
   if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {

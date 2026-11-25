@@ -23,7 +23,8 @@ import {
   X,
   Minus,
   Plus,
-  Tv
+  Tv,
+  Scale
 } from 'lucide-react';
 import { Anime } from './CatalogView';
 import { cloudflareApi } from '../services/cloudflareApi';
@@ -36,6 +37,7 @@ import { DualRating } from './DualRating';
 import { ReportModal } from './ReportModal';
 import { buildAnimeJsonLd } from '../utils/seoMeta';
 import { parsePlatformList } from '../utils/dataNormalization';
+import { normalizeCanonicalOttList, normalizeCanonicalOttName } from '../utils/ottHub';
 import { validateOfficialSourceUrl } from '../utils/submissionValidation';
 import { resolveCanonicalAnimeStatus } from '../utils/animeStatus';
 import { buildDubProgressBreakdown } from '../utils/dubProgress';
@@ -131,6 +133,7 @@ export interface AnimeDetailPageProps {
   watchlist: number[];
   onToggleWatchlist: (animeId: number) => void;
   onSelectAnime?: (anime: Anime) => void;
+  onCompareAnime?: (anime: AnimeDetailRecord) => void;
 }
 
 export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
@@ -141,7 +144,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   onBack,
   watchlist,
   onToggleWatchlist,
-  onSelectAnime: _onSelectAnime
+  onSelectAnime: _onSelectAnime,
+  onCompareAnime,
 }) => {
   const { user } = useUser();
   const [details, setDetails] = useState<AnimeDetailRecord | null>(initialAnime);
@@ -184,9 +188,15 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   // Toast / Modal states
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reportInitialField, setReportInitialField] = useState<string>('OTT Link');
   const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [isSynopsisExpanded, setIsSynopsisExpanded] = useState(false);
+
+  const openReportForField = (field: string) => {
+    setReportInitialField(field);
+    setIsReportOpen(true);
+  };
 
   // Watch Progress & Spoiler Protection states
   const [watchProgress, setWatchProgress] = useState<WatchProgressEntry | null>(() =>
@@ -728,38 +738,49 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   
   const genres = details?.genre ? details.genre.split(',').map((g: string) => g.trim()) : ['Action', 'Fantasy', 'Adventure', 'Supernatural'];
 
-  // Helper for platform URLs with direct series URLs and Android intent deep linking
+  // Helper for official OTT URLs — never fabricates unrelated series URLs
   const getPlatformUrl = (platformName: string, animeTitle: string, directUrl?: string, languages?: string[]) => {
-    const p = platformName.toLowerCase();
-    
-    // 1. Check if direct streamUrl is provided in details
-    let webUrl = directUrl || details?.streamUrl || '';
+    const canonicalName = normalizeCanonicalOttName(platformName) || platformName;
+    const p = canonicalName.toLowerCase();
+    const cleanedDirect = (directUrl || details?.streamUrl || '').trim();
+    const hasVerifiedDirectUrl = /^https?:\/\//i.test(cleanedDirect);
+    let webUrl = hasVerifiedDirectUrl ? cleanedDirect : '';
 
-    // If no direct URL, use official direct series URLs instead of generic search pages
     if (!webUrl) {
+      const encodedTitle = encodeURIComponent(animeTitle || '');
       if (p.includes('crunchyroll')) {
-        webUrl = `https://www.crunchyroll.com/series/G6NQ5DWZ6/my-hero-academia`;
+        webUrl = `https://www.crunchyroll.com/search?q=${encodedTitle}`;
       } else if (p.includes('netflix')) {
-        webUrl = `https://www.netflix.com/title/80108363`;
-      } else if (p.includes('jiocinema') || p.includes('jio')) {
-        webUrl = `https://www.jiocinema.com/tv-shows/anime/3762881`;
-      } else if (p.includes('hotstar') || p.includes('disney')) {
-        webUrl = `https://www.hotstar.com/in/shows/anime/1260114256`;
-      } else if (p.includes('prime') || p.includes('amazon')) {
-        webUrl = `https://www.primevideo.com/detail/Anime/0HHW7W8WJ8WJ8WJ8WJ8WJ8WJ8`;
+        webUrl = `https://www.netflix.com/search?q=${encodedTitle}`;
+      } else if (p.includes('jiohotstar') || p.includes('hotstar') || p.includes('jiocinema')) {
+        webUrl = `https://www.hotstar.com/in/explore?search_query=${encodedTitle}`;
+      } else if (p.includes('prime') || p.includes('anime times')) {
+        webUrl = `https://www.primevideo.com/search/ref=atv_nb_sr?phrase=${encodedTitle}`;
+      } else if (p.includes('muse')) {
+        webUrl = `https://www.youtube.com/@MuseIndia/search?query=${encodedTitle}`;
+      } else if (p.includes('ani-one')) {
+        webUrl = `https://www.youtube.com/@AniOneIndia/search?query=${encodedTitle}`;
       } else if (p.includes('youtube')) {
-        webUrl = `https://www.youtube.com/@MuseAsia`;
-      } else {
-        webUrl = `https://www.crunchyroll.com/series/G6NQ5DWZ6/my-hero-academia`;
+        webUrl = `https://www.youtube.com/results?search_query=${encodedTitle}`;
+      } else if (p.includes('sony')) {
+        webUrl = `https://www.sonyliv.com/search?q=${encodedTitle}`;
+      } else if (p.includes('zee5')) {
+        webUrl = `https://www.zee5.com/search?q=${encodedTitle}`;
       }
     }
 
-    return { name: platformName, url: webUrl, languages: Array.isArray(languages) ? languages : [] };
+    return {
+      name: canonicalName,
+      url: webUrl,
+      isDirectUrl: hasVerifiedDirectUrl,
+      languages: Array.isArray(languages) ? languages : [],
+    };
   };
 
   const handleOpenPlatform = (platform: { name: string; url: string }) => {
     setIsWatchOptionsOpen(false);
-    
+    if (!platform.url) return;
+
     const ua = navigator.userAgent || navigator.vendor || (window as Window & { opera?: string }).opera || '';
     const isAndroid = /android/i.test(ua);
     const pName = platform.name.toLowerCase();
@@ -767,14 +788,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     if (isAndroid) {
       let packageName = 'com.crunchyroll.crunchyroid';
       if (pName.includes('netflix')) packageName = 'com.netflix.mediaclient';
-      else if (pName.includes('jiocinema')) packageName = 'com.jio.media.stb.jiocinema';
-      else if (pName.includes('hotstar')) packageName = 'in.startv.hotstar';
-      else if (pName.includes('prime')) packageName = 'com.amazon.avod.thirdpartyclient';
-      else if (pName.includes('youtube')) packageName = 'com.google.android.youtube';
+      else if (pName.includes('jiohotstar') || pName.includes('hotstar')) packageName = 'in.startv.hotstar';
+      else if (pName.includes('prime') || pName.includes('anime times')) packageName = 'com.amazon.avod.thirdpartyclient';
+      else if (pName.includes('youtube') || pName.includes('muse') || pName.includes('ani-one')) packageName = 'com.google.android.youtube';
 
-      // Construct Android Intent URL to force open native app if installed
       const intentUrl = `intent://${platform.url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=${packageName};end;`;
-      
       try {
         window.location.href = intentUrl;
         return;
@@ -783,18 +801,17 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       }
     }
 
-    // Standard Universal Link / Web fallback for iOS, Desktop, etc.
     window.open(platform.url, '_blank', 'noopener,noreferrer');
   };
 
-  // Parse platforms list cleanly (supports delimited strings, arrays, or rich platform objects)
-  const rawPlatformsList: string[] = useMemo(
-    () =>
-      parsePlatformList(details?.platform, details?.platforms, details?.platforms_data, {
-        defaultFallback: ['Crunchyroll'],
-      }),
-    [details?.platform, details?.platforms, details?.platforms_data]
-  );
+  // Parse platforms cleanly & canonically — NEVER default to Crunchyroll if unverified
+  const rawPlatformsList: string[] = useMemo(() => {
+    return normalizeCanonicalOttList({
+      platform: details?.platform,
+      platforms: details?.platforms,
+      platforms_data: details?.platforms_data,
+    });
+  }, [details?.platform, details?.platforms, details?.platforms_data]);
 
   const availablePlatforms = (() => {
     let richPlatforms: RichPlatformEntry[] = [];
@@ -806,13 +823,17 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       }
     } catch {}
 
-    return Array.from<string>(new Set(rawPlatformsList)).map((pName) => {
+    return rawPlatformsList.map((pName) => {
       const richMatch = Array.isArray(richPlatforms)
-        ? richPlatforms.find(
-            (rp) => String(rp?.name || rp?.platform || '').toLowerCase() === pName.toLowerCase()
-          )
+        ? richPlatforms.find((rp) => {
+            const rawName = String(rp?.name || rp?.platform || '');
+            return (normalizeCanonicalOttName(rawName) || rawName).toLowerCase() === pName.toLowerCase();
+          })
         : undefined;
-      const directUrl = richMatch?.url || (pName.toLowerCase() === String(details?.platform || '').toLowerCase() ? details?.watch_url : '');
+      const normalizedDetailsPlatform = normalizeCanonicalOttName(String(details?.platform || ''));
+      const directUrl =
+        richMatch?.url ||
+        (normalizedDetailsPlatform.toLowerCase() === pName.toLowerCase() ? details?.watch_url : '');
       const partnerLangs = Array.isArray(richMatch?.languages) ? richMatch.languages : [];
       return getPlatformUrl(pName, title, directUrl, partnerLangs);
     });
@@ -959,15 +980,28 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </button>
 
         <div className="flex items-center gap-2">
+          {onCompareAnime && details && (
+            <button
+              type="button"
+              onClick={() => onCompareAnime(details)}
+              className="px-3 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-bold text-white/85 hover:text-white hover:bg-white/15 inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-lg active:scale-95"
+              title="Compare with another anime"
+            >
+              <Scale className="w-3.5 h-3.5 text-purple-300" />
+              <span className="hidden sm:inline">Compare</span>
+            </button>
+          )}
           <button
-            onClick={() => setIsReportOpen(true)}
+            type="button"
+            onClick={() => openReportForField('OTT Link')}
             className="p-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-white/60 hover:text-red-400 transition-all cursor-pointer shadow-lg active:scale-95"
-            title="Report Issue"
-            aria-label="Report"
+            title="Report Specific Field"
+            aria-label="Report Specific Field"
           >
             <Flag className="w-4 h-4" />
           </button>
           <button
+            type="button"
             onClick={handleBack}
             className="p-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-white/80 hover:text-white transition-all cursor-pointer shadow-lg active:scale-95"
             title="Close"
@@ -1085,13 +1119,85 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </div>
       </div>
 
-      {/* 3. NAKED CONTENT FLOW (100% CARDLESS & BOXLESS) */}
+      {/* 3. CONTENT FLOW */}
       <div className="relative z-10 max-w-2xl mx-auto px-4 sm:px-6">
+
+        {/* SECTION 0: WHERE TO WATCH (OFFICIAL OTT LINKS + REPORT SPECIFIC FIELD) */}
+        <section
+          aria-label="Where to Watch"
+          className="mt-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-5 sm:p-6 shadow-xl space-y-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase">
+                Where to Watch (India)
+              </h2>
+              <p className="text-[11px] text-neutral-400 mt-0.5">
+                Official licensed OTT platforms — AniDub India never hosts pirated video streams
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openReportForField('OTT Link')}
+              className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-rose-500/15 border border-white/10 hover:border-rose-500/35 text-[11px] font-semibold text-neutral-300 hover:text-rose-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Flag className="w-3 h-3" />
+              <span>Report Specific Field</span>
+            </button>
+          </div>
+
+          {availablePlatforms.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {availablePlatforms.map((plat) => (
+                <button
+                  key={`where_to_watch_${plat.name}`}
+                  type="button"
+                  onClick={() => handleOpenPlatform(plat)}
+                  className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-black/35 hover:bg-white/[0.07] border border-white/10 hover:border-purple-400/40 text-left transition-all cursor-pointer"
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-white truncate">{plat.name}</div>
+                    <div className="text-[11px] text-neutral-400 mt-0.5">
+                      {plat.isDirectUrl ? 'Direct official link • India' : 'Official platform lookup • India'}
+                    </div>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-purple-300 shrink-0" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-black/30 border border-white/10 text-xs text-neutral-400 flex flex-wrap items-center justify-between gap-3">
+              <span>Official Indian OTT streaming platform is currently <strong className="text-neutral-200">Not verified</strong>.</span>
+              <button
+                type="button"
+                onClick={() => openReportForField('OTT Link')}
+                className="text-purple-300 hover:text-purple-200 font-bold underline underline-offset-2 cursor-pointer"
+              >
+                Suggest official link
+              </button>
+            </div>
+          )}
+
+          {/* Quick Field-Specific Report Shortcuts */}
+          <div className="pt-3 border-t border-white/10 flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="text-neutral-500 font-semibold">Spot an inaccuracy? Report:</span>
+            {(['OTT Link', 'Dub Language', 'Episode Count', 'Release Schedule'] as const).map((fieldLabel) => (
+              <button
+                key={`report_field_${fieldLabel}`}
+                type="button"
+                onClick={() => openReportForField(fieldLabel)}
+                className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-rose-500/15 border border-white/10 hover:border-rose-500/35 text-neutral-300 hover:text-rose-200 font-semibold transition-colors cursor-pointer"
+              >
+                {fieldLabel}
+              </button>
+            ))}
+          </div>
+        </section>
 
         {/* SECTION 1: VISUAL DUB PROGRESS BARS (PER INDIAN LANGUAGE & SEASON) */}
         <section
           aria-label="Indian Dub Availability and Progress"
-          className="mt-12 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-5 sm:p-6 shadow-xl space-y-4"
+          className="mt-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-5 sm:p-6 shadow-xl space-y-4"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -1786,8 +1892,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         <ReportModal
           animeId={numericAnimeId}
           animeTitle={title}
+          initialField={reportInitialField}
           onClose={() => setIsReportOpen(false)}
-          onSuccess={() => showToast('Thank you! Your report has been saved to D1 and sent to moderators.')}
+          onSuccess={() => showToast(`Reported "${reportInitialField}" correction — thank you!`)}
         />
       )}
 
@@ -1802,6 +1909,7 @@ export interface AnimeDetailModalProps {
   onClose: () => void;
   watchlist: number[];
   onToggleWatchlist: (animeId: number) => void;
+  onCompareAnime?: (anime: AnimeDetailRecord) => void;
 }
 
 export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
@@ -1810,7 +1918,8 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   onResolvedAnime,
   onClose,
   watchlist,
-  onToggleWatchlist
+  onToggleWatchlist,
+  onCompareAnime,
 }) => {
   const shouldReduceMotion = useReducedMotion();
 
@@ -1857,6 +1966,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
           onBack={onClose}
           watchlist={watchlist}
           onToggleWatchlist={onToggleWatchlist}
+          onCompareAnime={onCompareAnime}
         />
       </motion.div>
     </div>

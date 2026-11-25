@@ -19,6 +19,7 @@ import {
   subscribeOfflineChanges,
 } from '../utils/offlineStorage';
 import { parsePlatformList } from '../utils/dataNormalization';
+import { normalizeCanonicalOttList } from '../utils/ottHub';
 import { isCanonicalAiring } from '../utils/animeStatus';
 import { normalizeLanguageName, isExcludedLanguage } from '../utils/languages';
 
@@ -115,14 +116,24 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   const toast = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [offlineSaved, setOfflineSaved] = useState(() => isAnimeOffline(anime.id));
+  const [offlineSaved, setOfflineSaved] = useState<boolean>(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setOfflineSaved(isAnimeOffline(anime.id));
-    return subscribeOfflineChanges(() => {
-      setOfflineSaved(isAnimeOffline(anime.id));
-    });
+    let active = true;
+    const syncOffline = () => {
+      Promise.resolve(isAnimeOffline(anime.id))
+        .then((saved) => {
+          if (active) setOfflineSaved(Boolean(saved));
+        })
+        .catch(() => {});
+    };
+    syncOffline();
+    const unsub = subscribeOfflineChanges(syncOffline);
+    return () => {
+      active = false;
+      unsub();
+    };
   }, [anime.id]);
 
   useEffect(() => {
@@ -144,13 +155,8 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
     anime.image ||
     '/logo.png';
 
-  // P0 #3: Never guess Crunchyroll when platform is missing
-  const platforms = parsePlatformList(
-    anime.platform,
-    undefined,
-    anime.platforms_data ?? anime.streaming_partners,
-    { defaultFallback: [] }
-  );
+  // Never guess Crunchyroll when platform is missing; normalize legacy OTT names canonically
+  const platforms = normalizeCanonicalOttList(anime);
   const primaryPlatformLabel = platforms.length > 0 ? platforms[0] : 'Not verified';
   const extraPlatformCount = platforms.length > 1 ? platforms.length - 1 : 0;
 
@@ -232,16 +238,16 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
           {/* Subtle bottom readability gradient */}
           <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#101522] via-[#101522]/40 to-transparent pointer-events-none" />
 
-          {/* Top-Left: Status / Rating badge */}
-          <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+          {/* Top-Left: Status / Rating badge (stacked vertically so AIRING never collides with top-right buttons) */}
+          <div className="absolute top-2.5 left-2.5 flex flex-col items-start gap-1 pointer-events-none">
             {hasRating && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-black/75 backdrop-blur-md border border-white/10 text-[11px] font-bold text-amber-300 tabular-nums">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-black/75 backdrop-blur-md border border-white/10 text-[11px] font-bold text-amber-300 tabular-nums">
                 <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                 {numericRating.toFixed(1)}
               </span>
             )}
             {isAiring && (
-              <span className="px-2 py-1 rounded-lg bg-emerald-600/85 text-white text-[10px] font-bold uppercase tracking-wide">
+              <span className="px-2 py-0.5 rounded-lg bg-emerald-600/90 text-white text-[10px] font-bold uppercase tracking-wide shadow-sm">
                 Airing
               </span>
             )}

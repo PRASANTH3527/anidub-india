@@ -22,3 +22,12 @@ createRoot(document.getElementById('root')!).render(
     </ToastProvider>
   </ClerkProvider>
 );
+
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {
+      // Non-fatal in restricted/sandboxed preview frames
+    });
+  });
+}
+

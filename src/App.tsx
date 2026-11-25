@@ -33,6 +33,15 @@ import {
   readMySubscriptionsEnabled,
   writeMySubscriptionsEnabled,
 } from './utils/ottHub';
+import {
+  getActiveAccountId,
+  normalizeAccountId,
+  readScopedJson,
+  removeScopedKey,
+  transitionAccountStorage,
+  writeScopedJson,
+} from './utils/accountIsolation';
+import { OfflineIndicator } from './components/PWAInstallButton';
 
 const ViewLoadingFallback = () => (
   <div className="w-full min-h-[50vh] flex flex-col items-center justify-center p-8 space-y-3">
@@ -62,6 +71,8 @@ const AnimeTierListMaker = lazy(() => import('./components/AnimeTierListMaker').
 const RecommendationSystem = lazy(() => import('./components/RecommendationSystem').then(m => ({ default: m.RecommendationSystem })));
 const CommunityChatView = lazy(() => import('./components/CommunityChatView').then(m => ({ default: m.CommunityChatView })));
 const LanguageLandingView = lazy(() => import('./components/LanguageLandingView').then(m => ({ default: m.LanguageLandingView })));
+const LegalPage = lazy(() => import('./components/LegalPage').then(m => ({ default: m.LegalPage })));
+const CompareAnimeModal = lazy(() => import('./components/CompareAnimeModal').then(m => ({ default: m.CompareAnimeModal })));
 
 
 
@@ -89,12 +100,10 @@ export default function App() {
   const prevSignedInRef = useRef<boolean>(false);
   const hydratedUserRef = useRef<string | null>(null);
 
-  // Recently viewed state (supports stored IDs or object snapshots in cf_anime_recently_viewed, hydrated directly from D1)
+  // Recently viewed state (account-scoped via accountIsolation.ts)
   const [recentlyViewed, setRecentlyViewed] = useState<any[]>(() => {
     try {
-      const saved = localStorage.getItem('cf_anime_recently_viewed');
-      if (!saved) return [];
-      const parsed = JSON.parse(saved);
+      const parsed = readScopedJson<unknown>('cf_anime_recently_viewed', []);
       if (!Array.isArray(parsed)) return [];
       return parsed
         .map((item) =>
@@ -118,13 +127,15 @@ export default function App() {
 
   const [isRouletteOpen, setIsRouletteOpen] = useState(false);
   const [isCollectionOpen, setIsCollectionOpen] = useState(false);
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [compareInitialAnime, setCompareInitialAnime] = useState<any | null>(null);
   const [catalogList, setCatalogList] = useState<any[]>([]);
   const [fullCatalogIndex, setFullCatalogIndex] = useState<any[]>([]);
   const fullCatalogFetchStartedRef = useRef(false);
   const [hydratedByIdList, setHydratedByIdList] = useState<any[]>([]);
   const hydratedByIdFetchedRef = useRef<Set<number>>(new Set());
 
-  // Shared "My Subscriptions" OTT filter state (persisted in localStorage)
+  // Shared "My Subscriptions" OTT filter state (account-scoped)
   const [mySubscriptions, setMySubscriptions] = useState<string[]>(() => readMySubscriptions());
   const [mySubscriptionsEnabled, setMySubscriptionsEnabled] = useState<boolean>(() =>
     readMySubscriptionsEnabled()
@@ -170,28 +181,28 @@ export default function App() {
     }
   }, []);
 
-  // Lazy-load lightweight full catalog index for discovery tools, OTT Hub counts, Matchmaker, Tier List, Collections & Roulette
+  // Lazy-load lightweight full catalog index for discovery tools, OTT Hub counts, Compare, Tier List, Collections & Roulette
   useEffect(() => {
     if (
       activeTab === 'recommendations' ||
+      activeTab === 'foryou' ||
+      activeTab === 'explore' ||
       activeTab === 'tierlist' ||
       activeTab === 'schedule' ||
-      activeTab === 'radar' ||
-
       activeTab === 'profile' ||
       feedView === 'foryou' ||
       isRouletteOpen ||
-      isCollectionOpen
+      isCollectionOpen ||
+      isCompareOpen
     ) {
       void ensureFullCatalogIndex();
       return;
     }
-    // Also warm the lightweight index in the background shortly after mount so OTT Hub stats show all 221+ titles
     const timer = window.setTimeout(() => {
       void ensureFullCatalogIndex();
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [activeTab, feedView, isRouletteOpen, isCollectionOpen, ensureFullCatalogIndex]);
+  }, [activeTab, feedView, isRouletteOpen, isCollectionOpen, isCompareOpen, ensureFullCatalogIndex]);
 
   const effectiveFullCatalog = useMemo(
     () => (fullCatalogIndex.length > 0 ? fullCatalogIndex : catalogList),
@@ -228,10 +239,32 @@ export default function App() {
     return found?.slug || undefined;
   }, [selectedAnimeId, findLoadedAnimeBySlugOrId]);
 
-  // Strict Clerk Admin Authentication State
+  // Strict Clerk Admin Authentication State & Account Data Isolation Scope
   const { isSignedIn, user: clerkUser } = useUser();
   const { getToken } = useAuth();
   const { signOut: clerkSignOut } = useClerk();
+  const activeUserId = isSignedIn && clerkUser?.id ? clerkUser.id : null;
+  const prevAccountScopeRef = useRef<string>(getActiveAccountId());
+
+  // Enforce strict per-account storage isolation on sign-in, account switch, and logout
+  useEffect(() => {
+    const nextScope = normalizeAccountId(activeUserId);
+    const prevScope = prevAccountScopeRef.current;
+
+    if (prevScope !== nextScope) {
+      transitionAccountStorage(prevScope, nextScope, {
+        purgePreviousUserScopedKeys: false,
+      });
+      prevAccountScopeRef.current = nextScope;
+
+      // Re-hydrate scoped client state immediately so previous account data never leaks
+      const scopedRecent = readScopedJson<unknown>('cf_anime_recently_viewed', [], activeUserId);
+      setRecentlyViewed(Array.isArray(scopedRecent) ? scopedRecent : []);
+      setMySubscriptions(readMySubscriptions(activeUserId));
+      setMySubscriptionsEnabled(readMySubscriptionsEnabled(activeUserId));
+    }
+  }, [activeUserId]);
+
   const isClientClerkAdmin = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
   const [isServerClerkAdmin, setIsServerClerkAdmin] = useState<boolean>(false);
   const isClerkAdmin = isClientClerkAdmin || isServerClerkAdmin;
@@ -243,6 +276,17 @@ export default function App() {
   const [adminPasswordLoading, setAdminPasswordLoading] = useState(false);
   const [isCatalogLoading, setIsCatalogLoading] = useState(true);
 
+  const handleOpenCompare = useCallback(
+    (initialAnime?: any | null) => {
+      setCompareInitialAnime(initialAnime || null);
+      setSelectedAnimeId(null);
+      setSelectedAnimeRecord(null);
+      setIsCompareOpen(true);
+      void ensureFullCatalogIndex();
+    },
+    [ensureFullCatalogIndex]
+  );
+
   const handleNavigateTab = useCallback((nextTab: string) => {
     setActiveTab(nextTab);
     if (nextTab !== 'language') {
@@ -250,14 +294,17 @@ export default function App() {
       if (typeof window !== 'undefined') {
         const pathByTab: Record<string, string> = {
           home: '/',
-          catalog: '/',
+          explore: '/explore',
+          catalog: '/explore',
           watchlist: '/watchlist',
           schedule: '/schedule',
-          radar: '/dub-radar',
-
           chat: '/chat',
           tierlist: '/tierlist',
+          foryou: '/recommendations',
           recommendations: '/recommendations',
+          feedback: '/feedback',
+          privacy: '/privacy',
+          copyright: '/copyright',
           profile: '/profile',
           admin: '/admin',
         };
@@ -265,6 +312,7 @@ export default function App() {
         if (targetPath && window.location.pathname !== targetPath) {
           window.history.pushState({ tab: nextTab }, '', targetPath);
         }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     }
   }, []);
@@ -428,10 +476,20 @@ export default function App() {
       } else {
         setIsPasswordModalOpen(true);
       }
-    } else if (pathname === '/watchlist') {
+    } else if (pathname === '/explore' || pathname === '/catalog') {
+      setActiveTab('explore');
+    } else if (pathname === '/watchlist' || pathname === '/library') {
       setActiveTab('watchlist');
     } else if (pathname === '/schedule') {
       setActiveTab('schedule');
+    } else if (pathname === '/privacy' || pathname === '/privacy-policy') {
+      setActiveTab('privacy');
+    } else if (pathname === '/copyright' || pathname === '/dmca' || pathname === '/takedown') {
+      setActiveTab('copyright');
+    } else if (pathname === '/feedback') {
+      setActiveTab('feedback');
+    } else if (pathname === '/compare') {
+      setIsCompareOpen(true);
     } else if (pathname === '/dub-radar' || pathname === '/radar') {
       setActiveTab('home');
       if (typeof window !== 'undefined') {
@@ -481,10 +539,18 @@ export default function App() {
         setSelectedSeoLanguage(null);
         if (pathname === '/admin' && isAdminAuthenticated) {
           setActiveTab('admin');
-        } else if (pathname === '/watchlist') {
+        } else if (pathname === '/explore' || pathname === '/catalog') {
+          setActiveTab('explore');
+        } else if (pathname === '/watchlist' || pathname === '/library') {
           setActiveTab('watchlist');
         } else if (pathname === '/schedule') {
           setActiveTab('schedule');
+        } else if (pathname === '/privacy' || pathname === '/privacy-policy') {
+          setActiveTab('privacy');
+        } else if (pathname === '/copyright' || pathname === '/dmca' || pathname === '/takedown') {
+          setActiveTab('copyright');
+        } else if (pathname === '/feedback') {
+          setActiveTab('feedback');
         } else if (pathname === '/dub-radar' || pathname === '/radar') {
           setActiveTab('home');
           if (typeof window !== 'undefined') {
@@ -527,6 +593,34 @@ export default function App() {
 
     if (activeTab === 'language' && selectedSeoLanguage) {
       updateDocumentSeoMeta(buildLanguageSeoMeta(selectedSeoLanguage, origin));
+      return;
+    }
+
+    if (activeTab === 'privacy') {
+      const base = buildDefaultSeoMeta(origin);
+      updateDocumentSeoMeta({
+        ...base,
+        title: 'Privacy Policy | AniDub India',
+        ogTitle: 'Privacy Policy | AniDub India',
+        description:
+          'Learn how AniDub India handles account preferences, watchlist sync, and privacy as a legal Indian dubbed anime directory.',
+        canonicalUrl: `${origin}/privacy`,
+        ogType: 'website',
+      });
+      return;
+    }
+
+    if (activeTab === 'copyright') {
+      const base = buildDefaultSeoMeta(origin);
+      updateDocumentSeoMeta({
+        ...base,
+        title: 'Copyright & Takedown Policy | AniDub India',
+        ogTitle: 'Copyright & Takedown Policy | AniDub India',
+        description:
+          'AniDub India is a legal OTT discovery directory that does not host video streams. Read our DMCA and copyright takedown policy.',
+        canonicalUrl: `${origin}/copyright`,
+        ogType: 'website',
+      });
       return;
     }
 
@@ -631,46 +725,46 @@ export default function App() {
     };
   }, [isSignedIn, clerkUser?.id, getToken]);
 
-  const addToRecentlyViewed = useCallback((anime: any) => {
-    const idNum = Number(anime?.id);
-    if (!Number.isInteger(idNum) || idNum <= 0) return;
+  const addToRecentlyViewed = useCallback(
+    (anime: any) => {
+      const idNum = Number(anime?.id);
+      if (!Number.isInteger(idNum) || idNum <= 0) return;
 
-    setHydratedByIdList((prev) => {
-      const existingIdx = prev.findIndex((item) => Number(item.id) === idNum);
-      if (existingIdx >= 0) {
-        const copy = [...prev];
-        copy[existingIdx] = { ...copy[existingIdx], ...anime };
-        return copy;
-      }
-      return [anime, ...prev];
-    });
+      setHydratedByIdList((prev) => {
+        const existingIdx = prev.findIndex((item) => Number(item.id) === idNum);
+        if (existingIdx >= 0) {
+          const copy = [...prev];
+          copy[existingIdx] = { ...copy[existingIdx], ...anime };
+          return copy;
+        }
+        return [anime, ...prev];
+      });
 
-    setRecentlyViewed((prev) => {
-      const filtered = prev.filter((item) => Number(item?.id) !== idNum);
-      const updated = [anime, ...filtered].slice(0, 10);
-      try {
-        localStorage.setItem('cf_anime_recently_viewed', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-  }, []);
+      setRecentlyViewed((prev) => {
+        const filtered = prev.filter((item) => Number(item?.id) !== idNum);
+        const updated = [anime, ...filtered].slice(0, 10);
+        writeScopedJson('cf_anime_recently_viewed', updated, activeUserId);
+        return updated;
+      });
+    },
+    [activeUserId]
+  );
 
   const handleClearRecentlyViewed = useCallback(() => {
     setRecentlyViewed([]);
-    try {
-      localStorage.removeItem('cf_anime_recently_viewed');
-    } catch {}
-  }, []);
+    removeScopedKey('cf_anime_recently_viewed', activeUserId);
+  }, [activeUserId]);
 
-  const handleRemoveRecentlyViewedItem = useCallback((animeId: number) => {
-    setRecentlyViewed(prev => {
-      const updated = prev.filter(item => item.id !== animeId);
-      try {
-        localStorage.setItem('cf_anime_recently_viewed', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-  }, []);
+  const handleRemoveRecentlyViewedItem = useCallback(
+    (animeId: number) => {
+      setRecentlyViewed((prev) => {
+        const updated = prev.filter((item) => item.id !== animeId);
+        writeScopedJson('cf_anime_recently_viewed', updated, activeUserId);
+        return updated;
+      });
+    },
+    [activeUserId]
+  );
 
   const handleToggleWatchlist = useCallback(async (animeId: number) => {
     const idNum = Number(animeId);
@@ -910,6 +1004,9 @@ export default function App() {
         <GodModeTracker activeTab={activeTab} activeAnimeSlug={activeAnimeSlug} />
       </Suspense>
 
+      {/* OFFLINE STATUS INDICATOR (PWA) */}
+      <OfflineIndicator />
+
       {/* 1. NAVBAR */}
       <Navbar
         activeTab={activeTab}
@@ -928,6 +1025,8 @@ export default function App() {
           }
         }}
         onOpenCollection={() => setIsCollectionOpen(true)}
+        onOpenCompare={() => handleOpenCompare(null)}
+        onSubmitDub={() => setIsDubModalOpen(true)}
         onSelectAnime={(id) => handleOpenAnime(id)}
         feedView={feedView}
         setFeedView={setFeedView}
@@ -1011,9 +1110,10 @@ export default function App() {
               </div>
             )}
 
-            {/* MAIN CATALOG & FEED VIEW */}
-            {(activeTab === 'home' || activeTab === 'catalog') && feedView !== 'foryou' && (
+            {/* MAIN CATALOG & EXPLORE VIEW */}
+            {(activeTab === 'home' || activeTab === 'explore' || activeTab === 'catalog') && feedView !== 'foryou' && (
               <CatalogView
+                mode={activeTab === 'explore' || activeTab === 'catalog' ? 'explore' : 'home'}
                 catalogList={catalogList}
                 fullCatalogIndex={effectiveFullCatalog}
                 onSelectAnime={(anime) => {
@@ -1028,6 +1128,10 @@ export default function App() {
                 onToggleUpvote={handleToggleUpvote}
                 onOpenRoulette={() => setIsRouletteOpen(true)}
                 onOpenCollection={() => setIsCollectionOpen(true)}
+                onOpenExplore={() => handleNavigateTab('explore')}
+                onOpenRecommendations={() => handleNavigateTab('recommendations')}
+                onOpenCompare={() => handleOpenCompare(null)}
+                userId={activeUserId}
                 feedView={feedView}
                 recentlyViewed={realRecentlyViewed}
                 onClearRecentlyViewed={handleClearRecentlyViewed}
@@ -1042,7 +1146,7 @@ export default function App() {
             )}
 
             {/* INTERACTIVE RECOMMENDATION SYSTEM (FOR YOU / MATCHMAKER) */}
-            {(activeTab === 'recommendations' || ((activeTab === 'home' || activeTab === 'catalog') && feedView === 'foryou')) && (
+            {(activeTab === 'recommendations' || activeTab === 'foryou' || ((activeTab === 'home' || activeTab === 'catalog') && feedView === 'foryou')) && (
               <Suspense fallback={<ViewLoadingFallback />}>
                 <RecommendationSystem
                   catalogList={effectiveFullCatalog}
@@ -1053,7 +1157,7 @@ export default function App() {
                   watchlist={watchlist}
                   onToggleWatchlist={handleToggleWatchlist}
                   onNavigateCatalog={() => {
-                    setActiveTab('home');
+                    handleNavigateTab('home');
                     setFeedView('library');
                   }}
                   mySubscriptions={mySubscriptions}
@@ -1063,8 +1167,8 @@ export default function App() {
               </Suspense>
             )}
 
-            {/* WATCHLIST VIEW */}
-            {activeTab === 'watchlist' && (
+            {/* WATCHLIST / STATUS-BASED LIBRARY VIEW */}
+            {(activeTab === 'watchlist' || activeTab === 'library') && (
               <Suspense fallback={<ViewLoadingFallback />}>
                 <WatchlistView
                   watchlist={realSavedWatchlist}
@@ -1073,8 +1177,11 @@ export default function App() {
                     addToRecentlyViewed(anime);
                   }}
                   onToggleWatchlist={handleToggleWatchlist}
-                  onNavigateToCatalog={() => setActiveTab('home')}
+                  onNavigateToCatalog={() => handleNavigateTab('home')}
+                  onOpenCreateCollection={() => setIsCollectionOpen(true)}
+                  onOpenCompare={() => handleOpenCompare(null)}
                   isSignedIn={Boolean(isSignedIn)}
+                  userId={activeUserId}
                 />
               </Suspense>
             )}
@@ -1163,17 +1270,48 @@ export default function App() {
                 />
               </Suspense>
             )}
+
+            {/* DEDICATED FEEDBACK & SUBMISSION PAGE (/feedback) */}
+            {activeTab === 'feedback' && (
+              <Suspense fallback={<ViewLoadingFallback />}>
+                <FeedbackSection
+                  mode="full"
+                  onSubmitDub={() => setIsDubModalOpen(true)}
+                  onNavigateLanguage={handleNavigateLanguage}
+                  onOpenPrivacy={() => handleNavigateTab('privacy')}
+                  onOpenCopyright={() => handleNavigateTab('copyright')}
+                />
+              </Suspense>
+            )}
+
+            {/* PUBLIC LEGAL PAGES: PRIVACY POLICY (/privacy) & COPYRIGHT/TAKEDOWN (/copyright) */}
+            {(activeTab === 'privacy' || activeTab === 'copyright') && (
+              <Suspense fallback={<ViewLoadingFallback />}>
+                <LegalPage
+                  page={activeTab === 'copyright' ? 'copyright' : 'privacy'}
+                  onNavigateHome={() => handleNavigateTab('home')}
+                  onSwitchLegalPage={(nextPage) => handleNavigateTab(nextPage)}
+                  onOpenFeedback={() => handleNavigateTab('feedback')}
+                />
+              </Suspense>
+            )}
           </motion.div>
         </AnimatePresence>
       </main>
 
-      {/* FEEDBACK SECTION / FOOTER */}
-      <Suspense fallback={null}>
-        <FeedbackSection
-          onSubmitDub={() => setIsDubModalOpen(true)}
-          onNavigateLanguage={handleNavigateLanguage}
-        />
-      </Suspense>
+      {/* COMPACT FOOTER WITH LEGAL LINKS (Hidden on full feedback page to avoid duplication) */}
+      {activeTab !== 'feedback' && activeTab !== 'admin' && (
+        <Suspense fallback={null}>
+          <FeedbackSection
+            mode="footer"
+            onSubmitDub={() => setIsDubModalOpen(true)}
+            onNavigateLanguage={handleNavigateLanguage}
+            onOpenFeedbackPage={() => handleNavigateTab('feedback')}
+            onOpenPrivacy={() => handleNavigateTab('privacy')}
+            onOpenCopyright={() => handleNavigateTab('copyright')}
+          />
+        </Suspense>
+      )}
 
 
       {/* MODALS WITH SPRING ANIMATEPRESENCE */}
@@ -1235,6 +1373,24 @@ export default function App() {
               onClose={() => handleOpenAnime(null)}
               watchlist={watchlist}
               onToggleWatchlist={handleToggleWatchlist}
+              onCompareAnime={(anime) => handleOpenCompare(anime)}
+            />
+          </Suspense>
+        )}
+
+        {/* 1.5 Compare Anime Side-by-Side Modal */}
+        {isCompareOpen && (
+          <Suspense fallback={<ModalLoadingFallback />}>
+            <CompareAnimeModal
+              key="compare-anime-modal"
+              catalogList={effectiveFullCatalog}
+              initialLeftAnime={compareInitialAnime}
+              onClose={() => setIsCompareOpen(false)}
+              onSelectAnime={(anime) => {
+                setIsCompareOpen(false);
+                handleOpenAnime(anime);
+                addToRecentlyViewed(anime);
+              }}
             />
           </Suspense>
         )}
