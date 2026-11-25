@@ -1709,67 +1709,6 @@ class CloudflareApiService {
       return false;
     }
   }
-
-  /**
-   * DUB REQUESTS: Fetch public demand leaderboard
-   */
-  public async fetchDubRequests(language?: string): Promise<{ success: boolean; data: any[]; error?: string }> {
-    try {
-      const url = language && language !== 'All' ? `${CLOUDFLARE_ENDPOINTS.DUB_REQUESTS}?language=${encodeURIComponent(language)}` : CLOUDFLARE_ENDPOINTS.DUB_REQUESTS;
-      const res = await this.smartFetch(url, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-      });
-      const json: any = await res.json().catch(() => null);
-      if (!res.ok) {
-        return { success: false, data: [], error: json?.error || `Failed to load dub requests (HTTP ${res.status})` };
-      }
-      return { success: true, data: Array.isArray(json?.data) ? json.data : [] };
-    } catch (err: any) {
-      return { success: false, data: [], error: err?.message || 'Network error loading dub requests' };
-    }
-  }
-
-  /**
-   * DUB REQUESTS: Vote or submit a new dub request
-   */
-  public async voteOrSubmitDubRequest(payload: {
-    animeTitle?: string;
-    animeId?: number;
-    language?: string;
-    requestId?: number;
-    website?: string;
-  }): Promise<{
-    success: boolean;
-    request?: any;
-    alreadyVoted?: boolean;
-    mergedExisting?: boolean;
-    error?: string;
-  }> {
-    try {
-      const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.DUB_REQUESTS_VOTE, {
-        method: 'POST',
-        headers: this.getHeaders(false),
-        body: JSON.stringify(payload),
-      });
-      const json: any = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        return {
-          success: false,
-          error: json.error || `Failed to process request vote (HTTP ${res.status})`,
-          alreadyVoted: json.alreadyVoted,
-        };
-      }
-      return {
-        success: true,
-        request: json.request,
-        alreadyVoted: json.alreadyVoted,
-        mergedExisting: json.mergedExisting,
-      };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Network error submitting vote' };
-    }
-  }
 }
 
 export const cloudflareApi = new CloudflareApiService();

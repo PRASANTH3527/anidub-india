@@ -19,15 +19,10 @@ import { handleCommunityRoutes } from '../../src/server/routes/communityRoutes';
 import { handleUserRoutes } from '../../src/server/routes/userRoutes';
 import { handleAnimeRoutes } from '../../src/server/routes/animeRoutes';
 import { handleAnalyticsRoutes } from '../../src/server/routes/analyticsRoutes';
-import { handleRadarRequestsRoutes } from '../../src/server/routes/radarRequestsRoutes';
-
-export { ChatRoom };
-
 const ROUTE_HANDLERS = [
   handleAdminRoutes,
   handleCommunityRoutes,
   handleUserRoutes,
-  handleRadarRequestsRoutes,
   handleAnimeRoutes,
   handleAnalyticsRoutes,
 ];

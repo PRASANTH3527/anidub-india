@@ -14,7 +14,6 @@ import {
   MessageSquare,
   ShieldCheck,
   Shield,
-  Megaphone,
 } from 'lucide-react';
 import { AniDubLogo } from './AniDubLogo';
 
@@ -120,20 +119,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* MOBILE TOP QUICK ACTIONS (>=44x44px touch targets for Dub Radar, Requests, Schedule, Admin) */}
           <div className="flex sm:hidden items-center gap-0.5 shrink-0">
-            <motion.button
-              type="button"
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }}
-              onClick={() => setActiveTab('dub-requests')}
-              title="Indian Dub Requests"
-              aria-label="Indian Dub Requests"
-              className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-                activeTab === 'dub-requests'
-                  ? 'bg-purple-500/20 text-purple-300 border border-purple-400/50 shadow-sm'
-                  : 'text-neutral-300 hover:text-white hover:bg-neutral-800/50'
-              }`}
-            >
-              <Megaphone className="w-5 h-5" />
-            </motion.button>
+
 
 
 
@@ -248,21 +234,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Calendar className="w-5 h-5" />
               </motion.button>
 
-              {/* 4b. Megaphone (Indian Dub Requests) */}
-              <motion.button
-                type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => setActiveTab('dub-requests')}
-                title="Indian Dub Requests (Public Demand Dashboard)"
-                aria-label="Indian Dub Requests"
-                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors cursor-pointer shrink-0 ${
-                  activeTab === 'dub-requests'
-                    ? 'bg-purple-500/25 text-purple-300 border border-purple-400/50 shadow-sm'
-                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-                }`}
-              >
-                <Megaphone className="w-5 h-5" />
-              </motion.button>
+
 
 
 

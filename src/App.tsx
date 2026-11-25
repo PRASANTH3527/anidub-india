@@ -62,7 +62,7 @@ const AnimeTierListMaker = lazy(() => import('./components/AnimeTierListMaker').
 const RecommendationSystem = lazy(() => import('./components/RecommendationSystem').then(m => ({ default: m.RecommendationSystem })));
 const CommunityChatView = lazy(() => import('./components/CommunityChatView').then(m => ({ default: m.CommunityChatView })));
 const LanguageLandingView = lazy(() => import('./components/LanguageLandingView').then(m => ({ default: m.LanguageLandingView })));
-const DubRequestsView = lazy(() => import('./components/DubRequestsView').then(m => ({ default: m.DubRequestsView })));
+
 
 
 export default function App() {
@@ -438,8 +438,12 @@ export default function App() {
         window.history.replaceState(null, '', '/');
       }
     } else if (pathname === '/dub-requests' || pathname === '/requests') {
-      setActiveTab('dub-requests');
+      setActiveTab('home');
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', '/');
+      }
     } else if (pathname === '/chat') {
+      setActiveTab('chat');
     } else if (pathname === '/tierlist') {
       setActiveTab('tierlist');
     } else if (pathname === '/recommendations') {
@@ -487,8 +491,12 @@ export default function App() {
             window.history.replaceState(null, '', '/');
           }
         } else if (pathname === '/dub-requests' || pathname === '/requests') {
-          setActiveTab('dub-requests');
+          setActiveTab('home');
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', '/');
+          }
         } else if (pathname === '/chat') {
+          setActiveTab('chat');
         } else if (pathname === '/tierlist') {
           setActiveTab('tierlist');
         } else if (pathname === '/recommendations') {
@@ -1087,15 +1095,7 @@ export default function App() {
               </Suspense>
             )}
 
-            {/* DUB REQUESTS VIEW (PUBLIC DEMAND DASHBOARD) */}
-            {activeTab === 'dub-requests' && (
-              <Suspense fallback={<ViewLoadingFallback />}>
-                <DubRequestsView
-                  onNavigate={(tab) => setActiveTab(tab)}
-                  onOpenCatalog={() => setActiveTab('home')}
-                />
-              </Suspense>
-            )}
+
 
 
 

@@ -57,8 +57,6 @@ export const CLOUDFLARE_ENDPOINTS = {
   NOTIFICATIONS: '/api/notifications',
   REPORT: '/api/report',
   PROGRESS: '/api/progress',
-  DUB_REQUESTS: '/api/dub-requests',
-  DUB_REQUESTS_VOTE: '/api/dub-requests/vote',
 };
 
 /**
