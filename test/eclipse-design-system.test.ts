@@ -162,4 +162,24 @@ test('Eclipse 8: Step 2 Explore Page layout has 44px/12px search, All/Tamil/Hind
   assert.ok(catalogCode.includes('My Subscriptions &amp; OTT Coverage'), 'Explore page must include collapsible OTT coverage strip');
 });
 
+test('Eclipse 9: Step 3 AnimeCard uses 2:3 poster aspect ratio, 12px radius, single rating pill, 44x44px duotone bookmark button, elevated language chips, honest OTT footer, and Share/Compare/Report overflow menu', async () => {
+  const { extractCompactLanguageCodes } = await import('../src/components/AnimeCard');
+  assert.deepEqual(extractCompactLanguageCodes('Tamil, Hindi, Telugu'), ['TAM', 'HIN', 'TEL']);
+
+  const cardCode = read('src/components/AnimeCard.tsx');
+  assert.ok(cardCode.includes('aspect-[2/3]'), 'AnimeCard poster must use strict 2:3 aspect ratio');
+  assert.ok(cardCode.includes('rounded-[12px]'), 'AnimeCard must use 12px rounded corners');
+  assert.ok(cardCode.includes('bg-[#12141E]') && cardCode.includes('border-[#292B39]'), 'AnimeCard must use #12141E surface and 1px #292B39 border');
+  assert.ok(cardCode.includes('w-11 h-11 min-w-[44px] min-h-[44px]'), 'Bookmark button must have 44x44px touch target');
+  assert.ok(cardCode.includes('duration-180'), 'AnimeCard interactions must use 180ms transitions');
+  assert.ok(cardCode.includes("fill={isBookmarked ? '#B49AF8' : 'none'}"), 'Bookmark icon must transition to duotone #B49AF8 fill when saved');
+  assert.ok(cardCode.includes('line-clamp-2') && cardCode.includes('text-[#F4F3FA]'), 'Title must be #F4F3FA clamped to 2 lines');
+  assert.ok(cardCode.includes('bg-[#191C29]'), 'Language badges must use #191C29 elevated chips');
+  assert.ok(cardCode.includes("'Not verified'"), 'Missing platform must display Not verified instead of defaulting to Crunchyroll');
+  assert.ok(cardCode.includes('<span>Share</span>'), 'Overflow menu must include Share');
+  assert.ok(cardCode.includes('<span>Compare</span>'), 'Overflow menu must include Compare');
+  assert.ok(cardCode.includes('<span>Report wrong info</span>'), 'Overflow menu must include Report wrong info');
+});
+
+
 
