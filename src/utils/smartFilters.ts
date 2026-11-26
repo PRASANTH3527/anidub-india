@@ -29,6 +29,7 @@ export interface SmartFilterOptions {
   episodeLength?: EpisodeLengthBucket | string;
   minRating?: number;
   fullyDubbedOnly?: boolean;
+  verifiedOnly?: boolean;
   freeLegalOnly?: boolean;
   selectedLanguage?: string;
   mySubscriptions?: string[];
@@ -48,8 +49,40 @@ export interface ActiveFilterChip {
     | 'episodeLength'
     | 'minRating'
     | 'fullyDubbedOnly'
+    | 'verifiedOnly'
     | 'freeLegalOnly'
     | 'mySubscriptions';
+}
+
+export function hasVerifiedOttAvailability(anime: {
+  platform?: unknown;
+  platforms?: unknown;
+  platforms_data?: unknown;
+  streaming_partners?: unknown;
+  streamUrl?: unknown;
+  watch_url?: unknown;
+}): boolean {
+  const platStr = Array.isArray(anime.platform)
+    ? anime.platform.map(String).join(',').trim()
+    : String(anime.platform || '').trim();
+  if (platStr && platStr.toLowerCase() !== 'not verified' && platStr.toLowerCase() !== 'none') {
+    return true;
+  }
+  const hasPartnerList = (list: unknown) =>
+    Array.isArray(list) &&
+    list.some((entry: any) => {
+      const name = String(entry?.name || entry?.platform || entry || '').trim();
+      return Boolean(name && name.toLowerCase() !== 'not verified');
+    });
+  if (
+    hasPartnerList(anime.platforms) ||
+    hasPartnerList(anime.platforms_data) ||
+    hasPartnerList(anime.streaming_partners)
+  ) {
+    return true;
+  }
+  const stream = String(anime.streamUrl || anime.watch_url || '').trim();
+  return stream.startsWith('https://');
 }
 
 export function matchesEpisodeLengthBucket(
@@ -133,7 +166,7 @@ export function isFullyDubbedInLanguage(
 
 /**
  * Applies all smart filters (episode length, min rating, fully dubbed only,
- * free legal streaming only, and My Subscriptions) to any anime array.
+ * verified availability only, free legal streaming only, and My Subscriptions) to any anime array.
  */
 export function applySmartFilters<
   T extends {
@@ -149,6 +182,8 @@ export function applySmartFilters<
     platforms?: unknown;
     platforms_data?: unknown;
     streaming_partners?: unknown;
+    streamUrl?: unknown;
+    watch_url?: unknown;
     dub_matrix?: unknown;
   },
 >(items: T[], options: SmartFilterOptions): T[] {
@@ -175,6 +210,10 @@ export function applySmartFilters<
       if (!isFullyDubbedInLanguage(anime, options.selectedLanguage)) return false;
     }
 
+    if (options.verifiedOnly) {
+      if (!hasVerifiedOttAvailability(anime)) return false;
+    }
+
     if (options.freeLegalOnly) {
       if (!isFreeLegalStreaming(anime)) return false;
     }
@@ -197,6 +236,7 @@ export function buildActiveFilterChips(params: {
   episodeLength?: EpisodeLengthBucket;
   minRating?: number;
   fullyDubbedOnly?: boolean;
+  verifiedOnly?: boolean;
   freeLegalOnly?: boolean;
   mySubscriptionsEnabled?: boolean;
   mySubscriptions?: string[];
@@ -236,11 +276,18 @@ export function buildActiveFilterChips(params: {
       label: `Rating ≥ ${params.minRating.toFixed(1)}/10`,
     });
   }
+  if (params.verifiedOnly) {
+    chips.push({
+      key: 'verifiedOnly',
+      category: 'verifiedOnly',
+      label: 'Verified Availability Only',
+    });
+  }
   if (params.fullyDubbedOnly) {
     chips.push({
       key: 'fullyDubbedOnly',
       category: 'fullyDubbedOnly',
-      label: 'Fully Dubbed Only',
+      label: 'Fully Dubbed Seasons Only',
     });
   }
   if (params.freeLegalOnly) {

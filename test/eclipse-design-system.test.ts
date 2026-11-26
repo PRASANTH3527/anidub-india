@@ -148,3 +148,18 @@ test('Eclipse 7: All remaining pages adopt Eclipse Dark tokens (#12141E, #191C29
   assert.ok(detailCode.includes('Reviews ('), 'AnimeDetailPage must render Reviews tab');
 });
 
+test('Eclipse 8: Step 2 Explore Page layout has 44px/12px search, All/Tamil/Hindi/Telugu/More pills, Bottom Sheet filters, and collapsible OTT coverage strip', () => {
+  const catalogCode = read('src/components/CatalogView.tsx');
+  assert.ok(catalogCode.includes('h-[44px]') && catalogCode.includes('rounded-[12px]'), 'Search input must have 44px height and 12px border radius');
+  assert.ok(catalogCode.includes('duration-180'), 'Language pills and filters must use 180ms transitions');
+  assert.ok(catalogCode.includes("'all', 'tamil', 'hindi', 'telugu'"), 'Primary language pills must include All, Tamil, Hindi, Telugu');
+  assert.ok(catalogCode.includes('More'), 'Language pills row must include More button for regional languages');
+  assert.ok(catalogCode.includes('data-testid="active-filter-count-badge"'), 'Filters button must show active filter count badge');
+  assert.ok(catalogCode.includes('data-testid="smart-filter-drawer"'), 'Filters must open the filter bottom sheet / panel');
+  assert.ok(catalogCode.includes('Verified availability only'), 'Filter sheet must include Verified availability only toggle');
+  assert.ok(catalogCode.includes('Fully dubbed seasons only'), 'Filter sheet must include Fully dubbed seasons only toggle');
+  assert.ok(catalogCode.includes('Apply Filters'), 'Filter sheet must include Apply Filters action');
+  assert.ok(catalogCode.includes('My Subscriptions &amp; OTT Coverage'), 'Explore page must include collapsible OTT coverage strip');
+});
+
+
