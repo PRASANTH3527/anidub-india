@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense, lazy } from 'react';
 import {
   AlertTriangle,
+  ArrowUp,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -20,7 +21,6 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { getVisiblePageNumbers } from '../utils/pagination';
 import { AnimeCard } from './AnimeCard';
 import { OttHubSection } from './OttHubSection';
 import { LatestDubUpdatesCard } from './LatestDubUpdatesCard';
@@ -106,6 +106,72 @@ export interface CatalogViewProps {
 
 export const FALLBACK_SEED_ANIME: Anime[] = [];
 
+export const CATALOG_BATCH_SIZE = 12;
+export const CATALOG_BATCHES_PER_CYCLE = 4;
+export const CATALOG_AUTO_LOAD_CYCLE_LIMIT = CATALOG_BATCH_SIZE * CATALOG_BATCHES_PER_CYCLE; // 48 anime per cycle
+
+/**
+ * Strictly deduplicates appended anime batches by unique Anime ID so duplicate cards never render.
+ */
+export function deduplicateAnimeById<T extends { id: number | string }>(
+  existing: T[],
+  incoming: T[]
+): T[] {
+  const seen = new Set<string>();
+  const merged: T[] = [];
+
+  for (const item of existing) {
+    if (!item || item.id === undefined || item.id === null) continue;
+    const key = String(item.id).trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+
+  for (const item of incoming) {
+    if (!item || item.id === undefined || item.id === null) continue;
+    const key = String(item.id).trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+
+  return merged;
+}
+
+/**
+ * Determines whether automatic infinite scroll should pause after completing a 48-anime (4-batch) cycle.
+ */
+export function shouldPauseAutoLoadCycle(
+  batchesLoadedInCycle: number,
+  totalLoadedItems: number,
+  hasNextPage: boolean
+): boolean {
+  if (!hasNextPage) return false;
+  if (batchesLoadedInCycle >= CATALOG_BATCHES_PER_CYCLE) return true;
+  if (
+    totalLoadedItems > 0 &&
+    totalLoadedItems % CATALOG_AUTO_LOAD_CYCLE_LIMIT === 0 &&
+    batchesLoadedInCycle > 0
+  ) {
+    return true;
+  }
+  return false;
+}
+
+interface ExploreCatalogCacheSnapshot {
+  filterSignature: string;
+  items: Anime[];
+  meta: CatalogMeta;
+  summary: CatalogSummary | null;
+  batchesInCycle: number;
+  isCyclePaused: boolean;
+  scrollY: number;
+}
+
+let exploreCatalogMemoryCache: ExploreCatalogCacheSnapshot | null = null;
+const EXPLORE_SCROLL_STORAGE_KEY = 'anidub_explore_scroll_y_v1';
+
 const GENRES = [
   'All Genres',
   'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Isekai',
@@ -161,7 +227,6 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   onClearSubscriptions,
 }) => {
   const toast = useToast();
-  const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(catalogList || []);
 
   // Parse initial shareable URL query params once on mount
   const initialUrlFilters = useMemo(() => {
@@ -197,27 +262,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     [setSearchQuery]
   );
 
-  const handleLike = useCallback((animeId: number, liked?: boolean, newCount?: number) => {
-    setRawAnimeList(prev => prev.map(a => {
-      if (a.id === animeId || String(a.id) === String(animeId)) {
-        return { ...a, likesCount: newCount !== undefined ? newCount : (Number(a.likesCount) || 0) + (liked ? 1 : -1) };
-      }
-      return a;
-    }));
-    if (onToggleLike) onToggleLike(animeId, Boolean(liked), newCount ?? 0);
-  }, [onToggleLike]);
-
-  const handleUpvote = useCallback((animeId: number, upvoted?: boolean, newCount?: number) => {
-    setRawAnimeList(prev => prev.map(a => {
-      if (a.id === animeId || String(a.id) === String(animeId)) {
-        return { ...a, popularity: newCount !== undefined ? newCount : (Number(a.popularity) || 0) + (upvoted ? 1 : -1) };
-      }
-      return a;
-    }));
-    if (onToggleUpvote) onToggleUpvote(animeId, Boolean(upvoted), newCount ?? 0);
-  }, [onToggleUpvote]);
-
-  const CATALOG_PAGE_SIZE = 12;
+  const CATALOG_PAGE_SIZE = CATALOG_BATCH_SIZE;
 
   // Filter States (URL params take priority, then persisted saved language preference)
   const [selectedLanguage, setSelectedLanguageState] = useState<string>(() => {
@@ -247,16 +292,126 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   const [isSmartFilterOpen, setIsSmartFilterOpen] = useState<boolean>(false);
   const [isMoreLanguagesOpen, setIsMoreLanguagesOpen] = useState<boolean>(false);
   const [isOttHubOpen, setIsOttHubOpen] = useState<boolean>(false);
-  const [loading, setLoading] = useState(false);
-  const [catalogStatus, setCatalogStatus] = useState<'loading' | 'success' | 'empty' | 'error' | 'offline'>('loading');
+
+  const [debouncedSearch, setDebouncedSearch] = useState(effectiveSearch || '');
+
+  const activeSubscriptionPlatforms = useMemo(
+    () => (mySubscriptionsEnabled && mySubscriptions.length > 0 ? mySubscriptions : []),
+    [mySubscriptionsEnabled, mySubscriptions]
+  );
+
+  const filterSignature = useMemo(
+    () =>
+      JSON.stringify({
+        q: debouncedSearch.trim().toLowerCase(),
+        lang: selectedLanguage,
+        genre: selectedGenre,
+        platform: selectedPlatform,
+        type: selectedType,
+        status: selectedStatus,
+        sort: selectedSort,
+        epLen: episodeLength,
+        minRating,
+        fullyDubbedOnly,
+        verifiedOnly,
+        freeLegalOnly,
+        subs: activeSubscriptionPlatforms,
+      }),
+    [
+      debouncedSearch,
+      selectedLanguage,
+      selectedGenre,
+      selectedPlatform,
+      selectedType,
+      selectedStatus,
+      selectedSort,
+      episodeLength,
+      minRating,
+      fullyDubbedOnly,
+      verifiedOnly,
+      freeLegalOnly,
+      activeSubscriptionPlatforms,
+    ]
+  );
+
+  const hasMatchingCache =
+    exploreCatalogMemoryCache !== null &&
+    exploreCatalogMemoryCache.filterSignature === filterSignature &&
+    exploreCatalogMemoryCache.items.length > 0;
+
+  const [rawAnimeList, setRawAnimeList] = useState<Anime[]>(() =>
+    hasMatchingCache && exploreCatalogMemoryCache
+      ? exploreCatalogMemoryCache.items
+      : deduplicateAnimeById([], (catalogList || []).slice(0, CATALOG_PAGE_SIZE))
+  );
+  const [loading, setLoading] = useState<boolean>(() => !hasMatchingCache);
+  const [isFetchingNextPage, setIsFetchingNextPage] = useState<boolean>(false);
+  const [catalogStatus, setCatalogStatus] = useState<'loading' | 'success' | 'empty' | 'error' | 'offline'>(() =>
+    hasMatchingCache ? 'success' : 'loading'
+  );
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [appendError, setAppendError] = useState<string | null>(null);
+
+  // Hybrid Infinite Scroll Cycle Tracking (4 batches of 12 = 48 anime per auto-load cycle)
+  const [batchesInCycle, setBatchesInCycle] = useState<number>(() =>
+    hasMatchingCache && exploreCatalogMemoryCache ? exploreCatalogMemoryCache.batchesInCycle : 1
+  );
+  const [isCyclePaused, setIsCyclePaused] = useState<boolean>(() =>
+    hasMatchingCache && exploreCatalogMemoryCache ? exploreCatalogMemoryCache.isCyclePaused : false
+  );
+
+  const [paginationMeta, setPaginationMeta] = useState<CatalogMeta>(() =>
+    hasMatchingCache && exploreCatalogMemoryCache
+      ? exploreCatalogMemoryCache.meta
+      : {
+          currentPage: 1,
+          totalPages: 1,
+          totalItems: 0,
+          limit: CATALOG_PAGE_SIZE,
+          hasNextPage: false,
+          hasPrevPage: false,
+        }
+  );
+  const [catalogSummary, setCatalogSummary] = useState<CatalogSummary | null>(() =>
+    hasMatchingCache && exploreCatalogMemoryCache ? exploreCatalogMemoryCache.summary : null
+  );
+
+  const [showBackToTop, setShowBackToTop] = useState<boolean>(false);
+
+  const gridTopRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isFetchingRef = useRef<boolean>(false);
+  const restoredFilterSignatureRef = useRef<string | null>(
+    hasMatchingCache ? filterSignature : null
+  );
+
+  const handleLike = useCallback((animeId: number, liked?: boolean, newCount?: number) => {
+    setRawAnimeList(prev => prev.map(a => {
+      if (a.id === animeId || String(a.id) === String(animeId)) {
+        return { ...a, likesCount: newCount !== undefined ? newCount : (Number(a.likesCount) || 0) + (liked ? 1 : -1) };
+      }
+      return a;
+    }));
+    if (onToggleLike) onToggleLike(animeId, Boolean(liked), newCount ?? 0);
+  }, [onToggleLike]);
+
+  const handleUpvote = useCallback((animeId: number, upvoted?: boolean, newCount?: number) => {
+    setRawAnimeList(prev => prev.map(a => {
+      if (a.id === animeId || String(a.id) === String(animeId)) {
+        return { ...a, popularity: newCount !== undefined ? newCount : (Number(a.popularity) || 0) + (upvoted ? 1 : -1) };
+      }
+      return a;
+    }));
+    if (onToggleUpvote) onToggleUpvote(animeId, Boolean(upvoted), newCount ?? 0);
+  }, [onToggleUpvote]);
 
   // Seed rawAnimeList from parent catalogList only while initial fetch is pending and local list is empty
   useEffect(() => {
     if (catalogList && catalogList.length > 0 && rawAnimeList.length === 0 && catalogStatus === 'loading') {
-      setRawAnimeList(catalogList);
+      setRawAnimeList(deduplicateAnimeById([], catalogList.slice(0, CATALOG_PAGE_SIZE)));
     }
-  }, [catalogList, rawAnimeList.length, catalogStatus]);
+  }, [catalogList, rawAnimeList.length, catalogStatus, CATALOG_PAGE_SIZE]);
 
   // Recent searches (account-scoped)
   const [recentSearches, setRecentSearches] = useState<string[]>(() =>
@@ -286,21 +441,6 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     window.addEventListener(ACCOUNT_CHANGED_EVENT, syncScopedPrefs);
     return () => window.removeEventListener(ACCOUNT_CHANGED_EVENT, syncScopedPrefs);
   }, [userId]);
-
-  // Server-Side Pagination States
-  const [currentPage, setCurrentPage] = useState(1);
-  const [debouncedSearch, setDebouncedSearch] = useState(effectiveSearch || '');
-  const [paginationMeta, setPaginationMeta] = useState<CatalogMeta>({
-    currentPage: 1,
-    totalPages: 1,
-    totalItems: 0,
-    limit: CATALOG_PAGE_SIZE,
-    hasNextPage: false,
-    hasPrevPage: false,
-  });
-  const [catalogSummary, setCatalogSummary] = useState<CatalogSummary | null>(null);
-  const gridTopRef = useRef<HTMLDivElement | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -357,160 +497,355 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     }
   }, [toast]);
 
-  const activeSubscriptionPlatforms = useMemo(
-    () => (mySubscriptionsEnabled && mySubscriptions.length > 0 ? mySubscriptions : []),
-    [mySubscriptionsEnabled, mySubscriptions]
+  // Keep memory cache in sync with loaded pages for instant restoration on back navigation
+  useEffect(() => {
+    if (catalogStatus === 'success' && rawAnimeList.length > 0) {
+      exploreCatalogMemoryCache = {
+        filterSignature,
+        items: rawAnimeList,
+        meta: paginationMeta,
+        summary: catalogSummary,
+        batchesInCycle,
+        isCyclePaused,
+        scrollY:
+          typeof window !== 'undefined'
+            ? window.scrollY || exploreCatalogMemoryCache?.scrollY || 0
+            : 0,
+      };
+    }
+  }, [
+    filterSignature,
+    rawAnimeList,
+    paginationMeta,
+    catalogSummary,
+    batchesInCycle,
+    isCyclePaused,
+    catalogStatus,
+  ]);
+
+  // Restore saved scroll position when returning to Explore with cached pages
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let savedY = exploreCatalogMemoryCache?.scrollY || 0;
+    try {
+      const storedRaw = window.sessionStorage.getItem(EXPLORE_SCROLL_STORAGE_KEY);
+      if (storedRaw) {
+        const parsed = JSON.parse(storedRaw);
+        if (parsed && parsed.filterSignature === filterSignature && Number(parsed.scrollY) > 0) {
+          savedY = Number(parsed.scrollY);
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    if (savedY > 0 && rawAnimeList.length > 0) {
+      const rafId = window.requestAnimationFrame(() => {
+        window.scrollTo({ top: savedY, behavior: 'auto' });
+      });
+      return () => window.cancelAnimationFrame(rafId);
+    }
+  }, []);
+
+  // Track window scroll for Back-to-Top floating button & scroll restoration
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleScroll = () => {
+      const currentY = window.scrollY || document.documentElement.scrollTop || 0;
+      setShowBackToTop(currentY > 480);
+      if (exploreCatalogMemoryCache && exploreCatalogMemoryCache.filterSignature === filterSignature) {
+        exploreCatalogMemoryCache.scrollY = currentY;
+      }
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [filterSignature]);
+
+  const handleSelectAnimeWithScrollSave = useCallback(
+    (anime: Anime) => {
+      if (typeof window !== 'undefined') {
+        const currentY = window.scrollY || document.documentElement.scrollTop || 0;
+        if (exploreCatalogMemoryCache) {
+          exploreCatalogMemoryCache.scrollY = currentY;
+        }
+        try {
+          window.sessionStorage.setItem(
+            EXPLORE_SCROLL_STORAGE_KEY,
+            JSON.stringify({ filterSignature, scrollY: currentY })
+          );
+        } catch {
+          // ignore storage quota errors
+        }
+      }
+      onSelectAnime(anime);
+    },
+    [filterSignature, onSelectAnime]
   );
 
-  // Reset to page 1 when filters or search change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [
-    selectedLanguage,
-    selectedGenre,
-    selectedPlatform,
-    selectedType,
-    selectedStatus,
-    selectedSort,
-    debouncedSearch,
-    episodeLength,
-    minRating,
-    fullyDubbedOnly,
-    verifiedOnly,
-    freeLegalOnly,
-    activeSubscriptionPlatforms,
-  ]);
+  const handleScrollToTop = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const prefersReducedMotion =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({
+      top: 0,
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    });
+  }, []);
 
-  const fetchCatalogPage = useCallback(async (pageToFetch: number) => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+  const normalizeBatchItems = useCallback(
+    (data: any[]): Anime[] => {
+      const approvedOnly = data.filter(
+        (item: any) => item.status !== 'pending' && item.submissionStatus !== 'pending'
+      );
+      const normalized = approvedOnly.map((item: any) => ({
+        ...item,
+        cover_image: proxyUrl(item.cover_image || item.cover_url),
+        banner_image: proxyUrl(item.banner_image || item.cover_image || item.cover_url),
+        languages: item.languages || '',
+        platform: item.platform || '',
+        type: item.type || 'TV Series',
+      }));
+      return verifiedOnly
+        ? normalized.filter((item: any) => {
+            const p = String(item.platform || '').trim();
+            return Boolean(p && p.toLowerCase() !== 'not verified' && p.toLowerCase() !== 'none');
+          })
+        : normalized;
+    },
+    [verifiedOnly]
+  );
 
-    setLoading(true);
-    setCatalogStatus('loading');
-    setCatalogError(null);
-    try {
-      const response = await cloudflareApi.fetchCatalog({
-        page: pageToFetch,
-        limit: CATALOG_PAGE_SIZE,
-        search: debouncedSearch,
-        language: selectedLanguage,
-        genre: selectedGenre,
-        platform: selectedPlatform,
-        type: selectedType,
-        status: selectedStatus,
-        sort: selectedSort,
-        episodeLength,
-        minRating,
-        fullyDubbed: fullyDubbedOnly,
-        freeLegal: freeLegalOnly,
-        platforms: activeSubscriptionPlatforms,
-        signal: controller.signal,
-      });
+  const fetchCatalogBatch = useCallback(
+    async (pageToFetch: number, mode: 'reset' | 'auto' | 'manual') => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      isFetchingRef.current = true;
 
-      if (controller.signal.aborted) return;
+      const isInitialReset = pageToFetch === 1 || mode === 'reset';
 
-      if (!response.ok) {
-        const nextStatus = response.status === 'offline' ? 'offline' : 'error';
-        setCatalogStatus(nextStatus);
-        setCatalogError(
-          response.error ||
+      if (isInitialReset) {
+        setLoading(true);
+        setIsFetchingNextPage(false);
+        setCatalogStatus('loading');
+        setCatalogError(null);
+        setAppendError(null);
+      } else {
+        setIsFetchingNextPage(true);
+        setAppendError(null);
+      }
+
+      try {
+        const response = await cloudflareApi.fetchCatalog({
+          page: pageToFetch,
+          limit: CATALOG_PAGE_SIZE,
+          search: debouncedSearch,
+          language: selectedLanguage,
+          genre: selectedGenre,
+          platform: selectedPlatform,
+          type: selectedType,
+          status: selectedStatus,
+          sort: selectedSort,
+          episodeLength,
+          minRating,
+          fullyDubbed: fullyDubbedOnly,
+          freeLegal: freeLegalOnly,
+          platforms: activeSubscriptionPlatforms,
+          signal: controller.signal,
+        });
+
+        if (controller.signal.aborted) return;
+
+        if (!response.ok) {
+          const nextStatus = response.status === 'offline' ? 'offline' : 'error';
+          const errMsg =
+            response.error ||
             (nextStatus === 'offline'
               ? 'You appear to be offline. Reconnect and tap Retry.'
-              : 'Unable to load the anime catalog right now. Please try again.')
-        );
-        setRawAnimeList([]);
-        return;
-      }
+              : 'Unable to load the next batch of anime right now. Please try again.');
 
-      const data = response.data || [];
-      const meta = response.meta;
-
-      if (response.summary) {
-        setCatalogSummary(response.summary);
-      }
-
-      if (data.length > 0 || (meta && meta.totalItems > 0)) {
-        const approvedOnly = data.filter(
-          (item: any) => item.status !== 'pending' && item.submissionStatus !== 'pending'
-        );
-        const normalized = approvedOnly.map((item: any) => ({
-          ...item,
-          cover_image: proxyUrl(item.cover_image || item.cover_url),
-          banner_image: proxyUrl(item.banner_image || item.cover_image || item.cover_url),
-          languages: item.languages || '',
-          platform: item.platform || '',
-          type: item.type || 'TV Series',
-        }));
-        const filteredNormalized = verifiedOnly
-          ? normalized.filter((item: any) => {
-              const p = String(item.platform || '').trim();
-              return Boolean(p && p.toLowerCase() !== 'not verified' && p.toLowerCase() !== 'none');
-            })
-          : normalized;
-        setRawAnimeList(filteredNormalized);
-        setCatalogStatus(filteredNormalized.length === 0 ? 'empty' : 'success');
-        if (meta) {
-          setPaginationMeta(meta);
+          if (isInitialReset) {
+            setCatalogStatus(nextStatus);
+            setCatalogError(errMsg);
+            setRawAnimeList([]);
+          } else {
+            // Keep already-loaded anime intact and show compact retry strip
+            setAppendError(errMsg);
+          }
+          return;
         }
-      } else {
-        setRawAnimeList([]);
-        setCatalogStatus('empty');
-        if (meta) {
-          setPaginationMeta(meta);
+
+        const data = response.data || [];
+        const meta = response.meta;
+
+        if (response.summary) {
+          setCatalogSummary(response.summary);
+        }
+
+        const filteredNormalized = normalizeBatchItems(data);
+        const resolvedMeta: CatalogMeta = meta || {
+          currentPage: pageToFetch,
+          totalPages: filteredNormalized.length >= CATALOG_PAGE_SIZE ? pageToFetch + 1 : pageToFetch,
+          totalItems: filteredNormalized.length,
+          limit: CATALOG_PAGE_SIZE,
+          hasNextPage: filteredNormalized.length >= CATALOG_PAGE_SIZE,
+          hasPrevPage: pageToFetch > 1,
+        };
+
+        setPaginationMeta(resolvedMeta);
+
+        if (isInitialReset) {
+          const dedupedInitial = deduplicateAnimeById([], filteredNormalized);
+          setRawAnimeList(dedupedInitial);
+          setCatalogStatus(dedupedInitial.length === 0 ? 'empty' : 'success');
+          setBatchesInCycle(1);
+          setIsCyclePaused(false);
         } else {
-          setPaginationMeta({
-            currentPage: pageToFetch,
-            totalPages: 1,
-            totalItems: 0,
-            limit: CATALOG_PAGE_SIZE,
-            hasNextPage: false,
-            hasPrevPage: pageToFetch > 1,
+          setRawAnimeList((prev) => {
+            const merged = deduplicateAnimeById(prev, filteredNormalized);
+            const nextBatches = mode === 'manual' ? 1 : batchesInCycle + 1;
+            const shouldPause = shouldPauseAutoLoadCycle(
+              nextBatches,
+              merged.length,
+              Boolean(resolvedMeta.hasNextPage)
+            );
+            setBatchesInCycle(nextBatches);
+            setIsCyclePaused(shouldPause);
+            return merged;
           });
+          setCatalogStatus('success');
+        }
+      } catch (err: any) {
+        if (err?.name === 'AbortError' || controller.signal.aborted) {
+          return;
+        }
+        const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        const errMsg = offline
+          ? 'You appear to be offline. Reconnect and try again.'
+          : err?.message || 'Unable to connect to the catalog API. Please retry.';
+
+        if (isInitialReset) {
+          setCatalogStatus(offline ? 'offline' : 'error');
+          setCatalogError(errMsg);
+          setRawAnimeList([]);
+        } else {
+          setAppendError(errMsg);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          isFetchingRef.current = false;
+          setLoading(false);
+          setIsFetchingNextPage(false);
         }
       }
-    } catch (err: any) {
-      if (err?.name === 'AbortError' || controller.signal.aborted) {
-        return;
-      }
-      const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-      console.warn('Failed fetching paginated catalog from Cloudflare:', err);
-      setCatalogStatus(offline ? 'offline' : 'error');
-      setCatalogError(
-        offline
-          ? 'You appear to be offline. Reconnect and try again.'
-          : err?.message || 'Unable to connect to the catalog API. Please retry.'
-      );
-      setRawAnimeList([]);
-    } finally {
-      if (!controller.signal.aborted) {
-        setLoading(false);
-      }
-    }
-  }, [
-    debouncedSearch,
-    selectedLanguage,
-    selectedGenre,
-    selectedPlatform,
-    selectedType,
-    selectedStatus,
-    selectedSort,
-    episodeLength,
-    minRating,
-    fullyDubbedOnly,
-    verifiedOnly,
-    freeLegalOnly,
-    activeSubscriptionPlatforms,
-  ]);
+    },
+    [
+      CATALOG_PAGE_SIZE,
+      debouncedSearch,
+      selectedLanguage,
+      selectedGenre,
+      selectedPlatform,
+      selectedType,
+      selectedStatus,
+      selectedSort,
+      episodeLength,
+      minRating,
+      fullyDubbedOnly,
+      freeLegalOnly,
+      activeSubscriptionPlatforms,
+      normalizeBatchItems,
+      batchesInCycle,
+    ]
+  );
 
+  // Reset list to page 1 and reset the 48-item cycle whenever filters or search change
   useEffect(() => {
-    fetchCatalogPage(currentPage);
+    if (restoredFilterSignatureRef.current === filterSignature && rawAnimeList.length > 0) {
+      // Skip initial re-fetch because we restored exact cached pages for this filterSignature
+      restoredFilterSignatureRef.current = null;
+      return;
+    }
+    restoredFilterSignatureRef.current = null;
+    setBatchesInCycle(0);
+    setIsCyclePaused(false);
+    setAppendError(null);
+    fetchCatalogBatch(1, 'reset');
+
     return () => {
       abortControllerRef.current?.abort();
     };
-  }, [currentPage, fetchCatalogPage]);
+  }, [filterSignature]);
+
+  const handleLoadMoreManual = useCallback(() => {
+    if (loading || isFetchingNextPage || isFetchingRef.current || !paginationMeta.hasNextPage) {
+      return;
+    }
+    setIsCyclePaused(false);
+    fetchCatalogBatch(paginationMeta.currentPage + 1, 'manual');
+  }, [loading, isFetchingNextPage, paginationMeta.hasNextPage, paginationMeta.currentPage, fetchCatalogBatch]);
+
+  const handleRetryNextBatch = useCallback(() => {
+    if (loading || isFetchingNextPage || isFetchingRef.current) return;
+    const nextPage = paginationMeta.currentPage + 1;
+    fetchCatalogBatch(nextPage, isCyclePaused ? 'manual' : 'auto');
+  }, [loading, isFetchingNextPage, paginationMeta.currentPage, isCyclePaused, fetchCatalogBatch]);
+
+  // IntersectionObserver with rootMargin: "500px" (400-600px prefetch distance)
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return;
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel) return;
+
+    if (
+      loading ||
+      isFetchingNextPage ||
+      catalogStatus !== 'success' ||
+      !paginationMeta.hasNextPage ||
+      isCyclePaused ||
+      Boolean(appendError)
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const firstEntry = entries[0];
+        if (
+          firstEntry &&
+          firstEntry.isIntersecting &&
+          !isFetchingRef.current &&
+          !loading &&
+          !isFetchingNextPage &&
+          paginationMeta.hasNextPage &&
+          !isCyclePaused &&
+          !appendError
+        ) {
+          fetchCatalogBatch(paginationMeta.currentPage + 1, 'auto');
+        }
+      },
+      {
+        root: null,
+        rootMargin: '500px',
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [
+    loading,
+    isFetchingNextPage,
+    catalogStatus,
+    paginationMeta.hasNextPage,
+    paginationMeta.currentPage,
+    isCyclePaused,
+    appendError,
+    fetchCatalogBatch,
+  ]);
 
   const activeFilterChips = useMemo(
     () =>
@@ -559,7 +894,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     setFreeLegalOnly(false);
     handleSearchChange('');
     onToggleMySubscriptionsEnabled?.(false);
-    setCurrentPage(1);
+    setBatchesInCycle(0);
+    setIsCyclePaused(false);
+    setAppendError(null);
   }, [onToggleMySubscriptionsEnabled, setSelectedLanguage, handleSearchChange]);
 
   const handleRemoveChip = useCallback(
@@ -608,15 +945,6 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
 
   const displayedAnime = rawAnimeList;
 
-  const handlePageChange = (nextPage: number) => {
-    const bounded = Math.min(Math.max(1, nextPage), paginationMeta.totalPages || 1);
-    if (bounded === currentPage || loading) return;
-    setCurrentPage(bounded);
-    try {
-      gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch {}
-  };
-
   // Compute dynamic regional dub language filter buttons from backend summary or loaded list
   const dynamicLanguageFilters = useMemo(() => {
     if (catalogSummary?.languageFilters && catalogSummary.languageFilters.length > 0) {
@@ -655,17 +983,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     return (catalogList && catalogList.length > 0) ? catalogList : rawAnimeList;
   }, [catalogList, rawAnimeList]);
 
-  const visiblePageNumbers = useMemo(() => {
-    return getVisiblePageNumbers(paginationMeta.currentPage, paginationMeta.totalPages, 5);
-  }, [paginationMeta.currentPage, paginationMeta.totalPages]);
-
-  const rangeStart = paginationMeta.totalItems === 0
-    ? 0
-    : ((paginationMeta.currentPage - 1) * paginationMeta.limit) + 1;
-  const rangeEnd = Math.min(
-    paginationMeta.totalItems,
-    rangeStart + Math.max(0, displayedAnime.length - 1)
-  );
+  const totalCatalogCount = Math.max(paginationMeta.totalItems, displayedAnime.length);
 
   const activeAdvancedFilterCount = useMemo(() => {
     return [
@@ -983,7 +1301,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 onToggleSubscriptionPlatform={(id) => onToggleSubscriptionPlatform?.(id)}
                 onToggleMySubscriptionsEnabled={(enabled) => onToggleMySubscriptionsEnabled?.(enabled)}
                 onClearSubscriptions={() => onClearSubscriptions?.()}
-                onSelectAnime={(a) => onSelectAnime(a as any)}
+                onSelectAnime={(a) => handleSelectAnimeWithScrollSave(a as any)}
               />
             </div>
           )}
@@ -1247,7 +1565,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                   aria-label="Apply Filters"
                   onClick={() => setIsSmartFilterOpen(false)}
                 >
-                  Show results ({paginationMeta.totalItems})
+                  Show results ({totalCatalogCount})
                 </Button>
               </div>
             </div>
@@ -1261,7 +1579,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             className="flex flex-wrap items-center gap-1.5 pt-0.5"
           >
             <span className="text-xs font-bold text-[#A1A5B5] mr-1">
-              {paginationMeta.totalItems} {paginationMeta.totalItems === 1 ? 'match' : 'matches'}:
+              {totalCatalogCount} {totalCatalogCount === 1 ? 'match' : 'matches'}:
             </span>
             {activeFilterChips.map((chip) => (
               <button
@@ -1309,7 +1627,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         </div>
       )}
 
-      {/* 2. POSTER-FIRST ANIME CATALOG GRID (Appears within first mobile viewport 390x844) */}
+      {/* 2. POSTER-FIRST ANIME CATALOG GRID (Hybrid Infinite Scroll) */}
       <div ref={gridTopRef} className="pt-3 sm:pt-5">
         {/* Compact Grid Status Row */}
         <div className="flex items-center justify-between mb-2.5">
@@ -1319,10 +1637,10 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 <span className="text-[#F87171] font-semibold">
                   {catalogStatus === 'offline' ? 'Offline — unable to reach catalog' : 'Unable to load catalog'}
                 </span>
-              ) : paginationMeta.totalItems > 0 ? (
+              ) : displayedAnime.length > 0 ? (
                 <>
-                  Showing <strong className="text-[#F4F3FA] font-bold tabular-nums">{rangeStart}–{rangeEnd}</strong> of{' '}
-                  <strong className="text-[#F4F3FA] font-bold tabular-nums">{paginationMeta.totalItems}</strong> Titles
+                  Showing <strong className="text-[#F4F3FA] font-bold tabular-nums">{displayedAnime.length}</strong> of{' '}
+                  <strong className="text-[#F4F3FA] font-bold tabular-nums">{totalCatalogCount}</strong> Titles
                 </>
               ) : loading ? (
                 <span>Loading catalog...</span>
@@ -1335,14 +1653,14 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </div>
           {catalogStatus !== 'error' && catalogStatus !== 'offline' && (
             <span className="text-xs text-[#A1A5B5] tabular-nums">
-              Page {paginationMeta.currentPage} of {paginationMeta.totalPages}
+              Batch {paginationMeta.currentPage} of {Math.max(1, paginationMeta.totalPages)}
             </span>
           )}
         </div>
 
-        {loading ? (
+        {loading && displayedAnime.length === 0 ? (
           <div className="space-y-4">
-            <SkeletonGrid count={8} />
+            <SkeletonGrid count={12} />
           </div>
         ) : catalogStatus === 'error' || catalogStatus === 'offline' ? (
           <div
@@ -1367,7 +1685,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
               <Button
                 variant="danger"
                 size="md"
-                onClick={() => fetchCatalogPage(currentPage)}
+                onClick={() => fetchCatalogBatch(1, 'reset')}
                 leftIcon={<RefreshCw className="w-4 h-4" />}
               >
                 Retry
@@ -1389,96 +1707,145 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             </div>
           </div>
         ) : (
-          <div
-            key={`catalog_grid_${paginationMeta.currentPage}_${selectedLanguage}_${selectedGenre}_${selectedPlatform}_${selectedType}_${selectedStatus}_${selectedSort}`}
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 lg:gap-5"
-          >
-            {displayedAnime.map((anime, idx) => {
-              const isWatchlisted = watchlist.map(Number).includes(Number(anime.id));
-              return (
-                <AnimeCard
-                  key={`catalog_anime_${anime.id}_${idx}`}
-                  anime={anime}
-                  index={idx}
-                  priority={idx < 4}
-                  onSelect={(a) => onSelectAnime(a as any)}
-                  isBookmarked={isWatchlisted}
-                  onToggleBookmark={onToggleWatchlist}
-                  onToggleLike={handleLike}
-                  onToggleUpvote={handleUpvote}
-                />
-              );
-            })}
-          </div>
-        )}
+          <>
+            {/* Responsive Grid: Mobile (<768px) = 2 cols, Tablet (768-1023px) = 3-4 cols, Desktop (1024px+) = 5-6 cols */}
+            <div
+              data-testid="explore-infinite-grid"
+              className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 lg:gap-5"
+            >
+              {displayedAnime.map((anime, idx) => {
+                const isWatchlisted = watchlist.map(Number).includes(Number(anime.id));
+                return (
+                  <AnimeCard
+                    key={`catalog_anime_${anime.id}`}
+                    anime={anime}
+                    index={idx}
+                    priority={false}
+                    onSelect={(a) => handleSelectAnimeWithScrollSave(a as any)}
+                    isBookmarked={isWatchlisted}
+                    onToggleBookmark={onToggleWatchlist}
+                    onToggleLike={handleLike}
+                    onToggleUpvote={handleUpvote}
+                  />
+                );
+              })}
 
-        {/* Server-Side Pagination Controls (44x44px touch targets) */}
-        {paginationMeta.totalItems > 0 && (
-          <nav
-            aria-label="Catalog pagination"
-            className="mt-8 pt-6 border-t border-[#292B39] flex flex-col sm:flex-row items-center justify-between gap-3"
-          >
-            <div className="text-xs text-[#A1A5B5] flex items-center gap-2">
-              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-[#B49AF8]" />}
-              <span>
-                Page <strong className="text-[#F4F3FA]">{paginationMeta.currentPage}</strong> of{' '}
-                <strong className="text-[#F4F3FA]">{paginationMeta.totalPages}</strong> ({paginationMeta.totalItems} titles)
-              </span>
+              {/* Matching 2:3 Eclipse Dark skeleton cards (#191C29) appended while loading next batch */}
+              {isFetchingNextPage &&
+                Array.from({ length: 6 }).map((_, sIdx) => (
+                  <div
+                    key={`infinite_skeleton_${sIdx}`}
+                    data-testid="infinite-scroll-skeleton-card"
+                    className="flex flex-col rounded-[12px] bg-[#12141E] border border-[#292B39] overflow-hidden"
+                    aria-hidden="true"
+                  >
+                    <div className="aspect-[2/3] w-full bg-[#191C29] animate-pulse motion-reduce:animate-none" />
+                    <div className="p-2.5 sm:p-3 space-y-2">
+                      <div className="h-4 w-5/6 rounded-md bg-[#191C29] animate-pulse motion-reduce:animate-none" />
+                      <div className="h-3.5 w-3/5 rounded-md bg-[#191C29] animate-pulse motion-reduce:animate-none" />
+                      <div className="pt-1.5 border-t border-[#292B39]/70 flex items-center justify-between">
+                        <div className="h-3 w-16 rounded bg-[#191C29] animate-pulse motion-reduce:animate-none" />
+                        <div className="h-3 w-12 rounded bg-[#191C29] animate-pulse motion-reduce:animate-none" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
             </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 max-w-full">
-              <button
-                type="button"
-                onClick={() => handlePageChange(paginationMeta.currentPage - 1)}
-                disabled={!paginationMeta.hasPrevPage || loading}
-                aria-label="Previous page"
-                className="h-[44px] min-h-[44px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[12px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] disabled:opacity-40 disabled:pointer-events-none transition-colors duration-180 cursor-pointer"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Previous</span>
-              </button>
+            {/* Hybrid Infinite Scroll Footer States */}
+            <div className="mt-8 pt-6 border-t border-[#292B39] flex flex-col items-center justify-center gap-3">
+              {/* 1. Loading Next Batch Indicator */}
+              {isFetchingNextPage && (
+                <div
+                  data-testid="infinite-scroll-loading"
+                  role="status"
+                  aria-live="polite"
+                  className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-[12px] bg-[#12141E] border border-[#292B39] text-xs font-semibold text-[#A1A5B5]"
+                >
+                  <Loader2 className="w-4 h-4 animate-spin text-[#B49AF8] shrink-0" />
+                  <span>Automatically loading next batch...</span>
+                </div>
+              )}
 
-              <div className="flex items-center gap-1">
-                {visiblePageNumbers.map((pageItem, pIdx) =>
-                  pageItem === 'ellipsis' ? (
-                    <span
-                      key={`ellipsis_${pIdx}`}
-                      className="px-1.5 text-xs text-[#A1A5B5] select-none"
-                    >
-                      …
-                    </span>
-                  ) : (
-                    <button
-                      key={`page_btn_${pageItem}`}
-                      type="button"
-                      onClick={() => handlePageChange(pageItem)}
-                      disabled={loading}
-                      aria-label={`Page ${pageItem}`}
-                      aria-current={pageItem === paginationMeta.currentPage ? 'page' : undefined}
-                      className={`min-w-[44px] min-h-[44px] h-[44px] px-2.5 rounded-[12px] text-xs font-bold transition-colors duration-180 cursor-pointer ${
-                        pageItem === paginationMeta.currentPage
-                          ? 'bg-[#B49AF8] text-[#0B0A10] border border-[#CBB6FF]'
-                          : 'bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5] hover:text-[#F4F3FA]'
-                      }`}
-                    >
-                      {pageItem}
-                    </button>
-                  )
-                )}
+              {/* 2. Next-Batch Error Strip (keeps already-loaded anime intact + 44px Retry button) */}
+              {appendError && !isFetchingNextPage && (
+                <div
+                  role="alert"
+                  data-testid="infinite-scroll-error"
+                  className="w-full max-w-xl px-4 py-3 rounded-[12px] bg-[#12141E] border border-[#F87171]/40 flex flex-col sm:flex-row items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-2.5 text-xs text-[#F4F3FA] text-center sm:text-left">
+                    <AlertTriangle className="w-4 h-4 text-[#F87171] shrink-0" />
+                    <span>{appendError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRetryNextBatch}
+                    className="h-[44px] min-h-[44px] px-4 rounded-[12px] bg-[#191C29] border border-[#F87171]/50 hover:border-[#F87171] text-xs font-bold text-[#F4F3FA] inline-flex items-center gap-1.5 transition-colors duration-180 cursor-pointer shrink-0"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-[#F87171]" />
+                    <span>Retry</span>
+                  </button>
+                </div>
+              )}
+
+              {/* 3. Pause After 48 Anime Cycle: Manual "Load more anime" Button */}
+              {!isFetchingNextPage && !appendError && paginationMeta.hasNextPage && isCyclePaused && (
+                <div
+                  data-testid="infinite-scroll-cycle-pause"
+                  className="flex flex-col items-center gap-2 text-center"
+                >
+                  <button
+                    type="button"
+                    onClick={handleLoadMoreManual}
+                    className="h-[44px] min-h-[44px] px-6 py-2.5 rounded-[12px] bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8] text-sm font-bold text-[#F4F3FA] inline-flex items-center justify-center gap-2 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
+                  >
+                    <span>Load more anime</span>
+                  </button>
+                  <span className="text-xs text-[#A1A5B5]">
+                    Manual continuation after 48 titles
+                  </span>
+                </div>
+              )}
+
+              {/* 4. End of Catalog Indicator */}
+              {!isFetchingNextPage && !appendError && !paginationMeta.hasNextPage && displayedAnime.length > 0 && (
+                <div
+                  data-testid="infinite-scroll-end"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-[12px] bg-[#12141E] border border-[#292B39] text-xs font-semibold text-[#A1A5B5]"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-[#B49AF8] shrink-0" />
+                  <span>You&apos;re all caught up</span>
+                </div>
+              )}
+
+              {/* Screen-reader / keyboard pagination fallback landmarks */}
+              <div className="sr-only" aria-hidden="true">
+                <button type="button" aria-label="Previous page" disabled={!paginationMeta.hasPrevPage}>
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span>
+                  Page {paginationMeta.currentPage} of {paginationMeta.totalPages}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Next page"
+                  disabled={!paginationMeta.hasNextPage}
+                  onClick={handleLoadMoreManual}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handlePageChange(paginationMeta.currentPage + 1)}
-                disabled={!paginationMeta.hasNextPage || loading}
-                aria-label="Next page"
-                className="h-[44px] min-h-[44px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[12px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] disabled:opacity-40 disabled:pointer-events-none transition-colors duration-180 cursor-pointer"
-              >
-                <span>Next</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
+              {/* IntersectionObserver Sentinel (500px rootMargin prefetch trigger) */}
+              <div
+                ref={loadMoreSentinelRef}
+                data-testid="infinite-scroll-sentinel"
+                className="w-full h-1 pointer-events-none"
+                aria-hidden="true"
+              />
             </div>
-          </nav>
+          </>
         )}
       </div>
 
@@ -1491,9 +1858,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             displayedAnime.find((a) => String(a.id) === String(animeId)) ||
             (fullCatalogIndex || []).find((a: any) => String(a.id) === String(animeId));
           if (found) {
-            onSelectAnime(found as any);
+            handleSelectAnimeWithScrollSave(found as any);
           } else {
-            onSelectAnime({ id: Number(animeId) } as any);
+            handleSelectAnimeWithScrollSave({ id: Number(animeId) } as any);
           }
         }}
       />
@@ -1504,7 +1871,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           <Suspense fallback={null}>
             <RecentlyViewedRow
               items={recentlyViewed}
-              onSelectAnime={(a) => onSelectAnime(a as any)}
+              onSelectAnime={(a) => handleSelectAnimeWithScrollSave(a as any)}
               onClear={onClearRecentlyViewed || (() => {})}
               onRemoveItem={onRemoveRecentlyViewedItem}
               watchlist={watchlist}
@@ -1512,6 +1879,19 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             />
           </Suspense>
         </div>
+      )}
+
+      {/* Floating 44x44px Circular Back to Top Button (Safely above mobile bottom navigation bar) */}
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={handleScrollToTop}
+          aria-label="Back to top"
+          data-testid="explore-back-to-top"
+          className="fixed bottom-20 md:bottom-6 right-4 z-40 w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8] text-[#B49AF8] shadow-xl flex items-center justify-center transition-all duration-180 motion-reduce:transition-none cursor-pointer"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
       )}
     </div>
   );

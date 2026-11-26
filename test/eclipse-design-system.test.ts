@@ -300,5 +300,40 @@ test('Eclipse 15: Step 9 Chat, Auth, Forms, Legal, and AdminDashboard adopt Ecli
   assert.ok(adminDash.split('\n').length < 2200, 'AdminDashboard must remain under 2200 lines');
 });
 
+test('Eclipse 16: Explore Catalog Hybrid Infinite Scroll deduplicates by Anime ID, pauses after 48 titles (4 batches of 12), and provides Eclipse loading/error/end/back-to-top states', async () => {
+  const {
+    CATALOG_BATCH_SIZE,
+    CATALOG_BATCHES_PER_CYCLE,
+    CATALOG_AUTO_LOAD_CYCLE_LIMIT,
+    deduplicateAnimeById,
+    shouldPauseAutoLoadCycle,
+  } = await import('../src/components/CatalogView');
+
+  assert.equal(CATALOG_BATCH_SIZE, 12);
+  assert.equal(CATALOG_BATCHES_PER_CYCLE, 4);
+  assert.equal(CATALOG_AUTO_LOAD_CYCLE_LIMIT, 48);
+
+  const deduped = deduplicateAnimeById(
+    [{ id: 1, title: 'Naruto' }, { id: 2, title: 'Bleach' }],
+    [{ id: 2, title: 'Bleach Duplicate' }, { id: 3, title: 'One Piece' }]
+  );
+  assert.equal(deduped.length, 3);
+  assert.deepEqual(deduped.map((x) => x.id), [1, 2, 3]);
+
+  assert.equal(shouldPauseAutoLoadCycle(1, 12, true), false);
+  assert.equal(shouldPauseAutoLoadCycle(3, 36, true), false);
+  assert.equal(shouldPauseAutoLoadCycle(4, 48, true), true);
+  assert.equal(shouldPauseAutoLoadCycle(4, 48, false), false);
+
+  const catalogCode = read('src/components/CatalogView.tsx');
+  assert.ok(catalogCode.includes("rootMargin: '500px'"), 'IntersectionObserver must prefetch with rootMargin: 500px');
+  assert.ok(catalogCode.includes('Load more anime'), 'Must render Load more anime button when paused at 48-title cap');
+  assert.ok(catalogCode.includes('Manual continuation after 48 titles'), 'Must display subtle helper text for 48-title pause');
+  assert.ok(catalogCode.includes('Automatically loading next batch...'), 'Must display subtle automatic loading indicator');
+  assert.ok(catalogCode.includes('You&apos;re all caught up') || catalogCode.includes("You're all caught up"), 'Must display end of catalog message');
+  assert.ok(catalogCode.includes('data-testid="explore-back-to-top"'), 'Must provide floating 44x44px Back to Top button');
+});
+
+
 
 
