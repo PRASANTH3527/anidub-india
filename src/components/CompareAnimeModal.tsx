@@ -10,11 +10,13 @@ import {
   X,
   CheckCircle2,
   Film,
+  Activity,
 } from 'lucide-react';
 import { buildAnimeComparison, type ComparableAnimeLike } from '../utils/compareAnime';
 import { matchesAnimeSearchQuery } from '../utils/searchFilterState';
 import { proxyUrl } from '../utils/imgbb';
 import { Button } from './ui/Button';
+import { EmptyState } from './ui/EclipseState';
 
 export interface CompareAnimeModalProps {
   catalogList: ComparableAnimeLike[];
@@ -104,24 +106,24 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
       aria-modal={asModal ? true : undefined}
       aria-labelledby="compare-anime-heading"
       onClick={(e) => e.stopPropagation()}
-      className={`w-full ${
+      className={`w-full overflow-x-clip ${
         asModal
-          ? 'max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-[#12141E] border border-[#292B39] p-5 sm:p-7 shadow-2xl'
-          : 'max-w-5xl mx-auto rounded-2xl bg-[#12141E] border border-[#292B39] p-5 sm:p-8 shadow-2xl'
-      } text-[#F4F3FA] font-sans space-y-6`}
+          ? 'max-w-4xl max-h-[90vh] overflow-y-auto rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-6 shadow-2xl'
+          : 'max-w-5xl mx-auto rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-6'
+      } text-[#F4F3FA] font-sans space-y-5`}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 border-b border-[#292B39] pb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8] shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-[12px] bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8] shrink-0">
             <Scale className="w-5 h-5" />
           </div>
-          <div>
-            <h2 id="compare-anime-heading" className="text-lg sm:text-xl font-black text-[#F4F3FA] tracking-tight">
+          <div className="min-w-0">
+            <h2 id="compare-anime-heading" className="text-lg sm:text-xl font-extrabold text-[#F4F3FA] tracking-tight truncate">
               Compare Anime (A vs B)
             </h2>
             <p className="text-xs text-[#A1A5B5]">
-              Side-by-side comparison of verified Indian dub languages, official OTT platforms, episodes, and ratings.
+              Verified Indian dub languages, official OTT platforms, status, episodes, and ratings.
             </p>
           </div>
         </div>
@@ -130,10 +132,10 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
           <Button
             type="button"
             variant="secondary"
-            size="sm"
+            size="md"
             onClick={handleSwap}
             aria-label="Swap Anime A and Anime B"
-            leftIcon={<ArrowLeftRight className="w-3.5 h-3.5 text-[#B49AF8]" />}
+            leftIcon={<ArrowLeftRight className="w-4 h-4 text-[#B49AF8]" />}
             className="text-xs"
           >
             <span className="hidden sm:inline">Swap</span>
@@ -143,7 +145,7 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="Close Compare Anime"
-              className="w-10 h-10 rounded-xl bg-[#191C29] hover:bg-[#292B39] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer"
+              className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] hover:border-[#B49AF8]/60 border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -152,20 +154,21 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
       </div>
 
       {safeList.length === 0 ? (
-        <div className="py-12 text-center space-y-2">
-          <Film className="w-8 h-8 text-[#A1A5B5] mx-auto" />
-          <p className="text-sm font-semibold text-[#F4F3FA]">Catalog is still loading</p>
-          <p className="text-xs text-[#A1A5B5]">Once anime titles finish loading, you can compare any two side by side.</p>
-        </div>
+        <EmptyState
+          icon={<Film className="w-5 h-5" />}
+          title="No anime loaded to compare"
+          description="Once the Indian dub catalog loads, pick any two titles to compare them side by side."
+          className="bg-[#191C29]"
+        />
       ) : (
         <>
-          {/* Pickers Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Clean Select Anime A & Select Anime B Picker Slots */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             {/* Anime A Picker */}
-            <div className="rounded-2xl bg-[#191C29] border border-[#292B39] p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <label htmlFor="compare-select-a" className="text-[11px] font-bold uppercase tracking-wider text-[#B49AF8]">
-                  Anime A
+            <div className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3.5 space-y-2.5 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <label htmlFor="compare-select-a" className="text-xs font-bold uppercase tracking-wider text-[#B49AF8]">
+                  Select Anime A
                 </label>
                 {leftAnime && onSelectAnime && (
                   <button
@@ -174,29 +177,29 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
                       onClose?.();
                       onSelectAnime(leftAnime);
                     }}
-                    className="text-[11px] font-semibold text-[#B49AF8] hover:text-[#CBB6FF] inline-flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-semibold text-[#B49AF8] hover:text-[#CBB6FF] inline-flex items-center gap-1 cursor-pointer"
                   >
-                    <span>Open Details</span>
+                    <span>Details</span>
                     <ExternalLink className="w-3 h-3" />
                   </button>
                 )}
               </div>
               <div className="relative">
-                <Search className="w-3.5 h-3.5 text-[#A1A5B5] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-4 h-4 text-[#A1A5B5] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={leftSearch}
                   onChange={(e) => setLeftSearch(e.target.value)}
-                  placeholder="Filter Anime A (English or Japanese)..."
+                  placeholder="Search Anime A..."
                   aria-label="Filter Anime A options"
-                  className="w-full min-h-[40px] rounded-xl bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] pl-8 pr-3 py-2 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none"
+                  className="w-full h-[44px] rounded-[12px] bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] pl-9 pr-3 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180"
                 />
               </div>
               <select
                 id="compare-select-a"
                 value={leftAnime ? Number(leftAnime.id) : ''}
                 onChange={(e) => setLeftId(Number(e.target.value))}
-                className="w-full min-h-[40px] rounded-xl bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] px-3 py-2 text-xs font-semibold text-[#F4F3FA] outline-none cursor-pointer"
+                className="w-full h-[44px] rounded-[12px] bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] px-3 text-xs font-semibold text-[#F4F3FA] outline-none cursor-pointer"
               >
                 {filteredLeftOptions.map((item) => (
                   <option key={`cmp_a_${item.id}`} value={Number(item.id)} className="bg-[#12141E] text-[#F4F3FA]">
@@ -207,10 +210,10 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
             </div>
 
             {/* Anime B Picker */}
-            <div className="rounded-2xl bg-[#191C29] border border-[#292B39] p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <label htmlFor="compare-select-b" className="text-[11px] font-bold uppercase tracking-wider text-[#CBB6FF]">
-                  Anime B
+            <div className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3.5 space-y-2.5 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <label htmlFor="compare-select-b" className="text-xs font-bold uppercase tracking-wider text-[#CBB6FF]">
+                  Select Anime B
                 </label>
                 {rightAnime && onSelectAnime && (
                   <button
@@ -219,29 +222,29 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
                       onClose?.();
                       onSelectAnime(rightAnime);
                     }}
-                    className="text-[11px] font-semibold text-[#CBB6FF] hover:text-[#F4F3FA] inline-flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-semibold text-[#CBB6FF] hover:text-[#F4F3FA] inline-flex items-center gap-1 cursor-pointer"
                   >
-                    <span>Open Details</span>
+                    <span>Details</span>
                     <ExternalLink className="w-3 h-3" />
                   </button>
                 )}
               </div>
               <div className="relative">
-                <Search className="w-3.5 h-3.5 text-[#A1A5B5] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-4 h-4 text-[#A1A5B5] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={rightSearch}
                   onChange={(e) => setRightSearch(e.target.value)}
-                  placeholder="Filter Anime B (English or Japanese)..."
+                  placeholder="Search Anime B..."
                   aria-label="Filter Anime B options"
-                  className="w-full min-h-[40px] rounded-xl bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] pl-8 pr-3 py-2 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none"
+                  className="w-full h-[44px] rounded-[12px] bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] pl-9 pr-3 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180"
                 />
               </div>
               <select
                 id="compare-select-b"
                 value={rightAnime ? Number(rightAnime.id) : ''}
                 onChange={(e) => setRightId(Number(e.target.value))}
-                className="w-full min-h-[40px] rounded-xl bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] px-3 py-2 text-xs font-semibold text-[#F4F3FA] outline-none cursor-pointer"
+                className="w-full h-[44px] rounded-[12px] bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] px-3 text-xs font-semibold text-[#F4F3FA] outline-none cursor-pointer"
               >
                 {filteredRightOptions.map((item) => (
                   <option key={`cmp_b_${item.id}`} value={Number(item.id)} className="bg-[#12141E] text-[#F4F3FA]">
@@ -252,34 +255,37 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
             </div>
           </div>
 
-          {/* Comparison Grid */}
+          {/* Responsive Side-by-Side Comparison Grid */}
           {comparison && (
             <div className="space-y-4">
               {/* Poster & Core Identity Row */}
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
                 {[
                   { side: comparison.left, accent: 'border-[#B49AF8]/40', winnerRating: comparison.ratingWinner === 'left' },
                   { side: comparison.right, accent: 'border-[#CBB6FF]/40', winnerRating: comparison.ratingWinner === 'right' },
                 ].map(({ side, accent, winnerRating }, idx) => (
                   <div
                     key={`cmp_card_${idx}_${side.id}`}
-                    className={`rounded-2xl bg-[#191C29] border ${accent} p-3 sm:p-4 flex flex-col sm:flex-row items-center sm:items-start gap-3`}
+                    className={`rounded-[12px] bg-[#191C29] border ${accent} p-3 flex flex-col sm:flex-row items-center sm:items-start gap-2.5 sm:gap-3 min-w-0`}
                   >
-                    <img
-                      src={proxyUrl(side.coverImage)}
-                      alt={side.title}
-                      className="w-16 h-24 sm:w-20 sm:h-28 rounded-xl object-cover border border-[#292B39] shrink-0 bg-[#12141E]"
-                    />
-                    <div className="min-w-0 flex-1 text-center sm:text-left space-y-1.5">
-                      <h3 className="text-sm sm:text-base font-bold text-[#F4F3FA] line-clamp-2 leading-snug">
+                    <div className="w-16 sm:w-20 aspect-[2/3] rounded-[10px] overflow-hidden border border-[#292B39] shrink-0 bg-[#12141E]">
+                      <img
+                        src={proxyUrl(side.coverImage)}
+                        alt={side.title}
+                        width={80}
+                        height={120}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1 text-center sm:text-left space-y-1">
+                      <h3 className="text-xs sm:text-sm font-bold text-[#F4F3FA] line-clamp-2 leading-snug break-words">
                         {side.title}
                       </h3>
-                      <p className="text-[11px] text-[#A1A5B5]">
-                        {side.type}
-                        {side.year ? ` • ${side.year}` : ''}
-                        {side.status ? ` • ${side.status}` : ''}
+                      <p className="text-[11px] text-[#A1A5B5] truncate">
+                        {side.type}{side.year ? ` • ${side.year}` : ''}
                       </p>
-                      <div className="inline-flex items-center gap-1.5 text-xs font-bold">
+                      <div className="inline-flex items-center gap-1 text-xs font-bold tabular-nums">
                         <Star className="w-3.5 h-3.5 text-[#F9C876] fill-[#F9C876]" />
                         <span className={winnerRating ? 'text-[#F9C876]' : 'text-[#F4F3FA]'}>
                           {side.ratingLabel}
@@ -291,24 +297,24 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
               </div>
 
               {/* Structured Comparison Rows */}
-              <div className="rounded-2xl border border-[#292B39] overflow-hidden divide-y divide-[#292B39] bg-[#191C29]/60">
+              <div className="rounded-[12px] border border-[#292B39] overflow-hidden divide-y divide-[#292B39] bg-[#191C29]/60">
                 {/* Verified Indian Dub Languages */}
-                <div className="p-4 space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
+                <div className="p-3.5 sm:p-4 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-xs font-bold text-[#F4F3FA] flex items-center gap-1.5">
                       <Globe2 className="w-4 h-4 text-[#B49AF8]" />
-                      Verified Indian Dub Languages
+                      Verified Dub Languages
                     </span>
                     {comparison.sharedLanguages.length > 0 && (
                       <span className="text-[11px] text-[#34D399] font-semibold inline-flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        {comparison.sharedLanguages.length} shared ({comparison.sharedLanguages.join(', ')})
+                        {comparison.sharedLanguages.length} shared
                       </span>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
                     {[comparison.left, comparison.right].map((side, idx) => (
-                      <div key={`cmp_lang_${idx}`} className="flex flex-wrap gap-1.5">
+                      <div key={`cmp_lang_${idx}`} className="flex flex-wrap gap-1.5 min-w-0">
                         {side.languages.length > 0 ? (
                           side.languages.map((lang) => {
                             const isShared = comparison.sharedLanguages.includes(lang);
@@ -333,12 +339,12 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
                   </div>
                 </div>
 
-                {/* Official OTT Platforms */}
-                <div className="p-4 space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
+                {/* Official Indian OTT Platforms */}
+                <div className="p-3.5 sm:p-4 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-xs font-bold text-[#F4F3FA] flex items-center gap-1.5">
                       <Tv className="w-4 h-4 text-[#B49AF8]" />
-                      Official OTT Platforms
+                      Official Indian OTT Platforms
                     </span>
                     {comparison.sharedPlatforms.length > 0 && (
                       <span className="text-[11px] text-[#B49AF8] font-semibold">
@@ -346,9 +352,9 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
                     {[comparison.left, comparison.right].map((side, idx) => (
-                      <div key={`cmp_ott_${idx}`} className="flex flex-wrap gap-1.5">
+                      <div key={`cmp_ott_${idx}`} className="flex flex-wrap gap-1.5 min-w-0">
                         {side.platforms.length > 0 ? (
                           side.platforms.map((plat) => {
                             const isShared = comparison.sharedPlatforms.includes(plat);
@@ -373,26 +379,43 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
                   </div>
                 </div>
 
-                {/* Episode Count */}
-                <div className="p-4 grid grid-cols-2 gap-3 sm:gap-4">
+                {/* Airing Status */}
+                <div className="p-3.5 sm:p-4 grid grid-cols-2 gap-2.5 sm:gap-4">
                   {[comparison.left, comparison.right].map((side, idx) => (
-                    <div key={`cmp_ep_${idx}`} className="space-y-0.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#A1A5B5]">
-                        Episodes
+                    <div key={`cmp_status_${idx}`} className="space-y-0.5 min-w-0">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#A1A5B5] flex items-center gap-1">
+                        <Activity className="w-3 h-3 text-[#B49AF8]" />
+                        <span>Airing Status</span>
                       </span>
-                      <p className="text-xs sm:text-sm font-semibold text-[#F4F3FA]">{side.episodesLabel}</p>
+                      <p className="text-xs sm:text-sm font-semibold text-[#F4F3FA] truncate">
+                        {side.status || 'Not verified'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Episode Count */}
+                <div className="p-3.5 sm:p-4 grid grid-cols-2 gap-2.5 sm:gap-4">
+                  {[comparison.left, comparison.right].map((side, idx) => (
+                    <div key={`cmp_ep_${idx}`} className="space-y-0.5 min-w-0">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#A1A5B5]">
+                        Episode Count
+                      </span>
+                      <p className="text-xs sm:text-sm font-semibold text-[#F4F3FA] truncate">
+                        {side.episodesLabel}
+                      </p>
                     </div>
                   ))}
                 </div>
 
                 {/* Rating & Studio */}
-                <div className="p-4 grid grid-cols-2 gap-3 sm:gap-4">
+                <div className="p-3.5 sm:p-4 grid grid-cols-2 gap-2.5 sm:gap-4">
                   {[comparison.left, comparison.right].map((side, idx) => (
-                    <div key={`cmp_studio_${idx}`} className="space-y-0.5">
+                    <div key={`cmp_studio_${idx}`} className="space-y-0.5 min-w-0">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-[#A1A5B5]">
                         Rating • Studio
                       </span>
-                      <p className="text-xs sm:text-sm font-semibold text-[#F4F3FA]">
+                      <p className="text-xs sm:text-sm font-semibold text-[#F4F3FA] break-words">
                         {side.ratingLabel}
                         <span className="text-[#A1A5B5] font-normal"> • {side.studio}</span>
                       </p>
@@ -408,13 +431,13 @@ export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
   );
 
   if (!asModal) {
-    return <div className="w-full px-3 sm:px-6 py-6 sm:py-8">{content}</div>;
+    return <div className="w-full px-3 sm:px-6 py-5 sm:py-7 overflow-x-clip">{content}</div>;
   }
 
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[95] flex items-center justify-center p-3 sm:p-5 bg-[#0B0A10]/85 backdrop-blur-sm"
+      className="fixed inset-0 z-[95] flex items-center justify-center p-2.5 sm:p-5 bg-[#0B0A10]/85"
     >
       {content}
     </div>

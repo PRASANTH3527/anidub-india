@@ -1,22 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Image from './OptimizedImage';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { 
-  ArrowLeft, 
-  Bookmark, 
-  CheckCircle2, 
-  Share2, 
-  Flag, 
-  Star, 
-  Play, 
-  ExternalLink, 
-  Send, 
-  ThumbsUp, 
+import {
+  ArrowLeft,
+  Bell,
+  BellRing,
+  Bookmark,
+  CheckCircle2,
+  Share2,
+  Flag,
+  Star,
+  Play,
+  ExternalLink,
+  Send,
+  ThumbsUp,
   Eye,
-  EyeOff, 
-  ChevronDown, 
-  ChevronUp, 
-  Sparkles, 
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
   ShieldCheck,
   Flame,
   Volume2,
@@ -24,7 +26,11 @@ import {
   Minus,
   Plus,
   Tv,
-  Scale
+  Scale,
+  Layers,
+  Clock,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 import { Anime } from './CatalogView';
 import { cloudflareApi } from '../services/cloudflareApi';
@@ -35,6 +41,8 @@ import { formatRelativeTime } from '../utils/timestamps';
 import { useUser, getClerkSessionToken } from '../lib/clerk';
 import { DualRating } from './DualRating';
 import { ReportModal } from './ReportModal';
+import { DetailModalSkeleton } from './SkeletonGrid';
+import { EmptyState } from './ui/EclipseState';
 import { buildAnimeJsonLd } from '../utils/seoMeta';
 import { parsePlatformList } from '../utils/dataNormalization';
 import { normalizeCanonicalOttList, normalizeCanonicalOttName } from '../utils/ottHub';
@@ -64,6 +72,7 @@ export interface AnimeReviewItem {
   isLiked: boolean;
   spoilers: boolean;
   revealed: boolean;
+  deliveryStatus?: 'pending' | 'published' | 'failed';
 }
 
 export interface RichPlatformEntry {
@@ -77,6 +86,19 @@ export interface SeasonEntry {
   name?: string;
   episodes?: number | string;
   episode_count?: number | string;
+}
+
+export interface FranchiseEntry {
+  id: number;
+  title: string;
+  slug?: string;
+  cover_image?: string;
+  year?: number | null;
+  type?: string;
+  languages?: string;
+  relation_type?: string | null;
+  sequence_number?: number | null;
+  status?: string | null;
 }
 
 export interface AnimeDetailRecord extends Omit<Partial<Anime>, 'rating' | 'year'> {
@@ -122,6 +144,12 @@ export interface AnimeDetailRecord extends Omit<Partial<Anime>, 'rating' | 'year
   audio_spec?: string | null;
   duration?: string | null;
   dub_matrix?: unknown;
+  last_verified_at?: string | null;
+  updated_at?: string | null;
+  franchise_id?: string | null;
+  relation_type?: string | null;
+  sequence_number?: number | null;
+  franchise_entries?: FranchiseEntry[];
 }
 
 export interface AnimeDetailPageProps {
@@ -185,6 +213,10 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     }
   });
 
+  // Follow for dub updates state
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isTogglingFollow, setIsTogglingFollow] = useState(false);
+
   // Toast / Modal states
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -193,14 +225,6 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [isSynopsisExpanded, setIsSynopsisExpanded] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState<'overview' | 'dubs' | 'progress' | 'reviews'>('overview');
-
-  const scrollToDetailSection = (tabId: 'overview' | 'dubs' | 'progress' | 'reviews', elementId: string) => {
-    setActiveDetailTab(tabId);
-    if (typeof document !== 'undefined') {
-      const target = document.getElementById(elementId);
-      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
 
   const openReportForField = (field: string) => {
     setReportInitialField(field);
@@ -247,6 +271,33 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       setIsWatched(watched.some((w) => Number(w) === idNum) || Boolean(localProgress?.completed));
     } catch {
       setIsWatched(Boolean(localProgress?.completed));
+    }
+
+    // Load follow status from localStorage + D1
+    try {
+      const followKey = user?.id ? `cf_followed_anime_ids_${user.id}` : 'cf_followed_anime_ids';
+      const localFollows: unknown[] = JSON.parse(localStorage.getItem(followKey) || '[]');
+      const idNum = Number(details?.id ?? animeId);
+      setIsFollowing(localFollows.some((fid) => Number(fid) === idNum));
+    } catch {
+      setIsFollowing(false);
+    }
+
+    if (user?.id) {
+      cloudflareApi
+        .fetchFollows()
+        .then((res) => {
+          const targetId = Number(details?.id ?? animeId);
+          if (Array.isArray(res?.follows)) {
+            const matched = res.follows.some((f) => Number(f.anime_id) === targetId);
+            setIsFollowing(matched);
+            try {
+              const ids = res.follows.map((f) => Number(f.anime_id)).filter((n) => n > 0);
+              localStorage.setItem(`cf_followed_anime_ids_${user.id}`, JSON.stringify(ids));
+            } catch {}
+          }
+        })
+        .catch(() => {});
     }
 
     // Sync watch progress from D1 if signed in
@@ -470,6 +521,94 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     }
   };
 
+  const handleToggleFollow = async () => {
+    if (numericAnimeId <= 0 || isTogglingFollow) return;
+    const nextFollowing = !isFollowing;
+    setIsFollowing(nextFollowing);
+    setIsTogglingFollow(true);
+
+    const followKey = user?.id ? `cf_followed_anime_ids_${user.id}` : 'cf_followed_anime_ids';
+    try {
+      const current: number[] = JSON.parse(localStorage.getItem(followKey) || '[]');
+      const updated = nextFollowing
+        ? Array.from(new Set([...current, numericAnimeId]))
+        : current.filter((id) => Number(id) !== numericAnimeId);
+      localStorage.setItem(followKey, JSON.stringify(updated));
+    } catch {}
+
+    try {
+      if (user?.id) {
+        if (nextFollowing) {
+          await cloudflareApi.followAnime(numericAnimeId);
+        } else {
+          await cloudflareApi.unfollowAnime(numericAnimeId);
+        }
+      }
+      showToast(
+        nextFollowing
+          ? 'Following dub updates for this title'
+          : 'Unfollowed dub updates'
+      );
+    } catch {
+      showToast(
+        nextFollowing
+          ? 'Saved dub follow locally (sign in to sync across devices)'
+          : 'Removed dub follow locally'
+      );
+    } finally {
+      setIsTogglingFollow(false);
+    }
+  };
+
+  const persistReviewsLocal = (items: AnimeReviewItem[]) => {
+    try {
+      localStorage.setItem(`cf_reviews_${animeId}`, JSON.stringify(items));
+    } catch {}
+  };
+
+  const submitReviewToServer = async (targetReview: AnimeReviewItem) => {
+    setReviewsList((prev) => {
+      const next = prev.map((r) =>
+        r.id === targetReview.id ? { ...r, deliveryStatus: 'pending' as const } : r
+      );
+      persistReviewsLocal(next);
+      return next;
+    });
+
+    try {
+      const res = await cloudflareApi.submitReview(animeId, {
+        user_name: targetReview.author,
+        rating: targetReview.rating,
+        language: targetReview.language,
+        comment: targetReview.comment,
+      });
+      const succeeded = Boolean(res && (res.success !== false));
+      setReviewsList((prev) => {
+        const next = prev.map((r) =>
+          r.id === targetReview.id
+            ? { ...r, deliveryStatus: succeeded ? ('published' as const) : ('failed' as const) }
+            : r
+        );
+        persistReviewsLocal(next);
+        return next;
+      });
+      if (succeeded) {
+        showToast('Review published');
+      } else {
+        showToast('Review failed to publish — tap Retry');
+      }
+    } catch {
+      setReviewsList((prev) => {
+        const next = prev.map((r) =>
+          r.id === targetReview.id ? { ...r, deliveryStatus: 'failed' as const } : r
+        );
+        persistReviewsLocal(next);
+        return next;
+      });
+      showToast('Review could not be synced — tap Retry');
+    }
+  };
+
   const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reviewComment.trim()) return;
@@ -477,43 +616,39 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     const currentUsername = user ? getVerifiedClerkUsername(user) : generateRandomUsername();
     const nowIso = new Date().toISOString();
 
-    const newRev = {
+    const newRev: AnimeReviewItem = {
       id: Date.now(),
       author: currentUsername,
       rating: reviewRating,
       language: reviewLang,
-      comment: reviewComment,
+      comment: reviewComment.trim(),
       spoilers: hasSpoilers,
       revealed: !hasSpoilers,
       likes: 1,
       isLiked: false,
       date: formatRelativeTime(nowIso),
-      created_at: nowIso
+      created_at: nowIso,
+      deliveryStatus: 'pending',
     };
 
     const updated = [newRev, ...reviewsList];
     setReviewsList(updated);
     setReviewComment('');
     try {
-      localStorage.setItem(`cf_reviews_${animeId}`, JSON.stringify(updated));
+      persistReviewsLocal(updated);
       const userRevs = JSON.parse(localStorage.getItem('cf_user_reviews') || '[]');
       userRevs.unshift({ ...newRev, animeId });
       localStorage.setItem('cf_user_reviews', JSON.stringify(userRevs));
 
-      // 1. Persist to D1 / SQLite database
-      cloudflareApi.submitReview(animeId, {
-        user_name: currentUsername,
-        rating: reviewRating,
-        language: reviewLang,
-        comment: reviewComment
-      }).catch(() => {});
+      // 1. Persist to D1 / SQLite database with explicit pending -> published/failed delivery state
+      await submitReviewToServer(newRev);
 
       // 2. Broadcast review into Live Community Chat REST API with verified Clerk username
       if (user) {
         const chatPayload = {
           user: currentUsername,
           username: currentUsername,
-          text: `[⭐ ${reviewRating}/10 • ${reviewLang}] ${reviewComment}`,
+          text: `[⭐ ${reviewRating}/10 • ${reviewLang}] ${newRev.comment}`,
           isReview: true,
           rating: reviewRating,
           language: reviewLang,
@@ -561,7 +696,6 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       console.error(err);
     }
     await handleRate(reviewRating);
-    showToast('Dub review submitted successfully!');
   };
 
   const handleLikeReview = (id: number | string) => {
@@ -637,6 +771,24 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     showToast(nextWatched ? 'Marked as Watched!' : 'Marked as uncompleted');
   };
 
+  const getSeasonEpisodeLimit = (seasonNumber: number): number | null => {
+    if (isMovie) return 1;
+    if (Array.isArray(seasonsArray) && seasonsArray.length > 0) {
+      const seasonEntry = seasonsArray[seasonNumber - 1];
+      const count = Number(seasonEntry?.episodes || seasonEntry?.episode_count || 0);
+      if (Number.isFinite(count) && count > 0) return count;
+    }
+    const dubSeasonMatch = dubProgress.seasons[seasonNumber - 1];
+    if (dubSeasonMatch) {
+      const maxFromDub = dubSeasonMatch.languages.reduce((acc, row) => {
+        const total = Number((row as { totalEpisodes?: number }).totalEpisodes || 0);
+        return total > acc ? total : acc;
+      }, 0);
+      if (maxFromDub > 0) return maxFromDub;
+    }
+    return totalEpisodes && totalEpisodes > 0 ? totalEpisodes : null;
+  };
+
   const handleUpdateWatchProgress = async (patch: {
     season?: number;
     episode?: number;
@@ -650,14 +802,18 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       completed: false,
       updatedAt: new Date().toISOString(),
     };
-    const nextSeason = Math.max(1, patch.season ?? prev.season);
+    const maxSeasonCount =
+      Array.isArray(seasonsArray) && seasonsArray.length > 0
+        ? seasonsArray.length
+        : Math.max(1, dubProgress.seasons.length);
+    const nextSeason = Math.min(maxSeasonCount, Math.max(1, patch.season ?? prev.season));
+    const cap = getSeasonEpisodeLimit(nextSeason);
     const nextEpisode = Math.max(0, patch.episode ?? prev.episode);
-    const cap = totalEpisodes && totalEpisodes > 0 ? totalEpisodes : null;
     const clampedEpisode = cap ? Math.min(cap, nextEpisode) : nextEpisode;
     const autoCompleted =
       patch.completed !== undefined
         ? patch.completed
-        : Boolean(cap && clampedEpisode >= cap);
+        : Boolean(cap && clampedEpisode >= cap && nextSeason >= maxSeasonCount);
 
     const saved = saveAnimeWatchProgress(animeId, {
       season: nextSeason,
@@ -694,7 +850,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         .finally(() => setIsSavingProgress(false));
     }
 
-    showToast(`Saved progress: S${saved.season} • Ep ${saved.episode}`);
+    showToast(`Saved progress: S${saved.season} • Ep ${saved.episode}${cap ? `/${cap}` : ''}`);
   };
 
   const handleToggleSpoilerProtection = () => {
@@ -871,11 +1027,63 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   }, [officialSourceHref]);
   const activeSeason = watchProgress?.season ?? 1;
   const activeEpisode = watchProgress?.episode ?? 0;
+  const maxSeasonsAvailable =
+    Array.isArray(seasonsArray) && seasonsArray.length > 0
+      ? seasonsArray.length
+      : Math.max(1, dubProgress.seasons.length);
+  const activeSeasonEpisodeCap = getSeasonEpisodeLimit(activeSeason);
   const progressPercent = computeWatchProgressPercent(
     activeEpisode,
-    totalEpisodes ?? watchProgress?.totalEpisodes ?? null,
+    activeSeasonEpisodeCap ?? totalEpisodes ?? watchProgress?.totalEpisodes ?? null,
     isWatched || Boolean(watchProgress?.completed)
   );
+
+  // Honest Last verified date string (never invents dates)
+  const formattedLastVerified = useMemo(() => {
+    const raw = details?.last_verified_at || details?.updated_at;
+    if (!raw || typeof raw !== 'string') return null;
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  }, [details?.last_verified_at, details?.updated_at]);
+
+  // Franchise watch order entries (sorted chronologically / by sequence_number)
+  const franchiseEntries: FranchiseEntry[] = useMemo(() => {
+    if (!Array.isArray(details?.franchise_entries) || details.franchise_entries.length === 0) {
+      return [];
+    }
+    return [...details.franchise_entries].sort((a, b) => {
+      const seqA = Number(a.sequence_number ?? 9999);
+      const seqB = Number(b.sequence_number ?? 9999);
+      if (seqA !== seqB) return seqA - seqB;
+      return Number(a.year ?? 9999) - Number(b.year ?? 9999);
+    });
+  }, [details?.franchise_entries]);
+
+  const handleOpenFranchiseEntry = (entry: FranchiseEntry) => {
+    if (Number(entry.id) === numericAnimeId) return;
+    if (_onSelectAnime) {
+      _onSelectAnime({
+        id: entry.id,
+        title: entry.title,
+        slug: entry.slug,
+        cover_image: entry.cover_image,
+        year: entry.year ?? undefined,
+        type: entry.type,
+        languages: entry.languages || '',
+      } as Anime);
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      const targetPath = `/anime/${encodeURIComponent(String(entry.slug || entry.id))}`;
+      window.history.pushState({}, '', targetPath);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
 
   // FAQ Items
   const faqItems = [
@@ -932,10 +1140,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     ]
   );
 
+  if (loading && !details) {
+    return <DetailModalSkeleton />;
+  }
+
   if (!loading && notFound) {
     return (
       <div className="relative w-full min-h-[70vh] bg-[#0B0A10] text-[#F4F3FA] font-sans flex flex-col items-center justify-center px-6 py-16 text-center">
-        <div className="max-w-md w-full rounded-2xl bg-[#12141E] border border-[#292B39] p-8 shadow-2xl space-y-4">
+        <div className="max-w-md w-full rounded-[12px] bg-[#12141E] border border-[#292B39] p-8 space-y-4">
           <div className="inline-flex items-center justify-center px-3 py-1 rounded-lg bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] text-xs font-bold uppercase tracking-wider">
             404 • Not Found
           </div>
@@ -946,7 +1158,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <button
             type="button"
             onClick={handleBack}
-            className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-sm font-bold transition-colors duration-150 cursor-pointer"
+            className="w-full min-h-[44px] py-2.5 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-sm font-bold transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
           >
             Back to Catalog
           </button>
@@ -956,32 +1168,18 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   }
 
   return (
-    <div className="relative w-full min-h-screen bg-[#0B0A10] text-[#F4F3FA] font-sans pb-36 overflow-x-clip selection:bg-[#B49AF8] selection:text-[#0B0A10]">
+    <div className="relative w-full min-h-screen bg-[#0B0A10] text-[#F4F3FA] font-sans pb-32 overflow-x-clip selection:bg-[#B49AF8] selection:text-[#0B0A10]">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: animeJsonLd }}
       />
 
-      {/* 1. SUBTLE ECLIPSE POSTER AMBIENT BACKDROP */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <Image
-          src={coverImage}
-          alt={title}
-          loading="lazy"
-          sizes="100vw"
-          width={640}
-          height={360}
-          quality={60}
-          className="w-full h-full object-cover blur-[110px] opacity-20"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0B0A10]/80 via-[#0B0A10]/95 to-[#0B0A10]" />
-      </div>
-
       {/* Top Navigation Bar */}
-      <div className="relative z-20 px-4 sm:px-6 py-4 flex items-center justify-between max-w-3xl mx-auto">
+      <div className="relative z-20 px-4 sm:px-6 py-3.5 flex items-center justify-between max-w-4xl mx-auto">
         <button
+          type="button"
           onClick={handleBack}
-          className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer"
+          className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
           title="Back to Catalog"
           aria-label="Back"
         >
@@ -993,7 +1191,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             <button
               type="button"
               onClick={() => onCompareAnime(details)}
-              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
+              className="min-h-[44px] px-3.5 py-2 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] inline-flex items-center gap-1.5 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
               title="Compare with another anime"
             >
               <Scale className="w-3.5 h-3.5 text-[#CBB6FF]" />
@@ -1002,17 +1200,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           )}
           <button
             type="button"
-            onClick={() => openReportForField('OTT Link')}
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F87171] flex items-center justify-center transition-colors duration-150 cursor-pointer"
-            title="Report Specific Field"
-            aria-label="Report Specific Field"
-          >
-            <Flag className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
             onClick={handleBack}
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
             title="Close"
             aria-label="Close"
           >
@@ -1023,203 +1212,226 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
       {/* TOAST NOTIFICATION */}
       {toastMessage && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-xl bg-[#12141E] border border-[#292B39] shadow-2xl flex items-center gap-2.5 text-[#F4F3FA] text-xs font-semibold">
+        <div
+          role="status"
+          className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-[12px] bg-[#12141E] border border-[#292B39] shadow-2xl flex items-center gap-2.5 text-[#F4F3FA] text-xs font-semibold"
+        >
           <Sparkles className="w-3.5 h-3.5 text-[#B49AF8] shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* 2. CINEMATIC POSTER HEADER (TOP SECTION) */}
-      <div className="relative z-10 px-4 flex flex-col items-center text-center max-w-3xl mx-auto mt-2">
-        {/* Poster */}
-        <div className="relative w-40 h-60 sm:w-44 sm:h-64 mx-auto mb-5">
-          <Image
-            src={posterImage}
-            alt={title}
-            priority
-            sizes="176px"
-            width={176}
-            height={256}
-            quality={80}
-            className="relative w-40 h-60 sm:w-44 sm:h-64 rounded-2xl shadow-2xl border border-[#292B39] object-cover z-10"
-          />
-        </div>
+      {/* MAIN CONTENT CONTAINER */}
+      <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 space-y-5">
 
-        {/* Title */}
-        <h1 className="text-2xl sm:text-4xl font-extrabold text-center text-[#F4F3FA] mb-2.5 relative z-10 leading-tight max-w-xl">
-          {title}
-        </h1>
+        {/* 1. COMPACT CINEMATIC HEADER (ECLIPSE DARK) */}
+        <header className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
+            {/* Strict 2:3 Poster */}
+            <div className="w-32 sm:w-36 aspect-[2/3] rounded-[12px] overflow-hidden border border-[#292B39] bg-[#191C29] shrink-0">
+              <Image
+                src={posterImage}
+                alt={title}
+                priority
+                sizes="(max-width: 640px) 128px, 144px"
+                width={144}
+                height={216}
+                quality={80}
+                className="w-full h-full object-cover"
+              />
+            </div>
 
-        {/* Meta details */}
-        <div className="flex items-center justify-center flex-wrap gap-2 text-xs font-semibold text-[#A1A5B5] relative z-10 mb-6">
-          {currentRating && (
-            <span className="flex items-center gap-1 text-[#F9C876] font-bold">
-              <Star className="w-3.5 h-3.5 fill-[#F9C876] text-[#F9C876]" />
-              <span>{currentRating.toFixed(1)} / 10</span>
-            </span>
-          )}
-          {currentRating && releaseYear && <span>•</span>}
-          {releaseYear && <span>{releaseYear}</span>}
-          <span>•</span>
-          <span className="text-[#CBB6FF] font-semibold">{type}</span>
-          {episodesText && (
-            <>
-              <span>•</span>
-              <span>{episodesText}</span>
-            </>
-          )}
-          {status && (
-            <>
-              <span>•</span>
-              <span className="text-[#34D399] font-semibold flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
-                <span>{status}</span>
-              </span>
-            </>
-          )}
-        </div>
+            {/* Header Metadata & Touch-Friendly Action Row */}
+            <div className="flex-1 min-w-0 w-full text-center sm:text-left space-y-3">
+              <div className="space-y-2">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#F4F3FA] leading-tight break-words">
+                  {title}
+                </h1>
 
-        {/* INLINE ACTION BAR */}
-        <div className="w-full max-w-md min-w-0 flex items-center justify-center gap-2 sm:gap-2.5 mb-2">
-          {availablePlatforms.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                if (availablePlatforms.length === 1) {
-                  handleOpenPlatform(availablePlatforms[0]);
-                } else {
-                  setIsWatchOptionsOpen(true);
-                }
-              }}
-              className="flex-1 min-w-0 min-h-[44px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] px-4 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors duration-150 cursor-pointer truncate"
-            >
-              <Play size={16} className="fill-[#0B0A10] shrink-0" />
-              <span className="truncate">{availablePlatforms.length > 1 ? 'Watch Options' : `Watch on ${availablePlatforms[0].name}`}</span>
-            </button>
-          )}
+                <div className="flex items-center justify-center sm:justify-start flex-wrap gap-2 text-xs font-semibold text-[#A1A5B5]">
+                  {currentRating !== null && currentRating > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#191C29] border border-[#292B39] text-[#F9C876] font-bold">
+                      <Star className="w-3.5 h-3.5 fill-[#F9C876] text-[#F9C876]" />
+                      <span>{currentRating.toFixed(1)}</span>
+                    </span>
+                  )}
+                  {releaseYear && (
+                    <span className="px-2 py-0.5 rounded-md bg-[#191C29] border border-[#292B39] text-[#F4F3FA]">
+                      {releaseYear}
+                    </span>
+                  )}
+                  <span className="px-2 py-0.5 rounded-md bg-[#191C29] border border-[#292B39] text-[#CBB6FF]">
+                    {type}
+                  </span>
+                  {episodesText && (
+                    <span className="px-2 py-0.5 rounded-md bg-[#191C29] border border-[#292B39] text-[#A1A5B5]">
+                      {episodesText}
+                    </span>
+                  )}
+                  {status && (
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border font-semibold ${
+                        status === 'Airing'
+                          ? 'bg-[#34D399]/10 border-[#34D399]/30 text-[#34D399]'
+                          : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5]'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          status === 'Airing' ? 'bg-[#34D399]' : 'bg-[#A1A5B5]'
+                        }`}
+                      />
+                      <span>{status}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
 
-          <div className="flex gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => numericAnimeId > 0 && onToggleWatchlist(numericAnimeId)}
-              aria-label={isBookmarked ? `Remove ${title} from watchlist` : `Add ${title} to watchlist`}
-              className={`w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl border transition-colors duration-150 cursor-pointer ${
-                isBookmarked
-                  ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF]'
-                  : 'bg-[#12141E] hover:bg-[#191C29] text-[#F4F3FA] border-[#292B39]'
-              }`}
-              title={isBookmarked ? 'In Watchlist' : 'Add to Watchlist'}
-            >
-              <Bookmark size={18} className={isBookmarked ? 'fill-[#0B0A10]' : ''} />
-            </button>
-            <button
-              type="button"
-              onClick={handleVote}
-              disabled={isVoting}
-              aria-label={`Upvote ${title}`}
-              className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] text-[#F9C876] transition-colors duration-150 relative cursor-pointer"
-              title="Upvote Anime"
-            >
-              <Flame size={19} className="fill-[#F9C876]" />
-              <span className="absolute -top-1 -right-1 text-[9px] font-bold bg-[#F9C876] text-[#0B0A10] px-1.5 py-0.5 rounded-md tabular-nums">
-                {upvotes > 0 ? (upvotes >= 1000 ? `${(upvotes / 1000).toFixed(1)}k` : upvotes) : '0'}
-              </span>
-            </button>
+              {/* Clean 44px Action Row: Save/Bookmark, Follow, Share, Report wrong info */}
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => numericAnimeId > 0 && onToggleWatchlist(numericAnimeId)}
+                  aria-pressed={isBookmarked}
+                  aria-label={isBookmarked ? `Remove ${title} from library` : `Save ${title} to library`}
+                  className={`min-h-[44px] px-4 py-2 rounded-[12px] text-xs font-bold inline-flex items-center justify-center gap-2 border transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
+                    isBookmarked
+                      ? 'bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] border-[#B49AF8]'
+                      : 'bg-[#191C29] hover:border-[#B49AF8]/60 text-[#F4F3FA] border-[#292B39]'
+                  }`}
+                >
+                  <Bookmark className={`w-4 h-4 shrink-0 ${isBookmarked ? 'fill-[#0B0A10]' : ''}`} />
+                  <span>{isBookmarked ? 'Saved' : 'Save'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleToggleFollow}
+                  disabled={isTogglingFollow}
+                  aria-pressed={isFollowing}
+                  aria-label={isFollowing ? `Unfollow dub updates for ${title}` : `Follow dub updates for ${title}`}
+                  className={`min-h-[44px] px-4 py-2 rounded-[12px] text-xs font-bold inline-flex items-center justify-center gap-2 border transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
+                    isFollowing
+                      ? 'bg-[#B49AF8]/15 border-[#B49AF8] text-[#CBB6FF]'
+                      : 'bg-[#191C29] hover:border-[#B49AF8]/60 text-[#F4F3FA] border-[#292B39]'
+                  }`}
+                >
+                  {isFollowing ? (
+                    <BellRing className="w-4 h-4 shrink-0 text-[#B49AF8]" />
+                  ) : (
+                    <Bell className="w-4 h-4 shrink-0 text-[#A1A5B5]" />
+                  )}
+                  <span>{isFollowing ? 'Following' : 'Follow'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  aria-label={`Share ${title}`}
+                  className="min-h-[44px] px-3.5 py-2 rounded-[12px] bg-[#191C29] hover:border-[#B49AF8]/60 border border-[#292B39] text-xs font-semibold text-[#F4F3FA] inline-flex items-center justify-center gap-2 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
+                >
+                  <Share2 className="w-4 h-4 shrink-0 text-[#A1A5B5]" />
+                  <span>Share</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openReportForField('OTT Link')}
+                  aria-label={`Report wrong info for ${title}`}
+                  className="min-h-[44px] px-3.5 py-2 rounded-[12px] bg-[#191C29] hover:border-[#F87171]/50 border border-[#292B39] text-xs font-semibold text-[#A1A5B5] hover:text-[#F87171] inline-flex items-center justify-center gap-2 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
+                >
+                  <Flag className="w-4 h-4 shrink-0" />
+                  <span>Report wrong info</span>
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </header>
 
-      {/* 3. CONTENT FLOW */}
-      <div className="relative z-10 max-w-2xl mx-auto px-4 sm:px-6">
-
-        {/* SECTION 0: WHERE TO WATCH (OFFICIAL OTT LINKS + REPORT SPECIFIC FIELD) */}
+        {/* 2. PROMINENT "WHERE TO WATCH" CARD (TOP PRIORITY, IMMEDIATELY BELOW HEADER) */}
         <section
           aria-label="Where to Watch"
-          className="mt-5 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-4"
+          data-testid="where-to-watch-card"
+          className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-3.5"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-[#B49AF8] text-[11px] font-bold tracking-wider uppercase">
+              <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase">
                 Where to Watch (India)
               </h2>
-              <p className="text-[11px] text-[#A1A5B5] mt-0.5">
-                Official licensed OTT platforms — AniDub India never hosts pirated video streams
+              <p className="text-xs text-[#A1A5B5] mt-0.5">
+                Official licensed Indian OTT streaming links
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => openReportForField('OTT Link')}
-              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#191C29] hover:border-[#F87171]/50 border border-[#292B39] text-[11px] font-semibold text-[#A1A5B5] hover:text-[#F87171] inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
-            >
-              <Flag className="w-3 h-3" />
-              <span>Report Specific Field</span>
-            </button>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#191C29] border border-[#292B39] text-[11px] text-[#A1A5B5]">
+              <Clock className="w-3.5 h-3.5 text-[#B49AF8]" />
+              <span>
+                Last verified:{' '}
+                <strong className="text-[#F4F3FA] font-semibold">
+                  {formattedLastVerified || 'Not verified'}
+                </strong>
+              </span>
+            </div>
           </div>
 
           {availablePlatforms.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {availablePlatforms.map((plat) => (
-                <button
+                <div
                   key={`where_to_watch_${plat.name}`}
-                  type="button"
-                  onClick={() => handleOpenPlatform(plat)}
-                  className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-[#191C29] hover:border-[#B49AF8]/60 border border-[#292B39] text-left transition-colors duration-150 cursor-pointer"
+                  className="flex items-center justify-between gap-3 p-3.5 rounded-[12px] bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/60 transition-colors duration-180 motion-reduce:transition-none"
                 >
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-[#F4F3FA] truncate flex items-center gap-1.5">
-                      <span>{plat.name}</span>
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#34D399]/15 border border-[#34D399]/30 text-[9px] font-bold text-[#34D399]">
-                        Verified
+                    <div className="text-sm font-bold text-[#F4F3FA] truncate flex items-center gap-2">
+                      <span className="truncate">{plat.name}</span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-[#34D399]/15 border border-[#34D399]/30 text-[10px] font-bold text-[#34D399] shrink-0">
+                        India
                       </span>
                     </div>
-                    <div className="text-[11px] text-[#A1A5B5] mt-0.5">
-                      {plat.isDirectUrl ? 'Direct official link • India' : 'Official platform lookup • India'}
+                    <div className="text-[11px] text-[#A1A5B5] mt-0.5 truncate">
+                      {plat.isDirectUrl ? 'Direct verified link' : 'Official catalog search'}
+                      {formattedLastVerified ? ` • ${formattedLastVerified}` : ''}
                     </div>
                   </div>
-                  <ExternalLink className="w-4 h-4 text-[#B49AF8] shrink-0" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenPlatform(plat)}
+                    className="min-h-[40px] px-3.5 py-2 rounded-[10px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-bold inline-flex items-center gap-1.5 shrink-0 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-[#0B0A10]" />
+                    <span>Watch</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
               ))}
             </div>
           ) : (
-            <div className="p-4 rounded-xl bg-[#191C29] border border-[#292B39] text-xs text-[#A1A5B5] flex flex-wrap items-center justify-between gap-3">
-              <span>Official Indian OTT streaming platform is currently <strong className="text-[#F4F3FA]">Not verified</strong>.</span>
+            <div className="p-4 rounded-[12px] bg-[#191C29] border border-[#292B39] text-xs text-[#A1A5B5] flex flex-wrap items-center justify-between gap-3">
+              <span>
+                Official Indian OTT availability: <strong className="text-[#F4F3FA]">Not verified</strong>.
+              </span>
               <button
                 type="button"
                 onClick={() => openReportForField('OTT Link')}
-                className="text-[#B49AF8] hover:text-[#CBB6FF] font-bold underline underline-offset-2 cursor-pointer"
+                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 text-[#B49AF8] font-semibold transition-colors duration-180 cursor-pointer"
               >
                 Suggest official link
               </button>
             </div>
           )}
-
-          {/* Quick Field-Specific Report Shortcuts */}
-          <div className="pt-3 border-t border-[#292B39] flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="text-[#A1A5B5] font-semibold">Spot an inaccuracy? Report:</span>
-            {(['OTT Link', 'Dub Language', 'Episode Count', 'Release Schedule'] as const).map((fieldLabel) => (
-              <button
-                key={`report_field_${fieldLabel}`}
-                type="button"
-                onClick={() => openReportForField(fieldLabel)}
-                className="px-2.5 py-1 rounded-lg bg-[#191C29] hover:border-[#F87171]/50 border border-[#292B39] text-[#A1A5B5] hover:text-[#F87171] font-semibold transition-colors duration-150 cursor-pointer"
-              >
-                {fieldLabel}
-              </button>
-            ))}
-          </div>
         </section>
 
-        {/* SLEEK ECLIPSE DETAIL NAVIGATION TABS (Overview, Seasons & Dubs, Watch Progress, Reviews) */}
+        {/* 3. CLEAN ECLIPSE TABS (Overview, Seasons & Dubs, Watch Progress, Reviews) */}
         <div
           role="tablist"
           aria-label="Anime detail sections"
-          className="mt-5 flex items-center gap-1.5 overflow-x-auto no-scrollbar p-1 rounded-xl bg-[#12141E] border border-[#292B39]"
+          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar p-1.5 rounded-[12px] bg-[#12141E] border border-[#292B39]"
         >
           {[
-            { id: 'overview' as const, label: 'Overview', targetId: 'detail-section-overview' },
-            { id: 'dubs' as const, label: 'Seasons & Dubs', targetId: 'detail-section-dubs' },
-            { id: 'progress' as const, label: 'Watch Progress', targetId: 'detail-section-progress' },
-            { id: 'reviews' as const, label: `Reviews (${reviewsList.length})`, targetId: 'detail-section-reviews' },
+            { id: 'overview' as const, label: 'Overview' },
+            { id: 'dubs' as const, label: 'Seasons & Dubs' },
+            { id: 'progress' as const, label: 'Watch Progress' },
+            { id: 'reviews' as const, label: `Reviews (${reviewsList.length})` },
           ].map((tabItem) => {
             const active = activeDetailTab === tabItem.id;
             return (
@@ -1228,8 +1440,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 type="button"
                 role="tab"
                 aria-selected={active}
-                onClick={() => scrollToDetailSection(tabItem.id, tabItem.targetId)}
-                className={`flex-1 min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors duration-150 cursor-pointer ${
+                onClick={() => setActiveDetailTab(tabItem.id)}
+                className={`flex-1 min-h-[44px] px-3.5 py-2 rounded-[10px] text-xs font-semibold whitespace-nowrap transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
                   active
                     ? 'bg-[#B49AF8] text-[#0B0A10] font-bold'
                     : 'text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#191C29]'
@@ -1241,541 +1453,733 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           })}
         </div>
 
-        {/* SECTION 1: VISUAL DUB PROGRESS BARS (PER INDIAN LANGUAGE & SEASON) */}
-        <section
-          id="detail-section-dubs"
-          aria-label="Indian Dub Availability and Progress"
-          className="mt-5 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-4"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-[#B49AF8] text-[11px] font-bold tracking-wider uppercase">
-                Indian Dub Availability &amp; Progress
-              </h2>
-              <p className="text-[11px] text-[#A1A5B5] mt-0.5">
-                Color-coded regional audio status across major Indian languages
-              </p>
-            </div>
+        {/* TAB PANEL: OVERVIEW */}
+        {activeDetailTab === 'overview' && (
+          <div id="detail-section-overview" role="tabpanel" className="space-y-5">
+            {/* Synopsis + Genres */}
+            <section className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase">
+                  Overview &amp; Synopsis
+                </h2>
+                <button
+                  type="button"
+                  onClick={handleToggleSpoilerProtection}
+                  aria-pressed={spoilerProtection}
+                  aria-label="Toggle spoiler protection"
+                  className={`min-h-[40px] px-3 py-1.5 rounded-[10px] text-xs font-semibold border inline-flex items-center gap-1.5 transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
+                    spoilerProtection
+                      ? 'bg-[#F9C876]/15 border-[#F9C876]/40 text-[#F9C876]'
+                      : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
+                  }`}
+                >
+                  {spoilerProtection ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  <span>Spoiler Shield: {spoilerProtection ? 'ON' : 'OFF'}</span>
+                </button>
+              </div>
 
-            {dubProgress.hasMultipleSeasons && (
-              <div className="flex items-center gap-1.5 flex-wrap" role="tablist" aria-label="Dub progress seasons">
-                {dubProgress.seasons.map((season, idx) => {
-                  const isActive = idx === selectedDubSeasonIdx;
-                  return (
+              <div className="relative">
+                <p
+                  className={`text-sm text-[#F4F3FA]/90 leading-relaxed transition-all duration-180 motion-reduce:transition-none ${
+                    spoilerProtection && !isSynopsisRevealed
+                      ? 'blur-md select-none opacity-60 pointer-events-none'
+                      : ''
+                  }`}
+                >
+                  {isSynopsisExpanded || synopsis.length <= 280
+                    ? synopsis
+                    : `${synopsis.slice(0, 280)}...`}
+                  {synopsis.length > 280 && (!spoilerProtection || isSynopsisRevealed) && (
                     <button
-                      key={season.seasonKey}
                       type="button"
-                      role="tab"
-                      aria-selected={isActive}
-                      onClick={() => setSelectedDubSeasonIdx(idx)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
-                        isActive
-                          ? 'bg-purple-600/30 border-purple-400/60 text-white'
-                          : 'bg-black/30 border-white/10 text-neutral-400 hover:text-white'
-                      }`}
+                      onClick={() => setIsSynopsisExpanded(!isSynopsisExpanded)}
+                      className="text-xs font-bold text-[#B49AF8] hover:text-[#CBB6FF] ml-2 cursor-pointer transition-colors"
                     >
-                      {season.seasonLabel}
+                      {isSynopsisExpanded ? 'Show less' : 'Read more'}
                     </button>
+                  )}
+                </p>
+
+                {spoilerProtection && !isSynopsisRevealed && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setIsSynopsisRevealed(true)}
+                      aria-label="Reveal blurred synopsis"
+                      className="min-h-[40px] px-4 py-2 rounded-[10px] bg-[#191C29] border border-[#F9C876]/50 text-[#F9C876] hover:text-[#F4F3FA] text-xs font-bold inline-flex items-center gap-2 shadow-xl cursor-pointer transition-colors"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Reveal Synopsis</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#292B39]">
+                <span className="text-[#A1A5B5] text-[11px] font-bold tracking-wider uppercase mr-1">
+                  Genres:
+                </span>
+                {genres.map((g: string, i: number) => (
+                  <span
+                    key={`detail_genre_${g}_${i}`}
+                    className="px-2.5 py-1 rounded-lg bg-[#191C29] border border-[#292B39] text-[#F4F3FA] font-medium text-xs"
+                  >
+                    {g}
+                  </span>
+                ))}
+              </div>
+            </section>
+
+            {/* Stream Specs */}
+            <section className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
+              <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase mb-3.5">
+                Stream Specs
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className="min-w-0">
+                  <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
+                    PLATFORMS
+                  </span>
+                  <span className="text-xs font-bold text-[#F4F3FA] flex items-center gap-1.5 truncate">
+                    <Play className="w-3.5 h-3.5 text-[#B49AF8] fill-[#B49AF8] shrink-0" />
+                    <span className="truncate">
+                      {availablePlatforms.length > 0
+                        ? availablePlatforms.map((p) => p.name).join(', ')
+                        : 'Not verified'}
+                    </span>
+                  </span>
+                </div>
+                {verifiedAudioSpec && (
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
+                      AUDIO TRACK
+                    </span>
+                    <span className="text-xs font-bold text-[#34D399] flex items-center gap-1.5">
+                      <Volume2 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{verifiedAudioSpec}</span>
+                    </span>
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
+                    STUDIO
+                  </span>
+                  <span className="text-xs font-bold text-[#F4F3FA] truncate block">{studio}</span>
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
+                    {isMovie ? 'FORMAT' : <>SEASONS &amp; EPISODES</>}
+                  </span>
+                  <span className="text-xs font-bold text-[#F4F3FA] truncate block">
+                    {isMovie
+                      ? movieDuration
+                        ? `Movie • ${movieDuration}`
+                        : 'Movie'
+                      : seasonEpisodeSummary || episodesText || (status === 'Airing' ? 'Ongoing' : 'Not verified')}
+                  </span>
+                </div>
+                {officialSourceHref && (
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
+                      OFFICIAL SOURCE
+                    </span>
+                    <a
+                      href={officialSourceHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-bold text-[#CBB6FF] hover:text-[#F4F3FA] inline-flex items-center gap-1 max-w-full truncate underline underline-offset-2"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-[#34D399] shrink-0" />
+                      <span className="truncate">{officialSourceLabel || 'Official Site'}</span>
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                    </a>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Franchise Watch Order (shown when anime belongs to a franchise) */}
+            {franchiseEntries.length > 0 && (
+              <section
+                aria-label="Franchise Watch Order"
+                data-testid="franchise-watch-order"
+                className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-[#B49AF8]" />
+                    <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase">
+                      Franchise Watch Order
+                    </h2>
+                  </div>
+                  <span className="text-[11px] font-semibold text-[#A1A5B5]">
+                    {franchiseEntries.length} {franchiseEntries.length === 1 ? 'Entry' : 'Entries'}
+                  </span>
+                </div>
+
+                <ol className="space-y-2">
+                  {franchiseEntries.map((entry, idx) => {
+                    const isCurrent = Number(entry.id) === numericAnimeId;
+                    return (
+                      <li key={`franchise_entry_${entry.id}`}>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenFranchiseEntry(entry)}
+                          disabled={isCurrent}
+                          className={`w-full min-h-[56px] p-3 rounded-[12px] border text-left flex items-center gap-3 transition-colors duration-180 motion-reduce:transition-none ${
+                            isCurrent
+                              ? 'bg-[#B49AF8]/12 border-[#B49AF8]/60 cursor-default'
+                              : 'bg-[#191C29] border-[#292B39] hover:border-[#B49AF8]/50 cursor-pointer'
+                          }`}
+                        >
+                          <span
+                            className={`w-7 h-7 rounded-lg text-xs font-extrabold flex items-center justify-center shrink-0 ${
+                              isCurrent
+                                ? 'bg-[#B49AF8] text-[#0B0A10]'
+                                : 'bg-[#12141E] border border-[#292B39] text-[#A1A5B5]'
+                            }`}
+                          >
+                            {entry.sequence_number ?? idx + 1}
+                          </span>
+                          <div className="w-9 aspect-[2/3] rounded-md overflow-hidden bg-[#12141E] border border-[#292B39] shrink-0">
+                            <Image
+                              src={entry.cover_image || '/logo.png'}
+                              alt={entry.title}
+                              loading="lazy"
+                              width={36}
+                              height={54}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs sm:text-sm font-bold text-[#F4F3FA] truncate">
+                              {entry.title}
+                            </div>
+                            <div className="text-[11px] text-[#A1A5B5] flex flex-wrap items-center gap-1.5 mt-0.5">
+                              {entry.relation_type && (
+                                <span className="text-[#CBB6FF] font-semibold">{entry.relation_type}</span>
+                              )}
+                              {entry.year && <span>• {entry.year}</span>}
+                              {entry.type && <span>• {entry.type}</span>}
+                            </div>
+                          </div>
+                          {isCurrent && (
+                            <span className="px-2 py-0.5 rounded-md bg-[#B49AF8] text-[#0B0A10] text-[10px] font-bold shrink-0">
+                              Viewing
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
+            )}
+
+            {/* Dual Rating & FAQ */}
+            <DualRating
+              globalRating={currentRating ?? 0}
+              initialUserRating={userRating}
+              communityScore={communityRating || (currentRating ?? 0)}
+              totalVotes={communityVotes}
+              onRate={handleCommunityRate}
+              className="w-full"
+            />
+
+            <section className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
+              <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase mb-3">
+                Frequently Asked Questions
+              </h2>
+              <div className="divide-y divide-[#292B39]">
+                {faqItems.map((item, idx) => {
+                  const isOpen = openFaqIndex === idx;
+                  return (
+                    <div key={`anime_faq_${idx}`} className="py-2">
+                      <button
+                        type="button"
+                        onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
+                        className="w-full min-h-[44px] py-1.5 flex items-center justify-between text-left text-xs sm:text-sm font-semibold text-[#F4F3FA] hover:text-[#B49AF8] transition-colors duration-180 cursor-pointer"
+                      >
+                        <span>{item.q}</span>
+                        {isOpen ? (
+                          <ChevronUp className="w-4 h-4 text-[#B49AF8] shrink-0 ml-2" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-[#A1A5B5] shrink-0 ml-2" />
+                        )}
+                      </button>
+                      {isOpen && (
+                        <div className="pt-1 pb-2 text-xs text-[#A1A5B5] leading-relaxed">
+                          {item.a}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
-            )}
+            </section>
           </div>
+        )}
 
-          <div className="space-y-3" data-testid="dub-progress-bars">
-            {activeDubSeason.languages.map((row) => {
-              const barColorClass =
-                row.status === 'complete'
-                  ? 'bg-gradient-to-r from-emerald-500 to-green-400'
-                  : row.status === 'partial'
-                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
-                    : row.status === 'available'
-                      ? 'bg-gradient-to-r from-emerald-500/80 to-teal-400/80'
-                      : 'bg-neutral-700/60';
+        {/* TAB PANEL: SEASONS & DUBS (Season × Language × OTT Matrix) */}
+        {activeDetailTab === 'dubs' && (
+          <section
+            id="detail-section-dubs"
+            role="tabpanel"
+            aria-label="Indian Dub Availability and Progress"
+            className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase">
+                  Season × Language × OTT Matrix
+                </h2>
+                <p className="text-xs text-[#A1A5B5] mt-0.5">
+                  Verified Indian dub episode counts across official platforms
+                </p>
+              </div>
 
-              const badgeColorClass =
-                row.status === 'complete'
-                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-                  : row.status === 'partial'
-                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-                    : row.status === 'available'
-                      ? 'bg-teal-500/15 border-teal-500/35 text-teal-300'
-                      : 'bg-neutral-800/70 border-neutral-700/60 text-neutral-400';
-
-              return (
-                <div key={`dub_bar_${activeDubSeason.seasonKey}_${row.language}`} className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className={`w-2 h-2 rounded-full shrink-0 ${
-                          row.status === 'complete' || row.status === 'available'
-                            ? 'bg-emerald-400'
-                            : row.status === 'partial'
-                              ? 'bg-amber-400'
-                              : 'bg-neutral-600'
+              {dubProgress.hasMultipleSeasons && (
+                <div className="flex items-center gap-1.5 flex-wrap" role="tablist" aria-label="Dub progress seasons">
+                  {dubProgress.seasons.map((season, idx) => {
+                    const isActive = idx === selectedDubSeasonIdx;
+                    return (
+                      <button
+                        key={season.seasonKey}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setSelectedDubSeasonIdx(idx)}
+                        className={`min-h-[40px] px-3 py-1.5 rounded-[10px] text-xs font-bold border transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
+                          isActive
+                            ? 'bg-[#B49AF8] border-[#B49AF8] text-[#0B0A10]'
+                            : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
                         }`}
-                      />
-                      <span className={`font-bold ${row.status === 'unavailable' ? 'text-neutral-500' : 'text-white'}`}>
-                        {row.language}
-                      </span>
-                      <span className="text-[11px] text-neutral-400 truncate">
-                        — {row.label}
+                      >
+                        {season.seasonLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Clean Season × Language × OTT Rows */}
+            <div className="space-y-3" data-testid="dub-progress-bars">
+              {activeDubSeason.languages.map((row) => {
+                const rowOttNames = availablePlatforms
+                  .filter(
+                    (p) =>
+                      p.languages.length === 0 ||
+                      p.languages.some((l) => l.toLowerCase().includes(row.language.toLowerCase()))
+                  )
+                  .map((p) => p.name);
+                const honestOttLabel =
+                  row.status === 'unavailable'
+                    ? '—'
+                    : rowOttNames.length > 0
+                      ? rowOttNames.join(', ')
+                      : 'Not verified';
+                const honestCountBadge =
+                  row.status === 'available' && !/\d/.test(row.badgeText)
+                    ? 'Count not verified'
+                    : row.badgeText;
+
+                const barColorClass =
+                  row.status === 'complete'
+                    ? 'bg-[#34D399]'
+                    : row.status === 'partial'
+                      ? 'bg-[#F9C876]'
+                      : row.status === 'available'
+                        ? 'bg-[#34D399]/75'
+                        : 'bg-[#292B39]';
+
+                const badgeColorClass =
+                  row.status === 'complete'
+                    ? 'bg-[#34D399]/15 border-[#34D399]/40 text-[#34D399]'
+                    : row.status === 'partial'
+                      ? 'bg-[#F9C876]/15 border-[#F9C876]/40 text-[#F9C876]'
+                      : row.status === 'available'
+                        ? 'bg-[#191C29] border-[#292B39] text-[#CBB6FF]'
+                        : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5]';
+
+                return (
+                  <div
+                    key={`dub_bar_${activeDubSeason.seasonKey}_${row.language}`}
+                    className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3.5 space-y-2.5"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`w-2 h-2 rounded-full shrink-0 ${
+                            row.status === 'complete' || row.status === 'available'
+                              ? 'bg-[#34D399]'
+                              : row.status === 'partial'
+                                ? 'bg-[#F9C876]'
+                                : 'bg-[#292B39]'
+                          }`}
+                        />
+                        <span
+                          className={`font-bold ${
+                            row.status === 'unavailable' ? 'text-[#A1A5B5]' : 'text-[#F4F3FA]'
+                          }`}
+                        >
+                          {row.language}
+                        </span>
+                        <span className="text-[11px] text-[#A1A5B5] truncate">
+                          • {honestOttLabel}
+                        </span>
+                      </div>
+
+                      <span
+                        className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border shrink-0 tabular-nums ${badgeColorClass}`}
+                      >
+                        {honestCountBadge}
                       </span>
                     </div>
 
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${badgeColorClass}`}>
-                      {row.badgeText}
-                    </span>
+                    <div className="w-full h-2 rounded-full bg-[#12141E] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-180 motion-reduce:transition-none ${barColorClass}`}
+                        style={{ width: `${row.status === 'unavailable' ? 0 : row.percent}%` }}
+                      />
+                    </div>
                   </div>
-
-                  <div className="w-full h-2 rounded-full bg-white/[0.07] overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${barColorClass}`}
-                      style={{ width: `${row.status === 'unavailable' ? 0 : row.percent}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* SECTION 1.5: WATCH PROGRESS TRACKER */}
-        <section
-          id="detail-section-progress"
-          aria-label="Watch Progress Tracker"
-          className="mt-5 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-4"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
-                <Tv className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-[11px] font-bold uppercase tracking-wider text-[#B49AF8]">
-                  Watch Progress Tracker
-                </h2>
-                <p className="text-[11px] text-[#A1A5B5]">
-                  Season {activeSeason} • Episode {activeEpisode}
-                  {totalEpisodes ? ` of ${totalEpisodes}` : ''} ({progressPercent}%)
-                  {isSavingProgress ? ' • Syncing…' : ''}
-                </p>
-              </div>
+                );
+              })}
             </div>
 
-            <button
-              type="button"
-              onClick={handleToggleWatched}
-              aria-pressed={isWatched}
-              aria-label={isWatched ? 'Mark series as unwatched' : 'Mark series as completed'}
-              className={`min-h-[38px] px-3 py-1.5 rounded-xl text-[11px] font-bold border inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer ${
-                isWatched
-                  ? 'bg-[#34D399]/15 border-[#34D399]/40 text-[#34D399]'
-                  : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
-              }`}
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>{isWatched ? 'Completed' : 'Mark Completed'}</span>
-            </button>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="w-full h-2 rounded-full bg-[#191C29] overflow-hidden">
-            <div
-              className="h-full rounded-full bg-[#B49AF8] transition-all duration-200"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-
-          {/* Season & Episode Controls */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            <div className="flex items-center justify-between rounded-xl bg-[#191C29] border border-[#292B39] px-3.5 py-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
-                Season
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleUpdateWatchProgress({ season: Math.max(1, activeSeason - 1) })}
-                  aria-label="Decrease season"
-                  className="w-9 h-9 rounded-lg bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 flex items-center justify-center text-[#F4F3FA] cursor-pointer"
-                >
-                  <Minus className="w-3.5 h-3.5" />
-                </button>
-                <span className="min-w-[2.25rem] text-center text-xs font-extrabold text-[#F4F3FA]">
-                  S{activeSeason}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleUpdateWatchProgress({ season: activeSeason + 1 })}
-                  aria-label="Increase season"
-                  className="w-9 h-9 rounded-lg bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 flex items-center justify-center text-[#F4F3FA] cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl bg-[#191C29] border border-[#292B39] px-3.5 py-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
-                Episode
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleUpdateWatchProgress({
-                      episode: Math.max(0, activeEpisode - 1),
-                      completed: false,
-                    })
-                  }
-                  aria-label="Previous episode"
-                  className="w-9 h-9 rounded-lg bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 flex items-center justify-center text-[#F4F3FA] cursor-pointer"
-                >
-                  <Minus className="w-3.5 h-3.5" />
-                </button>
-                <span className="min-w-[3.25rem] text-center text-xs font-extrabold text-[#F4F3FA]">
-                  Ep {activeEpisode}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleUpdateWatchProgress({ episode: activeEpisode + 1 })}
-                  aria-label="Next watched episode"
-                  className="w-9 h-9 rounded-lg bg-[#B49AF8] hover:bg-[#CBB6FF] flex items-center justify-center text-[#0B0A10] cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* SECTION 2: SYNOPSIS WITH SPOILER PROTECTION (OVERVIEW) */}
-        <div id="detail-section-overview" className="mt-8 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <h2 className="text-[#B49AF8] text-[11px] font-bold tracking-wider uppercase">
-              Synopsis
-            </h2>
-            <button
-              type="button"
-              onClick={handleToggleSpoilerProtection}
-              aria-pressed={spoilerProtection}
-              aria-label="Toggle spoiler protection"
-              className={`min-h-[36px] px-3 py-1 rounded-xl text-[11px] font-bold border inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer ${
-                spoilerProtection
-                  ? 'bg-[#F9C876]/15 border-[#F9C876]/40 text-[#F9C876]'
-                  : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
-              }`}
-            >
-              {spoilerProtection ? (
-                <EyeOff className="w-3.5 h-3.5" />
-              ) : (
-                <Eye className="w-3.5 h-3.5" />
-              )}
-              <span>Spoiler Protection: {spoilerProtection ? 'ON' : 'OFF'}</span>
-            </button>
-          </div>
-
-          <div className="relative">
-            <p
-              className={`text-sm sm:text-base text-[#F4F3FA]/90 leading-relaxed font-normal transition-all duration-200 ${
-                spoilerProtection && !isSynopsisRevealed
-                  ? 'blur-md select-none opacity-60 pointer-events-none'
-                  : ''
-              }`}
-            >
-              {isSynopsisExpanded || synopsis.length <= 280
-                ? synopsis
-                : `${synopsis.slice(0, 280)}...`}
-              {synopsis.length > 280 && (!spoilerProtection || isSynopsisRevealed) && (
-                <button
-                  type="button"
-                  onClick={() => setIsSynopsisExpanded(!isSynopsisExpanded)}
-                  className="text-xs font-bold text-[#B49AF8] hover:text-[#CBB6FF] ml-2 cursor-pointer transition-colors"
-                >
-                  {isSynopsisExpanded ? 'Show less' : 'Read more'}
-                </button>
-              )}
-            </p>
-
-            {spoilerProtection && !isSynopsisRevealed && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <button
-                  type="button"
-                  onClick={() => setIsSynopsisRevealed(true)}
-                  aria-label="Reveal blurred synopsis"
-                  className="px-4 py-2 rounded-xl bg-[#191C29] border border-[#F9C876]/50 text-[#F9C876] hover:text-[#F4F3FA] text-xs font-bold inline-flex items-center gap-2 shadow-xl cursor-pointer transition-colors"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Spoiler Shield Active — Click to Reveal Synopsis</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 pt-4 mt-4 border-t border-[#292B39] text-xs">
-            <span className="text-[#A1A5B5] text-[10px] font-bold tracking-wider uppercase mr-1">GENRES:</span>
-            {genres.map((g: string, i: number) => (
-              <span key={`detail_genre_${g}_${i}`} className="text-[#F4F3FA] font-medium text-xs">
-                {g}{i < genres.length - 1 ? ' • ' : ''}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* SECTION 3: STREAM SPECS */}
-        <div className="mt-6 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
-          <h2 className="text-[#B49AF8] text-[11px] font-bold tracking-wider uppercase mb-3.5">
-            Stream Specs
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-5">
-            <div className="min-w-0">
-              <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">PLATFORMS</span>
-              <span className="text-xs font-bold text-[#F4F3FA] flex items-center gap-1.5 truncate">
-                <Play className="w-3.5 h-3.5 text-[#B49AF8] fill-[#B49AF8] shrink-0" />
-                <span className="truncate">{availablePlatforms.length > 0 ? availablePlatforms.map(p => p.name).join(', ') : 'Not verified'}</span>
-              </span>
-            </div>
-            {verifiedAudioSpec && (
-              <div className="min-w-0">
-                <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">AUDIO TRACK</span>
-                <span className="text-xs font-bold text-[#34D399] flex items-center gap-1.5">
-                  <Volume2 className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{verifiedAudioSpec}</span>
-                </span>
-              </div>
-            )}
-            <div className="min-w-0">
-              <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">STUDIO</span>
-              <span className="text-xs font-bold text-[#F4F3FA] truncate block">{studio}</span>
-            </div>
-            <div className="min-w-0">
-              <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
-                {isMovie ? 'FORMAT' : <>SEASONS &amp; EPISODES</>}
-              </span>
-              <span className="text-xs font-bold text-[#F4F3FA] truncate block">
-                {isMovie
-                  ? (movieDuration ? `Movie • ${movieDuration}` : 'Movie')
-                  : (seasonEpisodeSummary || episodesText || (status === 'Airing' ? 'Ongoing' : 'TBA'))}
-              </span>
-            </div>
-            {officialSourceHref && (
-              <div className="min-w-0">
-                <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">OFFICIAL SOURCE</span>
-                <a
-                  href={officialSourceHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-bold text-[#CBB6FF] hover:text-[#F4F3FA] inline-flex items-center gap-1 max-w-full truncate underline underline-offset-2"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#34D399] shrink-0" />
-                  <span className="truncate">{officialSourceLabel || 'Official Site'}</span>
-                  <ExternalLink className="w-3 h-3 shrink-0" />
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* SECTION 4: COMMUNITY DUB REVIEWS (Dedicated Clean Card/Box) */}
-        <section
-          id="detail-section-reviews"
-          className="mt-6 bg-[#12141E] border border-[#292B39] rounded-2xl p-5 sm:p-6 space-y-5"
-        >
-          <div className="flex items-center justify-between pb-4 border-b border-[#292B39]">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
-                <Star className="w-4 h-4 fill-[#B49AF8]" />
-              </div>
-              <div>
-                <h2 className="text-sm sm:text-base font-extrabold text-[#F4F3FA] tracking-wide">
-                  Community Dub Reviews
-                </h2>
-                <p className="text-[11px] text-[#A1A5B5]">
-                  Ratings on voice acting, regional audio sync &amp; script localization
-                </p>
-              </div>
-            </div>
-            <span className="bg-[#191C29] border border-[#292B39] text-[#CBB6FF] text-[11px] font-bold px-3 py-1 rounded-lg">
-              {reviewsList.length} {reviewsList.length === 1 ? 'Review' : 'Reviews'}
-            </span>
-          </div>
-
-          {/* Review Submission Form */}
-          <form onSubmit={handleAddReview} className="space-y-4 pt-1 bg-[#191C29] border border-[#292B39] rounded-xl p-4">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-[#F4F3FA] font-semibold">Rate Dubbing Quality</span>
-              <span className="text-[#F9C876] font-bold flex items-center gap-1 bg-[#12141E] border border-[#292B39] px-2 py-0.5 rounded-lg">
-                <Star className="w-3.5 h-3.5 fill-[#F9C876] text-[#F9C876]" />
-                <span>{reviewRating.toFixed(1)} / 10.0</span>
-              </span>
-            </div>
-
-            <input
-              type="range"
-              min="1"
-              max="10"
-              step="0.5"
-              value={reviewRating}
-              onChange={(e) => setReviewRating(parseFloat(e.target.value))}
-              className="w-full accent-[#B49AF8] cursor-pointer h-1.5 bg-[#12141E] rounded-lg"
-            />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <select
-                value={reviewLang}
-                onChange={(e) => setReviewLang(e.target.value)}
-                className="w-full min-h-[42px] bg-[#12141E] border border-[#292B39] rounded-xl px-3.5 py-2 text-xs text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer"
-              >
-                {displayLanguages.map((lang: string, idx: number) => (
-                  <option key={`review_opt_${lang}_${idx}`} value={`${lang} Dub`}>{lang} Dub</option>
-                ))}
-              </select>
-
-              <div className="flex items-center justify-start sm:justify-end">
-                <label className="flex items-center gap-2 text-xs text-[#A1A5B5] cursor-pointer min-h-[40px]">
-                  <input
-                    type="checkbox"
-                    checked={hasSpoilers}
-                    onChange={(e) => setHasSpoilers(e.target.checked)}
-                    className="accent-[#B49AF8] rounded"
-                  />
-                  <span>Contains spoilers?</span>
-                </label>
-              </div>
-            </div>
-
-            <textarea
-              rows={2}
-              value={reviewComment}
-              onChange={(e) => setReviewComment(e.target.value)}
-              placeholder="Share thoughts on voice acting, sync, and regional dialogue delivery..."
-              className="w-full bg-[#12141E] border border-[#292B39] rounded-xl p-3.5 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8] resize-none"
-            />
-
-            <div className="flex justify-end">
+            <div className="pt-3 border-t border-[#292B39] flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="text-[#A1A5B5]">Spot an outdated dub count or missing language?</span>
               <button
-                type="submit"
-                className="min-h-[40px] px-5 py-2 rounded-xl bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-bold inline-flex items-center gap-2 cursor-pointer transition-colors duration-150"
+                type="button"
+                onClick={() => openReportForField('Dub Language')}
+                className="min-h-[38px] px-3 py-1.5 rounded-[10px] bg-[#191C29] border border-[#292B39] hover:border-[#F87171]/50 text-[#A1A5B5] hover:text-[#F87171] font-semibold transition-colors duration-180 cursor-pointer"
               >
-                <Send className="w-3.5 h-3.5" />
-                <span>Submit Review</span>
+                Report dub info
               </button>
             </div>
-          </form>
+          </section>
+        )}
 
-          {/* Reviews List Scrollable Container */}
-          <div className="max-h-[420px] overflow-y-auto pr-1 space-y-3 pt-1">
-            {reviewsList.length === 0 ? (
-              <div className="py-6 text-center text-xs text-[#A1A5B5] bg-[#191C29] border border-[#292B39] rounded-xl p-4">
-                <p>No community reviews yet for this title. Be the first to rate this regional dub above!</p>
-              </div>
-            ) : (
-              reviewsList.map((review, idx) => (
-                <div
-                  key={`review_${review.id}_${idx}`}
-                  className="space-y-2 text-xs p-4 rounded-xl bg-[#191C29] border border-[#292B39]"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <span className="font-bold text-[#F4F3FA]">{review.author}</span>
-                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-[#12141E] border border-[#292B39] text-[#CBB6FF] font-semibold">
-                        {review.language}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-[#F9C876] bg-[#12141E] px-2 py-0.5 rounded-md border border-[#292B39]">
-                      <Star className="w-3 h-3 fill-[#F9C876] text-[#F9C876]" />
-                      <span>{review.rating}</span>
-                    </div>
-                  </div>
-
-                  <div className="relative pt-1">
-                    {review.spoilers && !review.revealed ? (
-                      <div className="py-1 flex items-center justify-between text-[11px] text-[#A1A5B5]">
-                        <span className="flex items-center gap-1.5">
-                          <EyeOff className="w-3.5 h-3.5 text-[#A1A5B5]" />
-                          <span>Contains spoilers</span>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleSpoiler(review.id)}
-                          className="font-bold text-[#B49AF8] hover:underline cursor-pointer"
-                        >
-                          Reveal
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-[#F4F3FA]/90 leading-relaxed font-normal text-xs">
-                        {review.comment}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between text-[10px] text-[#A1A5B5] pt-2 border-t border-[#292B39]">
-                    <span>{review.date || 'Recent'}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleLikeReview(review.id)}
-                      className={`inline-flex items-center gap-1.5 text-[11px] transition-colors cursor-pointer ${
-                        review.isLiked
-                          ? 'text-[#B49AF8] font-bold'
-                          : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
-                      }`}
-                    >
-                      <ThumbsUp className="w-3.5 h-3.5" />
-                      <span>{review.likes || 0}</span>
-                    </button>
-                  </div>
+        {/* TAB PANEL: WATCH PROGRESS */}
+        {activeDetailTab === 'progress' && (
+          <section
+            id="detail-section-progress"
+            role="tabpanel"
+            aria-label="Watch Progress Tracker"
+            className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-[12px] bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
+                  <Tv className="w-5 h-5" />
                 </div>
-              ))
-            )}
-          </div>
-        </section>
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-[#B49AF8]">
+                    Season-Wise Watch Progress
+                  </h2>
+                  <p className="text-xs text-[#A1A5B5] mt-0.5 tabular-nums">
+                    Season {activeSeason} • Episode {activeEpisode}
+                    {activeSeasonEpisodeCap ? ` / ${activeSeasonEpisodeCap}` : ''} ({progressPercent}%)
+                    {isSavingProgress ? ' • Syncing…' : ''}
+                  </p>
+                </div>
+              </div>
 
-        {/* DUAL RATING SYSTEM (GLOBAL SCORE & COMMUNITY SCORE) */}
-        <div className="mt-6">
-          <DualRating
-            globalRating={details?.rating ? Number(details.rating) : 8.5}
-            initialUserRating={userRating}
-            communityScore={communityRating || (details?.rating ? Number(details.rating) : 8.5)}
-            totalVotes={communityVotes}
-            onRate={handleCommunityRate}
-            className="w-full"
-          />
-        </div>
+              <button
+                type="button"
+                onClick={handleToggleWatched}
+                aria-pressed={isWatched}
+                aria-label={isWatched ? 'Mark series as unwatched' : 'Mark series as completed'}
+                className={`min-h-[44px] px-4 py-2 rounded-[12px] text-xs font-bold border inline-flex items-center gap-2 transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
+                  isWatched
+                    ? 'bg-[#34D399]/15 border-[#34D399]/40 text-[#34D399]'
+                    : 'bg-[#191C29] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/60'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{isWatched ? 'Completed' : 'Mark Completed'}</span>
+              </button>
+            </div>
 
-        {/* SECTION 5: FREQUENTLY ASKED QUESTIONS */}
-        <div className="mt-8 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
-          <h2 className="text-[#B49AF8] text-[11px] font-bold tracking-wider uppercase mb-3">
-            Frequently Asked Questions
-          </h2>
-          <div className="divide-y divide-[#292B39]">
-            {faqItems.map((item, idx) => {
-              const isOpen = openFaqIndex === idx;
-              return (
-                <div key={`anime_faq_${idx}`} className="py-2.5">
+            {/* Progress Bar */}
+            <div className="w-full h-2.5 rounded-full bg-[#191C29] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-[#B49AF8] transition-all duration-180 motion-reduce:transition-none"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+
+            {/* Season & Episode Controls */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex items-center justify-between rounded-[12px] bg-[#191C29] border border-[#292B39] px-4 py-3">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] block">
+                    Season
+                  </span>
+                  <span className="text-[11px] text-[#A1A5B5] tabular-nums">
+                    Max {maxSeasonsAvailable}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
-                    className="w-full py-1.5 flex items-center justify-between text-left text-xs sm:text-sm font-semibold text-[#F4F3FA] hover:text-[#B49AF8] transition-colors cursor-pointer"
+                    disabled={activeSeason <= 1}
+                    onClick={() =>
+                      handleUpdateWatchProgress({
+                        season: Math.max(1, activeSeason - 1),
+                        episode: 0,
+                      })
+                    }
+                    aria-label="Decrease season"
+                    className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 disabled:opacity-40 flex items-center justify-center text-[#F4F3FA] transition-colors duration-180 cursor-pointer"
                   >
-                    <span>{item.q}</span>
-                    {isOpen ? (
-                      <ChevronUp className="w-4 h-4 text-[#B49AF8] shrink-0 ml-2" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-[#A1A5B5] shrink-0 ml-2" />
-                    )}
+                    <Minus className="w-4 h-4" />
                   </button>
-                  {isOpen && (
-                    <div className="pt-1.5 text-xs text-[#A1A5B5] leading-relaxed">
-                      {item.a}
-                    </div>
-                  )}
+                  <span className="min-w-[2.5rem] text-center text-sm font-extrabold text-[#F4F3FA] tabular-nums">
+                    S{activeSeason}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={activeSeason >= maxSeasonsAvailable}
+                    onClick={() =>
+                      handleUpdateWatchProgress({
+                        season: Math.min(maxSeasonsAvailable, activeSeason + 1),
+                        episode: 0,
+                      })
+                    }
+                    aria-label="Increase season"
+                    className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 disabled:opacity-40 flex items-center justify-center text-[#F4F3FA] transition-colors duration-180 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
                 </div>
-              );
-            })}
-          </div>
-        </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-[12px] bg-[#191C29] border border-[#292B39] px-4 py-3">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] block">
+                    Episode
+                  </span>
+                  <span className="text-[11px] text-[#A1A5B5] tabular-nums">
+                    {activeSeasonEpisodeCap ? `Limit ${activeSeasonEpisodeCap} eps` : 'No episode limit set'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={activeEpisode <= 0}
+                    onClick={() =>
+                      handleUpdateWatchProgress({
+                        episode: Math.max(0, activeEpisode - 1),
+                        completed: false,
+                      })
+                    }
+                    aria-label="Previous episode"
+                    className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 disabled:opacity-40 flex items-center justify-center text-[#F4F3FA] transition-colors duration-180 cursor-pointer"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <span className="min-w-[3.5rem] text-center text-sm font-extrabold text-[#F4F3FA] tabular-nums">
+                    Ep {activeEpisode}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={Boolean(activeSeasonEpisodeCap && activeEpisode >= activeSeasonEpisodeCap)}
+                    onClick={() => handleUpdateWatchProgress({ episode: activeEpisode + 1 })}
+                    aria-label="Next watched episode"
+                    className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#B49AF8] hover:bg-[#CBB6FF] disabled:opacity-40 flex items-center justify-center text-[#0B0A10] transition-colors duration-180 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* TAB PANEL: REVIEWS */}
+        {activeDetailTab === 'reviews' && (
+          <section
+            id="detail-section-reviews"
+            role="tabpanel"
+            className="bg-[#12141E] border border-[#292B39] rounded-[12px] p-4 sm:p-6 space-y-5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#292B39]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-[12px] bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
+                  <Star className="w-4 h-4 fill-[#B49AF8]" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-extrabold text-[#F4F3FA]">
+                    Community Dub Reviews
+                  </h2>
+                  <p className="text-xs text-[#A1A5B5]">
+                    Language-specific ratings on voice acting, sync &amp; script localization
+                  </p>
+                </div>
+              </div>
+              <span className="bg-[#191C29] border border-[#292B39] text-[#CBB6FF] text-xs font-bold px-3 py-1 rounded-lg">
+                {reviewsList.length} {reviewsList.length === 1 ? 'Review' : 'Reviews'}
+              </span>
+            </div>
+
+            {/* Review Submission Form */}
+            <form onSubmit={handleAddReview} className="space-y-4 bg-[#191C29] border border-[#292B39] rounded-[12px] p-4">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#F4F3FA] font-semibold">Rate Dubbing Quality</span>
+                <span className="text-[#F9C876] font-bold flex items-center gap-1 bg-[#12141E] border border-[#292B39] px-2.5 py-1 rounded-lg tabular-nums">
+                  <Star className="w-3.5 h-3.5 fill-[#F9C876] text-[#F9C876]" />
+                  <span>{reviewRating.toFixed(1)} / 10.0</span>
+                </span>
+              </div>
+
+              <input
+                type="range"
+                min="1"
+                max="10"
+                step="0.5"
+                value={reviewRating}
+                onChange={(e) => setReviewRating(parseFloat(e.target.value))}
+                className="w-full accent-[#B49AF8] cursor-pointer h-1.5 bg-[#12141E] rounded-lg"
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <select
+                  value={reviewLang}
+                  onChange={(e) => setReviewLang(e.target.value)}
+                  className="w-full h-[44px] bg-[#12141E] border border-[#292B39] rounded-[12px] px-3.5 text-xs text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer"
+                >
+                  {displayLanguages.map((lang: string, idx: number) => (
+                    <option key={`review_opt_${lang}_${idx}`} value={`${lang} Dub`}>
+                      {lang} Dub
+                    </option>
+                  ))}
+                </select>
+
+                <div className="flex items-center justify-start sm:justify-end">
+                  <label className="flex items-center gap-2 text-xs text-[#A1A5B5] cursor-pointer min-h-[44px]">
+                    <input
+                      type="checkbox"
+                      checked={hasSpoilers}
+                      onChange={(e) => setHasSpoilers(e.target.checked)}
+                      className="accent-[#B49AF8] rounded w-4 h-4"
+                    />
+                    <span>Contains spoilers?</span>
+                  </label>
+                </div>
+              </div>
+
+              <textarea
+                rows={3}
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="Share thoughts on voice acting, audio sync, and regional dialogue..."
+                className="w-full bg-[#12141E] border border-[#292B39] rounded-[12px] p-3.5 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8] resize-none"
+              />
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  className="min-h-[44px] px-5 py-2.5 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-bold inline-flex items-center gap-2 cursor-pointer transition-colors duration-180 motion-reduce:transition-none"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Submit Review</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Reviews List */}
+            <div className="space-y-3">
+              {reviewsList.length === 0 ? (
+                <EmptyState
+                  title="No dub reviews yet"
+                  description="Be the first to review the regional voice acting and audio quality for this title."
+                  className="bg-[#191C29]"
+                />
+              ) : (
+                reviewsList.map((review, idx) => (
+                  <div
+                    key={`review_${review.id}_${idx}`}
+                    className="space-y-2.5 text-xs p-4 rounded-[12px] bg-[#191C29] border border-[#292B39]"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-[#F4F3FA]">{review.author}</span>
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-[#12141E] border border-[#292B39] text-[#CBB6FF] font-semibold">
+                          {review.language}
+                        </span>
+                        {review.deliveryStatus === 'pending' && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#F9C876]/15 border border-[#F9C876]/30 text-[#F9C876] font-semibold">
+                            Posting…
+                          </span>
+                        )}
+                        {review.deliveryStatus === 'published' && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/15 border border-[#34D399]/30 text-[#34D399] font-semibold">
+                            Published
+                          </span>
+                        )}
+                        {review.deliveryStatus === 'failed' && (
+                          <button
+                            type="button"
+                            onClick={() => submitReviewToServer(review)}
+                            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-[#F87171]/15 border border-[#F87171]/40 text-[#F87171] font-bold hover:bg-[#F87171]/25 cursor-pointer"
+                          >
+                            <AlertCircle className="w-3 h-3" />
+                            <span>Failed — Retry</span>
+                            <RefreshCw className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-[#F9C876] bg-[#12141E] px-2 py-0.5 rounded-md border border-[#292B39] tabular-nums">
+                        <Star className="w-3 h-3 fill-[#F9C876] text-[#F9C876]" />
+                        <span>{review.rating}</span>
+                      </div>
+                    </div>
+
+                    <div className="relative pt-1">
+                      {review.spoilers && !review.revealed ? (
+                        <div className="py-1 flex items-center justify-between text-xs text-[#A1A5B5]">
+                          <span className="flex items-center gap-1.5">
+                            <EyeOff className="w-3.5 h-3.5 text-[#F9C876]" />
+                            <span>Contains spoilers</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSpoiler(review.id)}
+                            className="min-h-[36px] px-2.5 font-bold text-[#B49AF8] hover:underline cursor-pointer"
+                          >
+                            Reveal
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-[#F4F3FA]/90 leading-relaxed font-normal text-xs sm:text-sm">
+                          {review.comment}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-[#A1A5B5] pt-2 border-t border-[#292B39]">
+                      <span>{review.date || 'Recent'}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleLikeReview(review.id)}
+                        className={`min-h-[36px] px-2 inline-flex items-center gap-1.5 text-xs transition-colors duration-180 cursor-pointer ${
+                          review.isLiked
+                            ? 'text-[#B49AF8] font-bold'
+                            : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
+                        }`}
+                      >
+                        <ThumbsUp className="w-3.5 h-3.5" />
+                        <span>{review.likes || 0}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        )}
 
       </div>
 
