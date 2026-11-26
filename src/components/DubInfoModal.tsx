@@ -723,6 +723,22 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   const platformOptions: string[] = [...CANONICAL_STREAMING_PLATFORMS];
 
   const shouldReduceMotion = useReducedMotion();
+  const [activeGuidedStep, setActiveGuidedStep] = useState<1 | 2 | 3>(1);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState<boolean>(false);
+
+  const hasUnsavedChanges = Boolean(
+    !isSuccess &&
+      mode === 'submit' &&
+      (title.trim().length > 0 || synopsis.trim().length > 0)
+  );
+
+  const handleRequestClose = () => {
+    if (hasUnsavedChanges) {
+      setShowUnsavedConfirm(true);
+    } else {
+      onClose();
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -733,7 +749,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.16, ease: "easeOut" }}
-        onClick={onClose}
+        onClick={handleRequestClose}
         className="fixed inset-0 bg-[#0B0A10]/85"
       />
 
@@ -765,13 +781,76 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
           </div>
 
           <button
-            onClick={onClose}
+            type="button"
+            onClick={handleRequestClose}
             aria-label="Close modal"
-            className="w-11 h-11 rounded-xl text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#12141E] border border-[#292B39] flex items-center justify-center transition-colors duration-150 cursor-pointer"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#12141E] border border-[#292B39] flex items-center justify-center transition-colors duration-150 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* 3-Step Guided Flow Progress Header */}
+        {!isSuccess && (
+          <div
+            data-testid="dub-submit-guided-steps"
+            className="px-4 py-2.5 bg-[#12141E] border-b border-[#292B39] grid grid-cols-3 gap-1.5 shrink-0"
+          >
+            {[
+              { step: 1 as const, label: '1. Identify anime' },
+              { step: 2 as const, label: '2. Dub info & OTT' },
+              { step: 3 as const, label: '3. Verify & submit' },
+            ].map((item) => {
+              const isActive = activeGuidedStep === item.step;
+              return (
+                <button
+                  key={item.step}
+                  type="button"
+                  onClick={() => setActiveGuidedStep(item.step)}
+                  className={`min-h-[44px] px-2.5 py-1.5 rounded-[10px] text-[11px] sm:text-[12px] font-bold border transition-colors ${
+                    isActive
+                      ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/50'
+                      : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Unsaved Changes Confirmation Banner */}
+        {showUnsavedConfirm && (
+          <div
+            role="alert"
+            data-testid="unsaved-changes-confirm"
+            className="px-4 py-3 bg-[#191C29] border-b border-[#F9C876]/40 flex flex-wrap items-center justify-between gap-3 shrink-0"
+          >
+            <span className="text-xs font-semibold text-[#F4F3FA]">
+              Discard unsaved dub submission changes?
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowUnsavedConfirm(false)}
+                className="min-h-[44px] px-3 rounded-[10px] bg-[#12141E] text-[#F4F3FA] border border-[#292B39] text-xs font-semibold"
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUnsavedConfirm(false);
+                  onClose();
+                }}
+                className="min-h-[44px] px-3 rounded-[10px] bg-red-500/20 text-[#F87171] border border-red-500/30 text-xs font-bold"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* SCROLLING BODY */}
         <div className="flex-1 overflow-y-auto pb-28">

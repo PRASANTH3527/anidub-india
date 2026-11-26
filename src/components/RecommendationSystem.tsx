@@ -1,605 +1,335 @@
 import React, { useState, useMemo } from 'react';
+import { Sparkles, Star, Play, Bookmark, Clock, Globe, RefreshCw } from 'lucide-react';
 import {
-  Sparkles,
-  ArrowLeft,
-  ArrowRight,
-  RotateCcw,
-  Check,
-  Star,
-  Tv,
-  Bookmark,
-  Languages,
-  Flame,
-  Compass,
-  Heart,
-  Zap,
-  Film,
-  Smile,
-  TrendingUp,
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Anime } from './CatalogView';
-import { isCanonicalAiring } from '../utils/animeStatus';
-import { matchesSelectedPlatforms, normalizeCanonicalOttList } from '../utils/ottHub';
-import { extractCompactLanguageCodes } from '../utils/languages';
-import { Button } from './ui/Button';
+  Anime,
+  WatchlistItem,
+  normalizeAnimeList,
+  normalizeWatchlistProp,
+} from '../types';
+import { PlatformIcon } from './PlatformIcons';
+import { OptimizedImage } from './OptimizedImage';
 import { EmptyState } from './ui/EclipseState';
-import { SkeletonGrid } from './SkeletonGrid';
 
 export interface RecommendationSystemProps {
-  catalogList: Anime[];
-  onSelectAnime: (anime: Anime) => void;
-  watchlist?: number[];
-  onToggleWatchlist?: (animeId: number) => void;
+  animeList?: any[];
+  catalogList?: any[];
+  watchlist: any[];
+  onSelectAnime: (anime: any) => void;
+  onToggleWatchlist: (id: any, e?: any) => void;
   onNavigateCatalog?: () => void;
   mySubscriptions?: string[];
   mySubscriptionsEnabled?: boolean;
   onToggleMySubscriptionsEnabled?: (enabled: boolean) => void;
 }
 
-interface OptionItem {
-  id: string;
-  label: string;
-  sublabel?: string;
-  icon?: React.ReactNode;
-}
-
-const STEP_1_VIBES: OptionItem[] = [
-  { id: 'action', label: 'Action & Shonen', sublabel: 'Battles, superpowers & high energy', icon: <Flame className="w-4 h-4 text-[#F9C876]" /> },
-  { id: 'fantasy', label: 'Dark Fantasy & Magic', sublabel: 'Mythical realms, swords & supernatural', icon: <Sparkles className="w-4 h-4 text-[#B49AF8]" /> },
-  { id: 'scifi', label: 'Sci-Fi & Cyberpunk', sublabel: 'Futuristic worlds, AI & mecha', icon: <Zap className="w-4 h-4 text-[#34D399]" /> },
-  { id: 'thriller', label: 'Mystery & Thriller', sublabel: 'Suspense, mind games & investigations', icon: <Compass className="w-4 h-4 text-[#CBB6FF]" /> },
-  { id: 'romance', label: 'Romance & Drama', sublabel: 'Emotional stories & character arcs', icon: <Heart className="w-4 h-4 text-[#F87171]" /> },
-  { id: 'comedy', label: 'Comedy & Slice of Life', sublabel: 'Lighthearted & everyday adventures', icon: <Smile className="w-4 h-4 text-[#F9C876]" /> },
-];
-
-const STEP_2_LANGUAGES: OptionItem[] = [
-  { id: 'any', label: 'Any Regional Dub', sublabel: 'All verified Indian audio tracks', icon: <Languages className="w-4 h-4 text-[#B49AF8]" /> },
-  { id: 'TAM', label: 'Tamil', sublabel: 'Tamil dubbed releases', icon: <span className="text-xs font-bold text-[#B49AF8]">TA</span> },
-  { id: 'HIN', label: 'Hindi', sublabel: 'Hindi dubbed releases', icon: <span className="text-xs font-bold text-[#34D399]">HI</span> },
-  { id: 'TEL', label: 'Telugu', sublabel: 'Telugu dubbed releases', icon: <span className="text-xs font-bold text-[#CBB6FF]">TE</span> },
-  { id: 'MAL', label: 'Malayalam', sublabel: 'Malayalam dubbed releases', icon: <span className="text-xs font-bold text-[#F9C876]">ML</span> },
-  { id: 'KAN', label: 'Kannada', sublabel: 'Kannada dubbed releases', icon: <span className="text-xs font-bold text-[#F87171]">KN</span> },
-];
-
-const STEP_3_PLATFORMS: OptionItem[] = [
-  { id: 'all', label: 'All Official OTTs', sublabel: 'Across licensed Indian platforms', icon: <Tv className="w-4 h-4 text-[#F4F3FA]" /> },
-  { id: 'Crunchyroll', label: 'Crunchyroll India', sublabel: 'Regional dubbed simulcasts & catalog', icon: <span className="text-xs font-bold text-[#F9C876]">CR</span> },
-  { id: 'Netflix', label: 'Netflix India', sublabel: 'Multi-language dubbed originals & series', icon: <span className="text-xs font-bold text-[#F87171]">NF</span> },
-  { id: 'JioHotstar', label: 'JioHotstar', sublabel: 'Indian language anime streams', icon: <span className="text-xs font-bold text-[#B49AF8]">JH</span> },
-  { id: 'Muse India', label: 'Muse India / YouTube', sublabel: 'Free official regional streams', icon: <span className="text-xs font-bold text-[#34D399]">YT</span> },
-];
-
-const STEP_4_LENGTHS: OptionItem[] = [
-  { id: 'any', label: 'Any Length', sublabel: 'Single seasons, movies & long epics', icon: <Film className="w-4 h-4 text-[#F4F3FA]" /> },
-  { id: 'short', label: 'Quick Watch (12–16 Eps)', sublabel: 'Compact single-season runs', icon: <Zap className="w-4 h-4 text-[#34D399]" /> },
-  { id: 'medium', label: 'Multi-Cour (24+ Eps)', sublabel: 'Deeper long-running arcs', icon: <Flame className="w-4 h-4 text-[#F9C876]" /> },
-  { id: 'airing', label: 'Currently Airing', sublabel: 'Weekly dubbed releases', icon: <TrendingUp className="w-4 h-4 text-[#B49AF8]" /> },
-];
+const DUB_LANGUAGES = ['All', 'Tamil', 'Hindi', 'Telugu', 'Malayalam'] as const;
+const MOOD_GENRES = ['All', 'Action', 'Fantasy', 'Comedy', 'Sci-Fi', 'Romance', 'Drama'] as const;
+const LENGTH_FILTERS = [
+  { id: 'any', label: 'Any Length' },
+  { id: 'short', label: 'Short (≤13 eps)' },
+  { id: 'medium', label: 'Standard (14–26 eps)' },
+  { id: 'long', label: 'Long (27+ eps)' },
+] as const;
 
 export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
+  animeList: animeListProp,
   catalogList,
+  watchlist: watchlistProp,
   onSelectAnime,
-  watchlist = [],
   onToggleWatchlist,
-  onNavigateCatalog,
-  mySubscriptions = [],
-  mySubscriptionsEnabled = false,
-  onToggleMySubscriptionsEnabled,
 }) => {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [selectedVibes, setSelectedVibes] = useState<string[]>(['action']);
-  const [selectedLanguages, setSelectedLanguages] = useState<string[]>(['any']);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['all']);
-  const [selectedLength, setSelectedLength] = useState<string>('any');
-
-  const toggleSelection = (
-    id: string,
-    current: string[],
-    setter: (val: string[]) => void,
-    exclusiveId?: string
-  ) => {
-    if (exclusiveId && id === exclusiveId) {
-      setter([exclusiveId]);
-      return;
-    }
-
-    let next = [...current];
-    if (exclusiveId && next.includes(exclusiveId)) {
-      next = next.filter((i) => i !== exclusiveId);
-    }
-
-    if (next.includes(id)) {
-      if (next.length > 1) {
-        setter(next.filter((i) => i !== id));
-      }
-    } else {
-      setter([...next, id]);
-    }
-  };
-
-  const usingSubscriptionFilter = Boolean(mySubscriptionsEnabled && mySubscriptions.length > 0);
-  const eligibleCatalog = useMemo(
-    () =>
-      usingSubscriptionFilter
-        ? catalogList.filter((anime) => matchesSelectedPlatforms(anime as unknown as Record<string, unknown>, mySubscriptions))
-        : catalogList,
-    [catalogList, usingSubscriptionFilter, mySubscriptions]
+  const animeList = useMemo(
+    () => normalizeAnimeList(animeListProp || catalogList || []),
+    [animeListProp, catalogList]
+  );
+  const { items: watchlist } = useMemo(
+    () => normalizeWatchlistProp(watchlistProp, animeList),
+    [watchlistProp, animeList]
   );
 
-  const matchedAnime = useMemo(() => {
-    return eligibleCatalog
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('All');
+  const [selectedGenre, setSelectedGenre] = useState<string>('All');
+  const [selectedLength, setSelectedLength] = useState<string>('any');
+
+  const watchlistIds = useMemo(() => new Set(watchlist.map((item) => String(item.id))), [watchlist]);
+
+  // Extract user's favorite genres/languages from saved watchlist to personalize ranking
+  const userPreferences = useMemo(() => {
+    const genreScores: Record<string, number> = {};
+    const langScores: Record<string, number> = {};
+    watchlist.forEach((item) => {
+      const found = animeList.find((a) => String(a.id) === String(item.id));
+      if (!found) return;
+      (found.genres || []).forEach((g: string) => {
+        genreScores[g] = (genreScores[g] || 0) + 1;
+      });
+      (found.languages || []).forEach((l: string) => {
+        langScores[l] = (langScores[l] || 0) + 1;
+      });
+    });
+    return { genreScores, langScores };
+  }, [watchlist, animeList]);
+
+  const recommendations = useMemo(() => {
+    const filtered = animeList.filter((anime) => {
+      if (selectedLanguage !== 'All') {
+        if (!Array.isArray(anime.languages) || !anime.languages.includes(selectedLanguage as any)) {
+          return false;
+        }
+      }
+      if (selectedGenre !== 'All') {
+        if (!Array.isArray(anime.genres) || !anime.genres.includes(selectedGenre)) {
+          return false;
+        }
+      }
+      if (selectedLength !== 'any') {
+        const eps = anime.episodesCount || 0;
+        if (selectedLength === 'short' && (eps <= 0 || eps > 13)) return false;
+        if (selectedLength === 'medium' && (eps < 14 || eps > 26)) return false;
+        if (selectedLength === 'long' && eps < 27) return false;
+      }
+      return true;
+    });
+
+    return [...filtered]
       .map((anime) => {
-        let score = 45;
-
-        // 1. Vibe / Genre matching
-        const genres = (Array.isArray(anime.genres) ? anime.genres.join(', ') : String(anime.genres || '')).toLowerCase();
-        let vibeScore = 0;
-        selectedVibes.forEach((vibe) => {
-          if (vibe === 'action' && (genres.includes('action') || genres.includes('shonen'))) vibeScore += 28;
-          else if (vibe === 'fantasy' && (genres.includes('fantasy') || genres.includes('magic') || genres.includes('supernatural'))) vibeScore += 28;
-          else if (vibe === 'scifi' && (genres.includes('sci-fi') || genres.includes('cyberpunk') || genres.includes('mecha'))) vibeScore += 28;
-          else if (vibe === 'thriller' && (genres.includes('thriller') || genres.includes('mystery') || genres.includes('drama'))) vibeScore += 28;
-          else if (vibe === 'romance' && (genres.includes('romance') || genres.includes('drama') || genres.includes('slice'))) vibeScore += 28;
-          else if (vibe === 'comedy' && (genres.includes('comedy') || genres.includes('slice'))) vibeScore += 28;
+        let matchScore = (anime.rating || 7) * 10;
+        (anime.genres || []).forEach((g) => {
+          matchScore += (userPreferences.genreScores[g] || 0) * 8;
         });
-        score += Math.min(vibeScore, 36);
-
-        // 2. Language matching
-        const langCodes = extractCompactLanguageCodes(anime.languages);
-        if (selectedLanguages.includes('any')) {
-          score += 18;
-        } else {
-          const langMatch = selectedLanguages.some((l) => langCodes.includes(l));
-          if (langMatch) score += 24;
+        (anime.languages || []).forEach((l) => {
+          matchScore += (userPreferences.langScores[l] || 0) * 6;
+        });
+        if (!watchlistIds.has(anime.id)) {
+          matchScore += 5;
         }
-
-        // 3. Platform matching
-        const canonicalPlatforms = normalizeCanonicalOttList(anime as unknown as Record<string, unknown>);
-        if (selectedPlatforms.includes('all')) {
-          score += 12;
-        } else {
-          const platMatch = selectedPlatforms.some((p) =>
-            canonicalPlatforms.some((cp) => cp.toLowerCase().includes(p.toLowerCase()))
-          );
-          if (platMatch) score += 18;
-        }
-
-        // 4. Length matching
-        if (selectedLength === 'any') {
-          score += 8;
-        } else if (selectedLength === 'short' && anime.episodes_count && anime.episodes_count <= 16) {
-          score += 14;
-        } else if (selectedLength === 'medium' && anime.episodes_count && anime.episodes_count >= 20) {
-          score += 14;
-        } else if (selectedLength === 'airing' && isCanonicalAiring(anime as unknown as Record<string, unknown>)) {
-          score += 14;
-        }
-
-        // 5. Rating bonus (only if verified rating > 0)
-        const ratingNum = Number(anime.rating);
-        if (Number.isFinite(ratingNum) && ratingNum > 0) {
-          score += Math.min(Math.round(ratingNum * 1.2), 12);
-        }
-
-        const matchPercent = Math.min(Math.max(score, 62), 99);
-        return {
-          ...anime,
-          matchPercent,
-          canonicalPlatforms,
-          langCodes,
-        };
+        return { anime, matchScore };
       })
-      .sort((a, b) => b.matchPercent - a.matchPercent);
-  }, [eligibleCatalog, selectedVibes, selectedLanguages, selectedPlatforms, selectedLength]);
+      .sort((a, b) => b.matchScore - a.matchScore)
+      .slice(0, 12);
+  }, [animeList, selectedLanguage, selectedGenre, selectedLength, userPreferences, watchlistIds]);
 
-  const topMatches = matchedAnime.slice(0, 6);
-
-  const handleNext = () => {
-    if (currentStep < 5) setCurrentStep((prev) => prev + 1);
-  };
-
-  const handleBack = () => {
-    if (currentStep > 1) setCurrentStep((prev) => prev - 1);
-  };
-
-  const handleRestart = () => {
-    setCurrentStep(1);
-    setSelectedVibes(['action']);
-    setSelectedLanguages(['any']);
-    setSelectedPlatforms(['all']);
+  const handleResetFilters = () => {
+    setSelectedLanguage('All');
+    setSelectedGenre('All');
     setSelectedLength('any');
   };
 
-  if (catalogList.length === 0) {
-    return (
-      <div className="w-full max-w-5xl mx-auto px-3 sm:px-6 py-6 space-y-4">
-        <div className="h-20 rounded-[12px] bg-[#12141E] border border-[#292B39] animate-pulse" />
-        <SkeletonGrid count={4} />
-      </div>
-    );
-  }
-
   return (
-    <div className="w-full max-w-5xl mx-auto px-3 sm:px-6 py-5 sm:py-7 font-sans text-[#F4F3FA] overflow-x-clip">
-      {/* HEADER */}
-      <header className="text-center max-w-2xl mx-auto mb-6 space-y-2">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-[#F4F3FA] tracking-tight">
-          Anime Matchmaker
+    <section className="max-w-[1280px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[#F4F3FA]">
+      {/* Compact Header (24px mobile / 30px desktop) */}
+      <div className="mb-5">
+        <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#B49AF8] mb-1">
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Personalized Discovery</span>
+        </div>
+        <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em]">
+          For You
         </h1>
-        <p className="text-[#A1A5B5] text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
-          Pick your vibe, preferred Indian dub language, and official OTT platform for tailored matches.
+        <p className="text-[13px] sm:text-[14px] text-[#A1A5B5] mt-1">
+          Curated regional dub picks tailored to your language, genre mood, and episode length
         </p>
+      </div>
 
-        {usingSubscriptionFilter && (
-          <div className="pt-1 inline-flex flex-wrap items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-[#34D399]/10 border border-[#34D399]/35 text-[#34D399] text-xs font-semibold">
-            <Tv className="w-3.5 h-3.5" />
-            <span>My OTTs: {mySubscriptions.join(', ')} ({eligibleCatalog.length})</span>
-            {onToggleMySubscriptionsEnabled && (
+      {/* Unified Preference Filter Card (#12141E surface, 44px pills) */}
+      <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 mb-6 space-y-4">
+        {/* Dub Language Pills */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-[#B49AF8]" />
+              <span>Dub Language</span>
+            </span>
+            {(selectedLanguage !== 'All' || selectedGenre !== 'All' || selectedLength !== 'any') && (
               <button
                 type="button"
-                onClick={() => onToggleMySubscriptionsEnabled(false)}
-                className="underline hover:text-[#F4F3FA] cursor-pointer"
+                onClick={handleResetFilters}
+                className="min-h-[44px] px-3 rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#CBB6FF] text-[12px] font-semibold inline-flex items-center gap-1.5"
               >
-                Show all
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Reset preferences</span>
               </button>
             )}
           </div>
-        )}
-      </header>
-
-      {/* CLEAN STEP PROGRESS */}
-      <div className="max-w-3xl mx-auto mb-6 space-y-2">
-        <div className="flex items-center justify-between text-xs font-semibold text-[#A1A5B5]">
-          <span>
-            {currentStep <= 4 ? `Step ${currentStep} of 4` : 'Your Matches'}
-          </span>
-          <span className="text-[#B49AF8] tabular-nums">
-            {currentStep <= 4
-              ? `${eligibleCatalog.length} catalog titles`
-              : `${topMatches.length} recommendations`}
-          </span>
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+            {DUB_LANGUAGES.map((lang) => {
+              const active = selectedLanguage === lang;
+              return (
+                <button
+                  key={lang}
+                  type="button"
+                  onClick={() => setSelectedLanguage(lang)}
+                  className={`min-h-[44px] px-4 rounded-[12px] text-[13px] font-semibold whitespace-nowrap border transition-all duration-180 motion-reduce:transition-none ${
+                    active
+                      ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                      : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                  }`}
+                >
+                  {lang === 'All' ? 'All Languages' : `${lang} Dub`}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="h-2 bg-[#12141E] rounded-full border border-[#292B39] overflow-hidden">
-          <div
-            className="h-full rounded-full bg-[#B49AF8] transition-all duration-180 motion-reduce:transition-none"
-            style={{ width: `${(currentStep / 5) * 100}%` }}
-          />
+        {/* Genre / Mood & Watch Length Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-3 border-t border-[#292B39]">
+          <div>
+            <span className="text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] block mb-2">
+              Genre &amp; Mood
+            </span>
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+              {MOOD_GENRES.map((genre) => {
+                const active = selectedGenre === genre;
+                return (
+                  <button
+                    key={genre}
+                    type="button"
+                    onClick={() => setSelectedGenre(genre)}
+                    className={`min-h-[44px] px-3.5 rounded-[12px] text-[13px] font-semibold whitespace-nowrap border transition-all duration-180 ${
+                      active
+                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                        : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                    }`}
+                  >
+                    {genre}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <span className="text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] flex items-center gap-1.5 mb-2">
+              <Clock className="w-3.5 h-3.5 text-[#B49AF8]" />
+              <span>Watch Length</span>
+            </span>
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+              {LENGTH_FILTERS.map((len) => {
+                const active = selectedLength === len.id;
+                return (
+                  <button
+                    key={len.id}
+                    type="button"
+                    onClick={() => setSelectedLength(len.id)}
+                    className={`min-h-[44px] px-3.5 rounded-[12px] text-[13px] font-semibold whitespace-nowrap border transition-all duration-180 ${
+                      active
+                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                        : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                    }`}
+                  >
+                    {len.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
-      <AnimatePresence mode="wait">
-        {currentStep < 5 ? (
-          <motion.div
-            key={`recommendation_step_${currentStep}`}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.16, ease: 'easeOut' }}
-            className="bg-[#12141E] border border-[#292B39] rounded-[12px] p-4 sm:p-6 max-w-3xl mx-auto space-y-5"
-          >
-            {currentStep === 1 && (
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-lg font-extrabold text-[#F4F3FA]">Choose your story vibe</h2>
-                  <p className="text-[#A1A5B5] text-xs mt-1">Select one or more genres you enjoy.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {STEP_1_VIBES.map((opt) => {
-                    const isSelected = selectedVibes.includes(opt.id);
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => toggleSelection(opt.id, selectedVibes, setSelectedVibes)}
-                        className={`min-h-[56px] px-4 py-3 rounded-[12px] text-xs font-bold transition-colors duration-180 motion-reduce:transition-none cursor-pointer flex items-start gap-3 text-left border ${
-                          isSelected
-                            ? 'bg-[#191C29] text-[#F4F3FA] border-[#B49AF8]'
-                            : 'bg-[#191C29]/60 text-[#A1A5B5] hover:text-[#F4F3FA] border-[#292B39]'
-                        }`}
-                      >
-                        <div className="mt-0.5 shrink-0">{opt.icon}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-[#F4F3FA] flex items-center justify-between gap-2">
-                            <span className="truncate">{opt.label}</span>
-                            {isSelected && <Check className="w-4 h-4 text-[#B49AF8] shrink-0" />}
-                          </div>
-                          <p className="text-[11px] text-[#A1A5B5] font-normal mt-0.5">{opt.sublabel}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+      {/* Poster-First 2:3 Results Grid */}
+      {recommendations.length > 0 ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3.5 sm:gap-4">
+          {recommendations.map(({ anime }) => {
+            const isSaved = watchlistIds.has(anime.id);
+            const verifiedPlatforms = Array.isArray(anime.platforms)
+              ? anime.platforms.filter((p) => Boolean(p && p.trim()))
+              : [];
 
-            {currentStep === 2 && (
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-lg font-extrabold text-[#F4F3FA]">Preferred Indian dub language</h2>
-                  <p className="text-[#A1A5B5] text-xs mt-1">Select one or more regional dub tracks.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {STEP_2_LANGUAGES.map((opt) => {
-                    const isSelected = selectedLanguages.includes(opt.id);
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => toggleSelection(opt.id, selectedLanguages, setSelectedLanguages, 'any')}
-                        className={`min-h-[56px] px-4 py-3 rounded-[12px] text-xs font-bold transition-colors duration-180 motion-reduce:transition-none cursor-pointer flex items-start gap-3 text-left border ${
-                          isSelected
-                            ? 'bg-[#191C29] text-[#F4F3FA] border-[#B49AF8]'
-                            : 'bg-[#191C29]/60 text-[#A1A5B5] hover:text-[#F4F3FA] border-[#292B39]'
-                        }`}
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
-                          {opt.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-[#F4F3FA] flex items-center justify-between gap-2">
-                            <span className="truncate">{opt.label}</span>
-                            {isSelected && <Check className="w-4 h-4 text-[#B49AF8] shrink-0" />}
-                          </div>
-                          <p className="text-[11px] text-[#A1A5B5] font-normal mt-0.5">{opt.sublabel}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {currentStep === 3 && (
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-lg font-extrabold text-[#F4F3FA]">Where do you stream?</h2>
-                  <p className="text-[#A1A5B5] text-xs mt-1">Select your preferred official Indian OTT services.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {STEP_3_PLATFORMS.map((opt) => {
-                    const isSelected = selectedPlatforms.includes(opt.id);
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => toggleSelection(opt.id, selectedPlatforms, setSelectedPlatforms, 'all')}
-                        className={`min-h-[56px] px-4 py-3 rounded-[12px] text-xs font-bold transition-colors duration-180 motion-reduce:transition-none cursor-pointer flex items-start gap-3 text-left border ${
-                          isSelected
-                            ? 'bg-[#191C29] text-[#F4F3FA] border-[#B49AF8]'
-                            : 'bg-[#191C29]/60 text-[#A1A5B5] hover:text-[#F4F3FA] border-[#292B39]'
-                        }`}
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
-                          {opt.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-[#F4F3FA] flex items-center justify-between gap-2">
-                            <span className="truncate">{opt.label}</span>
-                            {isSelected && <Check className="w-4 h-4 text-[#B49AF8] shrink-0" />}
-                          </div>
-                          <p className="text-[11px] text-[#A1A5B5] font-normal mt-0.5">{opt.sublabel}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {currentStep === 4 && (
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-lg font-extrabold text-[#F4F3FA]">Series length &amp; pacing</h2>
-                  <p className="text-[#A1A5B5] text-xs mt-1">Choose a quick binge or a longer ongoing series.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {STEP_4_LENGTHS.map((opt) => {
-                    const isSelected = selectedLength === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setSelectedLength(opt.id)}
-                        className={`min-h-[56px] px-4 py-3 rounded-[12px] text-xs font-bold transition-colors duration-180 motion-reduce:transition-none cursor-pointer flex items-start gap-3 text-left border ${
-                          isSelected
-                            ? 'bg-[#191C29] text-[#F4F3FA] border-[#B49AF8]'
-                            : 'bg-[#191C29]/60 text-[#A1A5B5] hover:text-[#F4F3FA] border-[#292B39]'
-                        }`}
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
-                          {opt.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-[#F4F3FA] flex items-center justify-between gap-2">
-                            <span className="truncate">{opt.label}</span>
-                            {isSelected && <Check className="w-4 h-4 text-[#B49AF8] shrink-0" />}
-                          </div>
-                          <p className="text-[11px] text-[#A1A5B5] font-normal mt-0.5">{opt.sublabel}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between pt-4 border-t border-[#292B39]">
-              <Button
-                type="button"
-                variant="secondary"
-                size="md"
-                onClick={handleBack}
-                disabled={currentStep === 1}
-                leftIcon={<ArrowLeft className="w-4 h-4" />}
+            return (
+              <div
+                key={anime.id}
+                onClick={() => onSelectAnime(anime)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectAnime(anime);
+                  }
+                }}
+                className="group rounded-[14px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 overflow-hidden flex flex-col transition-all duration-180 cursor-pointer"
               >
-                Back
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="md"
-                onClick={handleNext}
-                rightIcon={<ArrowRight className="w-4 h-4" />}
-              >
-                {currentStep === 4 ? 'Show Matches' : 'Continue'}
-              </Button>
-            </div>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="recommendation_step_5_results"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.16, ease: 'easeOut' }}
-            className="space-y-4"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#12141E] border border-[#292B39] rounded-[12px] p-4 sm:p-5">
-              <div>
-                <h2 className="text-base sm:text-lg font-extrabold text-[#F4F3FA]">
-                  Recommended Indian Dubs
-                </h2>
-                <p className="text-[#A1A5B5] text-xs mt-0.5">
-                  Showing {topMatches.length} verified catalog matches
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="md"
-                  onClick={handleRestart}
-                  leftIcon={<RotateCcw className="w-4 h-4" />}
-                >
-                  Retake
-                </Button>
-                {onNavigateCatalog && (
-                  <Button
+                {/* 2:3 Poster Slot */}
+                <div className="relative aspect-[2/3] w-full bg-[#191C29] overflow-hidden">
+                  <OptimizedImage
+                    src={anime.poster}
+                    alt={anime.title}
+                    width={300}
+                    height={450}
+                    loading="lazy"
+                    className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-180"
+                    aspectRatio="portrait"
+                  />
+
+                  {/* Rating Chip */}
+                  {typeof anime.rating === 'number' && anime.rating > 0 && (
+                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-[8px] bg-[#0B0A10]/85 backdrop-blur-md border border-[#292B39] flex items-center gap-1 text-[11px] font-bold text-[#F9C876]">
+                      <Star className="w-3 h-3 fill-current" />
+                      <span>{anime.rating.toFixed(1)}</span>
+                    </div>
+                  )}
+
+                  {/* 44x44px Bookmark Button */}
+                  <button
                     type="button"
-                    variant="primary"
-                    size="md"
-                    onClick={onNavigateCatalog}
-                    rightIcon={<ArrowRight className="w-4 h-4" />}
+                    aria-label={isSaved ? `Remove ${anime.title} from Library` : `Save ${anime.title} to Library`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleWatchlist(anime.id, e);
+                    }}
+                    className={`absolute top-1.5 right-1.5 w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] backdrop-blur-md border flex items-center justify-center transition-colors ${
+                      isSaved
+                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                        : 'bg-[#0B0A10]/80 text-[#F4F3FA] border-[#292B39] hover:border-[#B49AF8]'
+                    }`}
                   >
-                    Browse Explore
-                  </Button>
-                )}
+                    <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
+                  </button>
+                </div>
+
+                {/* Card Body */}
+                <div className="p-3 flex-1 flex flex-col justify-between gap-2">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#F4F3FA] group-hover:text-[#CBB6FF] leading-[20px] line-clamp-2 min-h-[40px]">
+                      {anime.title}
+                    </h3>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {(anime.languages || []).slice(0, 3).map((lang) => (
+                        <span
+                          key={lang}
+                          className="px-1.5 py-0.5 rounded-[5px] bg-[#191C29] text-[#CBB6FF] border border-[#292B39] text-[10px] font-bold uppercase"
+                        >
+                          {lang.slice(0, 3)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-[#292B39] flex items-center justify-between text-[11px] text-[#A1A5B5]">
+                    {verifiedPlatforms.length > 0 ? (
+                      <span className="inline-flex items-center gap-1 font-medium text-[#F4F3FA] truncate">
+                        <PlatformIcon platform={verifiedPlatforms[0]} className="w-3 h-3 text-[#B49AF8]" />
+                        <span className="truncate">{verifiedPlatforms[0]}</span>
+                      </span>
+                    ) : (
+                      <span>OTT unverified</span>
+                    )}
+                    <Play className="w-3.5 h-3.5 text-[#B49AF8] shrink-0" />
+                  </div>
+                </div>
               </div>
-            </div>
-
-            {topMatches.length === 0 ? (
-              <EmptyState
-                title="No matching titles found"
-                description="Try broadening your OTT subscription filter or retaking the matchmaker with another language."
-                actionLabel="Retake Matchmaker"
-                onAction={handleRestart}
-                secondaryActionLabel={onNavigateCatalog ? 'Browse Explore' : undefined}
-                onSecondaryAction={onNavigateCatalog}
-              />
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {topMatches.map((anime, index) => {
-                  const isSaved = watchlist.includes(anime.id);
-                  const ratingNum = Number(anime.rating);
-                  const hasVerifiedRating = Number.isFinite(ratingNum) && ratingNum > 0;
-                  const honestOtt =
-                    anime.canonicalPlatforms.length > 0 ? anime.canonicalPlatforms[0] : 'Not verified';
-
-                  return (
-                    <article
-                      key={`recommendation_match_${anime.id}_${index}`}
-                      onClick={() => onSelectAnime(anime)}
-                      className="bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 rounded-[12px] p-3.5 flex gap-3.5 group transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
-                    >
-                      {/* Strict 2:3 Poster */}
-                      <div className="w-24 sm:w-28 aspect-[2/3] rounded-[10px] overflow-hidden bg-[#191C29] shrink-0 relative border border-[#292B39]">
-                        <img
-                          src={anime.cover_image || '/logo.png'}
-                          alt={anime.title}
-                          width={112}
-                          height={168}
-                          loading="lazy"
-                          decoding="async"
-                          onError={(e) => {
-                            e.currentTarget.src = '/logo.png';
-                          }}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-[#0B0A10]/90 border border-[#34D399]/40 text-[10px] font-bold text-[#34D399] tabular-nums">
-                          {anime.matchPercent}%
-                        </div>
-                      </div>
-
-                      <div className="flex-1 min-w-0 flex flex-col justify-between gap-2">
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-[11px] font-semibold text-[#A1A5B5] bg-[#191C29] px-2 py-0.5 rounded-md border border-[#292B39] truncate">
-                              {honestOtt}
-                            </span>
-                            {hasVerifiedRating && (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#F9C876] shrink-0 tabular-nums">
-                                <Star className="w-3 h-3 fill-[#F9C876]" />
-                                <span>{ratingNum.toFixed(1)}</span>
-                              </span>
-                            )}
-                          </div>
-
-                          <h3 className="text-sm sm:text-base font-bold text-[#F4F3FA] group-hover:text-[#B49AF8] transition-colors duration-180 line-clamp-2 leading-snug">
-                            {anime.title}
-                          </h3>
-
-                          {anime.genres && (
-                            <p className="text-[11px] text-[#A1A5B5] line-clamp-1">{anime.genres}</p>
-                          )}
-                        </div>
-
-                        <div className="pt-2 border-t border-[#292B39] flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {anime.langCodes.slice(0, 3).map((code) => (
-                              <span
-                                key={`rec_match_${anime.id}_${code}`}
-                                className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-[#191C29] border border-[#292B39] text-[#CBB6FF]"
-                              >
-                                {code}
-                              </span>
-                            ))}
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            {onToggleWatchlist && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onToggleWatchlist(anime.id);
-                                }}
-                                className={`w-10 h-10 min-w-[40px] min-h-[40px] rounded-[10px] flex items-center justify-center transition-colors duration-180 border cursor-pointer ${
-                                  isSaved
-                                    ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                                    : 'bg-[#191C29] hover:border-[#B49AF8]/60 text-[#A1A5B5] hover:text-[#F4F3FA] border-[#292B39]'
-                                }`}
-                                aria-label={isSaved ? `Remove ${anime.title} from library` : `Save ${anime.title}`}
-                              >
-                                <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
-                              </button>
-                            )}
-                            <span className="text-xs font-bold text-[#B49AF8] inline-flex items-center gap-1">
-                              <span>Details</span>
-                              <ArrowRight className="w-3.5 h-3.5" />
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+            );
+          })}
+        </div>
+      ) : (
+        <EmptyState
+          title="No matching recommendations"
+          description="Try selecting 'All Languages' or widening your watch length filter to discover more dubbed titles."
+          actionLabel="Reset filters"
+          onAction={handleResetFilters}
+        />
+      )}
+    </section>
   );
 };

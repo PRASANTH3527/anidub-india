@@ -203,7 +203,8 @@ export interface AdminLinkCheckResponse {
 export interface FeedbackSubmitPayload {
   name?: string;
   email?: string;
-  feedback: string;
+  feedback?: string;
+  message?: string;
   type?: string;
   website?: string;
 }
@@ -224,6 +225,7 @@ export interface ChatMessagePayload {
   token?: string;
   user?: string;
   username?: string;
+  user_name?: string;
   user_avatar?: string;
   avatar?: string;
   message?: string;
@@ -239,6 +241,10 @@ export interface ChatMessagePayload {
   clerk_user_id?: string;
   user_id?: string;
   userId?: string;
+  reply_to_id?: string | number;
+  reply_to_user?: string;
+  reply_to_message?: string;
+  is_spoiler?: boolean;
 }
 
 export interface ChatMessageRecord extends ChatMessagePayload {
@@ -1332,10 +1338,14 @@ class CloudflareApiService {
     payload: FeedbackSubmitPayload
   ): Promise<{ success: boolean; error?: string; status?: number }> {
     try {
+      const normalizedPayload = {
+        ...payload,
+        feedback: payload.feedback || payload.message || '',
+      };
       const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.FEEDBACK, {
         method: 'POST',
         headers: this.getHeaders(false),
-        body: JSON.stringify(payload),
+        body: JSON.stringify(normalizedPayload),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data?.success !== false) {
@@ -1631,22 +1641,27 @@ class CloudflareApiService {
    */
   public async reportIssue(payload: {
     animeId?: number | string;
-    animeTitle: string;
+    anime_id?: number | string;
+    animeTitle?: string;
+    anime_title?: string;
     field?: string;
     issueType?: string;
+    issue_type?: string;
     reason?: string;
     description?: string;
     notes?: string;
   }): Promise<{ success: boolean; reportId?: number | null; deliveredToTelegram?: boolean; error?: string }> {
     const resolvedField = payload.field ? String(payload.field).trim() : '';
-    const resolvedIssueType = payload.issueType || payload.reason || resolvedField || '';
+    const resolvedIssueType = payload.issueType || payload.issue_type || payload.reason || resolvedField || '';
     const resolvedDescription = payload.description ?? payload.notes ?? '';
+    const resolvedAnimeId = payload.animeId ?? payload.anime_id;
+    const resolvedAnimeTitle = payload.animeTitle || payload.anime_title || 'Anime';
     const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.REPORT, {
       method: 'POST',
       headers: this.getHeaders(false),
       body: JSON.stringify({
-        animeId: payload.animeId,
-        animeTitle: payload.animeTitle,
+        animeId: resolvedAnimeId,
+        animeTitle: resolvedAnimeTitle,
         field: resolvedField || undefined,
         issueType: resolvedIssueType,
         reason: resolvedIssueType,
@@ -2133,6 +2148,58 @@ class CloudflareApiService {
       };
     }
   }
+
+  public async getReviews(id: number | string): Promise<any[]> {
+    const list = await this.fetchReviews(id);
+    return list.map((r) => ({
+      id: String(r.id),
+      userName: r.user_name || r.author || 'AnimeFan_IN',
+      rating: Number(r.rating) || 8,
+      comment: r.comment || '',
+      date: r.date || r.created_at || 'Recently',
+      likes: Number(r.likes) || 0,
+      isSpoiler: Boolean(r.is_spoiler ?? r.spoilers),
+    }));
+  }
+
+  public async addReview(
+    id: number | string,
+    review: {
+      userName?: string;
+      rating?: number;
+      comment?: string;
+      isSpoiler?: boolean;
+      language?: string;
+    }
+  ): Promise<{ success: boolean }> {
+    return this.submitReview(id, {
+      user_name: review.userName || 'AnimeFan_IN',
+      rating: review.rating ?? 8,
+      comment: review.comment || '',
+      is_spoiler: Boolean(review.isSpoiler),
+      spoiler: Boolean(review.isSpoiler),
+      language: review.language,
+    });
+  }
+
+  public async syncWatchlistItem(payload: {
+    anime_id: string | number;
+    status?: string;
+    progress?: number;
+  }): Promise<void> {
+    await this.saveWatchProgress({
+      animeId: Number(payload.anime_id) || 0,
+      season: 1,
+      episode: Number(payload.progress) || 0,
+      completed: payload.status === 'Completed',
+    });
+  }
+
+  public async getChatMessages(_room?: string): Promise<any[]> {
+    const history = await this.fetchChatHistory({ limit: 50 });
+    return history;
+  }
 }
 
 export const cloudflareApi = new CloudflareApiService();
+

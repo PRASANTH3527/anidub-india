@@ -1,283 +1,219 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { X, Dices, Play, Star, RefreshCw, Bookmark } from 'lucide-react';
-import { Anime } from './CatalogView';
-import { Button } from './ui/Button';
-import { EmptyState } from './ui/EclipseState';
-import { extractCompactLanguageCodes, normalizeLanguageName } from '../utils/languages';
-import { normalizeCanonicalOttList } from '../utils/ottHub';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Dices, Star, Play, RefreshCw, Tv } from 'lucide-react';
+import { Anime, normalizeAnimeList } from '../types';
+import { OptimizedImage } from './OptimizedImage';
+import { PlatformIcon } from './PlatformIcons';
 
 export interface RouletteModalProps {
-  animeList: Anime[];
+  animeList: any[];
   onClose: () => void;
-  onSelectAnime: (anime: Anime) => void;
-  watchlist?: number[];
-  onToggleWatchlist?: (animeId: number) => void;
+  onSelectAnime: (anime: any) => void;
 }
 
-const ROULETTE_LANG_FILTERS = [
-  { id: 'All', label: 'All Dubs' },
-  { id: 'Tamil', label: 'Tamil Dub Only' },
-  { id: 'Hindi', label: 'Hindi' },
-  { id: 'Telugu', label: 'Telugu' },
-  { id: 'Malayalam', label: 'Malayalam' },
-] as const;
+const LANGUAGE_CHIPS = ['Any language', 'Tamil', 'Hindi', 'Telugu', 'Malayalam'] as const;
 
 export const RouletteModal: React.FC<RouletteModalProps> = ({
-  animeList,
+  animeList: animeListProp,
   onClose,
   onSelectAnime,
-  watchlist = [],
-  onToggleWatchlist,
 }) => {
-  const [selectedLangFilter, setSelectedLangFilter] = useState<string>('All');
-  const [isSpinning, setIsSpinning] = useState(false);
+  const animeList = useMemo(() => normalizeAnimeList(animeListProp), [animeListProp]);
+  const [selectedLang, setSelectedLang] = useState<string>('Any language');
   const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
+  const [isRolling, setIsRolling] = useState<boolean>(false);
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const eligiblePool = useMemo(() => {
+    if (selectedLang === 'Any language') return animeList;
+    return animeList.filter(
+      (a) => Array.isArray(a.languages) && a.languages.includes(selectedLang as any)
+    );
+  }, [animeList, selectedLang]);
 
-  const filteredPool = useMemo(() => {
-    const valid = Array.isArray(animeList) ? animeList : [];
-    if (selectedLangFilter === 'All') return valid;
-    const targetNorm = normalizeLanguageName(selectedLangFilter).toLowerCase();
-    return valid.filter((anime) => {
-      const raw = String(anime.languages || '').toLowerCase();
-      return raw.includes(targetNorm);
-    });
-  }, [animeList, selectedLangFilter]);
-
-  const rollRoulette = useCallback(
-    (poolOverride?: Anime[]) => {
-      const pool = poolOverride ?? filteredPool;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      if (pool.length === 0) {
-        setSelectedAnime(null);
-        setIsSpinning(false);
-        return;
-      }
-      if (pool.length === 1) {
-        setSelectedAnime(pool[0]);
-        setIsSpinning(false);
-        return;
-      }
-
-      setIsSpinning(true);
-      let counter = 0;
-      intervalRef.current = setInterval(() => {
-        const randomIndex = Math.floor(Math.random() * pool.length);
-        setSelectedAnime(pool[randomIndex]);
-        counter++;
-        if (counter >= 10) {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          intervalRef.current = null;
-          setIsSpinning(false);
-        }
-      }, 75);
-    },
-    [filteredPool]
-  );
+  const rollRandom = (pool: Anime[] = eligiblePool) => {
+    if (pool.length === 0) {
+      setSelectedAnime(null);
+      return;
+    }
+    setIsRolling(true);
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    setSelectedAnime(pool[randomIndex]);
+    setTimeout(() => setIsRolling(false), 180);
+  };
 
   useEffect(() => {
-    rollRoulette(filteredPool);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [filteredPool, rollRoulette]);
+    rollRandom(eligiblePool);
+  }, [selectedLang, animeList]);
 
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  const isSaved = selectedAnime ? watchlist.includes(selectedAnime.id) : false;
-  const ratingNum = selectedAnime ? Number(selectedAnime.rating) : 0;
-  const hasVerifiedRating = Number.isFinite(ratingNum) && ratingNum > 0;
-  const langCodes = selectedAnime ? extractCompactLanguageCodes(selectedAnime.languages) : [];
-  const canonicalOtts = selectedAnime
-    ? normalizeCanonicalOttList(selectedAnime as unknown as Record<string, unknown>)
+  const verifiedPlatforms = Array.isArray(selectedAnime?.platforms)
+    ? selectedAnime!.platforms.filter((p) => Boolean(p && p.trim()))
     : [];
-  const honestPlatform = canonicalOtts.length > 0 ? canonicalOtts[0] : 'Not verified';
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Random Anime Picker"
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#0B0A10]/85 font-sans"
+      aria-label="Surprise Me Anime Picker"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-180"
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg bg-[#12141E] border-t sm:border border-[#292B39] rounded-t-2xl sm:rounded-[12px] p-4 sm:p-6 shadow-2xl text-[#F4F3FA] space-y-4 max-h-[92vh] overflow-y-auto"
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg sm:text-xl font-extrabold text-[#F4F3FA] flex items-center gap-2">
-              <Dices className={`w-5 h-5 text-[#B49AF8] ${isSpinning ? 'animate-spin' : ''}`} />
-              <span>Random Anime</span>
-            </h2>
-            <p className="text-xs text-[#A1A5B5] mt-0.5">
-              Roll a verified Indian dubbed anime from the catalog.
-            </p>
+      <div className="w-full max-w-lg bg-[#12141E] border border-[#292B39] rounded-t-[20px] sm:rounded-[20px] p-4 sm:p-5 text-[#F4F3FA] shadow-2xl space-y-4">
+        {/* Top Row: Title & 44x44px Close Button */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-center">
+              <Dices className="w-4 h-4 text-[#B49AF8]" />
+            </div>
+            <div>
+              <h2 className="text-[16px] sm:text-[18px] font-bold text-[#F4F3FA]">
+                Surprise Me
+              </h2>
+              <p className="text-[12px] text-[#A1A5B5]">
+                Instant regional dub recommendation
+              </p>
+            </div>
           </div>
+
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close Random Anime"
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] hover:border-[#B49AF8]/60 border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 cursor-pointer shrink-0"
+            aria-label="Close Surprise Me modal"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] hover:bg-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39] flex items-center justify-center transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Compact Language Filter Chips */}
+        {/* Language Filter Chips (44px touch targets) */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-          {ROULETTE_LANG_FILTERS.map((opt) => {
-            const active = selectedLangFilter === opt.id;
+          {LANGUAGE_CHIPS.map((chip) => {
+            const active = selectedLang === chip;
             return (
               <button
-                key={opt.id}
+                key={chip}
                 type="button"
-                onClick={() => setSelectedLangFilter(opt.id)}
-                className={`min-h-[40px] px-3 py-1.5 rounded-[10px] text-xs font-bold border whitespace-nowrap transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
+                onClick={() => setSelectedLang(chip)}
+                className={`min-h-[44px] px-3.5 rounded-[10px] text-[12px] font-semibold whitespace-nowrap border transition-colors duration-180 ${
                   active
                     ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
                     : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
                 }`}
               >
-                {opt.label}
+                {chip}
               </button>
             );
           })}
         </div>
 
-        {/* Poster-First 2:3 Result Card or EmptyState */}
-        {filteredPool.length === 0 ? (
-          <EmptyState
-            icon={<Dices className="w-5 h-5" />}
-            title={`No ${selectedLangFilter} dub titles available`}
-            description="Try switching back to All Dubs to roll from the complete verified catalog."
-            actionLabel="Show All Dubs"
-            onAction={() => setSelectedLangFilter('All')}
-            className="bg-[#191C29]"
-          />
-        ) : selectedAnime ? (
-          <div className="space-y-4">
-            <div
-              className={`rounded-[12px] bg-[#191C29] border p-3.5 flex gap-3.5 transition-colors duration-180 ${
-                isSpinning ? 'border-[#F9C876]' : 'border-[#292B39]'
-              }`}
-            >
-              {/* Strict 2:3 Poster */}
-              <div className="w-28 sm:w-32 aspect-[2/3] rounded-[10px] overflow-hidden bg-[#12141E] border border-[#292B39] shrink-0 relative">
-                <img
-                  src={selectedAnime.cover_image || '/logo.png'}
-                  alt={selectedAnime.title}
-                  width={128}
-                  height={192}
-                  loading="lazy"
-                  decoding="async"
-                  onError={(e) => {
-                    e.currentTarget.src = '/logo.png';
-                  }}
-                  className="w-full h-full object-cover"
-                />
-                {hasVerifiedRating && (
-                  <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-[#0B0A10]/90 text-[#F9C876] text-[10px] font-bold border border-[#292B39] inline-flex items-center gap-0.5 tabular-nums">
-                    <Star className="w-3 h-3 fill-[#F9C876]" />
-                    <span>{ratingNum.toFixed(1)}</span>
-                  </span>
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0 flex flex-col justify-between gap-2">
-                <div className="space-y-1.5">
-                  <span className="inline-block px-2 py-0.5 rounded-md bg-[#12141E] border border-[#292B39] text-[11px] font-semibold text-[#A1A5B5] truncate max-w-full">
-                    {honestPlatform}
-                  </span>
-                  <h3 className="text-base sm:text-lg font-extrabold text-[#F4F3FA] line-clamp-2 leading-snug">
-                    {selectedAnime.title}
-                  </h3>
-                  {selectedAnime.genres && (
-                    <p className="text-[11px] text-[#A1A5B5] line-clamp-1">{selectedAnime.genres}</p>
-                  )}
-                  {selectedAnime.synopsis && (
-                    <p className="text-xs text-[#A1A5B5] line-clamp-2 leading-relaxed">
-                      {selectedAnime.synopsis}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                  {langCodes.length > 0 ? (
-                    langCodes.slice(0, 4).map((code) => (
-                      <span
-                        key={`roulette_lang_${selectedAnime.id}_${code}`}
-                        className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-[#12141E] border border-[#292B39] text-[#CBB6FF]"
-                      >
-                        {code}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-[11px] text-[#A1A5B5]">Dub languages not verified</span>
-                  )}
-                </div>
-              </div>
+        {/* Horizontal 2:3 Poster Preview Card */}
+        {selectedAnime ? (
+          <div
+            className={`rounded-[14px] bg-[#191C29] border border-[#292B39] p-3.5 flex items-start gap-3.5 transition-opacity duration-180 ${
+              isRolling ? 'opacity-60' : 'opacity-100'
+            }`}
+          >
+            <div className="w-24 sm:w-28 aspect-[2/3] rounded-[10px] overflow-hidden bg-[#12141E] border border-[#292B39] shrink-0">
+              <OptimizedImage
+                src={selectedAnime.poster}
+                alt={selectedAnime.title}
+                width={224}
+                height={336}
+                loading="lazy"
+                className="w-full h-full object-cover"
+                aspectRatio="portrait"
+              />
             </div>
 
-            {/* Action Bar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-              <Button
-                type="button"
-                variant="primary"
-                size="md"
-                onClick={() => rollRoulette()}
-                disabled={isSpinning}
-                leftIcon={<RefreshCw className={`w-4 h-4 ${isSpinning ? 'animate-spin' : ''}`} />}
-                className="flex-1"
-              >
-                {isSpinning ? 'Rolling…' : 'Roll Random Anime'}
-              </Button>
-
-              <div className="flex items-center gap-2">
-                {onToggleWatchlist && (
-                  <button
-                    type="button"
-                    onClick={() => onToggleWatchlist(selectedAnime.id)}
-                    className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] flex items-center justify-center transition-colors duration-180 cursor-pointer border ${
-                      isSaved
-                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                        : 'bg-[#191C29] hover:border-[#B49AF8]/60 text-[#A1A5B5] hover:text-[#F4F3FA] border-[#292B39]'
-                    }`}
-                    aria-label={isSaved ? 'Remove from Library' : 'Save to Library'}
-                  >
-                    <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
-                  </button>
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {typeof selectedAnime.rating === 'number' && selectedAnime.rating > 0 ? (
+                  <span className="px-2 py-0.5 rounded-[6px] bg-[#12141E] text-[#F9C876] border border-[#292B39] text-[11px] font-bold inline-flex items-center gap-1">
+                    <Star className="w-3 h-3 fill-current" />
+                    {selectedAnime.rating.toFixed(1)}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-[6px] bg-[#12141E] text-[#A1A5B5] border border-[#292B39] text-[11px]">
+                    Score unverified
+                  </span>
                 )}
 
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="md"
-                  onClick={() => {
-                    onSelectAnime(selectedAnime);
-                    onClose();
-                  }}
-                  rightIcon={<Play className="w-3.5 h-3.5 fill-current" />}
-                  className="flex-1 sm:flex-initial"
-                >
-                  View Details
-                </Button>
+                <span className="px-2 py-0.5 rounded-[6px] bg-[#12141E] text-[#A1A5B5] border border-[#292B39] text-[11px] inline-flex items-center gap-1">
+                  <Tv className="w-3 h-3 text-[#B49AF8]" />
+                  {selectedAnime.episodesCount && selectedAnime.episodesCount > 0
+                    ? `${selectedAnime.episodesCount} eps`
+                    : 'Count not verified'}
+                </span>
+              </div>
+
+              <h3 className="text-[16px] font-bold text-[#F4F3FA] leading-snug line-clamp-2">
+                {selectedAnime.title}
+              </h3>
+
+              {/* Regional Dub Badges */}
+              <div className="flex flex-wrap gap-1">
+                {(selectedAnime.languages || []).map((lang) => (
+                  <span
+                    key={lang}
+                    className="px-2 py-0.5 rounded-[6px] bg-[#B49AF8]/15 text-[#CBB6FF] border border-[#B49AF8]/30 text-[10px] font-bold uppercase"
+                  >
+                    {lang}
+                  </span>
+                ))}
+              </div>
+
+              {/* Verified OTT Badge */}
+              <div className="text-[12px] text-[#A1A5B5] pt-0.5">
+                {verifiedPlatforms.length > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 text-[#F4F3FA] font-medium">
+                    <PlatformIcon platform={verifiedPlatforms[0]} className="w-3.5 h-3.5 text-[#B49AF8]" />
+                    <span>Available on {verifiedPlatforms.join(', ')}</span>
+                  </span>
+                ) : (
+                  <span>OTT availability not verified</span>
+                )}
               </div>
             </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="rounded-[14px] bg-[#191C29] border border-[#292B39] p-6 text-center text-[13px] text-[#A1A5B5]">
+            No dubbed anime found for this language filter.
+          </div>
+        )}
+
+        {/* Action Hierarchy:
+            1. Full-width #B49AF8 Primary CTA ("View anime details")
+            2. Secondary "Roll again" button below */}
+        <div className="space-y-2 pt-1">
+          {selectedAnime && (
+            <button
+              type="button"
+              onClick={() => {
+                onSelectAnime(selectedAnime);
+                onClose();
+              }}
+              className="w-full min-h-[44px] sm:min-h-[48px] px-5 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold text-[14px] flex items-center justify-center gap-2 transition-colors duration-180 shadow-sm"
+            >
+              <Play className="w-4 h-4 fill-current" />
+              <span>View anime details</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            aria-label="Roll Random Anime"
+            onClick={() => rollRandom(eligiblePool)}
+            className="w-full min-h-[44px] px-4 rounded-[12px] bg-[#191C29] hover:bg-[#292B39] text-[#F4F3FA] border border-[#292B39] font-semibold text-[13px] flex items-center justify-center gap-2 transition-colors duration-180"
+          >
+            <RefreshCw className={`w-4 h-4 text-[#B49AF8] ${isRolling ? 'animate-spin' : ''}`} />
+            <span>Roll again</span>
+          </button>
+        </div>
       </div>
     </div>
   );

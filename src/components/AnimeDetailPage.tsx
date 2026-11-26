@@ -1,2435 +1,1479 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import Image from './OptimizedImage';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  ArrowLeft,
-  Bell,
-  BellRing,
-  Bookmark,
-  CheckCircle2,
-  Share2,
-  Flag,
-  Star,
-  Play,
-  ExternalLink,
-  Send,
-  ThumbsUp,
-  Eye,
-  EyeOff,
-  ChevronDown,
-  ChevronUp,
-  Sparkles,
-  ShieldCheck,
-  Flame,
-  Volume2,
-  X,
-  Minus,
-  Plus,
-  Tv,
-  Scale,
-  Layers,
-  Clock,
-  RefreshCw,
-  AlertCircle,
+  X, Star, Tv, Calendar, Heart, CheckCircle, Play, ExternalLink, Clock, Sparkles,
+  Share2, Bell, BellOff, Edit, MessageSquare, Send, ThumbsUp, AlertTriangle, Plus,
+  Minus, Flag, ArrowLeft, Layers, ShieldCheck, Globe, Eye, EyeOff, ChevronDown, ChevronUp
 } from 'lucide-react';
-import { Anime } from './CatalogView';
-import { cloudflareApi } from '../services/cloudflareApi';
-import { getCloudflareWsUrl } from '../config/cloudflare';
-import { generateRandomUsername } from '../utils/randomUser';
-import { getVerifiedClerkUsername } from '../utils/chatIdentity';
-import { formatRelativeTime } from '../utils/timestamps';
-import { useUser, getClerkSessionToken } from '../lib/clerk';
+import {
+  Anime,
+  WatchlistStatus,
+  normalizeAnimeRecord,
+  normalizeAnimeList,
+} from '../types';
+import { PlatformIcon } from './PlatformIcons';
 import { DualRating } from './DualRating';
 import { ReportModal } from './ReportModal';
-import { DetailModalSkeleton } from './SkeletonGrid';
-import { EmptyState } from './ui/EclipseState';
-import { buildAnimeJsonLd } from '../utils/seoMeta';
-import { parsePlatformList } from '../utils/dataNormalization';
-import { normalizeCanonicalOttList, normalizeCanonicalOttName } from '../utils/ottHub';
-import { validateOfficialSourceUrl } from '../utils/submissionValidation';
-import { resolveCanonicalAnimeStatus } from '../utils/animeStatus';
-import { buildDubProgressBreakdown } from '../utils/dubProgress';
+import { cloudflareApi } from '../services/cloudflareApi';
+import { generateOttUrl } from '../utils/ottRedirect';
+import { OptimizedImage } from './OptimizedImage';
 import {
-  getAnimeWatchProgress,
-  saveAnimeWatchProgress,
-  computeWatchProgressPercent,
-  getSpoilerProtectionEnabled,
-  setSpoilerProtectionEnabled,
-  SPOILER_PROTECTION_EVENT,
-  type WatchProgressEntry,
-} from '../utils/watchProgress';
-
-export interface AnimeReviewItem {
-  id: number | string;
-  author: string;
-  user_name?: string;
-  rating: number;
-  language: string;
-  comment: string;
-  date: string;
-  created_at?: string;
-  likes: number;
-  isLiked: boolean;
-  spoilers: boolean;
-  revealed: boolean;
-  deliveryStatus?: 'pending' | 'published' | 'failed';
-}
-
-export interface RichPlatformEntry {
-  name?: string;
-  platform?: string;
-  url?: string;
-  languages?: string[];
-}
-
-export interface SeasonEntry {
-  name?: string;
-  episodes?: number | string;
-  episode_count?: number | string;
-}
+  buildDubProgressBreakdown,
+  normalizeDubSeasonBreakdowns,
+  NormalizedSeasonBreakdown,
+} from '../utils/dubProgress';
+import { DetailModalSkeleton } from './ui/EclipseState';
+import { buildAnimeJsonLd } from '../utils/seo';
 
 export interface FranchiseEntry {
-  id: number;
+  id: string;
   title: string;
-  slug?: string;
-  cover_image?: string;
-  year?: number | null;
-  type?: string;
-  languages?: string;
-  relation_type?: string | null;
-  sequence_number?: number | null;
-  status?: string | null;
-}
-
-export interface AnimeDetailRecord extends Omit<Partial<Anime>, 'rating' | 'year'> {
-  popularity?: number;
-  likes?: number;
-  rating?: number | string | null;
-  year?: number | null;
-  studio?: string;
-  genre?: string;
-  watch_url?: string;
-  community_rating?: number;
-  communityRating?: number;
-  community_votes?: number;
-  communityVotes?: number;
-  user_rating?: number | null;
-  userRating?: number | null;
-  reviews?: Array<{
-    id?: number | string;
-    author?: string;
-    user_name?: string;
-    rating?: number | string;
-    language?: string;
-    comment?: string;
-    created_at?: string;
-    date?: string | number;
-    likes?: number;
-    spoilers?: boolean;
-  }>;
-  description?: string;
   releaseYear?: number;
-  airing_status?: string;
-  streamUrl?: string;
-  platforms?: string[] | string;
-  platforms_data?: RichPlatformEntry[] | Record<string, unknown> | string;
-  seasons?: SeasonEntry[];
-  mixedEntries?: SeasonEntry[];
-  seasonsList?: SeasonEntry[];
-  episodes_count?: number;
-  episodes?: number;
-  episode_count?: number;
-  season_episode_count?: string;
-  official_source_url?: string;
-  audio_spec?: string | null;
-  duration?: string | null;
-  dub_matrix?: unknown;
-  last_verified_at?: string | null;
-  updated_at?: string | null;
-  franchise_id?: string | null;
-  relation_type?: string | null;
-  sequence_number?: number | null;
-  franchise_entries?: FranchiseEntry[];
+  relationType: 'Prequel' | 'Sequel' | 'Current' | 'Side Story' | 'Main Story';
+  seasonNumber?: number;
+  poster?: string;
 }
 
 export interface AnimeDetailPageProps {
-  animeId: number | string;
-  initialAnime?: AnimeDetailRecord | null;
-  onResolvedAnime?: (anime: AnimeDetailRecord) => void;
-  onClose?: () => void;
-  onBack?: () => void;
-  watchlist: number[];
-  onToggleWatchlist: (animeId: number) => void;
-  onSelectAnime?: (anime: Anime) => void;
-  onCompareAnime?: (anime: AnimeDetailRecord) => void;
+  anime?: any | null;
+  animeId?: number | string | null;
+  initialAnime?: any | null;
+  onResolvedAnime?: (resolved: any) => void;
+  allAnime?: any[];
+  onClose: () => void;
+  isInWatchlist?: boolean;
+  watchlist?: any[];
+  onToggleWatchlist: (id: any, e?: any) => void;
+  watchlistStatus?: WatchlistStatus;
+  onUpdateStatus?: (id: string, status: WatchlistStatus) => void;
+  onSelectAnime?: (anime: any) => void;
+  onEditAnime?: (anime: any) => void;
+  onCompareAnime?: (anime: any) => void;
+  onShowToast?: (msg: string, type?: 'success' | 'info' | 'error') => void;
+  followedIds?: string[];
+  onToggleFollow?: (id: string, e?: React.MouseEvent) => void;
+  onReportIssue?: (anime: Anime) => void;
+  onWriteReview?: () => void;
+  user?: { id?: string; name?: string; email?: string; isAdmin?: boolean } | null;
+  asPage?: boolean;
+  isLoading?: boolean;
+}
+
+interface ReviewItem {
+  id: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  date: string;
+  likes: number;
+  isSpoiler?: boolean;
+}
+
+type DetailTabId = 'overview' | 'seasons-dubs' | 'progress' | 'reviews';
+
+const UNVERIFIED_COUNT_LABEL = 'Episode count not verified';
+const LEGACY_UNVERIFIED_COUNT_FALLBACK = 'Count not verified';
+
+/**
+ * Derive verified franchise entries strictly from catalog relationships or normalized root title
+ * when multiple distinct catalog entries exist. Never fabricates external titles.
+ */
+export function deriveVerifiedFranchiseOrder(animeInput: any, catalogInput: any[] = []): FranchiseEntry[] {
+  if (!animeInput) return [];
+  const anime = normalizeAnimeRecord(animeInput);
+  if (Array.isArray(animeInput.franchise_entries) && animeInput.franchise_entries.length > 1) {
+    return animeInput.franchise_entries.map((entry: any, idx: number) => ({
+      id: String(entry.id),
+      title: String(entry.title || ''),
+      releaseYear: Number(entry.year || entry.releaseYear) || undefined,
+      relationType:
+        String(entry.id) === String(anime.id)
+          ? 'Current'
+          : (entry.relation_type as FranchiseEntry['relationType']) || 'Main Story',
+      seasonNumber: Number(entry.sequence_number) || idx + 1,
+      poster: entry.cover_image || entry.poster,
+    }));
+  }
+
+  const catalog = normalizeAnimeList(catalogInput);
+  if (catalog.length <= 1) return [];
+
+  const getBaseFranchiseKey = (title: string) =>
+    title
+      .toLowerCase()
+      .replace(/\s*(?:season\s*\d+|part\s*\d+|cour\s*\d+|s\d+|:\s*.*)$/i, '')
+      .replace(/[^a-z0-9\s]/g, '')
+      .trim();
+
+  const currentBase = getBaseFranchiseKey(anime.title);
+  if (!currentBase || currentBase.length < 4) return [];
+
+  const related = catalog
+    .filter((item) => {
+      if (item.id === anime.id) return true;
+      const itemBase = getBaseFranchiseKey(item.title);
+      return itemBase === currentBase || item.title.toLowerCase().startsWith(currentBase);
+    })
+    .sort((a, b) => (a.releaseYear || 9999) - (b.releaseYear || 9999));
+
+  if (related.length <= 1) return [];
+
+  const currentIndex = related.findIndex((r) => r.id === anime.id);
+
+  return related.map((item, idx) => {
+    let relationType: FranchiseEntry['relationType'] = 'Main Story';
+    if (item.id === anime.id) {
+      relationType = 'Current';
+    } else if (idx < currentIndex) {
+      relationType = 'Prequel';
+    } else {
+      relationType = 'Sequel';
+    }
+    return {
+      id: item.id,
+      title: item.title,
+      releaseYear: item.releaseYear && item.releaseYear > 1900 ? item.releaseYear : undefined,
+      relationType,
+      seasonNumber: idx + 1,
+      poster: item.poster,
+    };
+  });
 }
 
 export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
+  anime: animeProp,
   animeId,
-  initialAnime = null,
+  initialAnime,
   onResolvedAnime,
+  allAnime = [],
   onClose,
-  onBack,
+  isInWatchlist: isInWatchlistProp,
   watchlist,
   onToggleWatchlist,
-  onSelectAnime: _onSelectAnime,
-  onCompareAnime,
+  watchlistStatus = 'Plan to Watch',
+  onUpdateStatus,
+  onSelectAnime,
+  onEditAnime,
+  onShowToast,
+  followedIds = [],
+  onToggleFollow,
+  onReportIssue,
+  user,
+  asPage = false,
+  isLoading: isLoadingProp = false,
 }) => {
-  const { user } = useUser();
-  const [details, setDetails] = useState<AnimeDetailRecord | null>(initialAnime);
-  const [loading, setLoading] = useState(!initialAnime);
-  const [notFound, setNotFound] = useState(false);
-  const [selectedDubSeasonIdx, setSelectedDubSeasonIdx] = useState(0);
-  const [upvotes, setUpvotes] = useState(Number(initialAnime?.popularity) || 0);
-  const [currentRating, setCurrentRating] = useState<number | null>(
-    initialAnime?.rating !== undefined && initialAnime?.rating !== null && !Number.isNaN(Number(initialAnime.rating))
-      ? Number(initialAnime.rating)
-      : null
-  );
-  const [isVoting, setIsVoting] = useState(false);
-  const [_isRating, setIsRating] = useState(false);
-  const [isWatched, setIsWatched] = useState(false);
-  const numericAnimeId = Number(details?.id ?? animeId) || 0;
+  const [fetchedRecord, setFetchedRecord] = useState<any | null>(null);
+  const [fetchingDetail, setFetchingDetail] = useState<boolean>(false);
+  const [internalReportOpen, setInternalReportOpen] = useState<boolean>(false);
 
-  // Community Rating states
-  const [communityRating, setCommunityRating] = useState<number>(0);
-  const [communityVotes, setCommunityVotes] = useState<number>(0);
-  const [userRating, setUserRating] = useState<number | null>(null);
-  const [hoverRating, setHoverRating] = useState<number>(0);
-  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
-  const [showSignInPrompt, setShowSignInPrompt] = useState(false);
+  useEffect(() => {
+    const rawTarget = animeProp || initialAnime;
+    if (animeId !== null && animeId !== undefined && !animeProp) {
+      let cancelled = false;
+      if (!rawTarget) setFetchingDetail(true);
+      cloudflareApi
+        .getAnimeById(animeId)
+        .then((res) => {
+          if (cancelled || !res) return;
+          setFetchedRecord(res);
+          onResolvedAnime?.(res);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setFetchingDetail(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    } else {
+      setFetchedRecord(null);
+      setFetchingDetail(false);
+    }
+  }, [animeId, animeProp]);
 
-  // Review Form state
-  const [reviewRating, setReviewRating] = useState(8.5);
-  const [reviewLang, setReviewLang] = useState('Hindi Dub');
-  const [reviewComment, setReviewComment] = useState('');
-  const [hasSpoilers, setHasSpoilers] = useState(false);
-  const [reviewsList, setReviewsList] = useState<AnimeReviewItem[]>(() => {
+  const anime: Anime | null = useMemo(() => {
+    const raw = animeProp || fetchedRecord || initialAnime;
+    if (!raw) return null;
+    return normalizeAnimeRecord(raw);
+  }, [animeProp, fetchedRecord, initialAnime]);
+
+  const isLoading = isLoadingProp || (fetchingDetail && !anime);
+
+  const isInWatchlist = useMemo(() => {
+    if (typeof isInWatchlistProp === 'boolean') return isInWatchlistProp;
+    if (!anime || !Array.isArray(watchlist)) return false;
+    return watchlist.some((item) => {
+      const idVal = item && typeof item === 'object' ? item.id : item;
+      return String(idVal) === String(anime.id);
+    });
+  }, [isInWatchlistProp, watchlist, anime]);
+
+  const [activeTab, setActiveTab] = useState<DetailTabId>('overview');
+  const [isFollowed, setIsFollowed] = useState(false);
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [newRating, setNewRating] = useState(9);
+  const [newIsSpoiler, setNewIsSpoiler] = useState(false);
+  const [reviewSyncState, setReviewSyncState] = useState<'idle' | 'posting' | 'failed'>('idle');
+  const [lastFailedComment, setLastFailedComment] = useState<string>('');
+  const [episodesWatchedBySeason, setEpisodesWatchedBySeason] = useState<Record<number, number>>({ 1: 0 });
+  const [selectedProgressSeason, setSelectedProgressSeason] = useState<number>(1);
+  const [selectedMatrixSeason, setSelectedMatrixSeason] = useState<number>(1);
+  const [isSynopsisExpanded, setIsSynopsisExpanded] = useState(false);
+  const [spoilerShieldEnabled, setSpoilerShieldEnabled] = useState<boolean>(() => {
     try {
-      const saved = localStorage.getItem(`cf_reviews_${animeId}`);
-      return saved ? JSON.parse(saved) : [];
+      const saved = localStorage.getItem('anidub_spoiler_shield');
+      return saved === null ? true : saved === 'true';
     } catch {
-      return [];
+      return true;
     }
   });
+  const [revealedReviewIds, setRevealedReviewIds] = useState<Record<string, boolean>>({});
 
-  // Follow for dub updates state
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [isTogglingFollow, setIsTogglingFollow] = useState(false);
+  const modalContainerRef = useRef<HTMLDivElement>(null);
+  const whereToWatchRef = useRef<HTMLElement>(null);
+  const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
-  // Toast / Modal states
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [isReportOpen, setIsReportOpen] = useState(false);
-  const [reportInitialField, setReportInitialField] = useState<string>('OTT Link');
-  const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
-  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
-  const [isSynopsisExpanded, setIsSynopsisExpanded] = useState(false);
-  const [activeDetailTab, setActiveDetailTab] = useState<'overview' | 'dubs' | 'progress' | 'reviews'>('overview');
-
-  const openReportForField = (field: string) => {
-    setReportInitialField(field);
-    setIsReportOpen(true);
-  };
-
-  // Watch Progress & Spoiler Protection states
-  const [watchProgress, setWatchProgress] = useState<WatchProgressEntry | null>(() =>
-    getAnimeWatchProgress(animeId)
+  const dubProgress = useMemo(() => (anime ? buildDubProgressBreakdown(anime) : null), [anime]);
+  const seasonBreakdowns: NormalizedSeasonBreakdown[] = useMemo(
+    () => (anime ? normalizeDubSeasonBreakdowns(anime) : []),
+    [anime]
   );
-  const [isSavingProgress, setIsSavingProgress] = useState(false);
-  const [spoilerProtection, setSpoilerProtection] = useState<boolean>(() =>
-    getSpoilerProtectionEnabled()
+  const franchiseEntries = useMemo(
+    () => (anime ? deriveVerifiedFranchiseOrder(anime, allAnime) : []),
+    [anime, allAnime]
   );
-  const [isSynopsisRevealed, setIsSynopsisRevealed] = useState(false);
 
+  // Accessibility: Focus trap, Escape key to close, and background scroll lock when rendered as modal
   useEffect(() => {
-    const syncSpoilerPref = () => {
-      const enabled = getSpoilerProtectionEnabled();
-      setSpoilerProtection(enabled);
-      if (enabled) {
-        setIsSynopsisRevealed(false);
+    if (asPage || !anime) return;
+
+    previousActiveElementRef.current = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key === 'Tab' && modalContainerRef.current) {
+        const focusable = modalContainerRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
-    window.addEventListener(SPOILER_PROTECTION_EVENT, syncSpoilerPref);
-    return () => window.removeEventListener(SPOILER_PROTECTION_EVENT, syncSpoilerPref);
-  }, []);
 
-  const handleBack = () => {
-    if (onBack) onBack();
-    else if (onClose) onClose();
-  };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = prevOverflow;
+      if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === 'function') {
+        previousActiveElementRef.current.focus();
+      }
+    };
+  }, [asPage, anime, onClose]);
 
   useEffect(() => {
-    setIsSynopsisRevealed(false);
-    // Load watch progress from localStorage
-    const localProgress = getAnimeWatchProgress(animeId);
-    setWatchProgress(localProgress);
+    if (!anime) return;
+    setActiveTab('overview');
+    setSelectedProgressSeason(1);
+    setSelectedMatrixSeason(1);
+    setIsSynopsisExpanded(false);
 
-    // Check watched status from localStorage
-    try {
-      const watched: unknown[] = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
-      const idNum = Number(animeId);
-      setIsWatched(watched.some((w) => Number(w) === idNum) || Boolean(localProgress?.completed));
-    } catch {
-      setIsWatched(Boolean(localProgress?.completed));
+    if (followedIds.length > 0) {
+      setIsFollowed(followedIds.includes(anime.id));
+    } else {
+      const follows = JSON.parse(localStorage.getItem('anime_follows') || '[]');
+      setIsFollowed(follows.includes(anime.id));
     }
 
-    // Load follow status from localStorage + D1
-    try {
-      const followKey = user?.id ? `cf_followed_anime_ids_${user.id}` : 'cf_followed_anime_ids';
-      const localFollows: unknown[] = JSON.parse(localStorage.getItem(followKey) || '[]');
-      const idNum = Number(details?.id ?? animeId);
-      setIsFollowing(localFollows.some((fid) => Number(fid) === idNum));
-    } catch {
-      setIsFollowing(false);
-    }
-
-    if (user?.id) {
-      cloudflareApi
-        .fetchFollows()
-        .then((res) => {
-          const targetId = Number(details?.id ?? animeId);
-          if (Array.isArray(res?.follows)) {
-            const ids = res.follows
-              .map((f: number | { anime_id?: number }) =>
-                typeof f === 'number' ? f : Number(f?.anime_id)
-              )
-              .filter((n) => Number.isFinite(n) && n > 0);
-            const matched = ids.some((fid) => fid === targetId);
-            setIsFollowing(matched);
-            try {
-              localStorage.setItem(`cf_followed_anime_ids_${user.id}`, JSON.stringify(ids));
-            } catch {}
-          }
-        })
-        .catch(() => {});
-    }
-
-    // Sync watch progress from D1 if signed in
-    if (user?.id) {
-      cloudflareApi
-        .getWatchProgress(animeId)
-        .then((remote) => {
-          if (remote) {
-            const normalizedRemote = saveAnimeWatchProgress(animeId, {
-              season: remote.season,
-              episode: remote.episode,
-              totalEpisodes: remote.totalEpisodes ?? localProgress?.totalEpisodes ?? null,
-              completed: remote.completed,
-            });
-            if (normalizedRemote) {
-              setWatchProgress(normalizedRemote);
-              if (normalizedRemote.completed) {
-                setIsWatched(true);
-              }
-            }
-          }
-        })
-        .catch(() => {});
-    }
-
-    // Check saved user rating locally
-    try {
-      const savedUserRate = localStorage.getItem(`cf_user_rating_${animeId}_${user?.id || 'anon'}`);
-      if (savedUserRate) {
-        setUserRating(Number(savedUserRate));
-      } else {
-        setUserRating(null);
-      }
-    } catch {
-      setUserRating(null);
-    }
-
-    // Load saved reviews for this specific anime
-    try {
-      const savedRevs = localStorage.getItem(`cf_reviews_${animeId}`);
-      if (savedRevs) {
-        setReviewsList(JSON.parse(savedRevs));
-      } else {
-        setReviewsList([]);
-      }
-    } catch {
-      setReviewsList([]);
-    }
-
-    fetchDetails();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [animeId, user?.id]);
-
-  const fetchDetails = async () => {
-    setLoading(true);
-    setNotFound(false);
-    setSelectedDubSeasonIdx(0);
-    try {
-      const data = await cloudflareApi.getAnimeById(animeId, user?.id);
-      if (data) {
-        const record = data as AnimeDetailRecord;
-        setDetails(record);
-        setNotFound(false);
-        onResolvedAnime?.(record);
-        if (data.popularity) setUpvotes(Number(data.popularity) || 0);
-        if (data.rating !== undefined && data.rating !== null) {
-          const parsedRating = Number(data.rating);
-          if (!Number.isNaN(parsedRating)) setCurrentRating(parsedRating);
-        }
-        
-        // Populate Community Rating data
-        if (data.community_rating !== undefined || data.communityRating !== undefined) {
-          const cRating = Number(data.community_rating ?? data.communityRating);
-          if (!isNaN(cRating) && cRating > 0) {
-            setCommunityRating(cRating);
-          }
-        }
-        if (data.community_votes !== undefined || data.communityVotes !== undefined) {
-          setCommunityVotes(Number(data.community_votes ?? data.communityVotes) || 0);
-        }
-        if (data.user_rating !== undefined || data.userRating !== undefined) {
-          const uRate = data.user_rating ?? data.userRating;
-          if (uRate !== null && !isNaN(Number(uRate))) {
-            setUserRating(Number(uRate));
-            try {
-              localStorage.setItem(`cf_user_rating_${animeId}_${user?.id || 'anon'}`, String(uRate));
-            } catch {}
-          }
-        }
-
-        if (data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
-          const shieldActive = getSpoilerProtectionEnabled();
-          const normalized: AnimeReviewItem[] = data.reviews.map((r: NonNullable<AnimeDetailRecord['reviews']>[number]) => ({
-            id: r.id || Date.now(),
-            author: r.author || r.user_name || 'Indian Anime Fan',
-            rating: Number(r.rating) || 8.5,
-            language: r.language || (r.comment?.match(/\[(.*?) Dub\]/)?.[1] ? `${r.comment.match(/\[(.*?) Dub\]/)?.[1]} Dub` : 'Hindi Dub'),
-            comment: r.comment ? r.comment.replace(/^\[.*?\]\s*/, '') : '',
-            date: formatRelativeTime(r.created_at || r.date || Date.now()),
-            likes: r.likes || 1,
-            isLiked: false,
-            spoilers: Boolean(r.spoilers),
-            revealed: !(Boolean(r.spoilers) && shieldActive)
-          }));
-
-          setReviewsList(prev => {
-            const existingIds = new Set(prev.map(p => String(p.id)));
-            const newFromApi = normalized.filter((n) => !existingIds.has(String(n.id)));
-            const merged = [...prev, ...newFromApi];
-            try {
-              localStorage.setItem(`cf_reviews_${animeId}`, JSON.stringify(merged));
-            } catch {}
-            return merged.length > 0 ? merged : normalized;
-          });
-        }
-      } else if (!initialAnime) {
-        setDetails(null);
-        setNotFound(true);
-      }
-    } catch (err) {
-      console.error('Failed to fetch anime details from Cloudflare:', err);
-      if (!initialAnime) {
-        setNotFound(true);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
-
-  const handleVote = async () => {
-    setIsVoting(true);
-    try {
-      const data = await cloudflareApi.upvoteAnime(animeId);
-      if (data && data.popularity) {
-        setUpvotes(data.popularity);
-        showToast(`🔥 Upvoted! Total upvotes: ${data.popularity}`);
-      }
-    } catch (err) {
-      setUpvotes(prev => prev + 1);
-      showToast('🔥 Upvoted!');
-    } finally {
+    const fetchReviews = async () => {
       try {
-        const upvoted: unknown[] = JSON.parse(localStorage.getItem('cf_user_upvoted_ids') || '[]');
-        const idNum = Number(animeId);
-        if (!upvoted.some((u) => Number(u) === idNum)) {
-          upvoted.push(idNum);
-          localStorage.setItem('cf_user_upvoted_ids', JSON.stringify(upvoted));
-        }
-      } catch (e) {
-        console.error(e);
-      }
-      setIsVoting(false);
-    }
-  };
-
-  // Interactive 10-point Community Rating with Optimistic UI updates
-  const handleCommunityRate = async (val: number) => {
-    // 1. Instant Optimistic UI Update
-    setUserRating(val);
-    const previousUserRating = userRating;
-    const previousCommunityRating = communityRating || Number(details?.rating || 8.5);
-    const previousTotalVotes = communityVotes || 0;
-
-    const newTotalVotes = previousUserRating ? previousTotalVotes : (previousTotalVotes + 1);
-    const baseSum = previousCommunityRating * (previousTotalVotes > 0 ? previousTotalVotes : 1);
-    const newSum = previousUserRating ? (baseSum - previousUserRating + val) : (baseSum + val);
-    const optimisticAvg = newTotalVotes > 0 ? Number((newSum / newTotalVotes).toFixed(1)) : val;
-    setCommunityRating(optimisticAvg);
-    setCommunityVotes(newTotalVotes);
-    showToast(`⭐ Rated ${val} / 10 with the Anidub Community!`);
-
-    try {
-      localStorage.setItem(`cf_user_rating_${animeId}_${user?.id || 'anon'}`, String(val));
-    } catch {}
-
-    // 2. Optional server sync if authenticated
-    if (user?.id) {
-      setIsSubmittingRating(true);
-      try {
-        const res = await cloudflareApi.submitCommunityRating(
-          animeId,
-          val,
-          user.id,
-          user.fullName || user.username || user.firstName || 'Anime Fan'
-        );
-        if (res && res.success) {
-          if (res.communityRating !== undefined) {
-            setCommunityRating(Number(res.communityRating));
-          }
-          if (res.totalVotes !== undefined) {
-            setCommunityVotes(Number(res.totalVotes));
-          }
-        }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.warn('Community rating persisted locally, sync note:', message);
-      } finally {
-        setIsSubmittingRating(false);
-      }
-    }
-  };
-
-  const handleRate = async (val: number) => {
-    setIsRating(true);
-    try {
-      const data = await cloudflareApi.rateAnime(animeId, val);
-      if (data.success) {
-        setCurrentRating(data.rating);
-        showToast(`⭐ Rated ${val}/10! Global rating updated to ${data.rating}`);
-      }
-    } catch (err) {
-      setCurrentRating(val);
-      showToast(`⭐ Rated ${val}/10!`);
-    } finally {
-      setIsRating(false);
-    }
-  };
-
-  const handleToggleFollow = async () => {
-    if (numericAnimeId <= 0 || isTogglingFollow) return;
-    const nextFollowing = !isFollowing;
-    setIsFollowing(nextFollowing);
-    setIsTogglingFollow(true);
-
-    const followKey = user?.id ? `cf_followed_anime_ids_${user.id}` : 'cf_followed_anime_ids';
-    try {
-      const current: number[] = JSON.parse(localStorage.getItem(followKey) || '[]');
-      const updated = nextFollowing
-        ? Array.from(new Set([...current, numericAnimeId]))
-        : current.filter((id) => Number(id) !== numericAnimeId);
-      localStorage.setItem(followKey, JSON.stringify(updated));
-    } catch {}
-
-    try {
-      if (user?.id) {
-        if (nextFollowing) {
-          await cloudflareApi.followAnime(numericAnimeId);
+        const cfReviews = await cloudflareApi.getReviews(anime.id);
+        if (cfReviews && cfReviews.length > 0) {
+          setReviews(cfReviews);
         } else {
-          await cloudflareApi.unfollowAnime(numericAnimeId);
+          const allReviews = JSON.parse(localStorage.getItem('anime_reviews') || '{}');
+          setReviews(Array.isArray(allReviews[anime.id]) ? allReviews[anime.id] : []);
         }
+      } catch {
+        const allReviews = JSON.parse(localStorage.getItem('anime_reviews') || '{}');
+        setReviews(Array.isArray(allReviews[anime.id]) ? allReviews[anime.id] : []);
       }
-      showToast(
-        nextFollowing
-          ? 'Following dub updates for this title'
-          : 'Unfollowed dub updates'
-      );
+    };
+    fetchReviews();
+
+    const seasonProgressMap = JSON.parse(localStorage.getItem('anime_season_progress_v2') || '{}');
+    const LegacyProgress = JSON.parse(localStorage.getItem('anime_progress') || '{}');
+    if (seasonProgressMap[anime.id] && typeof seasonProgressMap[anime.id] === 'object') {
+      setEpisodesWatchedBySeason(seasonProgressMap[anime.id]);
+    } else {
+      setEpisodesWatchedBySeason({ 1: Number(LegacyProgress[anime.id]) || 0 });
+    }
+  }, [anime?.id, followedIds]);
+
+  if (isLoading) {
+    return (
+      <div className={asPage ? 'max-w-[1280px] mx-auto px-4 py-6' : 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm'}>
+        <div className="w-full max-w-4xl">
+          <DetailModalSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  if (!anime) return null;
+
+  const currentSeasonObj =
+    seasonBreakdowns.find((s) => s.seasonNumber === selectedProgressSeason) || seasonBreakdowns[0];
+  const currentSeasonMaxEpisodes =
+    currentSeasonObj && currentSeasonObj.totalEpisodes && currentSeasonObj.totalEpisodes > 0
+      ? currentSeasonObj.totalEpisodes
+      : anime.episodesCount && anime.episodesCount > 0
+        ? anime.episodesCount
+        : null;
+
+  const episodesWatched = episodesWatchedBySeason[selectedProgressSeason] || 0;
+
+  const handleToggleSpoilerShield = () => {
+    const next = !spoilerShieldEnabled;
+    setSpoilerShieldEnabled(next);
+    try {
+      localStorage.setItem('anidub_spoiler_shield', String(next));
     } catch {
-      showToast(
-        nextFollowing
-          ? 'Saved dub follow locally (sign in to sync across devices)'
-          : 'Removed dub follow locally'
-      );
-    } finally {
-      setIsTogglingFollow(false);
+      // ignore storage errors
     }
   };
 
-  const persistReviewsLocal = (items: AnimeReviewItem[]) => {
-    try {
-      localStorage.setItem(`cf_reviews_${animeId}`, JSON.stringify(items));
-    } catch {}
-  };
+  const handleUpdateProgress = async (newCount: number) => {
+    const clamped =
+      currentSeasonMaxEpisodes !== null
+        ? Math.max(0, Math.min(newCount, currentSeasonMaxEpisodes))
+        : Math.max(0, newCount);
 
-  const submitReviewToServer = async (targetReview: AnimeReviewItem) => {
-    setReviewsList((prev) => {
-      const next = prev.map((r) =>
-        r.id === targetReview.id ? { ...r, deliveryStatus: 'pending' as const } : r
-      );
-      persistReviewsLocal(next);
-      return next;
-    });
+    const updatedSeasonMap = {
+      ...episodesWatchedBySeason,
+      [selectedProgressSeason]: clamped,
+    };
+    setEpisodesWatchedBySeason(updatedSeasonMap);
+
+    const seasonProgressMap = JSON.parse(localStorage.getItem('anime_season_progress_v2') || '{}');
+    seasonProgressMap[anime.id] = updatedSeasonMap;
+    localStorage.setItem('anime_season_progress_v2', JSON.stringify(seasonProgressMap));
+
+    const totalWatchedAcrossSeasons = Object.values(updatedSeasonMap).reduce(
+      (sum: number, val) => sum + (Number(val) || 0),
+      0
+    );
+    const legacyProgress = JSON.parse(localStorage.getItem('anime_progress') || '{}');
+    legacyProgress[anime.id] = totalWatchedAcrossSeasons;
+    localStorage.setItem('anime_progress', JSON.stringify(legacyProgress));
 
     try {
-      const res = await cloudflareApi.submitReview(animeId, {
-        user_name: targetReview.author,
-        rating: targetReview.rating,
-        language: targetReview.language,
-        comment: targetReview.comment,
+      await cloudflareApi.syncWatchlistItem({
+        anime_id: anime.id,
+        status: watchlistStatus || 'Watching',
+        progress: totalWatchedAcrossSeasons,
       });
-      const succeeded = Boolean(res && (res.success !== false));
-      setReviewsList((prev) => {
-        const next = prev.map((r) =>
-          r.id === targetReview.id
-            ? { ...r, deliveryStatus: succeeded ? ('published' as const) : ('failed' as const) }
-            : r
-        );
-        persistReviewsLocal(next);
-        return next;
-      });
-      if (succeeded) {
-        showToast('Review published');
-      } else {
-        showToast('Review failed to publish — tap Retry');
-      }
     } catch {
-      setReviewsList((prev) => {
-        const next = prev.map((r) =>
-          r.id === targetReview.id ? { ...r, deliveryStatus: 'failed' as const } : r
-        );
-        persistReviewsLocal(next);
-        return next;
-      });
-      showToast('Review could not be synced — tap Retry');
+      // Best-effort offline tolerance
     }
   };
 
-  const handleAddReview = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reviewComment.trim()) return;
+  const handleMarkSeasonComplete = () => {
+    if (currentSeasonMaxEpisodes && currentSeasonMaxEpisodes > 0) {
+      handleUpdateProgress(currentSeasonMaxEpisodes);
+      if (onUpdateStatus && seasonBreakdowns.length <= 1) {
+        onUpdateStatus(anime.id, 'Completed');
+      }
+      if (onShowToast) {
+        onShowToast(`Marked Season ${selectedProgressSeason} as completed`, 'success');
+      }
+    }
+  };
 
-    const currentUsername = user ? getVerifiedClerkUsername(user) : generateRandomUsername();
-    const nowIso = new Date().toISOString();
+  const handleAddReview = async (e?: React.FormEvent, retryText?: string) => {
+    if (e) e.preventDefault();
+    const commentText = (retryText ?? newComment).trim();
+    if (!commentText) return;
 
-    const newRev: AnimeReviewItem = {
-      id: Date.now(),
-      author: currentUsername,
-      rating: reviewRating,
-      language: reviewLang,
-      comment: reviewComment.trim(),
-      spoilers: hasSpoilers,
-      revealed: !hasSpoilers,
-      likes: 1,
-      isLiked: false,
-      date: formatRelativeTime(nowIso),
-      created_at: nowIso,
-      deliveryStatus: 'pending',
+    const autoSpoiler = /spoiler|dies|death|ending|betray|final boss/i.test(commentText);
+    const review: ReviewItem = {
+      id: Date.now().toString(),
+      userName: user?.name || 'AnimeFan_IN',
+      rating: newRating,
+      comment: commentText,
+      date: 'Just now',
+      likes: 0,
+      isSpoiler: newIsSpoiler || autoSpoiler,
     };
 
-    const updated = [newRev, ...reviewsList];
-    setReviewsList(updated);
-    setReviewComment('');
+    setReviewSyncState('posting');
     try {
-      persistReviewsLocal(updated);
-      const userRevs = JSON.parse(localStorage.getItem('cf_user_reviews') || '[]');
-      userRevs.unshift({ ...newRev, animeId });
-      localStorage.setItem('cf_user_reviews', JSON.stringify(userRevs));
+      await cloudflareApi.addReview(anime.id, review);
+      const updatedReviews = [review, ...reviews];
+      setReviews(updatedReviews);
 
-      // 1. Persist to D1 / SQLite database with explicit pending -> published/failed delivery state
-      await submitReviewToServer(newRev);
+      const allReviews = JSON.parse(localStorage.getItem('anime_reviews') || '{}');
+      allReviews[anime.id] = updatedReviews;
+      localStorage.setItem('anime_reviews', JSON.stringify(allReviews));
 
-      // 2. Broadcast review into Live Community Chat REST API with verified Clerk username
-      if (user) {
-        const chatPayload = {
-          user: currentUsername,
-          username: currentUsername,
-          text: `[⭐ ${reviewRating}/10 • ${reviewLang}] ${newRev.comment}`,
-          isReview: true,
-          rating: reviewRating,
-          language: reviewLang,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-
-        cloudflareApi.sendChatMessage(chatPayload).catch(() => {});
-
-        // 3. Send through Cloudflare WebSocket so connected users receive it instantly
-        try {
-          const wsToken = await getClerkSessionToken();
-          if (wsToken) {
-            const ws = new WebSocket(getCloudflareWsUrl('/ws'));
-            let sentReview = false;
-            ws.onopen = () => {
-              ws.send(JSON.stringify({
-                type: 'auth',
-                token: wsToken,
-                username: currentUsername,
-              }));
-            };
-            ws.onmessage = (event) => {
-              try {
-                const msgData = JSON.parse(event.data);
-                if (msgData?.type === 'auth_ok' && !sentReview) {
-                  sentReview = true;
-                  ws.send(JSON.stringify({
-                    id: `rev_${Date.now()}`,
-                    ...chatPayload
-                  }));
-                  setTimeout(() => ws.close(), 800);
-                  return;
-                }
-                if (msgData?.type === 'error' && msgData?.error) {
-                  showToast(msgData.error);
-                  ws.close();
-                }
-              } catch {}
-            };
-          }
-        } catch (_) {}
-      }
-
-    } catch (err) {
-      console.error(err);
+      setNewComment('');
+      setNewIsSpoiler(false);
+      setLastFailedComment('');
+      setReviewSyncState('idle');
+      if (onShowToast) onShowToast('Review published', 'success');
+    } catch {
+      setLastFailedComment(commentText);
+      setReviewSyncState('failed');
+      if (onShowToast) onShowToast('Could not publish review. Tap Retry.', 'error');
     }
-    await handleRate(reviewRating);
   };
 
-  const handleLikeReview = (id: number | string) => {
-    setReviewsList(reviewsList.map(r => {
-      if (r.id === id) {
-        const isLiked = !r.isLiked;
-        return { ...r, isLiked, likes: isLiked ? (r.likes || 0) + 1 : (r.likes || 1) - 1 };
-      }
-      return r;
-    }));
+  const handleLikeReview = (reviewId: string) => {
+    const updatedReviews = reviews.map((r) => (r.id === reviewId ? { ...r, likes: r.likes + 1 } : r));
+    setReviews(updatedReviews);
+    const allReviews = JSON.parse(localStorage.getItem('anime_reviews') || '{}');
+    allReviews[anime.id] = updatedReviews;
+    localStorage.setItem('anime_reviews', JSON.stringify(allReviews));
   };
 
-  const handleToggleSpoiler = (id: number | string) => {
-    setReviewsList(reviewsList.map(r => {
-      if (r.id === id) {
-        return { ...r, revealed: !r.revealed };
-      }
-      return r;
-    }));
+  const toggleFollow = (e: React.MouseEvent) => {
+    if (onToggleFollow) {
+      onToggleFollow(anime.id, e);
+      setIsFollowed(!isFollowed);
+      return;
+    }
+    const follows = JSON.parse(localStorage.getItem('anime_follows') || '[]');
+    let newFollows: string[];
+    if (isFollowed) {
+      newFollows = follows.filter((id: string) => id !== anime.id);
+      if (onShowToast) onShowToast(`Unfollowed ${anime.title}`, 'info');
+    } else {
+      newFollows = [...follows, anime.id];
+      if (onShowToast) onShowToast(`Following ${anime.title} for dub updates`, 'success');
+    }
+    localStorage.setItem('anime_follows', JSON.stringify(newFollows));
+    setIsFollowed(!isFollowed);
   };
 
   const handleShare = () => {
-    const shareSlug = details?.slug || animeId;
-    const shareUrl =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}/anime/${encodeURIComponent(String(shareSlug))}`
-        : '';
-    if (shareUrl) {
-      navigator.clipboard?.writeText(shareUrl);
-    }
-    showToast('Link copied to clipboard!');
-  };
-
-  const isBookmarked = watchlist.map(Number).includes(numericAnimeId);
-
-  const handleToggleWatched = () => {
-    const nextWatched = !isWatched;
-    setIsWatched(nextWatched);
-    try {
-      const watched: unknown[] = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
-      const idNum = Number(animeId);
-      let updated;
-      if (nextWatched) {
-        updated = Array.from(new Set([...watched, idNum]));
-      } else {
-        updated = watched.filter((w) => Number(w) !== idNum);
-      }
-      localStorage.setItem('cf_watched_anime_ids', JSON.stringify(updated));
-    } catch (e) {
-      console.error(e);
-    }
-    const maxEps = totalEpisodes && totalEpisodes > 0 ? totalEpisodes : (watchProgress?.episode || 1);
-    const saved = saveAnimeWatchProgress(animeId, {
-      season: watchProgress?.season ?? 1,
-      episode: nextWatched ? maxEps : Math.max(0, watchProgress?.episode ?? 0),
-      totalEpisodes: totalEpisodes ?? watchProgress?.totalEpisodes ?? null,
-      completed: nextWatched,
-    });
-    if (saved) {
-      setWatchProgress(saved);
-      if (user?.id) {
-        cloudflareApi
-          .saveWatchProgress({
-            animeId: saved.animeId,
-            season: saved.season,
-            episode: saved.episode,
-            totalEpisodes: saved.totalEpisodes,
-            completed: saved.completed,
-          })
-          .catch(() => {});
-      }
-    }
-    showToast(nextWatched ? 'Marked as Watched!' : 'Marked as uncompleted');
-  };
-
-  const getSeasonEpisodeLimit = (seasonNumber: number): number | null => {
-    if (isMovie) return 1;
-    if (Array.isArray(seasonsArray) && seasonsArray.length > 0) {
-      const seasonEntry = seasonsArray[seasonNumber - 1];
-      const count = Number(seasonEntry?.episodes || seasonEntry?.episode_count || 0);
-      if (Number.isFinite(count) && count > 0) return count;
-    }
-    const dubSeasonMatch = dubProgress.seasons[seasonNumber - 1];
-    if (dubSeasonMatch) {
-      const maxFromDub = dubSeasonMatch.languages.reduce((acc, row) => {
-        const total = Number((row as { totalEpisodes?: number }).totalEpisodes || 0);
-        return total > acc ? total : acc;
-      }, 0);
-      if (maxFromDub > 0) return maxFromDub;
-    }
-    return totalEpisodes && totalEpisodes > 0 ? totalEpisodes : null;
-  };
-
-  const handleUpdateWatchProgress = async (patch: {
-    season?: number;
-    episode?: number;
-    completed?: boolean;
-  }) => {
-    const prev = watchProgress || {
-      animeId: Number(animeId),
-      season: 1,
-      episode: 0,
-      totalEpisodes: totalEpisodes ?? null,
-      completed: false,
-      updatedAt: new Date().toISOString(),
-    };
-    const maxSeasonCount =
-      Array.isArray(seasonsArray) && seasonsArray.length > 0
-        ? seasonsArray.length
-        : Math.max(1, dubProgress.seasons.length);
-    const nextSeason = Math.min(maxSeasonCount, Math.max(1, patch.season ?? prev.season));
-    const cap = getSeasonEpisodeLimit(nextSeason);
-    const nextEpisode = Math.max(0, patch.episode ?? prev.episode);
-    const clampedEpisode = cap ? Math.min(cap, nextEpisode) : nextEpisode;
-    const autoCompleted =
-      patch.completed !== undefined
-        ? patch.completed
-        : Boolean(cap && clampedEpisode >= cap && nextSeason >= maxSeasonCount);
-
-    const saved = saveAnimeWatchProgress(animeId, {
-      season: nextSeason,
-      episode: clampedEpisode,
-      totalEpisodes: cap ?? prev.totalEpisodes ?? null,
-      completed: autoCompleted,
-    });
-    if (!saved) return;
-    setWatchProgress(saved);
-
-    if (autoCompleted !== isWatched) {
-      setIsWatched(autoCompleted);
-      try {
-        const watched: unknown[] = JSON.parse(localStorage.getItem('cf_watched_anime_ids') || '[]');
-        const idNum = Number(animeId);
-        const updated = autoCompleted
-          ? Array.from(new Set([...watched, idNum]))
-          : watched.filter((w) => Number(w) !== idNum);
-        localStorage.setItem('cf_watched_anime_ids', JSON.stringify(updated));
-      } catch {}
-    }
-
-    if (user?.id) {
-      setIsSavingProgress(true);
-      cloudflareApi
-        .saveWatchProgress({
-          animeId: saved.animeId,
-          season: saved.season,
-          episode: saved.episode,
-          totalEpisodes: saved.totalEpisodes,
-          completed: saved.completed,
+    const shareUrl = `${window.location.origin}/anime/${anime.id}`;
+    if (navigator.share) {
+      navigator
+        .share({
+          title: `${anime.title} — Regional Dub Guide`,
+          text: `Check out verified regional dub and OTT details for ${anime.title} on AniDub India`,
+          url: shareUrl,
         })
-        .catch(() => {})
-        .finally(() => setIsSavingProgress(false));
-    }
-
-    showToast(`Saved progress: S${saved.season} • Ep ${saved.episode}${cap ? `/${cap}` : ''}`);
-  };
-
-  const handleToggleSpoilerProtection = () => {
-    const next = !spoilerProtection;
-    setSpoilerProtection(next);
-    setSpoilerProtectionEnabled(next);
-    setIsSynopsisRevealed(false);
-    setReviewsList((prev) =>
-      prev.map((r) => (r.spoilers ? { ...r, revealed: !next } : r))
-    );
-    showToast(
-      next
-        ? 'Spoiler Protection enabled — plot synopsis & spoiler messages blurred'
-        : 'Spoiler Protection turned off'
-    );
-  };
-
-  // Anime properties and fallbacks
-  const title = details?.title || 'Anime Details';
-  const coverImage = details?.cover_image || '/logo.png';
-  const posterImage = coverImage;
-  const rawSynopsis = details?.synopsis || details?.description || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
-  const synopsis = rawSynopsis.replace(/Imported via standardized CSV format\.?/gi, '').trim() || 'Follow this thrilling dubbed adventure packed with high-stakes action, supernatural twists, and emotional character arcs, officially licensed with regional Indian audio tracks.';
-  const releaseYear = details?.releaseYear || details?.year || 2024;
-  const type = details?.type || 'TV Series';
-  const isMovie = String(type).toLowerCase().includes('movie');
-  const status = resolveCanonicalAnimeStatus(details);
-  const studio = details?.studio || 'Animation Studio';
-  const verifiedAudioSpec = typeof details?.audio_spec === 'string' && details.audio_spec.trim() ? details.audio_spec.trim() : '';
-  const movieDuration = typeof details?.duration === 'string' && details.duration.trim() ? details.duration.trim() : '';
-  const dubProgress = useMemo(
-    () => buildDubProgressBreakdown((details as Record<string, unknown> | null) ?? null),
-    [details]
-  );
-  const activeDubSeason =
-    dubProgress.seasons[selectedDubSeasonIdx] || dubProgress.overall;
-  
-  // Exclude non-Indian languages from dub badges (strictly exclude Japanese, English, Romaji, etc.)
-  const rawLanguages = details?.languages ? details.languages.split(',').map((l: string) => l.trim()) : ['Hindi', 'Tamil', 'Telugu', 'Malayalam'];
-  const languages = rawLanguages.filter(
-    (l: string) => !['japanese', 'english', 'romaji', 'korean', 'chinese', 'jap', 'jpn', 'eng'].includes(l.trim().toLowerCase())
-  );
-  const displayLanguages = languages.length > 0 ? languages : ['Hindi', 'Tamil', 'Telugu'];
-  
-  useEffect(() => {
-    if (displayLanguages.length > 0 && (!reviewLang || !displayLanguages.some((l: string) => reviewLang.includes(l)))) {
-      setReviewLang(`${displayLanguages[0]} Dub`);
-    }
-  }, [details]);
-  
-  const genres = details?.genre ? details.genre.split(',').map((g: string) => g.trim()) : ['Action', 'Fantasy', 'Adventure', 'Supernatural'];
-
-  // Helper for official OTT URLs — never fabricates unrelated series URLs
-  const getPlatformUrl = (platformName: string, animeTitle: string, directUrl?: string, languages?: string[]) => {
-    const canonicalName = normalizeCanonicalOttName(platformName) || platformName;
-    const p = canonicalName.toLowerCase();
-    const cleanedDirect = (directUrl || details?.streamUrl || '').trim();
-    const hasVerifiedDirectUrl = /^https?:\/\//i.test(cleanedDirect);
-    let webUrl = hasVerifiedDirectUrl ? cleanedDirect : '';
-
-    if (!webUrl) {
-      const encodedTitle = encodeURIComponent(animeTitle || '');
-      if (p.includes('crunchyroll')) {
-        webUrl = `https://www.crunchyroll.com/search?q=${encodedTitle}`;
-      } else if (p.includes('netflix')) {
-        webUrl = `https://www.netflix.com/search?q=${encodedTitle}`;
-      } else if (p.includes('jiohotstar') || p.includes('hotstar') || p.includes('jiocinema')) {
-        webUrl = `https://www.hotstar.com/in/explore?search_query=${encodedTitle}`;
-      } else if (p.includes('prime') || p.includes('anime times')) {
-        webUrl = `https://www.primevideo.com/search/ref=atv_nb_sr?phrase=${encodedTitle}`;
-      } else if (p.includes('muse')) {
-        webUrl = `https://www.youtube.com/@MuseIndia/search?query=${encodedTitle}`;
-      } else if (p.includes('ani-one')) {
-        webUrl = `https://www.youtube.com/@AniOneIndia/search?query=${encodedTitle}`;
-      } else if (p.includes('youtube')) {
-        webUrl = `https://www.youtube.com/results?search_query=${encodedTitle}`;
-      } else if (p.includes('sony')) {
-        webUrl = `https://www.sonyliv.com/search?q=${encodedTitle}`;
-      } else if (p.includes('zee5')) {
-        webUrl = `https://www.zee5.com/search?q=${encodedTitle}`;
-      }
-    }
-
-    return {
-      name: canonicalName,
-      url: webUrl,
-      isDirectUrl: hasVerifiedDirectUrl,
-      languages: Array.isArray(languages) ? languages : [],
-    };
-  };
-
-  const handleOpenPlatform = (platform: { name: string; url: string }) => {
-    setIsWatchOptionsOpen(false);
-    if (!platform.url) return;
-
-    const ua = navigator.userAgent || navigator.vendor || (window as Window & { opera?: string }).opera || '';
-    const isAndroid = /android/i.test(ua);
-    const pName = platform.name.toLowerCase();
-
-    if (isAndroid) {
-      let packageName = 'com.crunchyroll.crunchyroid';
-      if (pName.includes('netflix')) packageName = 'com.netflix.mediaclient';
-      else if (pName.includes('jiohotstar') || pName.includes('hotstar')) packageName = 'in.startv.hotstar';
-      else if (pName.includes('prime') || pName.includes('anime times')) packageName = 'com.amazon.avod.thirdpartyclient';
-      else if (pName.includes('youtube') || pName.includes('muse') || pName.includes('ani-one')) packageName = 'com.google.android.youtube';
-
-      const intentUrl = `intent://${platform.url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=${packageName};end;`;
-      try {
-        window.location.href = intentUrl;
-        return;
-      } catch {
-        // Fallback to standard HTTPS link
-      }
-    }
-
-    window.open(platform.url, '_blank', 'noopener,noreferrer');
-  };
-
-  // Parse platforms cleanly & canonically — NEVER default to Crunchyroll if unverified
-  const rawPlatformsList: string[] = useMemo(() => {
-    return normalizeCanonicalOttList({
-      platform: details?.platform,
-      platforms: details?.platforms,
-      platforms_data: details?.platforms_data,
-    });
-  }, [details?.platform, details?.platforms, details?.platforms_data]);
-
-  const availablePlatforms = (() => {
-    let richPlatforms: RichPlatformEntry[] = [];
-    try {
-      if (details?.platforms_data) {
-        richPlatforms = typeof details.platforms_data === 'string' 
-          ? JSON.parse(details.platforms_data) 
-          : details.platforms_data;
-      }
-    } catch {}
-
-    return rawPlatformsList.map((pName) => {
-      const richMatch = Array.isArray(richPlatforms)
-        ? richPlatforms.find((rp) => {
-            const rawName = String(rp?.name || rp?.platform || '');
-            return (normalizeCanonicalOttName(rawName) || rawName).toLowerCase() === pName.toLowerCase();
-          })
-        : undefined;
-      const normalizedDetailsPlatform = normalizeCanonicalOttName(String(details?.platform || ''));
-      const directUrl =
-        richMatch?.url ||
-        (normalizedDetailsPlatform.toLowerCase() === pName.toLowerCase() ? details?.watch_url : '');
-      const partnerLangs = Array.isArray(richMatch?.languages) ? richMatch.languages : [];
-      return getPlatformUrl(pName, title, directUrl, partnerLangs);
-    });
-  })();
-
-  // Calculate total episodes across all seasons using reduce (movies should never fabricate "1 Ep")
-  const seasonsArray = details?.seasons || details?.mixedEntries || details?.seasonsList || [];
-  const rawTotalEpisodes = Array.isArray(seasonsArray) && seasonsArray.length > 0
-    ? seasonsArray.reduce((acc: number, season: SeasonEntry) => acc + Number(season.episodes || season.episode_count || 0), 0)
-    : (details?.episodes_count || details?.episodes || details?.episode_count || null);
-  const totalEpisodes = isMovie ? null : (rawTotalEpisodes ? Number(rawTotalEpisodes) : null);
-
-  const episodesText = isMovie
-    ? (movieDuration || null)
-    : (totalEpisodes ? `${totalEpisodes} ${totalEpisodes === 1 ? 'Ep' : 'Eps'}` : null);
-  const seasonEpisodeSummary = String(details?.season_episode_count || '').trim();
-  const officialSourceValidation = validateOfficialSourceUrl(details?.official_source_url, 'Official Source Link');
-  const officialSourceHref = officialSourceValidation.ok && officialSourceValidation.url ? officialSourceValidation.url : '';
-  const officialSourceLabel = useMemo(() => {
-    if (!officialSourceHref) return '';
-    try {
-      return new URL(officialSourceHref).hostname.replace(/^www\./, '');
-    } catch {
-      return 'Official Link';
-    }
-  }, [officialSourceHref]);
-  const activeSeason = watchProgress?.season ?? 1;
-  const activeEpisode = watchProgress?.episode ?? 0;
-  const maxSeasonsAvailable =
-    Array.isArray(seasonsArray) && seasonsArray.length > 0
-      ? seasonsArray.length
-      : Math.max(1, dubProgress.seasons.length);
-  const activeSeasonEpisodeCap = getSeasonEpisodeLimit(activeSeason);
-  const progressPercent = computeWatchProgressPercent(
-    activeEpisode,
-    activeSeasonEpisodeCap ?? totalEpisodes ?? watchProgress?.totalEpisodes ?? null,
-    isWatched || Boolean(watchProgress?.completed)
-  );
-
-  // Honest Last verified date string (never invents dates)
-  const formattedLastVerified = useMemo(() => {
-    const raw = details?.last_verified_at || details?.updated_at;
-    if (!raw || typeof raw !== 'string') return null;
-    const parsed = new Date(raw);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed.toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  }, [details?.last_verified_at, details?.updated_at]);
-
-  // Franchise watch order entries (sorted chronologically / by sequence_number)
-  const franchiseEntries: FranchiseEntry[] = useMemo(() => {
-    if (!Array.isArray(details?.franchise_entries) || details.franchise_entries.length === 0) {
-      return [];
-    }
-    return [...details.franchise_entries].sort((a, b) => {
-      const seqA = Number(a.sequence_number ?? 9999);
-      const seqB = Number(b.sequence_number ?? 9999);
-      if (seqA !== seqB) return seqA - seqB;
-      return Number(a.year ?? 9999) - Number(b.year ?? 9999);
-    });
-  }, [details?.franchise_entries]);
-
-  const handleOpenFranchiseEntry = (entry: FranchiseEntry) => {
-    if (Number(entry.id) === numericAnimeId) return;
-    if (_onSelectAnime) {
-      _onSelectAnime({
-        id: entry.id,
-        title: entry.title,
-        slug: entry.slug,
-        cover_image: entry.cover_image,
-        year: entry.year ?? undefined,
-        type: entry.type,
-        languages: entry.languages || '',
-      } as Anime);
-      return;
-    }
-    if (typeof window !== 'undefined') {
-      const targetPath = `/anime/${encodeURIComponent(String(entry.slug || entry.id))}`;
-      window.history.pushState({}, '', targetPath);
-      window.dispatchEvent(new PopStateEvent('popstate'));
+        .catch(() => {});
+    } else {
+      navigator.clipboard.writeText(shareUrl);
+      if (onShowToast) onShowToast('Link copied to clipboard', 'info');
     }
   };
 
-  // FAQ Items
-  const faqItems = [
-    {
-      q: `Where can I legally watch ${title} dubbed in Hindi, Tamil, and Telugu?`,
-      a: `${title} is officially available for streaming in India on licensed platforms like ${availablePlatforms.map(p => p.name).join(', ')}. You can select regional voice tracks inside the player audio settings.`
-    },
-    {
-      q: `Are all episodes of ${title} dubbed in regional Indian languages?`,
-      a: `Yes, new episodes simulcast with regional Indian dubs as they are released by official distributors.`
-    },
-    {
-      q: `How can I rate the Indian voice acting quality for ${title}?`,
-      a: `Use our Community Dub Reviews section below to rate voice delivery, sync, and translation quality.`
+  const handlePrimaryWhereToWatchClick = () => {
+    if (whereToWatchRef.current) {
+      whereToWatchRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+  };
+
+  // Strict Data Honesty: Only verified OTT platforms from the record; NEVER default to Crunchyroll
+  const verifiedPlatforms = Array.isArray(anime.platforms)
+    ? anime.platforms.filter((p) => Boolean(p && p.trim().length > 0))
+    : [];
+
+  const lastVerifiedDisplay = anime.lastUpdated
+    ? new Date(anime.lastUpdated).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    : 'Catalog verified';
+
+  const statusOptions: WatchlistStatus[] = [
+    'Watching',
+    'Completed',
+    'On Hold',
+    'Dropped',
+    'Plan to Watch',
+    'Rewatching',
   ];
 
-  const animeJsonLd = useMemo(
-    () =>
-      buildAnimeJsonLd(
-        {
-          id: animeId,
-          slug: details?.slug,
-          title,
-          synopsis,
-          cover_image: posterImage,
-          languages: displayLanguages.join(', '),
-          type,
-          year: releaseYear,
-          rating: currentRating ?? details?.rating,
-          studio,
-          genres: genres.join(', '),
-          episodes_count: totalEpisodes,
-          popularity: upvotes,
-        },
-        typeof window !== 'undefined' ? window.location.origin : undefined,
-        String(details?.slug || animeId)
-      ),
-    [
-      animeId,
-      currentRating,
-      details?.rating,
-      details?.slug,
-      displayLanguages,
-      genres,
-      posterImage,
-      releaseYear,
-      studio,
-      synopsis,
-      title,
-      totalEpisodes,
-      type,
-      upvotes,
-    ]
-  );
+  const tabs: { id: DetailTabId; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'seasons-dubs', label: 'Seasons & Dubs' },
+    { id: 'progress', label: 'Watch Progress' },
+    { id: 'reviews', label: `Reviews (${reviews.length})` },
+  ];
 
-  if (loading && !details) {
-    return <DetailModalSkeleton />;
-  }
+  const synopsisText = anime.synopsis || 'Synopsis not yet verified in catalog.';
+  const isLongSynopsis = synopsisText.length > 220;
 
-  if (!loading && notFound) {
-    return (
-      <div className="relative w-full min-h-[70vh] bg-[#0B0A10] text-[#F4F3FA] font-sans flex flex-col items-center justify-center px-6 py-16 text-center">
-        <div className="max-w-md w-full rounded-[12px] bg-[#12141E] border border-[#292B39] p-8 space-y-4">
-          <div className="inline-flex items-center justify-center px-3 py-1 rounded-lg bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] text-xs font-bold uppercase tracking-wider">
-            404 • Not Found
-          </div>
-          <h1 className="text-2xl font-extrabold text-[#F4F3FA]">Anime Not Found</h1>
-          <p className="text-sm text-[#A1A5B5] leading-relaxed">
-            We couldn&apos;t find a published anime matching <span className="text-[#F4F3FA] font-semibold">&ldquo;{String(animeId)}&rdquo;</span> in the AniDub India catalog.
-          </p>
-          <button
-            type="button"
-            onClick={handleBack}
-            className="w-full min-h-[44px] py-2.5 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-sm font-bold transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
-          >
-            Back to Catalog
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const activeMatrixSeason =
+    seasonBreakdowns.find((s) => s.seasonNumber === selectedMatrixSeason) || seasonBreakdowns[0];
 
-  return (
-    <div className="relative w-full min-h-screen bg-[#0B0A10] text-[#F4F3FA] font-sans pb-32 overflow-x-clip selection:bg-[#B49AF8] selection:text-[#0B0A10]">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: animeJsonLd }}
-      />
-
-      {/* Top Navigation Bar */}
-      <div className="relative z-20 px-4 sm:px-6 py-3.5 flex items-center justify-between max-w-4xl mx-auto">
+  const innerContent = (
+    <div
+      ref={modalContainerRef}
+      className={
+        asPage
+          ? 'w-full bg-[#0B0A10] text-[#F4F3FA] pb-24'
+          : 'relative w-full max-w-4xl max-h-[92vh] bg-[#0B0A10] rounded-t-[20px] sm:rounded-[20px] border border-[#292B39] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-180'
+      }
+    >
+      {/* Top Bar for Page or Modal */}
+      <div className="sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 py-3 bg-[#0B0A10]/95 backdrop-blur-md border-b border-[#292B39]">
         <button
           type="button"
-          onClick={handleBack}
-          className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
-          title="Back to Catalog"
-          aria-label="Back"
+          onClick={onClose}
+          aria-label="Back to catalog"
+          className="min-h-[44px] min-w-[44px] px-3 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] text-[#F4F3FA] border border-[#292B39] flex items-center gap-2 text-[13px] font-semibold transition-colors duration-180 motion-reduce:transition-none"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-4 h-4 text-[#B49AF8]" />
+          <span>Back</span>
         </button>
 
         <div className="flex items-center gap-2">
-          {onCompareAnime && details && (
+          {onEditAnime && user?.isAdmin && (
             <button
               type="button"
-              onClick={() => onCompareAnime(details)}
-              className="min-h-[44px] px-3.5 py-2 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] inline-flex items-center gap-1.5 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
-              title="Compare with another anime"
+              onClick={() => onEditAnime(anime)}
+              aria-label="Edit Anime Info"
+              className="min-h-[44px] px-3 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] text-[#F4F3FA] border border-[#292B39] flex items-center gap-1.5 text-[12px] font-semibold transition-colors duration-180"
             >
-              <Scale className="w-3.5 h-3.5 text-[#CBB6FF]" />
-              <span className="hidden sm:inline">Compare</span>
+              <Edit className="w-4 h-4 text-[#B49AF8]" />
+              <span className="hidden sm:inline">Edit</span>
             </button>
           )}
-          <button
-            type="button"
-            onClick={handleBack}
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
-            title="Close"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {!asPage && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close detail view"
+              className="min-h-[44px] min-w-[44px] rounded-[12px] bg-[#12141E] hover:bg-[#191C29] text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39] flex items-center justify-center transition-colors duration-180"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* TOAST NOTIFICATION */}
-      {toastMessage && (
-        <div
-          role="status"
-          className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-[12px] bg-[#12141E] border border-[#292B39] shadow-2xl flex items-center gap-2.5 text-[#F4F3FA] text-xs font-semibold"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-[#B49AF8] shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* MAIN CONTENT CONTAINER */}
-      <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 space-y-5">
-
-        {/* 1. COMPACT CINEMATIC HEADER (ECLIPSE DARK) */}
-        <header className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
-            {/* Strict 2:3 Poster */}
-            <div className="w-32 sm:w-36 aspect-[2/3] rounded-[12px] overflow-hidden border border-[#292B39] bg-[#191C29] shrink-0">
-              <Image
-                src={posterImage}
-                alt={title}
-                priority
-                sizes="(max-width: 640px) 128px, 144px"
-                width={144}
-                height={216}
-                quality={80}
+      {/* Scrollable Body */}
+      <div className={asPage ? 'max-w-[1040px] mx-auto px-4 sm:px-6 pt-5' : 'overflow-y-auto flex-1 px-4 sm:px-6 pt-5 pb-10'}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: buildAnimeJsonLd(
+              {
+                id: anime.id,
+                title: anime.title,
+                synopsis: anime.synopsis,
+                poster: anime.poster,
+                releaseYear: anime.releaseYear,
+                rating: anime.rating,
+                episodesCount: anime.episodesCount,
+                languages: anime.languages,
+                genres: anime.genres,
+                studio: anime.studio,
+              },
+              'https://anidub.in'
+            ),
+          }}
+        />
+        {/* 1. Streaming-First Hero & Action Hierarchy */}
+        <section className="relative rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-6 mb-5 overflow-hidden">
+          <div className="flex flex-col sm:flex-row gap-5 items-start">
+            {/* 2:3 Poster */}
+            <div className="w-28 sm:w-40 aspect-[2/3] rounded-[12px] overflow-hidden border border-[#292B39] bg-[#191C29] shrink-0 shadow-lg mx-auto sm:mx-0">
+              <OptimizedImage
+                src={anime.poster}
+                alt={anime.title}
+                width={320}
+                height={480}
+                loading="lazy"
                 className="w-full h-full object-cover"
+                aspectRatio="portrait"
+                priority={true}
               />
             </div>
 
-            {/* Header Metadata & Touch-Friendly Action Row */}
-            <div className="flex-1 min-w-0 w-full text-center sm:text-left space-y-3">
-              <div className="space-y-2">
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#F4F3FA] leading-tight break-words">
-                  {title}
-                </h1>
+            {/* Hero Metadata & Action Hierarchy */}
+            <div className="flex-1 min-w-0 w-full">
+              {/* Compact Metadata Badges */}
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span
+                  className={`px-2.5 py-0.5 rounded-[8px] text-[11px] font-bold uppercase tracking-wider border ${
+                    anime.status === 'Airing'
+                      ? 'bg-emerald-500/10 text-[#34D399] border-emerald-500/30'
+                      : anime.status === 'Upcoming'
+                        ? 'bg-amber-500/10 text-[#F9C876] border-amber-500/30'
+                        : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39]'
+                  }`}
+                >
+                  {anime.status || 'Status unverified'}
+                </span>
 
-                <div className="flex items-center justify-center sm:justify-start flex-wrap gap-2 text-xs font-semibold text-[#A1A5B5]">
-                  {currentRating !== null && currentRating > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#191C29] border border-[#292B39] text-[#F9C876] font-bold">
-                      <Star className="w-3.5 h-3.5 fill-[#F9C876] text-[#F9C876]" />
-                      <span>{currentRating.toFixed(1)}</span>
-                    </span>
-                  )}
-                  {releaseYear && (
-                    <span className="px-2 py-0.5 rounded-md bg-[#191C29] border border-[#292B39] text-[#F4F3FA]">
-                      {releaseYear}
-                    </span>
-                  )}
-                  <span className="px-2 py-0.5 rounded-md bg-[#191C29] border border-[#292B39] text-[#CBB6FF]">
-                    {type}
+                {anime.releaseYear && anime.releaseYear > 0 && (
+                  <span className="px-2.5 py-0.5 rounded-[8px] text-[12px] font-medium bg-[#191C29] text-[#A1A5B5] border border-[#292B39] flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-[#B49AF8]" />
+                    {anime.releaseYear}
                   </span>
-                  {episodesText && (
-                    <span className="px-2 py-0.5 rounded-md bg-[#191C29] border border-[#292B39] text-[#A1A5B5]">
-                      {episodesText}
-                    </span>
-                  )}
-                  {status && (
+                )}
+
+                <span className="px-2.5 py-0.5 rounded-[8px] text-[12px] font-medium bg-[#191C29] text-[#A1A5B5] border border-[#292B39] flex items-center gap-1">
+                  <Tv className="w-3.5 h-3.5 text-[#B49AF8]" />
+                  {anime.episodesCount && anime.episodesCount > 0
+                    ? `${anime.episodesCount} Episodes`
+                    : UNVERIFIED_COUNT_LABEL}
+                </span>
+
+                {typeof anime.rating === 'number' && anime.rating > 0 && (
+                  <span className="px-2.5 py-0.5 rounded-[8px] text-[12px] font-bold bg-[#191C29] text-[#F9C876] border border-[#292B39] flex items-center gap-1">
+                    <Star className="w-3.5 h-3.5 fill-current" />
+                    {anime.rating.toFixed(1)}
+                  </span>
+                )}
+              </div>
+
+              {/* Crisp Title: 24px mobile / 30px desktop */}
+              <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em] mb-1.5">
+                {anime.title}
+              </h1>
+
+              {anime.japaneseTitle && (
+                <p className="text-[13px] text-[#A1A5B5] mb-3 truncate">{anime.japaneseTitle}</p>
+              )}
+
+              {/* Regional Dub Language Pills */}
+              <div className="flex flex-wrap items-center gap-1.5 mb-4">
+                {Array.isArray(anime.languages) && anime.languages.length > 0 ? (
+                  anime.languages.map((lang) => (
                     <span
-                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border font-semibold ${
-                        status === 'Airing'
-                          ? 'bg-[#34D399]/10 border-[#34D399]/30 text-[#34D399]'
-                          : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5]'
-                      }`}
+                      key={lang}
+                      className="px-2.5 py-1 rounded-[8px] text-[11px] font-bold uppercase tracking-wider bg-[#B49AF8]/15 text-[#CBB6FF] border border-[#B49AF8]/35"
                     >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          status === 'Airing' ? 'bg-[#34D399]' : 'bg-[#A1A5B5]'
-                        }`}
-                      />
-                      <span>{status}</span>
+                      {lang} Dub
+                    </span>
+                  ))
+                ) : (
+                  <span className="px-2.5 py-1 rounded-[8px] text-[11px] font-medium bg-[#191C29] text-[#A1A5B5] border border-[#292B39]">
+                    Regional dub languages not verified
+                  </span>
+                )}
+              </div>
+
+              {/* Dual Rating Summary */}
+              <div className="mb-4">
+                <DualRating
+                  animeId={anime.id}
+                  officialRating={anime.rating}
+                  userRatingsCount={anime.userRatingsCount}
+                  userRatingsSum={anime.userRatingsSum}
+                />
+              </div>
+
+              {/* Streaming-First Action Hierarchy:
+                  1. ONE full-width #B49AF8 Primary CTA ("Where to Watch")
+                  2. Secondary compact 44x44px action buttons (Save, Follow, Share, Report) */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handlePrimaryWhereToWatchClick}
+                  data-testid="hero-where-to-watch-cta"
+                  className="w-full sm:flex-1 min-h-[44px] sm:min-h-[48px] px-5 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold text-[14px] flex items-center justify-center gap-2 transition-all duration-180 motion-reduce:transition-none shadow-sm"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>Where to Watch</span>
+                  {verifiedPlatforms.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-[6px] bg-[#0B0A10]/15 text-[#0B0A10] text-[11px] font-extrabold">
+                      {verifiedPlatforms.length} OTT{verifiedPlatforms.length > 1 ? 's' : ''}
                     </span>
                   )}
-                </div>
-              </div>
-
-              {/* Clean 44px Action Row: Save/Bookmark, Follow, Share, Report wrong info */}
-              <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => numericAnimeId > 0 && onToggleWatchlist(numericAnimeId)}
-                  aria-pressed={isBookmarked}
-                  aria-label={isBookmarked ? `Remove ${title} from library` : `Save ${title} to library`}
-                  className={`min-h-[44px] px-4 py-2 rounded-[12px] text-xs font-bold inline-flex items-center justify-center gap-2 border transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
-                    isBookmarked
-                      ? 'bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] border-[#B49AF8]'
-                      : 'bg-[#191C29] hover:border-[#B49AF8]/60 text-[#F4F3FA] border-[#292B39]'
-                  }`}
-                >
-                  <Bookmark className={`w-4 h-4 shrink-0 ${isBookmarked ? 'fill-[#0B0A10]' : ''}`} />
-                  <span>{isBookmarked ? 'Saved' : 'Save'}</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleToggleFollow}
-                  disabled={isTogglingFollow}
-                  aria-pressed={isFollowing}
-                  aria-label={isFollowing ? `Unfollow dub updates for ${title}` : `Follow dub updates for ${title}`}
-                  className={`min-h-[44px] px-4 py-2 rounded-[12px] text-xs font-bold inline-flex items-center justify-center gap-2 border transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
-                    isFollowing
-                      ? 'bg-[#B49AF8]/15 border-[#B49AF8] text-[#CBB6FF]'
-                      : 'bg-[#191C29] hover:border-[#B49AF8]/60 text-[#F4F3FA] border-[#292B39]'
-                  }`}
-                >
-                  {isFollowing ? (
-                    <BellRing className="w-4 h-4 shrink-0 text-[#B49AF8]" />
-                  ) : (
-                    <Bell className="w-4 h-4 shrink-0 text-[#A1A5B5]" />
-                  )}
-                  <span>{isFollowing ? 'Following' : 'Follow'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleShare}
-                  aria-label={`Share ${title}`}
-                  className="min-h-[44px] px-3.5 py-2 rounded-[12px] bg-[#191C29] hover:border-[#B49AF8]/60 border border-[#292B39] text-xs font-semibold text-[#F4F3FA] inline-flex items-center justify-center gap-2 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
-                >
-                  <Share2 className="w-4 h-4 shrink-0 text-[#A1A5B5]" />
-                  <span>Share</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openReportForField('OTT Link')}
-                  aria-label={`Report wrong info for ${title}`}
-                  className="min-h-[44px] px-3.5 py-2 rounded-[12px] bg-[#191C29] hover:border-[#F87171]/50 border border-[#292B39] text-xs font-semibold text-[#A1A5B5] hover:text-[#F87171] inline-flex items-center justify-center gap-2 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
-                >
-                  <Flag className="w-4 h-4 shrink-0" />
-                  <span>Report wrong info</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* 2. PROMINENT "WHERE TO WATCH" CARD (TOP PRIORITY, IMMEDIATELY BELOW HEADER) */}
-        <section
-          aria-label="Where to Watch"
-          data-testid="where-to-watch-card"
-          className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-3.5"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase">
-                Where to Watch (India)
-              </h2>
-              <p className="text-xs text-[#A1A5B5] mt-0.5">
-                Official licensed Indian OTT streaming links
-              </p>
-            </div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#191C29] border border-[#292B39] text-[11px] text-[#A1A5B5]">
-              <Clock className="w-3.5 h-3.5 text-[#B49AF8]" />
-              <span>
-                Last verified:{' '}
-                <strong className="text-[#F4F3FA] font-semibold">
-                  {formattedLastVerified || 'Not verified'}
-                </strong>
-              </span>
-            </div>
-          </div>
-
-          {availablePlatforms.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {availablePlatforms.map((plat) => (
-                <div
-                  key={`where_to_watch_${plat.name}`}
-                  className="flex items-center justify-between gap-3 p-3.5 rounded-[12px] bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/60 transition-colors duration-180 motion-reduce:transition-none"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-[#F4F3FA] truncate flex items-center gap-2">
-                      <span className="truncate">{plat.name}</span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-[#34D399]/15 border border-[#34D399]/30 text-[10px] font-bold text-[#34D399] shrink-0">
-                        India
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-[#A1A5B5] mt-0.5 truncate">
-                      {plat.isDirectUrl ? 'Direct verified link' : 'Official catalog search'}
-                      {formattedLastVerified ? ` • ${formattedLastVerified}` : ''}
-                    </div>
-                  </div>
+                {/* Secondary Action Row (44x44px minimum touch targets) */}
+                <div className="flex items-center gap-2">
+                  {/* Save / Bookmark */}
                   <button
                     type="button"
-                    onClick={() => handleOpenPlatform(plat)}
-                    className="min-h-[40px] px-3.5 py-2 rounded-[10px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-bold inline-flex items-center gap-1.5 shrink-0 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
+                    onClick={(e) => onToggleWatchlist(anime.id, e)}
+                    aria-label={isInWatchlist ? 'Saved in Library' : 'Save to Library'}
+                    className={`flex-1 sm:flex-initial min-h-[44px] min-w-[44px] px-3.5 rounded-[12px] font-semibold text-[13px] flex items-center justify-center gap-1.5 border transition-all duration-180 motion-reduce:transition-none ${
+                      isInWatchlist
+                        ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/40'
+                        : 'bg-[#191C29] text-[#F4F3FA] border-[#292B39] hover:border-[#B49AF8]/40'
+                    }`}
                   >
-                    <Play className="w-3.5 h-3.5 fill-[#0B0A10]" />
-                    <span>Watch</span>
-                    <ExternalLink className="w-3 h-3" />
+                    <Heart className={`w-4 h-4 ${isInWatchlist ? 'fill-current text-[#B49AF8]' : ''}`} />
+                    <span>{isInWatchlist ? 'Saved' : 'Save'}</span>
+                  </button>
+
+                  {/* Follow for dub updates */}
+                  <button
+                    type="button"
+                    onClick={toggleFollow}
+                    aria-label={isFollowed ? 'Following dub updates' : 'Follow for dub updates'}
+                    className={`flex-1 sm:flex-initial min-h-[44px] min-w-[44px] px-3.5 rounded-[12px] font-semibold text-[13px] flex items-center justify-center gap-1.5 border transition-all duration-180 motion-reduce:transition-none ${
+                      isFollowed
+                        ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/40'
+                        : 'bg-[#191C29] hover:bg-[#292B39]/60 text-[#F4F3FA] border-[#292B39]'
+                    }`}
+                  >
+                    {isFollowed ? <Bell className="w-4 h-4 text-[#B49AF8]" /> : <BellOff className="w-4 h-4 text-[#A1A5B5]" />}
+                    <span>{isFollowed ? 'Following' : 'Follow'}</span>
+                  </button>
+
+                  {/* Share */}
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    aria-label="Share anime"
+                    title="Share anime"
+                    className="min-h-[44px] min-w-[44px] px-3 rounded-[12px] bg-[#191C29] hover:bg-[#292B39]/60 text-[#F4F3FA] border border-[#292B39] flex items-center justify-center transition-colors duration-180"
+                  >
+                    <Share2 className="w-4 h-4 text-[#A1A5B5]" />
+                  </button>
+
+                  {/* Report wrong info */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onReportIssue) {
+                        onReportIssue(anime);
+                      } else {
+                        setInternalReportOpen(true);
+                      }
+                    }}
+                    aria-label="Report wrong info"
+                    title="Report wrong info"
+                    className="min-h-[44px] min-w-[44px] px-3 rounded-[12px] bg-[#191C29] hover:bg-[#292B39]/60 text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39] flex items-center justify-center transition-colors duration-180"
+                  >
+                    <Flag className="w-4 h-4 text-[#F87171]" />
                   </button>
                 </div>
-              ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 2. Prominent "Where to Watch" Card (Top Priority) */}
+        <section
+          ref={whereToWatchRef}
+          id="where-to-watch-section"
+          data-testid="where-to-watch-card"
+          className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 mb-5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-[10px] bg-[#B49AF8]/15 border border-[#B49AF8]/30 flex items-center justify-center">
+                <Play className="w-4 h-4 text-[#B49AF8] fill-current" />
+              </div>
+              <div>
+                <h2 className="text-[16px] sm:text-[18px] font-bold text-[#F4F3FA]">Where to Watch (India)</h2>
+                <p className="text-[12px] text-[#A1A5B5]">Official regional OTT streaming links</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 text-[12px] text-[#A1A5B5]">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] bg-[#191C29] border border-[#292B39]">
+                <Globe className="w-3.5 h-3.5 text-[#B49AF8]" />
+                Region: <strong className="text-[#F4F3FA] font-semibold">India</strong>
+              </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] bg-[#191C29] border border-[#292B39]">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#34D399]" />
+                Last verified: <strong className="text-[#F4F3FA] font-semibold">{lastVerifiedDisplay}</strong>
+              </span>
+            </div>
+          </div>
+
+          {verifiedPlatforms.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {verifiedPlatforms.map((platform) => {
+                const ottUrl = generateOttUrl(platform, anime.title, anime.streamingLinks?.[platform]);
+                const hasDirectLink = Boolean(anime.streamingLinks?.[platform]);
+                return (
+                  <a
+                    key={platform}
+                    href={ottUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="min-h-[52px] px-4 py-3 rounded-[12px] bg-[#191C29] hover:bg-[#191C29]/80 border border-[#292B39] hover:border-[#B49AF8]/50 flex items-center justify-between gap-3 transition-all duration-180 group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-[8px] bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
+                        <PlatformIcon platform={platform} className="w-4 h-4 text-[#F4F3FA]" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[14px] font-bold text-[#F4F3FA] truncate">{platform}</div>
+                        <div className="text-[11px] text-[#A1A5B5]">
+                          {hasDirectLink ? 'Direct Verified Link' : 'Official Platform Search (India)'}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#B49AF8] group-hover:translate-x-0.5 transition-transform">
+                      Watch
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </span>
+                  </a>
+                );
+              })}
             </div>
           ) : (
-            <div className="p-4 rounded-[12px] bg-[#191C29] border border-[#292B39] text-xs text-[#A1A5B5] flex flex-wrap items-center justify-between gap-3">
-              <span>
-                Official Indian OTT availability: <strong className="text-[#F4F3FA]">Not verified</strong>.
-              </span>
-              <button
-                type="button"
-                onClick={() => openReportForField('OTT Link')}
-                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 text-[#B49AF8] font-semibold transition-colors duration-180 cursor-pointer"
-              >
-                Suggest official link
-              </button>
+            <div
+              data-testid="ott-not-verified"
+              className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            >
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-[#F9C876] shrink-0" />
+                <div>
+                  <div className="text-[14px] font-bold text-[#F4F3FA]">Not verified</div>
+                  <p className="text-[12px] text-[#A1A5B5]">
+                    Official Indian OTT streaming links have not been verified for this title yet.
+                  </p>
+                </div>
+              </div>
+              {onReportIssue && (
+                <button
+                  type="button"
+                  onClick={() => onReportIssue(anime)}
+                  className="min-h-[44px] px-3.5 rounded-[10px] bg-[#12141E] hover:bg-[#292B39] text-[#B49AF8] border border-[#292B39] text-[12px] font-semibold shrink-0 transition-colors"
+                >
+                  Submit verified OTT link
+                </button>
+              )}
             </div>
           )}
         </section>
 
-        {/* 3. CLEAN ECLIPSE TABS (Overview, Seasons & Dubs, Watch Progress, Reviews) */}
+        {/* 3. Clean Eclipse Tabs (Overview, Seasons & Dubs, Watch Progress, Reviews) */}
         <div
           role="tablist"
           aria-label="Anime detail sections"
-          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar p-1.5 rounded-[12px] bg-[#12141E] border border-[#292B39]"
+          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-[#292B39] mb-5 pb-1"
         >
-          {[
-            { id: 'overview' as const, label: 'Overview' },
-            { id: 'dubs' as const, label: 'Seasons & Dubs' },
-            { id: 'progress' as const, label: 'Watch Progress' },
-            { id: 'reviews' as const, label: `Reviews (${reviewsList.length})` },
-          ].map((tabItem) => {
-            const active = activeDetailTab === tabItem.id;
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
             return (
               <button
-                key={tabItem.id}
+                key={tab.id}
                 type="button"
                 role="tab"
-                aria-selected={active}
-                onClick={() => setActiveDetailTab(tabItem.id)}
-                className={`flex-1 min-h-[44px] px-3.5 py-2 rounded-[10px] text-xs font-semibold whitespace-nowrap transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
-                  active
-                    ? 'bg-[#B49AF8] text-[#0B0A10] font-bold'
-                    : 'text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#191C29]'
+                aria-selected={isActive}
+                onClick={() => setActiveTab(tab.id)}
+                className={`min-h-[44px] px-4 rounded-t-[12px] text-[13px] sm:text-[14px] font-semibold whitespace-nowrap border-b-2 transition-all duration-180 motion-reduce:transition-none ${
+                  isActive
+                    ? 'border-[#B49AF8] text-[#F4F3FA] bg-[#12141E]'
+                    : 'border-transparent text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#12141E]/50'
                 }`}
               >
-                {tabItem.label}
+                {tab.label}
               </button>
             );
           })}
         </div>
 
-        {/* TAB PANEL: OVERVIEW */}
-        {activeDetailTab === 'overview' && (
-          <div id="detail-section-overview" role="tabpanel" className="space-y-5">
-            {/* Synopsis + Genres */}
-            <section className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase">
-                  Overview &amp; Synopsis
-                </h2>
+        {/* TAB 1: OVERVIEW */}
+        {activeTab === 'overview' && (
+          <div className="space-y-5" role="tabpanel">
+            <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
+              <h3 className="text-[16px] font-bold text-[#F4F3FA] mb-2">Synopsis</h3>
+              <p
+                className={`text-[15px] text-[#A1A5B5] leading-[1.6] ${
+                  !isSynopsisExpanded && isLongSynopsis ? 'line-clamp-3' : ''
+                }`}
+              >
+                {synopsisText}
+              </p>
+              {isLongSynopsis && (
                 <button
                   type="button"
-                  onClick={handleToggleSpoilerProtection}
-                  aria-pressed={spoilerProtection}
-                  aria-label="Toggle spoiler protection"
-                  className={`min-h-[40px] px-3 py-1.5 rounded-[10px] text-xs font-semibold border inline-flex items-center gap-1.5 transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
-                    spoilerProtection
-                      ? 'bg-[#F9C876]/15 border-[#F9C876]/40 text-[#F9C876]'
-                      : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
-                  }`}
+                  onClick={() => setIsSynopsisExpanded((prev) => !prev)}
+                  className="mt-2 min-h-[44px] px-3 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[13px] font-semibold text-[#B49AF8] hover:text-[#CBB6FF] inline-flex items-center gap-1.5 transition-colors duration-180"
                 >
-                  {spoilerProtection ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  <span>Spoiler Shield: {spoilerProtection ? 'ON' : 'OFF'}</span>
+                  <span>{isSynopsisExpanded ? 'Show Less' : 'Read More'}</span>
+                  {isSynopsisExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
-              </div>
+              )}
 
-              <div className="relative">
-                <p
-                  className={`text-sm text-[#F4F3FA]/90 leading-relaxed transition-all duration-180 motion-reduce:transition-none ${
-                    spoilerProtection && !isSynopsisRevealed
-                      ? 'blur-md select-none opacity-60 pointer-events-none'
-                      : ''
-                  }`}
-                >
-                  {isSynopsisExpanded || synopsis.length <= 280
-                    ? synopsis
-                    : `${synopsis.slice(0, 280)}...`}
-                  {synopsis.length > 280 && (!spoilerProtection || isSynopsisRevealed) && (
-                    <button
-                      type="button"
-                      onClick={() => setIsSynopsisExpanded(!isSynopsisExpanded)}
-                      className="text-xs font-bold text-[#B49AF8] hover:text-[#CBB6FF] ml-2 cursor-pointer transition-colors"
-                    >
-                      {isSynopsisExpanded ? 'Show less' : 'Read more'}
-                    </button>
-                  )}
-                </p>
-
-                {spoilerProtection && !isSynopsisRevealed && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <button
-                      type="button"
-                      onClick={() => setIsSynopsisRevealed(true)}
-                      aria-label="Reveal blurred synopsis"
-                      className="min-h-[40px] px-4 py-2 rounded-[10px] bg-[#191C29] border border-[#F9C876]/50 text-[#F9C876] hover:text-[#F4F3FA] text-xs font-bold inline-flex items-center gap-2 shadow-xl cursor-pointer transition-colors"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Reveal Synopsis</span>
-                    </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5 pt-4 border-t border-[#292B39]">
+                <div>
+                  <div className="text-[12px] font-semibold text-[#A1A5B5] uppercase tracking-wider mb-1.5">
+                    Genres
                   </div>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#292B39]">
-                <span className="text-[#A1A5B5] text-[11px] font-bold tracking-wider uppercase mr-1">
-                  Genres:
-                </span>
-                {genres.map((g: string, i: number) => (
-                  <span
-                    key={`detail_genre_${g}_${i}`}
-                    className="px-2.5 py-1 rounded-lg bg-[#191C29] border border-[#292B39] text-[#F4F3FA] font-medium text-xs"
-                  >
-                    {g}
-                  </span>
-                ))}
-              </div>
-            </section>
-
-            {/* Stream Specs */}
-            <section className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
-              <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase mb-3.5">
-                Stream Specs
-              </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div className="min-w-0">
-                  <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
-                    PLATFORMS
-                  </span>
-                  <span className="text-xs font-bold text-[#F4F3FA] flex items-center gap-1.5 truncate">
-                    <Play className="w-3.5 h-3.5 text-[#B49AF8] fill-[#B49AF8] shrink-0" />
-                    <span className="truncate">
-                      {availablePlatforms.length > 0
-                        ? availablePlatforms.map((p) => p.name).join(', ')
-                        : 'Not verified'}
-                    </span>
-                  </span>
-                </div>
-                {verifiedAudioSpec && (
-                  <div className="min-w-0">
-                    <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
-                      AUDIO TRACK
-                    </span>
-                    <span className="text-xs font-bold text-[#34D399] flex items-center gap-1.5">
-                      <Volume2 className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">{verifiedAudioSpec}</span>
-                    </span>
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
-                    STUDIO
-                  </span>
-                  <span className="text-xs font-bold text-[#F4F3FA] truncate block">{studio}</span>
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
-                    {isMovie ? 'FORMAT' : <>SEASONS &amp; EPISODES</>}
-                  </span>
-                  <span className="text-xs font-bold text-[#F4F3FA] truncate block">
-                    {isMovie
-                      ? movieDuration
-                        ? `Movie • ${movieDuration}`
-                        : 'Movie'
-                      : seasonEpisodeSummary || episodesText || (status === 'Airing' ? 'Ongoing' : 'Not verified')}
-                  </span>
-                </div>
-                {officialSourceHref && (
-                  <div className="min-w-0">
-                    <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
-                      OFFICIAL SOURCE
-                    </span>
-                    <a
-                      href={officialSourceHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-bold text-[#CBB6FF] hover:text-[#F4F3FA] inline-flex items-center gap-1 max-w-full truncate underline underline-offset-2"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5 text-[#34D399] shrink-0" />
-                      <span className="truncate">{officialSourceLabel || 'Official Site'}</span>
-                      <ExternalLink className="w-3 h-3 shrink-0" />
-                    </a>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* Franchise Watch Order (shown when anime belongs to a franchise) */}
-            {franchiseEntries.length > 0 && (
-              <section
-                aria-label="Franchise Watch Order"
-                data-testid="franchise-watch-order"
-                className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-[#B49AF8]" />
-                    <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase">
-                      Franchise Watch Order
-                    </h2>
-                  </div>
-                  <span className="text-[11px] font-semibold text-[#A1A5B5]">
-                    {franchiseEntries.length} {franchiseEntries.length === 1 ? 'Entry' : 'Entries'}
-                  </span>
-                </div>
-
-                <ol className="space-y-2">
-                  {franchiseEntries.map((entry, idx) => {
-                    const isCurrent = Number(entry.id) === numericAnimeId;
-                    return (
-                      <li key={`franchise_entry_${entry.id}`}>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenFranchiseEntry(entry)}
-                          disabled={isCurrent}
-                          className={`w-full min-h-[56px] p-3 rounded-[12px] border text-left flex items-center gap-3 transition-colors duration-180 motion-reduce:transition-none ${
-                            isCurrent
-                              ? 'bg-[#B49AF8]/12 border-[#B49AF8]/60 cursor-default'
-                              : 'bg-[#191C29] border-[#292B39] hover:border-[#B49AF8]/50 cursor-pointer'
-                          }`}
+                  <div className="flex flex-wrap gap-1.5">
+                    {Array.isArray(anime.genres) && anime.genres.length > 0 ? (
+                      anime.genres.map((genre) => (
+                        <span
+                          key={genre}
+                          className="px-2.5 py-1 rounded-[8px] bg-[#191C29] text-[#F4F3FA] border border-[#292B39] text-[12px] font-medium"
                         >
-                          <span
-                            className={`w-7 h-7 rounded-lg text-xs font-extrabold flex items-center justify-center shrink-0 ${
-                              isCurrent
-                                ? 'bg-[#B49AF8] text-[#0B0A10]'
-                                : 'bg-[#12141E] border border-[#292B39] text-[#A1A5B5]'
-                            }`}
-                          >
-                            {entry.sequence_number ?? idx + 1}
+                          {genre}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[13px] text-[#A1A5B5]">Not verified</span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[12px] font-semibold text-[#A1A5B5] uppercase tracking-wider mb-1.5">
+                    Animation Studio
+                  </div>
+                  <div className="text-[14px] font-semibold text-[#F4F3FA]">
+                    {anime.studio && anime.studio.trim() ? anime.studio : 'Studio not verified'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Franchise Watch Order: ONLY rendered when verified franchise relationships exist */}
+            {franchiseEntries.length > 0 && (
+              <div
+                data-testid="franchise-watch-order"
+                className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[16px] font-bold text-[#F4F3FA] flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-[#B49AF8]" />
+                    <span>Franchise Watch Order</span>
+                  </h3>
+                  <span className="text-[12px] text-[#A1A5B5]">{franchiseEntries.length} verified entries</span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {franchiseEntries.map((entry, idx) => {
+                    const isCurrent = entry.id === anime.id;
+                    const matchedAnime = allAnime.find((a) => a.id === entry.id);
+                    return (
+                      <div
+                        key={entry.id}
+                        onClick={() => {
+                          if (!isCurrent && matchedAnime && onSelectAnime) {
+                            onSelectAnime(matchedAnime);
+                          }
+                        }}
+                        className={`min-h-[52px] p-3 rounded-[12px] border flex items-center justify-between gap-3 transition-colors ${
+                          isCurrent
+                            ? 'bg-[#B49AF8]/15 border-[#B49AF8]/40 text-[#F4F3FA]'
+                            : 'bg-[#191C29] border-[#292B39] hover:border-[#B49AF8]/30 cursor-pointer'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="w-7 h-7 rounded-[8px] bg-[#12141E] border border-[#292B39] text-[12px] font-bold text-[#B49AF8] flex items-center justify-center shrink-0">
+                            {idx + 1}
                           </span>
-                          <div className="w-9 aspect-[2/3] rounded-md overflow-hidden bg-[#12141E] border border-[#292B39] shrink-0">
-                            <Image
-                              src={entry.cover_image || '/logo.png'}
-                              alt={entry.title}
-                              loading="lazy"
-                              width={36}
-                              height={54}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs sm:text-sm font-bold text-[#F4F3FA] truncate">
-                              {entry.title}
-                            </div>
-                            <div className="text-[11px] text-[#A1A5B5] flex flex-wrap items-center gap-1.5 mt-0.5">
-                              {entry.relation_type && (
-                                <span className="text-[#CBB6FF] font-semibold">{entry.relation_type}</span>
-                              )}
-                              {entry.year && <span>• {entry.year}</span>}
-                              {entry.type && <span>• {entry.type}</span>}
+                          <div className="min-w-0">
+                            <div className="text-[14px] font-semibold text-[#F4F3FA] truncate">{entry.title}</div>
+                            <div className="text-[11px] text-[#A1A5B5]">
+                              {entry.relationType}
+                              {entry.releaseYear ? ` • ${entry.releaseYear}` : ''}
                             </div>
                           </div>
-                          {isCurrent && (
-                            <span className="px-2 py-0.5 rounded-md bg-[#B49AF8] text-[#0B0A10] text-[10px] font-bold shrink-0">
-                              Viewing
-                            </span>
-                          )}
-                        </button>
-                      </li>
+                        </div>
+                        {isCurrent ? (
+                          <span className="px-2.5 py-1 rounded-[8px] bg-[#B49AF8] text-[#0B0A10] text-[11px] font-bold shrink-0">
+                            Viewing
+                          </span>
+                        ) : (
+                          <span className="text-[12px] font-semibold text-[#B49AF8] shrink-0">View</span>
+                        )}
+                      </div>
                     );
                   })}
-                </ol>
-              </section>
-            )}
-
-            {/* Dual Rating & FAQ */}
-            <DualRating
-              globalRating={currentRating ?? 0}
-              initialUserRating={userRating}
-              communityScore={communityRating || (currentRating ?? 0)}
-              totalVotes={communityVotes}
-              onRate={handleCommunityRate}
-              className="w-full"
-            />
-
-            <section className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
-              <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase mb-3">
-                Frequently Asked Questions
-              </h2>
-              <div className="divide-y divide-[#292B39]">
-                {faqItems.map((item, idx) => {
-                  const isOpen = openFaqIndex === idx;
-                  return (
-                    <div key={`anime_faq_${idx}`} className="py-2">
-                      <button
-                        type="button"
-                        onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
-                        className="w-full min-h-[44px] py-1.5 flex items-center justify-between text-left text-xs sm:text-sm font-semibold text-[#F4F3FA] hover:text-[#B49AF8] transition-colors duration-180 cursor-pointer"
-                      >
-                        <span>{item.q}</span>
-                        {isOpen ? (
-                          <ChevronUp className="w-4 h-4 text-[#B49AF8] shrink-0 ml-2" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4 text-[#A1A5B5] shrink-0 ml-2" />
-                        )}
-                      </button>
-                      {isOpen && (
-                        <div className="pt-1 pb-2 text-xs text-[#A1A5B5] leading-relaxed">
-                          {item.a}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                </div>
               </div>
-            </section>
+            )}
           </div>
         )}
 
-        {/* TAB PANEL: SEASONS & DUBS (Season × Language × OTT Matrix) */}
-        {activeDetailTab === 'dubs' && (
-          <section
-            id="detail-section-dubs"
-            role="tabpanel"
-            aria-label="Indian Dub Availability and Progress"
-            className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-5"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-[#B49AF8] text-xs font-bold tracking-wider uppercase">
-                  Season × Language × OTT Matrix
-                </h2>
-                <p className="text-xs text-[#A1A5B5] mt-0.5">
-                  Verified Indian dub episode counts across official platforms
-                </p>
+        {/* TAB 2: SEASONS & DUBS */}
+        {activeTab === 'seasons-dubs' && (
+          <div className="space-y-4" role="tabpanel">
+            <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <div>
+                  <h3 className="text-[16px] font-bold text-[#F4F3FA]">Season & Regional Dub Matrix</h3>
+                  <p className="text-[12px] text-[#A1A5B5]">
+                    {dubProgress?.overallBadgeText || UNVERIFIED_COUNT_LABEL}
+                  </p>
+                </div>
+                {dubProgress?.statusLabel && (
+                  <span className="px-2.5 py-1 rounded-[8px] bg-[#B49AF8]/15 text-[#CBB6FF] border border-[#B49AF8]/30 text-[12px] font-semibold">
+                    {dubProgress.statusLabel}
+                  </span>
+                )}
               </div>
 
-              {dubProgress.hasMultipleSeasons && (
-                <div className="flex items-center gap-1.5 flex-wrap" role="tablist" aria-label="Dub progress seasons">
-                  {dubProgress.seasons.map((season, idx) => {
-                    const isActive = idx === selectedDubSeasonIdx;
-                    return (
-                      <button
-                        key={season.seasonKey}
-                        type="button"
-                        role="tab"
-                        aria-selected={isActive}
-                        onClick={() => setSelectedDubSeasonIdx(idx)}
-                        className={`min-h-[40px] px-3 py-1.5 rounded-[10px] text-xs font-bold border transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
-                          isActive
-                            ? 'bg-[#B49AF8] border-[#B49AF8] text-[#0B0A10]'
-                            : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
-                        }`}
-                      >
-                        {season.seasonLabel}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+              {/* Desktop Table: Season x Language x Verified OTT Matrix */}
+              <div className="hidden sm:block overflow-x-auto rounded-[12px] border border-[#292B39]">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#191C29] border-b border-[#292B39] text-[12px] font-bold text-[#A1A5B5] uppercase tracking-wider">
+                      <th className="py-3 px-4">Season</th>
+                      <th className="py-3 px-4">Episodes</th>
+                      <th className="py-3 px-4">Tamil / Hindi / Telugu Dubs</th>
+                      <th className="py-3 px-4">Verified OTT</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#292B39] text-[13px]">
+                    {seasonBreakdowns.map((season) => (
+                      <tr key={season.seasonNumber} className="bg-[#12141E] hover:bg-[#191C29]/50 transition-colors">
+                        <td className="py-3.5 px-4 font-bold text-[#F4F3FA]">
+                          {season.title || `Season ${season.seasonNumber}`}
+                        </td>
+                        <td className="py-3.5 px-4 text-[#A1A5B5]">
+                          {season.totalEpisodes && season.totalEpisodes > 0
+                            ? `${season.totalEpisodes} eps`
+                            : `${UNVERIFIED_COUNT_LABEL} (${LEGACY_UNVERIFIED_COUNT_FALLBACK})`}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {season.languages.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {season.languages.map((l) => (
+                                <span
+                                  key={l.language}
+                                  className="px-2.5 py-1 rounded-[8px] bg-[#191C29] border border-[#292B39] text-[12px] text-[#F4F3FA]"
+                                >
+                                  <strong className="text-[#CBB6FF]">{l.language}:</strong>{' '}
+                                  {l.totalEpisodes
+                                    ? `${l.dubbedEpisodes}/${l.totalEpisodes} eps`
+                                    : l.dubbedEpisodes > 0
+                                      ? `${l.dubbedEpisodes} eps`
+                                      : UNVERIFIED_COUNT_LABEL}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-[#A1A5B5]">{UNVERIFIED_COUNT_LABEL}</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {verifiedPlatforms.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {verifiedPlatforms.map((platform) => (
+                                <span
+                                  key={platform}
+                                  className="px-2 py-0.5 rounded-[6px] bg-[#191C29] border border-[#292B39] text-[11px] font-semibold text-[#F4F3FA]"
+                                >
+                                  {platform}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-[12px] text-[#A1A5B5]">Not verified</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-            {/* Clean Season × Language × OTT Rows */}
-            <div className="space-y-3" data-testid="dub-progress-bars">
-              {activeDubSeason.languages.map((row) => {
-                const rowOttNames = availablePlatforms
-                  .filter(
-                    (p) =>
-                      p.languages.length === 0 ||
-                      p.languages.some((l) => l.toLowerCase().includes(row.language.toLowerCase()))
-                  )
-                  .map((p) => p.name);
-                const honestOttLabel =
-                  row.status === 'unavailable'
-                    ? '—'
-                    : rowOttNames.length > 0
-                      ? rowOttNames.join(', ')
-                      : 'Not verified';
-                const honestCountBadge =
-                  row.status === 'available' && !/\d/.test(row.badgeText)
-                    ? 'Count not verified'
-                    : row.badgeText;
-
-                const barColorClass =
-                  row.status === 'complete'
-                    ? 'bg-[#34D399]'
-                    : row.status === 'partial'
-                      ? 'bg-[#F9C876]'
-                      : row.status === 'available'
-                        ? 'bg-[#34D399]/75'
-                        : 'bg-[#292B39]';
-
-                const badgeColorClass =
-                  row.status === 'complete'
-                    ? 'bg-[#34D399]/15 border-[#34D399]/40 text-[#34D399]'
-                    : row.status === 'partial'
-                      ? 'bg-[#F9C876]/15 border-[#F9C876]/40 text-[#F9C876]'
-                      : row.status === 'available'
-                        ? 'bg-[#191C29] border-[#292B39] text-[#CBB6FF]'
-                        : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5]';
-
-                return (
-                  <div
-                    key={`dub_bar_${activeDubSeason.seasonKey}_${row.language}`}
-                    className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3.5 space-y-2.5"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={`w-2 h-2 rounded-full shrink-0 ${
-                            row.status === 'complete' || row.status === 'available'
-                              ? 'bg-[#34D399]'
-                              : row.status === 'partial'
-                                ? 'bg-[#F9C876]'
-                                : 'bg-[#292B39]'
-                          }`}
-                        />
-                        <span
-                          className={`font-bold ${
-                            row.status === 'unavailable' ? 'text-[#A1A5B5]' : 'text-[#F4F3FA]'
+              {/* Mobile Compact Season Selector Pills + Stacked Language Rows */}
+              <div className="sm:hidden space-y-3">
+                {seasonBreakdowns.length > 1 && (
+                  <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+                    {seasonBreakdowns.map((season) => {
+                      const active = season.seasonNumber === (activeMatrixSeason?.seasonNumber ?? 1);
+                      return (
+                        <button
+                          key={season.seasonNumber}
+                          type="button"
+                          onClick={() => setSelectedMatrixSeason(season.seasonNumber)}
+                          className={`min-h-[44px] px-3.5 rounded-[10px] text-[13px] font-semibold whitespace-nowrap border transition-colors duration-180 ${
+                            active
+                              ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                              : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39]'
                           }`}
                         >
-                          {row.language}
-                        </span>
-                        <span className="text-[11px] text-[#A1A5B5] truncate">
-                          • {honestOttLabel}
-                        </span>
-                      </div>
+                          Season {season.seasonNumber}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
-                      <span
-                        className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border shrink-0 tabular-nums ${badgeColorClass}`}
-                      >
-                        {honestCountBadge}
+                {activeMatrixSeason && (
+                  <div className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3.5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[14px] font-bold text-[#F4F3FA]">
+                        {activeMatrixSeason.title || `Season ${activeMatrixSeason.seasonNumber}`}
+                      </div>
+                      <span className="text-[12px] font-medium text-[#A1A5B5]">
+                        {activeMatrixSeason.totalEpisodes && activeMatrixSeason.totalEpisodes > 0
+                          ? `${activeMatrixSeason.totalEpisodes} Episodes`
+                          : UNVERIFIED_COUNT_LABEL}
                       </span>
                     </div>
 
-                    <div className="w-full h-2 rounded-full bg-[#12141E] overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-180 motion-reduce:transition-none ${barColorClass}`}
-                        style={{ width: `${row.status === 'unavailable' ? 0 : row.percent}%` }}
-                      />
-                    </div>
+                    {activeMatrixSeason.languages.length > 0 ? (
+                      <div className="space-y-2">
+                        {activeMatrixSeason.languages.map((langProgress) => (
+                          <div
+                            key={langProgress.language}
+                            className="p-2.5 rounded-[10px] bg-[#12141E] border border-[#292B39] flex items-center justify-between gap-2"
+                          >
+                            <div>
+                              <span className="text-[13px] font-semibold text-[#F4F3FA]">
+                                {langProgress.language} Dub
+                              </span>
+                              {verifiedPlatforms.length > 0 && (
+                                <div className="text-[11px] text-[#A1A5B5]">
+                                  OTT: {verifiedPlatforms.join(', ')}
+                                </div>
+                              )}
+                            </div>
+                            <span
+                              className={`text-[12px] font-bold ${
+                                langProgress.isComplete ? 'text-[#34D399]' : 'text-[#B49AF8]'
+                              }`}
+                            >
+                              {langProgress.totalEpisodes
+                                ? `${langProgress.dubbedEpisodes} / ${langProgress.totalEpisodes} eps`
+                                : langProgress.dubbedEpisodes > 0
+                                  ? `${langProgress.dubbedEpisodes} eps verified`
+                                  : UNVERIFIED_COUNT_LABEL}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[12px] text-[#A1A5B5]">
+                        Per-language episode counts have not been verified for this season.
+                      </p>
+                    )}
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
-
-            <div className="pt-3 border-t border-[#292B39] flex flex-wrap items-center justify-between gap-2 text-xs">
-              <span className="text-[#A1A5B5]">Spot an outdated dub count or missing language?</span>
-              <button
-                type="button"
-                onClick={() => openReportForField('Dub Language')}
-                className="min-h-[38px] px-3 py-1.5 rounded-[10px] bg-[#191C29] border border-[#292B39] hover:border-[#F87171]/50 text-[#A1A5B5] hover:text-[#F87171] font-semibold transition-colors duration-180 cursor-pointer"
-              >
-                Report dub info
-              </button>
-            </div>
-          </section>
+          </div>
         )}
 
-        {/* TAB PANEL: WATCH PROGRESS */}
-        {activeDetailTab === 'progress' && (
-          <section
-            id="detail-section-progress"
-            role="tabpanel"
-            aria-label="Watch Progress Tracker"
-            className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-5"
-          >
+        {/* TAB 3: WATCH PROGRESS */}
+        {activeTab === 'progress' && (
+          <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-5" role="tabpanel">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-[12px] bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
-                  <Tv className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-[#B49AF8]">
-                    Season-Wise Watch Progress
-                  </h2>
-                  <p className="text-xs text-[#A1A5B5] mt-0.5 tabular-nums">
-                    Season {activeSeason} • Episode {activeEpisode}
-                    {activeSeasonEpisodeCap ? ` / ${activeSeasonEpisodeCap}` : ''} ({progressPercent}%)
-                    {isSavingProgress ? ' • Syncing…' : ''}
-                  </p>
-                </div>
+              <div>
+                <h3 className="text-[16px] font-bold text-[#F4F3FA]">Your Watch Progress</h3>
+                <p className="text-[12px] text-[#A1A5B5]">
+                  Track your status and per-season episode progress
+                </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleToggleWatched}
-                aria-pressed={isWatched}
-                aria-label={isWatched ? 'Mark series as unwatched' : 'Mark series as completed'}
-                className={`min-h-[44px] px-4 py-2 rounded-[12px] text-xs font-bold border inline-flex items-center gap-2 transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
-                  isWatched
-                    ? 'bg-[#34D399]/15 border-[#34D399]/40 text-[#34D399]'
-                    : 'bg-[#191C29] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/60'
-                }`}
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{isWatched ? 'Completed' : 'Mark Completed'}</span>
-              </button>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="w-full h-2.5 rounded-full bg-[#191C29] overflow-hidden">
-              <div
-                className="h-full rounded-full bg-[#B49AF8] transition-all duration-180 motion-reduce:transition-none"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-
-            {/* Season & Episode Controls */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="flex items-center justify-between rounded-[12px] bg-[#191C29] border border-[#292B39] px-4 py-3">
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] block">
-                    Season
-                  </span>
-                  <span className="text-[11px] text-[#A1A5B5] tabular-nums">
-                    Max {maxSeasonsAvailable}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={activeSeason <= 1}
-                    onClick={() =>
-                      handleUpdateWatchProgress({
-                        season: Math.max(1, activeSeason - 1),
-                        episode: 0,
-                      })
-                    }
-                    aria-label="Decrease season"
-                    className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 disabled:opacity-40 flex items-center justify-center text-[#F4F3FA] transition-colors duration-180 cursor-pointer"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <span className="min-w-[2.5rem] text-center text-sm font-extrabold text-[#F4F3FA] tabular-nums">
-                    S{activeSeason}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={activeSeason >= maxSeasonsAvailable}
-                    onClick={() =>
-                      handleUpdateWatchProgress({
-                        season: Math.min(maxSeasonsAvailable, activeSeason + 1),
-                        episode: 0,
-                      })
-                    }
-                    aria-label="Increase season"
-                    className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 disabled:opacity-40 flex items-center justify-center text-[#F4F3FA] transition-colors duration-180 cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between rounded-[12px] bg-[#191C29] border border-[#292B39] px-4 py-3">
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] block">
-                    Episode
-                  </span>
-                  <span className="text-[11px] text-[#A1A5B5] tabular-nums">
-                    {activeSeasonEpisodeCap ? `Limit ${activeSeasonEpisodeCap} eps` : 'No episode limit set'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={activeEpisode <= 0}
-                    onClick={() =>
-                      handleUpdateWatchProgress({
-                        episode: Math.max(0, activeEpisode - 1),
-                        completed: false,
-                      })
-                    }
-                    aria-label="Previous episode"
-                    className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 disabled:opacity-40 flex items-center justify-center text-[#F4F3FA] transition-colors duration-180 cursor-pointer"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <span className="min-w-[3.5rem] text-center text-sm font-extrabold text-[#F4F3FA] tabular-nums">
-                    Ep {activeEpisode}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={Boolean(activeSeasonEpisodeCap && activeEpisode >= activeSeasonEpisodeCap)}
-                    onClick={() => handleUpdateWatchProgress({ episode: activeEpisode + 1 })}
-                    aria-label="Next watched episode"
-                    className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#B49AF8] hover:bg-[#CBB6FF] disabled:opacity-40 flex items-center justify-center text-[#0B0A10] transition-colors duration-180 cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* TAB PANEL: REVIEWS */}
-        {activeDetailTab === 'reviews' && (
-          <section
-            id="detail-section-reviews"
-            role="tabpanel"
-            className="bg-[#12141E] border border-[#292B39] rounded-[12px] p-4 sm:p-6 space-y-5"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#292B39]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-[12px] bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
-                  <Star className="w-4 h-4 fill-[#B49AF8]" />
-                </div>
-                <div>
-                  <h2 className="text-sm sm:text-base font-extrabold text-[#F4F3FA]">
-                    Community Dub Reviews
-                  </h2>
-                  <p className="text-xs text-[#A1A5B5]">
-                    Language-specific ratings on voice acting, sync &amp; script localization
-                  </p>
-                </div>
-              </div>
-              <span className="bg-[#191C29] border border-[#292B39] text-[#CBB6FF] text-xs font-bold px-3 py-1 rounded-lg">
-                {reviewsList.length} {reviewsList.length === 1 ? 'Review' : 'Reviews'}
-              </span>
-            </div>
-
-            {/* Review Submission Form */}
-            <form onSubmit={handleAddReview} className="space-y-4 bg-[#191C29] border border-[#292B39] rounded-[12px] p-4">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[#F4F3FA] font-semibold">Rate Dubbing Quality</span>
-                <span className="text-[#F9C876] font-bold flex items-center gap-1 bg-[#12141E] border border-[#292B39] px-2.5 py-1 rounded-lg tabular-nums">
-                  <Star className="w-3.5 h-3.5 fill-[#F9C876] text-[#F9C876]" />
-                  <span>{reviewRating.toFixed(1)} / 10.0</span>
-                </span>
-              </div>
-
-              <input
-                type="range"
-                min="1"
-                max="10"
-                step="0.5"
-                value={reviewRating}
-                onChange={(e) => setReviewRating(parseFloat(e.target.value))}
-                className="w-full accent-[#B49AF8] cursor-pointer h-1.5 bg-[#12141E] rounded-lg"
-              />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              {onUpdateStatus && (
                 <select
-                  value={reviewLang}
-                  onChange={(e) => setReviewLang(e.target.value)}
-                  className="w-full h-[44px] bg-[#12141E] border border-[#292B39] rounded-[12px] px-3.5 text-xs text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer"
+                  aria-label="Watchlist status"
+                  value={watchlistStatus}
+                  onChange={(e) => onUpdateStatus(anime.id, e.target.value as WatchlistStatus)}
+                  className="min-h-[44px] px-3.5 rounded-[12px] bg-[#191C29] border border-[#292B39] text-[13px] font-semibold text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8]"
                 >
-                  {displayLanguages.map((lang: string, idx: number) => (
-                    <option key={`review_opt_${lang}_${idx}`} value={`${lang} Dub`}>
-                      {lang} Dub
+                  {statusOptions.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
                     </option>
                   ))}
                 </select>
+              )}
+            </div>
 
-                <div className="flex items-center justify-start sm:justify-end">
-                  <label className="flex items-center gap-2 text-xs text-[#A1A5B5] cursor-pointer min-h-[44px]">
-                    <input
-                      type="checkbox"
-                      checked={hasSpoilers}
-                      onChange={(e) => setHasSpoilers(e.target.checked)}
-                      className="accent-[#B49AF8] rounded w-4 h-4"
-                    />
-                    <span>Contains spoilers?</span>
-                  </label>
+            {/* Season Selector Pills (44px touch targets) */}
+            {seasonBreakdowns.length > 1 && (
+              <div>
+                <div className="text-[12px] font-semibold text-[#A1A5B5] mb-2">Select Season</div>
+                <div className="flex flex-wrap gap-2">
+                  {seasonBreakdowns.map((s) => (
+                    <button
+                      key={s.seasonNumber}
+                      type="button"
+                      onClick={() => setSelectedProgressSeason(s.seasonNumber)}
+                      className={`min-h-[44px] px-3.5 rounded-[10px] text-[13px] font-semibold border transition-colors ${
+                        selectedProgressSeason === s.seasonNumber
+                          ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                          : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                      }`}
+                    >
+                      Season {s.seasonNumber}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Episode Counter Bar */}
+            <div className="p-4 rounded-[12px] bg-[#191C29] border border-[#292B39] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="text-[12px] text-[#A1A5B5] font-medium">
+                  Season {selectedProgressSeason} Progress
+                </div>
+                <div className="text-[20px] font-bold text-[#F4F3FA]">
+                  {episodesWatched}{' '}
+                  <span className="text-[14px] font-normal text-[#A1A5B5]">
+                    / {currentSeasonMaxEpisodes !== null ? currentSeasonMaxEpisodes : '?'} Episodes
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Decrease watched episodes"
+                  onClick={() => handleUpdateProgress(episodesWatched - 1)}
+                  disabled={episodesWatched <= 0}
+                  className="min-h-[44px] min-w-[44px] rounded-[10px] bg-[#12141E] hover:bg-[#292B39] disabled:opacity-40 text-[#F4F3FA] border border-[#292B39] flex items-center justify-center transition-colors"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Increase watched episodes"
+                  onClick={() => handleUpdateProgress(episodesWatched + 1)}
+                  disabled={currentSeasonMaxEpisodes !== null && episodesWatched >= currentSeasonMaxEpisodes}
+                  className="min-h-[44px] min-w-[44px] rounded-[10px] bg-[#B49AF8] hover:bg-[#CBB6FF] disabled:opacity-40 text-[#0B0A10] font-bold flex items-center justify-center transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                {currentSeasonMaxEpisodes !== null && currentSeasonMaxEpisodes > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleMarkSeasonComplete}
+                    className="min-h-[44px] px-3.5 rounded-[10px] bg-[#12141E] hover:bg-[#292B39] text-[#CBB6FF] border border-[#292B39] text-[12px] font-semibold transition-colors"
+                  >
+                    Mark season completed
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: REVIEWS */}
+        {activeTab === 'reviews' && (
+          <div className="space-y-5" role="tabpanel">
+            {/* Write a Review Form */}
+            <form
+              onSubmit={(e) => handleAddReview(e)}
+              className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-[16px] font-bold text-[#F4F3FA]">Write a Review</h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] text-[#A1A5B5]">Your Rating:</span>
+                  <span className="px-2.5 py-1 rounded-[8px] bg-[#B49AF8]/15 text-[#CBB6FF] border border-[#B49AF8]/30 text-[13px] font-bold">
+                    {newRating} / 10
+                  </span>
+                </div>
+              </div>
+
+              {/* Accessible 1-10 Rating Slider + 44px Quick Score Buttons */}
+              <div className="space-y-2">
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  step={1}
+                  aria-label="Review score slider from 1 to 10"
+                  value={newRating}
+                  onChange={(e) => setNewRating(Number(e.target.value))}
+                  className="w-full h-2 bg-[#191C29] rounded-lg appearance-none cursor-pointer accent-[#B49AF8]"
+                />
+                <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setNewRating(num)}
+                      className={`min-h-[44px] rounded-[10px] text-[13px] font-bold border transition-colors duration-180 ${
+                        newRating === num
+                          ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                          : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
                 </div>
               </div>
 
               <textarea
                 rows={3}
-                value={reviewComment}
-                onChange={(e) => setReviewComment(e.target.value)}
-                placeholder="Share thoughts on voice acting, audio sync, and regional dialogue..."
-                className="w-full bg-[#12141E] border border-[#292B39] rounded-[12px] p-3.5 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8] resize-none"
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Share your thoughts on the regional dub quality, voice acting, or translation..."
+                className="w-full rounded-[12px] bg-[#191C29] border border-[#292B39] p-3 text-[14px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8]"
               />
 
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="min-h-[44px] px-5 py-2.5 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-bold inline-flex items-center gap-2 cursor-pointer transition-colors duration-180 motion-reduce:transition-none"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Submit Review</span>
-                </button>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <label className="min-h-[44px] inline-flex items-center gap-2 text-[13px] text-[#A1A5B5] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={newIsSpoiler}
+                    onChange={(e) => setNewIsSpoiler(e.target.checked)}
+                    className="w-4 h-4 rounded accent-[#B49AF8]"
+                  />
+                  <span>Contains spoilers</span>
+                </label>
+
+                <div className="flex items-center gap-2">
+                  {reviewSyncState === 'failed' && lastFailedComment && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddReview(undefined, lastFailedComment)}
+                      className="min-h-[44px] px-3.5 rounded-[12px] bg-red-500/15 text-[#F87171] border border-red-500/30 text-[12px] font-bold"
+                    >
+                      Failed — Retry
+                    </button>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={reviewSyncState === 'posting' || !newComment.trim()}
+                    className="min-h-[44px] px-4 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] disabled:opacity-50 text-[#0B0A10] font-bold text-[13px] inline-flex items-center gap-2 transition-colors"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>{reviewSyncState === 'posting' ? 'Posting…' : 'Post Review'}</span>
+                  </button>
+                </div>
               </div>
             </form>
 
-            {/* Reviews List */}
-            <div className="space-y-3">
-              {reviewsList.length === 0 ? (
-                <EmptyState
-                  title="No dub reviews yet"
-                  description="Be the first to review the regional voice acting and audio quality for this title."
-                  className="bg-[#191C29]"
-                />
-              ) : (
-                reviewsList.map((review, idx) => (
-                  <div
-                    key={`review_${review.id}_${idx}`}
-                    className="space-y-2.5 text-xs p-4 rounded-[12px] bg-[#191C29] border border-[#292B39]"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-[#F4F3FA]">{review.author}</span>
-                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-[#12141E] border border-[#292B39] text-[#CBB6FF] font-semibold">
-                          {review.language}
-                        </span>
-                        {review.deliveryStatus === 'pending' && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#F9C876]/15 border border-[#F9C876]/30 text-[#F9C876] font-semibold">
-                            Posting…
-                          </span>
-                        )}
-                        {review.deliveryStatus === 'published' && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#34D399]/15 border border-[#34D399]/30 text-[#34D399] font-semibold">
-                            Published
-                          </span>
-                        )}
-                        {review.deliveryStatus === 'failed' && (
-                          <button
-                            type="button"
-                            onClick={() => submitReviewToServer(review)}
-                            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-[#F87171]/15 border border-[#F87171]/40 text-[#F87171] font-bold hover:bg-[#F87171]/25 cursor-pointer"
-                          >
-                            <AlertCircle className="w-3 h-3" />
-                            <span>Failed — Retry</span>
-                            <RefreshCw className="w-2.5 h-2.5" />
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 text-[11px] font-bold text-[#F9C876] bg-[#12141E] px-2 py-0.5 rounded-md border border-[#292B39] tabular-nums">
-                        <Star className="w-3 h-3 fill-[#F9C876] text-[#F9C876]" />
-                        <span>{review.rating}</span>
-                      </div>
-                    </div>
+            {/* Spoiler Shield Controls Bar */}
+            <div className="rounded-[12px] bg-[#12141E] border border-[#292B39] px-4 py-2.5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-[13px]">
+                {spoilerShieldEnabled ? (
+                  <EyeOff className="w-4 h-4 text-[#B49AF8]" />
+                ) : (
+                  <Eye className="w-4 h-4 text-[#A1A5B5]" />
+                )}
+                <span className="font-semibold text-[#F4F3FA]">Spoiler Shield</span>
+                <span className="text-[12px] text-[#A1A5B5] hidden sm:inline">
+                  {spoilerShieldEnabled ? 'Masks reviews flagged with plot spoilers' : 'Showing all spoilers'}
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={spoilerShieldEnabled}
+                onClick={handleToggleSpoilerShield}
+                data-testid="spoiler-shield-toggle"
+                className={`min-h-[44px] px-3.5 rounded-[10px] text-[12px] font-bold border transition-colors duration-180 ${
+                  spoilerShieldEnabled
+                    ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/40'
+                    : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39]'
+                }`}
+              >
+                {spoilerShieldEnabled ? 'Spoiler Shield: ON' : 'Spoiler Shield: OFF'}
+              </button>
+            </div>
 
-                    <div className="relative pt-1">
-                      {review.spoilers && !review.revealed ? (
-                        <div className="py-1 flex items-center justify-between text-xs text-[#A1A5B5]">
-                          <span className="flex items-center gap-1.5">
-                            <EyeOff className="w-3.5 h-3.5 text-[#F9C876]" />
-                            <span>Contains spoilers</span>
+            {/* Reviews List */}
+            {reviews.length > 0 ? (
+              <div className="space-y-3">
+                {reviews.map((rev) => {
+                  const isMasked = Boolean(rev.isSpoiler && spoilerShieldEnabled && !revealedReviewIds[rev.id]);
+                  return (
+                    <div
+                      key={rev.id}
+                      className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[14px] font-bold text-[#F4F3FA]">{rev.userName}</span>
+                          <span className="px-2 py-0.5 rounded-[6px] bg-[#191C29] text-[#F9C876] text-[11px] font-bold flex items-center gap-1">
+                            <Star className="w-3 h-3 fill-current" />
+                            {rev.rating}/10
+                          </span>
+                          {rev.isSpoiler && (
+                            <span className="px-2 py-0.5 rounded-[6px] bg-amber-500/10 text-[#F9C876] border border-amber-500/30 text-[10px] font-bold uppercase">
+                              Spoiler
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-[#A1A5B5]">{rev.date}</span>
+                      </div>
+
+                      {isMasked ? (
+                        <div className="p-3 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-between gap-3">
+                          <span className="text-[13px] text-[#A1A5B5]">
+                            This review is hidden by Spoiler Shield.
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleToggleSpoiler(review.id)}
-                            className="min-h-[36px] px-2.5 font-bold text-[#B49AF8] hover:underline cursor-pointer"
+                            onClick={() =>
+                              setRevealedReviewIds((prev) => ({ ...prev, [rev.id]: true }))
+                            }
+                            className="min-h-[44px] px-3 rounded-[8px] bg-[#12141E] text-[#B49AF8] border border-[#292B39] text-[12px] font-semibold"
                           >
-                            Reveal
+                            Reveal Spoiler
                           </button>
                         </div>
                       ) : (
-                        <p className="text-[#F4F3FA]/90 leading-relaxed font-normal text-xs sm:text-sm">
-                          {review.comment}
-                        </p>
+                        <p className="text-[14px] text-[#F4F3FA] leading-relaxed">{rev.comment}</p>
                       )}
-                    </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-[#A1A5B5] pt-2 border-t border-[#292B39]">
-                      <span>{review.date || 'Recent'}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleLikeReview(review.id)}
-                        className={`min-h-[36px] px-2 inline-flex items-center gap-1.5 text-xs transition-colors duration-180 cursor-pointer ${
-                          review.isLiked
-                            ? 'text-[#B49AF8] font-bold'
-                            : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
-                        }`}
-                      >
-                        <ThumbsUp className="w-3.5 h-3.5" />
-                        <span>{review.likes || 0}</span>
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-        )}
-
-      </div>
-
-      {/* 4. STICKY ACTION BAR */}
-      <div className="fixed bottom-4 sm:bottom-6 left-3 right-3 sm:left-4 sm:right-4 w-auto max-w-[calc(100vw-1.5rem)] sm:max-w-md mx-auto z-50 bg-[#12141E] border border-[#292B39] p-2 gap-1.5 rounded-2xl flex items-center justify-between shadow-2xl overflow-hidden">
-        {/* Watch Options Button */}
-        <button
-          type="button"
-          onClick={() => setIsWatchOptionsOpen(true)}
-          className="min-h-[40px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] px-3.5 sm:px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 sm:gap-2 transition-colors duration-150 cursor-pointer text-[11px] sm:text-xs uppercase tracking-wider min-w-0 shrink"
-        >
-          <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-[#0B0A10] shrink-0" />
-          <span className="truncate">Watch Options</span>
-          <ChevronUp className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-        </button>
-
-        {/* Lightweight Icon Actions */}
-        <div className="flex items-center gap-1 sm:gap-1.5 pr-0.5 shrink-0">
-          {/* Upvote Button with count */}
-          <button
-            type="button"
-            onClick={handleVote}
-            disabled={isVoting}
-            className={`h-10 sm:h-11 px-2.5 sm:px-3 shrink-0 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center gap-1 transition-colors duration-150 cursor-pointer disabled:opacity-50 ${
-              upvotes > 0
-                ? 'text-[#F9C876] border-[#F9C876]/40'
-                : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
-            }`}
-            title={`Upvote (${upvotes} votes)`}
-            aria-label="Upvote"
-          >
-            <Flame className={`w-4 h-4 ${upvotes > 0 ? 'fill-[#F9C876] text-[#F9C876]' : ''}`} />
-            <span className="text-xs font-bold tabular-nums">
-              {upvotes > 0 ? (upvotes >= 1000 ? `${(upvotes / 1000).toFixed(1)}k` : upvotes) : ''}
-            </span>
-          </button>
-
-          {/* Watchlist Button */}
-          <button
-            type="button"
-            onClick={() => numericAnimeId > 0 && onToggleWatchlist(numericAnimeId)}
-            className={`w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-xl border flex items-center justify-center transition-colors duration-150 cursor-pointer ${
-              isBookmarked
-                ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF]'
-                : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
-            }`}
-            title={isBookmarked ? 'In Watchlist' : 'Add to Watchlist'}
-            aria-label="Watchlist"
-          >
-            <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-[#0B0A10] text-[#0B0A10]' : ''}`} />
-          </button>
-
-          {/* Mark Watched Button */}
-          <button
-            type="button"
-            onClick={handleToggleWatched}
-            className={`w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-xl border flex items-center justify-center transition-colors duration-150 cursor-pointer ${
-              isWatched
-                ? 'bg-[#34D399]/15 text-[#34D399] border-[#34D399]/40'
-                : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
-            }`}
-            title={isWatched ? 'Completed' : 'Mark as Watched'}
-            aria-label="Toggle Watched"
-          >
-            <CheckCircle2 className={`w-4 h-4 ${isWatched ? 'text-[#34D399]' : ''}`} />
-          </button>
-
-          {/* Share Button */}
-          <button
-            type="button"
-            onClick={handleShare}
-            className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer"
-            title="Share Anime"
-            aria-label="Share"
-          >
-            <Share2 className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* WATCH OPTIONS MODAL / DRAWER */}
-      <AnimatePresence>
-        {isWatchOptionsOpen && (
-          <div
-            onClick={() => setIsWatchOptionsOpen(false)}
-            className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 40 }}
-              transition={{ duration: 0.16 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md bg-[#12141E] border-t sm:border border-[#292B39] rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4"
-            >
-              <div className="flex items-center justify-between pb-2.5 border-b border-[#292B39]">
-                <div className="flex items-center gap-2">
-                  <Play className="w-4 h-4 fill-[#B49AF8] text-[#B49AF8]" />
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-[#F4F3FA]">
-                    Official Streaming Platforms
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsWatchOptionsOpen(false)}
-                  aria-label="Close streaming platforms modal"
-                  className="w-9 h-9 rounded-xl bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <p className="text-xs text-[#A1A5B5]">
-                Select an official platform to stream {title} with regional Indian dub audio:
-              </p>
-
-              <div className="space-y-2 pt-1 max-h-[50vh] overflow-y-auto">
-                {availablePlatforms.map((plat, idx) => (
-                  <a
-                    key={`detail_plat_${plat.name}_${idx}`}
-                    href={plat.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleOpenPlatform(plat);
-                    }}
-                    className="w-full bg-[#191C29] hover:border-[#B49AF8]/60 border border-[#292B39] rounded-xl p-3.5 flex items-center justify-between text-sm font-semibold text-[#F4F3FA] transition-colors duration-150 group cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[#12141E] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
-                        <Play className="w-4 h-4 fill-[#B49AF8] text-[#B49AF8]" />
-                      </div>
-                      <div className="text-left">
-                        <div className="font-bold text-[#F4F3FA] group-hover:text-[#B49AF8] transition-colors">
-                          {plat.name}
-                        </div>
-                        <div className="text-[11px] text-[#A1A5B5]">
-                          {plat.languages && plat.languages.length > 0
-                            ? `${plat.languages.join(', ')} Dubs`
-                            : 'Regional Indian Dub Audio'}
-                        </div>
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleLikeReview(rev.id)}
+                          className="min-h-[44px] px-3 rounded-[8px] bg-[#191C29] hover:bg-[#292B39] text-[12px] text-[#A1A5B5] hover:text-[#F4F3FA] inline-flex items-center gap-1.5 transition-colors"
+                        >
+                          <ThumbsUp className="w-3.5 h-3.5" />
+                          <span>Helpful ({rev.likes})</span>
+                        </button>
                       </div>
                     </div>
-                    <ExternalLink className="w-4 h-4 text-[#A1A5B5] group-hover:text-[#F4F3FA]" />
-                  </a>
-                ))}
+                  );
+                })}
               </div>
-
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsWatchOptionsOpen(false)}
-                  className="w-full min-h-[42px] py-2.5 rounded-xl bg-[#191C29] hover:border-[#B49AF8]/50 border border-[#292B39] text-xs font-semibold text-[#A1A5B5] hover:text-[#F4F3FA] cursor-pointer"
-                >
-                  Close
-                </button>
+            ) : (
+              <div className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-6 text-center text-[13px] text-[#A1A5B5]">
+                No community reviews yet. Be the first to review the regional dub!
               </div>
-            </motion.div>
+            )}
           </div>
         )}
-      </AnimatePresence>
-
-      {/* REPORT ISSUE MODAL */}
-      {isReportOpen && numericAnimeId > 0 && (
+      </div>
+      {internalReportOpen && (
         <ReportModal
-          animeId={numericAnimeId}
-          animeTitle={title}
-          initialField={reportInitialField}
-          onClose={() => setIsReportOpen(false)}
-          onSuccess={() => showToast(`Reported "${reportInitialField}" correction — thank you!`)}
+          anime={anime}
+          onClose={() => setInternalReportOpen(false)}
+          onSubmitSuccess={() => {
+            setInternalReportOpen(false);
+            onShowToast?.('Correction report submitted', 'success');
+          }}
         />
       )}
-
     </div>
   );
-};
 
-export interface AnimeDetailModalProps {
-  animeId: number | string;
-  initialAnime?: AnimeDetailRecord | null;
-  onResolvedAnime?: (anime: AnimeDetailRecord) => void;
-  onClose: () => void;
-  watchlist: number[];
-  onToggleWatchlist: (animeId: number) => void;
-  onCompareAnime?: (anime: AnimeDetailRecord) => void;
-}
-
-export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
-  animeId,
-  initialAnime = null,
-  onResolvedAnime,
-  onClose,
-  watchlist,
-  onToggleWatchlist,
-  onCompareAnime,
-}) => {
-  const shouldReduceMotion = useReducedMotion();
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [onClose]);
+  if (asPage) {
+    return innerContent;
+  }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-0 sm:p-4 md:p-6 font-sans">
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.16, ease: 'easeOut' }}
-        onClick={onClose}
-        className="fixed inset-0 bg-[#0B0A10]/90"
-      />
-
-      <motion.div
-        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 24 }}
-        animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
-        transition={{ duration: 0.18, ease: 'easeOut' }}
-        className="relative w-full max-w-5xl my-0 sm:my-6 rounded-none sm:rounded-2xl border-0 sm:border sm:border-[#292B39] overflow-hidden shadow-2xl z-10 will-change-transform"
-      >
-        <AnimeDetailPage
-          animeId={animeId}
-          initialAnime={initialAnime}
-          onResolvedAnime={onResolvedAnime}
-          onClose={onClose}
-          onBack={onClose}
-          watchlist={watchlist}
-          onToggleWatchlist={onToggleWatchlist}
-          onCompareAnime={onCompareAnime}
-        />
-      </motion.div>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${anime.title} details`}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-180"
+    >
+      {innerContent}
     </div>
   );
 };
+
+export const AnimeDetailModal = AnimeDetailPage;
 

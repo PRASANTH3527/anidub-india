@@ -1,233 +1,192 @@
 import React, { useState, useEffect } from 'react';
-import { Star, Sparkles, ShieldCheck, Check, Loader2, Send } from 'lucide-react';
-import { Button } from './ui/Button';
+import { Star, Users, ShieldCheck } from 'lucide-react';
+import { cloudflareApi } from '../services/cloudflareApi';
 
-export interface DualRatingProps {
-  globalRating?: number | null; // e.g. 8.5
-  initialUserRating?: number | null;
-  communityScore?: number | null;
-  totalVotes?: number;
-  onRate?: (score: number) => Promise<void> | void;
-  className?: string;
+interface DualRatingProps {
+  animeId: string;
+  officialRating?: number;
+  userRatingsCount?: number;
+  userRatingsSum?: number;
+  onRatingUpdate?: (newRating: number) => void;
 }
 
-const RATING_LABELS: Record<number, string> = {
-  1: 'Appalling',
-  2: 'Horrible',
-  3: 'Very Bad',
-  4: 'Bad',
-  5: 'Average',
-  6: 'Fine',
-  7: 'Good',
-  8: 'Very Good',
-  9: 'Great',
-  10: 'Masterpiece',
-};
-
-export const DualRating: React.FC<DualRatingProps> = ({
-  globalRating = 8.5,
-  initialUserRating = null,
-  communityScore,
-  totalVotes = 0,
-  onRate,
-  className = '',
+export const DualRating: React.FC<DualRatingProps> = ({ 
+  animeId, 
+  officialRating = 0,
+  userRatingsCount = 0,
+  userRatingsSum = 0,
+  onRatingUpdate 
 }) => {
-  const [userRating, setUserRating] = useState<number | null>(initialUserRating);
-  const [selectedRating, setSelectedRating] = useState<number | null>(null);
-  const [hoverRating, setHoverRating] = useState<number>(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [isRatedFeedback, setIsRatedFeedback] = useState(false);
+  const [userRating, setUserRating] = useState<number | null>(null);
+  const [hoveredScore, setHoveredScore] = useState<number | null>(null);
+  const [averageUserRating, setAverageUserRating] = useState<number>(0);
+  const [totalVotes, setTotalVotes] = useState<number>(0);
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
   useEffect(() => {
-    if (initialUserRating !== undefined && initialUserRating !== null) {
-      setUserRating(initialUserRating);
-    }
-  }, [initialUserRating]);
+    const ratingsData = JSON.parse(localStorage.getItem('anime_user_ratings') || '{}');
+    const currentAnimeRatings = ratingsData[animeId] || { sum: 0, count: 0, userVote: null };
 
-  const displayGlobal = typeof globalRating === 'number' && !isNaN(globalRating) ? globalRating : 8.5;
-  const currentActiveScore = hoverRating || selectedRating || userRating || 0;
+    const totalCount = userRatingsCount + (currentAnimeRatings.userVote ? 1 : 0);
+    const totalSum = userRatingsSum + (currentAnimeRatings.userVote || 0);
 
-  const handleSelectStar = (score: number) => {
-    setSelectedRating(score);
-    setIsSubmitted(false);
-  };
+    setUserRating(currentAnimeRatings.userVote);
+    setTotalVotes(totalCount);
+    setAverageUserRating(totalCount > 0 ? Number((totalSum / totalCount).toFixed(1)) : 0);
+  }, [animeId, userRatingsCount, userRatingsSum]);
 
-  const handleSubmitRating = async () => {
-    if (selectedRating === null || isSubmitting) return;
+  const handleRate = async (rating: number) => {
+    const clamped = Math.min(10, Math.max(1, Math.round(rating)));
+    const ratingsData = JSON.parse(localStorage.getItem('anime_user_ratings') || '{}');
+    const currentAnimeRatings = ratingsData[animeId] || { sum: 0, count: 0, userVote: null };
 
-    setIsSubmitting(true);
+    currentAnimeRatings.userVote = clamped;
+    ratingsData[animeId] = currentAnimeRatings;
+    localStorage.setItem('anime_user_ratings', JSON.stringify(ratingsData));
+
+    const totalCount = userRatingsCount + 1;
+    const totalSum = userRatingsSum + clamped;
+
+    setUserRating(clamped);
+    setTotalVotes(totalCount);
+    const newAvg = Number((totalSum / totalCount).toFixed(1));
+    setAverageUserRating(newAvg);
+
     try {
-      if (onRate) {
-        await onRate(selectedRating);
-      }
-      setUserRating(selectedRating);
-      setIsSubmitted(true);
-      setIsRatedFeedback(true);
-      setTimeout(() => setIsRatedFeedback(false), 3000);
-    } catch (err) {
-      console.error('Failed to submit rating:', err);
-    } finally {
-      setIsSubmitting(false);
+      await cloudflareApi.rateAnime(animeId, clamped);
+    } catch (error) {
+      console.error('Failed to sync rating with Cloudflare:', error);
+    }
+
+    if (onRatingUpdate) {
+      onRatingUpdate(newAvg);
     }
   };
+
+  const hasCatalogScore = typeof officialRating === 'number' && officialRating > 0;
+  const hasCommunityScore = totalVotes > 0 && averageUserRating > 0;
+  const activePreviewScore = hoveredScore ?? userRating ?? 8;
 
   return (
-    <div className={`w-full ${className}`}>
-      <div className="relative overflow-hidden rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5 text-[#F4F3FA]">
-        <div className="relative z-10 flex flex-col gap-4">
-          {/* Header Row */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
-              Dual Rating System
-            </span>
-            <span className="text-[11px] text-[#F9C876] bg-[#191C29] border border-[#292B39] px-2.5 py-0.5 rounded-lg font-semibold flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-[#F9C876]" />
-              10-Point Scale
-            </span>
+    <div
+      className="flex flex-col gap-3 bg-[#12141E] p-3.5 sm:p-4 rounded-[12px] border border-[#292B39]"
+      data-testid="dual-rating-card"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Catalog Score */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-4 h-4 text-[#B49AF8]" />
           </div>
-
-          {/* Dual Score Cards Row */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* 1. CATALOG SCORE (Read-only) */}
-            <div className="flex flex-col p-3.5 rounded-xl bg-[#191C29] border border-[#292B39] text-left">
-              <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#F9C876]">
-                <Star className="w-3.5 h-3.5 fill-[#F9C876] text-[#F9C876]" />
-                <span>Catalog Score</span>
+          <div>
+            <div className="text-[11px] text-[#A1A5B5] uppercase font-semibold tracking-wider">Catalog Score</div>
+            {hasCatalogScore ? (
+              <div className="text-[15px] font-bold text-[#F4F3FA] flex items-center gap-1">
+                <Star className="w-3.5 h-3.5 text-[#F9C876] fill-current" />
+                <span>{officialRating.toFixed(1)}</span>
+                <span className="text-[12px] text-[#A1A5B5] font-normal">/ 10</span>
               </div>
-              <div className="mt-1.5 flex items-baseline gap-1">
-                <span className="text-2xl sm:text-3xl font-extrabold text-[#F4F3FA] tracking-tight tabular-nums">
-                  {displayGlobal.toFixed(1)}
-                </span>
-                <span className="text-xs text-[#A1A5B5] font-bold">/ 10</span>
-              </div>
-              <div className="mt-1 flex items-center gap-1 text-[11px] text-[#A1A5B5]">
-                <ShieldCheck className="w-3 h-3 text-[#F9C876] shrink-0" />
-                <span>Catalog Score</span>
-              </div>
-            </div>
-
-            {/* 2. COMMUNITY RATING SCORE CARD */}
-            <div className="flex flex-col p-3.5 rounded-xl bg-[#191C29] border border-[#292B39] text-left">
-              <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#CBB6FF]">
-                <Sparkles className="w-3.5 h-3.5 text-[#B49AF8]" />
-                <span>Community</span>
-              </div>
-              <div className="mt-1.5 flex items-baseline gap-1">
-                <span className="text-2xl sm:text-3xl font-extrabold text-[#F4F3FA] tracking-tight tabular-nums">
-                  {communityScore !== undefined && communityScore !== null && totalVotes > 0
-                    ? Number(communityScore).toFixed(1)
-                    : userRating
-                      ? userRating.toFixed(1)
-                      : '0.0'}
-                </span>
-                <span className="text-xs text-[#A1A5B5] font-bold">/ 10</span>
-              </div>
-              <div className="mt-1 flex items-center gap-1 text-[11px] text-[#A1A5B5]">
-                <span>
-                  {totalVotes > 0 ? `${totalVotes} ${totalVotes === 1 ? 'vote' : 'votes'}` : 'No votes yet'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. INTERACTIVE 10-STAR COMMUNITY RATING ROW */}
-          <div className="pt-3 border-t border-[#292B39] flex flex-col gap-2.5">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-[#F4F3FA] text-xs">Rate this Anime</span>
-                {userRating && (
-                  <span className="text-[10px] font-semibold text-[#34D399] bg-[#34D399]/10 border border-[#34D399]/30 px-2 py-0.5 rounded-md flex items-center gap-1">
-                    <Check className="w-3 h-3" />
-                    Saved: {userRating}/10
-                  </span>
-                )}
-              </div>
-              <span className="text-[11px] font-semibold text-[#F9C876] h-4">
-                {currentActiveScore > 0
-                  ? `${currentActiveScore}/10 • ${RATING_LABELS[currentActiveScore] || ''}`
-                  : 'Tap a star to rate'}
-              </span>
-            </div>
-
-            {/* 10-Star Interactive Bar */}
-            <div className="flex items-center justify-between gap-0.5 sm:gap-1 p-1.5 sm:p-2 bg-[#191C29] rounded-xl border border-[#292B39] touch-manipulation">
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((star) => {
-                const isLit = currentActiveScore >= star;
-                return (
-                  <button
-                    key={`dual_rating_star_${star}`}
-                    type="button"
-                    onMouseEnter={() => setHoverRating(star)}
-                    onMouseLeave={() => setHoverRating(0)}
-                    onClick={() => handleSelectStar(star)}
-                    className="p-1.5 transition-colors duration-150 cursor-pointer focus:outline-none"
-                    aria-label={`Select ${star} out of 10`}
-                  >
-                    <Star
-                      className={`w-4 h-4 sm:w-5 sm:h-5 transition-colors duration-150 ${
-                        isLit
-                          ? 'fill-[#F9C876] text-[#F9C876]'
-                          : 'text-[#A1A5B5]/45 hover:text-[#F9C876]/70'
-                      }`}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* SUBMIT RATING BUTTON & STATUS */}
-            <div className="pt-1 flex flex-col sm:flex-row items-center justify-between gap-2.5">
-              <div className="text-[11px] text-[#A1A5B5]">
-                {selectedRating !== null ? (
-                  <span className="text-[#F9C876] font-medium">
-                    Selected: <strong>{selectedRating}/10</strong> ({RATING_LABELS[selectedRating] || ''})
-                  </span>
-                ) : userRating ? (
-                  <span className="text-[#A1A5B5]">
-                    Your current score: <strong className="text-[#F4F3FA]">{userRating}/10</strong>. Tap a star to change.
-                  </span>
-                ) : (
-                  <span>Tap a star above, then click submit</span>
-                )}
-              </div>
-
-              <Button
-                variant={
-                  selectedRating === null || (isSubmitted && selectedRating === userRating)
-                    ? 'secondary'
-                    : 'primary'
-                }
-                size="sm"
-                onClick={handleSubmitRating}
-                disabled={selectedRating === null || isSubmitting || (isSubmitted && selectedRating === userRating)}
-                className="w-full sm:w-auto"
-                leftIcon={
-                  isSubmitting ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : isSubmitted && selectedRating === userRating ? (
-                    <Check className="w-3.5 h-3.5 text-[#34D399]" />
-                  ) : (
-                    <Send className="w-3.5 h-3.5" />
-                  )
-                }
-              >
-                {isSubmitting
-                  ? 'Saving Rating...'
-                  : isSubmitted && selectedRating === userRating
-                    ? 'Rating Saved!'
-                    : 'Submit Rating'}
-              </Button>
-            </div>
-
-            {isRatedFeedback && (
-              <p className="text-[11px] text-center text-[#34D399] font-semibold bg-[#34D399]/10 border border-[#34D399]/30 rounded-lg py-1.5 px-2.5">
-                Success! Your rating of {userRating}/10 has been recorded.
-              </p>
+            ) : (
+              <div className="text-[13px] font-medium text-[#A1A5B5]">Not verified</div>
             )}
           </div>
         </div>
+
+        <div className="hidden sm:block h-8 w-px bg-[#292B39]" />
+
+        {/* Community Score */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-center shrink-0">
+            <Users className="w-4 h-4 text-[#CBB6FF]" />
+          </div>
+          <div>
+            <div className="text-[11px] text-[#A1A5B5] uppercase font-semibold tracking-wider flex items-center gap-1">
+              <span>Community Score</span>
+              {totalVotes > 0 && <span className="text-[#A1A5B5]">({totalVotes})</span>}
+            </div>
+            {hasCommunityScore ? (
+              <div className="text-[15px] font-bold text-[#F4F3FA] flex items-center gap-1">
+                <Star className="w-3.5 h-3.5 text-[#B49AF8] fill-current" />
+                <span>{averageUserRating.toFixed(1)}</span>
+                <span className="text-[12px] text-[#A1A5B5] font-normal">/ 10</span>
+              </div>
+            ) : (
+              <div className="text-[13px] font-medium text-[#A1A5B5]" data-testid="community-not-rated">
+                Not rated yet
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Toggle Rate Button (44px touch target) */}
+        <button
+          type="button"
+          onClick={() => setIsExpanded((prev) => !prev)}
+          aria-expanded={isExpanded}
+          className={`min-h-[44px] px-3.5 rounded-[10px] text-[12px] font-semibold border transition-all duration-180 motion-reduce:transition-none flex items-center gap-1.5 ${
+            userRating
+              ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/40 hover:bg-[#B49AF8]/25'
+              : 'bg-[#191C29] text-[#F4F3FA] border-[#292B39] hover:border-[#B49AF8]/40'
+          }`}
+        >
+          <Star className={`w-3.5 h-3.5 ${userRating ? 'text-[#F9C876] fill-current' : 'text-[#B49AF8]'}`} />
+          <span>{userRating ? `Your Score: ${userRating}/10` : 'Rate Anime'}</span>
+        </button>
       </div>
+
+      {/* Expandable Touch-Friendly 1-10 Rating Control (44px targets + accessible slider) */}
+      {isExpanded && (
+        <div className="pt-3 border-t border-[#292B39] flex flex-col gap-3">
+          <div className="flex items-center justify-between text-[12px]">
+            <span className="text-[#A1A5B5] font-medium">
+              {userRating ? `Your saved score: ${userRating}/10` : 'Tap a score (1–10) or slide to rate'}
+            </span>
+            <span className="font-bold text-[#CBB6FF]">{activePreviewScore} / 10</span>
+          </div>
+
+          <input
+            type="range"
+            min={1}
+            max={10}
+            step={1}
+            aria-label="Rate this anime from 1 to 10"
+            value={userRating ?? 8}
+            onChange={(e) => handleRate(Number(e.target.value))}
+            className="w-full h-2 bg-[#191C29] rounded-lg appearance-none cursor-pointer accent-[#B49AF8]"
+          />
+
+          <div
+            className="grid grid-cols-5 sm:grid-cols-10 gap-1.5"
+            role="group"
+            aria-label="Select score from 1 to 10"
+          >
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => {
+              const isSelected = userRating === score;
+              const isHighlighted = (hoveredScore || userRating || 0) >= score;
+              return (
+                <button
+                  key={score}
+                  type="button"
+                  aria-label={`Rate ${score} out of 10`}
+                  aria-pressed={isSelected}
+                  onMouseEnter={() => setHoveredScore(score)}
+                  onMouseLeave={() => setHoveredScore(null)}
+                  onClick={() => handleRate(score)}
+                  className={`min-h-[44px] rounded-[10px] text-[13px] font-bold border transition-all duration-180 motion-reduce:transition-none flex items-center justify-center ${
+                    isSelected
+                      ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8] shadow-sm'
+                      : isHighlighted
+                        ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/40'
+                        : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA] hover:border-[#B49AF8]/30'
+                  }`}
+                >
+                  {score}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

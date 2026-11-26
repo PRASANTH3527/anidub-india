@@ -46,6 +46,18 @@ const ClerkTokenSynchronizer: React.FC = () => {
 /**
  * Official ClerkProvider wrapper with hardcoded Clerk test publishableKey.
  */
+export const ECLIPSE_CLERK_APPEARANCE = {
+  variables: {
+    colorPrimary: '#B49AF8',
+    colorBackground: '#12141E',
+    colorInputBackground: '#191C29',
+    colorInputText: '#F4F3FA',
+    colorText: '#F4F3FA',
+    colorTextSecondary: '#A1A5B5',
+    borderRadius: '12px',
+  },
+};
+
 export const ClerkProvider: React.FC<{
   publishableKey?: string;
   afterSignOutUrl?: string;
@@ -60,6 +72,7 @@ export const ClerkProvider: React.FC<{
       <OfficialClerkProvider
         publishableKey={publishableKey}
         afterSignOutUrl={afterSignOutUrl}
+        appearance={ECLIPSE_CLERK_APPEARANCE}
         clerkJSUrl="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
       >
         <ClerkTokenSynchronizer />

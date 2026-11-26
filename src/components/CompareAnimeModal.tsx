@@ -1,445 +1,393 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
-  ArrowLeftRight,
-  ExternalLink,
-  Globe2,
-  Scale,
-  Search,
-  Star,
-  Tv,
-  X,
-  CheckCircle2,
-  Film,
-  Activity,
+  X, Star, Tv, Calendar, Globe, Layers, ArrowRightLeft, Search, Share2, Plus, Check
 } from 'lucide-react';
-import { buildAnimeComparison, type ComparableAnimeLike } from '../utils/compareAnime';
-import { matchesAnimeSearchQuery } from '../utils/searchFilterState';
-import { proxyUrl } from '../utils/imgbb';
-import { Button } from './ui/Button';
-import { EmptyState } from './ui/EclipseState';
+import { Anime, normalizeAnimeList, normalizeAnimeRecord } from '../types';
+import { PlatformIcon } from './PlatformIcons';
+import { OptimizedImage } from './OptimizedImage';
 
 export interface CompareAnimeModalProps {
-  catalogList: ComparableAnimeLike[];
-  initialLeftAnime?: ComparableAnimeLike | null;
-  onClose?: () => void;
-  onSelectAnime?: (anime: any) => void;
-  asModal?: boolean;
+  animeList?: any[];
+  catalogList?: any[];
+  initialAnime1?: any | null;
+  initialLeftAnime?: any | null;
+  initialAnime2?: any | null;
+  onClose: () => void;
+  onSelectAnime: (anime: any) => void;
+  asPage?: boolean;
 }
 
 export const CompareAnimeModal: React.FC<CompareAnimeModalProps> = ({
+  animeList: animeListProp,
   catalogList,
+  initialAnime1 = null,
   initialLeftAnime = null,
+  initialAnime2 = null,
   onClose,
   onSelectAnime,
-  asModal = true,
+  asPage = false,
 }) => {
-  const safeList = useMemo(
-    () => (Array.isArray(catalogList) ? catalogList.filter((a) => a && a.title) : []),
-    [catalogList]
+  const animeList = useMemo(
+    () => normalizeAnimeList(animeListProp || catalogList || []),
+    [animeListProp, catalogList]
   );
+  const startA = initialAnime1 || initialLeftAnime;
+  const [anime1, setAnime1] = useState<Anime | null>(
+    startA ? normalizeAnimeRecord(startA) : animeList[0] || null
+  );
+  const [anime2, setAnime2] = useState<Anime | null>(
+    initialAnime2 ? normalizeAnimeRecord(initialAnime2) : animeList[1] || null
+  );
+  const [pickerSlot, setPickerSlot] = useState<'A' | 'B' | null>(null);
+  const [pickerQuery, setPickerQuery] = useState<string>('');
+  const [copiedShare, setCopiedShare] = useState<boolean>(false);
 
-  const defaultLeftId = useMemo(() => {
-    if (initialLeftAnime?.id) return Number(initialLeftAnime.id);
-    return safeList[0] ? Number(safeList[0].id) : 0;
-  }, [initialLeftAnime, safeList]);
-
-  const defaultRightId = useMemo(() => {
-    const second = safeList.find((a) => Number(a.id) !== defaultLeftId);
-    return second ? Number(second.id) : defaultLeftId;
-  }, [safeList, defaultLeftId]);
-
-  const [leftId, setLeftId] = useState<number>(defaultLeftId);
-  const [rightId, setRightId] = useState<number>(defaultRightId);
-  const [leftSearch, setLeftSearch] = useState('');
-  const [rightSearch, setRightSearch] = useState('');
-
-  useEffect(() => {
-    if (!leftId && defaultLeftId) setLeftId(defaultLeftId);
-    if (!rightId && defaultRightId) setRightId(defaultRightId);
-  }, [leftId, rightId, defaultLeftId, defaultRightId]);
-
-  useEffect(() => {
-    if (!asModal || !onClose) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [asModal, onClose]);
-
-  const leftAnime = useMemo(() => {
-    if (initialLeftAnime && Number(initialLeftAnime.id) === leftId) return initialLeftAnime;
-    return safeList.find((a) => Number(a.id) === leftId) || safeList[0] || null;
-  }, [initialLeftAnime, leftId, safeList]);
-
-  const rightAnime = useMemo(() => {
-    return safeList.find((a) => Number(a.id) === rightId) || safeList[1] || safeList[0] || null;
-  }, [rightId, safeList]);
-
-  const filteredLeftOptions = useMemo(() => {
-    const matches = leftSearch.trim()
-      ? safeList.filter((a) => matchesAnimeSearchQuery(a as any, leftSearch))
-      : safeList;
-    return matches.slice(0, 60);
-  }, [safeList, leftSearch]);
-
-  const filteredRightOptions = useMemo(() => {
-    const matches = rightSearch.trim()
-      ? safeList.filter((a) => matchesAnimeSearchQuery(a as any, rightSearch))
-      : safeList;
-    return matches.slice(0, 60);
-  }, [safeList, rightSearch]);
-
-  const comparison = useMemo(() => {
-    if (!leftAnime || !rightAnime) return null;
-    return buildAnimeComparison(leftAnime, rightAnime);
-  }, [leftAnime, rightAnime]);
+  const filteredPickerAnime = useMemo(() => {
+    const q = pickerQuery.toLowerCase().trim();
+    if (!q) return animeList.slice(0, 36);
+    return animeList
+      .filter(
+        (a) =>
+          a.title.toLowerCase().includes(q) ||
+          (a.japaneseTitle && a.japaneseTitle.toLowerCase().includes(q)) ||
+          (a.languages || []).some((l: string) => l.toLowerCase().includes(q))
+      )
+      .slice(0, 36);
+  }, [animeList, pickerQuery]);
 
   const handleSwap = () => {
-    setLeftId(rightId);
-    setRightId(leftId);
+    setAnime1(anime2);
+    setAnime2(anime1);
   };
 
-  const content = (
+  const handleOpenPicker = (slot: 'A' | 'B') => {
+    setPickerSlot(slot);
+    setPickerQuery('');
+  };
+
+  const handlePickAnime = (chosen: Anime) => {
+    if (pickerSlot === 'A') {
+      setAnime1(chosen);
+    } else if (pickerSlot === 'B') {
+      setAnime2(chosen);
+    }
+    setPickerSlot(null);
+  };
+
+  const handleShareComparison = () => {
+    const titleA = anime1?.title || 'Anime A';
+    const titleB = anime2?.title || 'Anime B';
+    const shareText = `Comparing ${titleA} vs ${titleB} (Regional Dubs & Indian OTT Availability) on AniDub India`;
+    const shareUrl = window.location.href;
+    if (navigator.share) {
+      navigator.share({ title: `${titleA} vs ${titleB}`, text: shareText, url: shareUrl }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(`${shareText} — ${shareUrl}`);
+      setCopiedShare(true);
+      setTimeout(() => setCopiedShare(false), 2500);
+    }
+  };
+
+  const getWatchDurationLabel = (anime: Anime | null) => {
+    if (!anime || !anime.episodesCount || anime.episodesCount <= 0) return 'Not verified';
+    const totalHours = Math.round((anime.episodesCount * 24) / 60);
+    return `~${totalHours} hrs (${anime.episodesCount} eps)`;
+  };
+
+  const renderSlotHeader = (slot: 'A' | 'B', anime: Anime | null, label: string) => (
+    <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-3.5 sm:p-4 flex flex-col items-center text-center">
+      <span className="text-[11px] font-bold uppercase tracking-wider text-[#B49AF8] mb-2">
+        {label}
+      </span>
+
+      {anime ? (
+        <>
+          <div
+            onClick={() => onSelectAnime(anime)}
+            className="w-24 sm:w-32 aspect-[2/3] rounded-[12px] overflow-hidden bg-[#191C29] border border-[#292B39] mb-3 cursor-pointer shadow-md"
+          >
+            <OptimizedImage
+              src={anime.poster}
+              alt={anime.title}
+              className="w-full h-full object-cover"
+              aspectRatio="portrait"
+            />
+          </div>
+          <h3 className="text-[14px] sm:text-[15px] font-bold text-[#F4F3FA] line-clamp-2 min-h-[40px] mb-2">
+            {anime.title}
+          </h3>
+          <button
+            type="button"
+            onClick={() => handleOpenPicker(slot)}
+            className="w-full min-h-[44px] px-3 rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#CBB6FF] border border-[#292B39] text-[12px] font-semibold transition-colors duration-180"
+          >
+            Change anime
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => handleOpenPicker(slot)}
+          className="w-full aspect-[2/3] max-w-[130px] rounded-[12px] bg-[#191C29] hover:bg-[#292B39] border border-dashed border-[#B49AF8]/50 flex flex-col items-center justify-center gap-2 p-4 text-[#CBB6FF] transition-colors"
+        >
+          <Plus className="w-6 h-6 text-[#B49AF8]" />
+          <span className="text-[12px] font-bold">{label}</span>
+        </button>
+      )}
+    </div>
+  );
+
+  const innerContent = (
     <div
-      role={asModal ? 'dialog' : undefined}
-      aria-modal={asModal ? true : undefined}
-      aria-labelledby="compare-anime-heading"
-      onClick={(e) => e.stopPropagation()}
-      className={`w-full overflow-x-clip ${
-        asModal
-          ? 'max-w-4xl max-h-[90vh] overflow-y-auto rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-6 shadow-2xl'
-          : 'max-w-5xl mx-auto rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 sm:p-6'
-      } text-[#F4F3FA] font-sans space-y-5`}
+      className={
+        asPage
+          ? 'max-w-[1040px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[#F4F3FA]'
+          : 'relative w-full max-w-4xl max-h-[92vh] bg-[#0B0A10] text-[#F4F3FA] rounded-t-[20px] sm:rounded-[20px] border border-[#292B39] shadow-2xl overflow-y-auto p-4 sm:p-6'
+      }
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 border-b border-[#292B39] pb-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-[12px] bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8] shrink-0">
-            <Scale className="w-5 h-5" />
+      <div className="flex items-center justify-between gap-3 mb-5">
+        <div>
+          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#B49AF8] mb-1">
+            <ArrowRightLeft className="w-3.5 h-3.5" />
+            <span>Side-by-Side Matrix</span>
           </div>
-          <div className="min-w-0">
-            <h2 id="compare-anime-heading" className="text-lg sm:text-xl font-extrabold text-[#F4F3FA] tracking-tight truncate">
-              Compare Anime (A vs B)
-            </h2>
-            <p className="text-xs text-[#A1A5B5]">
-              Verified Indian dub languages, official OTT platforms, status, episodes, and ratings.
-            </p>
-          </div>
+          <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em]">
+            Compare Anime
+          </h1>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
+        <div className="flex items-center gap-2">
+          <button
             type="button"
-            variant="secondary"
-            size="md"
             onClick={handleSwap}
             aria-label="Swap Anime A and Anime B"
-            leftIcon={<ArrowLeftRight className="w-4 h-4 text-[#B49AF8]" />}
-            className="text-xs"
+            className="min-h-[44px] px-3.5 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] text-[#F4F3FA] border border-[#292B39] text-[12px] font-semibold inline-flex items-center gap-1.5"
           >
-            <span className="hidden sm:inline">Swap</span>
-          </Button>
-          {onClose && (
+            <ArrowRightLeft className="w-4 h-4 text-[#B49AF8]" />
+            <span>Swap</span>
+          </button>
+          {!asPage && (
             <button
               type="button"
               onClick={onClose}
               aria-label="Close Compare Anime"
-              className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] hover:border-[#B49AF8]/60 border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 cursor-pointer"
+              className="min-h-[44px] min-w-[44px] rounded-[12px] bg-[#12141E] hover:bg-[#191C29] text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39] flex items-center justify-center"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           )}
         </div>
       </div>
 
-      {safeList.length === 0 ? (
-        <EmptyState
-          icon={<Film className="w-5 h-5" />}
-          title="No anime loaded to compare"
-          description="Once the Indian dub catalog loads, pick any two titles to compare them side by side."
-          className="bg-[#191C29]"
-        />
-      ) : (
-        <>
-          {/* Clean Select Anime A & Select Anime B Picker Slots */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            {/* Anime A Picker */}
-            <div className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3.5 space-y-2.5 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <label htmlFor="compare-select-a" className="text-xs font-bold uppercase tracking-wider text-[#B49AF8]">
-                  Select Anime A
-                </label>
-                {leftAnime && onSelectAnime && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose?.();
-                      onSelectAnime(leftAnime);
-                    }}
-                    className="text-xs font-semibold text-[#B49AF8] hover:text-[#CBB6FF] inline-flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>Details</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-              <div className="relative">
-                <Search className="w-4 h-4 text-[#A1A5B5] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={leftSearch}
-                  onChange={(e) => setLeftSearch(e.target.value)}
-                  placeholder="Search Anime A..."
-                  aria-label="Filter Anime A options"
-                  className="w-full h-[44px] rounded-[12px] bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] pl-9 pr-3 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180"
-                />
-              </div>
-              <select
-                id="compare-select-a"
-                value={leftAnime ? Number(leftAnime.id) : ''}
-                onChange={(e) => setLeftId(Number(e.target.value))}
-                className="w-full h-[44px] rounded-[12px] bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] px-3 text-xs font-semibold text-[#F4F3FA] outline-none cursor-pointer"
-              >
-                {filteredLeftOptions.map((item) => (
-                  <option key={`cmp_a_${item.id}`} value={Number(item.id)} className="bg-[#12141E] text-[#F4F3FA]">
-                    {item.title}
-                  </option>
-                ))}
-              </select>
-            </div>
+      {/* Two 2:3 Poster Slots (Select Anime A / Select Anime B) */}
+      <div className="grid grid-cols-2 gap-3.5 sm:gap-5 mb-6">
+        {renderSlotHeader('A', anime1, 'Select Anime A')}
+        {renderSlotHeader('B', anime2, 'Select Anime B')}
+      </div>
 
-            {/* Anime B Picker */}
-            <div className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3.5 space-y-2.5 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <label htmlFor="compare-select-b" className="text-xs font-bold uppercase tracking-wider text-[#CBB6FF]">
-                  Select Anime B
-                </label>
-                {rightAnime && onSelectAnime && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose?.();
-                      onSelectAnime(rightAnime);
-                    }}
-                    className="text-xs font-semibold text-[#CBB6FF] hover:text-[#F4F3FA] inline-flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>Details</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-              <div className="relative">
-                <Search className="w-4 h-4 text-[#A1A5B5] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={rightSearch}
-                  onChange={(e) => setRightSearch(e.target.value)}
-                  placeholder="Search Anime B..."
-                  aria-label="Filter Anime B options"
-                  className="w-full h-[44px] rounded-[12px] bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] pl-9 pr-3 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180"
-                />
-              </div>
-              <select
-                id="compare-select-b"
-                value={rightAnime ? Number(rightAnime.id) : ''}
-                onChange={(e) => setRightId(Number(e.target.value))}
-                className="w-full h-[44px] rounded-[12px] bg-[#12141E] border border-[#292B39] focus:border-[#B49AF8] px-3 text-xs font-semibold text-[#F4F3FA] outline-none cursor-pointer"
-              >
-                {filteredRightOptions.map((item) => (
-                  <option key={`cmp_b_${item.id}`} value={Number(item.id)} className="bg-[#12141E] text-[#F4F3FA]">
-                    {item.title}
-                  </option>
-                ))}
-              </select>
+      {/* Comparison Matrix Rows */}
+      <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] divide-y divide-[#292B39] overflow-hidden mb-6">
+        {/* Row 1: Catalog Score */}
+        <div className="p-3.5 sm:p-4">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] text-center mb-2 flex items-center justify-center gap-1">
+            <Star className="w-3.5 h-3.5 text-[#F9C876]" />
+            <span>Rating</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div className="p-2.5 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[14px] font-bold text-[#F4F3FA]">
+              {anime1?.rating && anime1.rating > 0 ? `${anime1.rating.toFixed(1)} / 10` : 'Not verified'}
+            </div>
+            <div className="p-2.5 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[14px] font-bold text-[#F4F3FA]">
+              {anime2?.rating && anime2.rating > 0 ? `${anime2.rating.toFixed(1)} / 10` : 'Not verified'}
             </div>
           </div>
+        </div>
 
-          {/* Responsive Side-by-Side Comparison Grid */}
-          {comparison && (
-            <div className="space-y-4">
-              {/* Poster & Core Identity Row */}
-              <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
-                {[
-                  { side: comparison.left, accent: 'border-[#B49AF8]/40', winnerRating: comparison.ratingWinner === 'left' },
-                  { side: comparison.right, accent: 'border-[#CBB6FF]/40', winnerRating: comparison.ratingWinner === 'right' },
-                ].map(({ side, accent, winnerRating }, idx) => (
-                  <div
-                    key={`cmp_card_${idx}_${side.id}`}
-                    className={`rounded-[12px] bg-[#191C29] border ${accent} p-3 flex flex-col sm:flex-row items-center sm:items-start gap-2.5 sm:gap-3 min-w-0`}
-                  >
-                    <div className="w-16 sm:w-20 aspect-[2/3] rounded-[10px] overflow-hidden border border-[#292B39] shrink-0 bg-[#12141E]">
-                      <img
-                        src={proxyUrl(side.coverImage)}
-                        alt={side.title}
-                        width={80}
-                        height={120}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1 text-center sm:text-left space-y-1">
-                      <h3 className="text-xs sm:text-sm font-bold text-[#F4F3FA] line-clamp-2 leading-snug break-words">
-                        {side.title}
-                      </h3>
-                      <p className="text-[11px] text-[#A1A5B5] truncate">
-                        {side.type}{side.year ? ` • ${side.year}` : ''}
-                      </p>
-                      <div className="inline-flex items-center gap-1 text-xs font-bold tabular-nums">
-                        <Star className="w-3.5 h-3.5 text-[#F9C876] fill-[#F9C876]" />
-                        <span className={winnerRating ? 'text-[#F9C876]' : 'text-[#F4F3FA]'}>
-                          {side.ratingLabel}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+        {/* Row 2: Regional Dub Languages */}
+        <div className="p-3.5 sm:p-4">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] text-center mb-2 flex items-center justify-center gap-1">
+            <Globe className="w-3.5 h-3.5 text-[#B49AF8]" />
+            <span>Dub languages</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[anime1, anime2].map((item, idx) => (
+              <div
+                key={idx}
+                className="p-2.5 rounded-[10px] bg-[#191C29] border border-[#292B39] flex flex-wrap items-center justify-center gap-1.5"
+              >
+                {item && Array.isArray(item.languages) && item.languages.length > 0 ? (
+                  item.languages.map((lang) => (
+                    <span
+                      key={lang}
+                      className="px-2 py-0.5 rounded-[6px] bg-[#B49AF8]/15 text-[#CBB6FF] border border-[#B49AF8]/30 text-[11px] font-bold"
+                    >
+                      {lang}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-[12px] text-[#A1A5B5]">Not verified</span>
+                )}
               </div>
+            ))}
+          </div>
+        </div>
 
-              {/* Structured Comparison Rows */}
-              <div className="rounded-[12px] border border-[#292B39] overflow-hidden divide-y divide-[#292B39] bg-[#191C29]/60">
-                {/* Verified Indian Dub Languages */}
-                <div className="p-3.5 sm:p-4 space-y-2.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-[#F4F3FA] flex items-center gap-1.5">
-                      <Globe2 className="w-4 h-4 text-[#B49AF8]" />
-                      Verified Dub Languages
-                    </span>
-                    {comparison.sharedLanguages.length > 0 && (
-                      <span className="text-[11px] text-[#34D399] font-semibold inline-flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        {comparison.sharedLanguages.length} shared
+        {/* Row 3: OTT Availability (India) */}
+        <div className="p-3.5 sm:p-4">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] text-center mb-2 flex items-center justify-center gap-1">
+            <Tv className="w-3.5 h-3.5 text-[#B49AF8]" />
+            <span>OTT availability</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[anime1, anime2].map((item, idx) => {
+              const platforms = Array.isArray(item?.platforms)
+                ? item!.platforms.filter((p) => Boolean(p && p.trim()))
+                : [];
+              return (
+                <div
+                  key={idx}
+                  className="p-2.5 rounded-[10px] bg-[#191C29] border border-[#292B39] flex flex-wrap items-center justify-center gap-1.5"
+                >
+                  {platforms.length > 0 ? (
+                    platforms.map((p) => (
+                      <span
+                        key={p}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] bg-[#12141E] border border-[#292B39] text-[11px] font-semibold text-[#F4F3FA]"
+                      >
+                        <PlatformIcon platform={p} className="w-3 h-3 text-[#B49AF8]" />
+                        <span>{p}</span>
                       </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
-                    {[comparison.left, comparison.right].map((side, idx) => (
-                      <div key={`cmp_lang_${idx}`} className="flex flex-wrap gap-1.5 min-w-0">
-                        {side.languages.length > 0 ? (
-                          side.languages.map((lang) => {
-                            const isShared = comparison.sharedLanguages.includes(lang);
-                            return (
-                              <span
-                                key={`${idx}_${lang}`}
-                                className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
-                                  isShared
-                                    ? 'bg-[#34D399]/15 border-[#34D399]/35 text-[#34D399]'
-                                    : 'bg-[#12141E] border-[#292B39] text-[#F4F3FA]'
-                                }`}
-                              >
-                                {lang}
-                              </span>
-                            );
-                          })
-                        ) : (
-                          <span className="text-xs text-[#A1A5B5]">Not verified</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                    ))
+                  ) : (
+                    <span className="text-[12px] text-[#A1A5B5]">Not verified</span>
+                  )}
                 </div>
+              );
+            })}
+          </div>
+        </div>
 
-                {/* Official Indian OTT Platforms */}
-                <div className="p-3.5 sm:p-4 space-y-2.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-[#F4F3FA] flex items-center gap-1.5">
-                      <Tv className="w-4 h-4 text-[#B49AF8]" />
-                      Official Indian OTT Platforms
-                    </span>
-                    {comparison.sharedPlatforms.length > 0 && (
-                      <span className="text-[11px] text-[#B49AF8] font-semibold">
-                        Both on {comparison.sharedPlatforms.join(', ')}
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
-                    {[comparison.left, comparison.right].map((side, idx) => (
-                      <div key={`cmp_ott_${idx}`} className="flex flex-wrap gap-1.5 min-w-0">
-                        {side.platforms.length > 0 ? (
-                          side.platforms.map((plat) => {
-                            const isShared = comparison.sharedPlatforms.includes(plat);
-                            return (
-                              <span
-                                key={`${idx}_${plat}`}
-                                className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
-                                  isShared
-                                    ? 'bg-[#B49AF8]/15 border-[#B49AF8]/40 text-[#B49AF8]'
-                                    : 'bg-[#12141E] border-[#292B39] text-[#F4F3FA]'
-                                }`}
-                              >
-                                {plat}
-                              </span>
-                            );
-                          })
-                        ) : (
-                          <span className="text-xs text-[#A1A5B5]">Not verified</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+        {/* Row 4: Episodes & Watch Duration */}
+        <div className="p-3.5 sm:p-4">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] text-center mb-2 flex items-center justify-center gap-1">
+            <Layers className="w-3.5 h-3.5 text-[#B49AF8]" />
+            <span>Episodes &amp; Watch duration</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div className="p-2.5 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[13px] font-semibold text-[#F4F3FA]">
+              {getWatchDurationLabel(anime1)}
+            </div>
+            <div className="p-2.5 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[13px] font-semibold text-[#F4F3FA]">
+              {getWatchDurationLabel(anime2)}
+            </div>
+          </div>
+        </div>
 
-                {/* Airing Status */}
-                <div className="p-3.5 sm:p-4 grid grid-cols-2 gap-2.5 sm:gap-4">
-                  {[comparison.left, comparison.right].map((side, idx) => (
-                    <div key={`cmp_status_${idx}`} className="space-y-0.5 min-w-0">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#A1A5B5] flex items-center gap-1">
-                        <Activity className="w-3 h-3 text-[#B49AF8]" />
-                        <span>Airing Status</span>
-                      </span>
-                      <p className="text-xs sm:text-sm font-semibold text-[#F4F3FA] truncate">
-                        {side.status || 'Not verified'}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+        {/* Row 5: Release Year & Status */}
+        <div className="p-3.5 sm:p-4">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] text-center mb-2 flex items-center justify-center gap-1">
+            <Calendar className="w-3.5 h-3.5 text-[#B49AF8]" />
+            <span>Release &amp; Status</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div className="p-2.5 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[13px] text-[#F4F3FA]">
+              {anime1?.releaseYear || 'Year N/A'} • {anime1?.status || 'Unverified'}
+            </div>
+            <div className="p-2.5 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[13px] text-[#F4F3FA]">
+              {anime2?.releaseYear || 'Year N/A'} • {anime2?.status || 'Unverified'}
+            </div>
+          </div>
+        </div>
+      </div>
 
-                {/* Episode Count */}
-                <div className="p-3.5 sm:p-4 grid grid-cols-2 gap-2.5 sm:gap-4">
-                  {[comparison.left, comparison.right].map((side, idx) => (
-                    <div key={`cmp_ep_${idx}`} className="space-y-0.5 min-w-0">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#A1A5B5]">
-                        Episode Count
-                      </span>
-                      <p className="text-xs sm:text-sm font-semibold text-[#F4F3FA] truncate">
-                        {side.episodesLabel}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+      {/* Share Comparison Button (44px) */}
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={handleShareComparison}
+          className="min-h-[44px] px-6 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold text-[14px] inline-flex items-center gap-2 transition-colors duration-180 shadow-sm"
+        >
+          {copiedShare ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+          <span>{copiedShare ? 'Comparison link copied!' : 'Share comparison'}</span>
+        </button>
+      </div>
 
-                {/* Rating & Studio */}
-                <div className="p-3.5 sm:p-4 grid grid-cols-2 gap-2.5 sm:gap-4">
-                  {[comparison.left, comparison.right].map((side, idx) => (
-                    <div key={`cmp_studio_${idx}`} className="space-y-0.5 min-w-0">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#A1A5B5]">
-                        Rating • Studio
-                      </span>
-                      <p className="text-xs sm:text-sm font-semibold text-[#F4F3FA] break-words">
-                        {side.ratingLabel}
-                        <span className="text-[#A1A5B5] font-normal"> • {side.studio}</span>
-                      </p>
-                    </div>
-                  ))}
-                </div>
+      {/* Searchable Poster Picker Modal / Bottom Sheet */}
+      {pickerSlot && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Select Anime ${pickerSlot}`}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-2xl max-h-[85vh] bg-[#12141E] border border-[#292B39] rounded-t-[20px] sm:rounded-[20px] flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-[#292B39] flex items-center justify-between gap-3">
+              <h2 className="text-[16px] font-bold text-[#F4F3FA]">
+                Select Anime {pickerSlot}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setPickerSlot(null)}
+                aria-label="Close anime picker"
+                className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#191C29] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 border-b border-[#292B39]">
+              <div className="relative">
+                <Search className="w-4 h-4 text-[#A1A5B5] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={pickerQuery}
+                  onChange={(e) => setPickerQuery(e.target.value)}
+                  placeholder="Search by anime title or dub language..."
+                  className="w-full min-h-[44px] pl-10 pr-4 rounded-[12px] bg-[#191C29] border border-[#292B39] text-[14px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8]"
+                />
               </div>
             </div>
-          )}
-        </>
+
+            <div className="overflow-y-auto p-3.5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {filteredPickerAnime.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handlePickAnime(item)}
+                  className="rounded-[12px] bg-[#191C29] hover:bg-[#292B39] border border-[#292B39] hover:border-[#B49AF8] p-2.5 text-left flex items-center gap-2.5 transition-colors"
+                >
+                  <div className="w-12 aspect-[2/3] rounded-[8px] overflow-hidden bg-[#12141E] shrink-0">
+                    <OptimizedImage
+                      src={item.poster}
+                      alt={item.title}
+                      className="w-full h-full object-cover"
+                      aspectRatio="portrait"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold text-[#F4F3FA] line-clamp-2">
+                      {item.title}
+                    </div>
+                    <div className="text-[11px] text-[#A1A5B5] truncate">
+                      {(item.languages || []).slice(0, 2).join(', ')}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 
-  if (!asModal) {
-    return <div className="w-full px-3 sm:px-6 py-5 sm:py-7 overflow-x-clip">{content}</div>;
-  }
+  if (asPage) return innerContent;
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-[95] flex items-center justify-center p-2.5 sm:p-5 bg-[#0B0A10]/85"
-    >
-      {content}
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm">
+      {innerContent}
     </div>
   );
 };

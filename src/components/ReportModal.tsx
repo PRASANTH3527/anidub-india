@@ -1,117 +1,102 @@
-import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { X, CheckCircle2, AlertTriangle, Send, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, AlertTriangle, Send, Link2 } from 'lucide-react';
+import { Anime } from '../types';
 import { cloudflareApi } from '../services/cloudflareApi';
-import { AniDubLogo } from './AniDubLogo';
-import { Button } from './ui/Button';
 
 export interface ReportModalProps {
+  anime?: Anime | any | null;
   isOpen?: boolean;
   animeId?: number | string;
-  animeTitle: string;
-  initialField?: string;
+  animeTitle?: string;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSubmitSuccess?: () => void;
 }
 
-export const REPORT_FIELD_OPTIONS = [
-  { id: 'OTT Link', label: 'OTT Link', hint: 'Broken, expired, or wrong official streaming link' },
-  { id: 'Dub Language', label: 'Dub Language', hint: 'Missing or inaccurate Indian audio language' },
-  { id: 'Episode Count', label: 'Episode Count', hint: 'Wrong season or dubbed episode count' },
-  { id: 'Release Schedule', label: 'Release Schedule', hint: 'Incorrect simulcast day, time, or airing status' },
-  { id: 'Title / Poster', label: 'Title / Poster', hint: 'Typo, duplicate entry, or wrong cover image' },
-  { id: 'Other', label: 'Other', hint: 'Any other factual correction or copyright concern' },
+const ISSUE_CATEGORIES = [
+  'OTT Link',
+  'Dub Language',
+  'Episode Count',
+  'Release Schedule',
+  'Title / Poster',
+  'Other',
 ] as const;
 
-export const REPORT_ISSUE_TYPES = REPORT_FIELD_OPTIONS.map((f) => f.label);
-
 export const ReportModal: React.FC<ReportModalProps> = ({
+  anime: animeProp,
   isOpen = true,
   animeId,
   animeTitle,
-  initialField,
   onClose,
-  onSuccess,
+  onSubmitSuccess,
 }) => {
-  const [selectedField, setSelectedField] = useState<string>(
-    initialField || REPORT_FIELD_OPTIONS[0].id
-  );
+  const [issueType, setIssueType] = useState<string>('OTT Link');
   const [description, setDescription] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSuccess, setIsSuccess] = useState(false);
-
-  useEffect(() => {
-    if (initialField) {
-      setSelectedField(initialField);
-    }
-  }, [initialField]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  const selectedOption =
-    REPORT_FIELD_OPTIONS.find((opt) => opt.id === selectedField) || REPORT_FIELD_OPTIONS[0];
+  const anime = animeProp
+    ? { id: String(animeProp.id ?? animeId ?? '0'), title: String(animeProp.title || animeTitle || 'Anime') }
+    : animeId !== undefined || animeTitle
+      ? { id: String(animeId ?? '0'), title: String(animeTitle || 'Anime') }
+      : null;
+
+  if (!anime) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
-    setErrorMessage(null);
+    if (!description.trim()) return;
     setIsSubmitting(true);
+
+    const fullDescription = sourceUrl.trim()
+      ? `${description.trim()} (Source: ${sourceUrl.trim()})`
+      : description.trim();
 
     try {
       await cloudflareApi.reportIssue({
-        animeId,
-        animeTitle,
-        field: selectedField,
-        issueType: selectedField,
-        reason: selectedField,
-        description: description.trim(),
-        notes: description.trim(),
+        anime_id: anime.id,
+        anime_title: anime.title,
+        issue_type: issueType,
+        description: fullDescription,
       });
-      setIsSuccess(true);
-      onSuccess?.();
-      setTimeout(() => {
-        onClose();
-      }, 1600);
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Unable to submit correction right now. Please try again.');
-    } finally {
-      setIsSubmitting(false);
+    } catch (error) {
+      console.error('Failed to report issue to Cloudflare:', error);
     }
+
+    const reports = JSON.parse(localStorage.getItem('anime_reports') || '[]');
+    reports.push({
+      id: Date.now().toString(),
+      animeId: anime.id,
+      animeTitle: anime.title,
+      issueType,
+      description: fullDescription,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    });
+    localStorage.setItem('anime_reports', JSON.stringify(reports));
+
+    setIsSubmitting(false);
+    onSubmitSuccess?.();
+    onClose();
   };
 
-  const modalNode = (
+  return (
     <div
-      onClick={onClose}
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[#0B0A10]/85 backdrop-blur-sm animate-in fade-in duration-150"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Report incorrect info for ${anime.title}`}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-180"
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="report-modal-heading"
-        className="relative w-full max-w-md bg-[#12141E] border border-[#292B39] rounded-2xl p-5 sm:p-6 shadow-2xl z-10 text-[#F4F3FA] font-sans"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-[#292B39]">
-          <div className="flex items-center gap-3 min-w-0">
-            <AniDubLogo variant="horizontal" size="sm" className="shrink-0" />
-            <div className="min-w-0">
-              <h2 id="report-modal-heading" className="font-heading font-black text-[#F4F3FA] text-base sm:text-lg tracking-tight">
-                Report Wrong Info
-              </h2>
-              <p className="text-[#A1A5B5] text-xs truncate max-w-[230px]">
-                {animeTitle}
-              </p>
+      <div className="relative w-full max-w-md bg-[#12141E] border border-[#292B39] rounded-t-[20px] sm:rounded-[20px] p-5 shadow-2xl text-[#F4F3FA]">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-[12px] bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#F9C876] shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-[18px] font-bold text-[#F4F3FA]">Report Incorrect Info</h2>
+              <p className="text-[12px] text-[#A1A5B5] truncate max-w-[230px]">{anime.title}</p>
             </div>
           </div>
 
@@ -119,123 +104,81 @@ export const ReportModal: React.FC<ReportModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close report modal"
-            className="w-10 h-10 rounded-xl bg-[#191C29] hover:bg-[#292B39] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer shrink-0"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] hover:bg-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39] flex items-center justify-center transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {isSuccess ? (
-          <div className="py-10 text-center space-y-3">
-            <div className="w-14 h-14 mx-auto rounded-full bg-[#34D399]/15 border border-[#34D399]/40 flex items-center justify-center text-[#34D399]">
-              <CheckCircle2 className="w-8 h-8" />
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Category Chip Grid (Issue Type) */}
+          <div>
+            <label className="block text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] mb-2">
+              Issue Type
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {ISSUE_CATEGORIES.map((cat) => {
+                const active = issueType === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setIssueType(cat)}
+                    className={`min-h-[44px] px-3 rounded-[10px] text-[12px] font-semibold border transition-colors ${
+                      active
+                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                        : 'bg-[#191C29] text-[#F4F3FA] border-[#292B39] hover:border-[#B49AF8]/40'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
             </div>
-            <h3 className="font-heading font-black text-lg text-[#F4F3FA]">Correction Sent to Admin Queue</h3>
-            <p className="text-[#A1A5B5] text-xs max-w-xs mx-auto">
-              Thank you for flagging <span className="text-[#F4F3FA] font-semibold">{selectedField}</span>. Our moderators will verify and update this listing.
-            </p>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-            {errorMessage && (
-              <div className="p-3 rounded-xl bg-[#F87171]/10 border border-[#F87171]/30 text-[#F87171] text-xs flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#F87171]" />
-                <span>{errorMessage}</span>
-              </div>
-            )}
 
-            <div className="space-y-2">
-              <label htmlFor="report-field-select" className="text-xs font-bold text-[#F4F3FA] uppercase tracking-wider block">
-                Issue Type (Specific Field)
-              </label>
+          {/* Correct Information (Description) */}
+          <div>
+            <label className="block text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] mb-1.5">
+              Description / Correct information
+            </label>
+            <textarea
+              required
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Tell us what needs to be updated (e.g., Tamil dub episodes 1-12 are now streaming on Crunchyroll India)..."
+              className="w-full bg-[#191C29] border border-[#292B39] rounded-[12px] p-3 text-[14px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8] resize-none"
+            />
+          </div>
 
-              {/* Quick Field Selector Chips */}
-              <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Field to report">
-                {REPORT_FIELD_OPTIONS.map((option) => {
-                  const isSelected = selectedField === option.id;
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={isSelected}
-                      onClick={() => setSelectedField(option.id)}
-                      className={`min-h-[40px] px-3 py-2 rounded-xl text-left text-xs font-bold transition-colors duration-150 cursor-pointer border ${
-                        isSelected
-                          ? 'bg-[#B49AF8]/20 border-[#B49AF8] text-[#F4F3FA]'
-                          : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <select
-                id="report-field-select"
-                value={selectedField}
-                onChange={(e) => setSelectedField(e.target.value)}
-                className="sr-only"
-                aria-label="Select field to report"
-              >
-                {REPORT_FIELD_OPTIONS.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-
-              <p className="text-[11px] text-[#A1A5B5]">{selectedOption.hint}</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label htmlFor="report-description" className="text-xs font-bold text-[#F4F3FA] uppercase tracking-wider block">
-                Description
-              </label>
-              <textarea
-                id="report-description"
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={`Share the correct ${selectedField.toLowerCase()} (e.g., official OTT URL, episode count, or language)...`}
-                className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl p-3 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none resize-none transition-colors duration-150"
+          {/* Optional Official Source URL */}
+          <div>
+            <label className="block text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] mb-1.5">
+              Official source URL (Optional)
+            </label>
+            <div className="relative">
+              <Link2 className="w-4 h-4 text-[#A1A5B5] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="url"
+                value={sourceUrl}
+                onChange={(e) => setSourceUrl(e.target.value)}
+                placeholder="https://www.crunchyroll.com/..."
+                className="w-full min-h-[44px] pl-10 pr-3.5 rounded-[12px] bg-[#191C29] border border-[#292B39] text-[13px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8]"
               />
             </div>
+          </div>
 
-            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#191C29] border border-[#292B39] text-[11px] text-[#A1A5B5]">
-              <AlertTriangle className="w-4 h-4 text-[#F9C876] shrink-0" />
-              <span>Sent directly to the Admin moderation queue for verification.</span>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={onClose}
-              >
-                Cancel
-              </Button>
-
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                disabled={isSubmitting}
-                leftIcon={<Send className="w-3.5 h-3.5" />}
-              >
-                {isSubmitting ? 'Sending...' : 'Submit Correction'}
-              </Button>
-            </div>
-          </form>
-        )}
+          <button
+            type="submit"
+            disabled={isSubmitting || !description.trim()}
+            className="w-full min-h-[44px] sm:min-h-[48px] px-5 bg-[#B49AF8] hover:bg-[#CBB6FF] disabled:opacity-50 text-[#0B0A10] font-bold text-[14px] rounded-[12px] transition-colors flex items-center justify-center gap-2 shadow-sm"
+          >
+            <Send className="w-4 h-4" />
+            <span>{isSubmitting ? 'Submitting...' : 'Submit correction'}</span>
+          </button>
+        </form>
       </div>
     </div>
   );
-
-  if (typeof document !== 'undefined' && document.body) {
-    return createPortal(modalNode, document.body);
-  }
-  return modalNode;
 };

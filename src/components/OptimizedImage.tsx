@@ -13,6 +13,7 @@ export interface OptimizedImageProps
   quality?: number;
   unoptimized?: boolean;
   fallbackSrc?: string;
+  aspectRatio?: 'portrait' | 'video' | 'square' | string;
 }
 
 /**
@@ -72,6 +73,7 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   quality = 75,
   unoptimized = false,
   fallbackSrc = DEFAULT_FALLBACK,
+  aspectRatio: _aspectRatio,
   className = '',
   style,
   onError,

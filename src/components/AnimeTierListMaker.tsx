@@ -1,443 +1,337 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Trophy,
-  Sparkles,
-  RotateCcw,
-  Download,
-  Share2,
-  Search,
-  Layers,
-  ChevronUp,
-  ChevronDown,
-  X,
+  Trophy, RotateCcw, Search, Share2, Undo2, Plus, X, Check
 } from 'lucide-react';
-import { Anime } from './CatalogView';
-import { Button } from './ui/Button';
-import { EmptyState } from './ui/EclipseState';
+import { Anime, normalizeAnimeList } from '../types';
+import { OptimizedImage } from './OptimizedImage';
+import { ConfirmDialog } from './ui/EclipseState';
 
 export interface AnimeTierListMakerProps {
-  catalogList: Anime[];
-  onSelectAnime?: (anime: Anime) => void;
+  animeList?: any[];
+  catalogList?: any[];
+  onSelectAnime: (anime: any) => void;
   onNavigateHome?: () => void;
+  onShowToast?: (msg: string, type?: 'success' | 'info' | 'error') => void;
 }
 
-interface TierDefinition {
-  id: string;
-  label: string;
-  name: string;
-  badgeStyle: string;
-}
+type TierKey = 'S' | 'A' | 'B' | 'C' | 'D';
+type TiersMap = Record<TierKey, string[]>;
 
-const TIERS: TierDefinition[] = [
-  { id: 'S', label: 'S', name: 'Masterpiece', badgeStyle: 'bg-[#F87171]/15 border-[#F87171]/40 text-[#F87171]' },
-  { id: 'A', label: 'A', name: 'Top Tier', badgeStyle: 'bg-[#F9C876]/15 border-[#F9C876]/40 text-[#F9C876]' },
-  { id: 'B', label: 'B', name: 'Great Watch', badgeStyle: 'bg-[#B49AF8]/15 border-[#B49AF8]/40 text-[#B49AF8]' },
-  { id: 'C', label: 'C', name: 'Decent', badgeStyle: 'bg-[#34D399]/15 border-[#34D399]/40 text-[#34D399]' },
-  { id: 'D', label: 'D', name: 'Casual', badgeStyle: 'bg-[#191C29] border-[#292B39] text-[#A1A5B5]' },
+const TIER_DEFINITIONS: { id: TierKey; label: string; badgeClass: string }[] = [
+  { id: 'S', label: 'S', badgeClass: 'bg-[#B49AF8] text-[#0B0A10]' },
+  { id: 'A', label: 'A', badgeClass: 'bg-emerald-400 text-[#0B0A10]' },
+  { id: 'B', label: 'B', badgeClass: 'bg-sky-400 text-[#0B0A10]' },
+  { id: 'C', label: 'C', badgeClass: 'bg-[#F9C876] text-[#0B0A10]' },
+  { id: 'D', label: 'D', badgeClass: 'bg-[#F87171] text-[#0B0A10]' },
 ];
 
+const INITIAL_TIERS: TiersMap = { S: [], A: [], B: [], C: [], D: [] };
+const LANG_FILTERS = ['All', 'Tamil', 'Hindi', 'Telugu'] as const;
+
 export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
+  animeList: animeListProp,
   catalogList,
-  onNavigateHome,
+  onSelectAnime,
+  onShowToast,
 }) => {
-  const [tierState, setTierState] = useState<Record<string, Anime[]>>({
-    S: [],
-    A: [],
-    B: [],
-    C: [],
-    D: [],
-  });
-
-  const [format, setFormat] = useState<'PNG' | 'JPEG'>('PNG');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedLanguage, setSelectedLanguage] = useState('All');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
-  const [draggedAnime, setDraggedAnime] = useState<Anime | null>(null);
-  const [dragOverTier, setDragOverTier] = useState<string | null>(null);
-  const [isDockExpanded, setIsDockExpanded] = useState(true);
-  // Tap-to-assign selection for mobile & keyboard users
-  const [activeTapAnime, setActiveTapAnime] = useState<Anime | null>(null);
-
-  const tierBoardRef = useRef<HTMLDivElement | null>(null);
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3200);
-  };
-
-  const assignedIds = new Set(
-    Object.values(tierState).flatMap((list) => list.map((a) => a.id))
+  const animeList = useMemo(
+    () => normalizeAnimeList(animeListProp || catalogList || []),
+    [animeListProp, catalogList]
   );
 
-  const unrankedPool = catalogList.filter((anime) => {
-    if (assignedIds.has(anime.id)) return false;
-    const genreText = Array.isArray(anime.genres) ? anime.genres.join(', ') : String(anime.genres || '');
-    const langText = Array.isArray(anime.languages) ? anime.languages.join(', ') : String(anime.languages || '');
-    const matchesQuery =
-      !searchQuery.trim() ||
-      String(anime.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      genreText.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesLang =
-      selectedLanguage === 'All' ||
-      langText.toLowerCase().includes(selectedLanguage.toLowerCase());
-
-    return matchesQuery && matchesLang;
-  });
-
-  const assignToTier = (anime: Anime, tierId: string) => {
-    setTierState((prev) => {
-      const next: Record<string, Anime[]> = {};
-      Object.keys(prev).forEach((key) => {
-        next[key] = prev[key].filter((a) => a.id !== anime.id);
-      });
-      next[tierId] = [...(next[tierId] || []), anime];
-      return next;
-    });
-    setActiveTapAnime(null);
-  };
-
-  const removeFromTier = (animeId: number) => {
-    setTierState((prev) => {
-      const next: Record<string, Anime[]> = {};
-      Object.keys(prev).forEach((key) => {
-        next[key] = prev[key].filter((a) => a.id !== animeId);
-      });
-      return next;
-    });
-    if (activeTapAnime?.id === animeId) {
-      setActiveTapAnime(null);
-    }
-  };
-
-  const handleReset = () => {
-    setTierState({ S: [], A: [], B: [], C: [], D: [] });
-    setActiveTapAnime(null);
-    showToast('Tier list reset.');
-  };
-
-  const handleSamplePreset = () => {
-    if (catalogList.length === 0) return;
-    const items = [...catalogList];
-    setTierState({
-      S: items.slice(0, 3),
-      A: items.slice(3, 6),
-      B: items.slice(6, 9),
-      C: items.slice(9, 11),
-      D: items.slice(11, 13),
-    });
-    showToast('Loaded sample tier rankings.');
-  };
-
-  const handleShare = () => {
-    navigator.clipboard?.writeText(window.location.href);
-    showToast('Tier list link copied.');
-  };
-
-  const handleDragStart = (e: React.DragEvent, anime: Anime) => {
-    setDraggedAnime(anime);
-    e.dataTransfer.setData('text/plain', String(anime.id));
-  };
-
-  const handleDragOver = (e: React.DragEvent, tierId: string) => {
-    e.preventDefault();
-    if (dragOverTier !== tierId) setDragOverTier(tierId);
-  };
-
-  const handleDragLeave = (_e: React.DragEvent, tierId: string) => {
-    if (dragOverTier === tierId) setDragOverTier(null);
-  };
-
-  const handleDropOnTier = (e: React.DragEvent, tierId: string) => {
-    e.preventDefault();
-    setDragOverTier(null);
-    if (draggedAnime) {
-      assignToTier(draggedAnime, tierId);
-      setDraggedAnime(null);
-    }
-  };
-
-  const handleDownloadImage = () => {
-    setIsExporting(true);
-    showToast(`Exporting ${format} tier list...`);
-
+  const [tiers, setTiers] = useState<TiersMap>(() => {
     try {
-      const canvas = document.createElement('canvas');
-      canvas.width = 1200;
-      canvas.height = 900;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = '#0B0A10';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const saved = localStorage.getItem('anidub_tier_list_v2');
+      return saved ? JSON.parse(saved) : INITIAL_TIERS;
+    } catch {
+      return INITIAL_TIERS;
+    }
+  });
+  const [historyStack, setHistoryStack] = useState<TiersMap[]>([]);
+  const [selectedAnimeId, setSelectedAnimeId] = useState<string | null>(null);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedLang, setSelectedLang] = useState<string>('All');
+  const [poolVisibleCount, setPoolVisibleCount] = useState<number>(24);
+  const [showConfirmReset, setShowConfirmReset] = useState<boolean>(false);
+  const [copiedShare, setCopiedShare] = useState<boolean>(false);
 
-        ctx.fillStyle = '#B49AF8';
-        ctx.beginPath();
-        ctx.roundRect(40, 40, 50, 50, 12);
-        ctx.fill();
-        ctx.fillStyle = '#0B0A10';
-        ctx.font = 'bold 24px sans-serif';
-        ctx.fillText('AD', 48, 73);
+  useEffect(() => {
+    try {
+      localStorage.setItem('anidub_tier_list_v2', JSON.stringify(tiers));
+    } catch {
+      // ignore storage errors
+    }
+  }, [tiers]);
 
-        ctx.font = 'bold 30px sans-serif';
-        ctx.fillStyle = '#F4F3FA';
-        ctx.fillText('AniDub India • Tier List', 110, 70);
+  const animeById = useMemo(() => {
+    const map = new Map<string, Anime>();
+    animeList.forEach((a) => map.set(a.id, a));
+    return map;
+  }, [animeList]);
 
-        ctx.font = '14px sans-serif';
-        ctx.fillStyle = '#A1A5B5';
-        ctx.fillText('Indian Dubbed Anime Rankings', 110, 94);
+  const rankedIdsSet = useMemo(() => {
+    const set = new Set<string>();
+    (Object.values(tiers) as string[][]).forEach((arr) => arr.forEach((id) => set.add(id)));
+    return set;
+  }, [tiers]);
 
-        const tierLabels = [
-          { label: 'S', color: '#F87171', items: tierState.S },
-          { label: 'A', color: '#F9C876', items: tierState.A },
-          { label: 'B', color: '#B49AF8', items: tierState.B },
-          { label: 'C', color: '#34D399', items: tierState.C },
-          { label: 'D', color: '#292B39', items: tierState.D },
-        ];
-
-        let startY = 135;
-        tierLabels.forEach((tier) => {
-          ctx.fillStyle = tier.color;
-          ctx.beginPath();
-          ctx.roundRect(40, startY, 110, 125, 12);
-          ctx.fill();
-          ctx.fillStyle = tier.label === 'D' ? '#F4F3FA' : '#0B0A10';
-          ctx.font = 'bold 42px sans-serif';
-          ctx.fillText(tier.label, 80, startY + 80);
-
-          ctx.fillStyle = '#12141E';
-          ctx.beginPath();
-          ctx.roundRect(155, startY, canvas.width - 195, 125, 12);
-          ctx.fill();
-
-          ctx.fillStyle = '#F4F3FA';
-          ctx.font = 'bold 15px sans-serif';
-          tier.items.forEach((item, idx) => {
-            if (idx < 5) {
-              const xPos = 175 + idx * 190;
-              ctx.fillStyle = '#191C29';
-              ctx.beginPath();
-              ctx.roundRect(xPos, startY + 12, 170, 100, 10);
-              ctx.fill();
-              ctx.fillStyle = '#F4F3FA';
-              ctx.fillText(item.title.slice(0, 16), xPos + 10, startY + 52);
-              const ratingNum = Number(item.rating);
-              ctx.fillStyle = '#B49AF8';
-              ctx.font = '12px sans-serif';
-              ctx.fillText(
-                Number.isFinite(ratingNum) && ratingNum > 0 ? `★ ${ratingNum.toFixed(1)}/10` : 'Indian Dub',
-                xPos + 10,
-                startY + 80
-              );
-              ctx.font = 'bold 15px sans-serif';
-            }
-          });
-
-          startY += 140;
-        });
-
-        const mimeType = format === 'JPEG' ? 'image/jpeg' : 'image/png';
-        const dataUrl = canvas.toDataURL(mimeType, 0.95);
-        const link = document.createElement('a');
-        link.download = `anidub_tier_list_${Date.now()}.${format.toLowerCase()}`;
-        link.href = dataUrl;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showToast(`Saved tier list as ${format}.`);
+  const filteredUnrankedPool = useMemo(() => {
+    return animeList.filter((anime) => {
+      if (rankedIdsSet.has(anime.id)) return false;
+      if (selectedLang !== 'All') {
+        if (!Array.isArray(anime.languages) || !anime.languages.includes(selectedLang as any)) {
+          return false;
+        }
       }
-    } catch (err) {
-      console.error('Export error:', err);
-    } finally {
-      setIsExporting(false);
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        return (
+          anime.title.toLowerCase().includes(q) ||
+          (anime.japaneseTitle && anime.japaneseTitle.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [animeList, rankedIdsSet, selectedLang, searchQuery]);
+
+  const assignToTier = (animeId: string, targetTier: TierKey | 'UNRANKED') => {
+    setHistoryStack((prev) => [...prev.slice(-19), tiers]);
+    setTiers((prev) => {
+      const cleaned: TiersMap = {
+        S: prev.S.filter((id) => id !== animeId),
+        A: prev.A.filter((id) => id !== animeId),
+        B: prev.B.filter((id) => id !== animeId),
+        C: prev.C.filter((id) => id !== animeId),
+        D: prev.D.filter((id) => id !== animeId),
+      };
+      if (targetTier !== 'UNRANKED') {
+        cleaned[targetTier] = [...cleaned[targetTier], animeId];
+      }
+      return cleaned;
+    });
+    setSelectedAnimeId(null);
+  };
+
+  const handleUndo = () => {
+    if (historyStack.length === 0) return;
+    const previous = historyStack[historyStack.length - 1];
+    setTiers(previous);
+    setHistoryStack((prev) => prev.slice(0, -1));
+    if (onShowToast) onShowToast('Undid last tier change', 'info');
+  };
+
+  const handleConfirmReset = () => {
+    setHistoryStack((prev) => [...prev.slice(-19), tiers]);
+    setTiers(INITIAL_TIERS);
+    setSelectedAnimeId(null);
+    setShowConfirmReset(false);
+    if (onShowToast) onShowToast('Tier list reset', 'info');
+  };
+
+  const handleShareOrExport = () => {
+    const lines = TIER_DEFINITIONS.map((t) => {
+      const titles = tiers[t.id]
+        .map((id) => animeById.get(id)?.title)
+        .filter(Boolean)
+        .join(', ');
+      return `${t.id} Tier: ${titles || 'None'}`;
+    });
+    const text = `My Regional Dub Anime Tier List (AniDub India)\n${lines.join('\n')}`;
+    if (navigator.share) {
+      navigator.share({ title: 'My Anime Dub Tier List', text }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(text);
+      setCopiedShare(true);
+      setTimeout(() => setCopiedShare(false), 2500);
+      if (onShowToast) onShowToast('Tier list copied to clipboard!', 'success');
     }
   };
 
-  if (catalogList.length === 0) {
-    return (
-      <div className="max-w-5xl mx-auto px-3 sm:px-6 py-8">
-        <EmptyState
-          icon={<Trophy className="w-5 h-5" />}
-          title="No anime loaded for Tier List"
-          description="Browse Explore or wait for the catalog to finish loading to rank your favorite dubbed anime."
-          actionLabel={onNavigateHome ? 'Browse Explore' : undefined}
-          onAction={onNavigateHome}
-        />
-      </div>
-    );
-  }
+  const selectedAnime = selectedAnimeId ? animeById.get(selectedAnimeId) || null : null;
 
   return (
-    <div className="min-h-screen bg-[#0B0A10] text-[#F4F3FA] font-sans pb-52 px-3 sm:px-6 pt-5 relative overflow-x-clip">
-      {toastMessage && (
-        <div
-          role="status"
-          className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-[12px] bg-[#12141E] border border-[#292B39] shadow-2xl flex items-center gap-2.5 text-[#F4F3FA] text-xs font-semibold"
-        >
-          <Sparkles className="w-4 h-4 text-[#B49AF8] shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* TOOLBAR */}
-      <header className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-[12px] bg-[#12141E] border border-[#292B39] text-[#F9C876] flex items-center justify-center shrink-0">
-              <Trophy className="w-5 h-5" />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-[#F4F3FA] tracking-tight">
-              Anime Tier List Maker
-            </h1>
+    <section className="max-w-[1280px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[#F4F3FA]">
+      {/* Header & Action Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div>
+          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#B49AF8] mb-1">
+            <Trophy className="w-3.5 h-3.5" />
+            <span>Interactive Ranking</span>
           </div>
-          <p className="text-xs text-[#A1A5B5] mt-1">
-            Tap any anime card below to assign a tier on mobile, or drag and drop on desktop.
+          <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em]">
+            Regional Dub Tier List
+          </h1>
+          <p className="text-[13px] text-[#A1A5B5] mt-0.5">
+            Tap any poster to assign S–D tier on mobile, or drag and drop on desktop
           </p>
         </div>
 
-        <div className="flex items-center gap-2 rounded-[12px] bg-[#12141E] p-2 border border-[#292B39] flex-wrap">
-          <div className="flex items-center bg-[#191C29] rounded-[10px] p-0.5 border border-[#292B39]">
-            {(['PNG', 'JPEG'] as const).map((fmt) => (
-              <button
-                key={fmt}
-                type="button"
-                onClick={() => setFormat(fmt)}
-                className={`min-h-[38px] px-3 py-1 rounded-lg text-xs font-bold transition-colors duration-180 cursor-pointer ${
-                  format === fmt ? 'bg-[#B49AF8] text-[#0B0A10]' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
-                }`}
-              >
-                {fmt}
-              </button>
-            ))}
-          </div>
-
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={handleSamplePreset}
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#191C29] hover:border-[#B49AF8]/60 text-[#F9C876] transition-colors duration-180 cursor-pointer border border-[#292B39] flex items-center justify-center"
-            title="Load sample ranking"
-            aria-label="Load sample ranking"
+            onClick={handleUndo}
+            disabled={historyStack.length === 0}
+            aria-label="Undo last tier assignment"
+            className="min-h-[44px] px-3.5 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] disabled:opacity-40 text-[#F4F3FA] border border-[#292B39] text-[12px] font-semibold inline-flex items-center gap-1.5 transition-colors"
           >
-            <Sparkles className="w-4 h-4" />
+            <Undo2 className="w-4 h-4 text-[#B49AF8]" />
+            <span>Undo</span>
           </button>
 
           <button
             type="button"
-            onClick={handleReset}
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#191C29] hover:border-[#B49AF8]/60 text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors duration-180 cursor-pointer border border-[#292B39] flex items-center justify-center"
-            title="Reset tier list"
-            aria-label="Reset tier list"
+            onClick={() => setShowConfirmReset(true)}
+            disabled={rankedIdsSet.size === 0}
+            className="min-h-[44px] px-3.5 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] disabled:opacity-40 text-[#F87171] border border-[#292B39] text-[12px] font-semibold inline-flex items-center gap-1.5 transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
+            <span>Reset</span>
           </button>
-
-          <Button
-            type="button"
-            onClick={handleDownloadImage}
-            disabled={isExporting}
-            variant="primary"
-            size="md"
-            leftIcon={<Download className="w-4 h-4" />}
-          >
-            {isExporting ? 'Exporting…' : 'Export / Save'}
-          </Button>
 
           <button
             type="button"
-            onClick={handleShare}
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#191C29] hover:border-[#B49AF8]/60 text-[#B49AF8] transition-colors duration-180 cursor-pointer border border-[#292B39] flex items-center justify-center"
-            title="Share link"
-            aria-label="Share Tier List link"
+            onClick={handleShareOrExport}
+            className="min-h-[44px] px-4 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold text-[13px] inline-flex items-center gap-2 transition-colors shadow-sm"
           >
-            <Share2 className="w-4 h-4" />
+            {copiedShare ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+            <span>{copiedShare ? 'Copied!' : 'Export / Share'}</span>
           </button>
         </div>
-      </header>
+      </div>
 
-      {/* CENTRAL TIER BOARD */}
+      {/* Tap-to-Rank Action Bar (Always present in DOM for mobile accessibility & tests) */}
       <div
-        ref={tierBoardRef}
-        className="max-w-6xl mx-auto p-3.5 sm:p-5 bg-[#12141E] rounded-[12px] border border-[#292B39] space-y-3"
+        data-testid="tier-tap-assign-bar"
+        className={`mb-5 rounded-[14px] border p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all duration-180 ${
+          selectedAnime
+            ? 'bg-[#191C29] border-[#B49AF8]'
+            : 'bg-[#12141E] border-[#292B39]'
+        }`}
       >
-        {TIERS.map((tier) => {
-          const items = tierState[tier.id] || [];
-          const isTargeted = dragOverTier === tier.id;
+        <div className="flex items-center gap-3 min-w-0">
+          {selectedAnime ? (
+            <>
+              <div className="w-10 aspect-[2/3] rounded-[6px] overflow-hidden bg-[#12141E] border border-[#292B39] shrink-0">
+                <OptimizedImage
+                  src={selectedAnime.poster}
+                  alt={selectedAnime.title}
+                  className="w-full h-full object-cover"
+                  aspectRatio="portrait"
+                />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-[#B49AF8]">
+                  Tap a tier to assign
+                </div>
+                <div className="text-[14px] font-bold text-[#F4F3FA] truncate">
+                  {selectedAnime.title}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-[13px] text-[#A1A5B5]">
+              Select any anime poster below to quickly rank it into <strong className="text-[#F4F3FA]">S, A, B, C, or D</strong> tier.
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {TIER_DEFINITIONS.map((tier) => (
+            <button
+              key={tier.id}
+              type="button"
+              disabled={!selectedAnimeId}
+              onClick={() => selectedAnimeId && assignToTier(selectedAnimeId, tier.id)}
+              className={`min-h-[44px] min-w-[44px] px-3 rounded-[10px] font-extrabold text-[13px] transition-opacity ${tier.badgeClass} disabled:opacity-40`}
+            >
+              {tier.label}
+            </button>
+          ))}
+          {selectedAnimeId && rankedIdsSet.has(selectedAnimeId) && (
+            <button
+              type="button"
+              onClick={() => assignToTier(selectedAnimeId, 'UNRANKED')}
+              className="min-h-[44px] px-3 rounded-[10px] bg-[#12141E] text-[#F87171] border border-[#292B39] text-[12px] font-semibold"
+            >
+              Unrank
+            </button>
+          )}
+          {selectedAnimeId && (
+            <button
+              type="button"
+              onClick={() => setSelectedAnimeId(null)}
+              aria-label="Clear selection"
+              className="min-h-[44px] min-w-[44px] rounded-[10px] bg-[#12141E] text-[#A1A5B5] border border-[#292B39] flex items-center justify-center"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* S - D Tier Rows */}
+      <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] divide-y divide-[#292B39] overflow-hidden mb-6">
+        {TIER_DEFINITIONS.map((tier) => {
+          const tierItems = tiers[tier.id]
+            .map((id) => animeById.get(id))
+            .filter((x): x is Anime => Boolean(x));
 
           return (
             <div
               key={tier.id}
-              onDragOver={(e) => handleDragOver(e, tier.id)}
-              onDragLeave={(e) => handleDragLeave(e, tier.id)}
-              onDrop={(e) => handleDropOnTier(e, tier.id)}
-              className={`flex flex-col sm:flex-row items-stretch rounded-[12px] p-2.5 sm:p-3 bg-[#191C29] border transition-colors duration-180 gap-3 ${
-                isTargeted ? 'border-[#B49AF8]' : 'border-[#292B39]'
-              }`}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => {
+                if (draggedId) {
+                  assignToTier(draggedId, tier.id);
+                  setDraggedId(null);
+                }
+              }}
+              className="flex items-stretch min-h-[104px]"
             >
-              <div className="flex sm:flex-col items-center justify-between sm:justify-center sm:w-20 shrink-0 select-none">
-                <div
-                  className={`w-12 h-12 sm:w-16 sm:h-16 rounded-[10px] border ${tier.badgeStyle} flex flex-col items-center justify-center shrink-0`}
-                >
-                  <span className="text-xl sm:text-2xl font-extrabold leading-none">{tier.label}</span>
-                  <span className="text-[9px] uppercase font-bold opacity-80 hidden sm:block mt-0.5">
-                    Tier
-                  </span>
-                </div>
-                <span className="text-[11px] font-semibold text-[#A1A5B5] sm:mt-1.5">
-                  {items.length} {items.length === 1 ? 'title' : 'titles'}
-                </span>
+              <div
+                className={`w-16 sm:w-20 shrink-0 flex items-center justify-center text-[22px] font-black ${tier.badgeClass}`}
+              >
+                {tier.label}
               </div>
 
-              <div className="flex-1 flex flex-wrap gap-2.5 items-center min-h-[84px]">
-                {items.length === 0 ? (
-                  <div
-                    className={`w-full min-h-[84px] flex items-center justify-center gap-2 border rounded-[10px] py-3 px-3 text-xs select-none ${
-                      isTargeted
-                        ? 'border-solid border-[#B49AF8] bg-[#B49AF8]/10 text-[#B49AF8]'
-                        : 'border-dashed border-[#292B39] text-[#A1A5B5]'
-                    }`}
-                  >
-                    <Layers className="w-4 h-4 opacity-60 shrink-0" />
-                    <span>
-                      {isTargeted ? `Drop into ${tier.label} Tier` : `Drop or tap-assign into ${tier.label} Tier`}
-                    </span>
-                  </div>
-                ) : (
-                  items.map((anime, idx) => (
-                    <div
-                      key={`tier_${tier.id}_anime_${anime.id}_${idx}`}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, anime)}
-                      onClick={() => setActiveTapAnime(activeTapAnime?.id === anime.id ? null : anime)}
-                      className={`relative group w-16 sm:w-20 aspect-[2/3] rounded-[10px] overflow-hidden bg-[#12141E] border shrink-0 cursor-pointer transition-colors duration-180 select-none ${
-                        activeTapAnime?.id === anime.id ? 'border-[#B49AF8] ring-2 ring-[#B49AF8]/40' : 'border-[#292B39] hover:border-[#B49AF8]'
-                      }`}
-                      title={anime.title}
-                    >
-                      <img
-                        src={anime.cover_image || '/logo.png'}
-                        alt={anime.title}
-                        width={80}
-                        height={120}
-                        loading="lazy"
-                        decoding="async"
-                        onError={(e) => {
-                          e.currentTarget.src = '/logo.png';
-                        }}
-                        className="w-full h-full object-cover"
-                      />
+              <div className="flex-1 p-2.5 sm:p-3 flex flex-wrap items-center gap-2.5 bg-[#12141E]">
+                {tierItems.length > 0 ? (
+                  tierItems.map((anime) => {
+                    const isSelected = selectedAnimeId === anime.id;
+                    return (
                       <button
+                        key={anime.id}
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeFromTier(anime.id);
-                        }}
-                        aria-label={`Remove ${anime.title} from tier`}
-                        className="absolute top-1 right-1 w-6 h-6 rounded-md bg-[#0B0A10]/85 border border-[#292B39] text-[#F87171] flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-180 cursor-pointer"
+                        draggable
+                        onDragStart={() => setDraggedId(anime.id)}
+                        onClick={() =>
+                          setSelectedAnimeId((prev) => (prev === anime.id ? null : anime.id))
+                        }
+                        onDoubleClick={() => onSelectAnime(anime)}
+                        title={anime.title}
+                        className={`relative w-16 sm:w-20 aspect-[2/3] rounded-[10px] overflow-hidden bg-[#191C29] border-2 transition-all ${
+                          isSelected
+                            ? 'border-[#B49AF8] ring-2 ring-[#B49AF8]/40 scale-[1.03]'
+                            : 'border-[#292B39] hover:border-[#B49AF8]/50'
+                        }`}
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <OptimizedImage
+                          src={anime.poster}
+                          alt={anime.title}
+                          className="w-full h-full object-cover"
+                          aspectRatio="portrait"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 bg-[#0B0A10]/85 px-1 py-0.5 text-[10px] font-semibold text-[#F4F3FA] truncate">
+                          {anime.title}
+                        </div>
                       </button>
-                    </div>
-                  ))
+                    );
+                  })
+                ) : (
+                  <span className="text-[12px] text-[#A1A5B5] pl-2">
+                    Drop or tap-assign {tier.label}-tier anime here
+                  </span>
                 )}
               </div>
             </div>
@@ -445,147 +339,124 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
         })}
       </div>
 
-      {/* FLOATING BOTTOM DOCK + MOBILE TAP-TO-ASSIGN BAR */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 px-3 sm:px-6 pb-3 sm:pb-5 pointer-events-none">
-        <div className="max-w-5xl mx-auto bg-[#12141E] border border-[#292B39] rounded-[12px] p-3.5 sm:p-4 shadow-2xl pointer-events-auto space-y-3">
-          {/* Tap-to-Assign Action Bar (Mobile-first) */}
-          {activeTapAnime && (
-            <div
-              data-testid="tier-tap-assign-bar"
-              className="rounded-[10px] bg-[#191C29] border border-[#B49AF8]/50 p-2.5 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs font-bold text-[#F4F3FA] truncate max-w-[160px] sm:max-w-[240px]">
-                  Assign: {activeTapAnime.title}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {TIERS.map((t) => (
-                  <button
-                    key={`tap_assign_${t.id}`}
-                    type="button"
-                    onClick={() => assignToTier(activeTapAnime, t.id)}
-                    className={`min-w-[44px] min-h-[40px] px-2.5 rounded-lg border ${t.badgeStyle} text-xs font-extrabold cursor-pointer`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-                {assignedIds.has(activeTapAnime.id) && (
-                  <button
-                    type="button"
-                    onClick={() => removeFromTier(activeTapAnime.id)}
-                    className="min-h-[40px] px-2.5 rounded-lg bg-[#F87171]/15 border border-[#F87171]/40 text-[#F87171] text-xs font-bold cursor-pointer"
-                  >
-                    Remove
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setActiveTapAnime(null)}
-                  aria-label="Cancel tap assignment"
-                  className="w-10 h-10 rounded-lg bg-[#12141E] border border-[#292B39] text-[#A1A5B5] flex items-center justify-center cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-[#B49AF8]" />
-              <h2 className="text-xs font-extrabold text-[#F4F3FA] uppercase tracking-wider">
-                Unranked Pool ({unrankedPool.length})
-              </h2>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="hidden sm:flex items-center bg-[#191C29] rounded-[10px] p-0.5 border border-[#292B39]">
-                {['All', 'Tamil', 'Hindi', 'Telugu'].map((l) => (
-                  <button
-                    key={l}
-                    type="button"
-                    onClick={() => setSelectedLanguage(l)}
-                    className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors duration-180 cursor-pointer ${
-                      selectedLanguage === l ? 'bg-[#B49AF8] text-[#0B0A10]' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
-                    }`}
-                  >
-                    {l}
-                  </button>
-                ))}
-              </div>
-
-              <div className="relative w-36 sm:w-44">
-                <Search className="w-3.5 h-3.5 text-[#A1A5B5] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter pool..."
-                  aria-label="Filter unranked pool"
-                  className="w-full h-[38px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[10px] pl-8 pr-2.5 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsDockExpanded(!isDockExpanded)}
-                className="w-10 h-10 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center cursor-pointer"
-                aria-label={isDockExpanded ? 'Collapse Pool' : 'Expand Pool'}
-              >
-                {isDockExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </button>
-            </div>
+      {/* Unranked Pool with Search, Language Filter Pills & Pagination */}
+      <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-[16px] sm:text-[18px] font-bold text-[#F4F3FA]">
+              Unranked Anime Pool ({filteredUnrankedPool.length})
+            </h2>
+            <p className="text-[12px] text-[#A1A5B5]">
+              Tap a poster to highlight it, then tap S / A / B / C / D above
+            </p>
           </div>
 
-          {isDockExpanded && (
-            <div>
-              {unrankedPool.length === 0 ? (
-                <p className="text-center py-4 text-xs text-[#A1A5B5]">
-                  All matching titles have been assigned to tiers.
-                </p>
-              ) : (
-                <div className="flex gap-2.5 overflow-x-auto no-scrollbar py-1">
-                  {unrankedPool.map((anime, idx) => {
-                    const isSelected = activeTapAnime?.id === anime.id;
-                    return (
-                      <button
-                        key={`dock_anime_${anime.id}_${idx}`}
-                        type="button"
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, anime)}
-                        onClick={() => setActiveTapAnime(isSelected ? null : anime)}
-                        className={`relative w-16 sm:w-20 aspect-[2/3] rounded-[10px] overflow-hidden bg-[#191C29] border shrink-0 cursor-pointer transition-colors duration-180 text-left ${
-                          isSelected
-                            ? 'border-[#B49AF8] ring-2 ring-[#B49AF8]/40'
-                            : 'border-[#292B39] hover:border-[#B49AF8]'
-                        }`}
-                        title={`Tap to assign ${anime.title}`}
-                      >
-                        <img
-                          src={anime.cover_image || '/logo.png'}
-                          alt={anime.title}
-                          width={80}
-                          height={120}
-                          loading="lazy"
-                          decoding="async"
-                          onError={(e) => {
-                            e.currentTarget.src = '/logo.png';
-                          }}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute bottom-0 inset-x-0 p-1 bg-gradient-to-t from-[#0B0A10] to-transparent pointer-events-none">
-                          <p className="text-[9px] font-bold text-[#F4F3FA] truncate">{anime.title}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            {/* Language Pills (44px) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {LANG_FILTERS.map((lang) => {
+                const active = selectedLang === lang;
+                return (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => {
+                      setSelectedLang(lang);
+                      setPoolVisibleCount(24);
+                    }}
+                    className={`min-h-[44px] px-3.5 rounded-[10px] text-[12px] font-semibold whitespace-nowrap border transition-colors ${
+                      active
+                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                        : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                    }`}
+                  >
+                    {lang}
+                  </button>
+                );
+              })}
             </div>
-          )}
+
+            {/* Search Input (44px) */}
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-[#A1A5B5] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPoolVisibleCount(24);
+                }}
+                placeholder="Search unranked pool..."
+                className="w-full min-h-[44px] pl-9 pr-4 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[13px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8]"
+              />
+            </div>
+          </div>
         </div>
+
+        {/* Paginated Poster Grid */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+          {filteredUnrankedPool.slice(0, poolVisibleCount).map((anime) => {
+            const isSelected = selectedAnimeId === anime.id;
+            return (
+              <button
+                key={anime.id}
+                type="button"
+                draggable
+                onDragStart={() => setDraggedId(anime.id)}
+                onClick={() =>
+                  setSelectedAnimeId((prev) => (prev === anime.id ? null : anime.id))
+                }
+                className={`group relative aspect-[2/3] rounded-[10px] overflow-hidden bg-[#191C29] border-2 text-left transition-all duration-180 ${
+                  isSelected
+                    ? 'border-[#B49AF8] ring-2 ring-[#B49AF8]/40 scale-[1.02]'
+                    : 'border-[#292B39] hover:border-[#B49AF8]/50'
+                }`}
+              >
+                <OptimizedImage
+                  src={anime.poster}
+                  alt={anime.title}
+                  width={160}
+                  height={240}
+                  loading="lazy"
+                  className="w-full h-full object-cover"
+                  aspectRatio="portrait"
+                />
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0B0A10] via-[#0B0A10]/90 to-transparent p-2 pt-5">
+                  <div className="text-[11px] font-semibold text-[#F4F3FA] line-clamp-2 leading-tight">
+                    {anime.title}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {filteredUnrankedPool.length > poolVisibleCount && (
+          <div className="mt-5 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setPoolVisibleCount((prev) => prev + 24)}
+              className="min-h-[44px] px-5 rounded-[12px] bg-[#191C29] hover:bg-[#292B39] text-[#CBB6FF] border border-[#292B39] text-[13px] font-semibold inline-flex items-center gap-2 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>
+                Load more ({filteredUnrankedPool.length - poolVisibleCount} remaining)
+              </span>
+            </button>
+          </div>
+        )}
       </div>
-    </div>
+
+      {/* Protected Reset Confirmation */}
+      <ConfirmDialog
+        open={showConfirmReset}
+        title="Reset Tier List?"
+        description="Clear all S–D tier rankings and return all anime to the unranked pool?"
+        confirmLabel="Reset Tiers"
+        isDestructive={true}
+        onCancel={() => setShowConfirmReset(false)}
+        onConfirm={handleConfirmReset}
+      />
+    </section>
   );
 };

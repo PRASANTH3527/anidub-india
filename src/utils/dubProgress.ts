@@ -41,6 +41,8 @@ export interface DubProgressResult {
   seasons: SeasonDubProgress[];
   hasMultipleSeasons: boolean;
   overall: SeasonDubProgress;
+  overallBadgeText?: string;
+  statusLabel?: string;
 }
 
 interface RawSeasonDubEntry {
@@ -467,6 +469,8 @@ export function buildDubProgressBreakdown(anime: Record<string, unknown> | null 
       seasons: seasonEntries,
       hasMultipleSeasons: true,
       overall,
+      overallBadgeText: overall.totalEpisodes ? `${overall.totalEpisodes} total episodes` : 'Episode count not verified',
+      statusLabel: `${seasonEntries.length} Seasons`,
     };
   }
 
@@ -475,6 +479,8 @@ export function buildDubProgressBreakdown(anime: Record<string, unknown> | null 
       seasons: seasonEntries,
       hasMultipleSeasons: false,
       overall: seasonEntries[0],
+      overallBadgeText: seasonEntries[0].totalEpisodes ? `${seasonEntries[0].totalEpisodes} episodes` : 'Episode count not verified',
+      statusLabel: seasonEntries[0].seasonLabel,
     };
   }
 
@@ -482,8 +488,44 @@ export function buildDubProgressBreakdown(anime: Record<string, unknown> | null 
     seasons: [overall],
     hasMultipleSeasons: false,
     overall,
+    overallBadgeText: overall.totalEpisodes ? `${overall.totalEpisodes} episodes` : 'Episode count not verified',
+    statusLabel: 'Regional Dub Guide',
   };
 }
+
+export interface NormalizedSeasonLanguageRow {
+  language: string;
+  dubbedEpisodes: number;
+  totalEpisodes: number | null;
+  isComplete: boolean;
+}
+
+export interface NormalizedSeasonBreakdown {
+  seasonNumber: number;
+  title: string;
+  totalEpisodes: number | null;
+  languages: NormalizedSeasonLanguageRow[];
+}
+
+export function normalizeDubSeasonBreakdowns(
+  anime: Record<string, unknown> | null | undefined
+): NormalizedSeasonBreakdown[] {
+  const breakdown = buildDubProgressBreakdown(anime);
+  return breakdown.seasons.map((s, idx) => ({
+    seasonNumber: idx + 1,
+    title: s.seasonKey === 'overall' ? 'Season 1' : s.seasonLabel,
+    totalEpisodes: s.totalEpisodes,
+    languages: s.languages
+      .filter((l) => l.status !== 'unavailable')
+      .map((l) => ({
+        language: l.language,
+        dubbedEpisodes: l.episodesDubbed ?? 0,
+        totalEpisodes: l.totalEpisodes,
+        isComplete: l.status === 'complete',
+      })),
+  }));
+}
+
 
 export type DubMatrixCellStatus = 'complete' | 'partial' | 'unverified_count' | 'unavailable';
 

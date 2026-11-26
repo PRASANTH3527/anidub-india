@@ -34,17 +34,17 @@ const ACTIVE_OVERRIDE_CLASSES: Record<ButtonVariant, string> = {
 };
 
 /**
- * Standardized heights:
- * - sm: 40px (h-10, with min-h-[44px] on mobile viewports for touch ergonomics)
+ * Standardized heights & touch targets:
+ * - sm: 44px on mobile (min-h-[44px]), 40px on desktop (sm:min-h-[40px])
  * - md: 44px (h-11, min-h-[44px])
  * - lg: 48px (h-12, min-h-[48px])
- * - icon: 44x44px touch target on mobile, 40x40px on desktop
+ * - icon: strict 44x44px touch target (w-11 h-11 min-w-[44px] min-h-[44px])
  */
 const SIZE_CLASSES: Record<ButtonSize, string> = {
-  sm: 'h-11 sm:h-10 min-h-[44px] sm:min-h-[40px] px-3.5 text-xs rounded-xl gap-1.5',
-  md: 'h-11 min-h-[44px] px-4 text-xs sm:text-sm rounded-xl gap-2',
-  lg: 'h-12 min-h-[48px] px-5 text-sm rounded-xl gap-2',
-  icon: 'w-11 h-11 sm:w-10 sm:h-10 min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] p-0 rounded-xl justify-center',
+  sm: 'h-11 sm:h-10 min-h-[44px] sm:min-h-[40px] px-3.5 text-xs rounded-[12px] gap-1.5',
+  md: 'h-11 min-h-[44px] px-4 text-xs sm:text-sm rounded-[12px] gap-2',
+  lg: 'h-12 min-h-[48px] px-5 text-sm rounded-[12px] gap-2',
+  icon: 'w-11 h-11 min-w-[44px] min-h-[44px] p-0 rounded-[12px] justify-center',
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -64,7 +64,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const baseClasses =
-      'inline-flex items-center justify-center whitespace-nowrap shrink-0 select-none cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B49AF8]/70 disabled:opacity-45 disabled:pointer-events-none';
+      'inline-flex items-center justify-center whitespace-nowrap shrink-0 select-none cursor-pointer transition-colors duration-180 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B49AF8]/70 disabled:opacity-45 disabled:pointer-events-none';
     const variantClasses = active
       ? ACTIVE_OVERRIDE_CLASSES[variant]
       : VARIANT_CLASSES[variant];
@@ -87,3 +87,24 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 
 Button.displayName = 'Button';
+
+export interface IconButtonProps extends Omit<ButtonProps, 'size' | 'leftIcon' | 'rightIcon'> {
+  'aria-label': string;
+  icon?: React.ReactNode;
+}
+
+export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
+  ({ icon, children, variant = 'secondary', className = '', ...rest }, ref) => (
+    <Button
+      ref={ref}
+      variant={variant}
+      size="icon"
+      className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] ${className}`.trim()}
+      {...rest}
+    >
+      {icon || children}
+    </Button>
+  )
+);
+
+IconButton.displayName = 'IconButton';

@@ -27,9 +27,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 }) => (
   <div
     data-testid="eclipse-empty-state"
-    className={`rounded-2xl bg-[#12141E] border border-[#292B39] p-6 sm:p-10 text-center space-y-3 ${className}`.trim()}
+    className={`rounded-[12px] bg-[#12141E] border border-[#292B39] p-6 sm:p-10 text-center space-y-3 ${className}`.trim()}
   >
-    <div className="w-12 h-12 rounded-2xl bg-[#191C29] border border-[#292B39] text-[#B49AF8] flex items-center justify-center mx-auto">
+    <div className="w-12 h-12 rounded-[12px] bg-[#191C29] border border-[#292B39] text-[#B49AF8] flex items-center justify-center mx-auto">
       {icon || <Inbox className="w-5 h-5" />}
     </div>
     <h3 className="text-base sm:text-lg font-bold text-[#F4F3FA]">{title}</h3>
@@ -74,9 +74,9 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   <div
     role="alert"
     data-testid="eclipse-error-state"
-    className={`rounded-2xl bg-[#12141E] border border-[#F87171]/40 p-6 sm:p-8 text-center space-y-3 ${className}`.trim()}
+    className={`rounded-[12px] bg-[#12141E] border border-[#F87171]/40 p-6 sm:p-8 text-center space-y-3 ${className}`.trim()}
   >
-    <div className="w-12 h-12 rounded-2xl bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] flex items-center justify-center mx-auto">
+    <div className="w-12 h-12 rounded-[12px] bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] flex items-center justify-center mx-auto">
       <AlertTriangle className="w-5 h-5" />
     </div>
     <h3 className="text-base font-bold text-[#F4F3FA]">{title}</h3>
@@ -122,8 +122,17 @@ export const Modal: React.FC<ModalProps> = ({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
+    const previousOverflow = typeof document !== 'undefined' ? document.body.style.overflow : '';
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = 'hidden';
+    }
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (typeof document !== 'undefined') {
+        document.body.style.overflow = previousOverflow;
+      }
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -134,13 +143,19 @@ export const Modal: React.FC<ModalProps> = ({
       aria-modal="true"
       aria-label={title}
       data-testid="eclipse-modal"
-      className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 transition-opacity duration-150"
+      className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 transition-opacity duration-180 motion-reduce:transition-none"
       onClick={onClose}
     >
       <div
-        className={`w-full ${maxWidthClass} rounded-t-3xl sm:rounded-2xl bg-[#12141E] border-t sm:border border-[#292B39] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-transform duration-150`}
+        className={`w-full ${maxWidthClass} rounded-t-3xl sm:rounded-[12px] bg-[#12141E] border-t sm:border border-[#292B39] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-transform duration-180 motion-reduce:transition-none`}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile bottom sheet drag handle */}
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#12141E]">
+          <div className="w-10 h-1.5 rounded-full bg-[#292B39]" />
+        </div>
+
         <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5 border-b border-[#292B39] bg-[#12141E]">
           <div className="min-w-0">
             <h2 className="text-sm sm:text-base font-bold text-[#F4F3FA] truncate">{title}</h2>
@@ -152,7 +167,7 @@ export const Modal: React.FC<ModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close dialog"
-            className="w-11 h-11 sm:w-10 sm:h-10 min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer shrink-0"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -172,50 +187,77 @@ export const Modal: React.FC<ModalProps> = ({
   );
 };
 
+export const BottomSheet = Modal;
+
 export interface ConfirmDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  open?: boolean;
+  onClose?: () => void;
+  onCancel?: () => void;
   onConfirm: () => void;
   title: string;
   description: string;
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+  isDestructive?: boolean;
   loading?: boolean;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   isOpen,
+  open,
   onClose,
+  onCancel,
   onConfirm,
   title,
   description,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   destructive = false,
+  isDestructive = false,
   loading = false,
-}) => (
-  <Modal
-    isOpen={isOpen}
-    onClose={onClose}
-    title={title}
-    maxWidthClass="max-w-md"
-    footer={
-      <>
-        <Button variant="secondary" size="md" onClick={onClose} disabled={loading}>
-          {cancelLabel}
-        </Button>
-        <Button
-          variant={destructive ? 'danger' : 'primary'}
-          size="md"
-          onClick={onConfirm}
-          disabled={loading}
-        >
-          {loading ? 'Processing...' : confirmLabel}
-        </Button>
-      </>
-    }
-  >
-    <p className="text-xs sm:text-sm text-[#A1A5B5] leading-relaxed">{description}</p>
-  </Modal>
-);
+}) => {
+  const resolvedOpen = Boolean(isOpen ?? open);
+  const resolvedClose = onClose || onCancel || (() => {});
+  const resolvedDestructive = Boolean(destructive || isDestructive);
+
+  return (
+    <Modal
+      isOpen={resolvedOpen}
+      onClose={resolvedClose}
+      title={title}
+      maxWidthClass="max-w-md"
+      footer={
+        <>
+          <Button variant="secondary" size="md" onClick={resolvedClose} disabled={loading}>
+            {cancelLabel}
+          </Button>
+          <Button
+            variant={resolvedDestructive ? 'danger' : 'primary'}
+            size="md"
+            onClick={onConfirm}
+            disabled={loading}
+          >
+            {loading ? 'Processing...' : confirmLabel}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-xs sm:text-sm text-[#A1A5B5] leading-relaxed">{description}</p>
+    </Modal>
+  );
+};
+
+export {
+  SkeletonCard,
+  SkeletonGrid,
+  DetailModalSkeleton,
+  SchedulePageSkeleton,
+  LibraryPageSkeleton,
+  ProfilePageSkeleton,
+  ChatPageSkeleton,
+  PageViewSkeleton,
+  AdminSkeleton,
+} from '../SkeletonGrid';
+

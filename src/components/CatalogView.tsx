@@ -707,15 +707,15 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             <span className="truncate">Find anime in your language</span>
           </h1>
 
-          {/* Mobile Primary Action: Single Random button so heading never truncates on 390px */}
+          {/* Mobile Primary Action: Single Random button (44px height) so heading never truncates on 390px */}
           <div className="flex sm:hidden items-center shrink-0">
             <button
               type="button"
               onClick={onOpenRoulette}
               aria-label="Random Anime"
-              className="min-h-[38px] px-3 rounded-xl bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-bold inline-flex items-center gap-1.5 transition-colors duration-180 cursor-pointer shrink-0"
+              className="h-[44px] min-h-[44px] px-3.5 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-bold inline-flex items-center gap-1.5 transition-colors duration-180 motion-reduce:transition-none cursor-pointer shrink-0"
             >
-              <Dices className="w-3.5 h-3.5" />
+              <Dices className="w-4 h-4" />
               <span>Random</span>
             </button>
           </div>
@@ -755,8 +755,8 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </div>
         </div>
 
-        {/* 2. PROMINENT SEARCH BAR (44px height, 12px radius, clear button when typing) */}
-        <div className="space-y-1">
+        {/* 2. PROMINENT SEARCH BAR (44px height, 12px radius, 44x44px clear button when typing) */}
+        <div className="space-y-1.5">
           <div className="relative flex items-center">
             <Search className="w-4 h-4 text-[#B49AF8] absolute left-3.5 pointer-events-none shrink-0" />
             <input
@@ -764,14 +764,14 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
               value={effectiveSearch}
               onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Search English or Japanese title, alias (e.g. JJK), studio..."
-              className="w-full h-[44px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 focus:border-[#B49AF8] rounded-[12px] pl-10 pr-10 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180"
+              className="w-full h-[44px] min-h-[44px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 focus:border-[#B49AF8] rounded-[12px] pl-10 pr-12 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180 motion-reduce:transition-none"
             />
             {effectiveSearch && (
               <button
                 type="button"
                 onClick={() => handleSearchChange('')}
                 aria-label="Clear search query"
-                className="absolute right-2 w-9 h-9 flex items-center justify-center text-[#A1A5B5] hover:text-[#F4F3FA] rounded-lg hover:bg-[#191C29] transition-colors duration-180 cursor-pointer"
+                className="absolute right-0.5 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-[#A1A5B5] hover:text-[#F4F3FA] rounded-[12px] hover:bg-[#191C29] transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -787,12 +787,12 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
               {recentSearches.slice(0, 5).map((term) => (
                 <div
                   key={`recent_explore_${term}`}
-                  className="inline-flex items-center rounded-lg bg-[#12141E] border border-[#292B39] text-[#F4F3FA] shrink-0 overflow-hidden"
+                  className="inline-flex items-center min-h-[40px] rounded-[12px] bg-[#12141E] border border-[#292B39] text-[#F4F3FA] shrink-0 overflow-hidden"
                 >
                   <button
                     type="button"
                     onClick={() => handleSearchChange(term)}
-                    className="px-2 py-0.5 hover:bg-[#191C29] text-[11px] font-medium transition-colors duration-180 cursor-pointer"
+                    className="min-h-[40px] px-3 py-1 hover:bg-[#191C29] text-xs font-medium transition-colors duration-180 cursor-pointer"
                   >
                     {term}
                   </button>
@@ -800,16 +800,16 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                     type="button"
                     aria-label={`Remove recent search ${term}`}
                     onClick={() => setRecentSearches(removeRecentSearch(term, userId))}
-                    className="px-1.5 py-0.5 text-[#A1A5B5] hover:text-[#F87171] transition-colors duration-180 cursor-pointer"
+                    className="w-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-[#A1A5B5] hover:text-[#F87171] hover:bg-[#191C29] transition-colors duration-180 cursor-pointer"
                   >
-                    <X className="w-3 h-3" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ))}
               <button
                 type="button"
                 onClick={() => setRecentSearches(clearRecentSearches(userId))}
-                className="text-[11px] text-[#A1A5B5] hover:text-[#F87171] font-semibold ml-1 shrink-0 cursor-pointer"
+                className="min-h-[40px] px-2.5 rounded-[12px] text-xs text-[#A1A5B5] hover:text-[#F87171] font-semibold ml-0.5 shrink-0 cursor-pointer"
               >
                 Clear
               </button>
@@ -817,7 +817,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           )}
         </div>
 
-        {/* 2b. LANGUAGE FILTER PILLS (All, Tamil, Hindi, Telugu, More) + FILTERS BUTTON */}
+        {/* 2b. LANGUAGE FILTER PILLS (All, Tamil, Hindi, Telugu, More at 44px height) + FILTERS BUTTON (44px) */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {primaryLanguagePills.map((langItem) => {
             const active =
@@ -830,7 +830,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 type="button"
                 onClick={() => setSelectedLanguage(langItem.value)}
                 aria-pressed={active}
-                className={`min-h-[42px] px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 inline-flex items-center gap-1.5 border transition-all duration-180 cursor-pointer ${
+                className={`h-[44px] min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold shrink-0 inline-flex items-center gap-1.5 border transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
                   active
                     ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
                     : 'bg-[#12141E] border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA]'
@@ -856,7 +856,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             onClick={() => setIsMoreLanguagesOpen((prev) => !prev)}
             aria-expanded={isMoreLanguagesOpen}
             aria-pressed={isExtraLanguageActive}
-            className={`min-h-[42px] px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 inline-flex items-center gap-1 border transition-all duration-180 cursor-pointer ${
+            className={`h-[44px] min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold shrink-0 inline-flex items-center gap-1 border transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
               isExtraLanguageActive
                 ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
                 : isMoreLanguagesOpen
@@ -868,19 +868,19 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             {isMoreLanguagesOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
 
-          {/* Compact Filters Button (showing active filter count badge) next to language row */}
+          {/* Compact 44px Filters Button (showing active filter count badge) next to language row */}
           <button
             type="button"
             onClick={() => setIsSmartFilterOpen((prev) => !prev)}
             aria-expanded={isSmartFilterOpen}
             aria-label="Toggle Smart Filters"
-            className={`min-h-[42px] px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-180 cursor-pointer inline-flex items-center gap-1.5 shrink-0 ml-auto ${
+            className={`h-[44px] min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-all duration-180 motion-reduce:transition-none cursor-pointer inline-flex items-center gap-1.5 shrink-0 ml-auto ${
               isSmartFilterOpen || activeAdvancedFilterCount > 0
                 ? 'bg-[#191C29] border-[#B49AF8] text-[#F4F3FA]'
                 : 'bg-[#12141E] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/50'
             }`}
           >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-[#B49AF8]" />
+            <SlidersHorizontal className="w-4 h-4 text-[#B49AF8]" />
             <span>Filters</span>
             {activeAdvancedFilterCount > 0 && (
               <span
@@ -895,7 +895,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
 
         {/* Extra Regional Languages Tray (When "More" is clicked) */}
         {isMoreLanguagesOpen && (
-          <div className="flex flex-wrap items-center gap-1.5 p-2.5 rounded-xl bg-[#12141E] border border-[#292B39]">
+          <div className="flex flex-wrap items-center gap-1.5 p-2.5 rounded-[12px] bg-[#12141E] border border-[#292B39]">
             {(extraLanguagePills.length > 0
               ? extraLanguagePills
               : [
@@ -918,7 +918,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                     setIsMoreLanguagesOpen(false);
                   }}
                   aria-pressed={active}
-                  className={`min-h-[38px] px-3 py-1 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 border transition-all duration-180 cursor-pointer ${
+                  className={`min-h-[42px] px-3.5 py-1.5 rounded-[12px] text-xs font-semibold inline-flex items-center gap-1.5 border transition-all duration-180 cursor-pointer ${
                     active
                       ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
                       : 'bg-[#191C29] border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA]'
@@ -936,17 +936,17 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </div>
         )}
 
-        {/* 4. COLLAPSIBLE SINGLE-LINE OTT COVERAGE / SUBSCRIPTIONS STRIP */}
-        <div className="rounded-xl bg-[#12141E] border border-[#292B39] overflow-hidden">
+        {/* 4. COLLAPSIBLE SINGLE-LINE OTT COVERAGE / SUBSCRIPTIONS STRIP (Slim 44px height) */}
+        <div className="rounded-[12px] bg-[#12141E] border border-[#292B39] overflow-hidden">
           <button
             type="button"
             onClick={() => setIsOttHubOpen((prev) => !prev)}
             aria-expanded={isOttHubOpen}
             aria-label="Toggle OTT Coverage Hub"
-            className="w-full min-h-[38px] px-3 py-1.5 flex items-center justify-between gap-2 text-xs text-left hover:bg-[#191C29] transition-colors duration-180 cursor-pointer"
+            className="w-full h-[44px] min-h-[44px] px-3.5 py-2 flex items-center justify-between gap-2 text-xs text-left hover:bg-[#191C29] transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
           >
             <div className="flex items-center gap-2 min-w-0">
-              <Tv className="w-3.5 h-3.5 text-[#B49AF8] shrink-0" />
+              <Tv className="w-4 h-4 text-[#B49AF8] shrink-0" />
               <span className="font-semibold text-[#F4F3FA] truncate">
                 My Subscriptions &amp; OTT Coverage
               </span>
@@ -960,7 +960,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1 text-[11px] font-semibold text-[#B49AF8] shrink-0">
+            <div className="flex items-center gap-1 text-xs font-semibold text-[#B49AF8] shrink-0">
               <span>{isOttHubOpen ? 'Hide' : 'Expand'}</span>
               {isOttHubOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </div>
@@ -989,9 +989,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           )}
         </div>
 
-        {/* 3. CLEAN FILTER DRAWER / MOBILE BOTTOM SHEET (Smooth Bottom Sheet on mobile, clean panel on desktop) */}
+        {/* 3. UNIFIED FILTER & SORT BOTTOM SHEET (MOBILE) / PANEL (DESKTOP) */}
         {isSmartFilterOpen && (
-          <div className="fixed inset-0 z-50 sm:static sm:z-auto flex items-end sm:block">
+          <div className="fixed inset-0 z-[75] sm:static sm:z-auto flex items-end sm:block">
             {/* Mobile Backdrop */}
             <div
               onClick={() => setIsSmartFilterOpen(false)}
@@ -1001,15 +1001,20 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
 
             <div
               role="dialog"
+              aria-modal="true"
               aria-label="Catalog Filters"
               data-testid="smart-filter-drawer"
-              className="relative z-10 w-full max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-[#12141E] border-t sm:border border-[#292B39] p-4 sm:p-5 space-y-4 shadow-2xl"
+              className="relative z-10 w-full max-h-[86vh] overflow-y-auto rounded-t-3xl sm:rounded-[12px] bg-[#12141E] border-t sm:border border-[#292B39] p-4 sm:p-5 space-y-4 shadow-2xl"
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}
             >
-              {/* Mobile Drag Handle & Header */}
-              <div className="flex items-center justify-between pb-2 border-b border-[#292B39]">
+              {/* Mobile Drag Handle */}
+              <div className="sm:hidden w-10 h-1.5 rounded-full bg-[#292B39] mx-auto -mt-1 mb-1" />
+
+              {/* Header */}
+              <div className="flex items-center justify-between pb-2.5 border-b border-[#292B39]">
                 <div className="flex items-center gap-2">
                   <SlidersHorizontal className="w-4 h-4 text-[#B49AF8]" />
-                  <h2 className="text-sm font-bold text-[#F4F3FA]">Filter &amp; Sort Anime</h2>
+                  <h2 className="text-sm sm:text-base font-bold text-[#F4F3FA]">Filter &amp; Sort Anime</h2>
                   {activeAdvancedFilterCount > 0 && (
                     <span className="px-2 py-0.5 rounded-md bg-[#B49AF8]/15 border border-[#B49AF8]/35 text-[#B49AF8] text-[11px] font-bold">
                       {activeAdvancedFilterCount} active
@@ -1020,23 +1025,62 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                   type="button"
                   onClick={() => setIsSmartFilterOpen(false)}
                   aria-label="Close filters"
-                  className="w-9 h-9 rounded-xl bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center cursor-pointer"
+                  className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 cursor-pointer shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Primary Selectors: Streaming Platform (OTT), Genre, Format Type, Release Status, Sort */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5">
+              {/* Consolidated Languages Section inside Unified Filter Sheet */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
+                  Dub Languages
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    ...primaryLanguagePills,
+                    ...(extraLanguagePills.length > 0
+                      ? extraLanguagePills
+                      : [
+                          { label: 'Malayalam', value: 'Malayalam', count: 0 },
+                          { label: 'Kannada', value: 'Kannada', count: 0 },
+                          { label: 'Bengali', value: 'Bengali', count: 0 },
+                          { label: 'Marathi', value: 'Marathi', count: 0 },
+                        ]),
+                  ].map((langItem) => {
+                    const active =
+                      selectedLanguage.toLowerCase() === langItem.value.toLowerCase() ||
+                      (selectedLanguage === 'All' && langItem.value === 'All');
+                    return (
+                      <button
+                        key={`sheet_lang_${langItem.value}`}
+                        type="button"
+                        onClick={() => setSelectedLanguage(langItem.value)}
+                        aria-pressed={active}
+                        className={`min-h-[42px] px-3 py-1.5 rounded-[12px] text-xs font-semibold border transition-colors duration-180 cursor-pointer ${
+                          active
+                            ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
+                            : 'bg-[#191C29] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/50'
+                        }`}
+                      >
+                        {langItem.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Primary Selectors: OTT Platforms, Genre, Format Type, Release Status, Sort By */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 pt-2 border-t border-[#292B39]">
                 {[
                   { label: 'STREAMING PLATFORM', aria: 'Filter by platform', val: selectedPlatform, set: setSelectedPlatform, opts: PLATFORMS },
                   { label: 'GENRE', aria: 'Filter by genre', val: selectedGenre, set: setSelectedGenre, opts: GENRES },
                   { label: 'TYPE', aria: 'Filter by type', val: selectedType, set: setSelectedType, opts: TYPES },
-                  { label: 'STATUS', aria: 'Filter by status', val: selectedStatus, set: setSelectedStatus, opts: STATUSES },
+                  { label: 'RELEASE STATUS', aria: 'Filter by status', val: selectedStatus, set: setSelectedStatus, opts: STATUSES },
                 ].map((item) => (
                   <div
                     key={`catalog_filter_${item.label}`}
-                    className="flex flex-col gap-1 bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 rounded-xl px-3 py-2 transition-colors duration-180"
+                    className="flex flex-col justify-center min-h-[48px] gap-1 bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 rounded-[12px] px-3 py-2 transition-colors duration-180"
                   >
                     <span className="text-[10px] text-[#A1A5B5] font-bold uppercase tracking-wider">
                       {item.label}
@@ -1060,7 +1104,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 ))}
 
                 {/* Sort Dropdown */}
-                <div className="flex flex-col gap-1 bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 rounded-xl px-3 py-2 transition-colors duration-180">
+                <div className="flex flex-col justify-center min-h-[48px] gap-1 bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 rounded-[12px] px-3 py-2 transition-colors duration-180">
                   <span className="text-[10px] text-[#A1A5B5] font-bold uppercase tracking-wider">
                     SORT BY
                   </span>
@@ -1082,17 +1126,17 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 </div>
               </div>
 
-              {/* Verified Availability & Fully Dubbed Toggles */}
+              {/* Dub Availability Toggles */}
               <div className="space-y-2 pt-2 border-t border-[#292B39]">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
-                  Verification &amp; Dub Completeness
+                  Dub Availability &amp; Verification
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => setVerifiedOnly((prev) => !prev)}
                     aria-pressed={verifiedOnly}
-                    className={`min-h-[42px] px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all duration-180 cursor-pointer inline-flex items-center gap-2 ${
+                    className={`min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-all duration-180 cursor-pointer inline-flex items-center gap-2 ${
                       verifiedOnly
                         ? 'bg-[#B49AF8] border-[#CBB6FF] text-[#0B0A10] font-bold'
                         : 'bg-[#191C29] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/50'
@@ -1106,7 +1150,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                     type="button"
                     onClick={() => setFullyDubbedOnly((prev) => !prev)}
                     aria-pressed={fullyDubbedOnly}
-                    className={`min-h-[42px] px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all duration-180 cursor-pointer inline-flex items-center gap-2 ${
+                    className={`min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-all duration-180 cursor-pointer inline-flex items-center gap-2 ${
                       fullyDubbedOnly
                         ? 'bg-[#B49AF8] border-[#CBB6FF] text-[#0B0A10] font-bold'
                         : 'bg-[#191C29] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/50'
@@ -1120,7 +1164,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                     type="button"
                     onClick={() => setFreeLegalOnly((prev) => !prev)}
                     aria-pressed={freeLegalOnly}
-                    className={`min-h-[42px] px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all duration-180 cursor-pointer inline-flex items-center gap-2 ${
+                    className={`min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-all duration-180 cursor-pointer inline-flex items-center gap-2 ${
                       freeLegalOnly
                         ? 'bg-[#B49AF8] border-[#CBB6FF] text-[#0B0A10] font-bold'
                         : 'bg-[#191C29] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/50'
@@ -1147,7 +1191,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                           type="button"
                           onClick={() => setEpisodeLength(opt.id)}
                           aria-pressed={active}
-                          className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors duration-180 cursor-pointer ${
+                          className={`min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-colors duration-180 cursor-pointer ${
                             active
                               ? 'bg-[#B49AF8] border-[#CBB6FF] text-[#0B0A10] font-bold'
                               : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
@@ -1186,8 +1230,8 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 </div>
               </div>
 
-              {/* Filter Drawer Footer: Reset & Apply Buttons */}
-              <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#292B39]">
+              {/* Sticky Filter Drawer Footer: Reset & Show results (#B49AF8) CTA */}
+              <div className="sticky bottom-0 bg-[#12141E] flex items-center justify-between gap-3 pt-3 border-t border-[#292B39]">
                 <Button
                   type="button"
                   variant="secondary"
@@ -1200,22 +1244,23 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                   type="button"
                   variant="primary"
                   size="md"
+                  aria-label="Apply Filters"
                   onClick={() => setIsSmartFilterOpen(false)}
                 >
-                  Apply Filters
+                  Show results ({paginationMeta.totalItems})
                 </Button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Selected Active Filters as Removable Chips above the Anime Grid */}
+        {/* Selected Active Filters as Removable 40-44px Chips above the Anime Grid */}
         {activeFilterChips.length > 0 && (
           <div
             data-testid="active-filter-chips"
             className="flex flex-wrap items-center gap-1.5 pt-0.5"
           >
-            <span className="text-[11px] font-bold text-[#A1A5B5] mr-1">
+            <span className="text-xs font-bold text-[#A1A5B5] mr-1">
               {paginationMeta.totalItems} {paginationMeta.totalItems === 1 ? 'match' : 'matches'}:
             </span>
             {activeFilterChips.map((chip) => (
@@ -1224,24 +1269,24 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 type="button"
                 onClick={() => handleRemoveChip(chip)}
                 aria-label={`Remove filter ${chip.label}`}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#191C29] border border-[#B49AF8]/40 text-[11px] font-semibold text-[#CBB6FF] hover:border-[#B49AF8] hover:text-[#F4F3FA] transition-colors duration-180 cursor-pointer"
+                className="min-h-[40px] sm:min-h-[44px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#191C29] border border-[#B49AF8]/40 text-xs font-semibold text-[#CBB6FF] hover:border-[#B49AF8] hover:text-[#F4F3FA] transition-colors duration-180 cursor-pointer"
               >
                 <span>{chip.label}</span>
-                <X className="w-3 h-3" />
+                <X className="w-3.5 h-3.5" />
               </button>
             ))}
             <button
               type="button"
               onClick={handleShareFilterUrl}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#12141E] border border-[#292B39] text-[11px] font-semibold text-[#F4F3FA] hover:bg-[#191C29] transition-colors duration-180 cursor-pointer"
+              className="min-h-[40px] sm:min-h-[44px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#12141E] border border-[#292B39] text-xs font-semibold text-[#F4F3FA] hover:bg-[#191C29] transition-colors duration-180 cursor-pointer"
             >
-              <Share2 className="w-3 h-3 text-[#B49AF8]" />
+              <Share2 className="w-3.5 h-3.5 text-[#B49AF8]" />
               <span>Share Link</span>
             </button>
             <button
               type="button"
               onClick={handleClearAllFilters}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F87171]/15 border border-[#F87171]/35 text-[11px] font-semibold text-[#F87171] hover:bg-[#F87171]/25 transition-colors duration-180 cursor-pointer"
+              className="min-h-[40px] sm:min-h-[44px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#F87171]/15 border border-[#F87171]/35 text-xs font-semibold text-[#F87171] hover:bg-[#F87171]/25 transition-colors duration-180 cursor-pointer"
             >
               <span>Clear All</span>
             </button>
@@ -1252,12 +1297,12 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       {/* FOR YOU METADATA BANNER */}
       {feedView === 'foryou' && (
         <div className="mt-2.5 mb-1">
-          <div className="bg-[#12141E] border border-[#292B39] rounded-xl p-3 flex items-center gap-3">
+          <div className="bg-[#12141E] border border-[#292B39] rounded-[12px] p-3 flex items-center gap-3">
             <Sparkles className="w-4 h-4 text-[#F9C876] shrink-0" />
             <div>
               <div className="text-xs font-bold text-[#F4F3FA]">Curated For You • Indian Regional Dubs</div>
               <div className="text-[11px] text-[#A1A5B5] mt-0.5">
-                Tailored to your preferred Tamil, Telugu, Hindi & Malayalam anime dubs.
+                Tailored to your preferred Tamil, Telugu, Hindi &amp; Malayalam anime dubs.
               </div>
             </div>
           </div>
@@ -1289,7 +1334,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             </span>
           </div>
           {catalogStatus !== 'error' && catalogStatus !== 'offline' && (
-            <span className="text-[11px] text-[#A1A5B5] tabular-nums">
+            <span className="text-xs text-[#A1A5B5] tabular-nums">
               Page {paginationMeta.currentPage} of {paginationMeta.totalPages}
             </span>
           )}
@@ -1303,9 +1348,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           <div
             role="alert"
             data-testid="catalog-error-banner"
-            className="p-6 sm:p-8 rounded-2xl bg-[#12141E] border border-[#F87171]/40 text-center space-y-3 max-w-xl mx-auto my-4"
+            className="p-6 sm:p-8 rounded-[12px] bg-[#12141E] border border-[#F87171]/40 text-center space-y-3 max-w-xl mx-auto my-4"
           >
-            <div className="w-12 h-12 rounded-2xl bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 rounded-[12px] bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] flex items-center justify-center mx-auto">
               {catalogStatus === 'offline' ? (
                 <WifiOff className="w-6 h-6" />
               ) : (
@@ -1330,13 +1375,13 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             </div>
           </div>
         ) : displayedAnime.length === 0 ? (
-          <div className="text-center py-12 bg-[#12141E] rounded-2xl border border-[#292B39] space-y-3">
+          <div className="text-center py-12 bg-[#12141E] rounded-[12px] border border-[#292B39] space-y-3">
             <p className="text-[#F4F3FA] text-sm font-semibold">No anime matches your selected filters.</p>
             <p className="text-[#A1A5B5] text-xs">Try clearing a language, platform, or search filter.</p>
             <div className="pt-1">
               <Button
                 variant="primary"
-                size="sm"
+                size="md"
                 onClick={handleClearAllFilters}
               >
                 Reset All Filters
@@ -1346,7 +1391,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         ) : (
           <div
             key={`catalog_grid_${paginationMeta.currentPage}_${selectedLanguage}_${selectedGenre}_${selectedPlatform}_${selectedType}_${selectedStatus}_${selectedSort}`}
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-4"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 lg:gap-5"
           >
             {displayedAnime.map((anime, idx) => {
               const isWatchlisted = watchlist.map(Number).includes(Number(anime.id));
@@ -1367,7 +1412,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </div>
         )}
 
-        {/* Server-Side Pagination Controls (Next / Previous & Page Numbers) */}
+        {/* Server-Side Pagination Controls (44x44px touch targets) */}
         {paginationMeta.totalItems > 0 && (
           <nav
             aria-label="Catalog pagination"
@@ -1387,7 +1432,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 onClick={() => handlePageChange(paginationMeta.currentPage - 1)}
                 disabled={!paginationMeta.hasPrevPage || loading}
                 aria-label="Previous page"
-                className="min-h-[40px] inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150 cursor-pointer"
+                className="h-[44px] min-h-[44px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[12px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] disabled:opacity-40 disabled:pointer-events-none transition-colors duration-180 cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>Previous</span>
@@ -1410,7 +1455,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                       disabled={loading}
                       aria-label={`Page ${pageItem}`}
                       aria-current={pageItem === paginationMeta.currentPage ? 'page' : undefined}
-                      className={`min-w-[38px] h-[38px] px-2 rounded-xl text-xs font-bold transition-colors duration-150 cursor-pointer ${
+                      className={`min-w-[44px] min-h-[44px] h-[44px] px-2.5 rounded-[12px] text-xs font-bold transition-colors duration-180 cursor-pointer ${
                         pageItem === paginationMeta.currentPage
                           ? 'bg-[#B49AF8] text-[#0B0A10] border border-[#CBB6FF]'
                           : 'bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5] hover:text-[#F4F3FA]'
@@ -1427,7 +1472,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 onClick={() => handlePageChange(paginationMeta.currentPage + 1)}
                 disabled={!paginationMeta.hasNextPage || loading}
                 aria-label="Next page"
-                className="min-h-[40px] inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150 cursor-pointer"
+                className="h-[44px] min-h-[44px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[12px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] disabled:opacity-40 disabled:pointer-events-none transition-colors duration-180 cursor-pointer"
               >
                 <span>Next</span>
                 <ChevronRight className="w-4 h-4" />
