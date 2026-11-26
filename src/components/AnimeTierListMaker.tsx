@@ -72,14 +72,16 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
 
   const unrankedPool = catalogList.filter((anime) => {
     if (assignedIds.has(anime.id)) return false;
+    const genreText = Array.isArray(anime.genres) ? anime.genres.join(', ') : String(anime.genres || '');
+    const langText = Array.isArray(anime.languages) ? anime.languages.join(', ') : String(anime.languages || '');
     const matchesQuery =
       !searchQuery.trim() ||
-      anime.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (anime.genres && anime.genres.toLowerCase().includes(searchQuery.toLowerCase()));
+      String(anime.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      genreText.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesLang =
       selectedLanguage === 'All' ||
-      (anime.languages && anime.languages.toLowerCase().includes(selectedLanguage.toLowerCase()));
+      langText.toLowerCase().includes(selectedLanguage.toLowerCase());
 
     return matchesQuery && matchesLang;
   });

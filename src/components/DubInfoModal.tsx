@@ -12,7 +12,8 @@ import {
   Plus,
   Trash2,
   Loader2,
-  Send
+  Send,
+  AlertCircle
 } from 'lucide-react';
 import { AnimeRecord, DubLanguage, dbService } from '../services/databaseService';
 import { cloudflareApi } from '../services/cloudflareApi';
@@ -356,6 +357,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const toast = useToast();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -516,7 +518,11 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    setFormError(null);
+    if (!title.trim()) {
+      setFormError('Anime title is required.');
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -530,7 +536,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         );
         
         if (isDuplicate) {
-          toast.error('Anime Already Exists', 'This anime already exists in our database!');
+          const dupMsg = 'This anime already exists in our database!';
+          setFormError(dupMsg);
+          toast.error('Anime Already Exists', dupMsg);
           setIsSubmitting(false);
           return;
         }
@@ -551,7 +559,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     if (rawPoster) {
       const posterCheck = validateExternalImageUrl(rawPoster, { required: false, fieldName: 'Poster Image URL' });
       if (!posterCheck.ok) {
-        toast.error('Invalid Poster URL', posterCheck.error || 'Poster must be a valid HTTPS image URL.');
+        const posterErr = posterCheck.error || 'Poster must be a valid HTTPS image URL.';
+        setFormError(posterErr);
+        toast.error('Invalid Poster URL', posterErr);
         setIsSubmitting(false);
         return;
       }
@@ -560,7 +570,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     const derivedOfficialSourceUrl = deriveOfficialSourceUrlFromPartners(serializedPartners);
     const sourceUrlCheck = validateOfficialSourceUrl(derivedOfficialSourceUrl, 'Streaming Partner URL');
     if (!sourceUrlCheck.ok) {
-      toast.error('Invalid Streaming Partner URL', sourceUrlCheck.error || 'Primary streaming link must be a valid HTTP or HTTPS URL.');
+      const urlErr = sourceUrlCheck.error || 'Primary streaming link must be a valid HTTP or HTTPS URL.';
+      setFormError(urlErr);
+      toast.error('Invalid Streaming Partner URL', urlErr);
       setIsSubmitting(false);
       return;
     }
@@ -697,9 +709,11 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }, 1500);
     } catch (err: any) {
       console.error('[Submission error]:', err);
+      const errMsg = err?.message || 'Could not save to Cloudflare D1. Please check your connection and try again.';
+      setFormError(errMsg);
       toast.error(
         mode === 'edit' ? 'Failed to Save Changes' : 'Submission Failed',
-        err?.message || 'Could not save to Cloudflare D1. Please check your connection and try again.'
+        errMsg
       );
     } finally {
       setIsSubmitting(false);
@@ -778,10 +792,29 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
               </div>
             ) : (
               <form id="dub-info-form" onSubmit={handleSubmit} className="space-y-4 text-xs">
-                
+                {formError && (
+                  <div
+                    role="alert"
+                    className="p-3 rounded-[12px] bg-[#F87171]/10 border border-[#F87171]/35 text-[#F87171] text-xs flex items-start justify-between gap-2"
+                  >
+                    <div className="flex items-start gap-2 min-w-0">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#F87171]" />
+                      <span>{formError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormError(null)}
+                      aria-label="Dismiss form error"
+                      className="text-[#F87171] hover:text-[#F4F3FA] p-0.5 cursor-pointer shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 {/* Title Field */}
                 <div>
-                  <label className="block font-bold text-[#F4F3FA] mb-1 flex items-center justify-between">
+                  <label className="block font-bold text-[#F4F3FA] mb-1.5 flex items-center justify-between">
                     <span>Anime Title <span className="text-[#B49AF8]">*</span></span>
                   </label>
                   <div className="relative">
@@ -789,26 +822,29 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       type="text"
                       required
                       value={title}
-                      onChange={(e) => setTitle(e.target.value)}
+                      onChange={(e) => {
+                        setTitle(e.target.value);
+                        if (formError) setFormError(null);
+                      }}
                       placeholder="e.g. Solo Leveling, Demon Slayer, Jujutsu Kaisen..."
-                      className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
+                      className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] py-2.5 pl-3.5 pr-9 text-xs sm:text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180"
                     />
-                    <Search className="w-4 h-4 text-[#A1A5B5] absolute right-3 top-3 pointer-events-none" />
+                    <Search className="w-4 h-4 text-[#A1A5B5] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 </div>
 
                 {/* Synopsis Field */}
                 <div>
-                  <label className="block font-bold text-[#F4F3FA] mb-1 flex items-center justify-between">
+                  <label className="block font-bold text-[#F4F3FA] mb-1.5 flex items-center justify-between">
                     <span>Synopsis</span>
-                    <span className="text-[10px] text-[#A1A5B5] font-normal">Plot summary & overview</span>
+                    <span className="text-[10px] text-[#A1A5B5] font-normal">Plot summary &amp; overview</span>
                   </label>
                   <textarea
                     rows={4}
                     value={synopsis}
                     onChange={(e) => setSynopsis(e.target.value)}
                     placeholder="Type or paste a descriptive summary of the anime..."
-                    className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl py-2.5 px-3.5 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150 resize-y leading-relaxed font-sans"
+                    className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] py-2.5 px-3.5 text-xs sm:text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180 resize-y leading-relaxed font-sans"
                   />
                 </div>
 
@@ -1024,7 +1060,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               setFormData((prev: any) => ({ ...prev, status: 'Completed', airing_status: 'Completed' }));
                             }
                           }}
-                          className="w-full bg-[#191C29] border border-[#292B39] rounded-xl px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs"
+                          className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] rounded-[12px] px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs transition-colors duration-180"
                         >
                           <option value="TV Series">TV Series</option>
                           <option value="Movie">Movie</option>
@@ -1048,7 +1084,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                             }
                             setFormData((prev: any) => ({ ...prev, status: newStatus, airing_status: newStatus }));
                           }}
-                          className="w-full bg-[#191C29] border border-[#292B39] rounded-xl px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs"
+                          className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] rounded-[12px] px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs transition-colors duration-180"
                         >
                           <option value="Airing">Airing</option>
                           <option value="Completed">Completed</option>
@@ -1064,7 +1100,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                             value={releaseDay}
                             onChange={(e) => setReleaseDay(e.target.value)}
                             aria-label="Broadcast Day"
-                            className="w-full bg-[#191C29] border border-[#292B39] rounded-xl px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs"
+                            className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] rounded-[12px] px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs transition-colors duration-180"
                           >
                             <option value="">TBA / Unscheduled</option>
                             {ALL_DAYS.map((day) => (
@@ -1084,7 +1120,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                             placeholder="e.g. 08:30 PM IST"
                             aria-label="Broadcast Time"
                             maxLength={40}
-                            className="w-full bg-[#191C29] border border-[#292B39] rounded-xl px-3 py-2 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none focus:border-[#B49AF8]"
+                            className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] rounded-[12px] px-3 py-2 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none focus:border-[#B49AF8] transition-colors duration-180"
                           />
                         </div>
                       )}
@@ -1260,7 +1296,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       value={studio}
                       onChange={(e) => setStudio(e.target.value)}
                       placeholder="e.g. Ufotable"
-                      className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl px-3 py-2 text-[#F4F3FA] text-xs outline-none"
+                      className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] px-3 py-2 text-[#F4F3FA] text-xs outline-none transition-colors duration-180"
                     />
                   </div>
                   <div>
@@ -1270,7 +1306,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       value={releaseYear}
                       onChange={(e) => setReleaseYear(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                       placeholder="2025"
-                      className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl px-3 py-2 text-[#F4F3FA] text-xs outline-none"
+                      className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] px-3 py-2 text-[#F4F3FA] text-xs outline-none transition-colors duration-180"
                     />
                   </div>
                   <div>
@@ -1283,7 +1319,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       value={rating}
                       onChange={(e) => setRating(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       placeholder="8.5"
-                      className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl px-3 py-2 text-[#F4F3FA] text-xs outline-none"
+                      className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] px-3 py-2 text-[#F4F3FA] text-xs outline-none transition-colors duration-180"
                     />
                   </div>
                 </div>

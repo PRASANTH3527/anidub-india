@@ -18,7 +18,10 @@ import {
   EyeOff,
   Ban,
   Flag,
-  MoreHorizontal
+  MoreHorizontal,
+  Reply,
+  RotateCcw,
+  Check
 } from 'lucide-react';
 import { getCloudflareWsUrl } from '../config/cloudflare';
 import { cloudflareApi } from '../services/cloudflareApi';
@@ -27,6 +30,7 @@ import { syncAndDeduplicateChatMessages } from '../utils/chatDeduplication';
 import { getVerifiedClerkUsername } from '../utils/chatIdentity';
 import { useAuth } from '@clerk/clerk-react';
 import { useUser } from '../lib/clerk';
+import { EmptyState } from './ui/EclipseState';
 import {
   blockChatUser,
   unblockChatUser,
@@ -42,6 +46,11 @@ import {
   SPOILER_PROTECTION_EVENT,
 } from '../utils/watchProgress';
 
+export interface ChatReplyPreview {
+  user: string;
+  excerpt: string;
+}
+
 export interface ChatMessage {
   id: string | number;
   user: string;
@@ -51,7 +60,27 @@ export interface ChatMessage {
   isReview?: boolean;
   rating?: number | null;
   language?: string | null;
+  deliveryStatus?: 'sending' | 'sent' | 'failed';
+  replyTo?: ChatReplyPreview | null;
 }
+
+const REPLY_PREFIX_REGEX = /^\[reply:@([^|\]]+)\|([^\]]*)\]\s*/;
+
+const encodeReplyText = (text: string, replyTo?: ChatReplyPreview | null): string => {
+  if (!replyTo) return text;
+  const safeUser = replyTo.user.replace(/[|\]]/g, '').trim().slice(0, 32);
+  const safeExcerpt = replyTo.excerpt.replace(/[\r\n|\]]/g, ' ').trim().slice(0, 80);
+  return `[reply:@${safeUser}|${safeExcerpt}] ${text}`;
+};
+
+const parseReplyFromText = (rawText: string): { replyTo: ChatReplyPreview | null; body: string } => {
+  const match = rawText.match(REPLY_PREFIX_REGEX);
+  if (!match) return { replyTo: null, body: rawText };
+  return {
+    replyTo: { user: match[1], excerpt: match[2] },
+    body: rawText.slice(match[0].length),
+  };
+};
 
 const QUICK_REACTIONS = ['🔥', '❤️', '⚡', '🍿', '😭', '✨', '💯', '🎌'];
 
@@ -186,6 +215,8 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   const [reportDescription, setReportDescription] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [moderationToast, setModerationToast] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<ChatReplyPreview | null>(null);
+  const failedMessagesRef = useRef<Map<string, ChatMessage>>(new Map());
 
   useEffect(() => {
     const syncSpoilerPref = () => {
@@ -313,11 +344,16 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
           pendingOptimisticRef.current.delete(String(m.id));
         });
 
-        // Retain any pending in-flight messages that have not yet landed in the database
+        // Retain any pending in-flight or failed local messages so user never silently loses unsent text
         const inFlightPending: ChatMessage[] = [];
         pendingOptimisticRef.current.forEach((pendingMsg, pId) => {
           if (!seenIds.has(pId)) {
             inFlightPending.push(pendingMsg);
+          }
+        });
+        failedMessagesRef.current.forEach((failedMsg, fId) => {
+          if (!seenIds.has(fId) && !pendingOptimisticRef.current.has(fId)) {
+            inFlightPending.push(failedMsg);
           }
         });
 
@@ -326,7 +362,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         setMessages(nextState);
 
         try {
-          localStorage.setItem('cf_community_chat', JSON.stringify(nextState));
+          localStorage.setItem(
+            'cf_community_chat',
+            JSON.stringify(nextState.filter((m) => m.deliveryStatus !== 'failed'))
+          );
         } catch {}
 
         if (!isSilent) {
@@ -538,8 +577,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
   // 4. Send Message & Review: Client-side unique ID + Verified Clerk Username + Direct REST & WebSocket Persistence
   const sendMessage = async (
-    text: string, 
-    extra: { isReview?: boolean; rating?: number | null; language?: string | null } = {}
+    text: string,
+    extra: {
+      isReview?: boolean;
+      rating?: number | null;
+      language?: string | null;
+      replyTo?: ChatReplyPreview | null;
+      retryId?: string;
+    } = {}
   ): Promise<boolean> => {
     if (!text.trim()) return false;
 
@@ -563,11 +608,12 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       return false;
     }
 
-    // 1) CLIENT-SIDE UNIQUE ID: Generate a unique ID (crypto.randomUUID() or Date.now().toString())
-    // Use this exact ID for both the optimistic UI update AND send it to the backend to be saved as the message ID.
-    const clientUniqueId = typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    // 1) CLIENT-SIDE UNIQUE ID: Generate or reuse retry ID
+    const clientUniqueId = extra.retryId || (
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+    );
 
     const payload: ChatMessage & { username: string } = {
       id: clientUniqueId,
@@ -578,16 +624,21 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       isSelf: true,
       isReview: Boolean(extra.isReview),
       rating: extra.rating ?? null,
-      language: extra.language ?? null
+      language: extra.language ?? null,
+      deliveryStatus: 'sending',
+      replyTo: extra.replyTo ?? null,
     };
 
     // Track as in-flight pending
+    failedMessagesRef.current.delete(clientUniqueId);
     pendingOptimisticRef.current.set(clientUniqueId, payload);
 
-    // 2) OPTIMISTIC UI: Instantly add the message with exact clientUniqueId so user sees it without delay
+    // 2) OPTIMISTIC UI: Instantly show message with Sending… status
     setMessages(prev => {
-      if (prev.some(m => String(m.id) === clientUniqueId)) return prev;
-      const updated = [...prev, payload];
+      const exists = prev.some(m => String(m.id) === clientUniqueId);
+      const updated = exists
+        ? prev.map(m => (String(m.id) === clientUniqueId ? payload : m))
+        : [...prev, payload];
       try {
         localStorage.setItem('cf_community_chat', JSON.stringify(updated));
       } catch {}
@@ -606,8 +657,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         throw new Error(resp.error || 'Failed to post message');
       }
 
-      // Mark message as confirmed/resolved from in-flight
+      // Mark message as confirmed/sent
       pendingOptimisticRef.current.delete(clientUniqueId);
+      failedMessagesRef.current.delete(clientUniqueId);
+      setMessages(prev =>
+        prev.map(m =>
+          String(m.id) === clientUniqueId ? { ...m, deliveryStatus: 'sent' } : m
+        )
+      );
 
       // 4) Broadcast verified message over WebSocket if open
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -628,16 +685,38 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       setChatError(null);
       return true;
     } catch (err: any) {
-      // Rollback the optimistic message on error so user knows it wasn't saved
+      // Keep the failed message visible with explicit Failed — Retry state
       pendingOptimisticRef.current.delete(clientUniqueId);
-      setMessages(prev => prev.filter(m => String(m.id) !== clientUniqueId));
+      const failedMessage: ChatMessage = { ...payload, deliveryStatus: 'failed' };
+      failedMessagesRef.current.set(clientUniqueId, failedMessage);
+      setMessages(prev =>
+        prev.map(m =>
+          String(m.id) === clientUniqueId ? failedMessage : m
+        )
+      );
 
       console.warn('Network persistence note:', err);
       const errMsg = err.message || '';
-      setChatError(errMsg || 'Failed to post message');
+      setChatError(errMsg || 'Message failed to deliver — tap Retry on your message.');
       setTimeout(() => setChatError(null), 8000);
       return false;
     }
+  };
+
+  const handleRetryFailedMessage = async (msg: ChatMessage) => {
+    await sendMessage(msg.text, {
+      isReview: msg.isReview,
+      rating: msg.rating,
+      language: msg.language,
+      replyTo: msg.replyTo,
+      retryId: String(msg.id),
+    });
+  };
+
+  const handleDismissFailedMessage = (msgId: string | number) => {
+    const strId = String(msgId);
+    failedMessagesRef.current.delete(strId);
+    setMessages(prev => prev.filter(m => String(m.id) !== strId));
   };
 
   const handleSendMessageSubmit = async (e: React.FormEvent) => {
@@ -653,13 +732,15 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         language: reviewLang
       });
     } else {
-      const formattedText = formatSpoilerChatMessage(trimmed, isSpoilerDraft);
-      success = await sendMessage(formattedText);
+      const withReply = encodeReplyText(trimmed, replyingTo);
+      const formattedText = formatSpoilerChatMessage(withReply, isSpoilerDraft);
+      success = await sendMessage(formattedText, { replyTo: replyingTo });
     }
 
     if (success) {
       setInputMessage('');
       setIsSpoilerDraft(false);
+      setReplyingTo(null);
 
       // Ensure user's new message is scrolled into view within the container
       if (chatContainerRef.current) {
@@ -928,21 +1009,22 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       )}
 
       {/* 2. CONTINUOUS STREAM MESSAGE FEED */}
-      <div 
+      <div
         ref={chatContainerRef}
-        className="h-[390px] sm:h-[450px] md:h-[490px] overflow-y-auto overscroll-contain px-3 py-2.5 sm:px-4 sm:py-3 space-y-1 bg-[#12141E]"
+        className="h-[400px] sm:h-[460px] md:h-[500px] overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4 space-y-2.5 bg-[#0B0A10]"
       >
         {visibleMessages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-[#A1A5B5] p-6">
-            <div className="w-10 h-10 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <h4 className="text-xs font-semibold text-[#F4F3FA]">Welcome to Live Chat!</h4>
-            <p className="text-[11px] max-w-xs text-[#A1A5B5]">
-              {messages.length > 0 && blockedUsers.length > 0
-                ? 'All current messages are from blocked users.'
-                : 'Say hello or share your thoughts on regional anime dubs.'}
-            </p>
+          <div className="h-full flex items-center justify-center p-2">
+            <EmptyState
+              icon={<Sparkles className="w-5 h-5" />}
+              title="Welcome to Live Chat"
+              description={
+                messages.length > 0 && blockedUsers.length > 0
+                  ? 'All current messages are from blocked users.'
+                  : 'Say hello or share your thoughts on Tamil, Hindi, Telugu, and Malayalam dubs.'
+              }
+              className="w-full max-w-sm border-dashed"
+            />
           </div>
         ) : (
           visibleMessages.map((msg) => {
@@ -951,80 +1033,107 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             const msgKey = String(msg.id);
             const isSpoilerMsg = isChatMessageSpoiler(msg);
             const shouldBlur = spoilerProtection && isSpoilerMsg && !revealedMessageIds[msgKey];
-            const cleanBody = stripSpoilerMarker(msg.text);
+            const strippedText = stripSpoilerMarker(msg.text);
+            const parsedReply = parseReplyFromText(strippedText);
+            const effectiveReply = msg.replyTo || parsedReply.replyTo;
+            const cleanBody = parsedReply.body;
             const isMenuOpen = openMenuMessageId === msgKey;
 
             return (
-              <motion.div 
-                key={msg.id} 
-                initial={{ opacity: 0, y: 8 }}
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.16, ease: 'easeOut' }}
-                className="relative flex items-start gap-2.5 px-2 py-1.5 -mx-1.5 rounded-lg hover:bg-[#191C29] transition-colors duration-150 group"
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                data-testid="chat-message-bubble"
+                className={`relative flex items-start gap-2.5 p-3 rounded-[12px] border transition-colors duration-180 motion-reduce:transition-none group ${
+                  msg.deliveryStatus === 'failed'
+                    ? 'bg-[#F87171]/10 border-[#F87171]/40'
+                    : msg.isSelf
+                      ? 'bg-[#B49AF8]/12 border-[#B49AF8]/30'
+                      : 'bg-[#191C29] border-[#292B39]'
+                }`}
               >
                 {/* Avatar */}
-                <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-md sm:rounded-lg flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0 border ${avatarStyle} mt-0.5`}>
+                <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0 border ${avatarStyle} mt-0.5`}>
                   {getInitials(msg.user)}
                 </div>
 
                 {/* Message Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className={`text-[12px] sm:text-[13px] font-semibold ${userColor} hover:underline cursor-pointer tracking-tight`}>
+                    <span className={`text-[12px] sm:text-[13px] font-semibold ${userColor} tracking-tight truncate max-w-[160px]`}>
                       {msg.user}
                     </span>
 
                     {msg.isSelf && (
-                      <span className="text-[8px] font-bold text-[#B49AF8] bg-[#B49AF8]/15 border border-[#B49AF8]/30 px-1 py-0.2 rounded">
+                      <span className="text-[9px] font-bold text-[#B49AF8] bg-[#B49AF8]/15 border border-[#B49AF8]/30 px-1.5 py-0.5 rounded">
                         you
                       </span>
                     )}
 
                     {msg.isReview && (
-                      <span className="text-[9px] font-medium text-[#F9C876] bg-[#F9C876]/15 border border-[#F9C876]/30 px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
-                        <Star className="w-2 h-2 fill-[#F9C876]" />
+                      <span className="text-[10px] font-semibold text-[#F9C876] bg-[#F9C876]/15 border border-[#F9C876]/30 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5">
+                        <Star className="w-2.5 h-2.5 fill-[#F9C876]" />
                         <span>{msg.rating ? `${msg.rating}/10` : 'Dub Review'}</span>
                       </span>
                     )}
 
                     {isSpoilerMsg && (
-                      <span className="text-[9px] font-bold text-[#F9C876] bg-[#F9C876]/15 border border-[#F9C876]/30 px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
+                      <span className="text-[10px] font-bold text-[#F9C876] bg-[#F9C876]/15 border border-[#F9C876]/30 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5">
                         <EyeOff className="w-2.5 h-2.5" />
                         <span>Spoiler</span>
                       </span>
                     )}
 
                     {msg.language && (
-                      <span className="text-[9px] font-medium text-[#34D399] bg-[#34D399]/15 border border-[#34D399]/30 px-1.5 py-0.2 rounded">
+                      <span className="text-[10px] font-medium text-[#34D399] bg-[#34D399]/15 border border-[#34D399]/30 px-1.5 py-0.5 rounded">
                         {msg.language}
                       </span>
                     )}
 
-                    <span className="text-[10px] text-[#A1A5B5]/80 font-mono ml-auto sm:ml-1 select-none">
+                    <span className="text-[10px] text-[#A1A5B5] font-mono ml-auto select-none">
                       {msg.timestamp}
                     </span>
 
+                    {/* Quick Reply Action */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode('chat');
+                        setReplyingTo({
+                          user: msg.user,
+                          excerpt: shouldBlur ? 'Spoiler message' : cleanBody.slice(0, 80),
+                        });
+                      }}
+                      aria-label={`Reply to ${msg.user}`}
+                      className="p-1.5 rounded-lg text-[#A1A5B5] hover:text-[#B49AF8] hover:bg-[#12141E] transition-colors duration-180 motion-reduce:transition-none cursor-pointer sm:opacity-60 sm:group-hover:opacity-100 focus:opacity-100"
+                      title={`Reply to @${msg.user}`}
+                    >
+                      <Reply className="w-3.5 h-3.5" />
+                    </button>
+
                     {/* Block / Report User Menu Button */}
                     {!msg.isSelf && (
-                      <div className="relative ml-auto sm:ml-0" data-chat-mod-menu>
+                      <div className="relative" data-chat-mod-menu>
                         <button
                           type="button"
                           onClick={() => setOpenMenuMessageId(isMenuOpen ? null : msgKey)}
                           aria-label={`Moderate or report ${msg.user}`}
                           aria-expanded={isMenuOpen}
-                          className="p-1 rounded-md text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#12141E] transition-colors duration-150 cursor-pointer sm:opacity-40 sm:group-hover:opacity-100 focus:opacity-100"
+                          className="p-1.5 rounded-lg text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#12141E] transition-colors duration-180 motion-reduce:transition-none cursor-pointer sm:opacity-60 sm:group-hover:opacity-100 focus:opacity-100"
                           title={`Block or Report @${msg.user}`}
                         >
                           <MoreHorizontal className="w-3.5 h-3.5" />
                         </button>
 
                         {isMenuOpen && (
-                          <div className="absolute right-0 top-full mt-1 w-40 rounded-xl bg-[#191C29] border border-[#292B39] shadow-2xl py-1 z-40">
+                          <div className="absolute right-0 top-full mt-1 w-40 rounded-[12px] bg-[#12141E] border border-[#292B39] shadow-2xl py-1 z-40">
                             <button
                               type="button"
                               onClick={() => handleBlockChatUser(msg.user)}
                               aria-label={`Block user ${msg.user}`}
-                              className="w-full px-3 py-1.5 text-left text-xs text-[#F87171] hover:bg-[#F87171]/15 flex items-center gap-2 cursor-pointer"
+                              className="w-full min-h-[38px] px-3 py-1.5 text-left text-xs text-[#F87171] hover:bg-[#F87171]/15 flex items-center gap-2 cursor-pointer"
                             >
                               <Ban className="w-3.5 h-3.5 shrink-0" />
                               <span>Block User</span>
@@ -1036,7 +1145,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                                 setOpenMenuMessageId(null);
                               }}
                               aria-label={`Report user ${msg.user}`}
-                              className="w-full px-3 py-1.5 text-left text-xs text-[#F9C876] hover:bg-[#F9C876]/15 flex items-center gap-2 cursor-pointer"
+                              className="w-full min-h-[38px] px-3 py-1.5 text-left text-xs text-[#F9C876] hover:bg-[#F9C876]/15 flex items-center gap-2 cursor-pointer"
                             >
                               <Flag className="w-3.5 h-3.5 shrink-0" />
                               <span>Report User</span>
@@ -1047,11 +1156,19 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                     )}
                   </div>
 
+                  {/* Quoted Reply Block */}
+                  {effectiveReply && (
+                    <div className="mt-1.5 mb-1 px-2.5 py-1.5 rounded-lg bg-[#12141E]/80 border-l-2 border-[#B49AF8] text-[11px] text-[#A1A5B5] truncate">
+                      <span className="font-semibold text-[#B49AF8] mr-1.5">@{effectiveReply.user}</span>
+                      <span>{effectiveReply.excerpt}</span>
+                    </div>
+                  )}
+
                   {/* Message Body (with optional Spoiler Protection blur overlay) */}
-                  <div className="relative mt-0.5">
+                  <div className="relative mt-1">
                     {msg.isReview ? (
                       <div
-                        className={`text-xs text-[#F4F3FA] leading-relaxed border-l-2 border-[#F9C876] pl-2 py-0.5 bg-[#F9C876]/10 rounded-r break-words transition-all ${
+                        className={`text-xs sm:text-[13px] text-[#F4F3FA] leading-relaxed border-l-2 border-[#F9C876] pl-2.5 py-1 bg-[#F9C876]/10 rounded-r break-words transition-all ${
                           shouldBlur ? 'blur-sm select-none opacity-45 pointer-events-none' : ''
                         }`}
                       >
@@ -1059,7 +1176,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                       </div>
                     ) : (
                       <p
-                        className={`text-xs sm:text-[13px] text-[#F4F3FA] leading-snug break-words select-text font-normal transition-all ${
+                        className={`text-xs sm:text-[13px] text-[#F4F3FA] leading-relaxed break-words select-text font-normal transition-all ${
                           shouldBlur ? 'blur-sm select-none opacity-45 pointer-events-none' : ''
                         }`}
                       >
@@ -1074,13 +1191,49 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                           setRevealedMessageIds((prev) => ({ ...prev, [msgKey]: true }))
                         }
                         aria-label={`Reveal spoiler message from ${msg.user}`}
-                        className="mt-1 px-2.5 py-1 rounded-lg bg-[#F9C876]/15 hover:bg-[#F9C876]/25 border border-[#F9C876]/35 text-[11px] font-bold text-[#F9C876] inline-flex items-center gap-1.5 cursor-pointer"
+                        className="mt-1.5 min-h-[36px] px-3 py-1 rounded-[10px] bg-[#F9C876]/15 hover:bg-[#F9C876]/25 border border-[#F9C876]/35 text-[11px] font-bold text-[#F9C876] inline-flex items-center gap-1.5 cursor-pointer"
                       >
                         <Eye className="w-3 h-3" />
                         <span>Spoiler Hidden — Click to Reveal</span>
                       </button>
                     )}
                   </div>
+
+                  {/* Delivery Status Footer (Sending / Sent / Failed — Retry) */}
+                  {msg.isSelf && msg.deliveryStatus && (
+                    <div className="mt-1.5 flex items-center justify-end gap-2 text-[10px]">
+                      {msg.deliveryStatus === 'sending' && (
+                        <span className="text-[#A1A5B5] font-medium">Sending…</span>
+                      )}
+                      {msg.deliveryStatus === 'sent' && (
+                        <span className="text-[#34D399] font-medium inline-flex items-center gap-1">
+                          <Check className="w-3 h-3" />
+                          <span>Sent</span>
+                        </span>
+                      )}
+                      {msg.deliveryStatus === 'failed' && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[#F87171] font-semibold">Failed to send</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRetryFailedMessage(msg)}
+                            className="px-2 py-0.5 rounded-md bg-[#F87171]/20 hover:bg-[#F87171]/30 border border-[#F87171]/40 text-[#F4F3FA] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors duration-180"
+                          >
+                            <RotateCcw className="w-2.5 h-2.5" />
+                            <span>Retry</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDismissFailedMessage(msg.id)}
+                            aria-label="Dismiss failed message"
+                            className="text-[#A1A5B5] hover:text-[#F4F3FA] cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             );
@@ -1167,12 +1320,12 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         </div>
       )}
 
-      {/* 3. INPUT AREA */}
-      <div className="p-2.5 sm:p-3 border-t border-[#292B39] bg-[#191C29] space-y-2 relative">
+      {/* 3. STICKY BOTTOM COMPOSER */}
+      <div className="sticky bottom-0 p-3 border-t border-[#292B39] bg-[#191C29] space-y-2 z-20">
         
         {/* Error Warning */}
         {chatError && (
-          <div className="px-3 py-1.5 rounded-xl bg-[#F87171]/10 border border-[#F87171]/35 text-[#F87171] text-xs font-medium flex items-center justify-between gap-2">
+          <div role="alert" className="px-3 py-2 rounded-[12px] bg-[#F87171]/10 border border-[#F87171]/35 text-[#F87171] text-xs font-medium flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
               <AlertCircle className="w-3.5 h-3.5 text-[#F87171] shrink-0" />
               <span className="break-words">{chatError}</span>
@@ -1180,8 +1333,30 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             <button
               type="button"
               onClick={() => setChatError(null)}
-              className="p-1 rounded-md text-[#F87171] hover:text-[#F4F3FA] hover:bg-[#F87171]/20 transition-colors duration-150 shrink-0 cursor-pointer"
+              className="p-1.5 rounded-md text-[#F87171] hover:text-[#F4F3FA] hover:bg-[#F87171]/20 transition-colors duration-180 shrink-0 cursor-pointer"
               aria-label="Dismiss error"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Active Reply Preview Chip */}
+        {replyingTo && mode === 'chat' && (
+          <div
+            data-testid="chat-reply-preview"
+            className="flex items-center justify-between gap-2 px-3 py-2 rounded-[12px] bg-[#12141E] border border-[#B49AF8]/35 text-xs"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Reply className="w-3.5 h-3.5 text-[#B49AF8] shrink-0" />
+              <span className="text-[#B49AF8] font-semibold shrink-0">@{replyingTo.user}</span>
+              <span className="text-[#A1A5B5] truncate">{replyingTo.excerpt}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              aria-label="Cancel reply"
+              className="p-1 rounded-md text-[#A1A5B5] hover:text-[#F4F3FA] cursor-pointer shrink-0"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -1190,12 +1365,12 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
         {/* Review Mode Filters */}
         {mode === 'review' && (
-          <div className="flex items-center gap-2 px-1 text-xs text-[#F9C876]">
+          <div className="flex items-center flex-wrap gap-2 px-1 text-xs text-[#F9C876]">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-[#A1A5B5]">Reviewing:</span>
             <select
               value={reviewLang}
               onChange={(e) => setReviewLang(e.target.value)}
-              className="bg-[#12141E] border border-[#292B39] rounded-md px-2 py-0.5 text-[11px] text-[#F9C876] font-medium focus:outline-none cursor-pointer"
+              className="min-h-[36px] bg-[#12141E] border border-[#292B39] rounded-[10px] px-2.5 text-[11px] text-[#F9C876] font-medium focus:outline-none focus:border-[#B49AF8] cursor-pointer"
             >
               <option value="Tamil Dub">Tamil Dub</option>
               <option value="Telugu Dub">Telugu Dub</option>
@@ -1204,8 +1379,8 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
               <option value="Kannada Dub">Kannada Dub</option>
             </select>
 
-            <div className="flex items-center gap-0.5 bg-[#12141E] border border-[#292B39] px-1.5 py-0.5 rounded-md">
-              <Star className="w-2.5 h-2.5 fill-[#F9C876] text-[#F9C876] shrink-0" />
+            <div className="flex items-center gap-1 min-h-[36px] bg-[#12141E] border border-[#292B39] px-2.5 rounded-[10px]">
+              <Star className="w-3 h-3 fill-[#F9C876] text-[#F9C876] shrink-0" />
               <select
                 value={reviewRating}
                 onChange={(e) => setReviewRating(parseFloat(e.target.value))}
@@ -1221,9 +1396,9 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
         {/* Floating Emoji Picker Popover */}
         {showEmojiPicker && (
-          <div 
+          <div
             ref={emojiPickerRef}
-            className="absolute bottom-full mb-2 left-3 sm:left-4 bg-[#12141E] border border-[#292B39] rounded-xl shadow-2xl p-1.5 flex items-center gap-1 z-50"
+            className="absolute bottom-full mb-2 left-3 sm:left-4 bg-[#12141E] border border-[#292B39] rounded-[12px] shadow-2xl p-1.5 flex items-center gap-1 z-50"
           >
             {QUICK_REACTIONS.map((emoji) => (
               <button
@@ -1231,7 +1406,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                 type="button"
                 onClick={() => handleReactionClick(emoji)}
                 aria-label={`Insert ${emoji} reaction`}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#191C29] text-sm transition-colors duration-150 cursor-pointer"
+                className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#191C29] text-sm transition-colors duration-180 cursor-pointer"
                 title={`Add ${emoji}`}
               >
                 {emoji}
@@ -1241,23 +1416,23 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         )}
 
         {/* Active Username Indicator */}
-        <div className="text-xs text-[#A1A5B5] mb-1 flex items-center justify-between px-1 select-none">
-          <div className="flex items-center gap-1.5">
-            <span>{isSignedIn && user ? 'Verified Clerk Identity:' : 'Visitor Mode:'}</span>
-            <strong className="text-[#F4F3FA] font-semibold tracking-wide">
+        <div className="text-xs text-[#A1A5B5] flex items-center justify-between gap-2 px-1 select-none">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="shrink-0">{isSignedIn && user ? 'Verified:' : 'Visitor:'}</span>
+            <strong className="text-[#F4F3FA] font-semibold tracking-wide truncate">
               {currentUserName}
             </strong>
           </div>
           {!isSignedIn && (
-            <span className="text-[11px] text-[#F9C876]">
+            <span className="text-[11px] text-[#F9C876] shrink-0">
               Sign in with Clerk to post
             </span>
           )}
         </div>
 
-        {/* Sleek Input with Integrated Smiley and Send Button */}
+        {/* 44px Eclipse Composer with Smiley, Spoiler Tag & Send */}
         <form onSubmit={handleSendMessageSubmit} className="relative">
-          <div className={`relative flex items-center bg-[#12141E] focus-within:bg-[#0B0A10] border rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 transition-colors duration-150 ${
+          <div className={`relative flex items-center min-h-[44px] bg-[#12141E] focus-within:bg-[#0B0A10] border rounded-[12px] px-2 py-1 gap-1.5 transition-colors duration-180 motion-reduce:transition-none ${
             mode === 'review'
               ? 'border-[#F9C876]/40 focus-within:border-[#F9C876]'
               : 'border-[#292B39] focus-within:border-[#B49AF8]'
@@ -1267,7 +1442,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             <button
               type="button"
               onClick={() => setShowEmojiPicker(prev => !prev)}
-              className={`p-1.5 rounded-lg hover:bg-[#191C29] transition-colors duration-150 cursor-pointer shrink-0 mr-1 ${
+              className={`w-9 h-9 rounded-lg hover:bg-[#191C29] flex items-center justify-center transition-colors duration-180 cursor-pointer shrink-0 ${
                 showEmojiPicker ? 'text-[#F9C876] bg-[#191C29]' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
               }`}
               title="Add reaction emoji"
@@ -1282,7 +1457,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                 onClick={() => setIsSpoilerDraft((prev) => !prev)}
                 aria-pressed={isSpoilerDraft}
                 aria-label="Mark message as spoiler"
-                className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-colors duration-150 cursor-pointer shrink-0 mr-1.5 border ${
+                className={`min-h-[32px] px-2.5 rounded-lg text-[10px] font-bold transition-colors duration-180 cursor-pointer shrink-0 border ${
                   isSpoilerDraft
                     ? 'bg-[#F9C876]/20 border-[#F9C876]/40 text-[#F9C876]'
                     : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
@@ -1294,27 +1469,27 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             )}
 
             {/* Seamless Text Input */}
-            <input 
+            <input
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               placeholder={
                 !isSignedIn
-                  ? 'Sign in with Clerk to post in Live Chat...'
+                  ? 'Sign in with Clerk to post...'
                   : mode === 'review'
                   ? `Review as ${currentUserName} (${reviewLang})...`
-                  : defaultAnimeTitle 
-                    ? `Message as ${currentUserName} about ${defaultAnimeTitle}...`
+                  : defaultAnimeTitle
+                    ? `Message about ${defaultAnimeTitle}...`
                     : `Message as ${currentUserName}...`
               }
-              className="flex-1 bg-transparent text-xs sm:text-[13px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none min-w-0 py-1"
+              className="flex-1 bg-transparent text-xs sm:text-[13px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none min-w-0 py-1.5"
             />
 
             {/* Embedded Send Button */}
             <button
               type="submit"
               disabled={!inputMessage.trim()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors duration-150 cursor-pointer disabled:opacity-25 disabled:pointer-events-none ${
+              className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors duration-180 cursor-pointer disabled:opacity-30 disabled:pointer-events-none ${
                 mode === 'review'
                   ? 'bg-[#F9C876] text-[#0B0A10]'
                   : 'bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10]'
@@ -1322,7 +1497,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
               title={mode === 'review' ? 'Post Dub Review' : 'Send message'}
               aria-label={mode === 'review' ? 'Post Dub Review' : 'Send message'}
             >
-              <Send className="w-3.5 h-3.5 fill-current ml-0.5" />
+              <Send className="w-4 h-4 fill-current ml-0.5" />
             </button>
           </div>
         </form>

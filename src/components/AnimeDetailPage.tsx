@@ -289,10 +289,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         .then((res) => {
           const targetId = Number(details?.id ?? animeId);
           if (Array.isArray(res?.follows)) {
-            const matched = res.follows.some((f) => Number(f.anime_id) === targetId);
+            const ids = res.follows
+              .map((f: number | { anime_id?: number }) =>
+                typeof f === 'number' ? f : Number(f?.anime_id)
+              )
+              .filter((n) => Number.isFinite(n) && n > 0);
+            const matched = ids.some((fid) => fid === targetId);
             setIsFollowing(matched);
             try {
-              const ids = res.follows.map((f) => Number(f.anime_id)).filter((n) => n > 0);
               localStorage.setItem(`cf_followed_anime_ids_${user.id}`, JSON.stringify(ids));
             } catch {}
           }

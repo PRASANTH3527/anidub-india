@@ -19,13 +19,13 @@ export const LegalPage: React.FC<LegalPageProps> = ({
   const isPrivacy = page === 'privacy';
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 font-sans text-[#F4F3FA]">
+    <div className="w-full max-w-3xl mx-auto px-3 sm:px-6 py-6 sm:py-10 font-sans text-[#F4F3FA] overflow-x-clip">
       {/* Top Breadcrumb & Switcher */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <Button
           type="button"
           variant="secondary"
-          size="sm"
+          size="md"
           onClick={onNavigateHome}
           leftIcon={<ArrowLeft className="w-4 h-4" />}
           className="text-xs"
@@ -33,12 +33,12 @@ export const LegalPage: React.FC<LegalPageProps> = ({
           Back to Directory
         </Button>
 
-        <div className="inline-flex items-center rounded-xl bg-[#12141E] border border-[#292B39] p-1">
+        <div className="inline-flex items-center rounded-[12px] bg-[#12141E] border border-[#292B39] p-1">
           <button
             type="button"
             onClick={() => onSwitchLegalPage('privacy')}
             aria-current={isPrivacy ? 'page' : undefined}
-            className={`min-h-[36px] px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 cursor-pointer ${
+            className={`min-h-[40px] px-3.5 py-2 rounded-[10px] text-xs font-semibold transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
               isPrivacy ? 'bg-[#B49AF8] text-[#0B0A10]' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
             }`}
           >
@@ -48,7 +48,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
             type="button"
             onClick={() => onSwitchLegalPage('copyright')}
             aria-current={!isPrivacy ? 'page' : undefined}
-            className={`min-h-[36px] px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 cursor-pointer ${
+            className={`min-h-[40px] px-3.5 py-2 rounded-[10px] text-xs font-semibold transition-colors duration-180 motion-reduce:transition-none cursor-pointer ${
               !isPrivacy ? 'bg-[#B49AF8] text-[#0B0A10]' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
             }`}
           >
@@ -58,7 +58,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
       </div>
 
       {/* Main Legal Document Card */}
-      <article className="rounded-2xl bg-[#12141E] border border-[#292B39] p-6 sm:p-10 shadow-2xl space-y-8">
+      <article className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-5 sm:p-8 shadow-2xl space-y-8">
         <header className="space-y-4 border-b border-[#292B39] pb-6">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8] shrink-0">

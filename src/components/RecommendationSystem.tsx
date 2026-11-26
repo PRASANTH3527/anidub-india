@@ -133,7 +133,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
         let score = 45;
 
         // 1. Vibe / Genre matching
-        const genres = (anime.genres || '').toLowerCase();
+        const genres = (Array.isArray(anime.genres) ? anime.genres.join(', ') : String(anime.genres || '')).toLowerCase();
         let vibeScore = 0;
         selectedVibes.forEach((vibe) => {
           if (vibe === 'action' && (genres.includes('action') || genres.includes('shonen'))) vibeScore += 28;

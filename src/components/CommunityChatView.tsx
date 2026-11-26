@@ -20,10 +20,10 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
   return (
     <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6 overflow-x-clip box-border animate-in fade-in duration-200">
       {/* 1. HEADER BANNER */}
-      <div className="bg-[#12141E] border border-[#292B39] rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden">
+      <div className="bg-[#12141E] border border-[#292B39] rounded-[12px] p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden">
         <div className="flex items-center gap-3.5 relative z-10 min-w-0">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8] shrink-0">
-            <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-[12px] bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8] shrink-0">
+            <MessageSquare className="w-5 h-5" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center flex-wrap gap-2">
@@ -46,7 +46,7 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
           <Button
             type="button"
             variant="secondary"
-            size="sm"
+            size="md"
             onClick={onNavigateToCatalog}
             leftIcon={<Compass className="w-4 h-4 text-[#B49AF8]" />}
             className="text-xs"
@@ -57,7 +57,7 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
       </div>
 
       {/* 2. MAIN GRID: CHAT ROOM + COMMUNITY SIDEBAR */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* LEFT / CENTER: FULL LIVE CHAT COMPONENT */}
         <div className="lg:col-span-8 space-y-4 min-w-0">
           <Suspense fallback={<ChatPageSkeleton />}>
@@ -66,9 +66,9 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
         </div>
 
         {/* RIGHT: DUB CHANNELS, TOPICS & RULES SIDEBAR */}
-        <div className="lg:col-span-4 space-y-5 min-w-0">
+        <div className="lg:col-span-4 space-y-4 min-w-0">
           {/* Active Dub Topics Box */}
-          <div className="bg-[#12141E] border border-[#292B39] rounded-2xl p-5 shadow-xl space-y-4">
+          <div className="bg-[#12141E] border border-[#292B39] rounded-[12px] p-5 space-y-3.5">
             <div className="flex items-center gap-2 pb-2 border-b border-[#292B39]">
               <Flame className="w-4 h-4 text-[#F9C876]" />
               <h3 className="text-xs font-black uppercase tracking-wider text-[#F4F3FA]">
@@ -82,11 +82,11 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
                 '#DemonSlayerTelugu',
                 '#BleachMalayalam',
                 '#CrunchyrollIndia',
-                '#JioCinemaAnime',
+                '#JioHotstarAnime',
               ].map((tag) => (
                 <span
                   key={tag}
-                  className="px-3 py-1 rounded-xl bg-[#191C29] border border-[#292B39] text-[#B49AF8] font-semibold"
+                  className="px-3 py-1 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[#B49AF8] font-semibold"
                 >
                   {tag}
                 </span>
@@ -94,12 +94,12 @@ export const CommunityChatView: React.FC<CommunityChatViewProps> = ({
             </div>
           </div>
 
-          <div className="bg-[#12141E] border border-[#292B39] rounded-2xl p-4 text-[11px] text-[#A1A5B5] space-y-2">
+          <div className="bg-[#12141E] border border-[#292B39] rounded-[12px] p-4 text-xs text-[#A1A5B5] space-y-2 leading-relaxed">
             <span className="font-bold text-[#F4F3FA] block">Community Etiquette</span>
             <ul className="list-disc pl-4 space-y-1">
               <li>Respect voice actors and dubbing studios across all regional languages.</li>
-              <li>Please mark or warn before discussing major plot spoilers.</li>
-              <li>Keep discussions constructive, friendly, and welcoming to new anime fans.</li>
+              <li>Use the Spoiler tag before discussing major plot twists.</li>
+              <li>Keep discussions constructive, friendly, and welcoming to anime fans.</li>
             </ul>
           </div>
         </div>

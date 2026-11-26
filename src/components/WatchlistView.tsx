@@ -155,9 +155,11 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
         return false;
       }
       if (!query) return true;
-      const matchesTitle = anime.title.toLowerCase().includes(query);
-      const matchesLang = Boolean(anime.languages && anime.languages.toLowerCase().includes(query));
-      const matchesGenre = Boolean(anime.genres && anime.genres.toLowerCase().includes(query));
+      const matchesTitle = String(anime.title || '').toLowerCase().includes(query);
+      const langText = Array.isArray(anime.languages) ? anime.languages.join(', ') : String(anime.languages || '');
+      const genreText = Array.isArray(anime.genres) ? anime.genres.join(', ') : String(anime.genres || '');
+      const matchesLang = langText.toLowerCase().includes(query);
+      const matchesGenre = genreText.toLowerCase().includes(query);
       return matchesTitle || matchesLang || matchesGenre;
     });
 

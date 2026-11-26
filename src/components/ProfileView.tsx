@@ -721,7 +721,7 @@ export function ProfileView({
                   <VolumeX className="w-4 h-4 text-[#A1A5B5] shrink-0" />
                 )}
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-[#F4F3FA]">Sound Chime</p>
+                  <p className="text-xs font-bold text-[#F4F3FA]">Notification Sound Chime</p>
                   <p className="text-[11px] text-[#A1A5B5]">Play chime on updates</p>
                 </div>
               </div>

@@ -181,5 +181,79 @@ test('Eclipse 9: Step 3 AnimeCard uses 2:3 poster aspect ratio, 12px radius, sin
   assert.ok(cardCode.includes('<span>Report wrong info</span>'), 'Overflow menu must include Report wrong info');
 });
 
+test('Eclipse 10: Step 4 AnimeDetailPage features Where to Watch card, 4 real Eclipse tabs, Follow toggle, and explicit review delivery states', () => {
+  const detailCode = read('src/components/AnimeDetailPage.tsx');
+  assert.ok(detailCode.includes('data-testid="where-to-watch-card"'), 'AnimeDetailPage must render prominent Where to Watch card');
+  assert.ok(detailCode.includes('data-testid="franchise-watch-order"'), 'AnimeDetailPage Overview must support Franchise Watch Order');
+  assert.ok(detailCode.includes('DetailModalSkeleton'), 'AnimeDetailPage must render Eclipse DetailModalSkeleton while loading');
+  assert.ok(detailCode.includes('Count not verified'), 'Seasons & Dubs tab must display Count not verified when episode counts are unknown');
+  assert.ok(detailCode.includes('Posting…') && detailCode.includes('Failed — Retry'), 'Reviews tab must expose explicit Posting / Failed — Retry delivery states');
+  assert.ok(detailCode.includes('Follow'), 'AnimeDetailPage header must include Follow button');
+});
+
+test('Eclipse 11: Step 5 ScheduleView enforces Eclipse Day Selector, data honesty, collapsed empty grids, and SchedulePageSkeleton', () => {
+  const scheduleCode = read('src/components/ScheduleView.tsx');
+  assert.ok(scheduleCode.includes('Release Schedule'), 'ScheduleView must display Release Schedule title');
+  assert.ok(scheduleCode.includes('data-testid="schedule-empty-state"'), 'ScheduleView must collapse empty schedule grids into Eclipse EmptyState');
+  assert.ok(scheduleCode.includes('Time not verified'), 'ScheduleView must show Time not verified instead of guessing broadcast times');
+  assert.ok(scheduleCode.includes('SchedulePageSkeleton'), 'ScheduleView must use SchedulePageSkeleton for loading states');
+});
+
+test('Eclipse 12: Step 6 WatchlistView provides 6 status tabs, search/sort/CSV utility bar, +1 progress increment, ConfirmDialog removal, and LibraryPageSkeleton', () => {
+  const libCode = read('src/components/WatchlistView.tsx');
+  for (const label of ['Watching', 'Completed', 'Plan to Watch', 'On Hold', 'Dropped', 'Rewatching']) {
+    assert.ok(libCode.includes(label), `WatchlistView must include status tab "${label}"`);
+  }
+  assert.ok(libCode.includes('Export Watchlist (CSV)'), 'WatchlistView must include one-click Export Watchlist (CSV)');
+  assert.ok(libCode.includes('data-testid="library-anime-card"'), 'WatchlistView must render uniform 2:3 poster library cards');
+  assert.ok(libCode.includes('ConfirmDialog'), 'WatchlistView must use ConfirmDialog before removing titles');
+  assert.ok(libCode.includes('LibraryPageSkeleton'), 'WatchlistView must render LibraryPageSkeleton while loading');
+});
+
+test('Eclipse 13: Step 7 ProfileView enforces signed-out account isolation, Anime DNA, Settings & Support group, and strictly gated Admin link', () => {
+  const profileCode = read('src/components/ProfileView.tsx');
+  assert.ok(profileCode.includes('data-testid="profile-signed-out-card"'), 'ProfileView must render clean signed-out account isolation card');
+  assert.ok(profileCode.includes('data-testid="profile-settings-support"'), 'ProfileView must render grouped Settings & Support card');
+  assert.ok(profileCode.includes('isAuthorizedClerkAdmin'), 'ProfileView must gate Admin Dashboard link strictly behind isAuthorizedClerkAdmin');
+  assert.ok(profileCode.includes('ProfilePageSkeleton'), 'ProfileView must render ProfilePageSkeleton while Clerk loads');
+});
+
+test('Eclipse 14: Step 8 Discovery Tools adopt Eclipse Dark surfaces, 2:3 posters, honest metadata, and mobile tap-to-assign tier controls', () => {
+  const matchmaker = read('src/components/RecommendationSystem.tsx');
+  assert.ok(matchmaker.includes('EmptyState'), 'RecommendationSystem must use Eclipse EmptyState');
+  assert.ok(matchmaker.includes('aspect-[2/3]'), 'RecommendationSystem results must use 2:3 posters');
+
+  const compare = read('src/components/CompareAnimeModal.tsx');
+  assert.ok(compare.includes('Select Anime A') && compare.includes('Select Anime B'), 'CompareAnimeModal must provide clean Anime A & B picker slots');
+  assert.ok(compare.includes('aspect-[2/3]'), 'CompareAnimeModal must use 2:3 posters');
+
+  const tier = read('src/components/AnimeTierListMaker.tsx');
+  assert.ok(tier.includes('data-testid="tier-tap-assign-bar"'), 'AnimeTierListMaker must include mobile tap-to-assign tier bar');
+  assert.ok(tier.includes('aspect-[2/3]'), 'AnimeTierListMaker must use 2:3 posters');
+
+  const roulette = read('src/components/RouletteModal.tsx');
+  assert.ok(roulette.includes('Roll Random Anime'), 'RouletteModal must feature a single prominent Roll Random Anime CTA');
+  assert.ok(roulette.includes('aspect-[2/3]'), 'RouletteModal result card must use 2:3 poster');
+  assert.equal(roulette.includes('8.9'), false, 'RouletteModal must never invent fallback rating 8.9');
+});
+
+test('Eclipse 15: Step 9 Chat, Auth, Forms, Legal, and AdminDashboard adopt Eclipse Dark tokens, delivery states, reply previews, and ConfirmDialogs', () => {
+  const liveChat = read('src/components/LiveChat.tsx');
+  assert.ok(liveChat.includes('data-testid="chat-message-bubble"'), 'LiveChat must render elevated Eclipse message bubbles');
+  assert.ok(liveChat.includes('data-testid="chat-reply-preview"'), 'LiveChat must support Reply preview above composer');
+  assert.ok(liveChat.includes('Failed to send') && liveChat.includes('Sending…'), 'LiveChat must show explicit delivery states with Retry');
+
+  const authModal = read('src/components/AuthModal.tsx');
+  assert.ok(authModal.includes('bg-[#12141E]') && authModal.includes('border-[#292B39]') && authModal.includes('bg-[#B49AF8]'), 'AuthModal must use Eclipse Dark tokens');
+
+  const dubModal = read('src/components/DubInfoModal.tsx');
+  assert.ok(dubModal.includes('role="alert"') && dubModal.includes('min-h-[44px]'), 'DubInfoModal must show inline errors and 44px inputs');
+
+  const adminDash = read('src/components/AdminDashboard.tsx');
+  assert.ok(adminDash.includes('ConfirmDialog'), 'AdminDashboard must use ConfirmDialog for destructive actions');
+  assert.ok(adminDash.includes('AdminSkeleton'), 'AdminDashboard must use AdminSkeleton instead of generic spinners');
+  assert.ok(adminDash.split('\n').length < 2200, 'AdminDashboard must remain under 2200 lines');
+});
+
 
 

@@ -260,3 +260,43 @@ export function computeDynamicLanguageFilters(animeList: any[] = []): LanguageFi
   ];
 }
 
+const COMPACT_LANG_CODE_MAP: Record<string, string> = {
+  tamil: 'TAM',
+  hindi: 'HIN',
+  telugu: 'TEL',
+  malayalam: 'MAL',
+  kannada: 'KAN',
+  bengali: 'BEN',
+  marathi: 'MAR',
+  gujarati: 'GUJ',
+  punjabi: 'PAN',
+};
+
+/**
+ * Extracts compact 3-letter Indian regional dub codes (e.g. ['TAM', 'HIN', 'TEL'])
+ * while excluding non-regional tracks (Japanese, English, etc.).
+ */
+export function extractCompactLanguageCodes(rawLangs: unknown): string[] {
+  if (!rawLangs) return [];
+  const tokens: string[] = Array.isArray(rawLangs)
+    ? rawLangs.map(String)
+    : typeof rawLangs === 'string'
+      ? rawLangs.split(/[,/|•+]+/)
+      : [];
+
+  const codes: string[] = [];
+  const seen = new Set<string>();
+  for (const token of tokens) {
+    const trimmed = token.trim();
+    if (!trimmed || isExcludedLanguage(trimmed)) continue;
+    const normalized = normalizeLanguageName(trimmed);
+    if (!normalized || isExcludedLanguage(normalized)) continue;
+    const code = COMPACT_LANG_CODE_MAP[normalized.toLowerCase()] || normalized.slice(0, 3).toUpperCase();
+    if (code && !seen.has(code)) {
+      seen.add(code);
+      codes.push(code);
+    }
+  }
+  return codes;
+}
+

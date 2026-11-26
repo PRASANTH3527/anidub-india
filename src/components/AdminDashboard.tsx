@@ -56,6 +56,8 @@ import { AdminSettingsTab } from './admin/AdminSettingsTab';
 import { AdminTerminalHud } from './admin/AdminTerminalHud';
 import { AdminCommandPalette } from './admin/AdminCommandPalette';
 import { AdminCsvHelpModal } from './admin/AdminCsvHelpModal';
+import { ConfirmDialog } from './ui/EclipseState';
+import { AdminSkeleton } from './SkeletonGrid';
 import {
   type AdminTabId,
   type AdminAnimeRecord,
@@ -116,10 +118,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [cloudSyncing, setCloudSyncing] = useState(false);
   const [cloudStatusText, setCloudStatusText] = useState('');
 
-  // DubInfoModal state
+  // DubInfoModal & ConfirmDialog state
   const [isDubModalOpen, setIsDubModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'submit' | 'edit'>('submit');
   const [editingAnime, setEditingAnime] = useState<AdminAnimeRecord | null>(null);
+  const [confirmClearPendingOpen, setConfirmClearPendingOpen] = useState(false);
+  const [pendingDeleteAnime, setPendingDeleteAnime] = useState<AdminAnimeRecord | null>(null);
 
   // Tabs & list state
   const [activeAdminTab, setActiveAdminTab] = useState<AdminTabId>('overview');
@@ -612,10 +616,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setSuccessMsg(''), 4000);
   };
 
-  const handleClearPendingQueue = async () => {
-    if (!window.confirm(`Are you sure you want to clear all ${pendingItems.length} pending submissions from the moderation queue?`)) {
-      return;
-    }
+  const handleClearPendingQueue = () => {
+    setConfirmClearPendingOpen(true);
+  };
+
+  const executeClearPendingQueue = async () => {
+    setConfirmClearPendingOpen(false);
     setCloudSyncing(true);
     setCloudStatusText('Clearing pending moderation queue...');
     addTerminalLog('PURGE', `Wiping pending moderation queue (${pendingItems.length} items)`);
@@ -642,9 +648,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleDeleteCatalogAnime = async (e: React.MouseEvent, anime: AdminAnimeRecord) => {
+  const handleDeleteCatalogAnime = (e: React.MouseEvent, anime: AdminAnimeRecord) => {
     e.stopPropagation();
+    setPendingDeleteAnime(anime);
+  };
+
+  const executeDeleteCatalogAnime = async (anime: AdminAnimeRecord) => {
     const targetId = anime.id || anime._id;
+    setPendingDeleteAnime(null);
     if (targetId === undefined || targetId === null) return;
 
     setDeletingId(targetId);
@@ -1539,7 +1550,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
             (a.title && a.title.toLowerCase().includes(q)) ||
             (a.hindiTitle && a.hindiTitle.toLowerCase().includes(q)) ||
             formatLanguageText(a.languages).toLowerCase().includes(q) ||
-            (a.genres && a.genres.toLowerCase().includes(q)) ||
+            (a.genres && String(a.genres).toLowerCase().includes(q)) ||
             String(a.id).includes(q)
         )
         .slice(0, 6),
@@ -2007,14 +2018,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
               )}
 
               {activeAdminTab === 'analytics' && (
-                <Suspense
-                  fallback={
-                    <div className="p-8 rounded-2xl bg-[#12141E] border border-[#292B39] flex items-center justify-center gap-3 text-xs text-[#A1A5B5]">
-                      <Loader2 className="w-4 h-4 animate-spin text-[#B49AF8]" />
-                      <span>Loading analytics module...</span>
-                    </div>
-                  }
-                >
+                <Suspense fallback={<AdminSkeleton />}>
                   <AnalyticsDashboard />
                 </Suspense>
               )}
@@ -2153,6 +2157,29 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         onCopyHeaders={handleCopyHeaders}
         onCopySnippet={handleCopySnippet}
         onDownloadTemplate={handleDownloadTemplate}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmClearPendingOpen}
+        onClose={() => setConfirmClearPendingOpen(false)}
+        onConfirm={executeClearPendingQueue}
+        title="Clear Pending Moderation Queue?"
+        description={`This will permanently remove all ${pendingItems.length} pending community submissions from Cloudflare D1.`}
+        confirmLabel="Clear Queue"
+        destructive
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDeleteAnime)}
+        onClose={() => setPendingDeleteAnime(null)}
+        onConfirm={() => {
+          if (pendingDeleteAnime) executeDeleteCatalogAnime(pendingDeleteAnime);
+        }}
+        title="Delete Anime from Catalog?"
+        description={`Remove "${pendingDeleteAnime?.title || 'this entry'}" permanently from the Cloudflare D1 database?`}
+        confirmLabel="Delete Anime"
+        destructive
+        loading={Boolean(deletingId)}
       />
     </div>
   );

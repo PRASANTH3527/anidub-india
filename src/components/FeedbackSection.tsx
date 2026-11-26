@@ -353,7 +353,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Enter your name"
-                  className="w-full h-11 bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl px-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
+                  className="w-full h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] px-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180 motion-reduce:transition-none"
                 />
               </div>
               <div className="space-y-1.5 text-left">
@@ -365,7 +365,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="For follow-up replies"
-                  className="w-full h-11 bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl px-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
+                  className="w-full h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] px-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180 motion-reduce:transition-none"
                 />
               </div>
             </div>
@@ -383,7 +383,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   if (submitError) setSubmitError(null);
                 }}
                 placeholder="Tell us what needs fixing or how we can improve AniDub India..."
-                className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl p-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150 resize-none leading-relaxed"
+                className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] p-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180 motion-reduce:transition-none resize-none leading-relaxed"
               />
             </div>
 
@@ -400,7 +400,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                 className="hidden"
               />
               {fileError && (
-                <p className="text-xs text-[#F87171] font-medium">{fileError}</p>
+                <p role="alert" className="text-xs text-[#F87171] font-medium">{fileError}</p>
               )}
               {!screenshot ? (
                 <div
@@ -408,7 +408,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`w-full py-5 px-4 border border-dashed rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors duration-150 ${
+                  className={`w-full min-h-[72px] py-4 px-4 border border-dashed rounded-[12px] flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors duration-180 motion-reduce:transition-none ${
                     isDragging
                       ? 'border-[#B49AF8] bg-[#B49AF8]/10'
                       : 'border-[#292B39] bg-[#191C29]/60 hover:border-[#B49AF8]/60'
@@ -420,11 +420,13 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   </span>
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[#191C29] border border-[#292B39]">
+                <div className="flex items-center justify-between gap-3 p-3 rounded-[12px] bg-[#191C29] border border-[#292B39]">
                   <div className="flex items-center gap-3 min-w-0">
                     <img
                       src={screenshot}
                       alt="Screenshot preview"
+                      width={40}
+                      height={40}
                       className="w-10 h-10 rounded-lg object-cover border border-[#292B39] shrink-0"
                     />
                     <div className="min-w-0">
@@ -439,7 +441,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                     type="button"
                     onClick={handleRemoveImage}
                     aria-label="Remove screenshot"
-                    className="p-2 rounded-lg text-[#A1A5B5] hover:text-[#F87171] hover:bg-[#F87171]/10 transition-colors duration-150 cursor-pointer shrink-0"
+                    className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] text-[#A1A5B5] hover:text-[#F87171] hover:bg-[#F87171]/10 flex items-center justify-center transition-colors duration-180 cursor-pointer shrink-0"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -455,7 +457,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
               disabled={isSubmitting || !message.trim()}
               leftIcon={!isSubmitting ? <Send className="w-4 h-4" /> : undefined}
             >
-              {isSubmitting ? 'Submitting...' : 'Send Feedback'}
+              {isSubmitting ? 'Submitting…' : 'Send Feedback'}
             </Button>
           </form>
         )}
