@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, CheckCircle2, AlertTriangle, Send, AlertCircle } from 'lucide-react';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { AniDubLogo } from './AniDubLogo';
+import { Button } from './ui/Button';
 
 export interface ReportModalProps {
   isOpen?: boolean;
@@ -22,7 +23,6 @@ export const REPORT_FIELD_OPTIONS = [
   { id: 'Other', label: 'Other', hint: 'Any other factual correction or copyright concern' },
 ] as const;
 
-// Backwards-compatible export
 export const REPORT_ISSUE_TYPES = REPORT_FIELD_OPTIONS.map((f) => f.label);
 
 export const ReportModal: React.FC<ReportModalProps> = ({
@@ -92,24 +92,24 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   const modalNode = (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[#0B0A10]/85 backdrop-blur-sm animate-in fade-in duration-150"
     >
       <div
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="report-modal-heading"
-        className="relative w-full max-w-md bg-[#121829] border border-white/15 rounded-3xl p-5 sm:p-6 shadow-2xl z-10 text-neutral-100 font-sans"
+        className="relative w-full max-w-md bg-[#12141E] border border-[#292B39] rounded-2xl p-5 sm:p-6 shadow-2xl z-10 text-[#F4F3FA] font-sans"
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-neutral-800">
+        <div className="flex items-center justify-between pb-4 border-b border-[#292B39]">
           <div className="flex items-center gap-3 min-w-0">
             <AniDubLogo variant="horizontal" size="sm" className="shrink-0" />
             <div className="min-w-0">
-              <h2 id="report-modal-heading" className="font-heading font-black text-white text-base sm:text-lg tracking-tight">
+              <h2 id="report-modal-heading" className="font-heading font-black text-[#F4F3FA] text-base sm:text-lg tracking-tight">
                 Report Wrong Info
               </h2>
-              <p className="text-neutral-400 text-xs truncate max-w-[230px]">
+              <p className="text-[#A1A5B5] text-xs truncate max-w-[230px]">
                 {animeTitle}
               </p>
             </div>
@@ -119,7 +119,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close report modal"
-            className="w-8 h-8 rounded-xl bg-neutral-800/80 hover:bg-neutral-700 text-neutral-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            className="w-10 h-10 rounded-xl bg-[#191C29] hover:bg-[#292B39] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -127,25 +127,25 @@ export const ReportModal: React.FC<ReportModalProps> = ({
 
         {isSuccess ? (
           <div className="py-10 text-center space-y-3">
-            <div className="w-14 h-14 mx-auto rounded-full bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-xl">
+            <div className="w-14 h-14 mx-auto rounded-full bg-[#34D399]/15 border border-[#34D399]/40 flex items-center justify-center text-[#34D399]">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h3 className="font-heading font-black text-lg text-white">Correction Sent to Admin Queue</h3>
-            <p className="text-neutral-400 text-xs max-w-xs mx-auto">
-              Thank you for flagging <span className="text-white font-semibold">{selectedField}</span>. Our moderators will verify and update this listing.
+            <h3 className="font-heading font-black text-lg text-[#F4F3FA]">Correction Sent to Admin Queue</h3>
+            <p className="text-[#A1A5B5] text-xs max-w-xs mx-auto">
+              Thank you for flagging <span className="text-[#F4F3FA] font-semibold">{selectedField}</span>. Our moderators will verify and update this listing.
             </p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 pt-4">
             {errorMessage && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+              <div className="p-3 rounded-xl bg-[#F87171]/10 border border-[#F87171]/30 text-[#F87171] text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#F87171]" />
                 <span>{errorMessage}</span>
               </div>
             )}
 
             <div className="space-y-2">
-              <label htmlFor="report-field-select" className="text-xs font-bold text-neutral-300 uppercase tracking-wider block">
+              <label htmlFor="report-field-select" className="text-xs font-bold text-[#F4F3FA] uppercase tracking-wider block">
                 Issue Type (Specific Field)
               </label>
 
@@ -160,10 +160,10 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                       role="radio"
                       aria-checked={isSelected}
                       onClick={() => setSelectedField(option.id)}
-                      className={`px-3 py-2 rounded-xl text-left text-xs font-bold transition-colors cursor-pointer border ${
+                      className={`min-h-[40px] px-3 py-2 rounded-xl text-left text-xs font-bold transition-colors duration-150 cursor-pointer border ${
                         isSelected
-                          ? 'bg-purple-600/25 border-purple-400 text-white'
-                          : 'bg-[#161d30] border-neutral-800 text-neutral-300 hover:bg-[#1c253d] hover:text-white'
+                          ? 'bg-[#B49AF8]/20 border-[#B49AF8] text-[#F4F3FA]'
+                          : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
                       }`}
                     >
                       {option.label}
@@ -186,11 +186,11 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                 ))}
               </select>
 
-              <p className="text-[11px] text-neutral-400">{selectedOption.hint}</p>
+              <p className="text-[11px] text-[#A1A5B5]">{selectedOption.hint}</p>
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="report-description" className="text-xs font-bold text-neutral-300 uppercase tracking-wider block">
+              <label htmlFor="report-description" className="text-xs font-bold text-[#F4F3FA] uppercase tracking-wider block">
                 Description
               </label>
               <textarea
@@ -199,32 +199,34 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={`Share the correct ${selectedField.toLowerCase()} (e.g., official OTT URL, episode count, or language)...`}
-                className="w-full bg-[#0b0f17] border border-neutral-800 focus:border-purple-500 rounded-2xl p-3 text-xs text-white placeholder-neutral-500 outline-none resize-none"
+                className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl p-3 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none resize-none transition-colors duration-150"
               />
             </div>
 
-            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-900/60 border border-neutral-800 text-[11px] text-neutral-400">
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#191C29] border border-[#292B39] text-[11px] text-[#A1A5B5]">
+              <AlertTriangle className="w-4 h-4 text-[#F9C876] shrink-0" />
               <span>Sent directly to the Admin moderation queue for verification.</span>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={onClose}
-                className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-bold text-neutral-300 transition-colors cursor-pointer"
               >
                 Cancel
-              </button>
+              </Button>
 
-              <button
+              <Button
                 type="submit"
+                variant="primary"
+                size="sm"
                 disabled={isSubmitting}
-                className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-bold shadow-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                leftIcon={<Send className="w-3.5 h-3.5" />}
               >
-                <Send className="w-3.5 h-3.5" />
-                <span>{isSubmitting ? 'Sending...' : 'Submit Correction'}</span>
-              </button>
+                {isSubmitting ? 'Sending...' : 'Submit Correction'}
+              </Button>
             </div>
           </form>
         )}

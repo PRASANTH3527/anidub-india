@@ -14,6 +14,7 @@ import { useToast } from './Toast';
 import { cloudflareApi } from '../services/cloudflareApi';
 import { AniDubLogo } from './AniDubLogo';
 import { PRIMARY_SEO_LANGUAGES, getLanguageSlug } from '../utils/seoMeta';
+import { Button } from './ui/Button';
 
 export interface FeedbackSectionProps {
   onSubmitDub?: () => void;
@@ -131,7 +132,6 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
         return;
       }
 
-      // ONLY clear inputs and show success state on verified 2xx response
       setSubmitted(true);
       setName('');
       setEmail('');
@@ -163,36 +163,38 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   // Compact footer mode for main catalog/discovery views (keeps full feedback form dedicated to /feedback)
   if (mode === 'footer') {
     return (
-      <footer className="w-full max-w-6xl mx-auto px-3 sm:px-6 pt-8 pb-6 mt-10 border-t border-white/10 font-sans">
-        <div className="rounded-2xl bg-[#0d111a]/90 border border-white/10 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5">
+      <footer className="w-full max-w-6xl mx-auto px-3 sm:px-6 pt-8 pb-6 mt-10 border-t border-[#292B39] font-sans">
+        <div className="rounded-2xl bg-[#12141E] border border-[#292B39] p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div className="space-y-1.5 max-w-xl">
-            <h3 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
+            <h3 className="text-base sm:text-lg font-extrabold text-[#F4F3FA] tracking-tight">
               Know a missing dub?
             </h3>
-            <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed">
+            <p className="text-xs sm:text-sm text-[#A1A5B5] leading-relaxed">
               Submit verified Indian dub info with an official streaming link, or share feedback to help keep the directory accurate.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             {onSubmitDub && (
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="md"
                 onClick={onSubmitDub}
-                className="min-h-[42px] px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs sm:text-sm font-bold inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+                leftIcon={<Plus className="w-4 h-4 shrink-0" />}
               >
-                <Plus className="w-4 h-4 shrink-0" />
-                <span>Submit an Anime or Dub</span>
-              </button>
+                Submit an Anime or Dub
+              </Button>
             )}
             {onOpenFeedbackPage && (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="md"
                 onClick={onOpenFeedbackPage}
-                className="min-h-[42px] px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-200 hover:text-white text-xs sm:text-sm font-semibold inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+                leftIcon={<MessageSquare className="w-4 h-4 shrink-0 text-[#B49AF8]" />}
               >
-                <MessageSquare className="w-4 h-4 shrink-0 text-purple-400" />
-                <span>Share Feedback</span>
-              </button>
+                Share Feedback
+              </Button>
             )}
           </div>
         </div>
@@ -201,12 +203,12 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
         <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
           <div className="flex items-center gap-3">
             <AniDubLogo size="sm" showText={true} />
-            <span className="text-xs text-neutral-500 hidden sm:inline">•</span>
-            <span className="text-xs text-neutral-400">Official Indian Dubbed Anime Directory</span>
+            <span className="text-xs text-[#292B39] hidden sm:inline">•</span>
+            <span className="text-xs text-[#A1A5B5]">Official Indian Dubbed Anime Directory</span>
           </div>
 
           <div className="flex flex-col sm:items-end gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#A1A5B5]">
               Regional Dubbed Anime Languages
             </span>
             <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-4 gap-y-1.5 text-xs">
@@ -220,7 +222,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                       onNavigateLanguage(lang);
                     }
                   }}
-                  className="text-neutral-400 hover:text-purple-300 transition-colors font-medium"
+                  className="text-[#A1A5B5] hover:text-[#B49AF8] transition-colors duration-150 font-medium"
                 >
                   {lang} Dubs
                 </a>
@@ -229,7 +231,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
           </div>
         </div>
 
-        <div className="mt-5 pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-neutral-500">
+        <div className="mt-5 pt-4 border-t border-[#292B39] flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-[#A1A5B5]">
           <p className="text-center sm:text-left">
             © {new Date().getFullYear()} AniDub India. Legal OTT discovery directory — we do not host video streams. Rights-holder requests are honored promptly.
           </p>
@@ -242,7 +244,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   onOpenPrivacy();
                 }
               }}
-              className="text-neutral-400 hover:text-purple-300 transition-colors"
+              className="text-[#A1A5B5] hover:text-[#B49AF8] transition-colors duration-150"
             >
               Privacy Policy
             </a>
@@ -254,7 +256,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   onOpenCopyright();
                 }
               }}
-              className="text-neutral-400 hover:text-purple-300 transition-colors"
+              className="text-[#A1A5B5] hover:text-[#B49AF8] transition-colors duration-150"
             >
               Copyright &amp; Takedown
             </a>
@@ -266,13 +268,13 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
 
   // Dedicated Full Feedback & Community Contribution Page
   return (
-    <section className="w-full max-w-2xl mx-auto overflow-x-clip py-8 px-3 sm:px-4 md:px-6 box-border font-sans">
+    <section className="w-full max-w-2xl mx-auto overflow-x-clip py-8 px-3 sm:px-4 md:px-6 box-border font-sans text-[#F4F3FA]">
       {/* 1) INTRO */}
       <div className="text-center px-2 sm:px-4">
-        <h2 className="text-2xl font-extrabold tracking-tight text-white">
+        <h2 className="text-2xl font-extrabold tracking-tight text-[#F4F3FA]">
           Know a missing dub?
         </h2>
-        <p className="mt-3 text-sm leading-relaxed text-neutral-400 max-w-lg mx-auto">
+        <p className="mt-3 text-sm leading-relaxed text-[#A1A5B5] max-w-lg mx-auto">
           Help keep AniDub India accurate by submitting new dubbed titles or sending us feedback and bug reports.
         </p>
       </div>
@@ -280,24 +282,26 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
       {/* 2) SUBMIT BUTTON */}
       {onSubmitDub && (
         <div className="mt-5 px-2 sm:px-4">
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="lg"
+            fullWidth
             onClick={onSubmitDub}
-            className="w-full min-h-[48px] bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors active:scale-[0.99] cursor-pointer"
+            leftIcon={<Plus className="w-4 h-4 stroke-[2.5] text-[#B49AF8]" />}
           >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>Submit an Anime or Dub</span>
-          </button>
+            Submit an Anime or Dub
+          </Button>
         </div>
       )}
 
       {/* 3) FEEDBACK FORM CARD */}
-      <div className="mt-8 w-full bg-[#131926] border border-[#242d46] rounded-2xl p-5 sm:p-6">
+      <div className="mt-8 w-full bg-[#12141E] border border-[#292B39] rounded-2xl p-5 sm:p-6 shadow-xl">
         <div className="text-left mb-5">
-          <h3 className="text-lg font-extrabold text-white tracking-tight">
+          <h3 className="text-lg font-extrabold text-[#F4F3FA] tracking-tight">
             Share your feedback
           </h3>
-          <p className="mt-1.5 text-xs text-neutral-400 leading-relaxed">
+          <p className="mt-1.5 text-xs text-[#A1A5B5] leading-relaxed">
             Report broken links, suggest missing features, or tell us how we can improve the directory.
           </p>
         </div>
@@ -305,34 +309,35 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
         {submitError && (
           <div
             role="alert"
-            className="mb-5 p-4 rounded-xl bg-rose-500/10 border border-rose-500/35 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            className="mb-5 p-4 rounded-xl bg-[#F87171]/10 border border-[#F87171]/35 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
           >
-            <div className="flex items-start gap-2.5 text-xs text-rose-200">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2.5 text-xs text-[#F87171]">
+              <AlertCircle className="w-4 h-4 text-[#F87171] shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-rose-300">Feedback could not be delivered</p>
-                <p className="text-rose-200/85 mt-0.5">{submitError}</p>
+                <p className="font-bold text-[#F4F3FA]">Feedback could not be delivered</p>
+                <p className="text-[#F87171] mt-0.5">{submitError}</p>
               </div>
             </div>
-            <button
+            <Button
               type="button"
+              variant="danger"
+              size="sm"
               onClick={submitFeedbackRequest}
               disabled={isSubmitting || !message.trim()}
-              className="px-3.5 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-200 text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+              leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />}
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
-              <span>Retry</span>
-            </button>
+              Retry
+            </Button>
           </div>
         )}
 
         {submitted ? (
           <div className="py-10 text-center space-y-3" role="status">
-            <div className="w-12 h-12 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center mx-auto text-emerald-400">
+            <div className="w-12 h-12 rounded-full bg-[#34D399]/15 border border-[#34D399]/40 flex items-center justify-center mx-auto text-[#34D399]">
               <CheckCircle2 className="w-6 h-6" />
             </div>
-            <h4 className="font-bold text-lg text-white">Feedback Received</h4>
-            <p className="text-xs text-neutral-400 max-w-sm mx-auto leading-relaxed">
+            <h4 className="font-bold text-lg text-[#F4F3FA]">Feedback Received</h4>
+            <p className="text-xs text-[#A1A5B5] max-w-sm mx-auto leading-relaxed">
               Thank you! Your message has been saved and routed to the AniDub India moderation team.
             </p>
           </div>
@@ -340,7 +345,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5 text-left">
-                <label className="text-xs font-semibold text-neutral-300 block">
+                <label className="text-xs font-semibold text-[#F4F3FA] block">
                   Your Name (optional)
                 </label>
                 <input
@@ -348,11 +353,11 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Enter your name"
-                  className="w-full h-11 bg-[#0b0e18] border border-[#2a344d] focus:border-purple-500 rounded-xl px-3.5 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
+                  className="w-full h-11 bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl px-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
                 />
               </div>
               <div className="space-y-1.5 text-left">
-                <label className="text-xs font-semibold text-neutral-300 block">
+                <label className="text-xs font-semibold text-[#F4F3FA] block">
                   Email (optional)
                 </label>
                 <input
@@ -360,14 +365,14 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="For follow-up replies"
-                  className="w-full h-11 bg-[#0b0e18] border border-[#2a344d] focus:border-purple-500 rounded-xl px-3.5 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
+                  className="w-full h-11 bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl px-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5 text-left">
-              <label className="text-xs font-semibold text-neutral-300 block">
-                Your Message <span className="text-purple-400">*</span>
+              <label className="text-xs font-semibold text-[#F4F3FA] block">
+                Your Message <span className="text-[#B49AF8]">*</span>
               </label>
               <textarea
                 rows={4}
@@ -378,13 +383,13 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   if (submitError) setSubmitError(null);
                 }}
                 placeholder="Tell us what needs fixing or how we can improve AniDub India..."
-                className="w-full bg-[#0b0e18] border border-[#2a344d] focus:border-purple-500 rounded-xl p-3.5 text-sm text-white placeholder-neutral-500 outline-none transition-colors resize-none leading-relaxed"
+                className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl p-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150 resize-none leading-relaxed"
               />
             </div>
 
             {/* Optional Screenshot Upload */}
             <div className="space-y-1.5 text-left">
-              <label className="text-xs font-semibold text-neutral-300 block">
+              <label className="text-xs font-semibold text-[#F4F3FA] block">
                 Screenshot (optional, max 5MB)
               </label>
               <input
@@ -395,7 +400,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                 className="hidden"
               />
               {fileError && (
-                <p className="text-xs text-rose-400 font-medium">{fileError}</p>
+                <p className="text-xs text-[#F87171] font-medium">{fileError}</p>
               )}
               {!screenshot ? (
                 <div
@@ -403,38 +408,38 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`w-full py-5 px-4 border border-dashed rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                  className={`w-full py-5 px-4 border border-dashed rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors duration-150 ${
                     isDragging
-                      ? 'border-purple-400 bg-purple-500/10'
-                      : 'border-[#2a344d] bg-[#0b0e18]/60 hover:border-purple-500/50'
+                      ? 'border-[#B49AF8] bg-[#B49AF8]/10'
+                      : 'border-[#292B39] bg-[#191C29]/60 hover:border-[#B49AF8]/60'
                   }`}
                 >
-                  <Upload className="w-4 h-4 text-neutral-400" />
-                  <span className="text-xs text-neutral-300 font-medium">
+                  <Upload className="w-4 h-4 text-[#A1A5B5]" />
+                  <span className="text-xs text-[#F4F3FA] font-medium">
                     Click to attach or drag a screenshot here
                   </span>
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[#0b0e18] border border-purple-500/35">
+                <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[#191C29] border border-[#292B39]">
                   <div className="flex items-center gap-3 min-w-0">
                     <img
                       src={screenshot}
                       alt="Screenshot preview"
-                      className="w-10 h-10 rounded-lg object-cover border border-white/10 shrink-0"
+                      className="w-10 h-10 rounded-lg object-cover border border-[#292B39] shrink-0"
                     />
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-white truncate flex items-center gap-1.5">
-                        <ImageIcon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                      <p className="text-xs font-semibold text-[#F4F3FA] truncate flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-[#B49AF8] shrink-0" />
                         <span className="truncate">{fileName}</span>
                       </p>
-                      <p className="text-[11px] text-neutral-400">{fileSize}</p>
+                      <p className="text-[11px] text-[#A1A5B5]">{fileSize}</p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={handleRemoveImage}
                     aria-label="Remove screenshot"
-                    className="p-2 rounded-lg text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
+                    className="p-2 rounded-lg text-[#A1A5B5] hover:text-[#F87171] hover:bg-[#F87171]/10 transition-colors duration-150 cursor-pointer shrink-0"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -442,26 +447,22 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
               )}
             </div>
 
-            <button
+            <Button
               type="submit"
+              variant="primary"
+              size="lg"
+              fullWidth
               disabled={isSubmitting || !message.trim()}
-              className="w-full min-h-[46px] bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              leftIcon={!isSubmitting ? <Send className="w-4 h-4" /> : undefined}
             >
-              {isSubmitting ? (
-                <span>Submitting...</span>
-              ) : (
-                <>
-                  <Send className="w-4 h-4" />
-                  <span>Send Feedback</span>
-                </>
-              )}
-            </button>
+              {isSubmitting ? 'Submitting...' : 'Send Feedback'}
+            </Button>
           </form>
         )}
       </div>
 
       {/* Footer note */}
-      <div className="mt-8 pt-6 border-t border-white/10 text-center space-y-3">
+      <div className="mt-8 pt-6 border-t border-[#292B39] text-center space-y-3">
         <div className="flex justify-center">
           <AniDubLogo size="sm" showText={true} />
         </div>
@@ -474,11 +475,11 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                 onOpenPrivacy();
               }
             }}
-            className="text-neutral-400 hover:text-purple-300 transition-colors"
+            className="text-[#A1A5B5] hover:text-[#B49AF8] transition-colors duration-150"
           >
             Privacy Policy
           </a>
-          <span className="text-neutral-600">•</span>
+          <span className="text-[#292B39]">•</span>
           <a
             href="/copyright"
             onClick={(e) => {
@@ -487,12 +488,12 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                 onOpenCopyright();
               }
             }}
-            className="text-neutral-400 hover:text-purple-300 transition-colors"
+            className="text-[#A1A5B5] hover:text-[#B49AF8] transition-colors duration-150"
           >
             Copyright &amp; Takedown
           </a>
         </div>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-[#A1A5B5]">
           © {new Date().getFullYear()} AniDub India — Legal Indian Dubbed Anime Discovery Directory
         </p>
       </div>

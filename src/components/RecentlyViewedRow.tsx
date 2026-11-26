@@ -1,13 +1,13 @@
 import React, { useRef } from 'react';
 import Image from './OptimizedImage';
 import { motion, useReducedMotion } from 'motion/react';
-import { 
-  Clock, 
-  Trash2, 
-  Star, 
-  Play, 
-  Bookmark, 
-  X
+import {
+  Clock,
+  Trash2,
+  Star,
+  Play,
+  Bookmark,
+  X,
 } from 'lucide-react';
 import { parsePlatformList } from '../utils/dataNormalization';
 
@@ -70,7 +70,7 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
   onClear,
   onRemoveItem,
   watchlist = [],
-  onToggleWatchlist
+  onToggleWatchlist,
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const shouldReduceMotion = useReducedMotion();
@@ -79,19 +79,18 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
 
   return (
     <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 mb-8 overflow-hidden box-border font-sans">
-      
       {/* HEADER ROW */}
       <div className="flex items-center justify-between mb-3.5 gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-purple-950/70 border border-purple-600/40 text-purple-400 flex items-center justify-center shadow-sm shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-[#191C29] border border-[#292B39] text-[#B49AF8] flex items-center justify-center shrink-0">
             <Clock className="w-4 h-4" />
           </div>
-          
-          <h2 className="font-heading font-black text-white text-base sm:text-lg tracking-tight truncate">
+
+          <h2 className="font-heading font-black text-[#F4F3FA] text-base sm:text-lg tracking-tight truncate">
             Recently Viewed
           </h2>
 
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#182033] border border-neutral-700/80 text-purple-300 shrink-0">
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#191C29] border border-[#292B39] text-[#B49AF8] shrink-0">
             {items.length}
           </span>
         </div>
@@ -101,18 +100,18 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
           <button
             type="button"
             onClick={onClear}
-            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] font-bold bg-[#141b2c] hover:bg-rose-950/40 border border-neutral-800 hover:border-rose-900/50 text-neutral-400 hover:text-rose-300 transition-all cursor-pointer shadow-sm active:scale-95"
+            className="min-h-[38px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#F87171]/40 text-[#A1A5B5] hover:text-[#F87171] transition-colors duration-150 cursor-pointer"
             title="Clear all recently viewed history"
             aria-label="Clear all recently viewed history"
           >
-            <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-400" />
+            <Trash2 className="w-3.5 h-3.5 text-[#F87171]" />
             <span className="hidden xs:inline">Clear All</span>
           </button>
         </div>
       </div>
 
       {/* HORIZONTAL SCROLL ROW */}
-      <div 
+      <div
         ref={scrollRef}
         className="flex items-stretch gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1.5 px-0.5 select-none w-full max-w-full"
       >
@@ -124,15 +123,13 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
             <motion.div
               key={`recently_viewed_${anime.id}_${idx}`}
               onClick={() => onSelectAnime(anime)}
-              initial={shouldReduceMotion ? false : { opacity: 0, x: 20 }}
+              initial={shouldReduceMotion ? false : { opacity: 0, x: 16 }}
               animate={shouldReduceMotion ? undefined : { opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: Math.min(idx * 0.05, 0.3) }}
-              whileHover={shouldReduceMotion ? undefined : { y: -4, transition: { duration: 0.2 } }}
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
-              className="group relative flex-none w-36 sm:w-44 flex flex-col rounded-2xl bg-[#121829] border border-neutral-800/90 hover:border-purple-500/50 hover:shadow-xl hover:shadow-purple-950/30 transition-colors cursor-pointer overflow-hidden will-change-transform"
+              transition={{ duration: 0.16, delay: Math.min(idx * 0.04, 0.2) }}
+              className="group relative flex-none w-36 sm:w-44 flex flex-col rounded-2xl bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 transition-colors duration-150 cursor-pointer overflow-hidden"
             >
               {/* POSTER WRAPPER */}
-              <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-900">
+              <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#191C29]">
                 <Image
                   src={anime.cover_image || '/logo.png'}
                   alt={anime.title}
@@ -140,15 +137,15 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
                   sizes="(max-width: 640px) 144px, 176px"
                   width={176}
                   height={235}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
 
                 {/* Dark Gradient Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#121829] via-transparent to-black/40" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0B0A10]/90 via-transparent to-[#0B0A10]/30" />
 
                 {/* TOP LEFT: RATING PILL */}
-                <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/75 backdrop-blur-md text-amber-300 px-2 py-0.5 rounded-lg text-[10px] font-bold border border-amber-500/30 shadow-md">
-                  <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                <div className="absolute top-2 left-2 flex items-center gap-1 bg-[#0B0A10]/85 text-[#F9C876] px-2 py-0.5 rounded-lg text-[10px] font-bold border border-[#292B39]">
+                  <Star className="w-2.5 h-2.5 fill-[#F9C876] text-[#F9C876]" />
                   <span>{anime.rating ? anime.rating.toFixed(1) : '8.8'}</span>
                 </div>
 
@@ -161,26 +158,25 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
                         e.stopPropagation();
                         onToggleWatchlist(anime.id);
                       }}
-                      className={`w-6 h-6 rounded-full backdrop-blur-md flex items-center justify-center transition-all ${
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors duration-150 border ${
                         isSaved
-                          ? 'bg-primary-theme text-white shadow-md'
-                          : 'bg-black/75 text-neutral-300 hover:text-white hover:bg-black/90 border border-neutral-700/80'
+                          ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                          : 'bg-[#0B0A10]/85 text-[#F4F3FA] hover:bg-[#191C29] border-[#292B39]'
                       }`}
                       title={isSaved ? 'In Watchlist' : 'Add to Watchlist'}
                       aria-label={isSaved ? `Remove ${anime.title} from Watchlist` : `Add ${anime.title} to Watchlist`}
                     >
-                      <Bookmark className={`w-3 h-3 ${isSaved ? 'fill-current' : ''}`} />
+                      <Bookmark className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} />
                     </button>
                   )}
 
-                  {/* Circular close button for individual delete */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       onRemoveItem?.(anime.id);
                     }}
-                    className="w-6 h-6 rounded-full bg-black/75 hover:bg-rose-950/90 border border-neutral-700/80 hover:border-rose-500/60 text-neutral-300 hover:text-rose-300 backdrop-blur-md flex items-center justify-center transition-all shadow-md active:scale-90 cursor-pointer"
+                    className="w-7 h-7 rounded-lg bg-[#0B0A10]/85 hover:bg-[#F87171]/20 border border-[#292B39] hover:border-[#F87171]/50 text-[#A1A5B5] hover:text-[#F87171] flex items-center justify-center transition-colors duration-150 cursor-pointer"
                     title="Remove from recently viewed"
                     aria-label="Remove from recently viewed"
                   >
@@ -189,9 +185,9 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
                 </div>
 
                 {/* QUICK PLAY HOVER OVERLAY */}
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-                  <div className="w-11 h-11 rounded-full bg-purple-600/90 text-white flex items-center justify-center shadow-lg shadow-purple-600/50 transform scale-90 group-hover:scale-100 transition-transform">
-                    <Play className="w-5 h-5 fill-current ml-0.5" />
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none">
+                  <div className="w-10 h-10 rounded-full bg-[#B49AF8] text-[#0B0A10] flex items-center justify-center shadow-lg">
+                    <Play className="w-4 h-4 fill-current ml-0.5" />
                   </div>
                 </div>
 
@@ -200,13 +196,13 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
                   {langBadges.map((lang, idx) => (
                     <span
                       key={`rv_lang_${anime.id}_${lang}_${idx}`}
-                      className="px-1.5 py-0.5 rounded text-[8.5px] font-extrabold uppercase bg-black/80 backdrop-blur-md text-amber-300 border border-neutral-700/80"
+                      className="px-1.5 py-0.5 rounded text-[8.5px] font-extrabold uppercase bg-[#0B0A10]/90 text-[#F9C876] border border-[#292B39]"
                     >
                       {lang}
                     </span>
                   ))}
                   {anime.platform && (
-                    <span className="ml-auto px-1.5 py-0.5 rounded text-[8px] font-bold text-neutral-300 bg-neutral-900/90 border border-neutral-700/60 truncate max-w-[72px]">
+                    <span className="ml-auto px-1.5 py-0.5 rounded text-[8px] font-bold text-[#A1A5B5] bg-[#191C29]/90 border border-[#292B39] truncate max-w-[72px]">
                       {parsePlatformList(anime.platform)[0] || anime.platform}
                     </span>
                   )}
@@ -216,18 +212,18 @@ const RecentlyViewedRowComponent: React.FC<RecentlyViewedRowProps> = ({
               {/* FOOTER METADATA */}
               <div className="p-2.5 flex flex-col justify-between flex-grow">
                 <div>
-                  <h4 className="font-bold text-xs sm:text-sm text-neutral-100 group-hover:text-purple-300 truncate transition-colors">
+                  <h4 className="font-bold text-xs sm:text-sm text-[#F4F3FA] group-hover:text-[#B49AF8] truncate transition-colors duration-150">
                     {anime.title}
                   </h4>
-                  <div className="text-[10px] sm:text-xs text-neutral-400 flex items-center justify-between mt-1">
+                  <div className="text-[10px] sm:text-xs text-[#A1A5B5] flex items-center justify-between mt-1">
                     <span className="truncate">{anime.type || 'TV Series'}</span>
                     <span>{anime.episodes_count ? `${anime.episodes_count} Ep` : 'HD Dub'}</span>
                   </div>
                 </div>
 
-                <div className="mt-2 pt-1.5 border-t border-neutral-800/80 flex items-center justify-between text-[10px] text-purple-400 font-semibold group-hover:text-purple-300">
+                <div className="mt-2 pt-1.5 border-t border-[#292B39] flex items-center justify-between text-[10px] text-[#B49AF8] font-semibold">
                   <span>View Details</span>
-                  <span className="transform group-hover:translate-x-1 transition-transform">→</span>
+                  <span>→</span>
                 </div>
               </div>
             </motion.div>

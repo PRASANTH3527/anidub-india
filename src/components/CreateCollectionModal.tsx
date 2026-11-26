@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { AniDubLogo } from './AniDubLogo';
 import { Anime } from './CatalogView';
+import { Button } from './ui/Button';
 
 export interface CreatedCollectionSummary {
   id: string;
@@ -104,29 +105,29 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
   const queueAnime = animeList.filter(a => selectedIds.includes(a.id));
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 text-neutral-100 font-sans">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-8 border-b border-neutral-800">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 text-[#F4F3FA] font-sans">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-8 border-b border-[#292B39]">
         <div>
           <button
             onClick={onBack}
-            className="inline-flex items-center gap-2 text-neutral-400 hover:text-white text-xs sm:text-sm font-bold mb-3 cursor-pointer transition-colors"
+            className="min-h-[40px] inline-flex items-center gap-2 text-[#A1A5B5] hover:text-[#F4F3FA] text-xs sm:text-sm font-bold mb-3 cursor-pointer transition-colors duration-150"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Directory</span>
           </button>
 
           <div className="flex items-center gap-3.5">
-            <AniDubLogo variant="horizontal" size="md" className="shrink-0 drop-shadow-lg" />
+            <AniDubLogo variant="horizontal" size="md" className="shrink-0" />
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+                <h1 className="text-2xl sm:text-4xl font-black text-[#F4F3FA] tracking-tight">
                   Create Custom Collection
                 </h1>
-                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full px-2 py-0.5 text-[10px] font-black uppercase">
-                  Anonymous & Shareable
+                <span className="bg-[#34D399]/10 text-[#34D399] border border-[#34D399]/30 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase">
+                  Anonymous &amp; Shareable
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-neutral-400 mt-1">
+              <p className="text-xs sm:text-sm text-[#A1A5B5] mt-1">
                 Curate regional dubbed anime into a shareable playlist for your friends and community.
               </p>
             </div>
@@ -134,73 +135,79 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
         </div>
 
         {selectedIds.length > 0 && (
-          <button
+          <Button
             onClick={handleSaveCollection}
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-primary-theme to-orange-500 text-white font-extrabold text-sm shadow-xl hover:opacity-95 transition-all cursor-pointer whitespace-nowrap self-stretch sm:self-auto text-center"
+            variant="primary"
+            size="lg"
+            className="self-stretch sm:self-auto"
           >
             Save Collection ({selectedIds.length})
-          </button>
+          </Button>
         )}
       </div>
 
       {createdCollection && (
-        <div className="my-8 p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-[#121926] via-[#101725] to-[#0a0f1d] border-2 border-emerald-500/40 shadow-2xl relative overflow-hidden">
+        <div className="my-8 p-6 sm:p-8 rounded-2xl bg-[#12141E] border border-[#34D399]/40 shadow-2xl relative overflow-hidden">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full text-xs font-bold">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <div className="inline-flex items-center gap-2 bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/35 px-3 py-1 rounded-full text-xs font-bold">
+                <CheckCircle2 className="w-4 h-4 text-[#34D399]" />
                 <span>Collection Saved Successfully</span>
               </div>
 
-              <h2 className="text-xl sm:text-2xl font-black text-white">
+              <h2 className="text-xl sm:text-2xl font-black text-[#F4F3FA]">
                 {createdCollection.title}
               </h2>
 
-              <div className="flex items-center gap-2 text-xs text-neutral-400">
+              <div className="flex items-center gap-2 text-xs text-[#A1A5B5]">
                 <span>{createdCollection.count} regional dubbed titles curated</span>
                 <span>•</span>
-                <span className="bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800 text-[11px] font-mono text-neutral-300">
+                <span className="bg-[#191C29] px-2 py-0.5 rounded border border-[#292B39] text-[11px] font-mono text-[#F4F3FA]">
                   ID: #{createdCollection.id}
                 </span>
               </div>
             </div>
 
             <div className="w-full lg:w-auto flex flex-col sm:flex-row items-center gap-2.5">
-              <div className="w-full sm:w-80 bg-neutral-900 border border-neutral-700/80 rounded-xl p-1.5 flex items-center justify-between">
+              <div className="w-full sm:w-80 bg-[#191C29] border border-[#292B39] rounded-xl p-1.5 flex items-center justify-between">
                 <input
                   type="text"
                   readOnly
                   value={createdCollection.shareUrl}
-                  className="bg-transparent text-xs text-neutral-300 px-2.5 outline-none w-full truncate"
+                  className="bg-transparent text-xs text-[#F4F3FA] px-2.5 outline-none w-full truncate"
                 />
                 <button
                   onClick={handleCopyLink}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-black text-xs px-3 py-1.5 rounded-lg shrink-0 transition-colors cursor-pointer"
+                  className="min-h-[36px] bg-[#34D399] hover:opacity-90 text-[#0B0A10] font-black text-xs px-3 py-1.5 rounded-lg shrink-0 transition-opacity duration-150 cursor-pointer"
                 >
                   {copied ? 'Copied!' : 'Copy Link'}
                 </button>
               </div>
 
-              <button
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => {
-                  window.open(createdCollection.shareUrl, '_blank');
+                  window.location.href = createdCollection.shareUrl;
                 }}
-                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-primary-theme hover:bg-primary-theme/90 text-white font-bold text-xs inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                rightIcon={<ExternalLink className="w-3.5 h-3.5" />}
+                className="w-full sm:w-auto text-xs"
               >
-                <span>View Published List</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
+                View Published List
+              </Button>
 
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   setCreatedCollection(null);
                   setSelectedIds([]);
                   setCollectionTitle('');
                 }}
-                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-bold transition-colors cursor-pointer"
+                className="w-full sm:w-auto text-xs"
               >
                 New List
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -208,9 +215,9 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8 items-start">
         <div className="lg:col-span-5">
-          <div className="p-6 rounded-3xl bg-neutral-900/70 border border-neutral-800/80 backdrop-blur-md space-y-5 sticky top-20 shadow-xl">
+          <div className="p-6 rounded-2xl bg-[#12141E] border border-[#292B39] space-y-5 sticky top-20 shadow-xl">
             <div className="space-y-2">
-              <label className="block text-xs font-bold text-white uppercase tracking-wider">
+              <label className="block text-xs font-bold text-[#F4F3FA] uppercase tracking-wider">
                 1. Collection Title *
               </label>
               <input
@@ -218,13 +225,13 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                 value={collectionTitle}
                 onChange={(e) => setCollectionTitle(e.target.value)}
                 placeholder="e.g. Best Tamil Dubbed Action Animes"
-                className="w-full px-4 py-3 rounded-2xl bg-neutral-950/80 border border-neutral-700/80 text-sm font-semibold text-white placeholder-neutral-500 focus:outline-none focus:border-primary-theme transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-[#191C29] border border-[#292B39] text-sm font-semibold text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8] transition-colors duration-150"
               />
             </div>
 
             <div className="space-y-1.5">
-              <span className="text-[11px] text-neutral-400 font-semibold flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-[11px] text-[#A1A5B5] font-semibold flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-[#F9C876]" />
                 <span>Title Suggestions:</span>
               </span>
               <div className="flex flex-wrap gap-1.5">
@@ -233,7 +240,7 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                     key={`suggestion_${sIdx}`}
                     type="button"
                     onClick={() => setCollectionTitle(sug)}
-                    className="text-[11px] px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/50 text-neutral-300 hover:text-white hover:border-primary-theme/60 transition-colors cursor-pointer"
+                    className="text-[11px] px-2.5 py-1.5 rounded-lg bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] hover:border-[#B49AF8]/60 transition-colors duration-150 cursor-pointer"
                   >
                     {sug}
                   </button>
@@ -241,13 +248,13 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
               </div>
             </div>
 
-            <div className="space-y-3 pt-2 border-t border-neutral-800/80">
+            <div className="space-y-3 pt-2 border-t border-[#292B39]">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider">
+                  <span className="text-xs font-bold text-[#F4F3FA] uppercase tracking-wider">
                     2. Selected Queue
                   </span>
-                  <span className="bg-primary-theme/20 text-accent-theme border border-primary-theme/30 text-[10px] font-black px-2 py-0.5 rounded-full">
+                  <span className="bg-[#191C29] text-[#B49AF8] border border-[#292B39] text-[10px] font-black px-2 py-0.5 rounded-full">
                     {selectedIds.length} titles
                   </span>
                 </div>
@@ -255,7 +262,7 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                 {selectedIds.length > 0 && (
                   <button
                     onClick={() => setSelectedIds([])}
-                    className="text-xs text-neutral-400 hover:text-red-400 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                    className="text-xs text-[#A1A5B5] hover:text-[#F87171] inline-flex items-center gap-1 cursor-pointer transition-colors duration-150"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Clear all</span>
@@ -264,13 +271,13 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
               </div>
 
               {queueAnime.length === 0 ? (
-                <div className="p-8 rounded-2xl border-2 border-dashed border-neutral-800 text-center space-y-2">
-                  <Film className="w-8 h-8 text-neutral-600 mx-auto" />
-                  <p className="text-xs text-neutral-400 font-medium">
+                <div className="p-8 rounded-2xl border border-dashed border-[#292B39] bg-[#191C29]/40 text-center space-y-2">
+                  <Film className="w-8 h-8 text-[#A1A5B5] mx-auto" />
+                  <p className="text-xs text-[#F4F3FA] font-medium">
                     No anime selected yet.
                   </p>
-                  <p className="text-[11px] text-neutral-500">
-                    Click "Add to List" on any anime card from the catalog on the right.
+                  <p className="text-[11px] text-[#A1A5B5]">
+                    Click &quot;Add to List&quot; on any anime card from the catalog on the right.
                   </p>
                 </div>
               ) : (
@@ -278,10 +285,10 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                   {queueAnime.map((anime, idx) => (
                     <div
                       key={`queue_item_${anime.id}_${idx}`}
-                      className="p-2.5 rounded-2xl bg-neutral-950/80 border border-neutral-800 flex items-center justify-between gap-3 group"
+                      className="p-2.5 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-between gap-3 group"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="text-[10px] font-mono text-neutral-500 w-4">
+                        <span className="text-[10px] font-mono text-[#A1A5B5] w-4">
                           {idx + 1}.
                         </span>
                         <img
@@ -294,13 +301,13 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                           onError={(e) => {
                             e.currentTarget.src = '/logo.png';
                           }}
-                          className="w-8 h-11 rounded-lg object-cover shrink-0 border border-white/10"
+                          className="w-8 h-11 rounded-lg object-cover shrink-0 border border-[#292B39]"
                         />
                         <div className="min-w-0">
-                          <h4 className="text-xs font-bold text-white truncate max-w-[170px]">
+                          <h4 className="text-xs font-bold text-[#F4F3FA] truncate max-w-[170px]">
                             {anime.title}
                           </h4>
-                          <span className="text-[10px] text-neutral-400 truncate">
+                          <span className="text-[10px] text-[#A1A5B5] truncate">
                             {anime.languages || 'Hindi, Tamil, Telugu'}
                           </span>
                         </div>
@@ -308,8 +315,9 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
 
                       <button
                         onClick={() => toggleSelect(anime.id)}
-                        className="p-1 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-neutral-800 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-[#A1A5B5] hover:text-[#F87171] hover:bg-[#12141E] transition-colors duration-150 cursor-pointer"
                         title="Remove from queue"
+                        aria-label={`Remove ${anime.title} from queue`}
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -319,37 +327,37 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
               )}
             </div>
 
-            <button
+            <Button
               onClick={handleSaveCollection}
               disabled={selectedIds.length === 0 || !collectionTitle.trim()}
-              className={`w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-primary-theme via-orange-500 to-amber-500 text-white font-black text-sm shadow-xl transition-all cursor-pointer ${
-                selectedIds.length === 0 || !collectionTitle.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-95'
-              }`}
+              variant="primary"
+              size="lg"
+              fullWidth
             >
               Publish Custom Collection ({selectedIds.length})
-            </button>
+            </Button>
           </div>
         </div>
 
         <div className="lg:col-span-7 space-y-6">
-          <div className="p-6 rounded-3xl bg-neutral-900/50 border border-neutral-800/80 backdrop-blur-md space-y-4 shadow-xl">
+          <div className="p-6 rounded-2xl bg-[#12141E] border border-[#292B39] space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-black text-white">
+              <h3 className="text-base font-black text-[#F4F3FA]">
                 Select Anime for Collection
               </h3>
-              <span className="text-xs text-neutral-400 font-semibold">
+              <span className="text-xs text-[#A1A5B5] font-semibold">
                 {filteredCatalog.length} available
               </span>
             </div>
 
             <div className="relative">
-              <Search className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#A1A5B5] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search catalog by title or genre..."
-                className="w-full bg-[#0b0f17] border border-neutral-800 focus:border-primary-theme rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
+                className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl pl-10 pr-4 py-2.5 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
               />
             </div>
 
@@ -360,10 +368,10 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                   <button
                     key={lang}
                     onClick={() => setSelectedLang(lang)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                    className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors duration-150 cursor-pointer shrink-0 border ${
                       isActive
-                        ? 'bg-primary-theme text-white shadow-sm'
-                        : 'bg-neutral-800/80 border border-neutral-700/50 text-neutral-400 hover:text-white'
+                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                        : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
                     }`}
                   >
                     {lang}
@@ -381,13 +389,13 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
               return (
                 <div
                   key={`selectable_anime_${anime.id}_${idx}`}
-                  className={`rounded-2xl bg-[#131926] border transition-all overflow-hidden flex flex-col justify-between shadow-md ${
+                  className={`rounded-2xl bg-[#12141E] border transition-colors duration-150 overflow-hidden flex flex-col justify-between shadow-md ${
                     isSelected
-                      ? 'border-emerald-500 ring-2 ring-emerald-500/50'
-                      : 'border-neutral-800 hover:border-neutral-700'
+                      ? 'border-[#34D399] ring-1 ring-[#34D399]/50'
+                      : 'border-[#292B39] hover:border-[#B49AF8]/60'
                   }`}
                 >
-                  <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-neutral-900">
+                  <div className="relative aspect-[3/4.2] w-full overflow-hidden bg-[#191C29]">
                     <img
                       src={anime.cover_image ? anime.cover_image : '/logo.png'}
                       alt={anime.title}
@@ -402,7 +410,7 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                     />
 
                     {isSelected && (
-                      <div className="absolute top-2 right-2 w-7 h-7 rounded-full bg-emerald-500 text-neutral-950 flex items-center justify-center shadow-lg border border-white/20">
+                      <div className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#34D399] text-[#0B0A10] flex items-center justify-center shadow-lg">
                         <Check className="w-4 h-4 stroke-[3]" />
                       </div>
                     )}
@@ -411,7 +419,7 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
                       {languages.slice(0, 2).map((l, lIdx) => (
                         <span
                           key={`selectable_lang_${anime.id}_${l}_${lIdx}`}
-                          className="bg-black/80 backdrop-blur-md text-[9px] font-bold text-amber-300 px-1.5 py-0.5 rounded shadow"
+                          className="bg-[#0B0A10]/85 border border-[#292B39] text-[9px] font-bold text-[#F9C876] px-1.5 py-0.5 rounded"
                         >
                           {l}
                         </span>
@@ -421,20 +429,20 @@ export const CreateCollectionUI: React.FC<CreateCollectionUIProps> = ({
 
                   <div className="p-3 space-y-2 flex-1 flex flex-col justify-between">
                     <div>
-                      <h4 className="text-xs font-bold text-white line-clamp-1 leading-snug">
+                      <h4 className="text-xs font-bold text-[#F4F3FA] line-clamp-1 leading-snug">
                         {anime.title}
                       </h4>
-                      <p className="text-[10px] text-neutral-400 mt-0.5">
+                      <p className="text-[10px] text-[#A1A5B5] mt-0.5">
                         {anime.type || 'TV Series'} • {anime.platform || 'Not verified'}
                       </p>
                     </div>
 
                     <button
                       onClick={() => toggleSelect(anime.id)}
-                      className={`w-full py-1.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                      className={`min-h-[38px] w-full py-1.5 px-2 rounded-xl text-xs font-bold transition-colors duration-150 cursor-pointer flex items-center justify-center gap-1 border ${
                         isSelected
-                          ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-300'
-                          : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white'
+                          ? 'bg-[#34D399]/15 border-[#34D399]/40 text-[#34D399]'
+                          : 'bg-[#191C29] hover:bg-[#292B39] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
                       }`}
                     >
                       {isSelected ? (
@@ -474,7 +482,7 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0b0f17]/98 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0B0A10]">
       <div className="min-h-screen w-full">
         <CreateCollectionUI
           animeList={animeList}

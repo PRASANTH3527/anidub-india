@@ -1,16 +1,17 @@
 import React, { useState, useRef } from 'react';
-import { 
-  Trophy, 
-  Sparkles, 
-  RotateCcw, 
-  Download, 
-  Share2, 
-  Search, 
-  Layers, 
+import {
+  Trophy,
+  Sparkles,
+  RotateCcw,
+  Download,
+  Share2,
+  Search,
+  Layers,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
 } from 'lucide-react';
 import { Anime } from './CatalogView';
+import { Button } from './ui/Button';
 
 export interface AnimeTierListMakerProps {
   catalogList: Anime[];
@@ -22,71 +23,51 @@ interface TierDefinition {
   id: string;
   label: string;
   name: string;
-  bgGradient: string;
-  glowShadow: string;
-  borderColor: string;
-  textClass: string;
+  badgeStyle: string;
 }
 
 const TIERS: TierDefinition[] = [
-  { 
-    id: 'S', 
-    label: 'S', 
+  {
+    id: 'S',
+    label: 'S',
     name: 'Masterpiece',
-    bgGradient: 'bg-gradient-to-br from-red-500 via-rose-500 to-pink-600', 
-    glowShadow: 'shadow-lg shadow-red-500/35 ring-1 ring-red-400/40', 
-    borderColor: 'border-red-500/30',
-    textClass: 'text-white font-black' 
+    badgeStyle: 'bg-[#F87171]/15 border-[#F87171]/40 text-[#F87171]',
   },
-  { 
-    id: 'A', 
-    label: 'A', 
+  {
+    id: 'A',
+    label: 'A',
     name: 'Top Tier',
-    bgGradient: 'bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500', 
-    glowShadow: 'shadow-lg shadow-orange-500/35 ring-1 ring-orange-400/40', 
-    borderColor: 'border-orange-500/30',
-    textClass: 'text-white font-black' 
+    badgeStyle: 'bg-[#F9C876]/15 border-[#F9C876]/40 text-[#F9C876]',
   },
-  { 
-    id: 'B', 
-    label: 'B', 
+  {
+    id: 'B',
+    label: 'B',
     name: 'Great Watch',
-    bgGradient: 'bg-gradient-to-br from-amber-400 via-yellow-400 to-lime-500', 
-    glowShadow: 'shadow-lg shadow-yellow-400/35 ring-1 ring-yellow-300/40', 
-    borderColor: 'border-yellow-500/30',
-    textClass: 'text-neutral-950 font-black' 
+    badgeStyle: 'bg-[#B49AF8]/15 border-[#B49AF8]/40 text-[#B49AF8]',
   },
-  { 
-    id: 'C', 
-    label: 'C', 
+  {
+    id: 'C',
+    label: 'C',
     name: 'Decent',
-    bgGradient: 'bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500', 
-    glowShadow: 'shadow-lg shadow-emerald-500/35 ring-1 ring-emerald-400/40', 
-    borderColor: 'border-emerald-500/30',
-    textClass: 'text-white font-black' 
+    badgeStyle: 'bg-[#34D399]/15 border-[#34D399]/40 text-[#34D399]',
   },
-  { 
-    id: 'D', 
-    label: 'D', 
+  {
+    id: 'D',
+    label: 'D',
     name: 'Pass / Casual',
-    bgGradient: 'bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600', 
-    glowShadow: 'shadow-lg shadow-blue-500/35 ring-1 ring-blue-400/40', 
-    borderColor: 'border-blue-500/30',
-    textClass: 'text-white font-black' 
+    badgeStyle: 'bg-[#191C29] border-[#292B39] text-[#A1A5B5]',
   },
 ];
 
 export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
   catalogList,
-  onSelectAnime,
-  onNavigateHome
 }) => {
   const [tierState, setTierState] = useState<Record<string, Anime[]>>({
     S: [],
     A: [],
     B: [],
     C: [],
-    D: []
+    D: [],
   });
 
   const [format, setFormat] = useState<'PNG' | 'JPEG'>('PNG');
@@ -97,7 +78,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
   const [draggedAnime, setDraggedAnime] = useState<Anime | null>(null);
   const [dragOverTier, setDragOverTier] = useState<string | null>(null);
   const [isDockExpanded, setIsDockExpanded] = useState(true);
-  
+
   const tierBoardRef = useRef<HTMLDivElement | null>(null);
 
   const showToast = (msg: string) => {
@@ -111,11 +92,13 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
 
   const unrankedPool = catalogList.filter((anime) => {
     if (assignedIds.has(anime.id)) return false;
-    const matchesQuery = !searchQuery.trim() || 
+    const matchesQuery =
+      !searchQuery.trim() ||
       anime.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (anime.genres && anime.genres.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const matchesLang = selectedLanguage === 'All' || 
+    const matchesLang =
+      selectedLanguage === 'All' ||
       (anime.languages && anime.languages.toLowerCase().includes(selectedLanguage.toLowerCase()));
 
     return matchesQuery && matchesLang;
@@ -155,7 +138,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
       A: items.slice(3, 6),
       B: items.slice(6, 9),
       C: items.slice(9, 11),
-      D: items.slice(11, 13)
+      D: items.slice(11, 13),
     });
     showToast('Loaded sample community tier list rankings!');
   };
@@ -177,7 +160,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
     }
   };
 
-  const handleDragLeave = (e: React.DragEvent, tierId: string) => {
+  const handleDragLeave = (_e: React.DragEvent, tierId: string) => {
     if (dragOverTier === tierId) {
       setDragOverTier(null);
     }
@@ -195,39 +178,38 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
   const handleDownloadImage = () => {
     setIsExporting(true);
     showToast(`Generating ${format} snapshot of your tier list...`);
-    
+
     try {
       const canvas = document.createElement('canvas');
       canvas.width = 1200;
       canvas.height = 900;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.fillStyle = '#0a0a0a';
+        ctx.fillStyle = '#0B0A10';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Watermark Logo
-        ctx.fillStyle = '#9333ea';
+        ctx.fillStyle = '#B49AF8';
         ctx.beginPath();
         ctx.roundRect(40, 40, 50, 50, 14);
         ctx.fill();
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = '#0B0A10';
         ctx.font = 'bold 24px sans-serif';
         ctx.fillText('AD', 48, 73);
 
         ctx.font = 'bold 32px sans-serif';
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText('Anidub India • Tier List Rankings', 110, 70);
+        ctx.fillStyle = '#F4F3FA';
+        ctx.fillText('AniDub India • Tier List Rankings', 110, 70);
 
         ctx.font = '14px sans-serif';
-        ctx.fillStyle = '#9ca3af';
+        ctx.fillStyle = '#A1A5B5';
         ctx.fillText('Official Indian Regional Dub Catalog • Tamil • Telugu • Hindi', 110, 94);
 
         const tierLabels = [
-          { label: 'S', color: '#ef4444', items: tierState.S },
-          { label: 'A', color: '#f59e0b', items: tierState.A },
-          { label: 'B', color: '#eab308', items: tierState.B },
-          { label: 'C', color: '#10b981', items: tierState.C },
-          { label: 'D', color: '#3b82f6', items: tierState.D },
+          { label: 'S', color: '#F87171', items: tierState.S },
+          { label: 'A', color: '#F9C876', items: tierState.A },
+          { label: 'B', color: '#B49AF8', items: tierState.B },
+          { label: 'C', color: '#34D399', items: tierState.C },
+          { label: 'D', color: '#292B39', items: tierState.D },
         ];
 
         let startY = 135;
@@ -236,27 +218,27 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
           ctx.beginPath();
           ctx.roundRect(40, startY, 110, 125, 12);
           ctx.fill();
-          ctx.fillStyle = '#ffffff';
+          ctx.fillStyle = '#0B0A10';
           ctx.font = 'bold 44px sans-serif';
           ctx.fillText(tier.label, 80, startY + 82);
 
-          ctx.fillStyle = '#121216';
+          ctx.fillStyle = '#12141E';
           ctx.beginPath();
           ctx.roundRect(155, startY, canvas.width - 195, 125, 12);
           ctx.fill();
 
-          ctx.fillStyle = '#e5e7eb';
+          ctx.fillStyle = '#F4F3FA';
           ctx.font = 'bold 15px sans-serif';
           tier.items.forEach((item, idx) => {
             if (idx < 5) {
               const xPos = 175 + idx * 190;
-              ctx.fillStyle = '#1c1c24';
+              ctx.fillStyle = '#191C29';
               ctx.beginPath();
               ctx.roundRect(xPos, startY + 12, 170, 100, 10);
               ctx.fill();
-              ctx.fillStyle = '#ffffff';
+              ctx.fillStyle = '#F4F3FA';
               ctx.fillText(item.title.slice(0, 16), xPos + 10, startY + 55);
-              ctx.fillStyle = '#a855f7';
+              ctx.fillStyle = '#B49AF8';
               ctx.font = '12px sans-serif';
               ctx.fillText('★ ' + (item.rating || 8.5) + '/10', xPos + 10, startY + 80);
               ctx.font = 'bold 15px sans-serif';
@@ -266,9 +248,9 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
           startY += 140;
         });
 
-        ctx.fillStyle = '#6b7280';
+        ctx.fillStyle = '#A1A5B5';
         ctx.font = '13px sans-serif';
-        ctx.fillText('Generated on Anidub India • Official Anime Streaming & Dubbing Hub', 40, 875);
+        ctx.fillText('Generated on AniDub India • Official Anime Streaming & Dubbing Hub', 40, 875);
 
         const mimeType = format === 'JPEG' ? 'image/jpeg' : 'image/png';
         const dataUrl = canvas.toDataURL(mimeType, 0.95);
@@ -288,44 +270,42 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-neutral-100 font-sans pb-44 px-4 sm:px-6 pt-6 relative selection:bg-purple-500/30">
-      
+    <div className="min-h-screen bg-[#0B0A10] text-[#F4F3FA] font-sans pb-44 px-4 sm:px-6 pt-6 relative">
       {/* TOAST FEEDBACK */}
       {toastMessage && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl bg-[#141419]/95 border border-purple-500/60 backdrop-blur-2xl shadow-2xl flex items-center gap-3 text-white text-xs font-semibold animate-fadeIn">
-          <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-spin" />
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl bg-[#12141E] border border-[#292B39] shadow-2xl flex items-center gap-3 text-[#F4F3FA] text-xs font-semibold">
+          <Sparkles className="w-4 h-4 text-[#B49AF8] shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* FLOATING GLASSMORPHIC TOOLBAR (Top Right) */}
+      {/* TOOLBAR */}
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500/20 to-purple-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shadow-lg">
+            <div className="w-10 h-10 rounded-xl bg-[#12141E] border border-[#292B39] text-[#F9C876] flex items-center justify-center">
               <Trophy className="w-5 h-5" />
             </div>
-            <h1 className="font-heading font-black text-2xl sm:text-3xl text-white tracking-tight">
+            <h1 className="font-heading font-black text-2xl sm:text-3xl text-[#F4F3FA] tracking-tight">
               Indian Anime Tier List Maker
             </h1>
           </div>
-          <p className="text-xs text-neutral-400 mt-1">
-            Rank official regional Indian dubbed anime. Drag items from the glass dock below into the tiers.
+          <p className="text-xs text-[#A1A5B5] mt-1">
+            Rank official regional Indian dubbed anime. Drag items from the dock below into the tiers.
           </p>
         </div>
 
-        {/* Sleek Pill-Shaped Glass Floating Dock for Action Buttons */}
-        <div className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-white/10 backdrop-blur-md p-2 border border-white/15 shadow-xl shadow-black/40 flex-wrap justify-center select-none">
-          {/* Format Toggle Pill */}
-          <div className="flex items-center bg-black/40 rounded-full p-0.5 border border-white/10">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 rounded-2xl bg-[#12141E] p-2 border border-[#292B39] flex-wrap justify-center select-none">
+          <div className="flex items-center bg-[#191C29] rounded-xl p-0.5 border border-[#292B39]">
             {(['PNG', 'JPEG'] as const).map((fmt) => (
               <button
                 key={fmt}
                 onClick={() => setFormat(fmt)}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                  format === fmt 
-                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md shadow-purple-900/50' 
-                    : 'text-neutral-400 hover:text-white'
+                className={`min-h-[34px] px-3 py-1 rounded-lg text-xs font-bold transition-colors duration-150 cursor-pointer ${
+                  format === fmt
+                    ? 'bg-[#B49AF8] text-[#0B0A10]'
+                    : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
                 }`}
               >
                 {fmt}
@@ -335,92 +315,93 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
 
           <button
             onClick={handleSamplePreset}
-            className="p-2 rounded-full bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-amber-400 transition-all cursor-pointer border border-white/10 hover:border-amber-400/40 shadow-sm"
+            className="w-10 h-10 rounded-xl bg-[#191C29] hover:bg-[#292B39] text-[#F9C876] transition-colors duration-150 cursor-pointer border border-[#292B39] flex items-center justify-center"
             title="Load sample ranking"
+            aria-label="Load sample ranking"
           >
-            <Sparkles className="w-4 h-4 text-amber-400" />
+            <Sparkles className="w-4 h-4" />
           </button>
 
           <button
             onClick={handleReset}
-            className="p-2 rounded-full bg-white/5 hover:bg-white/15 text-neutral-400 hover:text-white transition-all cursor-pointer border border-white/10 hover:border-white/30 shadow-sm"
+            className="w-10 h-10 rounded-xl bg-[#191C29] hover:bg-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer border border-[#292B39] flex items-center justify-center"
             title="Reset tier list"
+            aria-label="Reset tier list"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
 
-          <button
+          <Button
             onClick={handleDownloadImage}
             disabled={isExporting}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:opacity-90 text-white text-xs font-black shadow-lg shadow-purple-500/30 transition-all cursor-pointer disabled:opacity-50"
+            variant="primary"
+            size="sm"
+            leftIcon={<Download className="w-3.5 h-3.5" />}
             title="Download Tier List Image"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>{isExporting ? 'Exporting...' : 'Download'}</span>
-          </button>
+            {isExporting ? 'Exporting...' : 'Download'}
+          </Button>
 
           <button
             onClick={handleShare}
-            className="p-2 rounded-full bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-purple-300 transition-all cursor-pointer border border-white/10 hover:border-purple-400/40 shadow-sm"
+            className="w-10 h-10 rounded-xl bg-[#191C29] hover:bg-[#292B39] text-[#B49AF8] transition-colors duration-150 cursor-pointer border border-[#292B39] flex items-center justify-center"
             title="Share Tier List link"
+            aria-label="Share Tier List link"
           >
-            <Share2 className="w-4 h-4 text-purple-400" />
+            <Share2 className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* CENTRAL TIER BOARD (Floating Glass Cards with Neon Badges) */}
-      <div 
+      {/* CENTRAL TIER BOARD */}
+      <div
         ref={tierBoardRef}
-        className="max-w-6xl mx-auto p-4 sm:p-6 bg-black/40 backdrop-blur-xl rounded-3xl border border-white/10 shadow-[0_10px_50px_rgba(0,0,0,0.7)] space-y-4"
+        className="max-w-6xl mx-auto p-4 sm:p-6 bg-[#12141E] rounded-2xl border border-[#292B39] shadow-2xl space-y-4"
       >
-        {/* Watermark Logo Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-white/10">
+        <div className="flex items-center justify-between pb-3 border-b border-[#292B39]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-600 to-amber-500 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-purple-600/30 ring-1 ring-white/20">
+            <div className="w-10 h-10 rounded-xl bg-[#B49AF8] flex items-center justify-center text-[#0B0A10] font-black text-sm">
               AD
             </div>
             <div>
-              <h3 className="text-sm font-black text-white tracking-wide">Anidub India • Tier List Rankings</h3>
-              <p className="text-[10px] text-neutral-400">Official Indian Dubbed Anime Directory</p>
+              <h3 className="text-sm font-black text-[#F4F3FA] tracking-wide">AniDub India • Tier List Rankings</h3>
+              <p className="text-[10px] text-[#A1A5B5]">Official Indian Dubbed Anime Directory</p>
             </div>
           </div>
-          <span className="text-[10px] text-purple-300 font-bold bg-white/5 border border-purple-500/30 px-3 py-1 rounded-full shadow-inner">
+          <span className="text-[10px] text-[#B49AF8] font-bold bg-[#191C29] border border-[#292B39] px-3 py-1 rounded-full">
             Regional Dub Edition
           </span>
         </div>
 
-        {/* Floating Glassmorphism Tier Rows with gap-3 */}
         <div className="flex flex-col gap-3">
           {TIERS.map((tier) => {
             const items = tierState[tier.id] || [];
             const isTargeted = dragOverTier === tier.id;
 
             return (
-              <div 
+              <div
                 key={tier.id}
                 onDragOver={(e) => handleDragOver(e, tier.id)}
                 onDragLeave={(e) => handleDragLeave(e, tier.id)}
                 onDrop={(e) => handleDropOnTier(e, tier.id)}
-                className={`relative flex flex-col sm:flex-row items-center sm:items-stretch rounded-2xl p-2.5 sm:p-3 bg-white/5 backdrop-blur-md border transition-all duration-300 gap-3 sm:gap-4 shadow-lg shadow-black/40 ${
+                className={`relative flex flex-col sm:flex-row items-center sm:items-stretch rounded-xl p-2.5 sm:p-3 bg-[#191C29] border transition-colors duration-150 gap-3 sm:gap-4 ${
                   isTargeted
-                    ? 'border-purple-400 ring-2 ring-purple-500/50 bg-white/[0.08] shadow-[0_0_35px_rgba(168,85,247,0.35)]'
-                    : 'border-white/10 hover:border-white/20'
+                    ? 'border-[#B49AF8] bg-[#191C29]'
+                    : 'border-[#292B39]'
                 }`}
               >
-                {/* Left Floating Neon Gradient Badge */}
                 <div className="flex sm:flex-col items-center justify-between sm:justify-center w-full sm:w-auto shrink-0 select-none">
-                  <div 
-                    className={`w-14 h-14 sm:w-20 sm:h-20 rounded-2xl ${tier.bgGradient} ${tier.glowShadow} ${tier.textClass} flex flex-col items-center justify-center shadow-lg transition-transform duration-200 hover:scale-105 shrink-0`}
+                  <div
+                    className={`w-14 h-14 sm:w-20 sm:h-20 rounded-xl border ${tier.badgeStyle} flex flex-col items-center justify-center shrink-0`}
                   >
-                    <span className="text-2xl sm:text-3xl font-heading font-black tracking-tight leading-none drop-shadow-md">
+                    <span className="text-2xl sm:text-3xl font-heading font-black tracking-tight leading-none">
                       {tier.label}
                     </span>
                     <span className="text-[8px] uppercase font-black tracking-widest mt-0.5 opacity-80 sm:block hidden">
                       Tier
                     </span>
                   </div>
-                  <span className="text-[10px] font-semibold text-neutral-400 sm:mt-1.5 text-center truncate max-w-[80px]">
+                  <span className="text-[10px] font-semibold text-[#A1A5B5] sm:mt-1.5 text-center truncate max-w-[80px]">
                     {items.length} {items.length === 1 ? 'title' : 'titles'}
                   </span>
                 </div>
@@ -428,14 +409,14 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                 {/* Right Items / Drag & Drop Zone */}
                 <div className="flex-1 w-full flex flex-wrap gap-2.5 sm:gap-3 items-center min-h-[85px] sm:min-h-[95px]">
                   {items.length === 0 ? (
-                    <div 
-                      className={`w-full min-h-[85px] sm:min-h-[95px] flex flex-col items-center justify-center border rounded-xl py-4 px-3 text-xs select-none transition-all duration-200 ${
-                        isTargeted 
-                          ? 'border-solid border-purple-400 bg-purple-500/15 text-purple-200 shadow-inner ring-1 ring-purple-400/50' 
-                          : 'border-dashed border-white/20 text-neutral-400 hover:border-white/30'
+                    <div
+                      className={`w-full min-h-[85px] sm:min-h-[95px] flex flex-col items-center justify-center border rounded-xl py-4 px-3 text-xs select-none transition-colors duration-150 ${
+                        isTargeted
+                          ? 'border-solid border-[#B49AF8] bg-[#B49AF8]/10 text-[#B49AF8]'
+                          : 'border-dashed border-[#292B39] text-[#A1A5B5]'
                       }`}
                     >
-                      <Layers className={`w-4 h-4 mb-1 transition-transform ${isTargeted ? 'scale-125 text-purple-300 animate-bounce' : 'opacity-40'}`} />
+                      <Layers className="w-4 h-4 mb-1 opacity-60" />
                       <span className="font-medium">
                         {isTargeted ? `Drop here to rank in ${tier.label} Tier!` : `Drag & drop anime cards into ${tier.label} Tier`}
                       </span>
@@ -443,14 +424,14 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                   ) : (
                     <>
                       {items.map((anime, idx) => (
-                        <div 
+                        <div
                           key={`tier_${tier.id}_anime_${anime.id}_${idx}`}
                           draggable
                           onDragStart={(e) => handleDragStart(e, anime)}
-                          className="relative group w-16 sm:w-20 aspect-[3/4] rounded-xl overflow-hidden bg-neutral-900 border border-white/20 shadow-md shrink-0 cursor-grab active:cursor-grabbing hover:scale-105 hover:border-purple-400/80 hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-200 select-none"
+                          className="relative group w-16 sm:w-20 aspect-[3/4] rounded-xl overflow-hidden bg-[#12141E] border border-[#292B39] shrink-0 cursor-grab active:cursor-grabbing hover:border-[#B49AF8] transition-colors duration-150 select-none"
                           title={anime.title}
                         >
-                          <img 
+                          <img
                             src={anime.cover_image ? anime.cover_image : '/logo.png'}
                             alt={anime.title}
                             width={160}
@@ -460,23 +441,23 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                             onError={(e) => {
                               e.currentTarget.src = '/logo.png';
                             }}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" 
+                            className="w-full h-full object-cover"
                           />
-                          
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1.5 text-[9px] text-white">
+
+                          <div className="absolute inset-0 bg-[#0B0A10]/85 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex flex-col justify-between p-1.5 text-[9px] text-[#F4F3FA]">
                             <button
                               onClick={() => removeFromTier(anime.id)}
-                              className="self-end p-1 rounded-full bg-red-600/90 hover:bg-red-500 text-white transition-all cursor-pointer shadow-md hover:scale-110"
+                              className="self-end w-6 h-6 rounded-full bg-[#F87171] text-[#0B0A10] font-bold flex items-center justify-center cursor-pointer"
                               title="Remove to pool"
                             >
                               ✕
                             </button>
-                            <span className="truncate font-bold leading-tight drop-shadow">{anime.title}</span>
+                            <span className="truncate font-bold leading-tight">{anime.title}</span>
                           </div>
                         </div>
                       ))}
                       {isTargeted && (
-                        <div className="w-16 sm:w-20 aspect-[3/4] rounded-xl border-2 border-solid border-purple-400 bg-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.4)] flex items-center justify-center text-purple-200 text-xs font-bold animate-pulse">
+                        <div className="w-16 sm:w-20 aspect-[3/4] rounded-xl border-2 border-solid border-[#B49AF8] bg-[#B49AF8]/15 flex items-center justify-center text-[#B49AF8] text-xs font-bold">
                           + Drop
                         </div>
                       )}
@@ -489,20 +470,18 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
         </div>
       </div>
 
-      {/* FLOATING BOTTOM GLASS PANEL (Unranked Anime Pool) */}
+      {/* FLOATING BOTTOM PANEL (Unranked Anime Pool) */}
       <div className="fixed bottom-0 left-0 right-0 z-40 px-3 sm:px-6 pb-4 sm:pb-6 pointer-events-none">
-        <div className="max-w-5xl mx-auto bg-black/75 backdrop-blur-2xl border border-white/15 rounded-3xl p-4 sm:p-5 shadow-[0_20px_60px_rgba(0,0,0,0.85)] pointer-events-auto transition-all duration-300 ring-1 ring-white/10">
-          
-          {/* Dock Header & Filter Controls */}
-          <div className="flex items-center justify-between pb-3 border-b border-white/10 gap-2 flex-wrap">
+        <div className="max-w-5xl mx-auto bg-[#12141E] border border-[#292B39] rounded-2xl p-4 sm:p-5 shadow-2xl pointer-events-auto">
+          <div className="flex items-center justify-between pb-3 border-b border-[#292B39] gap-2 flex-wrap">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-400 flex items-center justify-center shadow-inner">
+              <div className="w-8 h-8 rounded-xl bg-[#191C29] border border-[#292B39] text-[#B49AF8] flex items-center justify-center">
                 <Layers className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <h3 className="text-xs font-black text-[#F4F3FA] uppercase tracking-wider flex items-center gap-2">
                   <span>Unranked Anime Pool</span>
-                  <span className="px-2 py-0.5 rounded-full bg-white/10 text-[10px] font-bold text-purple-300 border border-white/10">
+                  <span className="px-2 py-0.5 rounded-full bg-[#191C29] text-[10px] font-bold text-[#B49AF8] border border-[#292B39]">
                     {unrankedPool.length}
                   </span>
                 </h3>
@@ -510,16 +489,15 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Language Filter */}
-              <div className="hidden sm:flex items-center bg-black/40 rounded-xl p-0.5 border border-white/10">
+              <div className="hidden sm:flex items-center bg-[#191C29] rounded-xl p-0.5 border border-[#292B39]">
                 {['All', 'Hindi', 'Tamil', 'Telugu'].map((l) => (
                   <button
                     key={l}
                     onClick={() => setSelectedLanguage(l)}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors duration-150 cursor-pointer ${
                       selectedLanguage === l
-                        ? 'bg-purple-600 text-white shadow-md'
-                        : 'text-neutral-400 hover:text-white'
+                        ? 'bg-[#B49AF8] text-[#0B0A10]'
+                        : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
                     }`}
                   >
                     {l}
@@ -527,47 +505,46 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                 ))}
               </div>
 
-              {/* Search input */}
               <div className="relative w-36 sm:w-44">
-                <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input 
+                <Search className="w-3.5 h-3.5 text-[#A1A5B5] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Filter cards..."
-                  className="w-full bg-black/50 border border-white/10 focus:border-purple-400/80 rounded-xl pl-8 pr-2.5 py-1 text-[11px] text-white placeholder-neutral-500 outline-none transition-colors"
+                  className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl pl-8 pr-2.5 py-1.5 text-[11px] text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
                 />
               </div>
 
               <button
                 onClick={() => setIsDockExpanded(!isDockExpanded)}
-                className="p-1.5 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-neutral-300 hover:text-white transition-all cursor-pointer shadow-sm"
+                className="w-8 h-8 rounded-xl bg-[#191C29] hover:bg-[#292B39] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer"
                 title={isDockExpanded ? 'Collapse Dock' : 'Expand Dock'}
+                aria-label={isDockExpanded ? 'Collapse Dock' : 'Expand Dock'}
               >
                 {isDockExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
-          {/* Collapsible Dock Content: Trading Cards Pool */}
           {isDockExpanded && (
             <div className="pt-3">
               {unrankedPool.length === 0 ? (
-                <div className="text-center py-6 text-xs text-neutral-400 italic flex flex-col items-center justify-center gap-1">
-                  <Sparkles className="w-4 h-4 text-amber-400" />
+                <div className="text-center py-6 text-xs text-[#A1A5B5] italic flex flex-col items-center justify-center gap-1">
+                  <Sparkles className="w-4 h-4 text-[#F9C876]" />
                   <span>All available titles have been ranked into tiers!</span>
                 </div>
               ) : (
                 <div className="flex gap-3 overflow-x-auto no-scrollbar py-1.5 px-0.5">
                   {unrankedPool.map((anime, idx) => (
-                    <div 
+                    <div
                       key={`dock_anime_${anime.id}_${idx}`}
                       draggable
                       onDragStart={(e) => handleDragStart(e, anime)}
-                      className="relative group w-16 sm:w-20 aspect-[3/4] rounded-2xl overflow-hidden bg-neutral-900 border border-white/20 shadow-xl shrink-0 cursor-grab active:cursor-grabbing hover:scale-105 hover:border-purple-400/80 hover:shadow-2xl hover:shadow-purple-500/30 transition-transform duration-200 select-none before:absolute before:inset-0 before:bg-gradient-to-t before:from-black/85 before:via-transparent before:to-white/10 before:pointer-events-none before:z-10"
+                      className="relative group w-16 sm:w-20 aspect-[3/4] rounded-xl overflow-hidden bg-[#191C29] border border-[#292B39] shrink-0 cursor-grab active:cursor-grabbing hover:border-[#B49AF8] transition-colors duration-150 select-none"
                       title={`${anime.title} - Drag into tier`}
                     >
-                      <img 
+                      <img
                         src={anime.cover_image ? anime.cover_image : '/logo.png'}
                         alt={anime.title}
                         width={160}
@@ -577,19 +554,18 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                         onError={(e) => {
                           e.currentTarget.src = '/logo.png';
                         }}
-                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" 
+                        className="w-full h-full object-cover"
                       />
 
-                      {/* Card Title Snippet at bottom */}
-                      <div className="absolute bottom-0 inset-x-0 p-1.5 z-20 pointer-events-none">
-                        <p className="text-[9px] font-bold text-white truncate drop-shadow-md">
+                      <div className="absolute bottom-0 inset-x-0 p-1.5 bg-gradient-to-t from-[#0B0A10] to-transparent z-20 pointer-events-none">
+                        <p className="text-[9px] font-bold text-[#F4F3FA] truncate">
                           {anime.title}
                         </p>
                       </div>
 
                       {/* Quick Tier Select Overlay on Hover */}
-                      <div className="absolute inset-0 z-30 bg-black/85 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-1.5 p-1 backdrop-blur-xs">
-                        <span className="text-[8px] font-black uppercase tracking-wider text-purple-300">Quick Rank:</span>
+                      <div className="absolute inset-0 z-30 bg-[#0B0A10]/90 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex flex-col justify-center items-center gap-1.5 p-1">
+                        <span className="text-[8px] font-black uppercase tracking-wider text-[#B49AF8]">Quick Rank:</span>
                         <div className="flex flex-wrap justify-center gap-1">
                           {TIERS.map((t) => (
                             <button
@@ -598,7 +574,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                                 e.stopPropagation();
                                 assignToTier(anime, t.id);
                               }}
-                              className={`w-5 h-5 rounded-lg ${t.bgGradient} ${t.textClass} text-[9px] font-black flex items-center justify-center hover:scale-125 transition-transform cursor-pointer shadow-md`}
+                              className={`w-6 h-6 rounded-lg border ${t.badgeStyle} text-[9px] font-black flex items-center justify-center cursor-pointer`}
                               title={`Rank into ${t.label} Tier`}
                             >
                               {t.label}
@@ -612,10 +588,8 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
               )}
             </div>
           )}
-
         </div>
       </div>
-
     </div>
   );
 };

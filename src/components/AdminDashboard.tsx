@@ -1549,23 +1549,23 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
   if (!isClerkAdminAuthorized) {
     const isCheckingServerAdmin = Boolean(isSignedIn && clerkUser && serverAdminVerified === null);
     return (
-      <div className="w-full min-h-screen bg-[#07090e] text-slate-100 flex flex-col items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-3xl bg-[#121829] border border-purple-500/30 p-8 shadow-2xl text-center space-y-5">
-          <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mx-auto">
+      <div className="w-full min-h-screen bg-[#0B0A10] text-[#F4F3FA] flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-2xl bg-[#12141E] border border-[#292B39] p-8 shadow-2xl text-center space-y-5">
+          <div className="w-12 h-12 rounded-2xl bg-[#F87171]/15 border border-[#F87171]/30 flex items-center justify-center mx-auto">
             {isCheckingServerAdmin ? (
-              <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+              <Loader2 className="w-6 h-6 text-[#B49AF8] animate-spin" />
             ) : (
-              <ShieldAlert className="w-6 h-6 text-rose-400" />
+              <ShieldAlert className="w-6 h-6 text-[#F87171]" />
             )}
           </div>
           <div className="space-y-1.5">
-            <h2 className="text-lg font-black text-white">
+            <h2 className="text-lg font-black text-[#F4F3FA]">
               {isCheckingServerAdmin ? 'Verifying Admin Session...' : 'Protected Admin Route'}
             </h2>
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-[#A1A5B5]">
               {isCheckingServerAdmin
                 ? 'Checking Clerk administrator permissions with the backend.'
-                : <>Only the authorized Clerk Administrator can access <code className="text-purple-400">/admin</code>.</>}
+                : <>Only the authorized Clerk Administrator can access <code className="text-[#B49AF8]">/admin</code>.</>}
             </p>
           </div>
           {!isSignedIn && (
@@ -1579,7 +1579,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
               if (onNavigateHome) onNavigateHome();
               else window.location.href = '/';
             }}
-            className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-white transition-colors cursor-pointer"
+            className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#191C29] hover:bg-[#292B39] border border-[#292B39] text-xs font-bold text-[#F4F3FA] transition-colors duration-150 cursor-pointer"
           >
             Return to Home
           </button>
@@ -1599,7 +1599,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
   ];
 
   return (
-    <div className="w-full min-h-screen bg-[#07090e] text-slate-100 flex flex-col md:flex-row font-sans relative selection:bg-purple-500 selection:text-white overflow-x-clip">
+    <div className="w-full min-h-screen bg-[#0B0A10] text-[#F4F3FA] flex flex-col md:flex-row font-sans relative selection:bg-[#B49AF8] selection:text-[#0B0A10] overflow-x-clip">
       <input
         ref={fileInputRef}
         type="file"
@@ -1608,32 +1608,28 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         className="hidden"
       />
 
-      <div className="fixed top-[-120px] left-[-120px] w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[140px] pointer-events-none z-0" />
-      <div className="fixed top-[25%] right-[-140px] w-[550px] h-[550px] bg-cyan-600/10 rounded-full blur-[160px] pointer-events-none z-0" />
-      <div className="fixed bottom-[-140px] left-[25%] w-[600px] h-[600px] bg-indigo-600/10 rounded-full blur-[160px] pointer-events-none z-0" />
-
       {/* Desktop Sidebar */}
       <aside
-        className={`hidden md:flex flex-col shrink-0 border-r border-white/10 bg-[#080c16]/95 backdrop-blur-2xl transition-all duration-300 relative z-30 sticky top-0 h-screen overflow-y-auto ${
+        className={`hidden md:flex flex-col shrink-0 border-r border-[#292B39] bg-[#12141E] transition-all duration-200 relative z-30 sticky top-0 h-screen overflow-y-auto ${
           isSidebarCollapsed ? 'w-20' : 'w-64'
         }`}
       >
-        <div className="p-4 border-b border-white/10 flex items-center justify-between">
+        <div className="p-4 border-b border-[#292B39] flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             {isSidebarCollapsed ? <AniDubLogo variant="icon" size="sm" /> : <AniDubLogo variant="horizontal" size="sm" />}
             {!isSidebarCollapsed && (
               <div className="min-w-0">
-                <div className="text-[10px] font-black tracking-[0.2em] uppercase text-white/40 truncate">ADMIN CONSOLE</div>
-                <div className="text-[9px] text-cyan-400 font-mono tracking-tight flex items-center gap-1 mt-0.5">
-                  <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>v4.2 PRO</span>
+                <div className="text-[10px] font-black tracking-[0.2em] uppercase text-[#A1A5B5] truncate">ADMIN CONSOLE</div>
+                <div className="text-[9px] text-[#B49AF8] font-mono tracking-tight flex items-center gap-1 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
+                  <span>v4.2 ECLIPSE</span>
                 </div>
               </div>
             )}
           </div>
           <button
             onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-            className="w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 rounded-lg bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer"
             title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {isSidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
@@ -1643,17 +1639,17 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         <div className="p-3">
           <button
             onClick={() => setIsCommandPaletteOpen(true)}
-            className={`w-full rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-purple-500/50 text-neutral-300 hover:text-white transition-all duration-200 cursor-pointer flex items-center gap-2 group ${
+            className={`w-full rounded-xl bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer flex items-center gap-2 group ${
               isSidebarCollapsed ? 'p-2.5 justify-center' : 'px-3 py-2 justify-between'
             }`}
             title="Open Command Palette (Ctrl+K)"
           >
             <div className="flex items-center gap-2">
-              <Command className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
-              {!isSidebarCollapsed && <span className="text-xs font-medium text-neutral-300">Command Palette</span>}
+              <Command className="w-4 h-4 text-[#B49AF8]" />
+              {!isSidebarCollapsed && <span className="text-xs font-medium text-[#F4F3FA]">Command Palette</span>}
             </div>
             {!isSidebarCollapsed && (
-              <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-mono text-neutral-400 border border-white/15">
+              <kbd className="px-1.5 py-0.5 rounded bg-[#12141E] text-[10px] font-mono text-[#A1A5B5] border border-[#292B39]">
                 ⌘K
               </kbd>
             )}
@@ -1668,78 +1664,75 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
               <button
                 key={item.id}
                 onClick={() => setActiveAdminTab(item.id)}
-                className={`w-full rounded-xl transition-colors duration-200 flex items-center gap-3 cursor-pointer group relative ${
+                className={`w-full rounded-xl transition-colors duration-150 flex items-center gap-3 cursor-pointer group relative ${
                   isSidebarCollapsed ? 'p-3 justify-center' : 'px-3.5 py-2.5 justify-between'
-                } ${isActive ? 'text-white font-semibold' : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'}`}
+                } ${
+                  isActive
+                    ? 'bg-[#B49AF8] text-[#0B0A10] font-bold'
+                    : 'text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#191C29]'
+                }`}
                 title={item.label}
               >
-                {isActive && (
-                  <motion.div
-                    layoutId="admin-sidebar-active-tab"
-                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 shadow-[0_0_20px_rgba(168,85,247,0.35)] border border-purple-400/40 -z-10"
-                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                  />
-                )}
                 <div className="flex items-center gap-3 min-w-0">
-                  <IconComp className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-neutral-400 group-hover:text-purple-300'}`} />
+                  <IconComp className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#0B0A10]' : 'text-[#A1A5B5] group-hover:text-[#B49AF8]'}`} />
                   {!isSidebarCollapsed && <span className="text-xs truncate tracking-tight">{item.label}</span>}
                 </div>
                 {!isSidebarCollapsed && item.count !== undefined && item.count > 0 && (
                   <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-                      isActive ? 'bg-purple-900/90 text-purple-200 border border-purple-400/30' : 'bg-white/10 text-neutral-300'
+                    className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono font-bold ${
+                      isActive ? 'bg-[#0B0A10]/20 text-[#0B0A10]' : 'bg-[#191C29] text-[#A1A5B5] border border-[#292B39]'
                     }`}
                   >
                     {item.count}
                   </span>
                 )}
                 {isSidebarCollapsed && item.count !== undefined && item.count > 0 && (
-                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-purple-400 ring-2 ring-[#080c16]" />
+                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#B49AF8]" />
                 )}
               </button>
             );
           })}
         </nav>
 
-        <div className="p-3 border-t border-white/10">
+        <div className="p-3 border-t border-[#292B39]">
           <button
             onClick={() => setIsTerminalOpen((prev) => !prev)}
-            className={`w-full rounded-xl bg-cyan-950/20 hover:bg-cyan-950/40 border border-cyan-500/30 hover:border-cyan-400/60 p-2.5 transition-all duration-200 cursor-pointer flex items-center gap-2.5 text-left group ${
+            className={`w-full rounded-xl bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] hover:border-[#B49AF8]/50 p-2.5 transition-colors duration-150 cursor-pointer flex items-center gap-2.5 text-left group ${
               isSidebarCollapsed ? 'justify-center' : 'justify-between'
             }`}
             title="Open Live System Terminal"
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-6 h-6 rounded-lg bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center shrink-0">
-                <Terminal className="w-3.5 h-3.5 text-cyan-300" />
+              <div className="w-6 h-6 rounded-lg bg-[#B49AF8]/15 border border-[#B49AF8]/30 flex items-center justify-center shrink-0">
+                <Terminal className="w-3.5 h-3.5 text-[#B49AF8]" />
               </div>
               {!isSidebarCollapsed && (
                 <div className="min-w-0">
-                  <div className="text-[11px] font-mono font-bold text-white flex items-center gap-1.5">
+                  <div className="text-[11px] font-mono font-bold text-[#F4F3FA] flex items-center gap-1.5">
                     <span>SYS TERMINAL</span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
                   </div>
-                  <div className="text-[9px] text-cyan-400 font-mono truncate">LIVE LOG MATRIX</div>
+                  <div className="text-[9px] text-[#A1A5B5] font-mono truncate">LIVE LOG MATRIX</div>
                 </div>
               )}
             </div>
             {!isSidebarCollapsed && (
-              <ChevronRight className="w-3.5 h-3.5 text-cyan-400 group-hover:translate-x-0.5 transition-transform" />
+              <ChevronRight className="w-3.5 h-3.5 text-[#A1A5B5] group-hover:text-[#F4F3FA]" />
             )}
           </button>
         </div>
 
-        <div className="p-3 border-t border-white/10 bg-black/20">
+        <div className="p-3 border-t border-[#292B39] bg-[#0B0A10]">
           <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : 'justify-between'}`}>
             <button
               onClick={() => {
                 if (onNavigateHome) onNavigateHome();
                 else window.location.href = '/';
               }}
-              className="p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-neutral-300 hover:text-white transition-colors cursor-pointer flex items-center gap-2"
+              className="p-2 rounded-xl bg-[#191C29] hover:bg-[#12141E] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer flex items-center gap-2"
               title="Return to Public Directory"
             >
-              <Globe className="w-4 h-4 text-purple-400" />
+              <Globe className="w-4 h-4 text-[#B49AF8]" />
               {!isSidebarCollapsed && <span className="text-xs">Public App</span>}
             </button>
             <button
@@ -1747,7 +1740,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                 if (onLogout) onLogout();
                 else window.location.href = '/';
               }}
-              className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-200 transition-colors cursor-pointer flex items-center gap-2"
+              className="p-2 rounded-xl bg-[#F87171]/10 hover:bg-[#F87171]/20 border border-[#F87171]/30 text-[#F87171] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer flex items-center gap-2"
               title="Sign Out"
             >
               <LogOut className="w-4 h-4" />
@@ -1759,39 +1752,36 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
 
       {/* Main Content Workspace */}
       <div className="flex-1 flex flex-col min-w-0 pb-24 md:pb-10 relative">
-        <header className="sticky top-0 z-30 bg-[#07090e]/85 backdrop-blur-2xl border-b border-white/10 px-4 sm:px-6 py-3.5 shadow-[0_4px_30px_rgba(0,0,0,0.6)]">
+        <header className="sticky top-0 z-30 bg-[#12141E]/95 backdrop-blur-md border-b border-[#292B39] px-4 sm:px-6 py-3.5">
           <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
             <div className="flex items-center gap-3.5 min-w-0">
-              <div className="relative group shrink-0 md:hidden">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-500 to-cyan-400 rounded-xl blur opacity-60 group-hover:opacity-100 transition duration-300" />
-                <div className="relative w-9 h-9 rounded-xl bg-[#0e121e] border border-white/20 flex items-center justify-center text-white">
-                  <Zap className="w-4 h-4 text-cyan-300 fill-cyan-400/40" />
+              <div className="relative shrink-0 md:hidden">
+                <div className="w-9 h-9 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
+                  <Zap className="w-4 h-4" />
                 </div>
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
-                    <span className="bg-gradient-to-r from-white via-slate-100 to-purple-200 bg-clip-text text-transparent">
-                      Admin Command Console
-                    </span>
+                  <h1 className="text-base sm:text-lg font-black tracking-tight text-[#F4F3FA] flex items-center gap-2">
+                    <span>Admin Command Console</span>
                   </h1>
                   <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-                    <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-purple-300 text-[10px] font-mono tracking-wider uppercase font-semibold">
+                    <span className="px-2 py-0.5 rounded-md bg-[#B49AF8]/15 border border-[#B49AF8]/30 text-[#B49AF8] text-[10px] font-mono tracking-wider uppercase font-semibold">
                       Superadmin
                     </span>
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono flex items-center gap-1.5 font-semibold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    <span className="px-2 py-0.5 rounded-md bg-[#34D399]/10 border border-[#34D399]/30 text-[#34D399] text-[10px] font-mono flex items-center gap-1.5 font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
                       <span>Cloudflare Edge D1</span>
                     </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-[11px] text-neutral-400 truncate hidden lg:block">
+                  <p className="text-[11px] text-[#A1A5B5] truncate hidden lg:block">
                     Regional Indian dubs moderation, Cloudflare D1 persistence &amp; IMDb telemetry
                   </p>
                   {cloudSyncing && (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-cyan-400 animate-pulse">
-                      <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#B49AF8]">
+                      <Loader2 className="w-3 h-3 animate-spin text-[#B49AF8]" />
                       <span>{cloudStatusText || 'Syncing with Edge...'}</span>
                     </span>
                   )}
@@ -1802,36 +1792,36 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => setIsCommandPaletteOpen(true)}
-                className="h-9 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-purple-400/50 text-neutral-300 hover:text-white flex items-center gap-2 text-xs font-medium transition-all duration-200 cursor-pointer shadow-sm group"
+                className="h-10 px-3 rounded-xl bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center gap-2 text-xs font-medium transition-colors duration-150 cursor-pointer"
                 title="Open Global Command Palette (Ctrl+K)"
               >
-                <Command className="w-3.5 h-3.5 text-purple-400 group-hover:scale-110 transition-transform" />
+                <Command className="w-3.5 h-3.5 text-[#B49AF8]" />
                 <span className="hidden sm:inline">Search</span>
-                <kbd className="hidden sm:inline px-1 py-0.2 rounded bg-white/10 text-[9px] font-mono text-neutral-400 border border-white/15">
+                <kbd className="hidden sm:inline px-1 py-0.2 rounded bg-[#12141E] text-[9px] font-mono text-[#A1A5B5] border border-[#292B39]">
                   ⌘K
                 </kbd>
               </button>
 
               <button
                 onClick={() => setIsTerminalOpen((prev) => !prev)}
-                className={`h-9 px-3 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 transition-all duration-200 cursor-pointer ${
+                className={`h-10 px-3 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 transition-colors duration-150 cursor-pointer ${
                   isTerminalOpen
-                    ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.3)]'
-                    : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-neutral-300 hover:text-white'
+                    ? 'bg-[#B49AF8] border-[#B49AF8] text-[#0B0A10]'
+                    : 'bg-[#191C29] hover:bg-[#0B0A10] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
                 }`}
                 title="Toggle System Terminal"
               >
-                <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                <Terminal className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">CLI</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span className={`w-1.5 h-1.5 rounded-full ${isTerminalOpen ? 'bg-[#0B0A10]' : 'bg-[#34D399]'}`} />
               </button>
 
               <button
                 onClick={fetchAnime}
-                className="h-9 w-9 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-cyan-400/50 text-neutral-300 hover:text-white flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
+                className="h-10 w-10 rounded-xl bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer"
                 title="Refresh database records"
               >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#B49AF8]' : ''}`} />
               </button>
 
               <button
@@ -1839,9 +1829,9 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                   if (onNavigateHome) onNavigateHome();
                   else window.location.href = '/';
                 }}
-                className="h-9 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-purple-400/50 text-neutral-200 hover:text-white text-xs font-semibold hidden md:inline-flex items-center gap-1.5 transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
+                className="h-10 px-3 rounded-xl bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] text-[#F4F3FA] text-xs font-semibold hidden md:inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
               >
-                <Globe className="w-3.5 h-3.5 text-purple-400" />
+                <Globe className="w-3.5 h-3.5 text-[#B49AF8]" />
                 <span>Public App</span>
               </button>
 
@@ -1850,7 +1840,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                   if (onLogout) onLogout();
                   else window.location.href = '/';
                 }}
-                className="h-9 w-9 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-400/50 text-rose-400 hover:text-rose-200 flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer md:hidden"
+                className="h-10 w-10 rounded-xl bg-[#F87171]/10 hover:bg-[#F87171]/20 border border-[#F87171]/30 text-[#F87171] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer md:hidden"
                 title="Logout from admin session"
               >
                 <LogOut className="w-4 h-4" />
@@ -1858,7 +1848,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
             </div>
           </div>
 
-          <div className="max-w-6xl mx-auto mt-3 pt-2 border-t border-white/5 md:hidden">
+          <div className="max-w-6xl mx-auto mt-3 pt-2 border-t border-[#292B39] md:hidden">
             <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
               {navItemsConfig.map((tab) => {
                 const isActive = activeAdminTab === tab.id;
@@ -1867,27 +1857,22 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                   <button
                     key={tab.id}
                     onClick={() => setActiveAdminTab(tab.id)}
-                    className={`relative h-9 px-3.5 rounded-xl text-xs font-medium transition-colors shrink-0 flex items-center gap-2 cursor-pointer pb-2 ${
-                      isActive ? 'text-white font-semibold' : 'text-neutral-400 hover:text-white hover:bg-white/[0.05]'
+                    className={`relative min-h-[40px] px-3.5 rounded-xl text-xs font-medium transition-colors duration-150 shrink-0 flex items-center gap-2 cursor-pointer ${
+                      isActive
+                        ? 'bg-[#B49AF8] text-[#0B0A10] font-bold'
+                        : 'text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#191C29]'
                     }`}
                   >
                     {IconComp && <IconComp className="w-3.5 h-3.5" />}
                     <span>{tab.label}</span>
                     {tab.count !== undefined && tab.count > 0 && (
                       <span
-                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                          isActive ? 'bg-purple-900/90 text-purple-200 border border-purple-400/30' : 'bg-neutral-800 text-neutral-300'
+                        className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
+                          isActive ? 'bg-[#0B0A10]/20 text-[#0B0A10]' : 'bg-[#191C29] text-[#A1A5B5] border border-[#292B39]'
                         }`}
                       >
                         {tab.count}
                       </span>
-                    )}
-                    {isActive && (
-                      <motion.div
-                        layoutId="admin-mobile-tab-underline"
-                        className="absolute bottom-0 left-2 right-2 h-0.5 bg-gradient-to-r from-purple-400 via-cyan-400 to-indigo-400 rounded-full"
-                        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                      />
                     )}
                   </button>
                 );
@@ -1898,41 +1883,41 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
 
         <div className="max-w-6xl mx-auto w-full px-4 pt-4 relative z-10">
           {showImportToast && (
-            <div className="rounded-2xl p-4 bg-emerald-950/70 backdrop-blur-xl border border-emerald-500/40 shadow-[0_0_25px_rgba(16,185,129,0.2)] flex items-center justify-between text-emerald-200 text-xs font-semibold mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="rounded-xl p-4 bg-[#12141E] border border-[#34D399]/40 flex items-center justify-between text-[#34D399] text-xs font-semibold mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                <div className="w-8 h-8 rounded-xl bg-[#34D399]/15 border border-[#34D399]/35 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-[#34D399]" />
                 </div>
                 <span>Import complete: Successfully synchronized {importedCount} anime entries to moderation queue.</span>
               </div>
-              <button onClick={() => setShowImportToast(false)} className="text-emerald-400 hover:text-white transition-colors p-1">
+              <button onClick={() => setShowImportToast(false)} className="text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
           )}
 
           {successMsg && (
-            <div className="rounded-2xl p-4 bg-purple-950/70 backdrop-blur-xl border border-purple-500/40 shadow-[0_0_25px_rgba(168,85,247,0.2)] flex items-center justify-between text-purple-200 text-xs font-semibold mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="rounded-xl p-4 bg-[#12141E] border border-[#B49AF8]/40 flex items-center justify-between text-[#F4F3FA] text-xs font-semibold mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-400/40 flex items-center justify-center shrink-0">
-                  <Sparkles className="w-4 h-4 text-purple-300" />
+                <div className="w-8 h-8 rounded-xl bg-[#B49AF8]/15 border border-[#B49AF8]/35 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-4 h-4 text-[#B49AF8]" />
                 </div>
                 <span>{successMsg}</span>
               </div>
-              <button onClick={() => setSuccessMsg('')} className="text-purple-400 hover:text-white transition-colors p-1">
+              <button onClick={() => setSuccessMsg('')} className="text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
           )}
 
           {apiError && (
-            <div className="rounded-2xl p-4 bg-red-950/80 border border-red-500/40 text-red-300 text-xs font-semibold mb-4 flex flex-col gap-2 shadow-lg animate-in fade-in zoom-in-95 duration-300">
+            <div className="rounded-xl p-4 bg-[#12141E] border border-[#F87171]/40 text-[#F87171] text-xs font-semibold mb-4 flex flex-col gap-2">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-400" />
+                <AlertTriangle className="w-4 h-4 text-[#F87171]" />
                 <span>Failed to reach anime catalog API. Operating in offline/cached session.</span>
               </div>
               {terminalLogs.length > 0 && terminalLogs[0].level === 'ERR' && (
-                <div className="mt-1 p-2 rounded-lg bg-black/40 border border-white/5 font-mono text-[10px] text-red-400 break-all">
+                <div className="mt-1 p-2 rounded-lg bg-[#0B0A10] border border-[#292B39] font-mono text-[10px] text-[#F87171] break-all">
                   {terminalLogs[0].msg}
                 </div>
               )}
@@ -1944,10 +1929,10 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
           <AnimatePresence mode="wait">
             <motion.div
               key={activeAdminTab}
-              initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, y: -6 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
               className="w-full space-y-6"
             >
               {activeAdminTab === 'overview' && (
@@ -2005,8 +1990,6 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                 />
               )}
 
-
-
               {activeAdminTab === 'data_health' && (
                 <AdminDataHealthTab
                   isCheckingHealth={isCheckingHealth}
@@ -2026,8 +2009,8 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
               {activeAdminTab === 'analytics' && (
                 <Suspense
                   fallback={
-                    <div className="p-8 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center gap-3 text-xs text-neutral-400">
-                      <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                    <div className="p-8 rounded-2xl bg-[#12141E] border border-[#292B39] flex items-center justify-center gap-3 text-xs text-[#A1A5B5]">
+                      <Loader2 className="w-4 h-4 animate-spin text-[#B49AF8]" />
                       <span>Loading analytics module...</span>
                     </div>
                   }
@@ -2091,11 +2074,11 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
       />
 
       {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-3 left-3 right-3 z-40 bg-[#090d18]/90 backdrop-blur-2xl border border-white/15 rounded-2xl p-1.5 shadow-[0_10px_35px_rgba(0,0,0,0.85)] flex items-center justify-around">
+      <div className="md:hidden fixed bottom-3 left-3 right-3 z-40 bg-[#12141E]/95 backdrop-blur-md border border-[#292B39] rounded-2xl p-1.5 shadow-2xl flex items-center justify-around">
         <button
           onClick={() => setActiveAdminTab('overview')}
-          className={`p-2 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
-            activeAdminTab === 'overview' ? 'text-cyan-300 bg-cyan-500/15' : 'text-neutral-400 hover:text-white'
+          className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
+            activeAdminTab === 'overview' ? 'text-[#B49AF8] bg-[#B49AF8]/15' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
           }`}
         >
           <Sliders className="w-4 h-4" />
@@ -2104,19 +2087,19 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
 
         <button
           onClick={() => setActiveAdminTab('pending')}
-          className={`p-2 rounded-xl flex flex-col items-center gap-1 relative transition-all cursor-pointer ${
-            activeAdminTab === 'pending' ? 'text-amber-300 bg-amber-500/15' : 'text-neutral-400 hover:text-white'
+          className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 relative transition-colors duration-150 cursor-pointer ${
+            activeAdminTab === 'pending' ? 'text-[#F9C876] bg-[#F9C876]/15' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
           }`}
         >
           <Inbox className="w-4 h-4" />
           <span className="text-[9px] font-medium">Pending</span>
-          {pendingCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[#090d18]" />}
+          {pendingCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#F9C876]" />}
         </button>
 
         <button
           onClick={() => setActiveAdminTab('catalog')}
-          className={`p-2 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
-            activeAdminTab === 'catalog' ? 'text-purple-300 bg-purple-500/15' : 'text-neutral-400 hover:text-white'
+          className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
+            activeAdminTab === 'catalog' ? 'text-[#B49AF8] bg-[#B49AF8]/15' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
           }`}
         >
           <Database className="w-4 h-4" />
@@ -2125,8 +2108,8 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
 
         <button
           onClick={() => setActiveAdminTab('analytics')}
-          className={`p-2 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
-            activeAdminTab === 'analytics' ? 'text-sky-300 bg-sky-500/15' : 'text-neutral-400 hover:text-white'
+          className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
+            activeAdminTab === 'analytics' ? 'text-[#B49AF8] bg-[#B49AF8]/15' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
           }`}
         >
           <Activity className="w-4 h-4" />
@@ -2135,7 +2118,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
 
         <button
           onClick={() => setIsCommandPaletteOpen(true)}
-          className="p-2 rounded-xl flex flex-col items-center gap-1 text-purple-400 hover:text-purple-300 cursor-pointer"
+          className="min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 text-[#B49AF8] hover:text-[#CBB6FF] cursor-pointer"
         >
           <Command className="w-4 h-4" />
           <span className="text-[9px] font-mono">⌘K</span>
@@ -2143,8 +2126,8 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
 
         <button
           onClick={() => setIsTerminalOpen((prev) => !prev)}
-          className={`p-2 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
-            isTerminalOpen ? 'text-cyan-300 bg-cyan-500/15' : 'text-neutral-400 hover:text-white'
+          className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
+            isTerminalOpen ? 'text-[#B49AF8] bg-[#B49AF8]/15' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
           }`}
         >
           <Terminal className="w-4 h-4" />

@@ -73,3 +73,78 @@ test('Eclipse 4: Compact Explore layout with native script language pills and po
   assert.ok(cardCode.includes('line-clamp-2'), 'AnimeCard must enforce 2-line title clamp');
   assert.ok(cardCode.includes('w-11 h-11'), 'AnimeCard bookmark button must have a 44x44px touch target');
 });
+
+test('Eclipse 5: Reusable EmptyState, ErrorState, Modal, ConfirmDialog, and DynamicIsland Toast components use Eclipse tokens', () => {
+  const eclipseStateCode = read('src/components/ui/EclipseState.tsx');
+  assert.ok(eclipseStateCode.includes('export const EmptyState'), 'EclipseState must export EmptyState');
+  assert.ok(eclipseStateCode.includes('export const ErrorState'), 'EclipseState must export ErrorState');
+  assert.ok(eclipseStateCode.includes('export const Modal'), 'EclipseState must export Modal');
+  assert.ok(eclipseStateCode.includes('export const ConfirmDialog'), 'EclipseState must export ConfirmDialog');
+  assert.ok(eclipseStateCode.includes('bg-[#12141E]'), 'EclipseState components must use #12141E surface');
+  assert.ok(eclipseStateCode.includes('border-[#292B39]'), 'EclipseState components must use #292B39 border');
+
+  const toastCode = read('src/components/DynamicIsland.tsx');
+  assert.ok(toastCode.includes('bg-[#12141E]'), 'DynamicIsland toast must use #12141E surface');
+  assert.ok(toastCode.includes('border-[#292B39]'), 'DynamicIsland toast must use #292B39 border');
+});
+
+test('Eclipse 6: Page-specific Loading Skeletons replace generic spinners in App.tsx, ScheduleView, and CommunityChatView', () => {
+  const skeletonCode = read('src/components/SkeletonGrid.tsx');
+  const requiredSkeletons = [
+    'DetailModalSkeleton',
+    'SchedulePageSkeleton',
+    'LibraryPageSkeleton',
+    'ProfilePageSkeleton',
+    'ChatPageSkeleton',
+    'PageViewSkeleton',
+  ];
+  for (const name of requiredSkeletons) {
+    assert.ok(skeletonCode.includes(name), `SkeletonGrid.tsx must export ${name}`);
+  }
+  assert.ok(skeletonCode.includes('bg-[#12141E]'), 'Skeletons must use #12141E surface');
+  assert.ok(skeletonCode.includes('bg-[#191C29]'), 'Skeletons must use #191C29 elevated pulse');
+
+  const appCode = read('src/App.tsx');
+  assert.ok(appCode.includes('PageViewSkeleton'), 'App.tsx must use PageViewSkeleton for view loading fallback');
+  assert.ok(appCode.includes('DetailModalSkeleton'), 'App.tsx must use DetailModalSkeleton for modal loading fallback');
+  assert.ok(appCode.includes('duration: 0.16'), 'App.tsx must use subtle 160ms transitions');
+});
+
+test('Eclipse 7: All remaining pages adopt Eclipse Dark tokens (#12141E, #191C29, #292B39, #B49AF8) and standardized hierarchy', () => {
+  const pagesToVerify = [
+    'src/components/AnimeDetailPage.tsx',
+    'src/components/WatchlistView.tsx',
+    'src/components/CreateCollectionModal.tsx',
+    'src/components/RecentlyViewedRow.tsx',
+    'src/components/ProfileView.tsx',
+    'src/components/AnimeDNAProfile.tsx',
+    'src/components/PersonalAnimeStats.tsx',
+    'src/components/ScheduleView.tsx',
+    'src/components/RecommendationSystem.tsx',
+    'src/components/CompareAnimeModal.tsx',
+    'src/components/RouletteModal.tsx',
+    'src/components/AnimeTierListMaker.tsx',
+    'src/components/CommunityChatView.tsx',
+    'src/components/FeedbackSection.tsx',
+    'src/components/LegalPage.tsx',
+    'src/components/ReportModal.tsx',
+    'src/components/LiveChat.tsx',
+    'src/components/DubInfoModal.tsx',
+    'src/components/AdminDashboard.tsx',
+  ];
+
+  for (const relPath of pagesToVerify) {
+    const code = read(relPath);
+    assert.ok(code.includes('#12141E') || code.includes('#191C29'), `${relPath} must use Eclipse surface/elevated tokens`);
+    assert.ok(code.includes('#292B39'), `${relPath} must use Eclipse border token #292B39`);
+    assert.ok(code.includes('#B49AF8'), `${relPath} must use Eclipse primary accent #B49AF8`);
+  }
+
+  const detailCode = read('src/components/AnimeDetailPage.tsx');
+  assert.ok(detailCode.includes('Where to Watch (India)'), 'AnimeDetailPage must keep prominent Where to Watch card');
+  assert.ok(detailCode.includes("label: 'Overview'"), 'AnimeDetailPage must render Overview tab');
+  assert.ok(detailCode.includes("label: 'Seasons & Dubs'"), 'AnimeDetailPage must render Seasons & Dubs tab');
+  assert.ok(detailCode.includes("label: 'Watch Progress'"), 'AnimeDetailPage must render Watch Progress tab');
+  assert.ok(detailCode.includes('Reviews ('), 'AnimeDetailPage must render Reviews tab');
+});
+

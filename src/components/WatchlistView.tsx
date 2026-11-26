@@ -5,6 +5,8 @@ import { Anime } from './CatalogView';
 import { AnimeCard } from './AnimeCard';
 import { AniDubLogo } from './AniDubLogo';
 import { useToast } from './Toast';
+import { Button } from './ui/Button';
+import { EmptyState } from './ui/EclipseState';
 import {
   LIBRARY_STATUSES,
   LIBRARY_STATUS_EVENT,
@@ -122,22 +124,22 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-in fade-in duration-300">
+    <div className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-in fade-in duration-200">
       {/* HEADER BANNER */}
-      <div className="bg-[#121829] border border-white/10 rounded-3xl p-5 sm:p-7 shadow-xl space-y-5">
+      <div className="bg-[#12141E] border border-[#292B39] rounded-2xl p-5 sm:p-7 shadow-xl space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <AniDubLogo variant="horizontal" size="sm" className="shrink-0 drop-shadow-md" />
+            <AniDubLogo variant="horizontal" size="sm" className="shrink-0" />
             <div>
               <div className="flex items-center flex-wrap gap-2.5">
-                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                <h1 className="text-xl sm:text-2xl font-black text-[#F4F3FA] tracking-tight">
                   My Library
                 </h1>
-                <span className="bg-[#241848] border border-[#4c2f8c] text-[#d8b4fe] text-[11px] font-bold px-2.5 py-0.5 rounded-full tabular-nums">
+                <span className="bg-[#191C29] border border-[#292B39] text-[#B49AF8] text-[11px] font-bold px-2.5 py-0.5 rounded-full tabular-nums">
                   {watchlist.length} saved
                 </span>
               </div>
-              <p className="text-xs text-neutral-400 mt-1 max-w-xl leading-relaxed">
+              <p className="text-xs text-[#A1A5B5] mt-1 max-w-xl leading-relaxed">
                 {isSignedIn
                   ? 'Synced with your signed-in account. Organize anime by status, track progress, or export as CSV.'
                   : 'Stored locally in your browser. Organize anime by watch status, export as CSV, or sign in to sync across devices.'}
@@ -146,42 +148,48 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={handleExportCsv}
               disabled={watchlist.length === 0}
-              className="min-h-[38px] px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 disabled:opacity-45 border border-emerald-500/35 text-emerald-200 hover:text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              leftIcon={<Download className="w-3.5 h-3.5 text-[#34D399]" />}
+              className="text-xs font-bold"
             >
-              <Download className="w-3.5 h-3.5 shrink-0" />
-              <span>Export Watchlist (CSV)</span>
-            </button>
+              Export Watchlist (CSV)
+            </Button>
 
             {onOpenCreateCollection && (
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="sm"
                 onClick={onOpenCreateCollection}
-                className="min-h-[38px] px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/35 text-purple-200 hover:text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                leftIcon={<Plus className="w-3.5 h-3.5" />}
+                className="text-xs font-bold"
               >
-                <Plus className="w-3.5 h-3.5 shrink-0" />
-                <span>Create Collection</span>
-              </button>
+                Create Collection
+              </Button>
             )}
 
             {onOpenCompare && (
-              <button
+              <Button
                 type="button"
+                variant="elevated"
+                size="sm"
                 onClick={onOpenCompare}
-                className="min-h-[38px] px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-200 hover:text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                leftIcon={<Scale className="w-3.5 h-3.5 text-[#B49AF8]" />}
+                className="text-xs font-semibold"
               >
-                <Scale className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                <span>Compare</span>
-              </button>
+                Compare
+              </Button>
             )}
           </div>
         </div>
 
         {/* STATUS TABS + SEARCH ROW */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-4 border-t border-white/10">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-4 border-t border-[#292B39]">
           <div
             role="tablist"
             aria-label="Library status filter"
@@ -192,14 +200,14 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               role="tab"
               aria-selected={activeStatusTab === 'all'}
               onClick={() => setActiveStatusTab('all')}
-              className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer border ${
+              className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shrink-0 transition-colors duration-150 cursor-pointer border ${
                 activeStatusTab === 'all'
-                  ? 'bg-purple-600 text-white border-purple-400/60'
-                  : 'bg-[#0b0f17] text-neutral-300 border-white/10 hover:text-white'
+                  ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                  : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
               }`}
             >
               <span>All</span>
-              <span className="text-[10px] opacity-80 tabular-nums">{statusCounts.all}</span>
+              <span className="text-[10px] opacity-85 tabular-nums">{statusCounts.all}</span>
             </button>
 
             {LIBRARY_STATUSES.map((status) => {
@@ -211,14 +219,14 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   role="tab"
                   aria-selected={isActive}
                   onClick={() => setActiveStatusTab(status.id)}
-                  className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer border ${
+                  className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shrink-0 transition-colors duration-150 cursor-pointer border ${
                     isActive
-                      ? 'bg-purple-600 text-white border-purple-400/60'
-                      : 'bg-[#0b0f17] text-neutral-300 border-white/10 hover:text-white'
+                      ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                      : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
                   }`}
                 >
                   <span>{status.label}</span>
-                  <span className="text-[10px] opacity-80 tabular-nums">
+                  <span className="text-[10px] opacity-85 tabular-nums">
                     {statusCounts[status.id]}
                   </span>
                 </button>
@@ -228,21 +236,21 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
           {watchlist.length > 0 && (
             <div className="w-full lg:w-64 relative shrink-0">
-              <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#A1A5B5] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search saved titles..."
                 aria-label="Search saved titles"
-                className="w-full bg-[#0b0f17] border border-white/10 focus:border-purple-500 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
+                className="w-full min-h-[40px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl pl-9 pr-8 py-2 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
                   aria-label="Clear saved search"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A1A5B5] hover:text-[#F4F3FA] cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -254,63 +262,55 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
       {/* WATCHLIST CONTENT / EMPTY STATE */}
       {watchlist.length === 0 ? (
-        <div className="text-center py-16 bg-[#121829]/60 border border-neutral-800 rounded-3xl p-8 max-w-lg mx-auto shadow-2xl space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-[#240f3a] border border-[#581c87] flex items-center justify-center mx-auto text-[#c084fc] shadow-lg">
-            <Bookmark className="w-8 h-8" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-xl font-black text-white">Your Library is Empty</h3>
-            <p className="text-xs text-neutral-400 max-w-sm mx-auto leading-relaxed">
-              Bookmark any anime in the directory to track it across Watching, Completed, Plan to Watch, On Hold, Dropped, or Rewatching.
-            </p>
-          </div>
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={onNavigateToCatalog}
-              className="bg-purple-600 hover:bg-purple-500 px-6 py-3 rounded-xl inline-flex items-center gap-2 shadow-lg text-white font-bold text-xs tracking-wide cursor-pointer transition-colors"
-            >
-              <Compass className="w-4 h-4" />
-              <span>Browse Dub Directory</span>
-            </button>
-          </div>
-        </div>
+        <EmptyState
+          icon={<Bookmark className="w-6 h-6" />}
+          title="Your Library is Empty"
+          description="Bookmark any anime in the directory to track it across Watching, Completed, Plan to Watch, On Hold, Dropped, or Rewatching."
+          actionLabel="Browse Dub Directory"
+          onAction={onNavigateToCatalog}
+        />
       ) : filteredWatchlist.length === 0 ? (
-        <div className="text-center py-14 bg-[#121829]/40 border border-neutral-800 rounded-3xl p-8 max-w-md mx-auto space-y-3">
-          <Search className="w-8 h-8 text-neutral-500 mx-auto" />
-          <h4 className="text-base font-bold text-white">No anime in this filter</h4>
-          <p className="text-xs text-neutral-400">
+        <div className="text-center py-12 bg-[#12141E] border border-[#292B39] rounded-2xl p-8 max-w-md mx-auto space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-[#191C29] border border-[#292B39] flex items-center justify-center mx-auto text-[#A1A5B5]">
+            <Search className="w-5 h-5" />
+          </div>
+          <h4 className="text-base font-bold text-[#F4F3FA]">No anime in this filter</h4>
+          <p className="text-xs text-[#A1A5B5]">
             {searchQuery
               ? `No saved titles match "${searchQuery}" in this status tab.`
               : 'Move any saved anime into this tab using the status dropdown under its card.'}
           </p>
           <div className="flex items-center justify-center gap-3 pt-1">
             {searchQuery && (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={() => setSearchQuery('')}
-                className="text-xs text-purple-300 hover:underline font-semibold cursor-pointer"
+                className="text-xs"
               >
                 Clear Search
-              </button>
+              </Button>
             )}
             {activeStatusTab !== 'all' && (
-              <button
+              <Button
                 type="button"
+                variant="elevated"
+                size="sm"
                 onClick={() => setActiveStatusTab('all')}
-                className="text-xs text-purple-300 hover:underline font-semibold cursor-pointer"
+                className="text-xs"
               >
                 Show All Saved ({watchlist.length})
-              </button>
+              </Button>
             )}
           </div>
         </div>
       ) : (
         <motion.div
           key={`watchlist_grid_${activeStatusTab}_${filteredWatchlist.length}`}
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25 }}
+          transition={{ duration: 0.16, ease: 'easeOut' }}
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-4"
         >
           {filteredWatchlist.map(({ anime, effectiveStatus, progress }, idx) => (
@@ -326,21 +326,21 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               </div>
 
               {/* Per-Card Library Status Switcher */}
-              <div className="rounded-xl bg-[#111624] border border-white/10 px-2 py-1.5 flex items-center justify-between gap-1.5">
+              <div className="rounded-xl bg-[#12141E] border border-[#292B39] px-2.5 py-2 flex items-center justify-between gap-1.5">
                 <select
                   aria-label={`Library status for ${anime.title}`}
                   value={effectiveStatus}
                   onChange={(e) => handleStatusChange(Number(anime.id), e.target.value as LibraryStatus)}
-                  className="w-full bg-transparent text-[11px] font-bold text-neutral-200 outline-none cursor-pointer"
+                  className="w-full bg-transparent text-[11px] font-bold text-[#F4F3FA] outline-none cursor-pointer"
                 >
                   {LIBRARY_STATUSES.map((st) => (
-                    <option key={st.id} value={st.id} className="bg-[#111624] text-white">
+                    <option key={st.id} value={st.id} className="bg-[#12141E] text-[#F4F3FA]">
                       {st.label}
                     </option>
                   ))}
                 </select>
                 {progress && progress.episode > 0 && (
-                  <span className="text-[10px] font-semibold text-neutral-400 shrink-0 tabular-nums">
+                  <span className="text-[10px] font-semibold text-[#A1A5B5] shrink-0 tabular-nums">
                     S{progress.season}E{progress.episode}
                   </span>
                 )}
@@ -351,20 +351,20 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       )}
 
       {/* FOOTER CALL-TO-ACTION */}
-      <div className="border-t border-neutral-800/80 pt-8 mt-10 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+      <div className="border-t border-[#292B39] pt-8 mt-10 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
         <div>
-          <h4 className="text-sm font-bold text-white flex items-center justify-center sm:justify-start gap-1.5">
-            <Sparkles className="w-4 h-4 text-amber-400" />
+          <h4 className="text-sm font-bold text-[#F4F3FA] flex items-center justify-center sm:justify-start gap-1.5">
+            <Sparkles className="w-4 h-4 text-[#F9C876]" />
             <span>Looking for more official Indian dubs?</span>
           </h4>
-          <p className="text-xs text-neutral-400 mt-0.5">
+          <p className="text-xs text-[#A1A5B5] mt-0.5">
             Browse verified Tamil, Hindi, Telugu, Malayalam, and Kannada dubbed anime on legal OTTs.
           </p>
         </div>
         <button
           type="button"
           onClick={onNavigateToCatalog}
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-purple-300 hover:text-white transition-colors cursor-pointer"
+          className="min-h-[40px] px-3 inline-flex items-center gap-1.5 text-xs font-bold text-[#B49AF8] hover:text-[#CBB6FF] transition-colors duration-150 cursor-pointer"
         >
           <span>Explore All Indian Dubs</span>
           <ArrowRight className="w-3.5 h-3.5" />

@@ -192,6 +192,15 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [isSynopsisExpanded, setIsSynopsisExpanded] = useState(false);
+  const [activeDetailTab, setActiveDetailTab] = useState<'overview' | 'dubs' | 'progress' | 'reviews'>('overview');
+
+  const scrollToDetailSection = (tabId: 'overview' | 'dubs' | 'progress' | 'reviews', elementId: string) => {
+    setActiveDetailTab(tabId);
+    if (typeof document !== 'undefined') {
+      const target = document.getElementById(elementId);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   const openReportForField = (field: string) => {
     setReportInitialField(field);
@@ -925,19 +934,19 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
   if (!loading && notFound) {
     return (
-      <div className="relative w-full min-h-[70vh] bg-[#050507] text-neutral-100 font-sans flex flex-col items-center justify-center px-6 py-16 text-center">
-        <div className="max-w-md w-full rounded-3xl bg-[#111726] border border-white/10 p-8 shadow-2xl space-y-4">
-          <div className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-extrabold uppercase tracking-wider">
+      <div className="relative w-full min-h-[70vh] bg-[#0B0A10] text-[#F4F3FA] font-sans flex flex-col items-center justify-center px-6 py-16 text-center">
+        <div className="max-w-md w-full rounded-2xl bg-[#12141E] border border-[#292B39] p-8 shadow-2xl space-y-4">
+          <div className="inline-flex items-center justify-center px-3 py-1 rounded-lg bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] text-xs font-bold uppercase tracking-wider">
             404 • Not Found
           </div>
-          <h1 className="text-2xl font-black text-white">Anime Not Found</h1>
-          <p className="text-sm text-neutral-400 leading-relaxed">
-            We couldn&apos;t find a published anime matching <span className="text-white font-semibold">&ldquo;{String(animeId)}&rdquo;</span> in the AniDub India catalog.
+          <h1 className="text-2xl font-extrabold text-[#F4F3FA]">Anime Not Found</h1>
+          <p className="text-sm text-[#A1A5B5] leading-relaxed">
+            We couldn&apos;t find a published anime matching <span className="text-[#F4F3FA] font-semibold">&ldquo;{String(animeId)}&rdquo;</span> in the AniDub India catalog.
           </p>
           <button
             type="button"
             onClick={handleBack}
-            className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-bold transition-all cursor-pointer shadow-lg"
+            className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-sm font-bold transition-colors duration-150 cursor-pointer"
           >
             Back to Catalog
           </button>
@@ -947,32 +956,32 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   }
 
   return (
-    <div className="relative w-full min-h-screen bg-[#050507] text-neutral-100 font-sans pb-36 overflow-x-clip selection:bg-purple-500/30">
+    <div className="relative w-full min-h-screen bg-[#0B0A10] text-[#F4F3FA] font-sans pb-36 overflow-x-clip selection:bg-[#B49AF8] selection:text-[#0B0A10]">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: animeJsonLd }}
       />
 
-      {/* 1. VIBRANT FULL-BLEED BACKGROUND */}
+      {/* 1. SUBTLE ECLIPSE POSTER AMBIENT BACKDROP */}
       <div className="fixed inset-0 z-0 pointer-events-none">
-        <Image 
-          src={coverImage} 
+        <Image
+          src={coverImage}
           alt={title}
           loading="lazy"
           sizes="100vw"
           width={640}
           height={360}
           quality={60}
-          className="w-full h-full object-cover blur-[100px] opacity-70 saturate-[1.5]" 
+          className="w-full h-full object-cover blur-[110px] opacity-20"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#050507]/90"></div>
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0B0A10]/80 via-[#0B0A10]/95 to-[#0B0A10]" />
       </div>
 
-      {/* Top Floating Navigation Bar */}
-      <div className="relative z-20 px-6 py-5 flex items-center justify-between max-w-3xl mx-auto">
+      {/* Top Navigation Bar */}
+      <div className="relative z-20 px-4 sm:px-6 py-4 flex items-center justify-between max-w-3xl mx-auto">
         <button
           onClick={handleBack}
-          className="p-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-white/80 hover:text-white transition-all cursor-pointer shadow-lg active:scale-95"
+          className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer"
           title="Back to Catalog"
           aria-label="Back"
         >
@@ -984,17 +993,17 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             <button
               type="button"
               onClick={() => onCompareAnime(details)}
-              className="px-3 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-bold text-white/85 hover:text-white hover:bg-white/15 inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-lg active:scale-95"
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
               title="Compare with another anime"
             >
-              <Scale className="w-3.5 h-3.5 text-purple-300" />
+              <Scale className="w-3.5 h-3.5 text-[#CBB6FF]" />
               <span className="hidden sm:inline">Compare</span>
             </button>
           )}
           <button
             type="button"
             onClick={() => openReportForField('OTT Link')}
-            className="p-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-white/60 hover:text-red-400 transition-all cursor-pointer shadow-lg active:scale-95"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F87171] flex items-center justify-center transition-colors duration-150 cursor-pointer"
             title="Report Specific Field"
             aria-label="Report Specific Field"
           >
@@ -1003,7 +1012,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <button
             type="button"
             onClick={handleBack}
-            className="p-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-white/80 hover:text-white transition-all cursor-pointer shadow-lg active:scale-95"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer"
             title="Close"
             aria-label="Close"
           >
@@ -1014,17 +1023,16 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
       {/* TOAST NOTIFICATION */}
       {toastMessage && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-full bg-black/80 backdrop-blur-xl border border-white/20 shadow-2xl flex items-center gap-2.5 text-white text-xs font-semibold animate-in fade-in duration-200">
-          <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-xl bg-[#12141E] border border-[#292B39] shadow-2xl flex items-center gap-2.5 text-[#F4F3FA] text-xs font-semibold">
+          <Sparkles className="w-3.5 h-3.5 text-[#B49AF8] shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* 2. CINEMATIC HERO (TOP SECTION) */}
-      <div className="relative z-10 px-4 flex flex-col items-center text-center max-w-3xl mx-auto mt-6">
+      {/* 2. CINEMATIC POSTER HEADER (TOP SECTION) */}
+      <div className="relative z-10 px-4 flex flex-col items-center text-center max-w-3xl mx-auto mt-2">
         {/* Poster */}
-        <div className="relative w-44 h-64 mx-auto mb-6">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-48 bg-purple-600 blur-[70px] opacity-50 pointer-events-none"></div>
+        <div className="relative w-40 h-60 sm:w-44 sm:h-64 mx-auto mb-5">
           <Image
             src={posterImage}
             alt={title}
@@ -1033,27 +1041,27 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             width={176}
             height={256}
             quality={80}
-            className="relative w-44 h-64 rounded-2xl shadow-[0_20px_50px_rgba(168,85,247,0.4)] border border-white/10 object-cover z-10"
+            className="relative w-40 h-60 sm:w-44 sm:h-64 rounded-2xl shadow-2xl border border-[#292B39] object-cover z-10"
           />
         </div>
 
         {/* Title */}
-        <h1 className="text-3xl sm:text-4xl font-black text-center text-white drop-shadow-2xl mb-3 relative z-10 leading-tight max-w-xl">
+        <h1 className="text-2xl sm:text-4xl font-extrabold text-center text-[#F4F3FA] mb-2.5 relative z-10 leading-tight max-w-xl">
           {title}
         </h1>
 
-        {/* Meta details: simple text separated by dots, NO pills or backgrounds */}
-        <div className="flex items-center justify-center flex-wrap gap-2 text-xs font-semibold text-white/80 relative z-10 mb-8">
+        {/* Meta details */}
+        <div className="flex items-center justify-center flex-wrap gap-2 text-xs font-semibold text-[#A1A5B5] relative z-10 mb-6">
           {currentRating && (
-            <span className="flex items-center gap-1 text-amber-400 font-bold">
-              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+            <span className="flex items-center gap-1 text-[#F9C876] font-bold">
+              <Star className="w-3.5 h-3.5 fill-[#F9C876] text-[#F9C876]" />
               <span>{currentRating.toFixed(1)} / 10</span>
             </span>
           )}
           {currentRating && releaseYear && <span>•</span>}
           {releaseYear && <span>{releaseYear}</span>}
           <span>•</span>
-          <span className="text-purple-300 font-medium">{type}</span>
+          <span className="text-[#CBB6FF] font-semibold">{type}</span>
           {episodesText && (
             <>
               <span>•</span>
@@ -1063,8 +1071,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           {status && (
             <>
               <span>•</span>
-              <span className="text-emerald-400 font-medium flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[#34D399] font-semibold flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
                 <span>{status}</span>
               </span>
             </>
@@ -1072,7 +1080,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </div>
 
         {/* INLINE ACTION BAR */}
-        <div className="w-full max-w-md min-w-0 flex items-center justify-center gap-2 sm:gap-3 mb-4">
+        <div className="w-full max-w-md min-w-0 flex items-center justify-center gap-2 sm:gap-2.5 mb-2">
           {availablePlatforms.length > 0 && (
             <button
               type="button"
@@ -1083,10 +1091,10 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   setIsWatchOptionsOpen(true);
                 }
               }}
-              className="flex-1 min-w-0 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-4 sm:px-6 py-3 sm:py-3.5 rounded-full font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(168,85,247,0.4)] transition-all cursor-pointer truncate"
+              className="flex-1 min-w-0 min-h-[44px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] px-4 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors duration-150 cursor-pointer truncate"
             >
-              <Play size={16} className="fill-white shrink-0" />
-              <span className="truncate">{availablePlatforms.length > 1 ? "Watch Options" : `Watch on ${availablePlatforms[0].name}`}</span>
+              <Play size={16} className="fill-[#0B0A10] shrink-0" />
+              <span className="truncate">{availablePlatforms.length > 1 ? 'Watch Options' : `Watch on ${availablePlatforms[0].name}`}</span>
             </button>
           )}
 
@@ -1095,24 +1103,26 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               type="button"
               onClick={() => numericAnimeId > 0 && onToggleWatchlist(numericAnimeId)}
               aria-label={isBookmarked ? `Remove ${title} from watchlist` : `Add ${title} to watchlist`}
-              className={`w-12 h-12 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 transition-all cursor-pointer ${
-                isBookmarked ? 'text-purple-400 bg-purple-500/20 border-purple-500/40' : 'text-white'
+              className={`w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl border transition-colors duration-150 cursor-pointer ${
+                isBookmarked
+                  ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF]'
+                  : 'bg-[#12141E] hover:bg-[#191C29] text-[#F4F3FA] border-[#292B39]'
               }`}
               title={isBookmarked ? 'In Watchlist' : 'Add to Watchlist'}
             >
-              <Bookmark size={20} className={isBookmarked ? 'fill-purple-400' : ''} />
+              <Bookmark size={18} className={isBookmarked ? 'fill-[#0B0A10]' : ''} />
             </button>
             <button
               type="button"
               onClick={handleVote}
               disabled={isVoting}
               aria-label={`Upvote ${title}`}
-              className="w-12 h-12 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 text-orange-400 transition-all relative cursor-pointer"
+              className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] text-[#F9C876] transition-colors duration-150 relative cursor-pointer"
               title="Upvote Anime"
             >
-              <Flame size={22} className="fill-orange-400" />
-              <span className="absolute -top-1 -right-1 text-[9px] font-black bg-orange-500 text-white px-1.5 py-0.5 rounded-full shadow-lg">
-                {upvotes > 0 ? (upvotes >= 1000 ? `${(upvotes/1000).toFixed(1)}k` : upvotes) : '0'}
+              <Flame size={19} className="fill-[#F9C876]" />
+              <span className="absolute -top-1 -right-1 text-[9px] font-bold bg-[#F9C876] text-[#0B0A10] px-1.5 py-0.5 rounded-md tabular-nums">
+                {upvotes > 0 ? (upvotes >= 1000 ? `${(upvotes / 1000).toFixed(1)}k` : upvotes) : '0'}
               </span>
             </button>
           </div>
@@ -1125,21 +1135,21 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         {/* SECTION 0: WHERE TO WATCH (OFFICIAL OTT LINKS + REPORT SPECIFIC FIELD) */}
         <section
           aria-label="Where to Watch"
-          className="mt-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-5 sm:p-6 shadow-xl space-y-4"
+          className="mt-5 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-4"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase">
+              <h2 className="text-[#B49AF8] text-[11px] font-bold tracking-wider uppercase">
                 Where to Watch (India)
               </h2>
-              <p className="text-[11px] text-neutral-400 mt-0.5">
+              <p className="text-[11px] text-[#A1A5B5] mt-0.5">
                 Official licensed OTT platforms — AniDub India never hosts pirated video streams
               </p>
             </div>
             <button
               type="button"
               onClick={() => openReportForField('OTT Link')}
-              className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-rose-500/15 border border-white/10 hover:border-rose-500/35 text-[11px] font-semibold text-neutral-300 hover:text-rose-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#191C29] hover:border-[#F87171]/50 border border-[#292B39] text-[11px] font-semibold text-[#A1A5B5] hover:text-[#F87171] inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
             >
               <Flag className="w-3 h-3" />
               <span>Report Specific Field</span>
@@ -1153,25 +1163,30 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   key={`where_to_watch_${plat.name}`}
                   type="button"
                   onClick={() => handleOpenPlatform(plat)}
-                  className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-black/35 hover:bg-white/[0.07] border border-white/10 hover:border-purple-400/40 text-left transition-all cursor-pointer"
+                  className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-[#191C29] hover:border-[#B49AF8]/60 border border-[#292B39] text-left transition-colors duration-150 cursor-pointer"
                 >
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-white truncate">{plat.name}</div>
-                    <div className="text-[11px] text-neutral-400 mt-0.5">
+                    <div className="text-xs font-bold text-[#F4F3FA] truncate flex items-center gap-1.5">
+                      <span>{plat.name}</span>
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#34D399]/15 border border-[#34D399]/30 text-[9px] font-bold text-[#34D399]">
+                        Verified
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-[#A1A5B5] mt-0.5">
                       {plat.isDirectUrl ? 'Direct official link • India' : 'Official platform lookup • India'}
                     </div>
                   </div>
-                  <ExternalLink className="w-4 h-4 text-purple-300 shrink-0" />
+                  <ExternalLink className="w-4 h-4 text-[#B49AF8] shrink-0" />
                 </button>
               ))}
             </div>
           ) : (
-            <div className="p-4 rounded-2xl bg-black/30 border border-white/10 text-xs text-neutral-400 flex flex-wrap items-center justify-between gap-3">
-              <span>Official Indian OTT streaming platform is currently <strong className="text-neutral-200">Not verified</strong>.</span>
+            <div className="p-4 rounded-xl bg-[#191C29] border border-[#292B39] text-xs text-[#A1A5B5] flex flex-wrap items-center justify-between gap-3">
+              <span>Official Indian OTT streaming platform is currently <strong className="text-[#F4F3FA]">Not verified</strong>.</span>
               <button
                 type="button"
                 onClick={() => openReportForField('OTT Link')}
-                className="text-purple-300 hover:text-purple-200 font-bold underline underline-offset-2 cursor-pointer"
+                className="text-[#B49AF8] hover:text-[#CBB6FF] font-bold underline underline-offset-2 cursor-pointer"
               >
                 Suggest official link
               </button>
@@ -1179,14 +1194,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           )}
 
           {/* Quick Field-Specific Report Shortcuts */}
-          <div className="pt-3 border-t border-white/10 flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="text-neutral-500 font-semibold">Spot an inaccuracy? Report:</span>
+          <div className="pt-3 border-t border-[#292B39] flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="text-[#A1A5B5] font-semibold">Spot an inaccuracy? Report:</span>
             {(['OTT Link', 'Dub Language', 'Episode Count', 'Release Schedule'] as const).map((fieldLabel) => (
               <button
                 key={`report_field_${fieldLabel}`}
                 type="button"
                 onClick={() => openReportForField(fieldLabel)}
-                className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-rose-500/15 border border-white/10 hover:border-rose-500/35 text-neutral-300 hover:text-rose-200 font-semibold transition-colors cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-[#191C29] hover:border-[#F87171]/50 border border-[#292B39] text-[#A1A5B5] hover:text-[#F87171] font-semibold transition-colors duration-150 cursor-pointer"
               >
                 {fieldLabel}
               </button>
@@ -1194,17 +1209,50 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           </div>
         </section>
 
+        {/* SLEEK ECLIPSE DETAIL NAVIGATION TABS (Overview, Seasons & Dubs, Watch Progress, Reviews) */}
+        <div
+          role="tablist"
+          aria-label="Anime detail sections"
+          className="mt-5 flex items-center gap-1.5 overflow-x-auto no-scrollbar p-1 rounded-xl bg-[#12141E] border border-[#292B39]"
+        >
+          {[
+            { id: 'overview' as const, label: 'Overview', targetId: 'detail-section-overview' },
+            { id: 'dubs' as const, label: 'Seasons & Dubs', targetId: 'detail-section-dubs' },
+            { id: 'progress' as const, label: 'Watch Progress', targetId: 'detail-section-progress' },
+            { id: 'reviews' as const, label: `Reviews (${reviewsList.length})`, targetId: 'detail-section-reviews' },
+          ].map((tabItem) => {
+            const active = activeDetailTab === tabItem.id;
+            return (
+              <button
+                key={tabItem.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => scrollToDetailSection(tabItem.id, tabItem.targetId)}
+                className={`flex-1 min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors duration-150 cursor-pointer ${
+                  active
+                    ? 'bg-[#B49AF8] text-[#0B0A10] font-bold'
+                    : 'text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#191C29]'
+                }`}
+              >
+                {tabItem.label}
+              </button>
+            );
+          })}
+        </div>
+
         {/* SECTION 1: VISUAL DUB PROGRESS BARS (PER INDIAN LANGUAGE & SEASON) */}
         <section
+          id="detail-section-dubs"
           aria-label="Indian Dub Availability and Progress"
-          className="mt-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-5 sm:p-6 shadow-xl space-y-4"
+          className="mt-5 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-4"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+              <h2 className="text-[#B49AF8] text-[11px] font-bold tracking-wider uppercase">
                 Indian Dub Availability &amp; Progress
               </h2>
-              <p className="text-[11px] text-neutral-400 mt-0.5">
+              <p className="text-[11px] text-[#A1A5B5] mt-0.5">
                 Color-coded regional audio status across major Indian languages
               </p>
             </div>
@@ -1294,19 +1342,20 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
         {/* SECTION 1.5: WATCH PROGRESS TRACKER */}
         <section
+          id="detail-section-progress"
           aria-label="Watch Progress Tracker"
-          className="mt-10 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-5 sm:p-6 shadow-xl space-y-4"
+          className="mt-5 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-4"
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300">
+              <div className="w-8 h-8 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
                 <Tv className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-xs font-black uppercase tracking-widest text-purple-300">
+                <h2 className="text-[11px] font-bold uppercase tracking-wider text-[#B49AF8]">
                   Watch Progress Tracker
                 </h2>
-                <p className="text-[11px] text-neutral-400">
+                <p className="text-[11px] text-[#A1A5B5]">
                   Season {activeSeason} • Episode {activeEpisode}
                   {totalEpisodes ? ` of ${totalEpisodes}` : ''} ({progressPercent}%)
                   {isSavingProgress ? ' • Syncing…' : ''}
@@ -1319,10 +1368,10 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               onClick={handleToggleWatched}
               aria-pressed={isWatched}
               aria-label={isWatched ? 'Mark series as unwatched' : 'Mark series as completed'}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-bold border inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`min-h-[38px] px-3 py-1.5 rounded-xl text-[11px] font-bold border inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer ${
                 isWatched
-                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-                  : 'bg-white/[0.04] border-white/10 text-neutral-300 hover:text-white'
+                  ? 'bg-[#34D399]/15 border-[#34D399]/40 text-[#34D399]'
+                  : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
               }`}
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1331,17 +1380,17 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+          <div className="w-full h-2 rounded-full bg-[#191C29] overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-emerald-400 transition-all duration-300"
+              className="h-full rounded-full bg-[#B49AF8] transition-all duration-200"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
 
           {/* Season & Episode Controls */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            <div className="flex items-center justify-between rounded-2xl bg-black/35 border border-white/10 px-3.5 py-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+            <div className="flex items-center justify-between rounded-xl bg-[#191C29] border border-[#292B39] px-3.5 py-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
                 Season
               </span>
               <div className="flex items-center gap-2">
@@ -1349,26 +1398,26 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   type="button"
                   onClick={() => handleUpdateWatchProgress({ season: Math.max(1, activeSeason - 1) })}
                   aria-label="Decrease season"
-                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer"
+                  className="w-9 h-9 rounded-lg bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 flex items-center justify-center text-[#F4F3FA] cursor-pointer"
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </button>
-                <span className="min-w-[2.25rem] text-center text-xs font-black text-white">
+                <span className="min-w-[2.25rem] text-center text-xs font-extrabold text-[#F4F3FA]">
                   S{activeSeason}
                 </span>
                 <button
                   type="button"
                   onClick={() => handleUpdateWatchProgress({ season: activeSeason + 1 })}
                   aria-label="Increase season"
-                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer"
+                  className="w-9 h-9 rounded-lg bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 flex items-center justify-center text-[#F4F3FA] cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-between rounded-2xl bg-black/35 border border-white/10 px-3.5 py-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+            <div className="flex items-center justify-between rounded-xl bg-[#191C29] border border-[#292B39] px-3.5 py-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
                 Episode
               </span>
               <div className="flex items-center gap-2">
@@ -1381,18 +1430,18 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     })
                   }
                   aria-label="Previous episode"
-                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer"
+                  className="w-9 h-9 rounded-lg bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 flex items-center justify-center text-[#F4F3FA] cursor-pointer"
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </button>
-                <span className="min-w-[3.25rem] text-center text-xs font-black text-white">
+                <span className="min-w-[3.25rem] text-center text-xs font-extrabold text-[#F4F3FA]">
                   Ep {activeEpisode}
                 </span>
                 <button
                   type="button"
                   onClick={() => handleUpdateWatchProgress({ episode: activeEpisode + 1 })}
                   aria-label="Next watched episode"
-                  className="w-7 h-7 rounded-lg bg-purple-600/80 hover:bg-purple-500 flex items-center justify-center text-white cursor-pointer shadow-sm"
+                  className="w-9 h-9 rounded-lg bg-[#B49AF8] hover:bg-[#CBB6FF] flex items-center justify-center text-[#0B0A10] cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -1401,10 +1450,10 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           </div>
         </section>
 
-        {/* SECTION 2: SYNOPSIS WITH SPOILER PROTECTION */}
-        <div className="mt-12">
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+        {/* SECTION 2: SYNOPSIS WITH SPOILER PROTECTION (OVERVIEW) */}
+        <div id="detail-section-overview" className="mt-8 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="text-[#B49AF8] text-[11px] font-bold tracking-wider uppercase">
               Synopsis
             </h2>
             <button
@@ -1412,10 +1461,10 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               onClick={handleToggleSpoilerProtection}
               aria-pressed={spoilerProtection}
               aria-label="Toggle spoiler protection"
-              className={`px-3 py-1 rounded-full text-[11px] font-bold border inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`min-h-[36px] px-3 py-1 rounded-xl text-[11px] font-bold border inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer ${
                 spoilerProtection
-                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-                  : 'bg-white/[0.04] border-white/10 text-neutral-400 hover:text-white'
+                  ? 'bg-[#F9C876]/15 border-[#F9C876]/40 text-[#F9C876]'
+                  : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
               }`}
             >
               {spoilerProtection ? (
@@ -1429,7 +1478,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
           <div className="relative">
             <p
-              className={`text-sm sm:text-base text-neutral-200/90 leading-relaxed font-normal transition-all duration-300 ${
+              className={`text-sm sm:text-base text-[#F4F3FA]/90 leading-relaxed font-normal transition-all duration-200 ${
                 spoilerProtection && !isSynopsisRevealed
                   ? 'blur-md select-none opacity-60 pointer-events-none'
                   : ''
@@ -1442,7 +1491,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsSynopsisExpanded(!isSynopsisExpanded)}
-                  className="text-xs font-bold text-purple-400 hover:text-purple-300 ml-2 cursor-pointer transition-colors"
+                  className="text-xs font-bold text-[#B49AF8] hover:text-[#CBB6FF] ml-2 cursor-pointer transition-colors"
                 >
                   {isSynopsisExpanded ? 'Show less' : 'Read more'}
                 </button>
@@ -1455,7 +1504,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   type="button"
                   onClick={() => setIsSynopsisRevealed(true)}
                   aria-label="Reveal blurred synopsis"
-                  className="px-4 py-2 rounded-xl bg-black/85 border border-amber-500/40 text-amber-300 hover:text-white hover:border-amber-400 text-xs font-bold inline-flex items-center gap-2 shadow-xl backdrop-blur-md cursor-pointer transition-all"
+                  className="px-4 py-2 rounded-xl bg-[#191C29] border border-[#F9C876]/50 text-[#F9C876] hover:text-[#F4F3FA] text-xs font-bold inline-flex items-center gap-2 shadow-xl cursor-pointer transition-colors"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>Spoiler Shield Active — Click to Reveal Synopsis</span>
@@ -1464,10 +1513,10 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 pt-4 text-xs">
-            <span className="text-purple-300/60 text-[10px] font-bold tracking-widest uppercase mr-1">GENRES:</span>
+          <div className="flex flex-wrap items-center gap-2 pt-4 mt-4 border-t border-[#292B39] text-xs">
+            <span className="text-[#A1A5B5] text-[10px] font-bold tracking-wider uppercase mr-1">GENRES:</span>
             {genres.map((g: string, i: number) => (
-              <span key={`detail_genre_${g}_${i}`} className="text-neutral-300 font-medium text-xs">
+              <span key={`detail_genre_${g}_${i}`} className="text-[#F4F3FA] font-medium text-xs">
                 {g}{i < genres.length - 1 ? ' • ' : ''}
               </span>
             ))}
@@ -1475,36 +1524,36 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </div>
 
         {/* SECTION 3: STREAM SPECS */}
-        <div className="mt-12">
-          <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase mb-4 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+        <div className="mt-6 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
+          <h2 className="text-[#B49AF8] text-[11px] font-bold tracking-wider uppercase mb-3.5">
             Stream Specs
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-5">
             <div className="min-w-0">
-              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">PLATFORMS</span>
-              <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
-                <Play className="w-3.5 h-3.5 text-purple-400 fill-purple-400 shrink-0" />
-                <span className="truncate">{availablePlatforms.map(p => p.name).join(', ')}</span>
+              <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">PLATFORMS</span>
+              <span className="text-xs font-bold text-[#F4F3FA] flex items-center gap-1.5 truncate">
+                <Play className="w-3.5 h-3.5 text-[#B49AF8] fill-[#B49AF8] shrink-0" />
+                <span className="truncate">{availablePlatforms.length > 0 ? availablePlatforms.map(p => p.name).join(', ') : 'Not verified'}</span>
               </span>
             </div>
             {verifiedAudioSpec && (
               <div className="min-w-0">
-                <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">AUDIO TRACK</span>
-                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">AUDIO TRACK</span>
+                <span className="text-xs font-bold text-[#34D399] flex items-center gap-1.5">
                   <Volume2 className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">{verifiedAudioSpec}</span>
                 </span>
               </div>
             )}
             <div className="min-w-0">
-              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">STUDIO</span>
-              <span className="text-xs font-bold text-white truncate block">{studio}</span>
+              <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">STUDIO</span>
+              <span className="text-xs font-bold text-[#F4F3FA] truncate block">{studio}</span>
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">
+              <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">
                 {isMovie ? 'FORMAT' : <>SEASONS &amp; EPISODES</>}
               </span>
-              <span className="text-xs font-bold text-white truncate block">
+              <span className="text-xs font-bold text-[#F4F3FA] truncate block">
                 {isMovie
                   ? (movieDuration ? `Movie • ${movieDuration}` : 'Movie')
                   : (seasonEpisodeSummary || episodesText || (status === 'Airing' ? 'Ongoing' : 'TBA'))}
@@ -1512,14 +1561,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             </div>
             {officialSourceHref && (
               <div className="min-w-0">
-                <span className="text-[10px] text-white/50 font-bold block uppercase tracking-wider mb-1">OFFICIAL SOURCE</span>
+                <span className="text-[10px] text-[#A1A5B5] font-bold block uppercase tracking-wider mb-1">OFFICIAL SOURCE</span>
                 <a
                   href={officialSourceHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs font-bold text-cyan-300 hover:text-cyan-200 inline-flex items-center gap-1 max-w-full truncate underline underline-offset-2"
+                  className="text-xs font-bold text-[#CBB6FF] hover:text-[#F4F3FA] inline-flex items-center gap-1 max-w-full truncate underline underline-offset-2"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#34D399] shrink-0" />
                   <span className="truncate">{officialSourceLabel || 'Official Site'}</span>
                   <ExternalLink className="w-3 h-3 shrink-0" />
                 </a>
@@ -1529,51 +1578,54 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </div>
 
         {/* SECTION 4: COMMUNITY DUB REVIEWS (Dedicated Clean Card/Box) */}
-        <section className="mt-12 bg-white/[0.04] backdrop-blur-2xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.5)] space-y-6">
-          <div className="flex items-center justify-between pb-4 border-b border-white/10">
+        <section
+          id="detail-section-reviews"
+          className="mt-6 bg-[#12141E] border border-[#292B39] rounded-2xl p-5 sm:p-6 space-y-5"
+        >
+          <div className="flex items-center justify-between pb-4 border-b border-[#292B39]">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shadow-md">
-                <Star className="w-4 h-4 fill-purple-400" />
+              <div className="w-9 h-9 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
+                <Star className="w-4 h-4 fill-[#B49AF8]" />
               </div>
               <div>
-                <h2 className="text-sm sm:text-base font-black text-white tracking-wide">
+                <h2 className="text-sm sm:text-base font-extrabold text-[#F4F3FA] tracking-wide">
                   Community Dub Reviews
                 </h2>
-                <p className="text-[11px] text-neutral-400">
-                  Ratings on voice acting, regional audio sync & script localization
+                <p className="text-[11px] text-[#A1A5B5]">
+                  Ratings on voice acting, regional audio sync &amp; script localization
                 </p>
               </div>
             </div>
-            <span className="bg-purple-950/80 border border-purple-500/40 text-purple-300 text-[11px] font-bold px-3 py-1 rounded-full">
+            <span className="bg-[#191C29] border border-[#292B39] text-[#CBB6FF] text-[11px] font-bold px-3 py-1 rounded-lg">
               {reviewsList.length} {reviewsList.length === 1 ? 'Review' : 'Reviews'}
             </span>
           </div>
 
           {/* Review Submission Form */}
-          <form onSubmit={handleAddReview} className="space-y-4 pt-1 bg-black/40 border border-white/10 rounded-2xl p-4 sm:p-5">
+          <form onSubmit={handleAddReview} className="space-y-4 pt-1 bg-[#191C29] border border-[#292B39] rounded-xl p-4">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-neutral-300 font-semibold">Rate Dubbing Quality</span>
-              <span className="text-amber-400 font-bold flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">
-                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+              <span className="text-[#F4F3FA] font-semibold">Rate Dubbing Quality</span>
+              <span className="text-[#F9C876] font-bold flex items-center gap-1 bg-[#12141E] border border-[#292B39] px-2 py-0.5 rounded-lg">
+                <Star className="w-3.5 h-3.5 fill-[#F9C876] text-[#F9C876]" />
                 <span>{reviewRating.toFixed(1)} / 10.0</span>
               </span>
             </div>
 
-            <input 
+            <input
               type="range"
               min="1"
               max="10"
               step="0.5"
               value={reviewRating}
               onChange={(e) => setReviewRating(parseFloat(e.target.value))}
-              className="w-full accent-purple-500 cursor-pointer h-1.5 bg-white/20 rounded-lg"
+              className="w-full accent-[#B49AF8] cursor-pointer h-1.5 bg-[#12141E] rounded-lg"
             />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <select
                 value={reviewLang}
                 onChange={(e) => setReviewLang(e.target.value)}
-                className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-purple-400 cursor-pointer"
+                className="w-full min-h-[42px] bg-[#12141E] border border-[#292B39] rounded-xl px-3.5 py-2 text-xs text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer"
               >
                 {displayLanguages.map((lang: string, idx: number) => (
                   <option key={`review_opt_${lang}_${idx}`} value={`${lang} Dub`}>{lang} Dub</option>
@@ -1581,30 +1633,30 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               </select>
 
               <div className="flex items-center justify-start sm:justify-end">
-                <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">
-                  <input 
+                <label className="flex items-center gap-2 text-xs text-[#A1A5B5] cursor-pointer min-h-[40px]">
+                  <input
                     type="checkbox"
                     checked={hasSpoilers}
                     onChange={(e) => setHasSpoilers(e.target.checked)}
-                    className="accent-purple-500 rounded"
+                    className="accent-[#B49AF8] rounded"
                   />
                   <span>Contains spoilers?</span>
                 </label>
               </div>
             </div>
 
-            <textarea 
+            <textarea
               rows={2}
               value={reviewComment}
               onChange={(e) => setReviewComment(e.target.value)}
               placeholder="Share thoughts on voice acting, sync, and regional dialogue delivery..."
-              className="w-full bg-black/60 border border-white/10 rounded-xl p-3.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400 resize-none"
+              className="w-full bg-[#12141E] border border-[#292B39] rounded-xl p-3.5 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8] resize-none"
             />
 
             <div className="flex justify-end">
               <button
                 type="submit"
-                className="px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-xs font-bold inline-flex items-center gap-2 cursor-pointer shadow-lg shadow-purple-900/40 transition-all active:scale-95"
+                className="min-h-[40px] px-5 py-2 rounded-xl bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-bold inline-flex items-center gap-2 cursor-pointer transition-colors duration-150"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Submit Review</span>
@@ -1613,61 +1665,61 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           </form>
 
           {/* Reviews List Scrollable Container */}
-          <div className="max-h-[420px] overflow-y-auto pr-1 space-y-4 pt-2 scrollbar-thin scrollbar-thumb-purple-600/50">
+          <div className="max-h-[420px] overflow-y-auto pr-1 space-y-3 pt-1">
             {reviewsList.length === 0 ? (
-              <div className="py-6 text-center text-xs text-neutral-400 bg-black/20 border border-white/5 rounded-2xl p-4">
+              <div className="py-6 text-center text-xs text-[#A1A5B5] bg-[#191C29] border border-[#292B39] rounded-xl p-4">
                 <p>No community reviews yet for this title. Be the first to rate this regional dub above!</p>
               </div>
             ) : (
               reviewsList.map((review, idx) => (
-                <div 
+                <div
                   key={`review_${review.id}_${idx}`}
-                  className="space-y-2 text-xs p-4 rounded-2xl bg-black/30 border border-white/5 hover:border-white/10 transition-colors"
+                  className="space-y-2 text-xs p-4 rounded-xl bg-[#191C29] border border-[#292B39]"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <span className="font-bold text-white">{review.author}</span>
-                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-purple-300 font-semibold">
+                      <span className="font-bold text-[#F4F3FA]">{review.author}</span>
+                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-[#12141E] border border-[#292B39] text-[#CBB6FF] font-semibold">
                         {review.language}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-[#F9C876] bg-[#12141E] px-2 py-0.5 rounded-md border border-[#292B39]">
+                      <Star className="w-3 h-3 fill-[#F9C876] text-[#F9C876]" />
                       <span>{review.rating}</span>
                     </div>
                   </div>
 
                   <div className="relative pt-1">
                     {review.spoilers && !review.revealed ? (
-                      <div className="py-1 flex items-center justify-between text-[11px] text-neutral-400">
+                      <div className="py-1 flex items-center justify-between text-[11px] text-[#A1A5B5]">
                         <span className="flex items-center gap-1.5">
-                          <EyeOff className="w-3.5 h-3.5 text-neutral-400" />
+                          <EyeOff className="w-3.5 h-3.5 text-[#A1A5B5]" />
                           <span>Contains spoilers</span>
                         </span>
                         <button
                           type="button"
                           onClick={() => handleToggleSpoiler(review.id)}
-                          className="font-bold text-purple-400 hover:underline cursor-pointer"
+                          className="font-bold text-[#B49AF8] hover:underline cursor-pointer"
                         >
                           Reveal
                         </button>
                       </div>
                     ) : (
-                      <p className="text-neutral-300/90 leading-relaxed font-normal text-xs">
+                      <p className="text-[#F4F3FA]/90 leading-relaxed font-normal text-xs">
                         {review.comment}
                       </p>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-2 border-t border-white/5">
+                  <div className="flex items-center justify-between text-[10px] text-[#A1A5B5] pt-2 border-t border-[#292B39]">
                     <span>{review.date || 'Recent'}</span>
                     <button
                       type="button"
                       onClick={() => handleLikeReview(review.id)}
                       className={`inline-flex items-center gap-1.5 text-[11px] transition-colors cursor-pointer ${
-                        review.isLiked 
-                          ? 'text-purple-400 font-bold' 
-                          : 'text-neutral-400 hover:text-white'
+                        review.isLiked
+                          ? 'text-[#B49AF8] font-bold'
+                          : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
                       }`}
                     >
                       <ThumbsUp className="w-3.5 h-3.5" />
@@ -1680,8 +1732,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           </div>
         </section>
 
-        {/* DUAL RATING SYSTEM (GLOBAL SCORE & COMMUNITY SCORE) - PLACED DIRECTLY BELOW COMMUNITY DUB REVIEWS */}
-        <div className="mt-8">
+        {/* DUAL RATING SYSTEM (GLOBAL SCORE & COMMUNITY SCORE) */}
+        <div className="mt-6">
           <DualRating
             globalRating={details?.rating ? Number(details.rating) : 8.5}
             initialUserRating={userRating}
@@ -1693,29 +1745,29 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         </div>
 
         {/* SECTION 5: FREQUENTLY ASKED QUESTIONS */}
-        <div className="mt-12">
-          <h2 className="text-purple-400 text-[10px] font-black tracking-widest uppercase mb-4 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+        <div className="mt-8 rounded-2xl bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
+          <h2 className="text-[#B49AF8] text-[11px] font-bold tracking-wider uppercase mb-3">
             Frequently Asked Questions
           </h2>
-          <div className="space-y-4">
+          <div className="divide-y divide-[#292B39]">
             {faqItems.map((item, idx) => {
               const isOpen = openFaqIndex === idx;
               return (
-                <div key={`anime_faq_${idx}`} className="pb-3">
+                <div key={`anime_faq_${idx}`} className="py-2.5">
                   <button
                     type="button"
                     onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
-                    className="w-full py-2 flex items-center justify-between text-left text-sm font-semibold text-white/90 hover:text-purple-300 transition-colors cursor-pointer"
+                    className="w-full py-1.5 flex items-center justify-between text-left text-xs sm:text-sm font-semibold text-[#F4F3FA] hover:text-[#B49AF8] transition-colors cursor-pointer"
                   >
                     <span>{item.q}</span>
                     {isOpen ? (
-                      <ChevronUp className="w-4 h-4 text-purple-400 shrink-0 ml-2" />
+                      <ChevronUp className="w-4 h-4 text-[#B49AF8] shrink-0 ml-2" />
                     ) : (
-                      <ChevronDown className="w-4 h-4 text-white/40 shrink-0 ml-2" />
+                      <ChevronDown className="w-4 h-4 text-[#A1A5B5] shrink-0 ml-2" />
                     )}
                   </button>
                   {isOpen && (
-                    <div className="pt-1 text-xs text-neutral-300/80 leading-relaxed">
+                    <div className="pt-1.5 text-xs text-[#A1A5B5] leading-relaxed">
                       {item.a}
                     </div>
                   )}
@@ -1728,36 +1780,36 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       </div>
 
       {/* 4. STICKY ACTION BAR */}
-      <div className="fixed bottom-4 sm:bottom-6 left-3 right-3 sm:left-4 sm:right-4 w-auto max-w-[calc(100vw-1.5rem)] sm:max-w-md mx-auto z-50 backdrop-blur-3xl bg-black/40 border border-white/10 p-2 sm:p-2.5 gap-1.5 rounded-[2.5rem] flex items-center justify-between shadow-2xl overflow-hidden">
+      <div className="fixed bottom-4 sm:bottom-6 left-3 right-3 sm:left-4 sm:right-4 w-auto max-w-[calc(100vw-1.5rem)] sm:max-w-md mx-auto z-50 bg-[#12141E] border border-[#292B39] p-2 gap-1.5 rounded-2xl flex items-center justify-between shadow-2xl overflow-hidden">
         {/* Watch Options Button */}
         <button
           type="button"
           onClick={() => setIsWatchOptionsOpen(true)}
-          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3.5 sm:px-6 py-2.5 sm:py-3.5 rounded-full font-bold shadow-[0_0_20px_rgba(168,85,247,0.5)] flex items-center justify-center gap-1.5 sm:gap-2 hover:opacity-95 transition-all cursor-pointer text-[11px] sm:text-xs uppercase tracking-wider active:scale-95 min-w-0 shrink"
+          className="min-h-[40px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] px-3.5 sm:px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 sm:gap-2 transition-colors duration-150 cursor-pointer text-[11px] sm:text-xs uppercase tracking-wider min-w-0 shrink"
         >
-          <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-white shrink-0" />
+          <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-[#0B0A10] shrink-0" />
           <span className="truncate">Watch Options</span>
-          <ChevronUp className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-80 shrink-0" />
+          <ChevronUp className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
         </button>
 
         {/* Lightweight Icon Actions */}
-        <div className="flex items-center gap-1 sm:gap-1.5 pr-0.5 sm:pr-1 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 pr-0.5 shrink-0">
           {/* Upvote Button with count */}
           <button
             type="button"
             onClick={handleVote}
             disabled={isVoting}
-            className={`h-9 sm:h-11 px-2.5 sm:px-3 shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer disabled:opacity-50 active:scale-95 ${
+            className={`h-10 sm:h-11 px-2.5 sm:px-3 shrink-0 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center gap-1 transition-colors duration-150 cursor-pointer disabled:opacity-50 ${
               upvotes > 0
-                ? 'text-orange-400 border-orange-500/30 bg-orange-500/10'
-                : 'text-white/80 hover:text-white'
+                ? 'text-[#F9C876] border-[#F9C876]/40'
+                : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
             }`}
             title={`Upvote (${upvotes} votes)`}
             aria-label="Upvote"
           >
-            <Flame className={`w-4 h-4 ${upvotes > 0 ? 'fill-orange-400 text-orange-400' : ''}`} />
-            <span className="text-xs font-bold">
-              {upvotes > 0 ? (upvotes >= 1000 ? `${(upvotes/1000).toFixed(1)}k` : upvotes) : ''}
+            <Flame className={`w-4 h-4 ${upvotes > 0 ? 'fill-[#F9C876] text-[#F9C876]' : ''}`} />
+            <span className="text-xs font-bold tabular-nums">
+              {upvotes > 0 ? (upvotes >= 1000 ? `${(upvotes / 1000).toFixed(1)}k` : upvotes) : ''}
             </span>
           </button>
 
@@ -1765,37 +1817,37 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           <button
             type="button"
             onClick={() => numericAnimeId > 0 && onToggleWatchlist(numericAnimeId)}
-            className={`w-9 h-9 sm:w-11 sm:h-11 shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
+            className={`w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-xl border flex items-center justify-center transition-colors duration-150 cursor-pointer ${
               isBookmarked
-                ? 'text-purple-400 border-purple-500/40 bg-purple-500/15'
-                : 'text-white/80 hover:text-white'
+                ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF]'
+                : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
             }`}
             title={isBookmarked ? 'In Watchlist' : 'Add to Watchlist'}
             aria-label="Watchlist"
           >
-            <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-purple-400 text-purple-400' : ''}`} />
+            <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-[#0B0A10] text-[#0B0A10]' : ''}`} />
           </button>
 
           {/* Mark Watched Button */}
           <button
             type="button"
             onClick={handleToggleWatched}
-            className={`w-9 h-9 sm:w-11 sm:h-11 shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
+            className={`w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-xl border flex items-center justify-center transition-colors duration-150 cursor-pointer ${
               isWatched
-                ? 'text-emerald-400 border-emerald-500/40 bg-emerald-500/15'
-                : 'text-white/80 hover:text-white'
+                ? 'bg-[#34D399]/15 text-[#34D399] border-[#34D399]/40'
+                : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
             }`}
             title={isWatched ? 'Completed' : 'Mark as Watched'}
             aria-label="Toggle Watched"
           >
-            <CheckCircle2 className={`w-4 h-4 ${isWatched ? 'text-emerald-400' : ''}`} />
+            <CheckCircle2 className={`w-4 h-4 ${isWatched ? 'text-[#34D399]' : ''}`} />
           </button>
 
           {/* Share Button */}
           <button
             type="button"
             onClick={handleShare}
-            className="w-9 h-9 sm:w-11 sm:h-11 shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all cursor-pointer active:scale-95"
+            className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer"
             title="Share Anime"
             aria-label="Share"
           >
@@ -1807,22 +1859,22 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       {/* WATCH OPTIONS MODAL / DRAWER */}
       <AnimatePresence>
         {isWatchOptionsOpen && (
-          <div 
+          <div
             onClick={() => setIsWatchOptionsOpen(false)}
-            className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+            className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80"
           >
             <motion.div
-              initial={{ opacity: 0, y: 80 }}
+              initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 80 }}
-              transition={{ duration: 0.2 }}
+              exit={{ opacity: 0, y: 40 }}
+              transition={{ duration: 0.16 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md bg-[#0b0c10] border border-white/10 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4"
+              className="w-full max-w-md bg-[#12141E] border-t sm:border border-[#292B39] rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4"
             >
-              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <div className="flex items-center justify-between pb-2.5 border-b border-[#292B39]">
                 <div className="flex items-center gap-2">
-                  <Play className="w-4 h-4 fill-purple-400 text-purple-400" />
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-white">
+                  <Play className="w-4 h-4 fill-[#B49AF8] text-[#B49AF8]" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-[#F4F3FA]">
                     Official Streaming Platforms
                   </h3>
                 </div>
@@ -1830,13 +1882,13 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   type="button"
                   onClick={() => setIsWatchOptionsOpen(false)}
                   aria-label="Close streaming platforms modal"
-                  className="p-1 rounded-full text-neutral-400 hover:text-white cursor-pointer"
+                  className="w-9 h-9 rounded-xl bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
 
-              <p className="text-xs text-neutral-400">
+              <p className="text-xs text-[#A1A5B5]">
                 Select an official platform to stream {title} with regional Indian dub audio:
               </p>
 
@@ -1851,24 +1903,24 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                       e.preventDefault();
                       handleOpenPlatform(plat);
                     }}
-                    className="w-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 rounded-2xl p-3.5 flex items-center justify-between text-sm font-semibold text-white transition-all group cursor-pointer"
+                    className="w-full bg-[#191C29] hover:border-[#B49AF8]/60 border border-[#292B39] rounded-xl p-3.5 flex items-center justify-between text-sm font-semibold text-[#F4F3FA] transition-colors duration-150 group cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-purple-950/60 border border-purple-500/30 flex items-center justify-center text-purple-300 group-hover:scale-105 transition-transform">
-                        <Play className="w-4 h-4 fill-purple-400 text-purple-400" />
+                      <div className="w-10 h-10 rounded-xl bg-[#12141E] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
+                        <Play className="w-4 h-4 fill-[#B49AF8] text-[#B49AF8]" />
                       </div>
                       <div className="text-left">
-                        <div className="font-bold text-white group-hover:text-purple-300 transition-colors">
+                        <div className="font-bold text-[#F4F3FA] group-hover:text-[#B49AF8] transition-colors">
                           {plat.name}
                         </div>
-                        <div className="text-[11px] text-neutral-400">
+                        <div className="text-[11px] text-[#A1A5B5]">
                           {plat.languages && plat.languages.length > 0
                             ? `${plat.languages.join(', ')} Dubs`
                             : 'Regional Indian Dub Audio'}
                         </div>
                       </div>
                     </div>
-                    <ExternalLink className="w-4 h-4 text-neutral-400 group-hover:text-white" />
+                    <ExternalLink className="w-4 h-4 text-[#A1A5B5] group-hover:text-[#F4F3FA]" />
                   </a>
                 ))}
               </div>
@@ -1877,7 +1929,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsWatchOptionsOpen(false)}
-                  className="w-full py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-xs font-semibold text-neutral-300 hover:text-white cursor-pointer"
+                  className="w-full min-h-[42px] py-2.5 rounded-xl bg-[#191C29] hover:border-[#B49AF8]/50 border border-[#292B39] text-xs font-semibold text-[#A1A5B5] hover:text-[#F4F3FA] cursor-pointer"
                 >
                   Close
                 </button>
@@ -1946,17 +1998,17 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.25, ease: "easeOut" }}
+        transition={{ duration: 0.16, ease: 'easeOut' }}
         onClick={onClose}
-        className="fixed inset-0 bg-[#0f1115]/90 backdrop-blur-xl"
+        className="fixed inset-0 bg-[#0B0A10]/90"
       />
 
       <motion.div
-        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 50 }}
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 24 }}
         animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 45 }}
-        transition={{ type: "spring", damping: 25, stiffness: 300 }}
-        className="relative w-full max-w-5xl my-0 sm:my-6 rounded-none sm:rounded-3xl overflow-hidden shadow-2xl z-10 will-change-transform"
+        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
+        className="relative w-full max-w-5xl my-0 sm:my-6 rounded-none sm:rounded-2xl border-0 sm:border sm:border-[#292B39] overflow-hidden shadow-2xl z-10 will-change-transform"
       >
         <AnimeDetailPage
           animeId={animeId}

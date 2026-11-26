@@ -753,28 +753,28 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
   const visibleMessages = filterVisibleChatMessages(messages, blockedUsers);
 
   return (
-    <div className={`bg-[#0a0e1a]/95 backdrop-blur-2xl border border-white/[0.08] rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col font-sans text-white overflow-hidden transition-all ${className || ''}`}>
+    <div className={`bg-[#12141E] border border-[#292B39] rounded-2xl shadow-2xl flex flex-col font-sans text-[#F4F3FA] overflow-hidden transition-colors duration-150 ${className || ''}`}>
       
-      {/* 1. CHANNEL HEADER BAR (Slack / Linear Style) */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-2.5 border-b border-white/[0.06] bg-black/20">
+      {/* 1. CHANNEL HEADER BAR */}
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3 border-b border-[#292B39] bg-[#191C29]">
         {/* Left: Channel Info & User Identity */}
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-6 h-6 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-[#B49AF8]/15 border border-[#B49AF8]/30 text-[#B49AF8] flex items-center justify-center shrink-0">
             <Hash className="w-3.5 h-3.5 stroke-[2.5]" />
           </div>
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-xs sm:text-[13px] font-semibold text-neutral-200 tracking-tight">
+            <span className="text-xs sm:text-[13px] font-semibold text-[#F4F3FA] tracking-tight">
               live-chat
             </span>
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${connectionStatus === 'connected' ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-amber-400'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${connectionStatus === 'connected' ? 'bg-[#34D399]' : 'bg-[#F9C876]'}`} />
             
             {/* Identity chip: Verified Clerk badge when signed in; editable guest name otherwise */}
             {isSignedIn && user ? (
               <div
-                className="hidden sm:inline-flex items-center gap-1 text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 rounded-md px-2 py-0.5 font-medium"
+                className="hidden sm:inline-flex items-center gap-1 text-[11px] text-[#34D399] bg-[#34D399]/10 border border-[#34D399]/30 rounded-md px-2 py-0.5 font-medium"
                 title="Verified Clerk Identity"
               >
-                <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                <ShieldCheck className="w-3 h-3 text-[#34D399] shrink-0" />
                 <span className="truncate max-w-[140px]">@{currentUserName}</span>
               </div>
             ) : (
@@ -783,11 +783,11 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                   type="button"
                   onClick={handleRandomizeName}
                   aria-label="Randomize guest display name"
-                  className="text-[11px] text-neutral-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-md px-1.5 py-0.5 flex items-center gap-1 transition-colors cursor-pointer"
+                  className="text-[11px] text-[#A1A5B5] hover:text-[#F4F3FA] bg-[#12141E] hover:bg-[#0B0A10] border border-[#292B39] rounded-md px-2 py-0.5 flex items-center gap-1 transition-colors duration-150 cursor-pointer"
                   title="Sign in with Clerk to post (click to cycle guest tag)"
                 >
-                  <span className="truncate max-w-[100px] text-purple-300 font-medium">@{guestName}</span>
-                  <Dices className="w-2.5 h-2.5 text-neutral-400 hover:text-amber-300 shrink-0" />
+                  <span className="truncate max-w-[100px] text-[#B49AF8] font-medium">@{guestName}</span>
+                  <Dices className="w-2.5 h-2.5 text-[#A1A5B5] hover:text-[#F9C876] shrink-0" />
                 </button>
               </div>
             )}
@@ -797,14 +797,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         {/* Right: Controls & Mode Switcher */}
         <div className="flex items-center gap-1.5 shrink-0">
           {/* Mode Switcher: Chat vs Dub Review */}
-          <div className="flex items-center p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs">
+          <div className="flex items-center p-0.5 rounded-lg bg-[#12141E] border border-[#292B39] text-xs">
             <button
               type="button"
               onClick={() => setMode('chat')}
-              className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors duration-150 cursor-pointer ${
                 mode === 'chat'
-                  ? 'bg-purple-600/80 text-white shadow-xs font-semibold'
-                  : 'text-neutral-400 hover:text-white'
+                  ? 'bg-[#B49AF8] text-[#0B0A10] font-bold'
+                  : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
               }`}
             >
               Chat
@@ -812,10 +812,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             <button
               type="button"
               onClick={() => setMode('review')}
-              className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors duration-150 cursor-pointer flex items-center gap-1 ${
                 mode === 'review'
-                  ? 'bg-amber-500/80 text-white shadow-xs font-semibold'
-                  : 'text-neutral-400 hover:text-white'
+                  ? 'bg-[#F9C876] text-[#0B0A10] font-bold'
+                  : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
               }`}
             >
               <Star className="w-2.5 h-2.5 fill-current" />
@@ -829,10 +829,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             onClick={handleToggleSpoilerShield}
             aria-pressed={spoilerProtection}
             aria-label={spoilerProtection ? 'Disable spoiler protection' : 'Enable spoiler protection'}
-            className={`p-1.5 rounded-md border transition-all cursor-pointer flex items-center gap-1 ${
+            className={`px-2 py-1.5 rounded-lg border transition-colors duration-150 cursor-pointer flex items-center gap-1 ${
               spoilerProtection
-                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-                : 'bg-white/[0.03] border-white/[0.08] text-neutral-500 hover:text-neutral-300'
+                ? 'bg-[#F9C876]/15 border-[#F9C876]/40 text-[#F9C876]'
+                : 'bg-[#12141E] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
             }`}
             title={spoilerProtection ? 'Spoiler Shield: ON' : 'Spoiler Shield: OFF'}
           >
@@ -848,7 +848,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
               type="button"
               onClick={() => setShowBlockedManager((prev) => !prev)}
               aria-label={`Manage ${blockedUsers.length} blocked users`}
-              className="px-2 py-1 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+              className="px-2 py-1.5 rounded-lg bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] hover:text-[#F4F3FA] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors duration-150"
               title="Manage blocked users"
             >
               <Ban className="w-3 h-3" />
@@ -864,10 +864,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
               setAutoScroll(next);
               if (next) scrollToBottom(true);
             }}
-            className={`p-1.5 rounded-md border transition-all cursor-pointer ${
+            className={`p-1.5 rounded-lg border transition-colors duration-150 cursor-pointer ${
               autoScroll 
-                ? 'bg-purple-500/10 border-purple-500/30 text-purple-300' 
-                : 'bg-white/[0.03] border-white/[0.08] text-neutral-500 hover:text-neutral-300'
+                ? 'bg-[#B49AF8]/15 border-[#B49AF8]/40 text-[#B49AF8]' 
+                : 'bg-[#12141E] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
             }`}
             title={autoScroll ? 'Auto-scroll enabled' : 'Auto-scroll paused'}
             aria-label="Toggle auto-scroll"
@@ -880,31 +880,31 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             type="button"
             onClick={fetchChatHistory}
             disabled={isSyncing}
-            className="p-1.5 rounded-md bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] text-neutral-400 hover:text-white transition-all cursor-pointer disabled:opacity-50"
+            className="p-1.5 rounded-lg bg-[#12141E] hover:bg-[#0B0A10] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer disabled:opacity-50"
             title="Refresh chat history"
             aria-label="Refresh chat history"
           >
-            <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-purple-400' : ''}`} />
+            <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-[#B49AF8]' : ''}`} />
           </button>
         </div>
       </div>
 
       {/* Blocked Users Manager Drawer */}
       {showBlockedManager && blockedUsers.length > 0 && (
-        <div className="px-3 py-2 bg-rose-950/30 border-b border-rose-500/20 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="px-3 py-2 bg-[#F87171]/10 border-b border-[#F87171]/25 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-bold text-rose-300">Blocked users:</span>
+            <span className="text-[11px] font-bold text-[#F87171]">Blocked users:</span>
             {blockedUsers.map((u) => (
               <button
                 key={`blocked_${u}`}
                 type="button"
                 onClick={() => handleUnblockChatUser(u)}
                 aria-label={`Unblock ${u}`}
-                className="px-2 py-0.5 rounded-md bg-black/40 border border-rose-500/30 text-neutral-200 hover:text-white text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                className="px-2 py-0.5 rounded-md bg-[#0B0A10] border border-[#F87171]/35 text-[#F4F3FA] text-[11px] inline-flex items-center gap-1 cursor-pointer"
                 title={`Unblock @${u}`}
               >
                 <span>@{u}</span>
-                <X className="w-3 h-3 text-rose-400" />
+                <X className="w-3 h-3 text-[#F87171]" />
               </button>
             ))}
           </div>
@@ -912,7 +912,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             type="button"
             onClick={() => setShowBlockedManager(false)}
             aria-label="Close blocked users panel"
-            className="text-[11px] text-neutral-400 hover:text-white cursor-pointer"
+            className="text-[11px] text-[#A1A5B5] hover:text-[#F4F3FA] cursor-pointer"
           >
             Close
           </button>
@@ -921,24 +921,24 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
 
       {/* Sync / Moderation Status Toast */}
       {(syncStatus || moderationToast) && (
-        <div className="text-[10px] font-medium text-emerald-400/90 bg-emerald-500/10 border-b border-emerald-500/15 px-3 py-1 flex items-center gap-1.5 animate-in fade-in duration-200">
+        <div className="text-[10px] font-medium text-[#34D399] bg-[#34D399]/10 border-b border-[#34D399]/20 px-3 py-1.5 flex items-center gap-1.5">
           <CheckCircle2 className="w-3 h-3 shrink-0" />
           <span>{moderationToast || `${syncStatus} — connected and synchronized.`}</span>
         </div>
       )}
 
-      {/* 2. CONTINUOUS STREAM MESSAGE FEED (Tight Slack / Linear Style) */}
+      {/* 2. CONTINUOUS STREAM MESSAGE FEED */}
       <div 
         ref={chatContainerRef}
-        className="h-[390px] sm:h-[450px] md:h-[490px] overflow-y-auto overscroll-contain px-3 py-2 sm:px-4 sm:py-2.5 space-y-1 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20"
+        className="h-[390px] sm:h-[450px] md:h-[490px] overflow-y-auto overscroll-contain px-3 py-2.5 sm:px-4 sm:py-3 space-y-1 bg-[#12141E]"
       >
         {visibleMessages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-neutral-400 p-6">
-            <div className="w-9 h-9 rounded-xl bg-purple-950/40 border border-purple-500/20 flex items-center justify-center text-purple-400 shadow-sm">
+          <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-[#A1A5B5] p-6">
+            <div className="w-10 h-10 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
               <Sparkles className="w-4 h-4" />
             </div>
-            <h4 className="text-xs font-semibold text-neutral-200">Welcome to Live Chat!</h4>
-            <p className="text-[11px] max-w-xs text-neutral-400">
+            <h4 className="text-xs font-semibold text-[#F4F3FA]">Welcome to Live Chat!</h4>
+            <p className="text-[11px] max-w-xs text-[#A1A5B5]">
               {messages.length > 0 && blockedUsers.length > 0
                 ? 'All current messages are from blocked users.'
                 : 'Say hello or share your thoughts on regional anime dubs.'}
@@ -957,51 +957,50 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             return (
               <motion.div 
                 key={msg.id} 
-                initial={{ opacity: 0, y: 12, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className="relative flex items-start gap-2.5 px-2 py-1 -mx-1.5 rounded-lg hover:bg-white/[0.025] transition-colors group"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.16, ease: 'easeOut' }}
+                className="relative flex items-start gap-2.5 px-2 py-1.5 -mx-1.5 rounded-lg hover:bg-[#191C29] transition-colors duration-150 group"
               >
-                {/* Refined Smaller Avatar with Subtle Border */}
-                <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-md sm:rounded-lg flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0 border shadow-xs ${avatarStyle} mt-0.5`}>
+                {/* Avatar */}
+                <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-md sm:rounded-lg flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0 border ${avatarStyle} mt-0.5`}>
                   {getInitials(msg.user)}
                 </div>
 
                 {/* Message Content */}
                 <div className="flex-1 min-w-0">
-                  {/* Sender Header Line (tight vertical spacing, subtle faded timestamp) */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className={`text-[12px] sm:text-[13px] font-semibold ${userColor} hover:underline cursor-pointer tracking-tight`}>
                       {msg.user}
                     </span>
 
                     {msg.isSelf && (
-                      <span className="text-[8px] font-bold text-purple-300/90 bg-purple-500/10 border border-purple-500/20 px-1 py-0.2 rounded">
+                      <span className="text-[8px] font-bold text-[#B49AF8] bg-[#B49AF8]/15 border border-[#B49AF8]/30 px-1 py-0.2 rounded">
                         you
                       </span>
                     )}
 
                     {msg.isReview && (
-                      <span className="text-[9px] font-medium text-amber-300/90 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
-                        <Star className="w-2 h-2 fill-amber-300" />
+                      <span className="text-[9px] font-medium text-[#F9C876] bg-[#F9C876]/15 border border-[#F9C876]/30 px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
+                        <Star className="w-2 h-2 fill-[#F9C876]" />
                         <span>{msg.rating ? `${msg.rating}/10` : 'Dub Review'}</span>
                       </span>
                     )}
 
                     {isSpoilerMsg && (
-                      <span className="text-[9px] font-bold text-amber-300/90 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
+                      <span className="text-[9px] font-bold text-[#F9C876] bg-[#F9C876]/15 border border-[#F9C876]/30 px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
                         <EyeOff className="w-2.5 h-2.5" />
                         <span>Spoiler</span>
                       </span>
                     )}
 
                     {msg.language && (
-                      <span className="text-[9px] font-medium text-emerald-300/90 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.2 rounded">
+                      <span className="text-[9px] font-medium text-[#34D399] bg-[#34D399]/15 border border-[#34D399]/30 px-1.5 py-0.2 rounded">
                         {msg.language}
                       </span>
                     )}
 
-                    <span className="text-[10px] text-neutral-500/70 font-mono ml-auto sm:ml-1 select-none">
+                    <span className="text-[10px] text-[#A1A5B5]/80 font-mono ml-auto sm:ml-1 select-none">
                       {msg.timestamp}
                     </span>
 
@@ -1013,19 +1012,19 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                           onClick={() => setOpenMenuMessageId(isMenuOpen ? null : msgKey)}
                           aria-label={`Moderate or report ${msg.user}`}
                           aria-expanded={isMenuOpen}
-                          className="p-1 rounded-md text-neutral-500 hover:text-white hover:bg-white/10 transition-colors cursor-pointer sm:opacity-40 sm:group-hover:opacity-100 focus:opacity-100"
+                          className="p-1 rounded-md text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#12141E] transition-colors duration-150 cursor-pointer sm:opacity-40 sm:group-hover:opacity-100 focus:opacity-100"
                           title={`Block or Report @${msg.user}`}
                         >
                           <MoreHorizontal className="w-3.5 h-3.5" />
                         </button>
 
                         {isMenuOpen && (
-                          <div className="absolute right-0 top-full mt-1 w-40 rounded-xl bg-[#111626] border border-white/15 shadow-2xl py-1 z-40">
+                          <div className="absolute right-0 top-full mt-1 w-40 rounded-xl bg-[#191C29] border border-[#292B39] shadow-2xl py-1 z-40">
                             <button
                               type="button"
                               onClick={() => handleBlockChatUser(msg.user)}
                               aria-label={`Block user ${msg.user}`}
-                              className="w-full px-3 py-1.5 text-left text-xs text-rose-300 hover:bg-rose-500/15 flex items-center gap-2 cursor-pointer"
+                              className="w-full px-3 py-1.5 text-left text-xs text-[#F87171] hover:bg-[#F87171]/15 flex items-center gap-2 cursor-pointer"
                             >
                               <Ban className="w-3.5 h-3.5 shrink-0" />
                               <span>Block User</span>
@@ -1037,7 +1036,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                                 setOpenMenuMessageId(null);
                               }}
                               aria-label={`Report user ${msg.user}`}
-                              className="w-full px-3 py-1.5 text-left text-xs text-amber-300 hover:bg-amber-500/15 flex items-center gap-2 cursor-pointer"
+                              className="w-full px-3 py-1.5 text-left text-xs text-[#F9C876] hover:bg-[#F9C876]/15 flex items-center gap-2 cursor-pointer"
                             >
                               <Flag className="w-3.5 h-3.5 shrink-0" />
                               <span>Report User</span>
@@ -1052,7 +1051,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                   <div className="relative mt-0.5">
                     {msg.isReview ? (
                       <div
-                        className={`text-xs text-amber-100/90 leading-relaxed border-l-2 border-amber-500/50 pl-2 py-0.5 bg-amber-500/[0.03] rounded-r break-words transition-all ${
+                        className={`text-xs text-[#F4F3FA] leading-relaxed border-l-2 border-[#F9C876] pl-2 py-0.5 bg-[#F9C876]/10 rounded-r break-words transition-all ${
                           shouldBlur ? 'blur-sm select-none opacity-45 pointer-events-none' : ''
                         }`}
                       >
@@ -1060,7 +1059,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                       </div>
                     ) : (
                       <p
-                        className={`text-xs sm:text-[13px] text-neutral-200/95 leading-snug break-words select-text font-normal transition-all ${
+                        className={`text-xs sm:text-[13px] text-[#F4F3FA] leading-snug break-words select-text font-normal transition-all ${
                           shouldBlur ? 'blur-sm select-none opacity-45 pointer-events-none' : ''
                         }`}
                       >
@@ -1075,7 +1074,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                           setRevealedMessageIds((prev) => ({ ...prev, [msgKey]: true }))
                         }
                         aria-label={`Reveal spoiler message from ${msg.user}`}
-                        className="mt-1 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-[11px] font-bold text-amber-300 inline-flex items-center gap-1.5 cursor-pointer"
+                        className="mt-1 px-2.5 py-1 rounded-lg bg-[#F9C876]/15 hover:bg-[#F9C876]/25 border border-[#F9C876]/35 text-[11px] font-bold text-[#F9C876] inline-flex items-center gap-1.5 cursor-pointer"
                       >
                         <Eye className="w-3 h-3" />
                         <span>Spoiler Hidden — Click to Reveal</span>
@@ -1092,40 +1091,40 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
       {/* Report User Inline Modal */}
       {reportingMessage && (
         <div
-          className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[80] bg-[#0B0A10]/85 flex items-center justify-center p-4"
           onClick={() => setReportingMessage(null)}
         >
           <form
             onSubmit={handleSubmitUserReport}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm rounded-2xl bg-[#0f1424] border border-white/15 p-5 shadow-2xl space-y-3.5"
+            className="w-full max-w-sm rounded-2xl bg-[#12141E] border border-[#292B39] p-5 shadow-2xl space-y-3.5"
           >
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-amber-300">
+              <div className="flex items-center gap-2 text-[#F9C876]">
                 <Flag className="w-4 h-4" />
-                <h4 className="text-sm font-bold text-white">Report @{reportingMessage.user}</h4>
+                <h4 className="text-sm font-bold text-[#F4F3FA]">Report @{reportingMessage.user}</h4>
               </div>
               <button
                 type="button"
                 onClick={() => setReportingMessage(null)}
                 aria-label="Close report user modal"
-                className="p-1 rounded-lg text-neutral-400 hover:text-white cursor-pointer"
+                className="p-1.5 rounded-lg text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#191C29] cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="text-[11px] text-neutral-400 bg-black/40 border border-white/10 rounded-xl p-2.5 line-clamp-2">
+            <div className="text-[11px] text-[#A1A5B5] bg-[#191C29] border border-[#292B39] rounded-xl p-2.5 line-clamp-2">
               "{stripSpoilerMarker(reportingMessage.text)}"
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-neutral-300">Reason</label>
+              <label className="block text-[11px] font-bold text-[#F4F3FA]">Reason</label>
               <select
                 value={reportIssueType}
                 onChange={(e) => setReportIssueType(e.target.value)}
                 aria-label="Report reason"
-                className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400"
+                className="w-full bg-[#191C29] border border-[#292B39] rounded-xl px-3 py-2 text-xs text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8]"
               >
                 <option value="Harassment or Abuse">Harassment or Abuse</option>
                 <option value="Spam or Scam Links">Spam or Scam Links</option>
@@ -1135,13 +1134,13 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-neutral-300">Additional Details (Optional)</label>
+              <label className="block text-[11px] font-bold text-[#F4F3FA]">Additional Details (Optional)</label>
               <textarea
                 rows={2}
                 value={reportDescription}
                 onChange={(e) => setReportDescription(e.target.value)}
                 placeholder="Tell our moderators what happened..."
-                className="w-full bg-black/50 border border-white/15 rounded-xl p-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400 resize-none"
+                className="w-full bg-[#191C29] border border-[#292B39] rounded-xl p-2.5 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8] resize-none"
               />
             </div>
 
@@ -1152,14 +1151,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                   handleBlockChatUser(reportingMessage.user);
                   setReportingMessage(null);
                 }}
-                className="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-bold cursor-pointer"
+                className="min-h-[40px] px-3 py-2 rounded-xl bg-[#F87171]/15 hover:bg-[#F87171]/25 border border-[#F87171]/35 text-[#F87171] text-xs font-bold cursor-pointer"
               >
                 Block & Close
               </button>
               <button
                 type="submit"
                 disabled={isSubmittingReport}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold cursor-pointer disabled:opacity-50"
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-extrabold cursor-pointer disabled:opacity-50"
               >
                 {isSubmittingReport ? 'Submitting…' : 'Submit Report'}
               </button>
@@ -1168,20 +1167,20 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         </div>
       )}
 
-      {/* 3. INPUT AREA POLISH (Streamlined, zero clutter, embedded emoji & send) */}
-      <div className="p-2.5 sm:p-3 border-t border-white/[0.06] bg-black/20 space-y-2 relative">
+      {/* 3. INPUT AREA */}
+      <div className="p-2.5 sm:p-3 border-t border-[#292B39] bg-[#191C29] space-y-2 relative">
         
-        {/* Error Warning (e.g., WebSocket / identity verification error) */}
+        {/* Error Warning */}
         {chatError && (
-          <div className="px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-center justify-between gap-2 shadow-xs animate-in fade-in duration-200">
+          <div className="px-3 py-1.5 rounded-xl bg-[#F87171]/10 border border-[#F87171]/35 text-[#F87171] text-xs font-medium flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
-              <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              <AlertCircle className="w-3.5 h-3.5 text-[#F87171] shrink-0" />
               <span className="break-words">{chatError}</span>
             </div>
             <button
               type="button"
               onClick={() => setChatError(null)}
-              className="p-1 rounded-md text-rose-300 hover:text-white hover:bg-rose-500/20 transition-all shrink-0 cursor-pointer"
+              className="p-1 rounded-md text-[#F87171] hover:text-[#F4F3FA] hover:bg-[#F87171]/20 transition-colors duration-150 shrink-0 cursor-pointer"
               aria-label="Dismiss error"
             >
               <X className="w-3.5 h-3.5" />
@@ -1189,14 +1188,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
           </div>
         )}
 
-        {/* If in Review Mode, show sleek mini filters for language & rating */}
+        {/* Review Mode Filters */}
         {mode === 'review' && (
-          <div className="flex items-center gap-2 px-1 text-xs text-amber-300/90">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">Reviewing:</span>
+          <div className="flex items-center gap-2 px-1 text-xs text-[#F9C876]">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#A1A5B5]">Reviewing:</span>
             <select
               value={reviewLang}
               onChange={(e) => setReviewLang(e.target.value)}
-              className="bg-black/50 border border-amber-500/30 rounded-md px-2 py-0.5 text-[11px] text-amber-300 font-medium focus:outline-none cursor-pointer"
+              className="bg-[#12141E] border border-[#292B39] rounded-md px-2 py-0.5 text-[11px] text-[#F9C876] font-medium focus:outline-none cursor-pointer"
             >
               <option value="Tamil Dub">Tamil Dub</option>
               <option value="Telugu Dub">Telugu Dub</option>
@@ -1205,15 +1204,15 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
               <option value="Kannada Dub">Kannada Dub</option>
             </select>
 
-            <div className="flex items-center gap-0.5 bg-black/50 border border-amber-500/30 px-1.5 py-0.5 rounded-md">
-              <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400 shrink-0" />
+            <div className="flex items-center gap-0.5 bg-[#12141E] border border-[#292B39] px-1.5 py-0.5 rounded-md">
+              <Star className="w-2.5 h-2.5 fill-[#F9C876] text-[#F9C876] shrink-0" />
               <select
                 value={reviewRating}
                 onChange={(e) => setReviewRating(parseFloat(e.target.value))}
-                className="bg-transparent text-[11px] text-amber-400 font-semibold focus:outline-none cursor-pointer"
+                className="bg-transparent text-[11px] text-[#F9C876] font-semibold focus:outline-none cursor-pointer"
               >
                 {[10, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.0, 5.0].map(r => (
-                  <option key={`chat_rating_${r}`} value={r} className="bg-neutral-900 text-white">{r}/10</option>
+                  <option key={`chat_rating_${r}`} value={r} className="bg-[#12141E] text-[#F4F3FA]">{r}/10</option>
                 ))}
               </select>
             </div>
@@ -1224,7 +1223,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
         {showEmojiPicker && (
           <div 
             ref={emojiPickerRef}
-            className="absolute bottom-full mb-2 left-3 sm:left-4 bg-[#101424] border border-white/10 rounded-xl shadow-2xl p-1.5 flex items-center gap-1 z-50 animate-in fade-in zoom-in-95 duration-150"
+            className="absolute bottom-full mb-2 left-3 sm:left-4 bg-[#12141E] border border-[#292B39] rounded-xl shadow-2xl p-1.5 flex items-center gap-1 z-50"
           >
             {QUICK_REACTIONS.map((emoji) => (
               <button
@@ -1232,7 +1231,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                 type="button"
                 onClick={() => handleReactionClick(emoji)}
                 aria-label={`Insert ${emoji} reaction`}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 text-sm transition-all duration-150 hover:scale-125 active:scale-75 cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#191C29] text-sm transition-colors duration-150 cursor-pointer"
                 title={`Add ${emoji}`}
               >
                 {emoji}
@@ -1241,35 +1240,35 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
           </div>
         )}
 
-        {/* Active Username Indicator directly above Chat Input Box */}
-        <div className="text-xs text-gray-400 mb-1 flex items-center justify-between px-1 select-none">
+        {/* Active Username Indicator */}
+        <div className="text-xs text-[#A1A5B5] mb-1 flex items-center justify-between px-1 select-none">
           <div className="flex items-center gap-1.5">
-            <span>{isSignedIn && user ? '🛡️ Verified Clerk Identity:' : '👤 Visitor Mode:'}</span>
-            <strong className="text-white font-semibold tracking-wide">
+            <span>{isSignedIn && user ? 'Verified Clerk Identity:' : 'Visitor Mode:'}</span>
+            <strong className="text-[#F4F3FA] font-semibold tracking-wide">
               {currentUserName}
             </strong>
           </div>
           {!isSignedIn && (
-            <span className="text-[11px] text-amber-300/90">
+            <span className="text-[11px] text-[#F9C876]">
               Sign in with Clerk to post
             </span>
           )}
         </div>
 
-        {/* Sleek, Single Pill Input with Integrated Smiley and Send Button */}
+        {/* Sleek Input with Integrated Smiley and Send Button */}
         <form onSubmit={handleSendMessageSubmit} className="relative">
-          <div className={`relative flex items-center bg-white/[0.04] hover:bg-white/[0.06] focus-within:bg-[#111624] border rounded-full px-2.5 sm:px-3 py-1 sm:py-1.5 transition-all shadow-inner ${
+          <div className={`relative flex items-center bg-[#12141E] focus-within:bg-[#0B0A10] border rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 transition-colors duration-150 ${
             mode === 'review'
-              ? 'border-amber-500/30 focus-within:border-amber-400 focus-within:ring-1 focus-within:ring-amber-500/20'
-              : 'border-white/10 focus-within:border-purple-500/50 focus-within:ring-1 focus-within:ring-purple-500/20'
+              ? 'border-[#F9C876]/40 focus-within:border-[#F9C876]'
+              : 'border-[#292B39] focus-within:border-[#B49AF8]'
           }`}>
             
             {/* Embedded Smiley Emoji Picker Toggle Button */}
             <button
               type="button"
               onClick={() => setShowEmojiPicker(prev => !prev)}
-              className={`p-1.5 rounded-full hover:bg-white/10 transition-all duration-200 hover:scale-110 active:scale-90 cursor-pointer shrink-0 mr-1 ${
-                showEmojiPicker ? 'text-amber-300 bg-white/10' : 'text-neutral-400 hover:text-white'
+              className={`p-1.5 rounded-lg hover:bg-[#191C29] transition-colors duration-150 cursor-pointer shrink-0 mr-1 ${
+                showEmojiPicker ? 'text-[#F9C876] bg-[#191C29]' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
               }`}
               title="Add reaction emoji"
               aria-label="Add reaction emoji"
@@ -1283,10 +1282,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                 onClick={() => setIsSpoilerDraft((prev) => !prev)}
                 aria-pressed={isSpoilerDraft}
                 aria-label="Mark message as spoiler"
-                className={`px-2 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer shrink-0 mr-1.5 border ${
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-colors duration-150 cursor-pointer shrink-0 mr-1.5 border ${
                   isSpoilerDraft
-                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-                    : 'bg-white/[0.04] border-white/10 text-neutral-400 hover:text-white'
+                    ? 'bg-[#F9C876]/20 border-[#F9C876]/40 text-[#F9C876]'
+                    : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
                 }`}
                 title="Tag this message as a spoiler"
               >
@@ -1294,7 +1293,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
               </button>
             )}
 
-            {/* Seamless Text Input with Dynamic 'Posting as...' in Placeholder */}
+            {/* Seamless Text Input */}
             <input 
               type="text"
               value={inputMessage}
@@ -1308,22 +1307,22 @@ export const LiveChat: React.FC<LiveChatProps> = ({ className, defaultAnimeTitle
                     ? `Message as ${currentUserName} about ${defaultAnimeTitle}...`
                     : `Message as ${currentUserName}...`
               }
-              className="flex-1 bg-transparent text-xs sm:text-[13px] text-white placeholder-neutral-500 focus:outline-none min-w-0 py-1"
+              className="flex-1 bg-transparent text-xs sm:text-[13px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none min-w-0 py-1"
             />
 
-            {/* Embedded Circular Send Button */}
+            {/* Embedded Send Button */}
             <button
               type="submit"
               disabled={!inputMessage.trim()}
-              className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 hover:scale-105 active:scale-90 cursor-pointer disabled:opacity-20 disabled:pointer-events-none shadow-sm ${
+              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors duration-150 cursor-pointer disabled:opacity-25 disabled:pointer-events-none ${
                 mode === 'review'
-                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-amber-500/20'
-                  : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-purple-600/20'
+                  ? 'bg-[#F9C876] text-[#0B0A10]'
+                  : 'bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10]'
               }`}
               title={mode === 'review' ? 'Post Dub Review' : 'Send message'}
               aria-label={mode === 'review' ? 'Post Dub Review' : 'Send message'}
             >
-              <Send className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-current ml-0.5" />
+              <Send className="w-3.5 h-3.5 fill-current ml-0.5" />
             </button>
           </div>
         </form>

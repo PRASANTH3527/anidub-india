@@ -8,7 +8,6 @@ import {
   LogOut,
   LogIn,
   Bookmark,
-  Check,
   ExternalLink,
   Mail,
   User as UserIcon,
@@ -28,6 +27,8 @@ import { AnimeCard } from './AnimeCard';
 import { useToast } from './Toast';
 import { useNotifications } from '../context/NotificationContext';
 import { PersonalAnimeStats } from './PersonalAnimeStats';
+import { Button } from './ui/Button';
+import { EmptyState } from './ui/EclipseState';
 import {
   ACCOUNT_CHANGED_EVENT,
   readScopedString,
@@ -294,26 +295,18 @@ export function ProfileView({
   });
 
   return (
-    <div className="relative w-full max-w-full min-h-screen text-neutral-100 font-sans pb-24 overflow-x-clip selection:bg-purple-500/30">
-      <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
-        <div className="absolute -top-32 -left-32 w-[600px] h-[600px] bg-gradient-to-br from-purple-700/20 via-indigo-600/15 to-transparent blur-[140px] rounded-full transform -rotate-12" />
-        <div className="absolute top-10 -right-28 w-[550px] h-[550px] bg-gradient-to-bl from-pink-600/15 via-purple-900/20 to-transparent blur-[150px] rounded-full" />
-        <div className="absolute top-[45%] left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-indigo-500/10 blur-[160px] rounded-full pointer-events-none" />
-      </div>
-
-      <div className="max-w-6xl mx-auto px-3 sm:px-6 pt-8 sm:pt-14 space-y-8 relative z-10">
-        <div className="relative w-full bg-gradient-to-b from-[#14192b]/95 via-[#0e1220]/95 to-[#090b14]/98 rounded-3xl p-5 sm:p-10 border border-purple-500/20 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl overflow-hidden animate-in fade-in duration-300">
-          <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500 to-pink-500 opacity-80" />
-          <div className="absolute -right-20 -bottom-20 w-80 h-80 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
-
+    <div className="relative w-full max-w-full min-h-screen text-[#F4F3FA] font-sans pb-24 overflow-x-clip">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 pt-6 sm:pt-10 space-y-8 relative z-10">
+        {/* PROFILE IDENTITY CARD */}
+        <div className="relative w-full bg-[#12141E] rounded-2xl p-5 sm:p-8 border border-[#292B39] shadow-xl overflow-hidden animate-in fade-in duration-200">
           <div className="absolute top-3 sm:top-6 right-3 sm:right-6 z-20">
             <SignedOut>
               <SignInButton mode="modal">
                 <button
                   type="button"
-                  className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-200 hover:text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 sm:gap-2 cursor-pointer active:scale-95"
+                  className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-bold transition-colors duration-150 flex items-center gap-1.5 cursor-pointer"
                 >
-                  <LogIn className="w-3.5 h-3.5 text-purple-400" />
+                  <LogIn className="w-3.5 h-3.5" />
                   <span>Sign In</span>
                 </button>
               </SignInButton>
@@ -323,9 +316,9 @@ export function ProfileView({
               <SignOutButton>
                 <button
                   type="button"
-                  className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 hover:text-red-200 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 sm:gap-2 cursor-pointer active:scale-95"
+                  className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#191C29] hover:bg-[#F87171]/15 border border-[#292B39] hover:border-[#F87171]/40 text-[#F87171] text-xs font-bold transition-colors duration-150 flex items-center gap-1.5 cursor-pointer"
                 >
-                  <LogOut className="w-3.5 h-3.5 text-red-400" />
+                  <LogOut className="w-3.5 h-3.5" />
                   <span>Log Out</span>
                 </button>
               </SignOutButton>
@@ -334,13 +327,11 @@ export function ProfileView({
 
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6 sm:gap-8 min-w-0">
             <div className="relative shrink-0">
-              <div className="absolute -inset-1.5 rounded-3xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-500 opacity-70 blur-md animate-pulse" />
-
-              <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-3xl overflow-hidden p-1 bg-gradient-to-br from-white/20 via-purple-500/30 to-black/80 shadow-2xl backdrop-blur-md">
+              <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden p-1 bg-[#191C29] border border-[#292B39]">
                 <img
                   src={activeAvatar}
                   alt={displayName}
-                  className="w-full h-full object-cover rounded-[20px]"
+                  className="w-full h-full object-cover rounded-xl"
                 />
               </div>
 
@@ -348,15 +339,15 @@ export function ProfileView({
                 type="button"
                 onClick={() => setIsEditModalOpen(true)}
                 title="Change Avatar"
-                className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-purple-600 hover:bg-purple-500 border-2 border-[#090b14] flex items-center justify-center text-white shadow-lg transition-transform hover:scale-110 active:scale-95 cursor-pointer z-30"
+                className="absolute -bottom-1 -right-1 w-9 h-9 rounded-full bg-[#B49AF8] hover:bg-[#CBB6FF] border-2 border-[#0B0A10] flex items-center justify-center text-[#0B0A10] shadow-lg transition-colors duration-150 cursor-pointer z-30"
                 aria-label="Change Avatar"
               >
                 <Edit3 className="w-3.5 h-3.5" />
               </button>
 
               <span
-                className={`absolute top-1 left-1 w-4 h-4 rounded-full border-2 border-[#090b14] shadow-[0_0_12px_rgba(52,211,153,0.9)] z-20 ${
-                  isSignedIn ? 'bg-emerald-500' : 'bg-neutral-500'
+                className={`absolute top-1 left-1 w-4 h-4 rounded-full border-2 border-[#0B0A10] z-20 ${
+                  isSignedIn ? 'bg-[#34D399]' : 'bg-[#A1A5B5]'
                 }`}
                 title={isSignedIn ? 'Active Clerk Session' : 'Guest Profile'}
               />
@@ -364,62 +355,66 @@ export function ProfileView({
 
             <div className="flex-1 min-w-0 w-full text-center md:text-left space-y-3 pt-2 sm:pt-0">
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold shadow-sm ${
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold ${
                   isSignedIn
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                    : 'bg-neutral-800/80 border-neutral-700 text-neutral-300'
+                    ? 'bg-[#34D399]/10 border-[#34D399]/30 text-[#34D399]'
+                    : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5]'
                 }`}>
-                  <span className={`w-2 h-2 rounded-full ${isSignedIn ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-400'}`} />
+                  <span className={`w-2 h-2 rounded-full ${isSignedIn ? 'bg-[#34D399]' : 'bg-[#A1A5B5]'}`} />
                   <span>Active Local Profile</span>
                 </span>
 
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold shadow-sm">
-                  <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#191C29] border border-[#292B39] text-[#F9C876] text-xs font-bold">
+                  <Trophy className="w-3.5 h-3.5 text-[#F9C876]" />
                   <span>{dubTier}</span>
                 </span>
 
                 {isSignedIn && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold shadow-sm">
-                    <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#191C29] border border-[#292B39] text-[#B49AF8] text-xs font-bold">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#B49AF8]" />
                     <span>Clerk Verified</span>
                   </span>
                 )}
               </div>
 
               <div className="flex items-center justify-center md:justify-start gap-2.5 min-w-0 max-w-full">
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-heading font-black text-white tracking-tight drop-shadow-md break-words max-w-full">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-heading font-black text-[#F4F3FA] tracking-tight break-words max-w-full">
                   {displayName}
                 </h1>
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(true)}
                   title="Edit Display Name"
-                  className="p-1.5 rounded-lg text-neutral-400 hover:text-purple-300 hover:bg-white/5 transition-colors cursor-pointer active:scale-95 shrink-0"
+                  className="p-2 rounded-lg text-[#A1A5B5] hover:text-[#B49AF8] hover:bg-[#191C29] transition-colors duration-150 cursor-pointer shrink-0"
                   aria-label="Edit Display Name"
                 >
                   <Edit3 className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
 
-              <p className="text-neutral-400 text-xs sm:text-sm font-medium flex items-center justify-center md:justify-start gap-1.5 min-w-0 max-w-full">
-                <Mail className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+              <p className="text-[#A1A5B5] text-xs sm:text-sm font-medium flex items-center justify-center md:justify-start gap-1.5 min-w-0 max-w-full">
+                <Mail className="w-3.5 h-3.5 text-[#A1A5B5] shrink-0" />
                 <span className="truncate">{displaySubtitle}</span>
               </p>
 
               <div className="pt-2 flex flex-wrap items-center justify-center md:justify-start gap-2.5 sm:gap-3">
                 {onOpenCreateCollection && (
-                  <button
+                  <Button
                     type="button"
+                    variant="primary"
+                    size="sm"
                     onClick={onOpenCreateCollection}
-                    className="px-4 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 font-bold text-xs transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                    leftIcon={<Plus className="w-3.5 h-3.5" />}
+                    className="text-xs"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>New Collection</span>
-                  </button>
+                    New Collection
+                  </Button>
                 )}
 
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => {
                     if (savedAnimeList.length === 0) {
                       showToast('Watchlist Empty', 'Save at least one anime before exporting to CSV.', 'info');
@@ -434,31 +429,31 @@ export function ProfileView({
                     downloadCsvFile(csv, `anidub-india-watchlist-${dateTag}.csv`);
                     showToast('Watchlist Exported', `Downloaded ${savedAnimeList.length} saved titles as CSV.`, 'success');
                   }}
-                  className="px-4 py-2 rounded-xl bg-emerald-600/15 hover:bg-emerald-600/25 border border-emerald-500/35 text-emerald-300 hover:text-emerald-200 font-bold text-xs transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                  leftIcon={<Download className="w-3.5 h-3.5 text-[#34D399]" />}
+                  className="text-xs"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Export Watchlist (CSV)</span>
-                </button>
+                  Export Watchlist (CSV)
+                </Button>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-6 mt-6 border-t border-white/10">
-            <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-3 text-center">
-              <p className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Watchlist</p>
-              <p className="text-lg sm:text-xl font-heading font-black text-purple-400 mt-0.5">{savedAnimeList.length}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-6 mt-6 border-t border-[#292B39]">
+            <div className="bg-[#191C29] border border-[#292B39] rounded-xl p-3 text-center">
+              <p className="text-[10px] uppercase font-bold text-[#A1A5B5] tracking-wider">Watchlist</p>
+              <p className="text-lg sm:text-xl font-heading font-black text-[#B49AF8] mt-0.5">{savedAnimeList.length}</p>
             </div>
-            <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-3 text-center">
-              <p className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Dub Ranking</p>
-              <p className="text-sm sm:text-base font-heading font-black text-amber-400 mt-1 truncate">{dubTier}</p>
+            <div className="bg-[#191C29] border border-[#292B39] rounded-xl p-3 text-center">
+              <p className="text-[10px] uppercase font-bold text-[#A1A5B5] tracking-wider">Dub Ranking</p>
+              <p className="text-sm sm:text-base font-heading font-black text-[#F9C876] mt-1 truncate">{dubTier}</p>
             </div>
-            <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-3 text-center">
-              <p className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Preferred Audio</p>
-              <p className="text-xs sm:text-sm font-heading font-bold text-emerald-400 mt-1 truncate">{preferredAudio}</p>
+            <div className="bg-[#191C29] border border-[#292B39] rounded-xl p-3 text-center">
+              <p className="text-[10px] uppercase font-bold text-[#A1A5B5] tracking-wider">Preferred Audio</p>
+              <p className="text-xs sm:text-sm font-heading font-bold text-[#34D399] mt-1 truncate">{preferredAudio}</p>
             </div>
-            <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-3 text-center">
-              <p className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Anime DNA</p>
-              <p className="text-xs sm:text-sm font-heading font-bold text-pink-400 mt-1 truncate">{animeDna}</p>
+            <div className="bg-[#191C29] border border-[#292B39] rounded-xl p-3 text-center">
+              <p className="text-[10px] uppercase font-bold text-[#A1A5B5] tracking-wider">Anime DNA</p>
+              <p className="text-xs sm:text-sm font-heading font-bold text-[#CBB6FF] mt-1 truncate">{animeDna}</p>
             </div>
           </div>
         </div>
@@ -475,45 +470,47 @@ export function ProfileView({
         {/* NOTIFICATION PREFERENCES SECTION */}
         <section
           aria-label="Notification Preferences"
-          className="rounded-3xl bg-[#111629]/85 border border-white/10 p-6 sm:p-7 space-y-5 shadow-xl"
+          className="rounded-2xl bg-[#12141E] border border-[#292B39] p-6 sm:p-7 space-y-5 shadow-xl"
         >
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#292B39] pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-300">
+              <div className="w-10 h-10 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
                 <Bell className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-base sm:text-lg font-heading font-black text-white uppercase tracking-tight">
+                <h2 className="text-base sm:text-lg font-heading font-black text-[#F4F3FA] uppercase tracking-tight">
                   Notification Preferences
                 </h2>
-                <p className="text-xs text-neutral-400">
+                <p className="text-xs text-[#A1A5B5]">
                   Manage sound chimes, browser push alerts, and dub release notifications
                 </p>
               </div>
             </div>
 
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => triggerTestNotification()}
               aria-label="Send test notification"
-              className="px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-200 text-xs font-bold transition-colors cursor-pointer"
+              className="text-xs"
             >
               Send Test Alert
-            </button>
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Sound Chime Toggle */}
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 p-4">
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-[#191C29] border border-[#292B39] p-4">
               <div className="flex items-center gap-3 min-w-0">
                 {isSoundEnabled ? (
-                  <Volume2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <Volume2 className="w-4 h-4 text-[#34D399] shrink-0" />
                 ) : (
-                  <VolumeX className="w-4 h-4 text-neutral-500 shrink-0" />
+                  <VolumeX className="w-4 h-4 text-[#A1A5B5] shrink-0" />
                 )}
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-white">Notification Sound Chime</p>
-                  <p className="text-[11px] text-neutral-400">Play a gentle chime on live updates</p>
+                  <p className="text-xs font-bold text-[#F4F3FA]">Notification Sound Chime</p>
+                  <p className="text-[11px] text-[#A1A5B5]">Play a gentle chime on live updates</p>
                 </div>
               </div>
               <button
@@ -522,12 +519,12 @@ export function ProfileView({
                 aria-checked={isSoundEnabled}
                 aria-label="Toggle notification sound chime"
                 onClick={toggleSound}
-                className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                  isSoundEnabled ? 'bg-purple-600' : 'bg-neutral-700'
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-150 cursor-pointer shrink-0 ${
+                  isSoundEnabled ? 'bg-[#B49AF8]' : 'bg-[#292B39]'
                 }`}
               >
                 <span
-                  className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                  className={`block w-5 h-5 rounded-full bg-[#0B0A10] transition-transform duration-150 ${
                     isSoundEnabled ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
@@ -535,14 +532,14 @@ export function ProfileView({
             </div>
 
             {/* Browser Desktop Notifications */}
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 p-4">
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-[#191C29] border border-[#292B39] p-4">
               <div className="flex items-center gap-3 min-w-0">
-                <Bell className="w-4 h-4 text-purple-400 shrink-0" />
+                <Bell className="w-4 h-4 text-[#B49AF8] shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-white">Desktop Push Alerts</p>
-                  <p className="text-[11px] text-neutral-400">
+                  <p className="text-xs font-bold text-[#F4F3FA]">Desktop Push Alerts</p>
+                  <p className="text-[11px] text-[#A1A5B5]">
                     Status:{' '}
-                    <span className="font-semibold text-neutral-200 capitalize">
+                    <span className="font-semibold text-[#F4F3FA] capitalize">
                       {browserPermission}
                     </span>
                   </p>
@@ -553,7 +550,7 @@ export function ProfileView({
                 onClick={requestBrowserPermission}
                 disabled={browserPermission === 'unsupported' || browserPermission === 'granted'}
                 aria-label="Enable browser push notifications"
-                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-50 text-xs font-bold text-white cursor-pointer shrink-0"
+                className="min-h-[36px] px-3 py-1.5 rounded-xl bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 disabled:opacity-50 text-xs font-bold text-[#F4F3FA] cursor-pointer shrink-0 transition-colors duration-150"
               >
                 {browserPermission === 'granted'
                   ? 'Enabled'
@@ -564,11 +561,11 @@ export function ProfileView({
             </div>
 
             {/* New Dub Releases Category */}
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 p-4">
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-[#191C29] border border-[#292B39] p-4">
               <div className="min-w-0">
-                <p className="text-xs font-bold text-white">New Dub Releases</p>
-                <p className="text-[11px] text-neutral-400">
-                  Notify when new Hindi, Tamil & Telugu dubs are added
+                <p className="text-xs font-bold text-[#F4F3FA]">New Dub Releases</p>
+                <p className="text-[11px] text-[#A1A5B5]">
+                  Notify when new Hindi, Tamil &amp; Telugu dubs are added
                 </p>
               </div>
               <button
@@ -577,12 +574,12 @@ export function ProfileView({
                 aria-checked={preferences.newDubs}
                 aria-label="Toggle new dub releases notifications"
                 onClick={() => updatePreference('newDubs', !preferences.newDubs)}
-                className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                  preferences.newDubs ? 'bg-purple-600' : 'bg-neutral-700'
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-150 cursor-pointer shrink-0 ${
+                  preferences.newDubs ? 'bg-[#B49AF8]' : 'bg-[#292B39]'
                 }`}
               >
                 <span
-                  className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                  className={`block w-5 h-5 rounded-full bg-[#0B0A10] transition-transform duration-150 ${
                     preferences.newDubs ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
@@ -590,10 +587,10 @@ export function ProfileView({
             </div>
 
             {/* Weekly Simulcast Alerts */}
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 p-4">
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-[#191C29] border border-[#292B39] p-4">
               <div className="min-w-0">
-                <p className="text-xs font-bold text-white">Weekly Simulcast Drops</p>
-                <p className="text-[11px] text-neutral-400">
+                <p className="text-xs font-bold text-[#F4F3FA]">Weekly Simulcast Drops</p>
+                <p className="text-[11px] text-[#A1A5B5]">
                   Alerts for scheduled weekly dub episode drops
                 </p>
               </div>
@@ -603,12 +600,12 @@ export function ProfileView({
                 aria-checked={preferences.simulcasts}
                 aria-label="Toggle weekly simulcast notifications"
                 onClick={() => updatePreference('simulcasts', !preferences.simulcasts)}
-                className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                  preferences.simulcasts ? 'bg-purple-600' : 'bg-neutral-700'
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-150 cursor-pointer shrink-0 ${
+                  preferences.simulcasts ? 'bg-[#B49AF8]' : 'bg-[#292B39]'
                 }`}
               >
                 <span
-                  className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                  className={`block w-5 h-5 rounded-full bg-[#0B0A10] transition-transform duration-150 ${
                     preferences.simulcasts ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
@@ -616,10 +613,10 @@ export function ProfileView({
             </div>
 
             {/* Community Chat & Reviews */}
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 p-4 sm:col-span-2">
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-[#191C29] border border-[#292B39] p-4 sm:col-span-2">
               <div className="min-w-0">
-                <p className="text-xs font-bold text-white">Community Chat & Reviews</p>
-                <p className="text-[11px] text-neutral-400">
+                <p className="text-xs font-bold text-[#F4F3FA]">Community Chat &amp; Reviews</p>
+                <p className="text-[11px] text-[#A1A5B5]">
                   Receive real-time alerts for new community reviews and chat highlights
                 </p>
               </div>
@@ -629,12 +626,12 @@ export function ProfileView({
                 aria-checked={preferences.communityChat}
                 aria-label="Toggle community chat and review notifications"
                 onClick={() => updatePreference('communityChat', !preferences.communityChat)}
-                className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                  preferences.communityChat ? 'bg-purple-600' : 'bg-neutral-700'
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-150 cursor-pointer shrink-0 ${
+                  preferences.communityChat ? 'bg-[#B49AF8]' : 'bg-[#292B39]'
                 }`}
               >
                 <span
-                  className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                  className={`block w-5 h-5 rounded-full bg-[#0B0A10] transition-transform duration-150 ${
                     preferences.communityChat ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
@@ -646,11 +643,11 @@ export function ProfileView({
         <div className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2.5">
-              <Bookmark className="w-5 h-5 text-purple-400" />
-              <h2 className="text-xl sm:text-2xl font-heading font-black text-white tracking-tight uppercase">
+              <Bookmark className="w-5 h-5 text-[#B49AF8]" />
+              <h2 className="text-xl sm:text-2xl font-heading font-black text-[#F4F3FA] tracking-tight uppercase">
                 Active Watchlist
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-bold">
+              <span className="px-2.5 py-0.5 rounded-full bg-[#191C29] border border-[#292B39] text-[#B49AF8] text-xs font-bold">
                 {savedAnimeList.length}
               </span>
             </div>
@@ -659,7 +656,7 @@ export function ProfileView({
               <button
                 type="button"
                 onClick={onNavigateToCatalog}
-                className="text-xs font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="min-h-[40px] px-3 text-xs font-bold text-[#B49AF8] hover:text-[#CBB6FF] flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
               >
                 <span>Explore Catalog</span>
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -687,104 +684,91 @@ export function ProfileView({
               ))}
             </div>
           ) : (
-            <div className="bg-[#121829]/70 border border-white/10 rounded-3xl p-8 sm:p-12 text-center space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto text-purple-400">
-                <Bookmark className="w-8 h-8 opacity-70" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base sm:text-lg font-bold text-white">Your Watchlist is Empty</h3>
-                <p className="text-xs sm:text-sm text-neutral-400 max-w-sm mx-auto">
-                  Explore our regional Indian dub directory and click the bookmark button on any anime to save it here.
-                </p>
-              </div>
-              {onNavigateToCatalog && (
-                <button
-                  type="button"
-                  onClick={onNavigateToCatalog}
-                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition-all cursor-pointer"
-                >
-                  Browse Dub Catalog
-                </button>
-              )}
-            </div>
+            <EmptyState
+              icon={<Bookmark className="w-6 h-6" />}
+              title="Your Watchlist is Empty"
+              description="Explore our regional Indian dub directory and click the bookmark button on any anime to save it here."
+              actionLabel={onNavigateToCatalog ? 'Browse Dub Catalog' : undefined}
+              onAction={onNavigateToCatalog}
+            />
           )}
         </div>
       </div>
 
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0A10]/85 backdrop-blur-sm animate-in fade-in duration-150">
           <div
-            className="w-full max-w-2xl bg-gradient-to-b from-[#14192b] to-[#0c0e18] border border-white/10 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl relative text-left animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-2xl bg-[#12141E] border border-[#292B39] rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl relative text-left max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <div className="flex items-center justify-between border-b border-[#292B39] pb-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-3">
-                  <h3 className="text-xl font-heading font-black text-white">Edit Profile & Avatar</h3>
-                  <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[10px] font-bold tracking-wider uppercase">
+                  <h3 className="text-xl font-heading font-black text-[#F4F3FA]">Edit Profile &amp; Avatar</h3>
+                  <span className="px-2.5 py-0.5 rounded-full bg-[#191C29] border border-[#292B39] text-[#B49AF8] text-[10px] font-bold tracking-wider uppercase">
                     {RICH_ANIME_AVATARS.length} Anime Characters
                   </span>
                 </div>
-                <p className="text-xs text-neutral-400">
+                <p className="text-xs text-[#A1A5B5]">
                   Customize your identity and choose your favorite character avatar
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsEditModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                className="w-10 h-10 rounded-xl bg-[#191C29] hover:bg-[#292B39] border border-[#292B39] flex items-center justify-center text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer"
                 aria-label="Close modal"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex items-center gap-2 p-1 rounded-2xl bg-white/[0.03] border border-white/10">
+            <div className="flex items-center gap-2 p-1 rounded-xl bg-[#191C29] border border-[#292B39]">
               <button
                 type="button"
                 onClick={() => setModalTab('identity')}
-                className={`flex-1 py-2 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                className={`flex-1 min-h-[40px] py-2 px-4 rounded-lg text-xs font-bold transition-colors duration-150 cursor-pointer flex items-center justify-center gap-2 ${
                   modalTab === 'identity'
-                    ? 'bg-purple-600 text-white shadow-md'
-                    : 'text-neutral-400 hover:text-white hover:bg-white/5'
+                    ? 'bg-[#B49AF8] text-[#0B0A10]'
+                    : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
                 }`}
               >
                 <ImageIcon className="w-3.5 h-3.5" />
-                <span>Avatar & Identity</span>
+                <span>Avatar &amp; Identity</span>
               </button>
               <button
                 type="button"
                 onClick={() => setModalTab('backup')}
-                className={`flex-1 py-2 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                className={`flex-1 min-h-[40px] py-2 px-4 rounded-lg text-xs font-bold transition-colors duration-150 cursor-pointer flex items-center justify-center gap-2 ${
                   modalTab === 'backup'
-                    ? 'bg-purple-600 text-white shadow-md'
-                    : 'text-neutral-400 hover:text-white hover:bg-white/5'
+                    ? 'bg-[#B49AF8] text-[#0B0A10]'
+                    : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
                 }`}
               >
                 <Database className="w-3.5 h-3.5" />
-                <span>Watchlist Stats & Backup</span>
+                <span>Watchlist Stats &amp; Backup</span>
               </button>
             </div>
 
             {modalTab === 'identity' ? (
               <form onSubmit={handleSaveProfile} className="space-y-6">
-                <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-900/30 via-indigo-900/20 to-transparent border border-purple-500/30 flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl overflow-hidden shrink-0 border-2 border-purple-400 shadow-md">
+                <div className="p-4 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 border-2 border-[#B49AF8]">
                     <img src={modalSelectedAvatar || DEFAULT_AVATAR} alt="Preview" className="w-full h-full object-cover" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-sm font-bold text-white truncate">
+                    <h4 className="text-sm font-bold text-[#F4F3FA] truncate">
                       {modalInputName.trim() || displayName}
                     </h4>
-                    <p className="text-[11px] text-purple-300 font-medium">
+                    <p className="text-[11px] text-[#B49AF8] font-medium">
                       Active Regional Enthusiast • {preferredAudio}
                     </p>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
-                    <UserIcon className="w-3.5 h-3.5 text-purple-400" />
+                  <label className="text-xs font-bold text-[#F4F3FA] flex items-center gap-1.5">
+                    <UserIcon className="w-3.5 h-3.5 text-[#B49AF8]" />
                     <span>Display Name</span>
                   </label>
                   <input
@@ -793,20 +777,20 @@ export function ProfileView({
                     onChange={(e) => setModalInputName(e.target.value)}
                     placeholder="e.g. ZoroFan99, Prasanth..."
                     maxLength={30}
-                    className="w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 focus:border-purple-500 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
+                    className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
                   />
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                     <div className="relative flex-1">
-                      <Search className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <Search className="w-4 h-4 text-[#A1A5B5] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                       <input
                         type="text"
                         value={avatarSearch}
                         onChange={(e) => setAvatarSearch(e.target.value)}
                         placeholder="Search character avatars by name..."
-                        className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/[0.04] border border-white/10 focus:border-purple-500 text-xs text-white placeholder-neutral-500 outline-none transition-colors"
+                        className="w-full min-h-[40px] pl-10 pr-4 py-2 rounded-xl bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
                       />
                     </div>
                   </div>
@@ -822,20 +806,14 @@ export function ProfileView({
                           key={cat}
                           type="button"
                           onClick={() => setSelectedCategory(cat)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                          className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors duration-150 shrink-0 cursor-pointer flex items-center gap-1.5 border ${
                             isActive
-                              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-                              : 'bg-white/5 text-neutral-400 hover:text-white hover:bg-white/10'
+                              ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                              : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
                           }`}
                         >
                           <span>{cat}</span>
-                          <span
-                            className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
-                              isActive
-                                ? 'bg-purple-900/70 text-purple-200'
-                                : 'bg-white/10 text-neutral-400'
-                            }`}
-                          >
+                          <span className="text-[10px] opacity-85 font-semibold">
                             {count}
                           </span>
                         </button>
@@ -846,11 +824,11 @@ export function ProfileView({
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-neutral-200">
+                    <label className="text-xs font-bold text-[#F4F3FA]">
                       Character Library ({filteredAvatars.length} characters)
                     </label>
                     {selectedCategory !== 'All' && (
-                      <span className="text-[11px] text-purple-400 font-medium">
+                      <span className="text-[11px] text-[#B49AF8] font-medium">
                         Showing {selectedCategory}
                       </span>
                     )}
@@ -859,12 +837,12 @@ export function ProfileView({
                     <button
                       type="button"
                       onClick={handleCustomUpload}
-                      className="group relative rounded-2xl overflow-hidden aspect-square border-2 border-dashed border-purple-500/40 hover:border-purple-400 bg-purple-500/5 hover:bg-purple-500/10 transition-all p-2 flex flex-col items-center justify-center text-center cursor-pointer hover:scale-102"
+                      className="group relative rounded-xl overflow-hidden aspect-square border border-dashed border-[#B49AF8]/50 hover:border-[#B49AF8] bg-[#191C29] transition-colors duration-150 p-2 flex flex-col items-center justify-center text-center cursor-pointer"
                       title="Upload or paste custom image URL"
                     >
-                      <Upload className="w-5 h-5 text-purple-400 mb-1 group-hover:scale-110 transition-transform" />
-                      <span className="text-[10px] font-bold text-purple-300">CUSTOM</span>
-                      <span className="text-[9px] text-neutral-400">Direct URL</span>
+                      <Upload className="w-5 h-5 text-[#B49AF8] mb-1" />
+                      <span className="text-[10px] font-bold text-[#B49AF8]">CUSTOM</span>
+                      <span className="text-[9px] text-[#A1A5B5]">Direct URL</span>
                     </button>
 
                     {filteredAvatars.map((av) => {
@@ -874,10 +852,10 @@ export function ProfileView({
                           key={av.name}
                           type="button"
                           onClick={() => setModalSelectedAvatar(av.url)}
-                          className={`group relative rounded-2xl overflow-hidden aspect-square border-2 transition-all p-0.5 cursor-pointer flex flex-col items-center justify-center ${
+                          className={`group relative rounded-xl overflow-hidden aspect-square border-2 transition-colors duration-150 p-0.5 cursor-pointer flex flex-col items-center justify-center ${
                             isSelected
-                              ? 'border-purple-500 scale-105 shadow-[0_0_14px_rgba(168,85,247,0.7)] bg-purple-500/10 ring-2 ring-purple-400/50'
-                              : 'border-white/10 hover:border-white/30 bg-white/[0.02] opacity-85 hover:opacity-100 hover:scale-102'
+                              ? 'border-[#B49AF8] bg-[#B49AF8]/10'
+                              : 'border-[#292B39] hover:border-[#B49AF8]/60 bg-[#191C29]'
                           }`}
                           title={`${av.name} • ${av.category}`}
                         >
@@ -888,15 +866,15 @@ export function ProfileView({
                             onError={(e) => {
                               (e.target as HTMLImageElement).src = DEFAULT_AVATAR;
                             }}
-                            className="w-full h-full object-cover rounded-[14px]"
+                            className="w-full h-full object-cover rounded-[10px]"
                           />
-                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-3 pb-1 px-1 rounded-b-[14px] pointer-events-none">
-                            <p className="text-[10px] font-bold text-white text-center truncate leading-tight drop-shadow-sm">
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0B0A10] via-[#0B0A10]/60 to-transparent pt-3 pb-1 px-1 rounded-b-[10px] pointer-events-none">
+                            <p className="text-[10px] font-bold text-[#F4F3FA] text-center truncate leading-tight">
                               {av.name}
                             </p>
                           </div>
                           {isSelected && (
-                            <span className="absolute top-1 right-1 w-4 h-4 bg-purple-600 rounded-full flex items-center justify-center text-[10px] text-white font-black shadow-md border border-white/20">
+                            <span className="absolute top-1 right-1 w-4 h-4 bg-[#B49AF8] rounded-full flex items-center justify-center text-[10px] text-[#0B0A10] font-black">
                               ✓
                             </span>
                           )}
@@ -906,47 +884,52 @@ export function ProfileView({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
-                  <button
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#292B39]">
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="sm"
                     onClick={() => setIsEditModalOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-bold transition-colors cursor-pointer"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
-                    className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-lg shadow-purple-600/30 flex items-center gap-2 cursor-pointer active:scale-95"
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<Save className="w-3.5 h-3.5" />}
                   >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>Save Changes</span>
-                  </button>
+                    Save Changes
+                  </Button>
                 </div>
               </form>
             ) : (
               <div className="space-y-6 py-2">
-                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">Watchlist Data Summary</h4>
+                <div className="p-4 rounded-xl bg-[#191C29] border border-[#292B39] space-y-3">
+                  <h4 className="text-xs font-bold text-[#F4F3FA] uppercase tracking-wider">Watchlist Data Summary</h4>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 rounded-xl bg-black/20 border border-white/5">
-                      <p className="text-[10px] text-neutral-400 uppercase font-bold">Saved Items</p>
-                      <p className="text-base font-bold text-purple-400 mt-0.5">{watchlist.length} Anime</p>
+                    <div className="p-3 rounded-xl bg-[#12141E] border border-[#292B39]">
+                      <p className="text-[10px] text-[#A1A5B5] uppercase font-bold">Saved Items</p>
+                      <p className="text-base font-bold text-[#B49AF8] mt-0.5">{watchlist.length} Anime</p>
                     </div>
-                    <div className="p-3 rounded-xl bg-black/20 border border-white/5">
-                      <p className="text-[10px] text-neutral-400 uppercase font-bold">Cloud Sync Status</p>
-                      <p className="text-base font-bold text-emerald-400 mt-0.5">{isSignedIn ? 'Synced to Clerk' : 'Local Storage'}</p>
+                    <div className="p-3 rounded-xl bg-[#12141E] border border-[#292B39]">
+                      <p className="text-[10px] text-[#A1A5B5] uppercase font-bold">Cloud Sync Status</p>
+                      <p className="text-base font-bold text-[#34D399] mt-0.5">{isSignedIn ? 'Synced to Clerk' : 'Local Storage'}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">Export / Import Watchlist Backup</h4>
-                  <p className="text-xs text-neutral-400">
+                <div className="p-4 rounded-xl bg-[#191C29] border border-[#292B39] space-y-3">
+                  <h4 className="text-xs font-bold text-[#F4F3FA] uppercase tracking-wider">Export / Import Watchlist Backup</h4>
+                  <p className="text-xs text-[#A1A5B5]">
                     Download your current watchlist as a JSON backup file or restore from a previous backup.
                   </p>
                   <div className="flex items-center gap-3 pt-1">
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<Download className="w-3.5 h-3.5 text-[#B49AF8]" />}
                       onClick={() => {
                         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(watchlist));
                         const downloadAnchor = document.createElement('a');
@@ -957,22 +940,21 @@ export function ProfileView({
                         downloadAnchor.remove();
                         showToast('Export Success', 'Watchlist backup downloaded!', 'success');
                       }}
-                      className="px-4 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-200 text-xs font-bold transition-colors flex items-center gap-2 cursor-pointer"
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Export JSON</span>
-                    </button>
+                      Export JSON
+                    </Button>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end pt-4 border-t border-white/10">
-                  <button
+                <div className="flex items-center justify-end pt-4 border-t border-[#292B39]">
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="sm"
                     onClick={() => setIsEditModalOpen(false)}
-                    className="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition-colors cursor-pointer"
                   >
                     Close
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

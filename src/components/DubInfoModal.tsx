@@ -718,31 +718,31 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.25, ease: "easeOut" }}
+        transition={{ duration: 0.16, ease: "easeOut" }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/80 backdrop-blur-md"
+        className="fixed inset-0 bg-[#0B0A10]/85"
       />
 
       <motion.div 
-        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 40 }}
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
         animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 35 }}
-        transition={{ type: "spring", damping: 25, stiffness: 300 }}
-        className="relative w-full max-w-xl bg-[#0b0e18]/95 border border-white/10 hover:border-purple-500/40 rounded-3xl shadow-[0_0_50px_rgba(168,85,247,0.25)] overflow-hidden z-10 my-auto text-neutral-100 backdrop-blur-2xl max-h-[90vh] flex flex-col font-sans will-change-transform"
+        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
+        transition={{ duration: 0.16, ease: "easeOut" }}
+        className="relative w-full max-w-xl bg-[#12141E] border border-[#292B39] rounded-2xl shadow-2xl overflow-hidden z-10 my-auto text-[#F4F3FA] max-h-[90vh] flex flex-col font-sans"
       >
         
         {/* HEADER */}
-        <div className="p-5 border-b border-neutral-800 flex items-center justify-between bg-gradient-to-r from-purple-950/40 via-transparent to-transparent shrink-0">
+        <div className="p-4 sm:p-5 border-b border-[#292B39] flex items-center justify-between bg-[#191C29] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 shrink-0">
-              <Film className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-[#B49AF8]/15 border border-[#B49AF8]/30 flex items-center justify-center text-[#B49AF8] shrink-0">
+              <Film className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-heading font-black text-lg text-white leading-tight">
+              <h3 className="font-heading font-black text-base sm:text-lg text-[#F4F3FA] leading-tight">
                 {mode === 'edit' ? 'Edit Anime Info' : 'Submit Dub Info'}
               </h3>
               {mode !== 'edit' && (
-                <p className="text-[11px] text-amber-400 font-semibold flex items-center gap-1 mt-0.5">
+                <p className="text-[11px] text-[#F9C876] font-semibold flex items-center gap-1 mt-0.5">
                   <ShieldAlert className="w-3.5 h-3.5" />
                   <span>Strict Moderation: Requires Admin Approval</span>
                 </p>
@@ -752,24 +752,25 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+            aria-label="Close modal"
+            className="w-11 h-11 rounded-xl text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#12141E] border border-[#292B39] flex items-center justify-center transition-colors duration-150 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* SCROLLING BODY */}
-        <div className="flex-1 overflow-y-auto pb-32">
+        <div className="flex-1 overflow-y-auto pb-28">
           <div className="p-5 sm:p-6 space-y-4">
             {isSuccess ? (
               <div className="py-8 text-center space-y-3">
-                <div className="w-14 h-14 rounded-full bg-emerald-950/70 border border-emerald-500/50 flex items-center justify-center mx-auto text-emerald-400 animate-bounce">
+                <div className="w-14 h-14 rounded-2xl bg-[#34D399]/15 border border-[#34D399]/35 flex items-center justify-center mx-auto text-[#34D399]">
                   <CheckCircle2 className="w-7 h-7" />
                 </div>
-                <h4 className="font-heading font-black text-xl text-white">
+                <h4 className="font-heading font-black text-xl text-[#F4F3FA]">
                   {mode === 'edit' ? 'Changes Saved Successfully!' : 'Saved with Status: "Pending"!'}
                 </h4>
-                <p className="text-xs text-neutral-300 max-w-md mx-auto leading-relaxed">
+                <p className="text-xs text-[#A1A5B5] max-w-md mx-auto leading-relaxed">
                   {mode === 'edit'
                     ? 'Your edits have been successfully saved and updated directly in the live catalog.'
                     : 'Your submission is currently locked under Strict Moderation. It has been sent to the Admin Dashboard and will remain hidden from the website until approved.'}
@@ -780,8 +781,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                 
                 {/* Title Field */}
                 <div>
-                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
-                    <span>Anime Title <span className="text-purple-400">*</span></span>
+                  <label className="block font-bold text-[#F4F3FA] mb-1 flex items-center justify-between">
+                    <span>Anime Title <span className="text-[#B49AF8]">*</span></span>
                   </label>
                   <div className="relative">
                     <input
@@ -790,49 +791,49 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       placeholder="e.g. Solo Leveling, Demon Slayer, Jujutsu Kaisen..."
-                      className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-white placeholder-neutral-500 outline-none transition-all"
+                      className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl py-2.5 pl-3.5 pr-8 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
                     />
-                    <Search className="w-4 h-4 text-neutral-500 absolute right-3 top-3 pointer-events-none" />
+                    <Search className="w-4 h-4 text-[#A1A5B5] absolute right-3 top-3 pointer-events-none" />
                   </div>
                 </div>
 
                 {/* Synopsis Field */}
                 <div>
-                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                  <label className="block font-bold text-[#F4F3FA] mb-1 flex items-center justify-between">
                     <span>Synopsis</span>
-                    <span className="text-[10px] text-neutral-400 font-normal">Plot summary & overview</span>
+                    <span className="text-[10px] text-[#A1A5B5] font-normal">Plot summary & overview</span>
                   </label>
                   <textarea
                     rows={4}
                     value={synopsis}
                     onChange={(e) => setSynopsis(e.target.value)}
                     placeholder="Type or paste a descriptive summary of the anime..."
-                    className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2.5 px-3.5 text-xs text-white placeholder-neutral-500 outline-none transition-all resize-y leading-relaxed font-sans"
+                    className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl py-2.5 px-3.5 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150 resize-y leading-relaxed font-sans"
                   />
                 </div>
 
                 {/* Poster Upload Area */}
                 <div>
-                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                  <label className="block font-bold text-[#F4F3FA] mb-1 flex items-center justify-between">
                     <span>Anime Poster (Upload File or Enter URL)</span>
                   </label>
                   <div className="space-y-2">
                     <div className="flex gap-3 items-center">
                       <div 
                         onClick={() => !isUploading && fileInputRef.current?.click()}
-                        className="flex-1 h-16 border-2 border-dashed border-neutral-700 hover:border-primary-theme rounded-2xl bg-[#171e2e] flex flex-col items-center justify-center cursor-pointer transition-all group"
+                        className="flex-1 h-16 border border-dashed border-[#292B39] hover:border-[#B49AF8] rounded-xl bg-[#191C29] flex flex-col items-center justify-center cursor-pointer transition-colors duration-150 group"
                       >
                         {isUploading ? (
                           <>
-                            <Loader2 className="w-4 h-4 text-primary-theme animate-spin mb-0.5" />
-                            <span className="text-[10px] text-neutral-300 font-bold uppercase tracking-wider">
+                            <Loader2 className="w-4 h-4 text-[#B49AF8] animate-spin mb-0.5" />
+                            <span className="text-[10px] text-[#F4F3FA] font-bold uppercase tracking-wider">
                               Uploading...
                             </span>
                           </>
                         ) : (
                           <>
-                            <Upload className="w-4 h-4 text-neutral-500 group-hover:text-accent-theme mb-0.5" />
-                            <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider group-hover:text-neutral-200">
+                            <Upload className="w-4 h-4 text-[#A1A5B5] group-hover:text-[#B49AF8] mb-0.5" />
+                            <span className="text-[10px] text-[#A1A5B5] font-bold uppercase tracking-wider group-hover:text-[#F4F3FA]">
                               {poster ? 'Change Uploaded Photo' : 'Upload Image File'}
                             </span>
                           </>
@@ -850,7 +851,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                           <img
                             src={poster || formData.poster || undefined}
                             alt="Preview"
-                            className="w-12 h-16 object-cover rounded-xl border border-primary-theme/50 shadow-xl"
+                            className="w-12 h-16 object-cover rounded-xl border border-[#B49AF8]/50"
                           />
                           <button 
                             type="button"
@@ -865,7 +866,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               }));
                               if (fileInputRef.current) fileInputRef.current.value = '';
                             }}
-                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center text-white border border-black shadow-lg hover:bg-purple-500 transition-colors"
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#B49AF8] rounded-full flex items-center justify-center text-[#0B0A10] border border-[#0B0A10] hover:bg-[#CBB6FF] transition-colors"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -886,19 +887,19 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                         }));
                       }}
                       placeholder="Or paste poster image URL (https://...)"
-                      className="w-full bg-[#171e2e] border border-neutral-700/80 focus:border-primary-theme rounded-xl py-2 px-3 text-xs text-white placeholder-neutral-500 outline-none transition-all"
+                      className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl py-2 px-3 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
                     />
                   </div>
                 </div>
 
                 {/* Streaming Partners */}
                 <div className="space-y-2">
-                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                  <label className="block font-bold text-[#F4F3FA] mb-1 flex items-center justify-between">
                     <span>Streaming Partners &amp; Per-Platform Dubs</span>
                     <button 
                       type="button" 
                       onClick={addStreamingPartner}
-                      className="text-[10px] text-accent-theme font-bold hover:text-primary-theme flex items-center gap-1 cursor-pointer"
+                      className="text-[11px] text-[#B49AF8] font-bold hover:text-[#CBB6FF] flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
                       Add Platform
@@ -914,13 +915,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       const activePlatformLabel = partner.name?.trim() || selectOptions[0] || 'Platform';
 
                       return (
-                        <div key={`stream_partner_${idx}`} className="bg-[#141b29] border border-neutral-800 rounded-2xl p-3 space-y-2.5">
+                        <div key={`stream_partner_${idx}`} className="bg-[#191C29] border border-[#292B39] rounded-xl p-3 space-y-2.5">
                           <div className="flex gap-2 items-start">
                             <div className="w-1/3">
                               <select
                                 value={partner.name}
                                 onChange={(e) => updateStreamingPartner(idx, 'name', e.target.value)}
-                                className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-2.5 py-2 text-[11px] text-white focus:outline-none focus:border-primary-theme cursor-pointer"
+                                className="w-full bg-[#12141E] border border-[#292B39] rounded-xl px-2.5 py-2 text-[11px] text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer"
                               >
                                 {selectOptions.map((platOption) => (
                                   <option key={platOption} value={platOption}>{platOption}</option>
@@ -933,28 +934,28 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                                 value={partner.url}
                                 onChange={(e) => updateStreamingPartner(idx, 'url', e.target.value)}
                                 placeholder="Link (e.g. https://www.crunchyroll.com/...)"
-                                className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-[11px] text-white placeholder-neutral-600 focus:outline-none focus:border-primary-theme"
+                                className="w-full bg-[#12141E] border border-[#292B39] rounded-xl px-3 py-2 text-[11px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8]"
                               />
                             </div>
                             {streamingPartners.length > 1 && (
                               <button
                                 type="button"
                                 onClick={() => removeStreamingPartner(idx)}
-                                className="p-2.5 rounded-xl bg-neutral-800/50 text-neutral-500 hover:text-purple-400 hover:bg-purple-950/25 transition-all cursor-pointer"
+                                className="p-2.5 rounded-xl bg-[#12141E] border border-[#292B39] text-[#A1A5B5] hover:text-[#F87171] hover:border-[#F87171]/40 transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>
 
-                          {/* Per-Platform Language Selection Checkboxes (only shown when 2+ platforms exist) */}
+                          {/* Per-Platform Language Selection Checkboxes */}
                           {streamingPartners.length > 1 && (
-                            <div className="pt-2 border-t border-white/5 space-y-1.5">
+                            <div className="pt-2 border-t border-[#292B39] space-y-1.5">
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                                <span className="text-[10px] font-bold text-[#A1A5B5] uppercase tracking-wider">
                                   Languages on {activePlatformLabel}
                                 </span>
-                                <span className="text-[10px] text-purple-300 font-semibold truncate max-w-[55%]">
+                                <span className="text-[10px] text-[#B49AF8] font-semibold truncate max-w-[55%]">
                                   {partner.languages && partner.languages.length > 0
                                     ? partner.languages.join(', ')
                                     : 'Select dubs'}
@@ -966,10 +967,10 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                                   return (
                                     <label
                                       key={`partner_${idx}_lang_${lang}`}
-                                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer select-none ${
+                                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors duration-150 cursor-pointer select-none ${
                                         isChecked
-                                          ? 'bg-purple-600 text-white font-bold ring-1 ring-purple-400 shadow-sm'
-                                          : 'bg-[#121829] text-neutral-400 border border-neutral-700 hover:text-neutral-200 hover:border-neutral-600'
+                                          ? 'bg-[#B49AF8] text-[#0B0A10] font-bold border border-[#B49AF8]'
+                                          : 'bg-[#12141E] text-[#A1A5B5] border border-[#292B39] hover:text-[#F4F3FA]'
                                       }`}
                                     >
                                       <input
@@ -982,8 +983,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                                         aria-hidden="true"
                                         className={`w-3 h-3 rounded flex items-center justify-center text-[9px] font-black border ${
                                           isChecked
-                                            ? 'bg-white text-purple-700 border-white'
-                                            : 'border-neutral-600 bg-black/30 text-transparent'
+                                            ? 'bg-[#0B0A10] text-[#B49AF8] border-[#0B0A10]'
+                                            : 'border-[#292B39] bg-[#0B0A10] text-transparent'
                                         }`}
                                       >
                                         ✓
@@ -1007,7 +1008,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   return (
                     <div className={`grid grid-cols-1 ${showScheduleFields ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2'} gap-3`}>
                       <div>
-                        <label className="block font-bold text-neutral-300 mb-1">Type</label>
+                        <label className="block font-bold text-[#F4F3FA] mb-1">Type</label>
                         <select 
                           value={formData.type || type || 'TV Series'} 
                           onChange={(e) => {
@@ -1023,7 +1024,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               setFormData((prev: any) => ({ ...prev, status: 'Completed', airing_status: 'Completed' }));
                             }
                           }}
-                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
+                          className="w-full bg-[#191C29] border border-[#292B39] rounded-xl px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs"
                         >
                           <option value="TV Series">TV Series</option>
                           <option value="Movie">Movie</option>
@@ -1032,7 +1033,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       </div>
 
                       <div>
-                        <label className="block font-bold text-neutral-300 mb-1">Status</label>
+                        <label className="block font-bold text-[#F4F3FA] mb-1">Status</label>
                         <select
                           aria-label="Anime Status"
                           value={statusState}
@@ -1047,7 +1048,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                             }
                             setFormData((prev: any) => ({ ...prev, status: newStatus, airing_status: newStatus }));
                           }}
-                          className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
+                          className="w-full bg-[#191C29] border border-[#292B39] rounded-xl px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs"
                         >
                           <option value="Airing">Airing</option>
                           <option value="Completed">Completed</option>
@@ -1058,12 +1059,12 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                       {showScheduleFields && (
                         <div>
-                          <label className="block font-bold text-neutral-300 mb-1">Broadcast Day</label>
+                          <label className="block font-bold text-[#F4F3FA] mb-1">Broadcast Day</label>
                           <select
                             value={releaseDay}
                             onChange={(e) => setReleaseDay(e.target.value)}
                             aria-label="Broadcast Day"
-                            className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"
+                            className="w-full bg-[#191C29] border border-[#292B39] rounded-xl px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs"
                           >
                             <option value="">TBA / Unscheduled</option>
                             {ALL_DAYS.map((day) => (
@@ -1075,7 +1076,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                       {showScheduleFields && (
                         <div>
-                          <label className="block font-bold text-neutral-300 mb-1">Broadcast Time (IST)</label>
+                          <label className="block font-bold text-[#F4F3FA] mb-1">Broadcast Time (IST)</label>
                           <input
                             type="text"
                             value={broadcastTime}
@@ -1083,7 +1084,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                             placeholder="e.g. 08:30 PM IST"
                             aria-label="Broadcast Time"
                             maxLength={40}
-                            className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none focus:border-primary-theme"
+                            className="w-full bg-[#191C29] border border-[#292B39] rounded-xl px-3 py-2 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none focus:border-[#B49AF8]"
                           />
                         </div>
                       )}
@@ -1093,33 +1094,33 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                 {/* Currently Airing Box */}
                 {(statusState === 'Airing' || statusState === 'Ongoing') && (
-                  <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-4 space-y-3">
+                  <div className="bg-[#191C29] border border-[#F9C876]/35 rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider">
-                        <Sparkles className="w-4 h-4 text-amber-400" />
+                      <div className="flex items-center gap-2 text-[#F9C876] text-xs font-bold uppercase tracking-wider">
+                        <Sparkles className="w-4 h-4 text-[#F9C876]" />
                         <span>Currently Airing Details</span>
                       </div>
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                      <span className="w-2 h-2 rounded-full bg-[#F9C876]" />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[11px] font-bold text-amber-300/90 mb-1">Current Season</label>
+                        <label className="block text-[11px] font-bold text-[#F4F3FA] mb-1">Current Season</label>
                         <input
                           type="text"
                           value={currentSeason}
                           onChange={(e) => setCurrentSeason(e.target.value)}
                           placeholder="e.g. Season 2"
-                          className="w-full bg-[#171e2e] border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none"
+                          className="w-full bg-[#12141E] border border-[#292B39] focus:border-[#F9C876] rounded-xl px-3 py-2 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-bold text-amber-300/90 mb-1">Live Episode</label>
+                        <label className="block text-[11px] font-bold text-[#F4F3FA] mb-1">Live Episode</label>
                         <input
                           type="number"
                           value={currentlyAiringEpisode}
                           onChange={(e) => setCurrentlyAiringEpisode(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                           placeholder="e.g. 5"
-                          className="w-full bg-[#171e2e] border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none"
+                          className="w-full bg-[#12141E] border border-[#292B39] focus:border-[#F9C876] rounded-xl px-3 py-2 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none"
                         />
                       </div>
                     </div>
@@ -1128,15 +1129,15 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                 {/* Mixed Entries Section */}
                 <div className="space-y-3">
-                  <label className="block font-bold text-neutral-300 mb-1 flex items-center justify-between">
+                  <label className="block font-bold text-[#F4F3FA] mb-1 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <Tv className="w-3.5 h-3.5 text-accent-theme" />
+                      <Tv className="w-3.5 h-3.5 text-[#B49AF8]" />
                       <span>Mixed Entries (Seasons, OVAs, Movies)</span>
                     </div>
                     <button 
                       type="button" 
                       onClick={addEntry}
-                      className="text-[10px] text-accent-theme font-bold hover:text-primary-theme flex items-center gap-1 cursor-pointer"
+                      className="text-[11px] text-[#B49AF8] font-bold hover:text-[#CBB6FF] flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
                       Add Entry
@@ -1145,13 +1146,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                   <div className="space-y-2.5">
                     {seasonDetails.map((entry, idx) => (
-                      <div key={`season_entry_${idx}`} className="bg-[#171e2e] border border-neutral-700/80 rounded-2xl p-3 space-y-2.5">
+                      <div key={`season_entry_${idx}`} className="bg-[#191C29] border border-[#292B39] rounded-xl p-3 space-y-2.5">
                         <div className="grid grid-cols-12 gap-2">
                           <div className="col-span-4">
                             <select
                               value={entry.type}
                               onChange={(e) => updateEntryField(idx, 'type', e.target.value)}
-                              className="w-full bg-[#121829] border border-neutral-700 rounded-xl px-2 py-1.5 text-[11px] text-white outline-none cursor-pointer"
+                              className="w-full bg-[#12141E] border border-[#292B39] rounded-xl px-2 py-1.5 text-[11px] text-[#F4F3FA] outline-none cursor-pointer"
                             >
                               <option value="Season">Season</option>
                               <option value="Movie">Movie</option>
@@ -1166,7 +1167,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               value={entry.label}
                               onChange={(e) => updateEntryField(idx, 'label', e.target.value)}
                               placeholder="Label"
-                              className="w-full bg-[#121829] border border-neutral-700 rounded-xl px-2 py-1.5 text-[11px] text-white outline-none"
+                              className="w-full bg-[#12141E] border border-[#292B39] rounded-xl px-2 py-1.5 text-[11px] text-[#F4F3FA] outline-none"
                             />
                           </div>
                           <div className="col-span-3">
@@ -1175,7 +1176,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               value={entry.episodeCount}
                               onChange={(e) => updateEntryField(idx, 'episodeCount', e.target.value)}
                               placeholder="Eps"
-                              className="w-full bg-[#121829] border border-neutral-700 rounded-xl px-2 py-1.5 text-[11px] text-white outline-none"
+                              className="w-full bg-[#12141E] border border-[#292B39] rounded-xl px-2 py-1.5 text-[11px] text-[#F4F3FA] outline-none"
                             />
                           </div>
                           <div className="col-span-2 flex justify-center items-center">
@@ -1183,7 +1184,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => removeEntry(idx)}
-                                className="p-1.5 rounded-xl text-neutral-500 hover:text-purple-400 hover:bg-purple-950/20 transition-all cursor-pointer"
+                                className="p-1.5 rounded-xl text-[#A1A5B5] hover:text-[#F87171] hover:bg-[#12141E] transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1193,7 +1194,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                         {/* Language Pill Toggles */}
                         <div>
-                          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">Available Languages:</span>
+                          <span className="text-[10px] font-bold text-[#A1A5B5] uppercase tracking-wider block mb-1">Available Languages:</span>
                           <div className="flex flex-wrap gap-1.5">
                             {ALL_LANGS.map(sl => {
                               const isSel = entry.languages.includes(sl);
@@ -1202,10 +1203,10 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                                   key={sl}
                                   type="button"
                                   onClick={() => toggleLangForEntry(idx, sl)}
-                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors duration-150 cursor-pointer ${
                                     isSel
-                                      ? 'bg-purple-600 text-white font-bold ring-1 ring-purple-400'
-                                      : 'bg-[#121829] text-neutral-400 border border-neutral-700'
+                                      ? 'bg-[#B49AF8] text-[#0B0A10] font-bold border border-[#B49AF8]'
+                                      : 'bg-[#12141E] text-[#A1A5B5] border border-[#292B39]'
                                   }`}
                                 >
                                   {sl}
@@ -1221,14 +1222,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                 {/* Genres */}
                 <div>
-                  <label className="block font-bold text-neutral-300 mb-1.5 flex items-center justify-between">
+                  <label className="block font-bold text-[#F4F3FA] mb-1.5 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
                       <span>Genres</span>
-                      <span className="text-[10px] text-neutral-400 font-normal">(Select all that apply)</span>
+                      <span className="text-[10px] text-[#A1A5B5] font-normal">(Select all that apply)</span>
                     </span>
-                    <span className="text-[10px] text-purple-400 font-bold">{genres.length} selected</span>
+                    <span className="text-[10px] text-[#B49AF8] font-bold">{genres.length} selected</span>
                   </label>
-                  <div className="flex flex-wrap gap-2 p-3.5 rounded-2xl bg-[#141b29] border border-neutral-700/80 max-h-48 overflow-y-auto no-scrollbar">
+                  <div className="flex flex-wrap gap-2 p-3.5 rounded-xl bg-[#191C29] border border-[#292B39] max-h-48 overflow-y-auto no-scrollbar">
                     {AVAILABLE_GENRES.map((g) => {
                       const isSelected = genres.includes(g);
                       return (
@@ -1236,13 +1237,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                           type="button"
                           key={g}
                           onClick={() => toggleGenre(g)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors duration-150 cursor-pointer flex items-center gap-1.5 ${
                             isSelected
-                              ? 'bg-gradient-to-r from-[#9333ea] to-[#7c3aed] text-white shadow-[0_0_15px_rgba(147,51,234,0.45)] ring-1 ring-purple-400/70'
-                              : 'bg-[#1a2235] text-neutral-400 hover:text-neutral-200 border border-neutral-700/60 hover:border-neutral-600'
+                              ? 'bg-[#B49AF8] text-[#0B0A10] border border-[#B49AF8]'
+                              : 'bg-[#12141E] text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39]'
                           }`}
                         >
-                          {isSelected && <span className="text-white text-xs font-black">✓</span>}
+                          {isSelected && <span className="text-[#0B0A10] text-xs font-black">✓</span>}
                           <span>{g}</span>
                         </button>
                       );
@@ -1253,27 +1254,27 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                 {/* Studio, Year, Rating */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block font-bold text-neutral-400 mb-1">Studio</label>
+                    <label className="block font-bold text-[#A1A5B5] mb-1">Studio</label>
                     <input
                       type="text"
                       value={studio}
                       onChange={(e) => setStudio(e.target.value)}
                       placeholder="e.g. Ufotable"
-                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none"
+                      className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl px-3 py-2 text-[#F4F3FA] text-xs outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-neutral-400 mb-1">Year</label>
+                    <label className="block font-bold text-[#A1A5B5] mb-1">Year</label>
                     <input
                       type="number"
                       value={releaseYear}
                       onChange={(e) => setReleaseYear(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                       placeholder="2025"
-                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none"
+                      className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl px-3 py-2 text-[#F4F3FA] text-xs outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-neutral-400 mb-1">Rating</label>
+                    <label className="block font-bold text-[#A1A5B5] mb-1">Rating</label>
                     <input
                       type="number"
                       step="0.1"
@@ -1282,19 +1283,19 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       value={rating}
                       onChange={(e) => setRating(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       placeholder="8.5"
-                      className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white text-xs outline-none"
+                      className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl px-3 py-2 text-[#F4F3FA] text-xs outline-none"
                     />
                   </div>
                 </div>
 
                 {/* Strict Moderation Gate Card */}
-                <div className="rounded-2xl p-4 bg-amber-950/20 border border-amber-500/30 space-y-1.5">
-                  <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
+                <div className="rounded-xl p-4 bg-[#191C29] border border-[#F9C876]/35 space-y-1.5">
+                  <div className="flex items-center gap-2 text-[#F9C876] text-xs font-bold">
                     <ShieldAlert className="w-4 h-4 shrink-0" />
                     <span>Strict Moderation Gate</span>
                   </div>
-                  <p className="text-[11px] text-neutral-300 leading-relaxed">
-                    This submission will be saved with <span className="text-amber-400 font-bold">approval status: "pending"</span>. It will <span className="text-rose-400 font-bold">NEVER</span> appear on the public website until approved by the admin.
+                  <p className="text-[11px] text-[#A1A5B5] leading-relaxed">
+                    This submission will be saved with <span className="text-[#F9C876] font-bold">approval status: "pending"</span>. It will <span className="text-[#F87171] font-bold">NEVER</span> appear on the public website until approved by the admin.
                   </p>
                 </div>
 
@@ -1303,24 +1304,23 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
           </div>
         </div>
 
-        {/* STICKY GLOWING FOOTER BUTTON */}
+        {/* STICKY FOOTER BUTTON */}
         {!isSuccess && (
-          <div className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-[#111726] via-[#111726]/95 to-transparent backdrop-blur-lg border-t border-white/5 z-50">
+          <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 bg-[#191C29] border-t border-[#292B39] z-50">
             <button
               type="submit"
               form="dub-info-form"
               disabled={isSubmitting || !title.trim()}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-purple-600 hover:from-orange-500 hover:via-amber-500 hover:to-purple-500 text-white font-black text-sm flex items-center justify-center gap-3 cursor-pointer shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+              className="w-full min-h-[48px] px-5 py-3 rounded-xl bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-black text-sm flex items-center justify-center gap-2.5 cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
-                <div className="flex items-center gap-2 text-white">
-                  <Loader2 className="w-5 h-5 animate-spin text-amber-300" />
+                <div className="flex items-center gap-2 text-[#0B0A10]">
+                  <Loader2 className="w-5 h-5 animate-spin" />
                   <span>{mode === 'edit' ? 'Saving changes...' : 'Submitting...'}</span>
                 </div>
               ) : (
-                <div className="relative flex items-center gap-3">
-                  <div className="absolute -inset-1 bg-white rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity" />
-                  <Send className="w-5 h-5 relative" />
+                <div className="flex items-center gap-2.5">
+                  <Send className="w-4 h-4" />
                   <span>{mode === 'edit' ? 'Save Anime Changes' : 'Submit Dub for Admin Approval'}</span>
                 </div>
               )}

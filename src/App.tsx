@@ -42,19 +42,14 @@ import {
   writeScopedJson,
 } from './utils/accountIsolation';
 import { OfflineIndicator } from './components/PWAInstallButton';
+import { PageViewSkeleton, DetailModalSkeleton } from './components/SkeletonGrid';
+import { Button } from './components/ui/Button';
 
-const ViewLoadingFallback = () => (
-  <div className="w-full min-h-[50vh] flex flex-col items-center justify-center p-8 space-y-3">
-    <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
-    <span className="text-xs text-neutral-400 font-medium tracking-wide">Loading view...</span>
-  </div>
+const ViewLoadingFallback: React.FC<{ tab?: string }> = ({ tab }) => (
+  <PageViewSkeleton tab={tab} />
 );
 
-const ModalLoadingFallback = () => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm">
-    <Loader2 className="w-10 h-10 text-purple-400 animate-spin" />
-  </div>
-);
+const ModalLoadingFallback = () => <DetailModalSkeleton />;
 
 // Code-split heavy, below-the-fold, and non-critical views using React.lazy
 const GodModeTracker = lazy(() => import('./components/GodModeTracker').then(m => ({ default: m.GodModeTracker })));
@@ -1103,23 +1098,23 @@ export default function App() {
       )}
 
       {/* 3. MAIN CONTENT VIEWS WITH SMOOTH PAGE TRANSITIONS */}
-      <main className="flex-grow w-full max-w-full overflow-x-clip pt-4 sm:pt-6 pb-24 sm:pb-16 transition-all duration-500 box-border">
+      <main className="flex-grow w-full max-w-full overflow-x-clip pt-3 sm:pt-5 pb-24 sm:pb-16 transition-colors duration-150 box-border">
         <AnimatePresence mode="wait">
           <motion.div
             key={`page_view_${activeTab}_${activeTab === 'explore' ? feedView : ''}`}
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
             className="w-full min-w-0 max-w-full overflow-x-clip"
           >
             {/* FOR YOU HEADER METADATA BLOCK (WHEN FORYOU FEED ACTIVE) */}
             {feedView === 'foryou' && (activeTab === 'explore' || activeTab === 'catalog') && (
-              <div className="w-full max-w-5xl mx-auto px-4 mb-6">
-                <div className="p-5 rounded-3xl bg-primary-theme/5 border border-primary-theme/10 flex items-center justify-between">
+              <div className="w-full max-w-5xl mx-auto px-4 mb-5">
+                <div className="p-4 rounded-2xl bg-[#12141E] border border-[#292B39] flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg font-black text-white">Recommended For You</h2>
-                    <p className="text-xs text-neutral-400">Curated specifically based on your watch history and dub preferences.</p>
+                    <h2 className="text-base sm:text-lg font-extrabold text-[#F4F3FA]">Recommended For You</h2>
+                    <p className="text-xs text-[#A1A5B5]">Curated specifically based on your watch history and dub preferences.</p>
                   </div>
                 </div>
               </div>
@@ -1343,24 +1338,25 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-label="Anime Not Found"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0f1115]/90 backdrop-blur-xl"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80"
           >
-            <div className="max-w-md w-full rounded-3xl bg-[#111726] border border-white/10 p-8 shadow-2xl text-center space-y-4">
-              <div className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-extrabold uppercase tracking-wider">
+            <div className="max-w-md w-full rounded-2xl bg-[#12141E] border border-[#292B39] p-6 sm:p-8 shadow-2xl text-center space-y-4">
+              <div className="inline-flex items-center justify-center px-3 py-1 rounded-lg bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] text-xs font-bold uppercase tracking-wider">
                 404 • Not Found
               </div>
-              <h2 className="text-2xl font-black text-white">Anime Not Found</h2>
-              <p className="text-sm text-neutral-400 leading-relaxed">
+              <h2 className="text-xl sm:text-2xl font-extrabold text-[#F4F3FA]">Anime Not Found</h2>
+              <p className="text-xs sm:text-sm text-[#A1A5B5] leading-relaxed">
                 We couldn&apos;t find a published anime matching{' '}
-                <span className="text-white font-semibold">&ldquo;{deepLinkNotFoundSlug}&rdquo;</span> in the AniDub India catalog.
+                <span className="text-[#F4F3FA] font-semibold">&ldquo;{deepLinkNotFoundSlug}&rdquo;</span> in the AniDub India catalog.
               </p>
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="md"
+                fullWidth
                 onClick={() => handleOpenAnime(null)}
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-bold transition-all cursor-pointer shadow-lg"
               >
                 Back to Catalog
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -1453,103 +1449,109 @@ export default function App() {
 
       {/* 5. Clerk Admin Authentication Modal */}
       {isPasswordModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-          <div className="w-full max-w-md bg-[#121829] border border-primary-theme rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 relative">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85">
+          <div className="w-full max-w-md bg-[#12141E] border border-[#292B39] rounded-2xl p-6 shadow-2xl relative">
             <div className="text-center mb-5 flex flex-col items-center">
               <AniDubLogo variant="stacked" size="sm" className="mb-3" />
-              <h3 className="text-lg font-black text-white">Clerk Admin Protection</h3>
-              <p className="text-xs text-neutral-400 mt-1">
-                Strict Clerk Authentication is required to access <code className="text-purple-400">/admin</code>
+              <h3 className="text-lg font-extrabold text-[#F4F3FA]">Clerk Admin Protection</h3>
+              <p className="text-xs text-[#A1A5B5] mt-1">
+                Strict Clerk Authentication is required to access <code className="text-[#B49AF8]">/admin</code>
               </p>
             </div>
 
             {!isSignedIn ? (
               <div className="flex flex-col items-center space-y-4">
                 <SignIn />
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="md"
+                  fullWidth
                   onClick={() => setIsPasswordModalOpen(false)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#161d2f] hover:bg-[#1a2236] text-neutral-300 text-xs font-semibold transition-colors border border-neutral-800 cursor-pointer"
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
             ) : isClerkAdmin ? (
               <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3">
-                  <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div className="p-4 rounded-2xl bg-[#34D399]/10 border border-[#34D399]/30 flex items-center gap-3">
+                  <ShieldCheck className="w-5 h-5 text-[#34D399] shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-emerald-300">Authorized Clerk Administrator</p>
-                    <p className="text-[11px] text-neutral-300 truncate">{clerkUser?.primaryEmailAddress?.emailAddress}</p>
+                    <p className="text-xs font-bold text-[#34D399]">Authorized Clerk Administrator</p>
+                    <p className="text-[11px] text-[#A1A5B5] truncate">{clerkUser?.primaryEmailAddress?.emailAddress}</p>
                   </div>
                 </div>
 
                 {adminAuthError && (
-                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-[11px] text-rose-400 font-medium text-center break-words">
+                  <div className="p-3 rounded-xl bg-[#F87171]/10 border border-[#F87171]/30 text-[11px] text-[#F87171] font-medium text-center break-words">
                     {adminAuthError}
                   </div>
                 )}
 
-                <div className="flex space-x-3 pt-2">
-                  <button
-                    type="button"
+                <div className="flex gap-2.5 pt-2">
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    className="flex-1"
                     onClick={() => setIsPasswordModalOpen(false)}
-                    className="flex-1 px-4 py-2.5 rounded-xl bg-[#161d2f] hover:bg-[#1a2236] text-neutral-300 text-xs font-semibold transition-colors border border-neutral-800 cursor-pointer"
                   >
                     Cancel
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    className="flex-1"
                     onClick={handleVerifyClerkAdminUnlock}
                     disabled={adminPasswordLoading}
-                    className="flex-1 px-4 py-2.5 rounded-xl btn-primary-theme text-white text-xs font-bold transition-all shadow-lg shadow-purple-950/40 disabled:opacity-50 cursor-pointer"
                   >
                     {adminPasswordLoading ? 'Verifying...' : 'Open Admin Console'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3">
-                  <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="p-4 rounded-2xl bg-[#F87171]/10 border border-[#F87171]/30 flex items-start gap-3">
+                  <ShieldAlert className="w-5 h-5 text-[#F87171] shrink-0 mt-0.5" />
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-rose-300">Admin Verification Status</p>
-                    <p className="text-[11px] text-neutral-300 mt-1">
-                      Signed in as <span className="font-mono text-white">{clerkUser?.primaryEmailAddress?.emailAddress}</span>.
+                    <p className="text-xs font-bold text-[#F87171]">Admin Verification Status</p>
+                    <p className="text-[11px] text-[#A1A5B5] mt-1">
+                      Signed in as <span className="font-mono text-[#F4F3FA]">{clerkUser?.primaryEmailAddress?.emailAddress}</span>.
                     </p>
                     {adminAuthError && (
-                      <p className="text-[11px] text-rose-300 mt-2 font-medium break-words">
+                      <p className="text-[11px] text-[#F87171] mt-2 font-medium break-words">
                         {adminAuthError}
                       </p>
                     )}
                   </div>
                 </div>
 
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="md"
+                  fullWidth
                   onClick={handleVerifyClerkAdminUnlock}
                   disabled={adminPasswordLoading}
-                  className="w-full px-4 py-2.5 rounded-xl btn-primary-theme text-white text-xs font-bold transition-all shadow-lg shadow-purple-950/40 disabled:opacity-50 cursor-pointer"
                 >
                   {adminPasswordLoading ? 'Verifying...' : 'Open Admin Console'}
-                </button>
+                </Button>
 
-                <div className="flex space-x-3 pt-1">
-                  <button
-                    type="button"
+                <div className="flex gap-2.5 pt-1">
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    className="flex-1"
                     onClick={() => setIsPasswordModalOpen(false)}
-                    className="flex-1 px-4 py-2.5 rounded-xl bg-[#161d2f] hover:bg-[#1a2236] text-neutral-300 text-xs font-semibold transition-colors border border-neutral-800 cursor-pointer"
                   >
                     Close
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="md"
+                    className="flex-1"
                     onClick={() => clerkSignOut()}
-                    className="flex-1 px-4 py-2.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    leftIcon={<LogOut className="w-3.5 h-3.5" />}
                   >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Switch Account</span>
-                  </button>
+                    Switch Account
+                  </Button>
                 </div>
               </div>
             )}
