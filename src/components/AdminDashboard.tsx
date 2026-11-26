@@ -427,12 +427,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     addTerminalLog('SYNC', 'Querying Cloudflare Edge D1 endpoint: /api/anime');
     setApiError(false);
     try {
-      const { data, meta } = await cloudflareApi.fetchCatalog({ page: 1, limit: 100 });
+      const { data, meta } = await cloudflareApi.fetchCatalog({ page: 1, limit: 100, fresh: true });
       const allData = [...(data || [])];
       if (meta && meta.totalPages > 1) {
         const extraPages = Math.min(meta.totalPages, 10);
         for (let p = 2; p <= extraPages; p++) {
-          const nextRes = await cloudflareApi.fetchCatalog({ page: p, limit: 100 });
+          const nextRes = await cloudflareApi.fetchCatalog({ page: p, limit: 100, fresh: true });
           if (nextRes?.data?.length) allData.push(...nextRes.data);
         }
       }
@@ -533,11 +533,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const rawType = item.type || item.Type || 'TV Series';
       const rawStatusIn = String(item.status || item.airing_status || '').trim().toLowerCase();
-      const targetStatus = rawStatusIn.includes('complete')
-        ? 'Completed'
-        : rawType === 'Movie'
+      const targetStatus =
+        rawStatusIn.includes('complete') || rawStatusIn === 'finished' || rawStatusIn === 'ended'
           ? 'Completed'
-          : 'Airing';
+          : rawStatusIn.includes('upcoming')
+            ? 'Upcoming'
+            : rawStatusIn.includes('ongoing') || rawStatusIn.includes('simulcast')
+              ? 'Ongoing'
+              : rawStatusIn.includes('airing')
+                ? 'Airing'
+                : rawType === 'Movie'
+                  ? 'Completed'
+                  : 'Airing';
 
       const res = await cloudflareApi.approveAnime(itemId, targetStatus);
       if (!res || res.success === false) {
@@ -686,11 +693,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setModalMode('edit');
     const resolvedType = anime.type || anime.Type || 'TV Series';
     const rawStatusStr = String(anime.status || anime.airing_status || '').trim().toLowerCase();
-    const resolvedStatus = rawStatusStr.includes('complete')
-      ? 'Completed'
-      : resolvedType === 'Movie'
+    const resolvedStatus =
+      rawStatusStr.includes('complete') || rawStatusStr === 'finished' || rawStatusStr === 'ended'
         ? 'Completed'
-        : 'Airing';
+        : rawStatusStr.includes('upcoming')
+          ? 'Upcoming'
+          : rawStatusStr.includes('ongoing') || rawStatusStr.includes('simulcast')
+            ? 'Ongoing'
+            : rawStatusStr.includes('airing')
+              ? 'Airing'
+              : resolvedType === 'Movie'
+                ? 'Completed'
+                : 'Airing';
 
     setEditingAnime({
       ...anime,
@@ -1266,22 +1280,32 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
     );
   });
 
-  const handleSaveEdit = async (editedData: AdminAnimeRecord) => {
+  const handleSaveEdit = async (editedData: AdminAnimeRecord & { _savedToServer?: boolean }) => {
     if (!editedData) return;
-    const targetId = editedData.id || editingAnime?.id;
-    const resolvedImage = editedData.posterUrl || editedData.image || editedData.cover_image || editedData.poster;
-    const resolvedType = editedData.type || editedData.Type || editingAnime?.type || 'TV Series';
-    const rawStatusStr = String(editedData.status || editedData.airing_status || '').trim().toLowerCase();
-    const resolvedStatus = rawStatusStr.includes('complete')
-      ? 'Completed'
-      : resolvedType === 'Movie'
+    const alreadySavedToServer = Boolean(editedData._savedToServer);
+    const { _savedToServer: _ignoredSavedFlag, ...cleanEditedInput } = editedData;
+    const targetId = cleanEditedInput.id || editingAnime?.id;
+    const resolvedImage = cleanEditedInput.posterUrl || cleanEditedInput.image || cleanEditedInput.cover_image || cleanEditedInput.poster;
+    const resolvedType = cleanEditedInput.type || cleanEditedInput.Type || editingAnime?.type || 'TV Series';
+    const rawStatusStr = String(cleanEditedInput.status || cleanEditedInput.airing_status || '').trim().toLowerCase();
+    const resolvedStatus =
+      rawStatusStr.includes('complete') || rawStatusStr === 'finished' || rawStatusStr === 'ended'
         ? 'Completed'
-        : 'Airing';
+        : rawStatusStr.includes('upcoming')
+          ? 'Upcoming'
+          : rawStatusStr.includes('ongoing') || rawStatusStr.includes('simulcast')
+            ? 'Ongoing'
+            : rawStatusStr.includes('airing')
+              ? 'Airing'
+              : resolvedType === 'Movie'
+                ? 'Completed'
+                : 'Airing';
+    const isAiringStatus = resolvedStatus === 'Airing' || resolvedStatus === 'Ongoing';
 
     const partnerSources =
-      editedData.streaming_partners ||
-      editedData.platforms_data ||
-      editedData.watch_providers ||
+      cleanEditedInput.streaming_partners ||
+      cleanEditedInput.platforms_data ||
+      cleanEditedInput.watch_providers ||
       editingAnime?.streaming_partners ||
       editingAnime?.platforms_data ||
       editingAnime?.watch_providers;
@@ -1289,55 +1313,60 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
     const derivedPartnerLangs = deriveAggregateLanguagesFromPartners(partnersArray);
 
     const fullEditedData: AdminAnimeRecord = {
-      ...editedData,
-      id: targetId || editedData.id,
+      ...cleanEditedInput,
+      id: targetId || cleanEditedInput.id,
       type: resolvedType,
       Type: resolvedType,
       status: resolvedStatus,
       airing_status: resolvedStatus,
-      image: editedData.posterUrl || editedData.image || resolvedImage,
-      cover_image: editedData.posterUrl || editedData.cover_image || resolvedImage,
-      poster: editedData.posterUrl || editedData.poster || resolvedImage,
-      posterUrl: editedData.posterUrl || resolvedImage,
-      poster_url: editedData.posterUrl || resolvedImage,
-      languages: editedData.languages || derivedPartnerLangs || editingAnime?.languages,
+      broadcast_day: isAiringStatus ? (cleanEditedInput.broadcast_day ?? null) : null,
+      broadcast_time: isAiringStatus ? (cleanEditedInput.broadcast_time ?? null) : null,
+      season: isAiringStatus ? (cleanEditedInput.season ?? null) : null,
+      current_season: isAiringStatus ? (cleanEditedInput.current_season ?? cleanEditedInput.season ?? null) : null,
+      live_episode: isAiringStatus ? (cleanEditedInput.live_episode ?? null) : null,
+      image: cleanEditedInput.posterUrl || cleanEditedInput.image || resolvedImage,
+      cover_image: cleanEditedInput.posterUrl || cleanEditedInput.cover_image || resolvedImage,
+      poster: cleanEditedInput.posterUrl || cleanEditedInput.poster || resolvedImage,
+      posterUrl: cleanEditedInput.posterUrl || resolvedImage,
+      poster_url: cleanEditedInput.posterUrl || resolvedImage,
+      languages: cleanEditedInput.languages || derivedPartnerLangs || editingAnime?.languages,
       streaming_partners: partnersArray,
       platforms_data: partnersArray,
       watch_providers: partnersArray,
       watch_url:
-        editedData.watch_url !== undefined
-          ? String(editedData.watch_url).trim()
+        cleanEditedInput.watch_url !== undefined
+          ? String(cleanEditedInput.watch_url).trim()
           : editingAnime?.watch_url
             ? String(editingAnime.watch_url).trim()
             : '',
       platform:
-        editedData.platform ||
+        cleanEditedInput.platform ||
         normalizePlatformString(partnersArray.map((p) => p.name).filter(Boolean)) ||
         editingAnime?.platform ||
-        'Crunchyroll',
+        '',
       mixed_entries:
-        editedData.mixed_entries !== undefined
-          ? editedData.mixed_entries
-          : editedData.mixedEntries !== undefined
-            ? editedData.mixedEntries
+        cleanEditedInput.mixed_entries !== undefined
+          ? cleanEditedInput.mixed_entries
+          : cleanEditedInput.mixedEntries !== undefined
+            ? cleanEditedInput.mixedEntries
             : editingAnime?.mixed_entries || editingAnime?.mixedEntries || [],
       mixedEntries:
-        editedData.mixedEntries !== undefined
-          ? editedData.mixedEntries
-          : editedData.mixed_entries !== undefined
-            ? editedData.mixed_entries
+        cleanEditedInput.mixedEntries !== undefined
+          ? cleanEditedInput.mixedEntries
+          : cleanEditedInput.mixed_entries !== undefined
+            ? cleanEditedInput.mixed_entries
             : editingAnime?.mixedEntries || editingAnime?.mixed_entries || [],
       episodes_per_season:
-        editedData.episodes_per_season !== undefined
-          ? editedData.episodes_per_season
+        cleanEditedInput.episodes_per_season !== undefined
+          ? cleanEditedInput.episodes_per_season
           : editingAnime?.episodes_per_season || '',
       season_episode_count:
-        editedData.season_episode_count !== undefined
-          ? normalizeSeasonEpisodeCount(editedData.season_episode_count)
+        cleanEditedInput.season_episode_count !== undefined
+          ? normalizeSeasonEpisodeCount(cleanEditedInput.season_episode_count)
           : editingAnime?.season_episode_count || '',
       official_source_url:
-        editedData.official_source_url !== undefined
-          ? String(editedData.official_source_url).trim()
+        cleanEditedInput.official_source_url !== undefined
+          ? String(cleanEditedInput.official_source_url).trim()
           : editingAnime?.official_source_url || '',
     };
 
@@ -1346,7 +1375,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
       const updated = exists
         ? prev.map((item) =>
             item.id === targetId || String(item.id) === String(targetId)
-              ? { ...item, ...fullEditedData, image: editedData.posterUrl || editedData.image || resolvedImage }
+              ? { ...item, ...fullEditedData, image: cleanEditedInput.posterUrl || cleanEditedInput.image || resolvedImage }
               : item
           )
         : [fullEditedData, ...prev];
@@ -1362,7 +1391,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
       setPendingItems((prev) =>
         prev.map((item) =>
           item.id === targetId || String(item.id) === String(targetId)
-            ? { ...item, ...fullEditedData, image: editedData.posterUrl || editedData.image || resolvedImage }
+            ? { ...item, ...fullEditedData, image: cleanEditedInput.posterUrl || cleanEditedInput.image || resolvedImage }
             : item
         )
       );
@@ -1373,19 +1402,23 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
     }
 
     setCloudSyncing(true);
-    setCloudStatusText(`Saving #${targetId || 'new'} to Cloudflare D1...`);
-    addTerminalLog('MUT', `Pushed update for #${targetId || 'new'} (${fullEditedData.title}) to Edge`);
+    setCloudStatusText(`Syncing #${targetId || 'new'} with Cloudflare D1...`);
+    addTerminalLog('MUT', `Pushed update for #${targetId || 'new'} (${fullEditedData.title}) [Status: ${resolvedStatus}] to Edge`);
     try {
-      if (targetId) {
+      if (targetId && !alreadySavedToServer) {
         await cloudflareApi.updateAnime(targetId, fullEditedData);
-        setSuccessMsg('Changes saved to Cloudflare D1.');
-        addTerminalLog('OK', `Cloudflare D1 updated entry #${targetId}`);
-        setTimeout(() => setSuccessMsg(''), 4000);
       }
+      cloudflareApi.clearCatalogIndexCache();
+      setSuccessMsg('Changes saved to Cloudflare D1.');
+      addTerminalLog('OK', `Cloudflare D1 updated entry #${targetId || 'new'} (status: ${resolvedStatus})`);
+      setTimeout(() => setSuccessMsg(''), 4000);
       await fetchAnime();
     } catch (err) {
       console.warn('Notice saving edit to Cloudflare D1:', err);
-      addTerminalLog('WARN', `Edge warning saving edit #${targetId || 'new'}`);
+      const errMsg = err instanceof Error ? err.message : 'Edge save error';
+      setSuccessMsg(`Failed to save changes: ${errMsg}`);
+      addTerminalLog('ERR', `Edge error saving edit #${targetId || 'new'}: ${errMsg}`);
+      setTimeout(() => setSuccessMsg(''), 5000);
     } finally {
       setCloudSyncing(false);
       setCloudStatusText('');
@@ -2053,9 +2086,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         onClose={() => setIsCommandPaletteOpen(false)}
         onSelectTab={setActiveAdminTab}
         onSelectAnime={(anime) => {
-          setEditingAnime(anime);
-          setModalMode('edit');
-          setIsDubModalOpen(true);
+          handleOpenEditModal(anime);
         }}
       />
 

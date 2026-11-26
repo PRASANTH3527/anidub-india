@@ -1000,7 +1000,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[#0b0f17] dark:bg-[#0b0f17] text-neutral-100 flex flex-col font-sans selection:bg-primary-theme selection:text-white transition-colors duration-300 box-border">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[#0B0A10] dark:bg-[#0B0A10] text-[#F4F3FA] flex flex-col font-sans selection:bg-[#B49AF8] selection:text-[#0B0A10] transition-colors duration-200 box-border">
       
       {/* GOD-MODE FIRST-PARTY EDGE ANALYTICS & TELEMETRY TRACKER */}
       <Suspense fallback={null}>
@@ -1045,21 +1045,24 @@ export default function App() {
           <AdminDashboard
             catalogList={catalogList}
             onAnimeCreated={(updatedAnime?: any, deletedId?: string | number) => {
+              cloudflareApi.clearCatalogIndexCache();
               if (deletedId !== undefined && deletedId !== null) {
                 setCatalogList(prev => prev.filter(a => String(a.id) !== String(deletedId)));
+                setFullCatalogIndex(prev => prev.filter(a => String(a.id) !== String(deletedId)));
                 setRecentlyViewed(prev => prev.filter(a => String(a.id) !== String(deletedId)));
                 return;
               }
               if (updatedAnime) {
                 const targetId = updatedAnime.id;
                 const newCover = updatedAnime.posterUrl || updatedAnime.image || updatedAnime.cover_image || updatedAnime.poster;
+                const resolvedStatus = updatedAnime.status || updatedAnime.airing_status || (updatedAnime.type === 'Movie' ? 'Completed' : 'Airing');
                 const normalizedItem = {
                   ...updatedAnime,
                   image: newCover,
                   cover_image: newCover,
                   poster: newCover,
-                  status: updatedAnime.status || updatedAnime.airing_status || (updatedAnime.type === 'Movie' ? 'Completed' : 'Airing'),
-                  airing_status: updatedAnime.airing_status || updatedAnime.status || (updatedAnime.type === 'Movie' ? 'Completed' : 'Airing')
+                  status: resolvedStatus,
+                  airing_status: resolvedStatus,
                 };
 
                 setCatalogList(prev => {
@@ -1069,6 +1072,15 @@ export default function App() {
                   } else {
                     return [normalizedItem, ...prev];
                   }
+                });
+
+                setFullCatalogIndex(prev => {
+                  if (prev.length === 0) return prev;
+                  const exists = prev.some(a => a.id === targetId || String(a.id) === String(targetId));
+                  if (exists) {
+                    return prev.map(a => (a.id === targetId || String(a.id) === String(targetId)) ? { ...a, ...normalizedItem } : a);
+                  }
+                  return [normalizedItem, ...prev];
                 });
 
                 setRecentlyViewed(prev => {

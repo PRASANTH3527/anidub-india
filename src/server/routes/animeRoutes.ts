@@ -105,6 +105,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           };
         });
 
+        const bypassIndexCache = url.searchParams.has('_t') || url.searchParams.get('fresh') === '1';
         return jsonResponse(
           {
             data: lightweight,
@@ -114,7 +115,9 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           200,
           request,
           {
-            'Cache-Control': 'public, max-age=120, s-maxage=300, stale-while-revalidate=600',
+            'Cache-Control': bypassIndexCache
+              ? 'no-store'
+              : 'public, max-age=120, s-maxage=300, stale-while-revalidate=600',
           }
         );
       }
@@ -416,6 +419,8 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             // Optional summary fallback if upvotes/popularity columns vary
           }
 
+          const bypassCatalogCache =
+            includePending || url.searchParams.has('_t') || url.searchParams.get('fresh') === '1';
           return jsonResponse(
             {
               data: results,
@@ -431,7 +436,9 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             200,
             request,
             {
-              'Cache-Control': 'public, max-age=60, s-maxage=120, stale-while-revalidate=300',
+              'Cache-Control': bypassCatalogCache
+                ? 'no-store'
+                : 'public, max-age=60, s-maxage=120, stale-while-revalidate=300',
             }
           );
         } catch (dbErr) {
@@ -592,8 +599,8 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             : 1;
         try {
           const insertRes = await env.DB.prepare(`
-            INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, platforms_data, watch_url, studio, mixedEntries, mixed_entries, episodes_per_season, broadcast_day, broadcast_time, season_episode_count, official_source_url, approval_status, is_published)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, platforms_data, watch_url, studio, mixedEntries, mixed_entries, episodes_per_season, broadcast_day, broadcast_time, season_episode_count, official_source_url, approval_status, is_published, airing_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `)
             .bind(
               body.title,
@@ -623,7 +630,8 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               seasonEpisodeCount,
               officialSourceUrl,
               finalSubmissionStatus,
-              finalIsPublished
+              finalIsPublished,
+              finalStatus
             )
             .run();
           createdId = insertRes.meta?.last_row_id || null;
@@ -682,6 +690,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           animeId: createdId,
           id: createdId,
           status: finalStatus,
+          airing_status: finalStatus,
           platform: normalizedPlatform,
           languages: resolvedLanguages,
           broadcast_day: broadcastDay,
@@ -1104,18 +1113,47 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             ? normalizeSeasonEpisodeCount(body)
             : '';
 
+          const lowerIncomingStatus = incomingStatus.toLowerCase();
+          const isNonAiringStatus =
+            lowerIncomingStatus.includes('complete') ||
+            lowerIncomingStatus === 'finished' ||
+            lowerIncomingStatus === 'ended' ||
+            lowerIncomingStatus.includes('upcoming');
+
+          const explicitSeasonClear =
+            body.season === null ||
+            body.season === '' ||
+            body.current_season === null ||
+            body.current_season === '';
+          const seasonBindValue =
+            isNonAiringStatus && (explicitSeasonClear || body.season === undefined)
+              ? ''
+              : explicitSeasonClear
+                ? ''
+                : updatedSeason;
+
           const hasBroadcastDayUpdate =
+            isNonAiringStatus ||
             body.broadcast_day !== undefined ||
             body.broadcastDay !== undefined ||
             body.releaseDay !== undefined ||
             body.release_day !== undefined;
           const hasBroadcastTimeUpdate =
+            isNonAiringStatus ||
             body.broadcast_time !== undefined ||
             body.broadcastTime !== undefined ||
             body.airTime !== undefined ||
             body.air_time !== undefined;
-          const updatedBroadcastDay = hasBroadcastDayUpdate ? normalizeBroadcastDay(body) : null;
-          const updatedBroadcastTime = hasBroadcastTimeUpdate ? normalizeBroadcastTime(body) : null;
+          const updatedBroadcastDay = isNonAiringStatus
+            ? null
+            : hasBroadcastDayUpdate
+              ? normalizeBroadcastDay(body)
+              : null;
+          const updatedBroadcastTime = isNonAiringStatus
+            ? null
+            : hasBroadcastTimeUpdate
+              ? normalizeBroadcastTime(body)
+              : null;
 
           let updateRes: { meta?: { changes?: number } } | undefined;
           try {
@@ -1129,7 +1167,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 episodes_count = COALESCE(?, episodes_count),
                 status = COALESCE(?, status),
                 submissionStatus = COALESCE(?, submissionStatus),
-                season = COALESCE(?, season),
+                season = NULLIF(COALESCE(?, season), ''),
                 year = COALESCE(?, year),
                 genres = COALESCE(?, genres),
                 languages = COALESCE(?, languages),
@@ -1145,7 +1183,8 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 broadcast_time = CASE WHEN ? = 1 THEN ? ELSE broadcast_time END,
                 season_episode_count = CASE WHEN ? = 1 THEN ? ELSE season_episode_count END,
                 official_source_url = CASE WHEN ? = 1 THEN ? ELSE official_source_url END,
-                last_verified_at = COALESCE(?, last_verified_at)
+                last_verified_at = COALESCE(?, last_verified_at),
+                airing_status = COALESCE(?, airing_status)
               WHERE id = ? OR slug = ?`
             )
               .bind(
@@ -1157,7 +1196,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 updatedEpisodes,
                 incomingStatus || null,
                 body.submissionStatus || null,
-                updatedSeason,
+                seasonBindValue,
                 parsedUpdateYear !== null && Number.isFinite(parsedUpdateYear) ? parsedUpdateYear : null,
                 body.genres || null,
                 resolvedUpdateLanguages,
@@ -1187,6 +1226,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                   : (resolvedUpdateLanguages || normalizedPlatformUpdate || updatedEpisodes !== null
                       ? new Date().toISOString().slice(0, 10)
                       : null),
+                incomingStatus || null,
                 id,
                 id
               )
@@ -1195,60 +1235,122 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             if (!isMissingColumnError(updErr)) {
               throw updErr;
             }
-            updateRes = await env.DB.prepare(
-              `UPDATE anime SET 
-                title = COALESCE(?, title),
-                synopsis = COALESCE(?, synopsis),
-                cover_image = COALESCE(?, cover_image),
-                banner_image = COALESCE(?, banner_image),
-                rating = COALESCE(?, rating),
-                episodes_count = COALESCE(?, episodes_count),
-                status = COALESCE(?, status),
-                submissionStatus = COALESCE(?, submissionStatus),
-                season = COALESCE(?, season),
-                year = COALESCE(?, year),
-                genres = COALESCE(?, genres),
-                languages = COALESCE(?, languages),
-                platform = COALESCE(?, platform),
-                type = COALESCE(?, type),
-                studio = COALESCE(?, studio),
-                platforms_data = CASE WHEN ? IS NOT NULL THEN ? ELSE platforms_data END,
-                watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END,
-                mixedEntries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixedEntries END,
-                mixed_entries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixed_entries END,
-                episodes_per_season = CASE WHEN ? IS NOT NULL THEN ? ELSE episodes_per_season END
-              WHERE id = ? OR slug = ?`
-            )
-              .bind(
-                body.title || null,
-                body.synopsis || null,
-                body.cover_image || null,
-                body.banner_image || null,
-                body.rating !== undefined && body.rating !== null && String(body.rating).trim() !== '' ? parseFloat(String(body.rating)) : null,
-                updatedEpisodes,
-                incomingStatus || null,
-                body.submissionStatus || null,
-                updatedSeason,
-                parsedUpdateYear !== null && Number.isFinite(parsedUpdateYear) ? parsedUpdateYear : null,
-                body.genres || null,
-                resolvedUpdateLanguages,
-                normalizedPlatformUpdate,
-                resolvedType,
-                body.studio || null,
-                partnersJson,
-                partnersJson,
-                resolvedWatchUrl,
-                resolvedWatchUrl,
-                mixedJson,
-                mixedJson,
-                mixedJson,
-                mixedJson,
-                episodesPerSeasonStr,
-                episodesPerSeasonStr,
-                id,
-                id
+            try {
+              updateRes = await env.DB.prepare(
+                `UPDATE anime SET 
+                  title = COALESCE(?, title),
+                  synopsis = COALESCE(?, synopsis),
+                  cover_image = COALESCE(?, cover_image),
+                  banner_image = COALESCE(?, banner_image),
+                  rating = COALESCE(?, rating),
+                  episodes_count = COALESCE(?, episodes_count),
+                  status = COALESCE(?, status),
+                  submissionStatus = COALESCE(?, submissionStatus),
+                  season = NULLIF(COALESCE(?, season), ''),
+                  year = COALESCE(?, year),
+                  genres = COALESCE(?, genres),
+                  languages = COALESCE(?, languages),
+                  platform = COALESCE(?, platform),
+                  type = COALESCE(?, type),
+                  studio = COALESCE(?, studio),
+                  platforms_data = CASE WHEN ? IS NOT NULL THEN ? ELSE platforms_data END,
+                  watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END,
+                  mixedEntries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixedEntries END,
+                  mixed_entries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixed_entries END,
+                  episodes_per_season = CASE WHEN ? IS NOT NULL THEN ? ELSE episodes_per_season END,
+                  airing_status = COALESCE(?, airing_status)
+                WHERE id = ? OR slug = ?`
               )
-              .run();
+                .bind(
+                  body.title || null,
+                  body.synopsis || null,
+                  body.cover_image || null,
+                  body.banner_image || null,
+                  body.rating !== undefined && body.rating !== null && String(body.rating).trim() !== '' ? parseFloat(String(body.rating)) : null,
+                  updatedEpisodes,
+                  incomingStatus || null,
+                  body.submissionStatus || null,
+                  seasonBindValue,
+                  parsedUpdateYear !== null && Number.isFinite(parsedUpdateYear) ? parsedUpdateYear : null,
+                  body.genres || null,
+                  resolvedUpdateLanguages,
+                  normalizedPlatformUpdate,
+                  resolvedType,
+                  body.studio || null,
+                  partnersJson,
+                  partnersJson,
+                  resolvedWatchUrl,
+                  resolvedWatchUrl,
+                  mixedJson,
+                  mixedJson,
+                  mixedJson,
+                  mixedJson,
+                  episodesPerSeasonStr,
+                  episodesPerSeasonStr,
+                  incomingStatus || null,
+                  id,
+                  id
+                )
+                .run();
+            } catch (legacyUpdErr) {
+              if (!isMissingColumnError(legacyUpdErr)) {
+                throw legacyUpdErr;
+              }
+              updateRes = await env.DB.prepare(
+                `UPDATE anime SET 
+                  title = COALESCE(?, title),
+                  synopsis = COALESCE(?, synopsis),
+                  cover_image = COALESCE(?, cover_image),
+                  banner_image = COALESCE(?, banner_image),
+                  rating = COALESCE(?, rating),
+                  episodes_count = COALESCE(?, episodes_count),
+                  status = COALESCE(?, status),
+                  submissionStatus = COALESCE(?, submissionStatus),
+                  season = NULLIF(COALESCE(?, season), ''),
+                  year = COALESCE(?, year),
+                  genres = COALESCE(?, genres),
+                  languages = COALESCE(?, languages),
+                  platform = COALESCE(?, platform),
+                  type = COALESCE(?, type),
+                  studio = COALESCE(?, studio),
+                  platforms_data = CASE WHEN ? IS NOT NULL THEN ? ELSE platforms_data END,
+                  watch_url = CASE WHEN ? IS NOT NULL THEN ? ELSE watch_url END,
+                  mixedEntries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixedEntries END,
+                  mixed_entries = CASE WHEN ? IS NOT NULL THEN ? ELSE mixed_entries END,
+                  episodes_per_season = CASE WHEN ? IS NOT NULL THEN ? ELSE episodes_per_season END
+                WHERE id = ? OR slug = ?`
+              )
+                .bind(
+                  body.title || null,
+                  body.synopsis || null,
+                  body.cover_image || null,
+                  body.banner_image || null,
+                  body.rating !== undefined && body.rating !== null && String(body.rating).trim() !== '' ? parseFloat(String(body.rating)) : null,
+                  updatedEpisodes,
+                  incomingStatus || null,
+                  body.submissionStatus || null,
+                  seasonBindValue,
+                  parsedUpdateYear !== null && Number.isFinite(parsedUpdateYear) ? parsedUpdateYear : null,
+                  body.genres || null,
+                  resolvedUpdateLanguages,
+                  normalizedPlatformUpdate,
+                  resolvedType,
+                  body.studio || null,
+                  partnersJson,
+                  partnersJson,
+                  resolvedWatchUrl,
+                  resolvedWatchUrl,
+                  mixedJson,
+                  mixedJson,
+                  mixedJson,
+                  mixedJson,
+                  episodesPerSeasonStr,
+                  episodesPerSeasonStr,
+                  id,
+                  id
+                )
+                .run();
+            }
           }
 
           if (updateRes?.meta?.changes === 0) {
@@ -1377,28 +1479,35 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             }
           }
 
-          return jsonResponse({
-            success: true,
-            id,
-            status: incomingStatus,
-            languages: resolvedUpdateLanguages,
-            platform: normalizedPlatformUpdate,
-            broadcast_day: updatedBroadcastDay,
-            broadcast_time: updatedBroadcastTime,
-            ...(hasSeasonEpisodeCountUpdate ? { season_episode_count: updatedSeasonEpisodeCount } : {}),
-            ...(hasOfficialSourceUpdate ? { official_source_url: updatedOfficialSourceUrl } : {}),
-            ...(body.franchise_id !== undefined ? { franchise_id: cleanFranchiseId } : {}),
-            ...(body.relation_type !== undefined ? { relation_type: cleanRelationType } : {}),
-            ...(body.sequence_number !== undefined ? { sequence_number: cleanSequenceNumber } : {}),
-            last_verified_at: cleanLastVerifiedAt,
-            platforms_data: hasPartnersUpdate ? normalizedPartners : partnersJson,
-            streaming_partners: hasPartnersUpdate ? normalizedPartners : rawPartners,
-            watch_providers: hasPartnersUpdate ? normalizedPartners : undefined,
-            watch_url: resolvedWatchUrl,
-            mixed_entries: rawMixed,
-            mixedEntries: rawMixed,
-            episodes_per_season: episodesPerSeasonStr,
-          });
+          return jsonResponse(
+            {
+              success: true,
+              id,
+              status: incomingStatus,
+              airing_status: incomingStatus,
+              languages: resolvedUpdateLanguages,
+              platform: normalizedPlatformUpdate,
+              broadcast_day: updatedBroadcastDay,
+              broadcast_time: updatedBroadcastTime,
+              season: seasonBindValue === '' ? null : seasonBindValue,
+              ...(hasSeasonEpisodeCountUpdate ? { season_episode_count: updatedSeasonEpisodeCount } : {}),
+              ...(hasOfficialSourceUpdate ? { official_source_url: updatedOfficialSourceUrl } : {}),
+              ...(body.franchise_id !== undefined ? { franchise_id: cleanFranchiseId } : {}),
+              ...(body.relation_type !== undefined ? { relation_type: cleanRelationType } : {}),
+              ...(body.sequence_number !== undefined ? { sequence_number: cleanSequenceNumber } : {}),
+              last_verified_at: cleanLastVerifiedAt,
+              platforms_data: hasPartnersUpdate ? normalizedPartners : partnersJson,
+              streaming_partners: hasPartnersUpdate ? normalizedPartners : rawPartners,
+              watch_providers: hasPartnersUpdate ? normalizedPartners : undefined,
+              watch_url: resolvedWatchUrl,
+              mixed_entries: rawMixed,
+              mixedEntries: rawMixed,
+              episodes_per_season: episodesPerSeasonStr,
+            },
+            200,
+            request,
+            { 'Cache-Control': 'no-store' }
+          );
         } catch (err) {
           return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
         }

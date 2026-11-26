@@ -1,25 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useUser } from '../lib/clerk';
+import { isAuthorizedClerkAdmin } from '../utils/auth';
 import {
-  Compass,
-  Bookmark,
-  Calendar,
   Trophy,
-  User,
   MessageSquare,
   ShieldCheck,
-  Shield,
   MoreHorizontal,
   Sparkles,
   Plus,
   MessageCircleHeart,
   ChevronDown,
+  ChevronRight,
   X,
   Scale,
   FileText,
 } from 'lucide-react';
 import { AniDubLogo } from './AniDubLogo';
 import { PWAInstallButton } from './PWAInstallButton';
+import { SignatureNavIcon, type NavTabIconName } from './IconRegistry';
+import { Button } from './ui/Button';
 
 interface NavbarProps {
   activeTab: string;
@@ -40,6 +40,15 @@ interface NavbarProps {
   unreadAlertsCount?: number;
 }
 
+interface NavTabConfig {
+  id: string;
+  label: string;
+  iconName: NavTabIconName;
+  active: boolean;
+  badge?: number;
+  onClick: () => void;
+}
+
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
@@ -52,9 +61,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   userAvatar,
   unreadAlertsCount = 0,
 }) => {
-  const { user } = useUser();
+  const { user, isSignedIn } = useUser();
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // Strict authorization check: Hide Admin Dashboard link from unauthorized visitors
+  const isAuthorizedAdminUser = Boolean(
+    isAdminAuthenticated || (isSignedIn && user && isAuthorizedClerkAdmin(user))
+  );
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -62,10 +76,19 @@ export const Navbar: React.FC<NavbarProps> = ({
         setMoreMenuOpen(false);
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMoreMenuOpen(false);
+      }
+    };
     if (moreMenuOpen) {
       document.addEventListener('mousedown', handleOutsideClick);
+      document.addEventListener('keydown', handleKeyDown);
     }
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [moreMenuOpen]);
 
   const logoClickCountRef = useRef(0);
@@ -108,13 +131,25 @@ export const Navbar: React.FC<NavbarProps> = ({
     activeTab === 'copyright' ||
     activeTab === 'admin';
 
-  const primaryDesktopItems = [
-    { id: 'explore', label: 'Explore', icon: Compass, active: isExploreActive, onClick: () => navigate('explore', 'library') },
-    { id: 'schedule', label: 'Schedule', icon: Calendar, active: isScheduleActive, onClick: () => navigate('schedule') },
+  const primaryTabs: NavTabConfig[] = [
+    {
+      id: 'explore',
+      label: 'Explore',
+      iconName: 'explore',
+      active: isExploreActive,
+      onClick: () => navigate('explore', 'library'),
+    },
+    {
+      id: 'schedule',
+      label: 'Schedule',
+      iconName: 'schedule',
+      active: isScheduleActive,
+      onClick: () => navigate('schedule'),
+    },
     {
       id: 'watchlist',
       label: 'Library',
-      icon: Bookmark,
+      iconName: 'library',
       active: isLibraryActive,
       badge: watchlistCount > 0 ? watchlistCount : undefined,
       onClick: () => navigate('watchlist'),
@@ -122,171 +157,379 @@ export const Navbar: React.FC<NavbarProps> = ({
     {
       id: 'profile',
       label: 'Profile',
-      icon: User,
+      iconName: 'profile',
       active: isProfileActive,
       badge: unreadAlertsCount > 0 ? unreadAlertsCount : undefined,
       onClick: () => navigate('profile'),
     },
   ];
 
-  const primaryMobileTabs = [
-    { id: 'explore', label: 'Explore', icon: Compass, active: isExploreActive, onClick: () => navigate('explore', 'library') },
-    { id: 'schedule', label: 'Schedule', icon: Calendar, active: isScheduleActive, onClick: () => navigate('schedule') },
-    {
-      id: 'watchlist',
-      label: 'Library',
-      icon: Bookmark,
-      active: isLibraryActive,
-      badge: watchlistCount > 0 ? watchlistCount : undefined,
-      onClick: () => navigate('watchlist'),
-    },
-    {
-      id: 'profile',
-      label: 'Profile',
-      icon: User,
-      active: isProfileActive,
-      badge: unreadAlertsCount > 0 ? unreadAlertsCount : undefined,
-      onClick: () => navigate('profile'),
-    },
-  ];
+  const mobileBottomSheet =
+    moreMenuOpen && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            data-testid="mobile-more-bottom-sheet"
+            className="md:hidden fixed inset-0 z-[70] flex flex-col justify-end"
+            role="dialog"
+            aria-modal="true"
+            aria-label="More navigation and tools"
+          >
+            {/* Backdrop */}
+            <div
+              onClick={() => setMoreMenuOpen(false)}
+              className="fixed inset-0 bg-black/75 transition-opacity duration-150"
+              aria-hidden="true"
+            />
+
+            {/* Bottom Sheet Surface */}
+            <div
+              className="relative z-10 w-full rounded-t-3xl bg-[#12141E] border-t border-[#292B39] px-4 pt-2.5 pb-6 max-h-[82vh] overflow-y-auto transition-transform duration-150"
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.25rem)' }}
+            >
+              {/* Grab Handle */}
+              <div className="w-10 h-1.5 rounded-full bg-[#292B39] mx-auto mb-3" />
+
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#292B39]">
+                <div>
+                  <h2 className="text-sm font-bold text-[#F4F3FA]">Quick Shortcuts &amp; Tools</h2>
+                  <p className="text-[11px] text-[#A1A5B5]">
+                    Discovery tools, community chat, and catalog support
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMoreMenuOpen(false)}
+                  aria-label="Close menu"
+                  className="min-w-[44px] min-h-[44px] rounded-xl bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Category 1: Discovery Tools */}
+                <div className="space-y-1.5">
+                  <div className="px-1 text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
+                    Discovery Tools
+                  </div>
+                  <div className="rounded-2xl bg-[#191C29] border border-[#292B39] divide-y divide-[#292B39] overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => navigate('foryou', 'foryou')}
+                      className={`w-full min-h-[52px] px-3.5 py-2.5 text-left flex items-center justify-between gap-3 transition-colors duration-150 cursor-pointer ${
+                        activeTab === 'foryou' ? 'bg-[#B49AF8]/15 text-[#F4F3FA]' : 'text-[#F4F3FA] hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
+                          <Sparkles className="w-4 h-4 text-[#B49AF8]" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-[#F4F3FA] truncate">Find Your Next Anime</div>
+                          <div className="text-[11px] text-[#A1A5B5] truncate">Filter by verified dub language &amp; OTT</div>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#A1A5B5] shrink-0" />
+                    </button>
+
+                    {onOpenCompare && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMoreMenuOpen(false);
+                          onOpenCompare();
+                        }}
+                        className="w-full min-h-[52px] px-3.5 py-2.5 text-left flex items-center justify-between gap-3 text-[#F4F3FA] hover:bg-white/[0.03] transition-colors duration-150 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
+                            <Scale className="w-4 h-4 text-[#CBB6FF]" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-[#F4F3FA] truncate">Compare Anime</div>
+                            <div className="text-[11px] text-[#A1A5B5] truncate">Side-by-side Indian dubs &amp; OTT platforms</div>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-[#A1A5B5] shrink-0" />
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => navigate('tierlist')}
+                      className={`w-full min-h-[52px] px-3.5 py-2.5 text-left flex items-center justify-between gap-3 transition-colors duration-150 cursor-pointer ${
+                        activeTab === 'tierlist' ? 'bg-[#B49AF8]/15 text-[#F4F3FA]' : 'text-[#F4F3FA] hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
+                          <Trophy className="w-4 h-4 text-[#F9C876]" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-[#F4F3FA] truncate">Tier List Maker</div>
+                          <div className="text-[11px] text-[#A1A5B5] truncate">Rank your favorite Indian dubbed anime</div>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#A1A5B5] shrink-0" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Category 2: Community & Contributions */}
+                <div className="space-y-1.5">
+                  <div className="px-1 text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
+                    Community &amp; Contributions
+                  </div>
+                  <div className="rounded-2xl bg-[#191C29] border border-[#292B39] divide-y divide-[#292B39] overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => navigate('chat')}
+                      className={`w-full min-h-[52px] px-3.5 py-2.5 text-left flex items-center justify-between gap-3 transition-colors duration-150 cursor-pointer ${
+                        isChatActive ? 'bg-[#B49AF8]/15 text-[#F4F3FA]' : 'text-[#F4F3FA] hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
+                          <MessageSquare className="w-4 h-4 text-[#B49AF8]" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-[#F4F3FA] truncate">Community Chat</div>
+                          <div className="text-[11px] text-[#A1A5B5] truncate">Live Indian dub discussions</div>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#A1A5B5] shrink-0" />
+                    </button>
+
+                    {onSubmitDub && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMoreMenuOpen(false);
+                          onSubmitDub();
+                        }}
+                        className="w-full min-h-[52px] px-3.5 py-2.5 text-left flex items-center justify-between gap-3 text-[#F4F3FA] hover:bg-white/[0.03] transition-colors duration-150 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
+                            <Plus className="w-4 h-4 text-[#34D399]" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-[#F4F3FA] truncate">Submit an Anime or Dub</div>
+                            <div className="text-[11px] text-[#A1A5B5] truncate">Add a verified regional dub to the queue</div>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-[#A1A5B5] shrink-0" />
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => navigate('feedback')}
+                      className={`w-full min-h-[52px] px-3.5 py-2.5 text-left flex items-center justify-between gap-3 transition-colors duration-150 cursor-pointer ${
+                        activeTab === 'feedback' ? 'bg-[#B49AF8]/15 text-[#F4F3FA]' : 'text-[#F4F3FA] hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
+                          <MessageCircleHeart className="w-4 h-4 text-[#F87171]" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-[#F4F3FA] truncate">Share Feedback</div>
+                          <div className="text-[11px] text-[#A1A5B5] truncate">Report bugs or suggest improvements</div>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#A1A5B5] shrink-0" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Category 3: App & Legal */}
+                <div className="space-y-1.5">
+                  <div className="px-1 text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
+                    App &amp; Legal
+                  </div>
+                  <div className="rounded-2xl bg-[#191C29] border border-[#292B39] divide-y divide-[#292B39] overflow-hidden">
+                    <div className="px-1.5 py-1">
+                      <PWAInstallButton
+                        variant="menu-item"
+                        onActionComplete={() => setMoreMenuOpen(false)}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => navigate('privacy')}
+                      className={`w-full min-h-[48px] px-3.5 py-2.5 text-left flex items-center justify-between gap-3 transition-colors duration-150 cursor-pointer ${
+                        activeTab === 'privacy' || activeTab === 'copyright'
+                          ? 'bg-[#B49AF8]/15 text-[#F4F3FA]'
+                          : 'text-[#F4F3FA] hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
+                          <FileText className="w-4 h-4 text-[#A1A5B5]" />
+                        </div>
+                        <span className="text-xs font-semibold text-[#F4F3FA] truncate">Privacy &amp; Copyright Policy</span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#A1A5B5] shrink-0" />
+                    </button>
+
+                    {isAuthorizedAdminUser && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMoreMenuOpen(false);
+                          onUnlockAdmin();
+                        }}
+                        className="w-full min-h-[48px] px-3.5 py-2.5 text-left flex items-center justify-between gap-3 text-[#F9C876] hover:bg-white/[0.03] transition-colors duration-150 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
+                            <ShieldCheck className="w-4 h-4 text-[#F9C876]" />
+                          </div>
+                          <span className="text-xs font-semibold truncate">Admin Dashboard</span>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-[#A1A5B5] shrink-0" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
     <>
-      <nav className="sticky top-0 z-50 w-full bg-[#090d16]/95 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-50 w-full bg-[#0B0A10] border-b border-[#292B39]">
+        <nav
+          aria-label="Primary desktop navigation"
+          className="max-w-7xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3"
+        >
           {/* ZONE 1: Brand */}
           <button
             type="button"
             onClick={handleLogoClick}
-            className="flex items-center gap-2 select-none cursor-pointer shrink-0 focus:outline-none"
+            className="flex items-center gap-2 select-none cursor-pointer shrink-0 focus:outline-none min-h-[44px]"
             aria-label="AniDub India Home"
           >
             <AniDubLogo size="md" showText={true} />
           </button>
 
-          {/* ZONE 2: Desktop Primary Navigation (Visible Text Labels) */}
-          <div className="hidden md:flex items-center gap-1">
-            {primaryDesktopItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={item.onClick}
-                  aria-current={item.active ? 'page' : undefined}
-                  className={`relative h-10 px-3.5 rounded-xl text-sm font-semibold inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    item.active
-                      ? 'bg-purple-600/20 text-white border border-purple-500/40'
-                      : 'text-neutral-300 hover:text-white hover:bg-white/5 border border-transparent'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 shrink-0 ${item.active ? 'text-purple-300' : 'text-neutral-400'}`} />
-                  <span>{item.label}</span>
-                  {item.badge !== undefined && (
-                    <span className="px-1.5 py-0.5 rounded-md bg-purple-600 text-white text-[10px] font-bold leading-none tabular-nums">
-                      {item.badge > 99 ? '99+' : item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          {/* ZONE 2: Desktop Primary Navigation (Custom Signature SVG Icons + Text Labels) */}
+          <div className="hidden md:flex items-center gap-1.5">
+            {primaryTabs.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={item.onClick}
+                aria-current={item.active ? 'page' : undefined}
+                className={`relative h-10 min-h-[40px] px-3.5 rounded-xl text-sm font-semibold inline-flex items-center gap-2 transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer border ${
+                  item.active
+                    ? 'bg-[#191C29] text-[#F4F3FA] border-[#B49AF8]/55'
+                    : 'text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#12141E] border-transparent'
+                }`}
+              >
+                <SignatureNavIcon
+                  name={item.iconName}
+                  active={item.active}
+                  className={`w-[18px] h-[18px] shrink-0 ${item.active ? 'text-[#B49AF8]' : 'text-[#A1A5B5]'}`}
+                />
+                <span>{item.label}</span>
+                {item.badge !== undefined && (
+                  <span className="px-1.5 py-0.5 rounded-md bg-[#B49AF8] text-[#0B0A10] text-[10px] font-bold leading-none tabular-nums">
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
 
-          {/* ZONE 3: Install App + Community Chat Shortcut + More Menu + Admin */}
+          {/* ZONE 3: Install App + Community Chat Shortcut + More Menu + Authorized Admin */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0" ref={moreMenuRef}>
             <div className="hidden lg:block">
               <PWAInstallButton variant="button" />
             </div>
 
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
+              active={isChatActive}
               onClick={() => navigate('chat')}
               aria-label="Community Chat"
               title="Community Chat"
-              className={`min-h-[40px] px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer border ${
-                isChatActive
-                  ? 'bg-purple-600/20 text-white border-purple-500/40'
-                  : 'bg-white/5 text-neutral-300 hover:text-white hover:bg-white/10 border-white/10'
-              }`}
+              leftIcon={<MessageSquare className="w-4 h-4 text-[#B49AF8]" />}
             >
-              <MessageSquare className="w-4 h-4 shrink-0" />
               <span className="hidden sm:inline">Chat</span>
-            </button>
+            </Button>
 
-            {isAdminAuthenticated && (
-              <button
-                type="button"
+            {isAuthorizedAdminUser && (
+              <Button
+                variant="secondary"
+                size="sm"
+                active={activeTab === 'admin'}
                 onClick={onUnlockAdmin}
                 aria-label="Admin Dashboard"
                 title="Admin Dashboard"
-                className={`min-h-[40px] px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer border ${
-                  activeTab === 'admin'
-                    ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
-                    : 'bg-white/5 text-amber-300 hover:bg-amber-500/15 border-white/10'
-                }`}
+                leftIcon={<ShieldCheck className="w-4 h-4 text-[#F9C876]" />}
               >
-                <ShieldCheck className="w-4 h-4 shrink-0" />
                 <span className="hidden lg:inline">Admin</span>
-              </button>
+              </Button>
             )}
 
-            {/* More Dropdown */}
+            {/* More Menu Trigger (Desktop Popover + Mobile Bottom Sheet) */}
             <div className="relative">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
+                active={moreMenuOpen || isMoreActive}
                 onClick={() => setMoreMenuOpen((prev) => !prev)}
                 aria-expanded={moreMenuOpen}
-                aria-haspopup="menu"
+                aria-haspopup="dialog"
                 aria-label="More navigation options"
-                className={`min-h-[40px] px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer border ${
-                  moreMenuOpen || isMoreActive
-                    ? 'bg-purple-600/20 text-white border-purple-500/40'
-                    : 'bg-white/5 text-neutral-300 hover:text-white hover:bg-white/10 border-white/10'
-                }`}
+                leftIcon={
+                  moreMenuOpen ? (
+                    <X className="w-4 h-4" />
+                  ) : (
+                    <MoreHorizontal className="w-4 h-4" />
+                  )
+                }
+                rightIcon={
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 hidden sm:block transition-transform duration-150 ${
+                      moreMenuOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                }
               >
-                {moreMenuOpen ? (
-                  <X className="w-4 h-4 shrink-0" />
-                ) : (
-                  <MoreHorizontal className="w-4 h-4 shrink-0" />
-                )}
                 <span className="hidden sm:inline">More</span>
-                <ChevronDown className={`w-3.5 h-3.5 hidden sm:block transition-transform ${moreMenuOpen ? 'rotate-180' : ''}`} />
-              </button>
+              </Button>
 
+              {/* Desktop Dropdown Menu */}
               {moreMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 mt-2 w-60 rounded-2xl bg-[#101624] border border-white/15 shadow-2xl p-1.5 z-50"
+                  className="hidden md:block absolute right-0 mt-2 w-64 rounded-2xl bg-[#12141E] border border-[#292B39] shadow-2xl p-1.5 z-50"
                 >
+                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#A1A5B5]">
+                    Discovery Tools
+                  </div>
                   <button
                     type="button"
                     role="menuitem"
                     onClick={() => navigate('foryou', 'foryou')}
-                    className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
+                    className={`w-full px-3 py-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors duration-150 cursor-pointer ${
                       activeTab === 'foryou'
-                        ? 'bg-purple-600/20 text-white'
-                        : 'text-neutral-200 hover:bg-white/5'
+                        ? 'bg-[#B49AF8]/15 text-[#F4F3FA]'
+                        : 'text-[#F4F3FA] hover:bg-[#191C29]'
                     }`}
                   >
-                    <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                    <Sparkles className="w-4 h-4 text-[#B49AF8] shrink-0" />
                     <div>
                       <div>Find Your Next Anime</div>
-                      <div className="text-[10px] text-neutral-400 font-normal">Filter by language &amp; OTT</div>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => navigate('chat')}
-                    className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
-                      isChatActive ? 'bg-purple-600/20 text-white' : 'text-neutral-200 hover:bg-white/5'
-                    }`}
-                  >
-                    <MessageSquare className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <div>
-                      <div>Community Chat</div>
-                      <div className="text-[10px] text-neutral-400 font-normal">Live Indian dub discussions</div>
+                      <div className="text-[10px] text-[#A1A5B5] font-normal">Filter by language &amp; OTT</div>
                     </div>
                   </button>
 
@@ -298,12 +541,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setMoreMenuOpen(false);
                         onOpenCompare();
                       }}
-                      className="w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-neutral-200 hover:bg-white/5 flex items-center gap-2.5 transition-colors cursor-pointer"
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-[#F4F3FA] hover:bg-[#191C29] flex items-center gap-2.5 transition-colors duration-150 cursor-pointer"
                     >
-                      <Scale className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <Scale className="w-4 h-4 text-[#CBB6FF] shrink-0" />
                       <div>
                         <div>Compare Anime</div>
-                        <div className="text-[10px] text-neutral-400 font-normal">Side-by-side dubs &amp; OTTs</div>
+                        <div className="text-[10px] text-[#A1A5B5] font-normal">Side-by-side dubs &amp; OTTs</div>
                       </div>
                     </button>
                   )}
@@ -312,23 +555,36 @@ export const Navbar: React.FC<NavbarProps> = ({
                     type="button"
                     role="menuitem"
                     onClick={() => navigate('tierlist')}
-                    className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
-                      activeTab === 'tierlist' ? 'bg-purple-600/20 text-white' : 'text-neutral-200 hover:bg-white/5'
+                    className={`w-full px-3 py-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors duration-150 cursor-pointer ${
+                      activeTab === 'tierlist' ? 'bg-[#B49AF8]/15 text-[#F4F3FA]' : 'text-[#F4F3FA] hover:bg-[#191C29]'
                     }`}
                   >
-                    <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
+                    <Trophy className="w-4 h-4 text-[#F9C876] shrink-0" />
                     <div>
                       <div>Tier List Maker</div>
-                      <div className="text-[10px] text-neutral-400 font-normal">Rank your favorite dubs</div>
+                      <div className="text-[10px] text-[#A1A5B5] font-normal">Rank your favorite dubs</div>
                     </div>
                   </button>
 
-                  <PWAInstallButton
-                    variant="menu-item"
-                    onActionComplete={() => setMoreMenuOpen(false)}
-                  />
+                  <div className="my-1.5 border-t border-[#292B39]" />
+                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#A1A5B5]">
+                    Community &amp; Support
+                  </div>
 
-                  <div className="my-1.5 border-t border-white/10" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => navigate('chat')}
+                    className={`w-full px-3 py-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors duration-150 cursor-pointer ${
+                      isChatActive ? 'bg-[#B49AF8]/15 text-[#F4F3FA]' : 'text-[#F4F3FA] hover:bg-[#191C29]'
+                    }`}
+                  >
+                    <MessageSquare className="w-4 h-4 text-[#B49AF8] shrink-0" />
+                    <div>
+                      <div>Community Chat</div>
+                      <div className="text-[10px] text-[#A1A5B5] font-normal">Live Indian dub discussions</div>
+                    </div>
+                  </button>
 
                   {onSubmitDub && (
                     <button
@@ -338,9 +594,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setMoreMenuOpen(false);
                         onSubmitDub();
                       }}
-                      className="w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-neutral-200 hover:bg-white/5 flex items-center gap-2.5 transition-colors cursor-pointer"
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-[#F4F3FA] hover:bg-[#191C29] flex items-center gap-2.5 transition-colors duration-150 cursor-pointer"
                     >
-                      <Plus className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <Plus className="w-4 h-4 text-[#34D399] shrink-0" />
                       <span>Submit an Anime or Dub</span>
                     </button>
                   )}
@@ -349,44 +605,50 @@ export const Navbar: React.FC<NavbarProps> = ({
                     type="button"
                     role="menuitem"
                     onClick={() => navigate('feedback')}
-                    className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
-                      activeTab === 'feedback' ? 'bg-purple-600/20 text-white' : 'text-neutral-200 hover:bg-white/5'
+                    className={`w-full px-3 py-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors duration-150 cursor-pointer ${
+                      activeTab === 'feedback' ? 'bg-[#B49AF8]/15 text-[#F4F3FA]' : 'text-[#F4F3FA] hover:bg-[#191C29]'
                     }`}
                   >
-                    <MessageCircleHeart className="w-4 h-4 text-rose-400 shrink-0" />
+                    <MessageCircleHeart className="w-4 h-4 text-[#F87171] shrink-0" />
                     <span>Share Feedback</span>
                   </button>
+
+                  <PWAInstallButton
+                    variant="menu-item"
+                    onActionComplete={() => setMoreMenuOpen(false)}
+                  />
 
                   <button
                     type="button"
                     role="menuitem"
                     onClick={() => navigate('privacy')}
-                    className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
+                    className={`w-full px-3 py-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2.5 transition-colors duration-150 cursor-pointer ${
                       activeTab === 'privacy' || activeTab === 'copyright'
-                        ? 'bg-purple-600/20 text-white'
-                        : 'text-neutral-300 hover:bg-white/5'
+                        ? 'bg-[#B49AF8]/15 text-[#F4F3FA]'
+                        : 'text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#191C29]'
                     }`}
                   >
-                    <FileText className="w-4 h-4 text-neutral-400 shrink-0" />
+                    <FileText className="w-4 h-4 text-[#A1A5B5] shrink-0" />
                     <span>Privacy &amp; Copyright</span>
                   </button>
 
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setMoreMenuOpen(false);
-                      onUnlockAdmin();
-                    }}
-                    className="w-full px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-neutral-300 hover:bg-white/5 flex items-center gap-2.5 transition-colors cursor-pointer"
-                  >
-                    {isAdminAuthenticated ? (
-                      <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-                    ) : (
-                      <Shield className="w-4 h-4 text-neutral-400 shrink-0" />
-                    )}
-                    <span>Admin Dashboard</span>
-                  </button>
+                  {isAuthorizedAdminUser && (
+                    <>
+                      <div className="my-1.5 border-t border-[#292B39]" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMoreMenuOpen(false);
+                          onUnlockAdmin();
+                        }}
+                        className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-[#F9C876] hover:bg-[#191C29] flex items-center gap-2.5 transition-colors duration-150 cursor-pointer"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-[#F9C876] shrink-0" />
+                        <span>Admin Dashboard</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -397,7 +659,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="button"
                 onClick={() => navigate('profile')}
                 aria-label="Open Profile"
-                className="hidden sm:flex w-9 h-9 rounded-full overflow-hidden border border-white/15 hover:border-purple-400 transition-colors cursor-pointer shrink-0"
+                className="hidden sm:flex w-10 h-10 rounded-full overflow-hidden border border-[#292B39] hover:border-[#B49AF8] transition-colors duration-150 cursor-pointer shrink-0"
               >
                 <img
                   src={user?.imageUrl || userAvatar}
@@ -407,41 +669,54 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
           </div>
-        </div>
-      </nav>
+        </nav>
+      </header>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR (4 Clear Predictable Destinations) */}
+      {/* Mobile Bottom Sheet Portal */}
+      {mobileBottomSheet}
+
+      {/* MOBILE BOTTOM NAVIGATION BAR (4 Destinations with Custom Signature Duotone SVG Icons) */}
       <nav
         aria-label="Mobile primary navigation"
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#090d16]/95 backdrop-blur-xl border-t border-white/10"
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#0B0A10] border-t border-[#292B39]"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <div className="grid grid-cols-4 h-16 px-1">
-          {primaryMobileTabs.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={item.onClick}
-                aria-current={item.active ? 'page' : undefined}
-                aria-label={item.label}
-                className={`relative flex flex-col items-center justify-center gap-1 min-w-[44px] min-h-[44px] rounded-xl transition-colors cursor-pointer ${
-                  item.active ? 'text-purple-300' : 'text-neutral-400 hover:text-neutral-200'
-                }`}
-              >
-                <div className="relative">
-                  <Icon className="w-5 h-5" />
-                  {item.badge !== undefined && (
-                    <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-purple-600 text-white text-[9px] font-bold flex items-center justify-center tabular-nums">
-                      {item.badge > 99 ? '99+' : item.badge}
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] font-semibold leading-none">{item.label}</span>
-              </button>
-            );
-          })}
+        <div className="grid grid-cols-4 h-14 px-1">
+          {primaryTabs.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={item.onClick}
+              aria-current={item.active ? 'page' : undefined}
+              aria-label={item.label}
+              className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] rounded-xl transition-colors duration-150 cursor-pointer ${
+                item.active ? 'text-[#B49AF8]' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
+              }`}
+            >
+              {/* Subtle top active bar indicator */}
+              {item.active && (
+                <span
+                  aria-hidden="true"
+                  className="absolute top-0 w-7 h-0.5 rounded-full bg-[#B49AF8]"
+                />
+              )}
+              <div className="relative flex items-center justify-center">
+                <SignatureNavIcon
+                  name={item.iconName}
+                  active={item.active}
+                  className="w-5 h-5"
+                />
+                {item.badge !== undefined && (
+                  <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#B49AF8] text-[#0B0A10] text-[9px] font-bold flex items-center justify-center tabular-nums">
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-semibold leading-none tracking-tight">
+                {item.label}
+              </span>
+            </button>
+          ))}
         </div>
       </nav>
     </>

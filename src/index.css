@@ -1,10 +1,38 @@
 @import "tailwindcss";
 
 :root {
-  --primary-accent: #9333ea;
-  --primary-glow: rgba(147, 51, 234, 0.4);
-  --primary-badge: #7e22ce;
-  --primary-light: #c084fc;
+  /* AniDub Eclipse — Cinematic Minimalism Design Tokens */
+  --eclipse-bg: #0B0A10;
+  --eclipse-surface: #12141E;
+  --eclipse-elevated: #191C29;
+  --eclipse-primary: #B49AF8;
+  --eclipse-secondary: #CBB6FF;
+  --eclipse-text: #F4F3FA;
+  --eclipse-muted: #A1A5B5;
+  --eclipse-border: #292B39;
+  --eclipse-success: #34D399;
+  --eclipse-rating: #F9C876;
+  --eclipse-error: #F87171;
+
+  /* Legacy alias bindings mapped to Eclipse tokens */
+  --primary-accent: #B49AF8;
+  --primary-glow: rgba(180, 154, 248, 0.25);
+  --primary-badge: #191C29;
+  --primary-light: #CBB6FF;
+}
+
+@theme {
+  --color-eclipse-bg: #0B0A10;
+  --color-eclipse-surface: #12141E;
+  --color-eclipse-elevated: #191C29;
+  --color-eclipse-primary: #B49AF8;
+  --color-eclipse-secondary: #CBB6FF;
+  --color-eclipse-text: #F4F3FA;
+  --color-eclipse-muted: #A1A5B5;
+  --color-eclipse-border: #292B39;
+  --color-eclipse-success: #34D399;
+  --color-eclipse-rating: #F9C876;
+  --color-eclipse-error: #F87171;
 }
 
 *,
@@ -19,51 +47,79 @@ body,
   width: 100%;
   max-width: 100%;
   overflow-x: clip;
+  background-color: var(--eclipse-bg);
+  color: var(--eclipse-text);
+}
+
+/* Eclipse Theme Utility Classes */
+.bg-eclipse-bg {
+  background-color: #0B0A10;
+}
+
+.bg-eclipse-surface {
+  background-color: #12141E;
+}
+
+.bg-eclipse-elevated {
+  background-color: #191C29;
+}
+
+.text-eclipse-text {
+  color: #F4F3FA;
+}
+
+.text-eclipse-muted {
+  color: #A1A5B5;
+}
+
+.border-eclipse-border {
+  border-color: #292B39;
 }
 
 .btn-primary-theme {
-  background: linear-gradient(to right, #9333ea, #6366f1);
-  color: white;
+  background-color: #B49AF8;
+  color: #0B0A10;
+  font-weight: 700;
 }
 
 .btn-primary-theme:hover {
-  background: linear-gradient(to right, #a855f7, #4f46e5);
+  background-color: #CBB6FF;
 }
 
 .badge-primary-theme {
-  background-color: rgba(147, 51, 234, 0.2);
-  border: 1px solid rgba(147, 51, 234, 0.5);
-  color: #d8b4fe;
+  background-color: rgba(180, 154, 248, 0.14);
+  border: 1px solid rgba(180, 154, 248, 0.38);
+  color: #CBB6FF;
 }
 
 .active-tab-theme {
-  background-color: rgba(147, 51, 234, 0.2);
-  border: 1px solid rgba(147, 51, 234, 0.6);
-  color: #c084fc;
+  background-color: rgba(180, 154, 248, 0.14);
+  border: 1px solid rgba(180, 154, 248, 0.45);
+  color: #B49AF8;
 }
 
 .text-primary-theme {
-  color: #c084fc;
+  color: #B49AF8;
 }
 
 .text-accent-theme {
-  color: #a855f7;
+  color: #CBB6FF;
 }
 
 .border-primary-theme {
-  border-color: rgba(147, 51, 234, 0.4);
+  border-color: rgba(180, 154, 248, 0.45);
 }
 
 .border-primary-light\/50 {
-  border-color: rgba(192, 132, 252, 0.5);
+  border-color: rgba(203, 182, 255, 0.5);
 }
 
 .bg-primary-theme {
-  background-color: #9333ea;
+  background-color: #B49AF8;
 }
 
 .bg-primary-theme\/20 {
-  background-color: rgba(147, 51, 234, 0.2);
+  background-color: rgba(180, 154, 248, 0.15);
 }
 
 /* Hide scrollbar utility */
@@ -76,25 +132,30 @@ body,
 }
 
 .font-heading {
-  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  font-family: 'Plus Jakarta Sans', 'Outfit', system-ui, -apple-system, sans-serif;
 }
 
 .border-primary-theme\/30 {
-  border-color: rgba(147, 51, 234, 0.3);
+  border-color: rgba(180, 154, 248, 0.3);
 }
 
 .border-primary-theme\/50 {
-  border-color: rgba(147, 51, 234, 0.5);
+  border-color: rgba(180, 154, 248, 0.5);
 }
 
 .ring-accent-theme\/40 {
-  --tw-ring-color: rgba(168, 85, 247, 0.4);
+  --tw-ring-color: rgba(180, 154, 248, 0.4);
 }
 
-@keyframes gradientMove {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @keyframes shimmer {
@@ -102,14 +163,8 @@ body,
   100% { background-position: 200% 0; }
 }
 
-.animate-gradient {
-  background-size: 200% 200%;
-  animation: gradientMove 6s ease infinite;
-}
-
 .animate-shimmer {
-  background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.02) 75%);
+  background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.02) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.8s infinite;
 }
-

@@ -8,7 +8,7 @@ import {
   Share2,
   Bookmark,
   Star,
-  MoreVertical,
+  MoreHorizontal,
   Flame,
 } from 'lucide-react';
 import { useToast } from './Toast';
@@ -170,7 +170,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   const extraLangCount = langCodes.length > 3 ? langCodes.length - 3 : 0;
   const compactLangText =
     visibleLangCodes.length > 0
-      ? `${visibleLangCodes.join(' • ')}${extraLangCount > 0 ? ` +${extraLangCount}` : ''}`
+      ? `${visibleLangCodes.join(' · ')}${extraLangCount > 0 ? ` +${extraLangCount}` : ''}`
       : 'Dub info unverified';
 
   const isAiring = isCanonicalAiring(anime);
@@ -231,167 +231,174 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
         transition={{ duration: 0.25, ease: "easeOut" }}
         className="h-full"
       >
-      <article
-        onClick={() => onSelect(anime)}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onSelect(anime);
-          }
-        }}
-        className="group relative h-full flex flex-col rounded-2xl bg-[#101522] border border-white/10 hover:border-purple-500/45 overflow-hidden transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500/60"
-      >
-        {/* Uniform 3:4 Poster Container */}
-        <div className="relative aspect-[3/4] w-full bg-[#0a0e18] overflow-hidden shrink-0">
-          <Image
-            src={posterSrc}
-            alt={anime.title}
-            width={300}
-            height={400}
-            priority={isPriorityCard}
-            loading={isPriorityCard ? "eager" : "lazy"}
-            sizes="(max-width: 640px) 48vw, (max-width: 1024px) 24vw, 220px"
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-          />
+        <article
+          onClick={() => onSelect(anime)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelect(anime);
+            }
+          }}
+          className="group relative h-full flex flex-col rounded-2xl bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 overflow-hidden transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B49AF8]/70"
+        >
+          {/* Cinematic Poster-First 3:4 Artwork Container */}
+          <div className="relative aspect-[3/4] w-full bg-[#0B0A10] overflow-hidden shrink-0">
+            <Image
+              src={posterSrc}
+              alt={anime.title}
+              width={300}
+              height={400}
+              priority={isPriorityCard}
+              loading={isPriorityCard ? "eager" : "lazy"}
+              sizes="(max-width: 640px) 48vw, (max-width: 1024px) 24vw, 220px"
+              className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+            />
 
-          {/* Subtle bottom readability gradient */}
-          <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#101522] via-[#101522]/40 to-transparent pointer-events-none" />
+            {/* Measured bottom contrast scrim */}
+            <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#12141E] via-[#12141E]/40 to-transparent pointer-events-none" />
 
-          {/* Top-Left: Status / Rating badge (stacked vertically so AIRING never collides with top-right buttons) */}
-          <div className="absolute top-2.5 left-2.5 flex flex-col items-start gap-1 pointer-events-none">
-            {hasRating && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-black/75 backdrop-blur-md border border-white/10 text-[11px] font-bold text-amber-300 tabular-nums">
-                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                {numericRating.toFixed(1)}
-              </span>
-            )}
-            {isAiring && (
-              <span className="px-2 py-0.5 rounded-lg bg-emerald-600/90 text-white text-[10px] font-bold uppercase tracking-wide shadow-sm">
-                Airing
-              </span>
-            )}
-            {showTrendingBadge && (
-              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-orange-600/90 text-white text-[10px] font-bold uppercase tracking-wide shadow-sm">
-                <Flame className="w-2.5 h-2.5" />
-                Hot
-              </span>
+            {/* Top-Left: Quiet Rating & Status indicators */}
+            <div className="absolute top-2 left-2 flex flex-col items-start gap-1 pointer-events-none">
+              {hasRating && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#0B0A10]/85 border border-[#292B39] text-[11px] font-bold text-[#F9C876] tabular-nums">
+                  <Star className="w-3 h-3 fill-[#F9C876] text-[#F9C876]" />
+                  {numericRating.toFixed(1)}
+                </span>
+              )}
+              {isAiring && (
+                <span className="px-2 py-0.5 rounded-lg bg-[#12141E]/90 border border-[#34D399]/40 text-[#34D399] text-[10px] font-bold uppercase tracking-wide">
+                  Airing
+                </span>
+              )}
+              {showTrendingBadge && (
+                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-[#12141E]/90 border border-[#F9C876]/40 text-[#F9C876] text-[10px] font-bold uppercase tracking-wide">
+                  <Flame className="w-2.5 h-2.5" />
+                  Hot
+                </span>
+              )}
+            </div>
+
+            {/* Top-Right: Single Primary Bookmark Button (44x44px hit target) */}
+            {onToggleBookmark && (
+              <div className="absolute top-1.5 right-1.5">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleBookmark(anime.id);
+                  }}
+                  aria-label={isBookmarked ? `Remove ${anime.title} from Library` : `Save ${anime.title} to Library`}
+                  aria-pressed={isBookmarked}
+                  className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer focus:outline-none"
+                >
+                  <span
+                    className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-colors duration-150 ${
+                      isBookmarked
+                        ? 'bg-[#B49AF8] border-[#B49AF8] text-[#0B0A10]'
+                        : 'bg-[#0B0A10]/80 border-[#292B39] text-[#F4F3FA] hover:bg-[#191C29] hover:border-[#B49AF8]/50'
+                    }`}
+                  >
+                    <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
+                  </span>
+                </button>
+              </div>
             )}
           </div>
 
-          {/* Top-Right: Single Primary Action (Save/Bookmark) + Clean Overflow Menu */}
-          <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5" ref={menuRef}>
-            {onToggleBookmark && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleBookmark(anime.id);
-                }}
-                aria-label={isBookmarked ? `Remove ${anime.title} from Library` : `Save ${anime.title} to Library`}
-                aria-pressed={isBookmarked}
-                className={`w-9 h-9 rounded-xl backdrop-blur-md border flex items-center justify-center transition-colors cursor-pointer ${
-                  isBookmarked
-                    ? 'bg-purple-600 border-purple-400 text-white'
-                    : 'bg-black/70 border-white/15 text-neutral-200 hover:bg-black/90 hover:text-white'
+          {/* Clean Metadata Body (Uniform Height, Overflow menu off the poster) */}
+          <div className="p-2.5 sm:p-3 flex flex-col flex-1 justify-between gap-1.5">
+            <div className="space-y-1">
+              <div className="flex items-start justify-between gap-1">
+                <h3 className="text-xs sm:text-sm font-bold text-[#F4F3FA] leading-snug line-clamp-2 min-h-[2.25rem] sm:min-h-[2.5rem] group-hover:text-[#CBB6FF] transition-colors duration-150 flex-1">
+                  {anime.title}
+                </h3>
+
+                {/* Overflow (...) Menu Trigger positioned cleanly beside title */}
+                <div className="relative shrink-0 -mr-1.5 -mt-1" ref={menuRef}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpen((prev) => !prev);
+                    }}
+                    aria-label={`More actions for ${anime.title}`}
+                    aria-expanded={menuOpen}
+                    aria-haspopup="menu"
+                    className="w-9 h-9 min-w-[36px] min-h-[36px] rounded-lg text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#191C29] flex items-center justify-center transition-colors duration-150 cursor-pointer"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+
+                  {menuOpen && (
+                    <div
+                      role="menu"
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute right-0 bottom-full mb-1 w-44 rounded-xl bg-[#191C29] border border-[#292B39] shadow-2xl p-1 z-30"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={handleShare}
+                        className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-[#F4F3FA] hover:bg-[#12141E] flex items-center gap-2 cursor-pointer"
+                      >
+                        <Share2 className="w-3.5 h-3.5 text-[#B49AF8] shrink-0" />
+                        <span>Share Link</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={handleToggleOffline}
+                        className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-[#F4F3FA] hover:bg-[#12141E] flex items-center gap-2 cursor-pointer"
+                      >
+                        {offlineSaved ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[#34D399] shrink-0" />
+                        ) : (
+                          <DownloadCloud className="w-3.5 h-3.5 text-[#CBB6FF] shrink-0" />
+                        )}
+                        <span>{offlineSaved ? 'Saved Offline' : 'Save Info Offline'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={handleReport}
+                        className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-[#F87171] hover:bg-[#F87171]/15 flex items-center gap-2 cursor-pointer"
+                      >
+                        <Flag className="w-3.5 h-3.5 shrink-0" />
+                        <span>Report Issue</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Compact Regional Language Summary */}
+              <p className="text-[11px] font-semibold tracking-wide text-[#CBB6FF] truncate">
+                {compactLangText}
+              </p>
+            </div>
+
+            {/* Honest OTT Platform Footer */}
+            <div className="pt-1.5 border-t border-[#292B39] flex items-center justify-between gap-2 text-[11px]">
+              <span
+                className={`font-medium truncate ${
+                  primaryPlatformLabel === 'Not verified' ? 'text-[#A1A5B5]/70 italic' : 'text-[#A1A5B5]'
                 }`}
               >
-                <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
-              </button>
-            )}
-
-            <div className="relative">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenuOpen((prev) => !prev);
-                }}
-                aria-label={`More actions for ${anime.title}`}
-                aria-expanded={menuOpen}
-                aria-haspopup="menu"
-                className="w-9 h-9 rounded-xl bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/15 text-neutral-200 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <MoreVertical className="w-4 h-4" />
-              </button>
-
-              {menuOpen && (
-                <div
-                  role="menu"
-                  onClick={(e) => e.stopPropagation()}
-                  className="absolute right-0 mt-1.5 w-44 rounded-xl bg-[#0e1422] border border-white/15 shadow-2xl p-1 z-30"
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleShare}
-                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-neutral-200 hover:bg-white/10 flex items-center gap-2 cursor-pointer"
-                  >
-                    <Share2 className="w-3.5 h-3.5 text-purple-300 shrink-0" />
-                    <span>Share Link</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleToggleOffline}
-                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-neutral-200 hover:bg-white/10 flex items-center gap-2 cursor-pointer"
-                  >
-                    {offlineSaved ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    ) : (
-                      <DownloadCloud className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
-                    )}
-                    <span>{offlineSaved ? 'Saved Offline' : 'Save Info Offline'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleReport}
-                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-rose-300 hover:bg-rose-500/15 flex items-center gap-2 cursor-pointer"
-                  >
-                    <Flag className="w-3.5 h-3.5 shrink-0" />
-                    <span>Report Issue</span>
-                  </button>
-                </div>
+                {primaryPlatformLabel}
+                {extraPlatformCount > 0 ? ` +${extraPlatformCount}` : ''}
+              </span>
+              {isMovie ? (
+                <span className="text-[#A1A5B5] font-semibold shrink-0">{displayTypeLabel}</span>
+              ) : anime.year ? (
+                <span className="text-[#A1A5B5] font-medium tabular-nums shrink-0">{anime.year}</span>
+              ) : (
+                <span className="text-[#A1A5B5] font-medium shrink-0">{displayTypeLabel}</span>
               )}
             </div>
           </div>
-        </div>
-
-        {/* Clean Metadata Body (Uniform Height) */}
-        <div className="p-3 sm:p-3.5 flex flex-col flex-1 justify-between gap-2">
-          <div className="space-y-1.5">
-            <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 min-h-[2.5rem] group-hover:text-purple-200 transition-colors">
-              {anime.title}
-            </h3>
-
-            {/* Compact Language Summary */}
-            <p className="text-[11px] font-semibold tracking-wide text-purple-300 truncate">
-              {compactLangText}
-            </p>
-          </div>
-
-          {/* Honest OTT Platform Footer */}
-          <div className="pt-2 border-t border-white/8 flex items-center justify-between gap-2 text-[11px]">
-            <span
-              className={`font-medium truncate ${
-                primaryPlatformLabel === 'Not verified' ? 'text-neutral-500 italic' : 'text-neutral-300'
-              }`}
-            >
-              {primaryPlatformLabel}
-              {extraPlatformCount > 0 ? ` +${extraPlatformCount}` : ''}
-            </span>
-            {isMovie ? (
-              <span className="text-neutral-400 font-semibold shrink-0">{displayTypeLabel}</span>
-            ) : anime.year ? (
-              <span className="text-neutral-500 font-medium tabular-nums shrink-0">{anime.year}</span>
-            ) : (
-              <span className="text-neutral-500 font-medium shrink-0">{displayTypeLabel}</span>
-            )}
-          </div>
-        </div>
-      </article>
+        </article>
       </motion.div>
 
       {showReportModal && (

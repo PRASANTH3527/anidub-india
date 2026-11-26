@@ -248,16 +248,25 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     languages: string[];
   }[]>(() => parseStreamingPartners(initialData));
 
-  const [statusState, setStatusState] = useState<string>(() => {
-    const anime = (initialData || {}) as any;
-    const raw = String(anime.status || anime.airing_status || '').trim().toLowerCase();
-    if (raw.includes('complete')) return 'Completed';
+  const resolveEditableStatus = (animeObj: any, resolvedType?: string): string => {
+    const raw = String(animeObj?.status || animeObj?.airing_status || '').trim().toLowerCase();
+    if (raw.includes('complete') || raw === 'finished' || raw === 'ended') return 'Completed';
     if (raw.includes('upcoming')) return 'Upcoming';
-    if (raw.includes('ongoing')) return 'Ongoing';
-    return 'Airing';
+    if (raw.includes('ongoing') || raw.includes('simulcast')) return 'Ongoing';
+    if (raw.includes('airing')) return 'Airing';
+    const typeLower = String(resolvedType || animeObj?.type || animeObj?.Type || '').trim().toLowerCase();
+    return typeLower.includes('movie') ? 'Completed' : 'Airing';
+  };
+
+  const [statusState, setStatusState] = useState<string>(() => resolveEditableStatus(initialData));
+  const [releaseDay, setReleaseDay] = useState<string>(() => {
+    const st = resolveEditableStatus(initialData);
+    return st === 'Airing' || st === 'Ongoing' ? normalizeBroadcastDay(initialData) || '' : '';
   });
-  const [releaseDay, setReleaseDay] = useState<string>(() => normalizeBroadcastDay(initialData) || '');
-  const [broadcastTime, setBroadcastTime] = useState<string>(() => normalizeBroadcastTime(initialData) || '');
+  const [broadcastTime, setBroadcastTime] = useState<string>(() => {
+    const st = resolveEditableStatus(initialData);
+    return st === 'Airing' || st === 'Ongoing' ? normalizeBroadcastTime(initialData) || '' : '';
+  });
 
   useEffect(() => {
     if (initialData) {
@@ -284,21 +293,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }
       setType(cleanType);
 
-      // State Initialization: When the Edit Modal opens and sets its state, make sure the type property is explicitly included
+      // State Initialization: Read actual database status directly without overriding valid Completed/Upcoming values
       const anime = initialData as any;
-      const rawStatusStr = String(initDataAny?.status || initDataAny?.airing_status || '').trim().toLowerCase();
-      const initialStatus = rawStatusStr.includes('complete')
-        ? 'Completed'
-        : rawStatusStr.includes('upcoming')
-          ? 'Upcoming'
-          : rawStatusStr.includes('ongoing')
-            ? 'Ongoing'
-            : cleanType === 'Movie'
-              ? 'Completed'
-              : 'Airing';
+      const initialStatus = resolveEditableStatus(initDataAny, cleanType);
+      const isAiringInitial = initialStatus === 'Airing' || initialStatus === 'Ongoing';
       setStatusState(initialStatus);
-      setReleaseDay(normalizeBroadcastDay(initDataAny) || '');
-      setBroadcastTime(normalizeBroadcastTime(initDataAny) || '');
+      setReleaseDay(isAiringInitial ? normalizeBroadcastDay(initDataAny) || '' : '');
+      setBroadcastTime(isAiringInitial ? normalizeBroadcastTime(initDataAny) || '' : '');
 
       setFormData({ 
         ...anime, 
@@ -310,10 +311,16 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       // Re-populate mixed entries / seasons from initialData
       const parsedMixed = parseMixedEntries(initialData);
       setMixedEntries(parsedMixed);
-      setCurrentSeason(String(parsedMixed.length));
-      const last = parsedMixed[parsedMixed.length - 1];
-      if (last && last.episodes) {
-        setCurrentlyAiringEpisode(Number(last.episodes) || 12);
+      if (isAiringInitial) {
+        setCurrentSeason(
+          String(initDataAny?.current_season || initDataAny?.season || parsedMixed.length || '')
+        );
+        const last = parsedMixed[parsedMixed.length - 1];
+        const liveEp = initDataAny?.live_episode ?? (last && last.episodes ? Number(last.episodes) : '');
+        setCurrentlyAiringEpisode(liveEp !== '' && liveEp !== null && liveEp !== undefined ? Number(liveEp) || '' : '');
+      } else {
+        setCurrentSeason('');
+        setCurrentlyAiringEpisode('');
       }
 
       // Re-populate streaming partners from initialData
@@ -592,10 +599,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }));
       const episodesPerSeasonStr = mixedEntries.map(e => e.episodes || 0).join('|');
 
-      const resolvedBroadcastDay =
-        statusState === 'Airing' || statusState === 'Ongoing' ? releaseDay.trim() || null : null;
-      const resolvedBroadcastTime =
-        statusState === 'Airing' || statusState === 'Ongoing' ? broadcastTime.trim() || null : null;
+      const isAiringStatus = statusState === 'Airing' || statusState === 'Ongoing';
+      const resolvedBroadcastDay = isAiringStatus ? releaseDay.trim() || null : null;
+      const resolvedBroadcastTime = isAiringStatus ? broadcastTime.trim() || null : null;
+      const resolvedCurrentSeason = isAiringStatus ? currentSeason.trim() || null : null;
+      const resolvedLiveEpisode =
+        isAiringStatus && currentlyAiringEpisode !== '' && Number.isFinite(Number(currentlyAiringEpisode))
+          ? Number(currentlyAiringEpisode)
+          : null;
 
       const payload = {
         title: title.trim(),
@@ -618,7 +629,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         mixedEntries: formattedMixedEntries,
         episodes_per_season: episodesPerSeasonStr,
         type: formData.type || type || 'TV Series',
-        season: currentSeason.trim() || null,
+        season: resolvedCurrentSeason,
+        current_season: resolvedCurrentSeason,
+        live_episode: resolvedLiveEpisode,
         year: parsedYear,
         genres: Array.isArray(genres) ? genres.join(',') : genres,
         popularity: 0,
@@ -641,6 +654,10 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         savedResult = await cloudflareApi.submitCommunityAnime(payload);
       }
 
+      if (savedResult && savedResult.success === false) {
+        throw new Error(savedResult.error || 'Server rejected the anime update.');
+      }
+
       const fullUpdatedItem = {
         ...payload,
         id: initialData?.id || savedResult?.animeId || savedResult?.id,
@@ -654,15 +671,20 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         platform: payload.platform,
         synopsis: synopsis.trim(),
         status: statusState,
+        airing_status: statusState,
         broadcast_day: resolvedBroadcastDay,
         broadcast_time: resolvedBroadcastTime,
+        season: resolvedCurrentSeason,
+        current_season: resolvedCurrentSeason,
+        live_episode: resolvedLiveEpisode,
         season_episode_count: normalizedSeasonEpCount,
         official_source_url: sourceUrlCheck.url || '',
         cover_image: defaultCover,
         image: defaultCover,
         poster: defaultCover,
         posterUrl: defaultCover,
-        poster_url: defaultCover
+        poster_url: defaultCover,
+        _savedToServer: true,
       };
 
       // Trigger parent state update immediately
@@ -675,34 +697,10 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       }, 1500);
     } catch (err: any) {
       console.error('[Submission error]:', err);
-      
-      if (err?.message && (err.message.includes('already exists') || err.message.includes('Already exists'))) {
-        toast.error('Submission Failed', err.message);
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Fallback local success so user isn't blocked by transient network errors
-      const fallbackItem = {
-        title: title.trim(),
-        synopsis: synopsis.trim(),
-        id: initialData?.id,
-        status: statusState,
-        type: formData.type || type || 'TV Series',
-        cover_image: defaultCover,
-        image: defaultCover,
-        poster: defaultCover,
-        posterUrl: defaultCover,
-        poster_url: defaultCover,
-        mixed_entries: mixedEntries,
-        mixedEntries: mixedEntries
-      };
-      onSubmit(fallbackItem);
-      setIsSuccess(true);
-      setTimeout(() => {
-        setIsSuccess(false);
-        onClose();
-      }, 1500);
+      toast.error(
+        mode === 'edit' ? 'Failed to Save Changes' : 'Submission Failed',
+        err?.message || 'Could not save to Cloudflare D1. Please check your connection and try again.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -1018,6 +1016,10 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                             setType(newType);
                             if (newType === 'Movie') {
                               setStatusState('Completed');
+                              setReleaseDay('');
+                              setBroadcastTime('');
+                              setCurrentSeason('');
+                              setCurrentlyAiringEpisode('');
                               setFormData((prev: any) => ({ ...prev, status: 'Completed', airing_status: 'Completed' }));
                             }
                           }}
@@ -1032,10 +1034,17 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       <div>
                         <label className="block font-bold text-neutral-300 mb-1">Status</label>
                         <select
+                          aria-label="Anime Status"
                           value={statusState}
                           onChange={(e) => {
                             const newStatus = e.target.value;
                             setStatusState(newStatus);
+                            if (newStatus !== 'Airing' && newStatus !== 'Ongoing') {
+                              setReleaseDay('');
+                              setBroadcastTime('');
+                              setCurrentSeason('');
+                              setCurrentlyAiringEpisode('');
+                            }
                             setFormData((prev: any) => ({ ...prev, status: newStatus, airing_status: newStatus }));
                           }}
                           className="w-full bg-[#171e2e] border border-neutral-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-primary-theme cursor-pointer text-xs"

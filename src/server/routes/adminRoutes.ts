@@ -959,15 +959,44 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
       const id = approveMatch[1];
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
       const targetStatus = String(body.status || body.airing_status || '').trim() || 'Completed';
+      const isNonAiringApprove =
+        targetStatus.toLowerCase().includes('complete') || targetStatus.toLowerCase().includes('upcoming');
       if (env.DB) {
-        const res = await env.DB.prepare("UPDATE anime SET status = ?, submissionStatus = 'approved', approval_status = 'approved', is_published = 1 WHERE id = ?")
-          .bind(targetStatus, id)
-          .run();
+        let res: { meta?: { changes?: number } } | undefined;
+        try {
+          res = await env.DB.prepare(
+            isNonAiringApprove
+              ? "UPDATE anime SET status = ?, airing_status = ?, broadcast_day = NULL, broadcast_time = NULL, submissionStatus = 'approved', approval_status = 'approved', is_published = 1 WHERE id = ?"
+              : "UPDATE anime SET status = ?, airing_status = ?, submissionStatus = 'approved', approval_status = 'approved', is_published = 1 WHERE id = ?"
+          )
+            .bind(targetStatus, targetStatus, id)
+            .run();
+        } catch (approveErr) {
+          if (!isMissingColumnError(approveErr)) throw approveErr;
+          res = await env.DB.prepare(
+            "UPDATE anime SET status = ?, submissionStatus = 'approved', approval_status = 'approved', is_published = 1 WHERE id = ?"
+          )
+            .bind(targetStatus, id)
+            .run();
+        }
         if (res?.meta?.changes === 0) {
           return jsonResponse({ success: false, error: 'Anime not found' }, 404, request);
         }
       }
-      return jsonResponse({ success: true, id, status: targetStatus, submissionStatus: 'approved', approval_status: 'approved', is_published: 1 }, 200, request);
+      return jsonResponse(
+        {
+          success: true,
+          id,
+          status: targetStatus,
+          airing_status: targetStatus,
+          submissionStatus: 'approved',
+          approval_status: 'approved',
+          is_published: 1,
+        },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
     } catch (err) {
       return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
     }

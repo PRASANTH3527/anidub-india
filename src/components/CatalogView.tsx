@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense, lazy } from 'react';
-import { 
+import {
   AlertTriangle,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   Clock,
-  Compass,
-  Dices, 
+  Dices,
   RefreshCw,
   Scale,
   Share2,
-  Sparkles, 
+  Sparkles,
   Loader2,
   Search,
   SlidersHorizontal,
@@ -19,12 +18,14 @@ import {
   CheckCircle2,
   Tv,
   WifiOff,
-  X
+  X,
 } from 'lucide-react';
 import { getVisiblePageNumbers } from '../utils/pagination';
 import { AnimeCard } from './AnimeCard';
 import { OttHubSection } from './OttHubSection';
 import { LatestDubUpdatesCard } from './LatestDubUpdatesCard';
+import { Button } from './ui/Button';
+import { ExploreIcon } from './IconRegistry';
 import { cloudflareApi, type CatalogMeta, type CatalogSummary } from '../services/cloudflareApi';
 import { computeDynamicLanguageFilters } from '../utils/languages';
 import {
@@ -107,21 +108,33 @@ export const FALLBACK_SEED_ANIME: Anime[] = [];
 
 const GENRES = [
   'All Genres',
-  'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Isekai', 
-  'Mystery', 'Romance', 'Sci-Fi', 'Shonen', 'Seinen', 'Shoujo', 'Josei', 
+  'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Isekai',
+  'Mystery', 'Romance', 'Sci-Fi', 'Shonen', 'Seinen', 'Shoujo', 'Josei',
   'Slice of Life', 'Sports', 'Supernatural', 'Thriller', 'Mecha', 'Psychological',
   'Music', 'Military', 'Historical', 'Martial Arts', 'Ecchi', 'Gourmet', 'Workplace',
-  'School', 'Mythology', 'Parody'
+  'School', 'Mythology', 'Parody',
 ];
 const PLATFORMS: string[] = [...CANONICAL_OTT_FILTER_OPTIONS];
 const TYPES = ['All Types', 'TV Series', 'Movie', 'OVA', 'Special'];
 const STATUSES = ['All Status', 'Airing', 'Completed', 'Upcoming'];
 const SORTS = [
-  { label: '🔥 Most Upvoted', value: 'popularity' },
-  { label: '⭐ Highest Rated', value: 'rating' },
-  { label: '📅 Newest Release', value: 'newest' },
-  { label: '🔤 Title (A-Z)', value: 'title' }
+  { label: 'Most Upvoted', value: 'popularity' },
+  { label: 'Highest Rated', value: 'rating' },
+  { label: 'Newest Release', value: 'newest' },
+  { label: 'Title (A-Z)', value: 'title' },
 ];
+
+export const NATIVE_LANGUAGE_SCRIPT: Record<string, string> = {
+  tamil: 'தமிழ்',
+  hindi: 'हिन्दी',
+  telugu: 'తెలుగు',
+  malayalam: 'മലയാളം',
+  kannada: 'ಕನ್ನಡ',
+  bengali: 'বাংলা',
+  marathi: 'मराठी',
+  gujarati: 'ગુજરાતી',
+  punjabi: 'ਪੰਜਾਬੀ',
+};
 
 const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   catalogList,
@@ -184,7 +197,6 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     [setSearchQuery]
   );
 
-
   const handleLike = useCallback((animeId: number, liked?: boolean, newCount?: number) => {
     setRawAnimeList(prev => prev.map(a => {
       if (a.id === animeId || String(a.id) === String(animeId)) {
@@ -232,6 +244,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   const [fullyDubbedOnly, setFullyDubbedOnly] = useState<boolean>(false);
   const [freeLegalOnly, setFreeLegalOnly] = useState<boolean>(false);
   const [isSmartFilterOpen, setIsSmartFilterOpen] = useState<boolean>(false);
+  const [isOttHubOpen, setIsOttHubOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
   const [catalogStatus, setCatalogStatus] = useState<'loading' | 'success' | 'empty' | 'error' | 'offline'>('loading');
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -612,344 +625,428 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     rangeStart + Math.max(0, displayedAnime.length - 1)
   );
 
+  const activeAdvancedFilterCount = useMemo(() => {
+    return [
+      selectedGenre !== 'All Genres',
+      selectedPlatform !== 'All Platforms',
+      selectedType !== 'All Types',
+      selectedStatus !== 'All Status',
+      selectedSort !== 'popularity',
+      episodeLength !== 'any',
+      minRating > 0,
+      fullyDubbedOnly,
+      freeLegalOnly,
+    ].filter(Boolean).length;
+  }, [
+    selectedGenre,
+    selectedPlatform,
+    selectedType,
+    selectedStatus,
+    selectedSort,
+    episodeLength,
+    minRating,
+    fullyDubbedOnly,
+    freeLegalOnly,
+  ]);
+
   return (
     <div
       aria-label="Indian Dubbed Anime Discovery Catalog"
-      className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 overflow-x-clip font-sans text-slate-100 pb-8 box-border"
+      className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 overflow-x-clip font-sans text-[#F4F3FA] pb-8 box-border"
     >
-      {/* 1. UNIFIED EXPLORE CATALOG HEADER + RANDOM ANIME + OTT COVERAGE + FULL FILTERS */}
-      <div className="pt-5 sm:pt-7 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
-              <Compass className="w-6 h-6 text-purple-400 shrink-0" />
-                <span>Explore Dubbed Anime</span>
-              </h1>
-              <p className="text-xs sm:text-sm text-neutral-400 mt-1">
-                Filter verified Indian anime dubs by language, OTT platform, genre, and status.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap shrink-0">
-              {onOpenCompare && (
-                <button
-                  type="button"
-                  onClick={onOpenCompare}
-                  className="min-h-[40px] px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-neutral-200 hover:text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  <Scale className="w-4 h-4 text-indigo-400 shrink-0" />
-                  <span>Compare Anime</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={onOpenRoulette}
-                className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-purple-600 hover:from-amber-500 hover:to-purple-500 text-white text-xs font-bold inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
-              >
-                <Dices className="w-4 h-4 shrink-0" />
-                <span>Random Anime</span>
-              </button>
-              {onOpenRecommendations && (
-                <button
-                  type="button"
-                  onClick={onOpenRecommendations}
-                  className="min-h-[40px] px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-neutral-200 hover:text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span>Find Your Next Anime</span>
-                </button>
-              )}
-            </div>
+      {/* 1. COMPACT ABOVE-THE-FOLD EXPLORE HEADER + SEARCH + NATIVE SCRIPT LANGUAGE PILLS */}
+      <div className="pt-2.5 sm:pt-5 space-y-2 sm:space-y-3">
+        {/* Heading + Discovery Tools Row */}
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-base sm:text-2xl font-extrabold text-[#F4F3FA] tracking-tight flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <ExploreIcon active className="w-5 h-5 sm:w-6 sm:h-6 text-[#B49AF8] shrink-0" />
+            <span className="truncate">Find anime in your language</span>
+          </h1>
+
+          {/* Mobile Primary Action: Single Random button so heading never truncates on 390px */}
+          <div className="flex sm:hidden items-center shrink-0">
+            <button
+              type="button"
+              onClick={onOpenRoulette}
+              aria-label="Random Anime"
+              className="min-h-[38px] px-3 rounded-xl bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-bold inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer shrink-0"
+            >
+              <Dices className="w-3.5 h-3.5" />
+              <span>Random</span>
+            </button>
           </div>
 
-          {/* Dedicated Explore Search Box + Recent Searches */}
-          <div className="space-y-2">
-            <div className="relative flex items-center">
-              <Search className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none shrink-0" />
-              <input
-                type="text"
-                value={effectiveSearch}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Search by English/Japanese title, alias (e.g. Shingeki no Kyojin, JJK), studio, genre..."
-                className="w-full h-11 bg-[#131926] border border-white/15 hover:border-purple-500/50 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 rounded-xl pl-10 pr-10 text-sm text-white placeholder-neutral-500 outline-none transition-colors"
-              />
-              {effectiveSearch && (
-                <button
-                  type="button"
-                  onClick={() => handleSearchChange('')}
-                  aria-label="Clear search query"
-                  className="absolute right-3 text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
+          {/* Desktop Discovery Tools Group (1 primary button on screen: Random) */}
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
+            {onOpenCompare && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onOpenCompare}
+                aria-label="Compare Anime"
+                leftIcon={<Scale className="w-3.5 h-3.5 text-[#CBB6FF]" />}
+              >
+                <span>Compare</span>
+              </Button>
+            )}
+            {onOpenRecommendations && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onOpenRecommendations}
+                aria-label="Find Your Next Anime"
+                leftIcon={<Sparkles className="w-3.5 h-3.5 text-[#CBB6FF]" />}
+              >
+                <span>Matchmaker</span>
+              </Button>
+            )}
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={onOpenRoulette}
+              leftIcon={<Dices className="w-3.5 h-3.5" />}
+            >
+              <span>Random Anime</span>
+            </Button>
+          </div>
+        </div>
 
-            {recentSearches.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 mr-1">
-                  <Clock className="w-3 h-3 text-purple-400" />
-                  Recent:
-                </span>
-                {recentSearches.slice(0, 6).map((term) => (
-                  <div
-                    key={`recent_explore_${term}`}
-                    className="inline-flex items-center rounded-lg bg-[#131926] border border-white/10 text-neutral-200 overflow-hidden"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleSearchChange(term)}
-                      className="px-2.5 py-1 hover:bg-white/10 hover:text-white text-[11px] font-medium transition-colors cursor-pointer"
-                    >
-                      {term}
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Remove recent search ${term}`}
-                      onClick={() => setRecentSearches(removeRecentSearch(term, userId))}
-                      className="px-1.5 py-1 text-neutral-500 hover:text-rose-300 transition-colors cursor-pointer"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setRecentSearches(clearRecentSearches(userId))}
-                  className="text-[11px] text-neutral-500 hover:text-rose-300 font-semibold ml-1 cursor-pointer"
-                >
-                  Clear all
-                </button>
-              </div>
+        {/* Dedicated Explore Search Box + Compact Recent Searches */}
+        <div className="space-y-1.5">
+          <div className="relative flex items-center">
+            <Search className="w-4 h-4 text-[#B49AF8] absolute left-3.5 pointer-events-none shrink-0" />
+            <input
+              type="text"
+              value={effectiveSearch}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search English or Japanese title, alias (e.g. JJK), studio..."
+              className="w-full h-11 bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 focus:border-[#B49AF8] rounded-xl pl-10 pr-10 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
+            />
+            {effectiveSearch && (
+              <button
+                type="button"
+                onClick={() => handleSearchChange('')}
+                aria-label="Clear search query"
+                className="absolute right-2.5 w-8 h-8 flex items-center justify-center text-[#A1A5B5] hover:text-[#F4F3FA] rounded-lg hover:bg-[#191C29] transition-colors duration-150 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             )}
           </div>
 
-          {/* Regional Dub Audio Filter Strip */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-[11px] font-bold uppercase text-neutral-400 tracking-wider">
-                Regional Dub Audio
+          {recentSearches.length > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs py-0.5">
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#A1A5B5] shrink-0">
+                <Clock className="w-3 h-3 text-[#B49AF8]" />
+                Recent:
               </span>
-            </div>
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-              {dynamicLanguageFilters.map((langItem) => {
-                const active =
-                  selectedLanguage.toLowerCase() === langItem.value.toLowerCase() ||
-                  (selectedLanguage === 'All' && langItem.value === 'All');
-                return (
+              {recentSearches.slice(0, 5).map((term) => (
+                <div
+                  key={`recent_explore_${term}`}
+                  className="inline-flex items-center rounded-lg bg-[#12141E] border border-[#292B39] text-[#F4F3FA] shrink-0 overflow-hidden"
+                >
                   <button
-                    key={langItem.value}
                     type="button"
-                    onClick={() => setSelectedLanguage(langItem.value)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
-                      active
-                        ? 'bg-purple-600 text-white border border-purple-400/60'
-                        : 'bg-[#131926] border border-white/10 hover:border-white/25 text-neutral-300 hover:text-white'
+                    onClick={() => handleSearchChange(term)}
+                    className="px-2 py-0.5 hover:bg-[#191C29] text-[11px] font-medium transition-colors duration-150 cursor-pointer"
+                  >
+                    {term}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove recent search ${term}`}
+                    onClick={() => setRecentSearches(removeRecentSearch(term, userId))}
+                    className="px-1.5 py-0.5 text-[#A1A5B5] hover:text-[#F87171] transition-colors duration-150 cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setRecentSearches(clearRecentSearches(userId))}
+                className="text-[11px] text-[#A1A5B5] hover:text-[#F87171] font-semibold ml-1 shrink-0 cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Regional Dub Language Pills with Native Scripts + Expandable Filter/OTT Triggers */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+          {dynamicLanguageFilters.map((langItem) => {
+            const active =
+              selectedLanguage.toLowerCase() === langItem.value.toLowerCase() ||
+              (selectedLanguage === 'All' && langItem.value === 'All');
+            const nativeScript = NATIVE_LANGUAGE_SCRIPT[langItem.value.toLowerCase()];
+            return (
+              <button
+                key={langItem.value}
+                type="button"
+                onClick={() => setSelectedLanguage(langItem.value)}
+                aria-pressed={active}
+                className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 inline-flex items-center gap-1.5 border transition-colors duration-150 cursor-pointer ${
+                  active
+                    ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
+                    : 'bg-[#12141E] border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA]'
+                }`}
+              >
+                <span>{langItem.label}</span>
+                {nativeScript && (
+                  <span
+                    className={`text-[11px] font-medium ${
+                      active ? 'text-[#0B0A10]/85' : 'text-[#CBB6FF]'
                     }`}
                   >
-                    <span>{langItem.label}</span>
-                    <span
-                      className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold tabular-nums ${
-                        active ? 'bg-black/30 text-white' : 'bg-black/40 text-neutral-400'
-                      }`}
-                    >
-                      {langItem.count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                    {nativeScript}
+                  </span>
+                )}
+                {langItem.count > 0 && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold tabular-nums ${
+                      active
+                        ? 'bg-[#0B0A10]/20 text-[#0B0A10]'
+                        : 'bg-[#191C29] text-[#A1A5B5]'
+                    }`}
+                  >
+                    {langItem.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
 
-          {/* OTT Intelligence Hub & Subscription Coverage Calculator */}
-          <OttHubSection
-            catalogIndex={fullCatalogIndex && fullCatalogIndex.length > 0 ? fullCatalogIndex : statsSourceList}
-            selectedPlatform={selectedPlatform}
-            activeLanguage={selectedLanguage}
-            onSelectPlatform={(platformName) => {
-              setSelectedPlatform(platformName);
-              if (platformName !== 'All Platforms') {
-                gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }
-            }}
-            mySubscriptions={mySubscriptions}
-            mySubscriptionsEnabled={mySubscriptionsEnabled}
-            onToggleSubscriptionPlatform={(id) => onToggleSubscriptionPlatform?.(id)}
-            onToggleMySubscriptionsEnabled={(enabled) => onToggleMySubscriptionsEnabled?.(enabled)}
-            onClearSubscriptions={() => onClearSubscriptions?.()}
-            onSelectAnime={(a) => onSelectAnime(a as any)}
-          />
-        </div>
-
-      {/* 4. FILTER & SORT DROPDOWNS GRID */}
-      <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3">
-        
-        {/* Render Dropdowns */}
-        {[
-          { label: 'GENRE', val: selectedGenre, set: setSelectedGenre, opts: GENRES },
-          { label: 'PLATFORM', val: selectedPlatform, set: setSelectedPlatform, opts: PLATFORMS },
-          { label: 'TYPE', val: selectedType, set: setSelectedType, opts: TYPES },
-          { label: 'STATUS', val: selectedStatus, set: setSelectedStatus, opts: STATUSES }
-        ].map((item) => (
-          <div 
-            key={`catalog_filter_${item.label}`} 
-            className="relative min-w-0 overflow-hidden flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 hover:border-purple-500/40 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 transition-colors duration-200"
-          >
-            <span className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-wider shrink-0 pr-1">
-              {item.label}
-            </span>
-            <div className="relative flex items-center min-w-0 flex-1 justify-end">
-              <select
-                value={item.val}
-                onChange={(e) => item.set(e.target.value)}
-                aria-label={`Filter by ${item.label.toLowerCase()}`}
-                className="bg-transparent text-white text-xs sm:text-sm font-medium outline-none cursor-pointer text-right appearance-none w-full min-w-0 text-ellipsis pr-5 truncate"
-              >
-                {item.opts.map(o => <option key={o} value={o} className="bg-[#1A1C29] text-white">{o}</option>)}
-              </select>
-              <ChevronDown className="absolute right-0 w-3.5 h-3.5 text-gray-400 pointer-events-none shrink-0" />
-            </div>
-          </div>
-        ))}
-        
-        {/* Sort (Half width or grid item) */}
-        <div className="relative min-w-0 overflow-hidden col-span-2 sm:col-span-1 flex items-center justify-between bg-[#1A1C29]/80 border border-gray-700/50 hover:border-purple-500/40 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 transition-colors duration-200">
-          <span className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-wider shrink-0 pr-1">
-            SORT
-          </span>
-          <div className="relative flex items-center min-w-0 flex-1 justify-end">
-            <select
-              value={selectedSort}
-              onChange={(e) => setSelectedSort(e.target.value)}
-              aria-label="Sort catalog"
-              className="bg-transparent text-white text-xs sm:text-sm font-medium outline-none cursor-pointer text-right appearance-none w-full min-w-0 text-ellipsis pr-5 truncate"
-            >
-              {SORTS.map(s => <option key={s.value} value={s.value} className="bg-[#1A1C29] text-white">{s.label}</option>)}
-            </select>
-            <ChevronDown className="absolute right-0 w-3.5 h-3.5 text-gray-400 pointer-events-none shrink-0" />
-          </div>
-        </div>
-      </div>
-
-      {/* 4.5 ADVANCED SMART FILTER ENGINE */}
-      <div className="mt-3 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Expandable Filters & Sort Drawer Trigger */}
           <button
             type="button"
             onClick={() => setIsSmartFilterOpen((prev) => !prev)}
             aria-expanded={isSmartFilterOpen}
             aria-label="Toggle Smart Filters"
-            className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer inline-flex items-center gap-2 ${
-              isSmartFilterOpen || episodeLength !== 'any' || minRating > 0 || fullyDubbedOnly || freeLegalOnly
-                ? 'bg-purple-600/25 border-purple-400/60 text-white'
-                : 'bg-[#141b29] border-[#242d46] text-slate-300 hover:text-white hover:border-purple-500/40'
+            className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors duration-150 cursor-pointer inline-flex items-center gap-1.5 shrink-0 ${
+              isSmartFilterOpen || activeAdvancedFilterCount > 0
+                ? 'bg-[#191C29] border-[#B49AF8] text-[#F4F3FA]'
+                : 'bg-[#12141E] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] hover:border-[#B49AF8]/50'
             }`}
           >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-purple-400" />
-            <span>Smart Filters</span>
-            {(episodeLength !== 'any' || minRating > 0 || fullyDubbedOnly || freeLegalOnly) && (
-              <span className="px-1.5 py-0.5 rounded-full bg-purple-500 text-white text-[10px] font-black">
-                {[episodeLength !== 'any', minRating > 0, fullyDubbedOnly, freeLegalOnly].filter(Boolean).length}
+            <SlidersHorizontal className="w-3.5 h-3.5 text-[#B49AF8]" />
+            <span>Filters</span>
+            {activeAdvancedFilterCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-md bg-[#B49AF8] text-[#0B0A10] text-[10px] font-extrabold tabular-nums">
+                {activeAdvancedFilterCount}
               </span>
             )}
             {isSmartFilterOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
 
-          {/* Quick Inline Toggles always reachable */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setFullyDubbedOnly((prev) => !prev)}
-              aria-pressed={fullyDubbedOnly}
-              className={`min-h-[36px] px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer inline-flex items-center gap-1.5 ${
-                fullyDubbedOnly
-                  ? 'bg-emerald-600/25 border-emerald-400/60 text-emerald-200'
-                  : 'bg-[#141b29] border-[#242d46] text-slate-300 hover:text-white'
-              }`}
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Fully Dubbed Only</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFreeLegalOnly((prev) => !prev)}
-              aria-pressed={freeLegalOnly}
-              className={`min-h-[36px] px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer inline-flex items-center gap-1.5 ${
-                freeLegalOnly
-                  ? 'bg-cyan-600/25 border-cyan-400/60 text-cyan-200'
-                  : 'bg-[#141b29] border-[#242d46] text-slate-300 hover:text-white'
-              }`}
-            >
-              <Tv className="w-3.5 h-3.5" />
-              <span>Free Legal Streaming Only</span>
-            </button>
-          </div>
+          {/* Expandable OTT Coverage Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsOttHubOpen((prev) => !prev)}
+            aria-expanded={isOttHubOpen}
+            aria-label="Toggle OTT Coverage Hub"
+            className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors duration-150 cursor-pointer inline-flex items-center gap-1.5 shrink-0 ${
+              isOttHubOpen || mySubscriptionsEnabled
+                ? 'bg-[#191C29] border-[#B49AF8] text-[#F4F3FA]'
+                : 'bg-[#12141E] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] hover:border-[#B49AF8]/50'
+            }`}
+          >
+            <Tv className="w-3.5 h-3.5 text-[#CBB6FF]" />
+            <span>OTT Hub</span>
+            {mySubscriptionsEnabled && (
+              <span className="w-2 h-2 rounded-full bg-[#34D399]" />
+            )}
+            {isOttHubOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
         </div>
 
-        {/* Expandable Smart Filter Drawer */}
+        {/* EXPANDABLE FILTERS & SORT PANEL (Collapsed by default so Anime Cards appear on 1st mobile screen) */}
         {isSmartFilterOpen && (
           <div
             data-testid="smart-filter-drawer"
-            className="rounded-2xl bg-[#131926]/95 border border-[#242d46] p-4 grid grid-cols-1 md:grid-cols-2 gap-4 shadow-xl"
+            className="rounded-2xl bg-[#12141E] border border-[#292B39] p-3.5 sm:p-4 space-y-4 shadow-xl"
           >
-            {/* Episode Length Buckets */}
-            <div className="space-y-2">
-              <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-                Episode Length
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {EPISODE_LENGTH_OPTIONS.map((opt) => {
-                  const active = episodeLength === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setEpisodeLength(opt.id)}
-                      aria-pressed={active}
-                      className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                        active
-                          ? 'bg-purple-600/30 border-purple-400/70 text-white'
-                          : 'bg-[#0e1422] border-[#222b42] text-slate-300 hover:text-white hover:border-slate-600'
-                      }`}
+            {/* Primary Dropdowns Grid: Genre, Platform, Type, Status, Sort */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-2.5">
+              {[
+                { label: 'GENRE', val: selectedGenre, set: setSelectedGenre, opts: GENRES },
+                { label: 'PLATFORM', val: selectedPlatform, set: setSelectedPlatform, opts: PLATFORMS },
+                { label: 'TYPE', val: selectedType, set: setSelectedType, opts: TYPES },
+                { label: 'STATUS', val: selectedStatus, set: setSelectedStatus, opts: STATUSES },
+              ].map((item) => (
+                <div
+                  key={`catalog_filter_${item.label}`}
+                  className="relative min-w-0 overflow-hidden flex items-center justify-between bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 rounded-xl px-2.5 py-2 transition-colors duration-150"
+                >
+                  <span className="text-[10px] text-[#A1A5B5] font-bold uppercase tracking-wider shrink-0 pr-1">
+                    {item.label}
+                  </span>
+                  <div className="relative flex items-center min-w-0 flex-1 justify-end">
+                    <select
+                      value={item.val}
+                      onChange={(e) => item.set(e.target.value)}
+                      aria-label={`Filter by ${item.label.toLowerCase()}`}
+                      className="bg-transparent text-[#F4F3FA] text-xs font-semibold outline-none cursor-pointer text-right appearance-none w-full min-w-0 text-ellipsis pr-4 truncate"
                     >
-                      {opt.label}
-                    </button>
-                  );
-                })}
+                      {item.opts.map(o => (
+                        <option key={o} value={o} className="bg-[#12141E] text-[#F4F3FA]">
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-0 w-3.5 h-3.5 text-[#A1A5B5] pointer-events-none shrink-0" />
+                  </div>
+                </div>
+              ))}
+
+              {/* Sort Dropdown */}
+              <div className="relative min-w-0 overflow-hidden col-span-2 sm:col-span-1 flex items-center justify-between bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 rounded-xl px-2.5 py-2 transition-colors duration-150">
+                <span className="text-[10px] text-[#A1A5B5] font-bold uppercase tracking-wider shrink-0 pr-1">
+                  SORT
+                </span>
+                <div className="relative flex items-center min-w-0 flex-1 justify-end">
+                  <select
+                    value={selectedSort}
+                    onChange={(e) => setSelectedSort(e.target.value)}
+                    aria-label="Sort catalog"
+                    className="bg-transparent text-[#F4F3FA] text-xs font-semibold outline-none cursor-pointer text-right appearance-none w-full min-w-0 text-ellipsis pr-4 truncate"
+                  >
+                    {SORTS.map(s => (
+                      <option key={s.value} value={s.value} className="bg-[#12141E] text-[#F4F3FA]">
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-0 w-3.5 h-3.5 text-[#A1A5B5] pointer-events-none shrink-0" />
+                </div>
               </div>
             </div>
 
-            {/* Minimum Rating Slider */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="smart-filter-min-rating"
-                  className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5"
-                >
-                  <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                  <span>Minimum Catalog Score</span>
-                </label>
-                <span className="text-xs font-black text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-lg">
-                  {minRating > 0 ? `${minRating.toFixed(1)} / 10` : 'Any Rating'}
-                </span>
+            {/* Smart Filter Controls: Episode Length + Minimum Rating + Quick Toggles */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-[#292B39]">
+              {/* Episode Length Buckets */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
+                  Episode Length
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {EPISODE_LENGTH_OPTIONS.map((opt) => {
+                    const active = episodeLength === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setEpisodeLength(opt.id)}
+                        aria-pressed={active}
+                        className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors duration-150 cursor-pointer ${
+                          active
+                            ? 'bg-[#B49AF8] border-[#CBB6FF] text-[#0B0A10] font-bold'
+                            : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <input
-                id="smart-filter-min-rating"
-                type="range"
-                min={0}
-                max={10}
-                step={0.5}
-                value={minRating}
-                onChange={(e) => setMinRating(parseFloat(e.target.value))}
-                className="w-full accent-purple-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
-              />
-              <div className="flex justify-between text-[10px] text-slate-500 font-semibold">
-                <span>0</span>
-                <span>5.0</span>
-                <span>7.5</span>
-                <span>10</span>
+
+              {/* Minimum Rating Slider */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="smart-filter-min-rating"
+                    className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] flex items-center gap-1.5"
+                  >
+                    <Star className="w-3.5 h-3.5 text-[#F9C876] fill-[#F9C876]" />
+                    <span>Minimum Catalog Score</span>
+                  </label>
+                  <span className="text-xs font-bold text-[#F9C876] bg-[#191C29] border border-[#292B39] px-2 py-0.5 rounded-lg">
+                    {minRating > 0 ? `${minRating.toFixed(1)} / 10` : 'Any Rating'}
+                  </span>
+                </div>
+                <input
+                  id="smart-filter-min-rating"
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={0.5}
+                  value={minRating}
+                  onChange={(e) => setMinRating(parseFloat(e.target.value))}
+                  className="w-full accent-[#B49AF8] cursor-pointer h-2 bg-[#191C29] rounded-lg"
+                />
+                <div className="flex justify-between text-[10px] text-[#A1A5B5] font-semibold">
+                  <span>0</span>
+                  <span>5.0</span>
+                  <span>7.5</span>
+                  <span>10</span>
+                </div>
               </div>
             </div>
+
+            {/* Verified Dub & Free Legal Streaming Toggles */}
+            <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-[#292B39]">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setFullyDubbedOnly((prev) => !prev)}
+                  aria-pressed={fullyDubbedOnly}
+                  className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors duration-150 cursor-pointer inline-flex items-center gap-1.5 ${
+                    fullyDubbedOnly
+                      ? 'bg-[#34D399]/15 border-[#34D399]/60 text-[#34D399]'
+                      : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Fully Dubbed Only</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFreeLegalOnly((prev) => !prev)}
+                  aria-pressed={freeLegalOnly}
+                  className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors duration-150 cursor-pointer inline-flex items-center gap-1.5 ${
+                    freeLegalOnly
+                      ? 'bg-[#B49AF8]/20 border-[#B49AF8] text-[#CBB6FF]'
+                      : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
+                  }`}
+                >
+                  <Tv className="w-3.5 h-3.5" />
+                  <span>Free Legal Streaming Only</span>
+                </button>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsSmartFilterOpen(false)}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* EXPANDABLE OTT COVERAGE & SUBSCRIPTION CALCULATOR */}
+        {isOttHubOpen && (
+          <div className="pt-1">
+            <OttHubSection
+              catalogIndex={fullCatalogIndex && fullCatalogIndex.length > 0 ? fullCatalogIndex : statsSourceList}
+              selectedPlatform={selectedPlatform}
+              activeLanguage={selectedLanguage}
+              onSelectPlatform={(platformName) => {
+                setSelectedPlatform(platformName);
+                if (platformName !== 'All Platforms') {
+                  gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+              mySubscriptions={mySubscriptions}
+              mySubscriptionsEnabled={mySubscriptionsEnabled}
+              onToggleSubscriptionPlatform={(id) => onToggleSubscriptionPlatform?.(id)}
+              onToggleMySubscriptionsEnabled={(enabled) => onToggleMySubscriptionsEnabled?.(enabled)}
+              onClearSubscriptions={() => onClearSubscriptions?.()}
+              onSelectAnime={(a) => onSelectAnime(a as any)}
+            />
           </div>
         )}
 
@@ -959,7 +1056,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             data-testid="active-filter-chips"
             className="flex flex-wrap items-center gap-1.5 pt-0.5"
           >
-            <span className="text-[11px] font-bold text-slate-400 mr-1">
+            <span className="text-[11px] font-bold text-[#A1A5B5] mr-1">
               {paginationMeta.totalItems} {paginationMeta.totalItems === 1 ? 'match' : 'matches'}:
             </span>
             {activeFilterChips.map((chip) => (
@@ -968,7 +1065,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 type="button"
                 onClick={() => handleRemoveChip(chip)}
                 aria-label={`Remove filter ${chip.label}`}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/15 border border-purple-500/40 text-[11px] font-bold text-purple-200 hover:bg-purple-500/25 hover:text-white transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#191C29] border border-[#B49AF8]/40 text-[11px] font-semibold text-[#CBB6FF] hover:border-[#B49AF8] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer"
               >
                 <span>{chip.label}</span>
                 <X className="w-3 h-3" />
@@ -977,15 +1074,15 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             <button
               type="button"
               onClick={handleShareFilterUrl}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 border border-white/15 text-[11px] font-bold text-neutral-200 hover:bg-white/10 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#12141E] border border-[#292B39] text-[11px] font-semibold text-[#F4F3FA] hover:bg-[#191C29] transition-colors duration-150 cursor-pointer"
             >
-              <Share2 className="w-3 h-3 text-purple-300" />
+              <Share2 className="w-3 h-3 text-[#B49AF8]" />
               <span>Share Link</span>
             </button>
             <button
               type="button"
               onClick={handleClearAllFilters}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/35 text-[11px] font-bold text-rose-300 hover:bg-rose-500/25 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F87171]/15 border border-[#F87171]/35 text-[11px] font-semibold text-[#F87171] hover:bg-[#F87171]/25 transition-colors duration-150 cursor-pointer"
             >
               <span>Clear All</span>
             </button>
@@ -993,47 +1090,47 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         )}
       </div>
 
-      {/* 6. FOR YOU METADATA BANNER */}
+      {/* FOR YOU METADATA BANNER */}
       {feedView === 'foryou' && (
-        <div className="px-0.5 sm:px-2 md:px-0 mt-6 mb-2">
-          <div className="bg-gradient-to-r from-amber-500/15 via-purple-500/15 to-indigo-500/15 border border-amber-500/30 rounded-2xl p-3.5 flex items-center gap-3">
-            <Sparkles className="w-5 h-5 text-amber-400 shrink-0 animate-pulse" />
+        <div className="mt-3 mb-1">
+          <div className="bg-[#12141E] border border-[#292B39] rounded-xl p-3 flex items-center gap-3">
+            <Sparkles className="w-4 h-4 text-[#F9C876] shrink-0" />
             <div>
-              <div className="text-xs font-bold text-white">Curated For You • Indian Regional Dubs</div>
-              <div className="text-[10px] text-neutral-400 mt-0.5">
-                Handpicked based on your preferences in Tamil, Telugu, Hindi & Malayalam anime dubs.
+              <div className="text-xs font-bold text-[#F4F3FA]">Curated For You • Indian Regional Dubs</div>
+              <div className="text-[11px] text-[#A1A5B5] mt-0.5">
+                Tailored to your preferred Tamil, Telugu, Hindi & Malayalam anime dubs.
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 7. Catalog List Grid with Server-Side Pagination */}
-      <div ref={gridTopRef} className="pt-6 sm:pt-8">
-        {/* 1. GRID HEADER ROW */}
-        <div className="flex items-center justify-between mb-3.5">
+      {/* 2. POSTER-FIRST ANIME CATALOG GRID (Appears within first mobile viewport 390x844) */}
+      <div ref={gridTopRef} className="pt-3 sm:pt-5">
+        {/* Compact Grid Status Row */}
+        <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center space-x-1.5 text-xs">
-            <span className="text-neutral-400">
+            <span className="text-[#A1A5B5]">
               {catalogStatus === 'error' || catalogStatus === 'offline' ? (
-                <span className="text-rose-300 font-semibold">
+                <span className="text-[#F87171] font-semibold">
                   {catalogStatus === 'offline' ? 'Offline — unable to reach catalog' : 'Unable to load catalog'}
                 </span>
               ) : paginationMeta.totalItems > 0 ? (
                 <>
-                  Showing <strong className="text-white font-bold tabular-nums">{rangeStart}–{rangeEnd}</strong> of{' '}
-                  <strong className="text-white font-bold tabular-nums">{paginationMeta.totalItems}</strong> Titles
+                  Showing <strong className="text-[#F4F3FA] font-bold tabular-nums">{rangeStart}–{rangeEnd}</strong> of{' '}
+                  <strong className="text-[#F4F3FA] font-bold tabular-nums">{paginationMeta.totalItems}</strong> Titles
                 </>
               ) : loading ? (
                 <span>Loading catalog...</span>
               ) : (
                 <>
-                  Showing <strong className="text-white font-bold tabular-nums">0</strong> Titles
+                  Showing <strong className="text-[#F4F3FA] font-bold tabular-nums">0</strong> Titles
                 </>
               )}
             </span>
           </div>
           {catalogStatus !== 'error' && catalogStatus !== 'offline' && (
-            <span className="text-[11px] text-neutral-500 tabular-nums">
+            <span className="text-[11px] text-[#A1A5B5] tabular-nums">
               Page {paginationMeta.currentPage} of {paginationMeta.totalPages}
             </span>
           )}
@@ -1047,43 +1144,45 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           <div
             role="alert"
             data-testid="catalog-error-banner"
-            className="p-6 sm:p-8 rounded-2xl bg-rose-500/10 border border-rose-500/35 text-center space-y-3 max-w-xl mx-auto my-6"
+            className="p-6 sm:p-8 rounded-2xl bg-[#12141E] border border-[#F87171]/40 text-center space-y-3 max-w-xl mx-auto my-4"
           >
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 rounded-2xl bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] flex items-center justify-center mx-auto">
               {catalogStatus === 'offline' ? (
                 <WifiOff className="w-6 h-6" />
               ) : (
                 <AlertTriangle className="w-6 h-6" />
               )}
             </div>
-            <h3 className="text-base font-bold text-white">
+            <h3 className="text-base font-bold text-[#F4F3FA]">
               {catalogStatus === 'offline' ? 'You are currently offline' : 'Failed to load anime catalog'}
             </h3>
-            <p className="text-xs text-rose-200/85 max-w-md mx-auto leading-relaxed">
+            <p className="text-xs text-[#A1A5B5] max-w-md mx-auto leading-relaxed">
               {catalogError || 'The catalog service could not be reached. Please check your connection and retry.'}
             </p>
             <div className="pt-1">
-              <button
-                type="button"
+              <Button
+                variant="danger"
+                size="md"
                 onClick={() => fetchCatalogPage(currentPage)}
-                className="min-h-[42px] px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold inline-flex items-center gap-2 transition-colors cursor-pointer"
+                leftIcon={<RefreshCw className="w-4 h-4" />}
               >
-                <RefreshCw className="w-4 h-4" />
-                <span>Retry</span>
-              </button>
+                Retry
+              </Button>
             </div>
           </div>
         ) : displayedAnime.length === 0 ? (
-          <div className="text-center py-14 bg-[#101522] rounded-2xl border border-white/10 space-y-3">
-            <p className="text-neutral-300 text-sm font-semibold">No anime matches your selected filters.</p>
-            <p className="text-neutral-500 text-xs">Try clearing a language, platform, or search filter.</p>
-            <button
-              type="button"
-              onClick={handleClearAllFilters}
-              className="mt-2 min-h-[40px] px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors cursor-pointer"
-            >
-              Reset All Filters
-            </button>
+          <div className="text-center py-12 bg-[#12141E] rounded-2xl border border-[#292B39] space-y-3">
+            <p className="text-[#F4F3FA] text-sm font-semibold">No anime matches your selected filters.</p>
+            <p className="text-[#A1A5B5] text-xs">Try clearing a language, platform, or search filter.</p>
+            <div className="pt-1">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleClearAllFilters}
+              >
+                Reset All Filters
+              </Button>
+            </div>
           </div>
         ) : (
           <div
@@ -1113,13 +1212,13 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         {paginationMeta.totalItems > 0 && (
           <nav
             aria-label="Catalog pagination"
-            className="mt-8 pt-6 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-3"
+            className="mt-8 pt-6 border-t border-[#292B39] flex flex-col sm:flex-row items-center justify-between gap-3"
           >
-            <div className="text-xs text-slate-400 flex items-center gap-2">
-              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />}
+            <div className="text-xs text-[#A1A5B5] flex items-center gap-2">
+              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-[#B49AF8]" />}
               <span>
-                Page <strong className="text-white">{paginationMeta.currentPage}</strong> of{' '}
-                <strong className="text-white">{paginationMeta.totalPages}</strong> ({paginationMeta.totalItems} titles)
+                Page <strong className="text-[#F4F3FA]">{paginationMeta.currentPage}</strong> of{' '}
+                <strong className="text-[#F4F3FA]">{paginationMeta.totalPages}</strong> ({paginationMeta.totalItems} titles)
               </span>
             </div>
 
@@ -1129,7 +1228,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 onClick={() => handlePageChange(paginationMeta.currentPage - 1)}
                 disabled={!paginationMeta.hasPrevPage || loading}
                 aria-label="Previous page"
-                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-[#141b29] border border-[#242d46] hover:border-purple-500/50 text-xs font-semibold text-slate-200 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer"
+                className="min-h-[40px] inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150 cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>Previous</span>
@@ -1140,7 +1239,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                   pageItem === 'ellipsis' ? (
                     <span
                       key={`ellipsis_${pIdx}`}
-                      className="px-1.5 text-xs text-slate-500 select-none"
+                      className="px-1.5 text-xs text-[#A1A5B5] select-none"
                     >
                       …
                     </span>
@@ -1152,10 +1251,10 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                       disabled={loading}
                       aria-label={`Page ${pageItem}`}
                       aria-current={pageItem === paginationMeta.currentPage ? 'page' : undefined}
-                      className={`min-w-[34px] h-[34px] px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      className={`min-w-[38px] h-[38px] px-2 rounded-xl text-xs font-bold transition-colors duration-150 cursor-pointer ${
                         pageItem === paginationMeta.currentPage
-                          ? 'bg-gradient-to-r from-[#9333ea] to-[#6366f1] text-white shadow-[0_3px_12px_rgba(147,51,234,0.35)] border border-purple-400/50'
-                          : 'bg-[#141b29] border border-[#242d46] hover:border-purple-500/40 text-slate-300 hover:text-white'
+                          ? 'bg-[#B49AF8] text-[#0B0A10] border border-[#CBB6FF]'
+                          : 'bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5] hover:text-[#F4F3FA]'
                       }`}
                     >
                       {pageItem}
@@ -1169,7 +1268,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 onClick={() => handlePageChange(paginationMeta.currentPage + 1)}
                 disabled={!paginationMeta.hasNextPage || loading}
                 aria-label="Next page"
-                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-[#141b29] border border-[#242d46] hover:border-purple-500/50 text-xs font-semibold text-slate-200 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer"
+                className="min-h-[40px] inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 text-xs font-semibold text-[#F4F3FA] disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150 cursor-pointer"
               >
                 <span>Next</span>
                 <ChevronRight className="w-4 h-4" />
@@ -1179,7 +1278,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         )}
       </div>
 
-      {/* P2 #2: Compact Latest Dub Updates Feed (below catalog so above-the-fold stays search-first) */}
+      {/* Compact Latest Dub Updates Feed (below catalog so above-the-fold stays search-first) */}
       <LatestDubUpdatesCard
         className="mt-8"
         limit={6}

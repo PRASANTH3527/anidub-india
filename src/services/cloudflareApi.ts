@@ -102,6 +102,8 @@ export interface AnimePayload {
   reviews?: AnimeReviewResponse[];
   broadcast_day?: string | null;
   broadcast_time?: string | null;
+  current_season?: string | null;
+  live_episode?: number | null;
   releaseDay?: string;
   airTime?: string;
   season_episode_count?: string;
@@ -278,6 +280,7 @@ export interface FetchCatalogOptions {
   freeLegal?: boolean;
   sort?: string;
   includePending?: boolean;
+  fresh?: boolean;
   signal?: AbortSignal;
 }
 
@@ -429,6 +432,10 @@ class CloudflareApiService {
     if (options.freeLegal) queryParams.set('freeLegal', 'true');
     if (options.sort) queryParams.set('sort', options.sort);
     if (options.includePending) queryParams.set('includePending', 'true');
+    if (options.fresh || options.includePending) {
+      queryParams.set('fresh', '1');
+      queryParams.set('_t', String(Date.now()));
+    }
 
     const qs = queryParams.toString();
     const endpoint = `${CLOUDFLARE_ENDPOINTS.CATALOG}${qs ? `?${qs}` : ''}`;
@@ -624,7 +631,10 @@ class CloudflareApiService {
 
     const reqPromise = (async () => {
       try {
-        const res = await this.smartFetch(CLOUDFLARE_ENDPOINTS.CATALOG_INDEX, {
+        const indexEndpoint = forceRefresh
+          ? `${CLOUDFLARE_ENDPOINTS.CATALOG_INDEX}?fresh=1&_t=${Date.now()}`
+          : CLOUDFLARE_ENDPOINTS.CATALOG_INDEX;
+        const res = await this.smartFetch(indexEndpoint, {
           method: 'GET',
           headers: this.getHeaders(false),
         });
@@ -796,7 +806,9 @@ class CloudflareApiService {
       throw new Error(errorMsg);
     }
 
-    return await res.json();
+    const created = await res.json();
+    this.clearCatalogIndexCache();
+    return created;
   }
 
   /**
@@ -845,7 +857,9 @@ class CloudflareApiService {
       throw new Error(`[ERROR] Backend returned ${res.status} (${res.statusText}): ${errBody || 'Update rejected'}`);
     }
 
-    return await res.json();
+    const updated = await res.json();
+    this.clearCatalogIndexCache();
+    return updated;
   }
 
   /**
@@ -884,7 +898,9 @@ class CloudflareApiService {
       throw new Error(errorMsg);
     }
 
-    return await res.json().catch(() => ({ success: true }));
+    const deleted = await res.json().catch(() => ({ success: true }));
+    this.clearCatalogIndexCache();
+    return deleted;
   }
 
   /**
@@ -922,7 +938,9 @@ class CloudflareApiService {
       throw new Error(errJson.error || `Failed to approve anime ID ${id} on Cloudflare D1`);
     }
 
-    return await res.json();
+    const approved = await res.json();
+    this.clearCatalogIndexCache();
+    return approved;
   }
 
   /**
