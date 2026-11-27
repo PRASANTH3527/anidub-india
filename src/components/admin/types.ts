@@ -1,6 +1,7 @@
 export type AdminActiveTab =
   | 'overview'
   | 'catalog'
+  | 'editor'
   | 'dubs'
   | 'translations'
   | 'moderation'
@@ -9,6 +10,7 @@ export type AdminActiveTab =
   | 'data_health'
   | 'analytics'
   | 'backup'
+  | 'activity_log'
   | 'settings';
 
 export type FeedbackStatus = 'open' | 'in_progress' | 'resolved';
@@ -24,6 +26,13 @@ export interface AdminAnimeRecord {
 
 export type DataHealthFilter =
   | 'all'
+  | 'missing_artwork'
+  | 'missing_synopsis'
+  | 'duplicate_titles'
+  | 'inconsistent_episodes'
+  | 'unverified_dubs'
+  | 'stale_verification'
+  | 'missing_translations'
   | 'missing_stream_links'
   | 'missing_dub_langs'
   | 'missing_episode_counts'

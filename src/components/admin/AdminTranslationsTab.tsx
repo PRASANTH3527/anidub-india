@@ -12,6 +12,9 @@ import {
   ShieldCheck,
   Loader2,
   BookOpen,
+  Sparkles,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import {
   cloudflareApi,
@@ -31,6 +34,7 @@ import type { AdminAnimeRecord } from './types';
 
 interface AdminTranslationsTabProps {
   catalog: AdminAnimeRecord[];
+  initialAnimeId?: string | number | null;
   onSuccess?: (message: string) => void;
 }
 
@@ -56,15 +60,20 @@ const STATUS_FILTER_OPTIONS: Array<{ id: TranslationFilterStatus; label: string 
 
 export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
   catalog,
+  initialAnimeId,
   onSuccess,
 }) => {
   const [selectedLocale, setSelectedLocale] = useState<TargetTranslationLocale>('ta');
   const [statusFilter, setStatusFilter] = useState<TranslationFilterStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedAnimeId, setSelectedAnimeId] = useState<string>('');
+  const [selectedAnimeId, setSelectedAnimeId] = useState<string>(
+    initialAnimeId ? String(initialAnimeId) : ''
+  );
 
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [generatingAi, setGeneratingAi] = useState<boolean>(false);
+  const [togglingLock, setTogglingLock] = useState<boolean>(false);
   const [deleting, setDeleting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [tableReady, setTableReady] = useState<boolean>(true);
@@ -78,7 +87,14 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
   const [localizedTitle, setLocalizedTitle] = useState('');
   const [localizedSynopsis, setLocalizedSynopsis] = useState('');
   const [localizedDescription, setLocalizedDescription] = useState('');
+  const [isManualLocked, setIsManualLocked] = useState<boolean>(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  useEffect(() => {
+    if (initialAnimeId) {
+      setSelectedAnimeId(String(initialAnimeId));
+    }
+  }, [initialAnimeId]);
 
   const loadTranslations = useCallback(async () => {
     setLoading(true);
@@ -91,7 +107,7 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
       setCoverage(res.coverage || []);
       setAnimeSourceHashes(res.animeSourceHashes || {});
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to load translation center data.');
+      setErrorMsg(err?.message || 'Failed to load translation studio data.');
     } finally {
       setLoading(false);
     }
@@ -120,12 +136,16 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
           computeSourceHash(anime.title, anime.synopsis || anime.description || '');
         const outdated = tr ? isTranslationOutdated(tr.source_hash, currentHash) : false;
         const status: 'missing' | TranslationStatus = tr ? tr.translation_status : 'missing';
+        const locked =
+          Boolean(tr?.is_locked) ||
+          (typeof tr?.updated_by === 'string' && tr.updated_by.startsWith('LOCKED:'));
         return {
           anime,
           animeIdStr,
           translation: tr,
           status,
           outdated,
+          locked,
           currentHash,
         };
       })
@@ -142,7 +162,6 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
       });
   }, [catalog, translationLookup, selectedLocale, animeSourceHashes, searchQuery, statusFilter]);
 
-  // Keep a valid anime selected when catalog or filters update
   useEffect(() => {
     if (enrichedRows.length === 0) {
       setSelectedAnimeId('');
@@ -165,12 +184,14 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
       setLocalizedTitle('');
       setLocalizedSynopsis('');
       setLocalizedDescription('');
+      setIsManualLocked(false);
       return;
     }
     setLocalizedTitle(activeRow.translation?.localized_title || '');
     setLocalizedSynopsis(activeRow.translation?.synopsis || '');
     setLocalizedDescription(activeRow.translation?.description || '');
-  }, [activeRow?.animeIdStr, selectedLocale, activeRow?.translation?.updated_at]);
+    setIsManualLocked(Boolean(activeRow.locked));
+  }, [activeRow?.animeIdStr, selectedLocale, activeRow?.translation?.updated_at, activeRow?.locked]);
 
   const handleSaveWithStatus = async (targetStatus: TranslationStatus) => {
     if (!activeRow) return;
@@ -194,6 +215,9 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
         description: trimmedDesc || null,
         translation_status: targetStatus,
       });
+      if (isManualLocked) {
+        await cloudflareApi.toggleAdminTranslationLock(activeRow.animeIdStr, selectedLocale, true).catch(() => null);
+      }
       await loadTranslations();
       const label = LOCALE_LABELS[selectedLocale]?.english || selectedLocale.toUpperCase();
       onSuccess?.(
@@ -203,6 +227,61 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
       setErrorMsg(err?.message || 'Failed to save translation.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRegenerateWithWorkersAi = async () => {
+    if (!activeRow) return;
+    if (isManualLocked) {
+      setErrorMsg(
+        'This translation is locked for manual editing. Unlock it first if you want Workers AI to overwrite it.'
+      );
+      return;
+    }
+    setGeneratingAi(true);
+    setErrorMsg(null);
+    try {
+      const res = await cloudflareApi.generateAdminTranslationWithAi({
+        anime_id: activeRow.animeIdStr,
+        locale: selectedLocale,
+        title: activeRow.anime.title,
+        synopsis: activeRow.anime.synopsis || activeRow.anime.description || '',
+      });
+      if (res.synopsis) {
+        setLocalizedSynopsis(res.synopsis);
+      }
+      if (res.description) {
+        setLocalizedDescription(res.description);
+      }
+      await loadTranslations();
+      const label = LOCALE_LABELS[selectedLocale]?.english || selectedLocale.toUpperCase();
+      onSuccess?.(
+        `Generated ${label} translation via ${res.provider === 'workers-ai' ? 'Cloudflare Workers AI' : 'Translation Engine'} for "${activeRow.anime.title}".`
+      );
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to generate translation with Workers AI.');
+    } finally {
+      setGeneratingAi(false);
+    }
+  };
+
+  const handleToggleLock = async () => {
+    if (!activeRow) return;
+    const nextLock = !isManualLocked;
+    setTogglingLock(true);
+    setErrorMsg(null);
+    try {
+      await cloudflareApi.toggleAdminTranslationLock(activeRow.animeIdStr, selectedLocale, nextLock);
+      setIsManualLocked(nextLock);
+      await loadTranslations();
+      const label = LOCALE_LABELS[selectedLocale]?.english || selectedLocale.toUpperCase();
+      onSuccess?.(
+        `${nextLock ? 'Locked' : 'Unlocked'} manual ${label} translation for "${activeRow.anime.title}".`
+      );
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Save a draft first before locking manual edits.');
+    } finally {
+      setTogglingLock(false);
     }
   };
 
@@ -228,7 +307,7 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
   const activeLocaleMeta = LANGUAGE_REGISTRY.find((l) => l.code === selectedLocale);
 
   return (
-    <div className="space-y-5 min-w-0">
+    <div data-testid="admin-translations-studio" className="space-y-5 min-w-0">
       {/* Header Banner */}
       <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="min-w-0">
@@ -238,10 +317,10 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
             </div>
             <div className="min-w-0">
               <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] truncate">
-                Multilingual Translation Center
+                Workers AI Translation Studio (`anime_translations`)
               </h2>
               <p className="text-xs text-[var(--text-secondary)]">
-                Additive D1 localization for anime synopses &amp; SEO metadata. English source entries are never altered.
+                Side-by-side Original English Synopsis vs Localized Translation across 6 Indian scripts with Workers AI generation and manual edit lock protection.
               </p>
             </div>
           </div>
@@ -426,6 +505,14 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {row.locked && (
+                        <span
+                          className="p-1 rounded bg-amber-500/15 text-amber-500 border border-amber-500/30"
+                          title="Locked Manual Edit"
+                        >
+                          <Lock className="w-3 h-3" />
+                        </span>
+                      )}
                       {row.outdated && (
                         <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#FBBF24]/15 text-[#FBBF24] border border-[#FBBF24]/30">
                           Outdated
@@ -458,33 +545,90 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
                   </h3>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {activeRow.outdated && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-[#FBBF24]/15 text-[#FBBF24] border border-[#FBBF24]/30">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Source Changed
-                    </span>
-                  )}
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {/* Regenerate with Workers AI Button */}
+                  <button
+                    type="button"
+                    data-testid="regenerate-workers-ai-btn"
+                    disabled={generatingAi || saving || isManualLocked}
+                    onClick={handleRegenerateWithWorkersAi}
+                    className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--accent-soft)] hover:opacity-90 border border-[var(--accent-primary)]/40 text-xs font-bold text-[var(--accent-primary)] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {generatingAi ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5" />
+                    )}
+                    <span>Regenerate with Workers AI</span>
+                  </button>
+
+                  {/* Lock Manual Edit Button */}
+                  <button
+                    type="button"
+                    data-testid="toggle-translation-lock-btn"
+                    disabled={togglingLock || saving}
+                    onClick={handleToggleLock}
+                    className={`min-h-[40px] px-3 py-1.5 rounded-xl border text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                      isManualLocked
+                        ? 'bg-amber-500/15 text-amber-500 border-amber-500/40'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {isManualLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                    <span>{isManualLocked ? 'Locked (Manual)' : 'Lock Manual Edit'}</span>
+                  </button>
+
                   <StatusBadge status={activeRow.status} />
                 </div>
               </div>
 
-              {/* Read-Only English Source Reference */}
-              <div className="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-3.5 space-y-2">
-                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                  <BookOpen className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                  <span>Original English Source (Read-Only)</span>
+              {/* Side-by-Side Comparison: Left Original English vs Right Localized Editor */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {/* Original English Source (Read-Only) */}
+                <div className="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-3.5 space-y-2">
+                  <div className="flex items-center justify-between gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    <span className="inline-flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                      Original English Synopsis
+                    </span>
+                    <span className="text-[10px] font-mono">Read-Only</span>
+                  </div>
+                  <div className="text-xs font-semibold text-[var(--text-primary)]">
+                    {activeRow.anime.title}
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap break-words max-h-56 overflow-y-auto">
+                    {activeRow.anime.synopsis || activeRow.anime.description || 'No English synopsis recorded yet.'}
+                  </p>
                 </div>
-                <div className="text-xs font-semibold text-[var(--text-primary)]">
-                  {activeRow.anime.title}
+
+                {/* Localized Synopsis Editor */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="admin-tr-synopsis"
+                      className="block text-xs font-bold text-[var(--text-primary)]"
+                    >
+                      Localized {LOCALE_LABELS[selectedLocale].english} Synopsis
+                    </label>
+                    <span className="text-[11px] text-[var(--text-secondary)]">
+                      {localizedSynopsis.length}/4000
+                    </span>
+                  </div>
+                  <textarea
+                    id="admin-tr-synopsis"
+                    rows={8}
+                    maxLength={4000}
+                    value={localizedSynopsis}
+                    onChange={(e) => setLocalizedSynopsis(e.target.value)}
+                    disabled={!tableReady || saving}
+                    placeholder={`Write or generate natural ${LOCALE_LABELS[selectedLocale].english} synopsis for Indian anime fans...`}
+                    className="w-full p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] leading-relaxed resize-y disabled:opacity-60"
+                  />
                 </div>
-                <p className="text-xs text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap break-words max-h-36 overflow-y-auto">
-                  {activeRow.anime.synopsis || activeRow.anime.description || 'No English synopsis recorded yet.'}
-                </p>
               </div>
 
-              {/* Editable Localized Fields */}
-              <div className="space-y-3.5">
+              {/* Additional Localized Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
                   <label
                     htmlFor="admin-tr-title"
@@ -499,32 +643,8 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
                     value={localizedTitle}
                     onChange={(e) => setLocalizedTitle(e.target.value)}
                     disabled={!tableReady || saving}
-                    placeholder="Optional native-script subtitle (official English title stays primary)"
+                    placeholder="Optional native-script subtitle (English title stays primary)"
                     className="w-full min-h-[44px] px-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] disabled:opacity-60"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label
-                      htmlFor="admin-tr-synopsis"
-                      className="block text-xs font-semibold text-[var(--text-primary)]"
-                    >
-                      Localized Synopsis
-                    </label>
-                    <span className="text-[11px] text-[var(--text-secondary)]">
-                      {localizedSynopsis.length}/4000
-                    </span>
-                  </div>
-                  <textarea
-                    id="admin-tr-synopsis"
-                    rows={5}
-                    maxLength={4000}
-                    value={localizedSynopsis}
-                    onChange={(e) => setLocalizedSynopsis(e.target.value)}
-                    disabled={!tableReady || saving}
-                    placeholder={`Write natural ${LOCALE_LABELS[selectedLocale].english} synopsis for Indian anime fans...`}
-                    className="w-full p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] leading-relaxed resize-y disabled:opacity-60"
                   />
                 </div>
 
@@ -540,15 +660,15 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
                       {localizedDescription.length}/320
                     </span>
                   </div>
-                  <textarea
+                  <input
                     id="admin-tr-description"
-                    rows={2}
+                    type="text"
                     maxLength={320}
                     value={localizedDescription}
                     onChange={(e) => setLocalizedDescription(e.target.value)}
                     disabled={!tableReady || saving}
-                    placeholder="Concise 140–160 char localized meta description for search & social shares"
-                    className="w-full p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] resize-y disabled:opacity-60"
+                    placeholder="Concise 140–160 char localized meta description"
+                    className="w-full min-h-[44px] px-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] focus:outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] disabled:opacity-60"
                   />
                 </div>
               </div>
@@ -563,7 +683,7 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
                     className="min-h-[44px] px-4 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)] inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <FileEdit className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-                    <span>Save Draft</span>
+                    <span>Edit Manually (Save Draft)</span>
                   </button>
 
                   <button

@@ -14,6 +14,8 @@ import {
 } from '../../utils/dataNormalization';
 import { validateOfficialSourceUrl } from '../../utils/submissionValidation';
 import { classifyLinkHealthStatus, isSafePublicHttpUrl, type LinkHealthStatus } from '../../utils/linkHealth';
+import { validateCsvDryRunRows } from '../../utils/adminOpsPro';
+import { recordAdminActivityLog } from './adminOpsProRoutes';
 import { D1_DATABASE_ID, getErrorMessage, isMissingColumnError, type RouteContext } from './shared';
 
 interface CsvImportRow {
@@ -701,14 +703,43 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
       );
     }
     try {
-      const body = (await request.json()) as CsvImportRow | CsvImportRow[];
+      const body = (await request.json()) as Record<string, any> | CsvImportRow[];
       let rows: CsvImportRow[] = [];
-      if (Array.isArray(body)) rows = body;
-      else if (Array.isArray(body?.animeList)) rows = body.animeList as CsvImportRow[];
-      else if (Array.isArray(body?.data)) rows = body.data as CsvImportRow[];
+      let isDryRun = false;
+      if (Array.isArray(body)) {
+        rows = body;
+      } else if (body && typeof body === 'object') {
+        isDryRun = Boolean(body.dryRun);
+        if (Array.isArray(body.animeList)) rows = body.animeList as CsvImportRow[];
+        else if (Array.isArray(body.data)) rows = body.data as CsvImportRow[];
+        else if (Array.isArray(body.rows)) rows = body.rows as CsvImportRow[];
+      }
 
       if (!rows || rows.length === 0) {
         return jsonResponse({ success: false, error: 'Empty CSV payload' }, 400);
+      }
+
+      if (isDryRun) {
+        const existingTitles = new Set<string>();
+        if (env.DB) {
+          const res = await env.DB.prepare('SELECT title FROM anime')
+            .all<{ title?: string }>()
+            .catch(() => ({ results: [] }));
+          for (const r of res.results || []) {
+            if (r.title) existingTitles.add(String(r.title).trim().toLowerCase());
+          }
+        }
+        const dryRunSummary = validateCsvDryRunRows(rows as Array<Record<string, any>>, existingTitles);
+        return jsonResponse(
+          {
+            success: true,
+            dryRun: true,
+            ...dryRunSummary,
+          },
+          200,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
       }
 
       const extractTitleFromRow = (r: CsvImportRow): string => {
@@ -972,6 +1003,18 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         insertedCount++;
       }
 
+      if (env.DB && insertedCount > 0) {
+        await recordAdminActivityLog(env.DB, {
+          actor_id: session.userId,
+          actor_email: session.email,
+          action: 'CSV_IMPORT_COMMIT',
+          entity_type: 'anime',
+          entity_id: `batch-${insertedCount}`,
+          summary: `Imported ${insertedCount} CSV rows into Pending Moderation queue (${skippedCount} duplicates skipped).`,
+          diff_json: { insertedCount, skippedCount, addedTitles: addedTitles.slice(0, 15) },
+        });
+      }
+
       return jsonResponse({
         success: true,
         count: insertedCount,
@@ -1045,6 +1088,14 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         if (res?.meta?.changes === 0) {
           return jsonResponse({ success: false, error: 'Anime not found' }, 404, request);
         }
+        await recordAdminActivityLog(env.DB, {
+          actor_id: session.userId,
+          actor_email: session.email,
+          action: 'APPROVE_PENDING_ANIME',
+          entity_type: 'anime',
+          entity_id: id,
+          summary: `Approved pending anime #${id} and published with status "${targetStatus}".`,
+        });
       }
       return jsonResponse(
         {
@@ -1082,6 +1133,14 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         if (res?.meta?.changes === 0) {
           return jsonResponse({ success: false, error: 'Anime not found' }, 404, request);
         }
+        await recordAdminActivityLog(env.DB, {
+          actor_id: session.userId,
+          actor_email: session.email,
+          action: 'REJECT_PENDING_ANIME',
+          entity_type: 'anime',
+          entity_id: id,
+          summary: `Rejected and removed pending anime submission #${id}.`,
+        });
       }
       return jsonResponse({ success: true, id }, 200, request);
     } catch (err) {

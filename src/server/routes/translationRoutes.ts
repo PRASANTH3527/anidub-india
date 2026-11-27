@@ -251,20 +251,35 @@ export async function handleTranslationRoutes(ctx: RouteContext): Promise<Respon
       let allTranslations: AnimeTranslationRecord[] = [];
       let tableReady = true;
       try {
-        const trRes = await env.DB.prepare(
-          'SELECT id, anime_id, locale, localized_title, synopsis, description, source_hash, translation_status, updated_at FROM anime_translations ORDER BY updated_at DESC, id DESC'
-        ).all();
-        allTranslations = (trRes.results || []).map((r) => ({
-          id: Number(r.id) || undefined,
-          anime_id: String(r.anime_id),
-          locale: String(r.locale),
-          localized_title: r.localized_title ? String(r.localized_title) : null,
-          synopsis: r.synopsis ? String(r.synopsis) : null,
-          description: r.description ? String(r.description) : null,
-          source_hash: r.source_hash ? String(r.source_hash) : null,
-          translation_status: sanitizeTranslationStatus(r.translation_status, 'draft'),
-          updated_at: r.updated_at ? String(r.updated_at) : undefined,
-        }));
+        let trRows: Record<string, unknown>[] = [];
+        try {
+          const trRes = await env.DB.prepare(
+            'SELECT id, anime_id, locale, localized_title, synopsis, description, source_hash, translation_status, updated_by, updated_at FROM anime_translations ORDER BY updated_at DESC, id DESC'
+          ).all();
+          trRows = trRes.results || [];
+        } catch {
+          const trResFallback = await env.DB.prepare(
+            'SELECT id, anime_id, locale, localized_title, synopsis, description, source_hash, translation_status, updated_at FROM anime_translations ORDER BY updated_at DESC, id DESC'
+          ).all();
+          trRows = trResFallback.results || [];
+        }
+        allTranslations = trRows.map((r) => {
+          const updatedBy = r.updated_by ? String(r.updated_by) : null;
+          const isLocked = Boolean(r.is_locked) || (updatedBy ? updatedBy.startsWith('LOCKED:') : false);
+          return {
+            id: Number(r.id) || undefined,
+            anime_id: String(r.anime_id),
+            locale: String(r.locale),
+            localized_title: r.localized_title ? String(r.localized_title) : null,
+            synopsis: r.synopsis ? String(r.synopsis) : null,
+            description: r.description ? String(r.description) : null,
+            source_hash: r.source_hash ? String(r.source_hash) : null,
+            translation_status: sanitizeTranslationStatus(r.translation_status, 'draft'),
+            updated_by: updatedBy,
+            is_locked: isLocked,
+            updated_at: r.updated_at ? String(r.updated_at) : undefined,
+          };
+        });
       } catch (trErr) {
         if (isMissingTranslationsTableError(trErr)) {
           tableReady = false;
@@ -351,6 +366,7 @@ export async function handleTranslationRoutes(ctx: RouteContext): Promise<Respon
 
     const { anime_id, locale, localized_title, synopsis, description, translation_status } =
       validated.data;
+    const requestedLock = body.is_locked !== undefined ? Boolean(body.is_locked) : undefined;
 
     try {
       // Verify the target anime exists and compute canonical English source_hash without touching anime row
@@ -371,28 +387,57 @@ export async function handleTranslationRoutes(ctx: RouteContext): Promise<Respon
 
       const canonicalAnimeId = String(animeRow.id);
       const sourceHash = computeSourceHash(animeRow.title, animeRow.synopsis);
+      const actorTag = requestedLock
+        ? `LOCKED:${auth.session.email || auth.session.userId || 'admin'}`
+        : auth.session.email || auth.session.userId || 'admin';
 
-      await env.DB.prepare(
-        `INSERT INTO anime_translations (anime_id, locale, localized_title, synopsis, description, source_hash, translation_status, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-         ON CONFLICT(anime_id, locale) DO UPDATE SET
-           localized_title = excluded.localized_title,
-           synopsis = excluded.synopsis,
-           description = excluded.description,
-           source_hash = excluded.source_hash,
-           translation_status = excluded.translation_status,
-           updated_at = datetime('now')`
-      )
-        .bind(
-          canonicalAnimeId,
-          locale,
-          localized_title,
-          synopsis,
-          description,
-          sourceHash,
-          translation_status
+      try {
+        await env.DB.prepare(
+          `INSERT INTO anime_translations (anime_id, locale, localized_title, synopsis, description, source_hash, translation_status, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(anime_id, locale) DO UPDATE SET
+             localized_title = excluded.localized_title,
+             synopsis = excluded.synopsis,
+             description = excluded.description,
+             source_hash = excluded.source_hash,
+             translation_status = excluded.translation_status,
+             updated_by = excluded.updated_by,
+             updated_at = datetime('now')`
         )
-        .run();
+          .bind(
+            canonicalAnimeId,
+            locale,
+            localized_title,
+            synopsis,
+            description,
+            sourceHash,
+            translation_status,
+            actorTag
+          )
+          .run();
+      } catch {
+        await env.DB.prepare(
+          `INSERT INTO anime_translations (anime_id, locale, localized_title, synopsis, description, source_hash, translation_status, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(anime_id, locale) DO UPDATE SET
+             localized_title = excluded.localized_title,
+             synopsis = excluded.synopsis,
+             description = excluded.description,
+             source_hash = excluded.source_hash,
+             translation_status = excluded.translation_status,
+             updated_at = datetime('now')`
+        )
+          .bind(
+            canonicalAnimeId,
+            locale,
+            localized_title,
+            synopsis,
+            description,
+            sourceHash,
+            translation_status
+          )
+          .run();
+      }
 
       const saved = await env.DB.prepare(
         'SELECT id, anime_id, locale, localized_title, synopsis, description, source_hash, translation_status, updated_at FROM anime_translations WHERE anime_id = ? AND locale = ? LIMIT 1'
@@ -403,7 +448,13 @@ export async function handleTranslationRoutes(ctx: RouteContext): Promise<Respon
       return jsonResponse(
         {
           success: true,
-          translation: saved,
+          translation: saved
+            ? {
+                ...saved,
+                updated_by: actorTag,
+                is_locked: actorTag.startsWith('LOCKED:'),
+              }
+            : null,
         },
         200,
         request,

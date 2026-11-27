@@ -529,7 +529,7 @@ export default function App() {
       if (slugOrId) {
         void resolveDeepLinkAnime(slugOrId);
       }
-    } else if (pathname === '/admin' || pathname === '/admin/analytics') {
+    } else if (pathname === '/admin' || pathname.startsWith('/admin/')) {
       if (isAdminAuthenticated && isClerkAdmin) {
         setActiveTab('admin');
         setIsPasswordModalOpen(false);
@@ -605,7 +605,7 @@ export default function App() {
         setDeepLinkLoading(false);
         setSelectedSeoLanguage(null);
         if (
-          (pathname === '/admin' || pathname === '/admin/analytics') &&
+          (pathname === '/admin' || pathname.startsWith('/admin/')) &&
           isAdminAuthenticated &&
           isClerkAdmin
         ) {

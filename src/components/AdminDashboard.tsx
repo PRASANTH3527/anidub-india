@@ -28,6 +28,7 @@ import {
   X,
   FileSpreadsheet,
   RefreshCw,
+  Activity,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DubInfoModal } from './DubInfoModal';
@@ -44,6 +45,11 @@ import {
   type AdminOverviewStats,
   type FeedbackStatus,
 } from './admin/types';
+import {
+  validateCsvDryRunRows,
+  type AnimeEditorTabId,
+  type CsvDryRunSummary,
+} from '../utils/adminOpsPro';
 import { AdminTranslationsTab } from './admin/AdminTranslationsTab';
 import { AdminOverviewTab } from './admin/AdminOverviewTab';
 import { AdminCatalogTab } from './admin/AdminCatalogTab';
@@ -54,6 +60,10 @@ import { AdminSettingsTab } from './admin/AdminSettingsTab';
 import { AdminTerminalHud } from './admin/AdminTerminalHud';
 import { AdminCommandPalette } from './admin/AdminCommandPalette';
 import { AdminCsvHelpModal } from './admin/AdminCsvHelpModal';
+import { AdminAnimeEditorView } from './admin/AdminAnimeEditorView';
+import { AdminDubMatrixTab } from './admin/AdminDubMatrixTab';
+import { AdminModerationInboxTab } from './admin/AdminModerationInboxTab';
+import { AdminActivityLogTab } from './admin/AdminActivityLogTab';
 
 export interface AdminDashboardProps {
   onAnimeCreated?: (updatedAnime?: any, deletedId?: string | number) => void;
@@ -79,8 +89,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Navigation & Responsive Shell State
   const [activeTab, setActiveTab] = useState<AdminActiveTab>(() => {
-    if (typeof window !== 'undefined' && window.location.pathname === '/admin/analytics') {
-      return 'analytics';
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      if (p === '/admin/analytics') return 'analytics';
+      if (p === '/admin/catalog/new' || /^\/admin\/catalog\/[^/]+\/edit\/?$/.test(p)) {
+        return 'editor';
+      }
     }
     return 'overview';
   });
@@ -113,6 +127,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isBulkProcessing, setIsBulkProcessing] = useState<boolean>(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [editingAnime, setEditingAnime] = useState<any | null>(null);
+  const [editorTargetTab, setEditorTargetTab] = useState<AnimeEditorTabId>('identity');
+  const [translationTargetAnimeId, setTranslationTargetAnimeId] = useState<string | number | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
   const [cmdQuery, setCmdQuery] = useState<string>('');
   const [healthFilter, setHealthFilter] = useState<DataHealthFilter>('all');
@@ -127,9 +143,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [linkCheckReport, setLinkCheckReport] = useState<AdminLinkCheckResponse | null>(null);
   const [isCheckingLinks, setIsCheckingLinks] = useState<boolean>(false);
 
-  // CSV Import / Export State
+  // CSV Import / Export & Dry-Run State
   const [isUploadingCsv, setIsUploadingCsv] = useState<boolean>(false);
   const [isCsvHelpOpen, setIsCsvHelpOpen] = useState<boolean>(false);
+  const [csvDryRunReport, setCsvDryRunReport] = useState<CsvDryRunSummary | null>(null);
+  const [stagedCsvRows, setStagedCsvRows] = useState<any[]>([]);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   // Diagnostics & D1 Status State
@@ -1350,24 +1368,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return;
       }
 
-      const res: any = await cloudflareApi.uploadCSV({ animeList: parsedItems });
-      if (res && res.success) {
-        const addedCount = res.insertedCount ?? res.inserted ?? res.count ?? parsedItems.length;
-        await fetchPendingItems();
-        void fetchD1StatusSummary();
-        setActiveTab('moderation');
-        setModerationSubTab('pending');
-        showToast(`Imported ${addedCount} titles into Pending Moderation queue!`, 'success');
-      } else {
-        showToast(res?.error || res?.message || 'Failed to import CSV rows', 'error');
+      // Phase 2: Safe CSV Import Dry-Run before committing
+      setStagedCsvRows(parsedItems);
+      try {
+        const dryRes = await cloudflareApi.dryRunImportCsv(parsedItems);
+        if (dryRes && dryRes.report) {
+          setCsvDryRunReport(dryRes.report);
+          setActiveTab('backup');
+          showToast(
+            `Dry-Run Complete: ${dryRes.report.validCount} valid, ${dryRes.report.duplicateCount} duplicates, ${dryRes.report.invalidCount} errors. Review before committing.`,
+            'success'
+          );
+          return;
+        }
+      } catch {
+        // Fallback to local dry-run validator if server endpoint is unreachable
+        const existingSource = fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems;
+        const localDryReport = validateCsvDryRunRows(parsedItems, existingSource);
+        setCsvDryRunReport(localDryReport);
+        setActiveTab('backup');
+        showToast(
+          `Dry-Run Complete: ${localDryReport.validCount} valid, ${localDryReport.duplicateCount} duplicates, ${localDryReport.invalidCount} errors.`,
+          'success'
+        );
+        return;
       }
     } catch (err: any) {
-      showToast(`CSV Import Failed: ${err?.message || 'Unknown error'}`, 'error');
+      showToast(`CSV Dry-Run Failed: ${err?.message || 'Unknown error'}`, 'error');
     } finally {
       setIsUploadingCsv(false);
       if (csvInputRef.current) csvInputRef.current.value = '';
     }
   };
+
+  const handleCommitStagedCsv = async () => {
+    if (stagedCsvRows.length === 0) return;
+    setIsUploadingCsv(true);
+    try {
+      const res: any = await cloudflareApi.uploadCSV({ animeList: stagedCsvRows });
+      if (res && res.success) {
+        const addedCount = res.insertedCount ?? res.inserted ?? res.count ?? stagedCsvRows.length;
+        setCsvDryRunReport(null);
+        setStagedCsvRows([]);
+        await fetchPendingItems();
+        void fetchD1StatusSummary();
+        setActiveTab('moderation');
+        setModerationSubTab('pending');
+        showToast(`Committed ${addedCount} valid titles into Pending Moderation queue!`, 'success');
+      } else {
+        showToast(res?.error || res?.message || 'Failed to commit CSV rows', 'error');
+      }
+    } catch (err: any) {
+      showToast(`CSV Commit Failed: ${err?.message || 'Unknown error'}`, 'error');
+    } finally {
+      setIsUploadingCsv(false);
+    }
+  };
+
+  const handleOpenModularEditor = useCallback(
+    (anime: any | null, targetTab: AnimeEditorTabId = 'identity') => {
+      setEditingAnime(anime);
+      setEditorTargetTab(targetTab);
+      setActiveTab('editor');
+      if (typeof window !== 'undefined') {
+        const targetPath =
+          anime && anime.id ? `/admin/catalog/${anime.id}/edit` : '/admin/catalog/new';
+        if (window.location.pathname !== targetPath) {
+          window.history.pushState(null, '', targetPath);
+        }
+      }
+    },
+    []
+  );
 
   // STRICT CLERK ADMIN ROUTE GUARD (Production Enforced)
   if (!isClerkAdminAuthorized) {
@@ -1415,6 +1487,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } else {
       setActiveTab(tab);
     }
+    if (
+      typeof window !== 'undefined' &&
+      tab !== 'editor' &&
+      window.location.pathname.startsWith('/admin/catalog/')
+    ) {
+      window.history.pushState(null, '', '/admin');
+    }
     setIsMobileMoreOpen(false);
   };
 
@@ -1448,7 +1527,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         },
         {
           id: 'dubs',
-          label: 'Dubs',
+          label: 'Dubs Matrix',
           icon: Globe,
           badge:
             overviewStats.unverifiedDubsCount > 0
@@ -1457,7 +1536,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         },
         {
           id: 'translations',
-          label: 'Translations',
+          label: 'Translation Studio',
           icon: Languages,
         },
       ],
@@ -1467,13 +1546,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       items: [
         {
           id: 'moderation',
-          label: 'Moderation & Feedback',
+          label: 'Moderation Inbox',
           icon: Clock,
           badge: totalModerationBadge > 0 ? totalModerationBadge : undefined,
         },
         {
           id: 'data_health',
-          label: 'Data Health',
+          label: 'Data Health QA',
           icon: ShieldCheck,
           badge:
             dataHealthReport.summary.all > 0 ? dataHealthReport.summary.all : undefined,
@@ -1484,7 +1563,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     {
       groupLabel: 'System',
       items: [
-        { id: 'backup', label: 'Backup & Export', icon: Download },
+        { id: 'backup', label: 'Backup & CSV', icon: Download },
+        { id: 'activity_log', label: 'Activity Log', icon: Activity },
         { id: 'settings', label: 'Settings', icon: Settings },
       ],
     },
@@ -1634,12 +1714,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <h1 className="text-sm sm:text-base font-extrabold text-[var(--text-primary)] truncate">
                 {effectiveTab === 'overview' && 'Command Center'}
                 {effectiveTab === 'catalog' && 'Anime Catalog'}
-                {effectiveTab === 'dubs' && 'Regional Dubs Intelligence'}
-                {effectiveTab === 'translations' && 'Native Synopsis Translations'}
-                {effectiveTab === 'moderation' && 'Moderation & Feedback'}
-                {effectiveTab === 'data_health' && 'Data Health Audit'}
+                {effectiveTab === 'editor' && (editingAnime ? 'Modular Anime Editor' : 'New Catalog Entry')}
+                {effectiveTab === 'dubs' && 'Bulk Dub Intelligence & Episode Matrix'}
+                {effectiveTab === 'translations' && 'Workers AI Translation Studio'}
+                {effectiveTab === 'moderation' && 'Unified Moderation Inbox'}
+                {effectiveTab === 'data_health' && 'Catalog Data Health & QA Scanner'}
                 {effectiveTab === 'analytics' && 'Analytics & Edge Telemetry'}
-                {effectiveTab === 'backup' && 'Backup & Export'}
+                {effectiveTab === 'backup' && 'Backup, Export & CSV Dry-Run'}
+                {effectiveTab === 'activity_log' && 'Admin Activity & Audit Log'}
                 {effectiveTab === 'settings' && 'Workspace Settings'}
               </h1>
             </div>
@@ -1673,10 +1755,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <button
               type="button"
-              onClick={() => {
-                setEditingAnime(null);
-                setIsAddModalOpen(true);
-              }}
+              data-testid="admin-header-add-anime-btn"
+              onClick={() => handleOpenModularEditor(null, 'identity')}
               className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-bold flex items-center gap-1.5 shadow-xs"
             >
               <Plus className="w-4 h-4" />
@@ -1694,20 +1774,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               pendingItems={pendingItems}
               feedbackList={feedbackList}
               onSetActiveTab={handleSelectNavTab}
-              onOpenAddModal={() => {
-                setEditingAnime(null);
-                setIsAddModalOpen(true);
-              }}
+              onOpenAddModal={() => handleOpenModularEditor(null, 'identity')}
               onFilterCatalogByLanguage={handleFilterCatalogByLanguage}
               onApprovePending={handleApprove}
               onRejectPending={handleReject}
             />
           )}
 
-          {/* SECTION 2 & 3: ANIME CATALOG & DUBS INTELLIGENCE */}
-          {(effectiveTab === 'catalog' || effectiveTab === 'dubs') && (
+          {/* SECTION 2: MODULAR ANIME EDITOR (/admin/catalog/new & /admin/catalog/:id/edit) */}
+          {effectiveTab === 'editor' && (
+            <AdminAnimeEditorView
+              initialAnime={editingAnime}
+              initialTab={editorTargetTab}
+              onCancel={() => {
+                setEditingAnime(null);
+                handleSelectNavTab('catalog');
+              }}
+              onSaved={(savedAnime, isNew) => {
+                onAnimeCreated?.(savedAnime);
+                setEditingAnime(null);
+                handleSelectNavTab('catalog');
+                void fetchPaginatedAdminCatalog(catalogPage);
+                void fetchD1StatusSummary();
+                showToast(
+                  isNew
+                    ? `Created "${savedAnime.title}" in Cloudflare D1!`
+                    : `Updated "${savedAnime.title}" in Cloudflare D1!`,
+                  'success'
+                );
+              }}
+              onOpenTranslationsForAnime={(animeId) => {
+                setTranslationTargetAnimeId(animeId);
+                handleSelectNavTab('translations');
+              }}
+            />
+          )}
+
+          {/* SECTION 3: ANIME CATALOG */}
+          {effectiveTab === 'catalog' && (
             <AdminCatalogTab
-              mode={effectiveTab === 'dubs' ? 'dubs' : 'catalog'}
+              mode="catalog"
               items={catalogItems}
               totalItems={catalogTotalItems}
               currentPage={catalogPage}
@@ -1725,10 +1831,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               setSortBy={setSortBy}
               onPageChange={(nextPage) => setCatalogPage(nextPage)}
               onRefresh={() => void fetchPaginatedAdminCatalog(catalogPage)}
-              onOpenAddModal={() => {
-                setEditingAnime(null);
-                setIsAddModalOpen(true);
-              }}
+              onOpenAddModal={() => handleOpenModularEditor(null, 'identity')}
               selectedCatalogIds={selectedCatalogIds}
               setSelectedCatalogIds={setSelectedCatalogIds}
               bulkLanguage={bulkLanguage}
@@ -1741,101 +1844,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onBulkToggleVisibility={handleBulkToggleVisibility}
               onBulkDeleteSelected={handleBulkDeleteSelected}
               onToggleVisibility={handleToggleVisibility}
-              onEditAnime={(anime) => {
-                setEditingAnime(anime);
-                setIsAddModalOpen(true);
-              }}
+              onEditAnime={(anime) => handleOpenModularEditor(anime, 'identity')}
               onDeleteCatalogAnime={handleDeleteCatalogAnime}
             />
           )}
 
-          {/* SECTION 4: TRANSLATIONS */}
+          {/* SECTION 4: BULK DUB INTELLIGENCE & EPISODE MATRIX EDITOR */}
+          {effectiveTab === 'dubs' && (
+            <AdminDubMatrixTab
+              catalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
+              onEditAnimeInEditor={(anime) => handleOpenModularEditor(anime, 'dubs')}
+              onSuccess={(msg) => {
+                showToast(msg, 'success');
+                void fetchPaginatedAdminCatalog(catalogPage);
+                void fetchD1StatusSummary();
+              }}
+            />
+          )}
+
+          {/* SECTION 5: WORKERS AI TRANSLATION STUDIO */}
           {effectiveTab === 'translations' && (
             <AdminTranslationsTab
               catalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
+              initialAnimeId={translationTargetAnimeId}
               onSuccess={(msg) => showToast(msg, 'success')}
             />
           )}
 
-          {/* SECTION 5: MODERATION & FEEDBACK */}
+          {/* SECTION 6: UNIFIED MODERATION INBOX */}
           {effectiveTab === 'moderation' && (
-            <div data-testid="admin-moderation-section" className="space-y-6">
-              <div className="p-3 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-wrap items-center gap-2">
-                {(
-                  [
-                    {
-                      id: 'all',
-                      label: `All Queues (${pendingItems.length + feedbackList.length})`,
-                    },
-                    {
-                      id: 'pending',
-                      label: `Pending Anime Submissions (${pendingItems.length})`,
-                    },
-                    {
-                      id: 'feedback',
-                      label: `User Feedback Tickets (${feedbackList.length})`,
-                    },
-                  ] as const
-                ).map((sub) => (
-                  <button
-                    key={sub.id}
-                    type="button"
-                    onClick={() => setModerationSubTab(sub.id)}
-                    className={`min-h-[42px] px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-                      moderationSubTab === sub.id
-                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
-                        : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    {sub.label}
-                  </button>
-                ))}
-              </div>
-
-              {(moderationSubTab === 'all' || moderationSubTab === 'pending') && (
-                <AdminPendingTab
-                  pendingItems={pendingItems}
-                  onApproveAllPending={handleApproveAllPending}
-                  onClearAllPending={handleClearAllPending}
-                  onEditPending={(item) => {
-                    setEditingAnime(item);
-                    setIsAddModalOpen(true);
-                  }}
-                  onTogglePendingLanguage={handleTogglePendingLanguage}
-                  onApprove={handleApprove}
-                  onReject={handleReject}
-                />
-              )}
-
-              {(moderationSubTab === 'all' || moderationSubTab === 'feedback') && (
-                <AdminFeedbackTab
-                  feedbackList={feedbackList}
-                  onUpdateFeedbackStatus={handleUpdateFeedbackStatus}
-                  onRefreshFeedback={() => void fetchFeedbackItems()}
-                  updatingFeedbackId={updatingFeedbackId}
-                  feedbackError={feedbackError}
-                />
-              )}
-            </div>
+            <AdminModerationInboxTab
+              pendingItems={pendingItems}
+              feedbackList={feedbackList}
+              updatingFeedbackId={updatingFeedbackId}
+              feedbackError={feedbackError}
+              onApproveAnime={handleApprove}
+              onRejectAnime={handleReject}
+              onEditPendingAnime={(anime) => handleOpenModularEditor(anime, 'identity')}
+              onClearPendingQueue={handleClearAllPending}
+              onUpdateFeedbackStatus={handleUpdateFeedbackStatus}
+              onSuccess={(msg) => showToast(msg, 'success')}
+            />
           )}
 
-          {/* SECTION 6: DATA HEALTH */}
+          {/* SECTION 7: CATALOG DATA HEALTH & QA SCANNER */}
           {effectiveTab === 'data_health' && (
             <AdminDataHealthTab
               dataHealthReport={dataHealthReport}
+              catalogList={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
               healthFilter={healthFilter}
               setHealthFilter={setHealthFilter}
-              onEditAnime={(anime) => {
-                setEditingAnime(anime);
-                setIsAddModalOpen(true);
-              }}
+              onEditAnime={(anime, targetTab) =>
+                handleOpenModularEditor(anime, targetTab || 'identity')
+              }
               linkCheckReport={linkCheckReport}
               isCheckingLinks={isCheckingLinks}
               onRunLinkCheck={handleRunLinkCheck}
             />
           )}
 
-          {/* SECTION 7: ANALYTICS */}
+          {/* SECTION 8: ANALYTICS */}
           {effectiveTab === 'analytics' && (
             <AnalyticsDashboard
               onNavigateHome={onNavigateHome}
@@ -1846,7 +1914,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* SECTION 8: BACKUP & EXPORT */}
+          {/* SECTION 9: BACKUP, EXPORT & SAFE CSV DRY-RUN */}
           {effectiveTab === 'backup' && (
             <div data-testid="admin-backup-tab" className="max-w-4xl mx-auto space-y-6">
               <div className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4 shadow-sm">
@@ -1856,10 +1924,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                   <div>
                     <h2 className="text-lg font-extrabold text-[var(--text-primary)]">
-                      Catalog Backup &amp; Bulk CSV Import
+                      Catalog Backup &amp; Safe CSV Import Dry-Run
                     </h2>
                     <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
-                      Export full Cloudflare D1 snapshots or import verified CSV spreadsheets into the Pending Moderation queue.
+                      Export full Cloudflare D1 snapshots or run a safe CSV validation dry-run before committing rows to the Pending Moderation queue.
                     </p>
                   </div>
                 </div>
@@ -1868,7 +1936,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     type="button"
                     onClick={handleExportCSV}
-                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all"
+                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-extrabold uppercase text-emerald-600 dark:text-emerald-400">
@@ -1887,7 +1955,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     type="button"
                     onClick={handleExportSQL}
-                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all"
+                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-extrabold uppercase text-sky-600 dark:text-sky-400">
@@ -1907,11 +1975,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="button"
                     onClick={() => csvInputRef.current?.click()}
                     disabled={isUploadingCsv}
-                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all disabled:opacity-50"
+                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all disabled:opacity-50 cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-extrabold uppercase text-[var(--accent-primary)]">
-                        Bulk Upload
+                        Safe Dry-Run Upload
                       </span>
                       {isUploadingCsv ? (
                         <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-primary)]" />
@@ -1920,13 +1988,107 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       )}
                     </div>
                     <div className="text-sm font-bold text-[var(--text-primary)]">
-                      Import CSV to Pending
+                      Upload CSV (Dry-Run First)
                     </div>
                     <p className="text-xs text-[var(--text-secondary)]">
-                      Safely stage CSV rows into Pending Moderation.
+                      Preview &amp; validate rows before committing to D1.
                     </p>
                   </button>
                 </div>
+
+                {/* Safe CSV Dry-Run Report Preview */}
+                {csvDryRunReport && (
+                  <div
+                    data-testid="csv-dry-run-preview"
+                    className="p-4 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--accent-primary)]/40 space-y-4"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
+                          CSV Dry-Run Validation Summary
+                        </h3>
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          Review parsed rows and duplicates before committing to the Pending Moderation queue.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                        <span className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+                          Total: {csvDryRunReport.totalRows}
+                        </span>
+                        <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
+                          Valid: {csvDryRunReport.validCount}
+                        </span>
+                        <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                          Duplicates: {csvDryRunReport.duplicateCount}
+                        </span>
+                        <span className="px-2.5 py-1 rounded-lg bg-red-500/15 text-red-500 border border-red-500/30">
+                          Errors: {csvDryRunReport.invalidCount}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="max-h-64 overflow-y-auto divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                      {csvDryRunReport.rows.map((row) => (
+                        <div
+                          key={row.rowIndex}
+                          className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-bold text-[var(--text-primary)] truncate">
+                              Row #{row.rowIndex}: {row.title || '(Missing Title)'}
+                            </div>
+                            <div className="text-[11px] text-[var(--text-secondary)] truncate">
+                              {row.type} · {row.year || 'N/A'} · Languages:{' '}
+                              {row.languages || 'Unverified'} · OTT: {row.platform || 'Unverified'}
+                            </div>
+                            {row.errors.length > 0 && (
+                              <div className="text-[11px] text-red-500 font-semibold mt-0.5">
+                                {row.errors.join(' • ')}
+                              </div>
+                            )}
+                            {row.warnings.length > 0 && (
+                              <div className="text-[11px] text-amber-500 font-semibold mt-0.5">
+                                {row.warnings.join(' • ')}
+                              </div>
+                            )}
+                          </div>
+                          <span
+                            className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase shrink-0 ${
+                              row.status === 'valid'
+                                ? 'bg-emerald-500/15 text-emerald-500'
+                                : row.status === 'duplicate'
+                                  ? 'bg-amber-500/15 text-amber-500'
+                                  : 'bg-red-500/15 text-red-500'
+                            }`}
+                          >
+                            {row.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCsvDryRunReport(null);
+                          setStagedCsvRows([]);
+                        }}
+                        className="min-h-[44px] px-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] cursor-pointer"
+                      >
+                        Cancel Dry-Run
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isUploadingCsv || csvDryRunReport.validCount === 0}
+                        onClick={handleCommitStagedCsv}
+                        className="min-h-[44px] px-5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold cursor-pointer disabled:opacity-50"
+                      >
+                        Commit {csvDryRunReport.validCount} Valid Rows to Pending Queue
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="pt-3 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2">
                   <button
@@ -1950,7 +2112,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
-          {/* SECTION 9: SETTINGS */}
+          {/* SECTION 10: ADMIN ACTIVITY LOG */}
+          {effectiveTab === 'activity_log' && <AdminActivityLogTab />}
+
+          {/* SECTION 11: SETTINGS */}
           {effectiveTab === 'settings' && (
             <AdminSettingsTab
               tgStatus={tgStatus}
@@ -2024,7 +2189,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onClick={() => setIsMobileMoreOpen((prev) => !prev)}
           className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl transition-all ${
             isMobileMoreOpen ||
-            ['translations', 'data_health', 'analytics', 'backup', 'settings'].includes(
+            ['translations', 'data_health', 'analytics', 'backup', 'activity_log', 'settings'].includes(
               effectiveTab
             )
               ? 'text-[var(--accent-primary)] font-extrabold'
@@ -2066,7 +2231,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   { id: 'translations', label: 'Translations', icon: Languages },
                   { id: 'data_health', label: 'Data Health', icon: ShieldCheck },
                   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-                  { id: 'backup', label: 'Backup & Export', icon: Download },
+                  { id: 'backup', label: 'Backup & CSV', icon: Download },
+                  { id: 'activity_log', label: 'Activity Log', icon: Activity },
                   { id: 'settings', label: 'Settings', icon: Settings },
                 ] as const
               ).map((item) => {
@@ -2146,18 +2312,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         pendingCount={pendingItems.length}
         feedbackCount={overviewStats.openFeedbackCount}
         dataHealthCount={dataHealthReport.summary.all}
-        onOpenAddModal={() => {
-          setEditingAnime(null);
-          setIsAddModalOpen(true);
-        }}
+        onOpenAddModal={() => handleOpenModularEditor(null, 'identity')}
         onSetActiveTab={handleSelectNavTab}
         onExportCSV={handleExportCSV}
         onRunDiagnostics={() => setIsDiagnosticsOpen(true)}
         filteredCatalog={catalogItems}
-        onEditAnime={(anime) => {
-          setEditingAnime(anime);
-          setIsAddModalOpen(true);
-        }}
+        onEditAnime={(anime) => handleOpenModularEditor(anime, 'identity')}
       />
 
       {/* 6. CSV IMPORT HELP MODAL */}
@@ -2168,7 +2328,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onTriggerCsvUpload={() => csvInputRef.current?.click()}
       />
 
-      {/* 7. ADD / EDIT ANIME MODAL */}
+      {/* 7. FALLBACK QUICK DUB MODAL (Only if explicitly triggered) */}
       <DubInfoModal
         isOpen={isAddModalOpen}
         onClose={() => {

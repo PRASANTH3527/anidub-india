@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -7,14 +7,21 @@ import {
   Loader2,
   AlertTriangle,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 import type { DataHealthFilter } from './types';
-import type { AdminLinkCheckResponse } from '../../services/cloudflareApi';
+import { cloudflareApi, type AdminLinkCheckResponse } from '../../services/cloudflareApi';
+import {
+  scanCatalogDataHealth,
+  type DataHealthScanReport,
+  type DataHealthIssueCategory,
+  type AnimeEditorTabId,
+} from '../../utils/adminOpsPro';
 
 export interface DataHealthReport {
   items: Array<{
     anime: any;
-    issues: Array<{ label: string; severity: 'critical' | 'warning' }>;
+    issues: Array<{ label: string; severity: 'critical' | 'warning'; targetEditorTab?: AnimeEditorTabId }>;
   }>;
   summary: {
     all: number;
@@ -28,17 +35,32 @@ export interface DataHealthReport {
 }
 
 export interface AdminDataHealthTabProps {
-  dataHealthReport: DataHealthReport;
+  dataHealthReport?: DataHealthReport;
+  catalogList?: any[];
   healthFilter: DataHealthFilter;
   setHealthFilter: (filter: DataHealthFilter) => void;
-  onEditAnime: (anime: any) => void;
+  onEditAnime: (anime: any, targetEditorTab?: AnimeEditorTabId) => void;
   linkCheckReport: AdminLinkCheckResponse | null;
   isCheckingLinks: boolean;
   onRunLinkCheck: () => void;
 }
 
+const SCANNER_CATEGORIES: Array<{
+  id: 'all' | DataHealthIssueCategory;
+  label: string;
+}> = [
+  { id: 'all', label: 'All Flagged Issues' },
+  { id: 'missing_artwork', label: 'Missing Posters / Banners' },
+  { id: 'missing_synopsis', label: 'Missing Synopsis' },
+  { id: 'duplicate_titles', label: 'Potential Duplicates' },
+  { id: 'inconsistent_episodes', label: 'Inconsistent Episodes' },
+  { id: 'unverified_dubs', label: 'Unverified Dub Claims' },
+  { id: 'stale_verification', label: 'Stale Verification (>90d)' },
+  { id: 'missing_translations', label: 'Missing Translations' },
+];
+
 export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
-  dataHealthReport,
+  catalogList = [],
   healthFilter,
   setHealthFilter,
   onEditAnime,
@@ -46,6 +68,48 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
   isCheckingLinks,
   onRunLinkCheck,
 }) => {
+  const [serverScanReport, setServerScanReport] = useState<DataHealthScanReport | null>(null);
+  const [isScanning, setIsScanning] = useState<boolean>(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  const runServerScan = useCallback(async () => {
+    setIsScanning(true);
+    setScanError(null);
+    try {
+      const res = await cloudflareApi.fetchAdminDataHealth();
+      if (res.report) {
+        setServerScanReport(res.report);
+      }
+    } catch (err: any) {
+      setScanError(err?.message || 'Unable to run server Data Health scan; using local catalog audit.');
+    } finally {
+      setIsScanning(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    runServerScan();
+  }, [runServerScan]);
+
+  // Fallback local scan if server scan hasn't resolved yet
+  const activeScanReport: DataHealthScanReport = useMemo(() => {
+    if (serverScanReport) return serverScanReport;
+    return scanCatalogDataHealth(catalogList);
+  }, [serverScanReport, catalogList]);
+
+  const animeById = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const a of catalogList) {
+      map.set(String(a.id), a);
+    }
+    return map;
+  }, [catalogList]);
+
+  const filteredIssues = useMemo(() => {
+    if (healthFilter === 'all') return activeScanReport.issues;
+    return activeScanReport.issues.filter((iss) => iss.category === healthFilter);
+  }, [activeScanReport, healthFilter]);
+
   return (
     <div data-testid="admin-data-health-tab" className="space-y-6 text-[var(--text-primary)]">
       {/* Header & Summary */}
@@ -53,19 +117,29 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
         <div>
           <h2 className="text-lg sm:text-xl font-extrabold text-[var(--text-primary)] flex items-center gap-2.5">
             <ShieldCheck className="w-5 h-5 text-emerald-500" />
-            Data Health &amp; Catalog Quality Audit
+            Catalog Data Health &amp; QA Scanner
           </h2>
           <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-            Automated scan for missing official streaming links, unverified dub language tags, missing episode counts, and incomplete broadcast schedules.
+            Read-only production QA scan for missing posters/banners, missing synopses, potential duplicate titles, inconsistent episode counts, unverified dub claims, stale OTT verification dates (&gt; 90 days), and missing translations.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
+            onClick={runServerScan}
+            disabled={isScanning}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 text-[var(--accent-primary)] ${isScanning ? 'animate-spin' : ''}`} />
+            <span>Re-Scan D1</span>
+          </button>
+
+          <button
+            type="button"
             onClick={onRunLinkCheck}
             disabled={isCheckingLinks}
-            className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+            className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
           >
             {isCheckingLinks ? (
               <>
@@ -79,9 +153,10 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
               </>
             )}
           </button>
+
           <div className="px-3.5 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-center">
             <div className="text-base font-black text-emerald-600 dark:text-emerald-400">
-              {dataHealthReport.summary.healthyCount}
+              {activeScanReport.healthyCount}
             </div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
               Healthy
@@ -89,14 +164,21 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
           </div>
           <div className="px-3.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-center">
             <div className="text-base font-black text-amber-600 dark:text-amber-400">
-              {dataHealthReport.summary.all}
+              {activeScanReport.flaggedCount}
             </div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-              Needs Fix
+              Flagged
             </div>
           </div>
         </div>
       </div>
+
+      {scanError && (
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-500 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>{scanError}</span>
+        </div>
+      )}
 
       {/* Official OTT Link Health Check Results */}
       {linkCheckReport && (
@@ -105,7 +187,7 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
             <div>
               <h3 className="text-sm font-extrabold text-[var(--text-primary)] flex items-center gap-2">
                 <Link2 className="w-4 h-4 text-[var(--accent-primary)]" />
-                Official OTT Link Health Report
+                SSRF-Protected Official OTT Link Health Report
               </h3>
               {linkCheckReport.note && (
                 <p className="text-xs text-[var(--text-secondary)] mt-0.5">{linkCheckReport.note}</p>
@@ -114,16 +196,16 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
             {linkCheckReport.summary && (
               <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
-                  Healthy: {linkCheckReport.summary.active}
+                  OK: {linkCheckReport.summary.active}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-600 dark:text-sky-400">
                   Redirected: {linkCheckReport.summary.redirected}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400">
-                  Unverified (Bot Blocked): {linkCheckReport.summary.unverified}
+                  Blocked/403 or Timeout: {linkCheckReport.summary.unverified + linkCheckReport.summary.regionRestricted}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400">
-                  Broken: {linkCheckReport.summary.broken}
+                  Confirmed Broken: {linkCheckReport.summary.broken}
                 </span>
               </div>
             )}
@@ -170,7 +252,15 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
                               : 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30'
                       }`}
                     >
-                      {item.status}
+                      {item.status === 'Active'
+                        ? 'OK'
+                        : item.status === 'Broken'
+                          ? 'Confirmed Broken'
+                          : item.status === 'Region-restricted'
+                            ? 'Blocked/403'
+                            : item.detail?.toLowerCase().includes('timed out')
+                              ? 'Timeout'
+                              : 'Blocked/403'}
                       {item.httpStatus ? ` (${item.httpStatus})` : ''}
                     </span>
                   </div>
@@ -181,101 +271,75 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
         </div>
       )}
 
-      {/* Filter Pills */}
+      {/* Scanner Category Filter Pills */}
       <div className="flex flex-wrap gap-2">
-        {(
-          [
-            { id: 'all', label: 'All Issues', count: dataHealthReport.summary.all },
-            {
-              id: 'missing_stream_links',
-              label: 'Missing Stream Links',
-              count: dataHealthReport.summary.missing_stream_links,
-            },
-            {
-              id: 'missing_dub_langs',
-              label: 'Missing Dub Langs',
-              count: dataHealthReport.summary.missing_dub_langs,
-            },
-            {
-              id: 'missing_episode_counts',
-              label: 'Missing Episode Counts',
-              count: dataHealthReport.summary.missing_episode_counts,
-            },
-            {
-              id: 'unverified_metadata',
-              label: 'Unverified Metadata',
-              count: dataHealthReport.summary.unverified_metadata,
-            },
-            {
-              id: 'incomplete_schedule',
-              label: 'Incomplete Schedule',
-              count: dataHealthReport.summary.incomplete_schedule,
-            },
-          ] as Array<{ id: DataHealthFilter; label: string; count: number }>
-        ).map((pill) => (
-          <button
-            key={pill.id}
-            type="button"
-            onClick={() => setHealthFilter(pill.id)}
-            className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 ${
-              healthFilter === pill.id
-                ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
-                : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <span>{pill.label}</span>
-            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold bg-black/15">
-              {pill.count}
-            </span>
-          </button>
-        ))}
+        {SCANNER_CATEGORIES.map((pill) => {
+          const count =
+            pill.id === 'all'
+              ? activeScanReport.issues.length
+              : activeScanReport.countsByCategory[pill.id] || 0;
+          return (
+            <button
+              key={pill.id}
+              type="button"
+              onClick={() => setHealthFilter(pill.id)}
+              className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer ${
+                healthFilter === pill.id
+                  ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
+                  : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <span>{pill.label}</span>
+              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold bg-black/15">
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Results List */}
-      {dataHealthReport.items.length === 0 ? (
+      {/* Flagged Issues List */}
+      {filteredIssues.length === 0 ? (
         <div className="p-12 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-center">
           <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
           <h3 className="text-base font-bold text-[var(--text-primary)]">
             No Data Health Issues Found
           </h3>
           <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-            All anime entries in this filter pass metadata quality checks.
+            All anime entries in this QA category pass production quality checks.
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {dataHealthReport.items.map(({ anime, issues }) => (
-            <div
-              key={anime.id}
-              className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-            >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <img
-                  src={
-                    anime.posterUrl ||
-                    anime.image ||
-                    anime.cover_image ||
-                    anime.poster ||
-                    'https://picsum.photos/seed/anime/80/120'
-                  }
-                  alt={anime.title}
-                  loading="lazy"
-                  className="w-12 h-16 rounded-xl object-cover shrink-0 border border-[var(--border-subtle)]"
-                />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
-                      {anime.title}
-                    </h4>
-                    <span className="text-[11px] font-mono text-[var(--text-secondary)]">
-                      #{anime.id}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {issues.map((issue, idx) => (
+          {filteredIssues.slice(0, 120).map((issue, idx) => {
+            const fullAnime = animeById.get(String(issue.animeId)) || {
+              id: issue.animeId,
+              title: issue.title,
+              slug: issue.slug,
+              cover_image: issue.cover_image,
+            };
+            return (
+              <div
+                key={`${issue.animeId}-${issue.category}-${idx}`}
+                className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <img
+                    src={issue.cover_image || '/logo.png'}
+                    alt={issue.title}
+                    loading="lazy"
+                    className="w-12 h-16 rounded-xl object-cover shrink-0 border border-[var(--border-subtle)]"
+                  />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
+                        {issue.title}
+                      </h4>
+                      <span className="text-[11px] font-mono text-[var(--text-secondary)]">
+                        #{issue.animeId}
+                      </span>
                       <span
-                        key={idx}
-                        className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border ${
                           issue.severity === 'critical'
                             ? 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30'
                             : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
@@ -283,21 +347,25 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
                       >
                         {issue.label}
                       </span>
-                    ))}
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1 break-words">
+                      {issue.detail}
+                    </p>
                   </div>
                 </div>
-              </div>
 
-              <button
-                type="button"
-                onClick={() => onEditAnime(anime)}
-                className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold flex items-center gap-1.5 shrink-0 self-end sm:self-center"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                Fix in Editor
-              </button>
-            </div>
-          ))}
+                <button
+                  type="button"
+                  data-testid={`fix-in-editor-${issue.animeId}`}
+                  onClick={() => onEditAnime(fullAnime, issue.targetEditorTab)}
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold flex items-center gap-1.5 shrink-0 self-end sm:self-center cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Fix in Editor</span>
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

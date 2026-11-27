@@ -301,6 +301,7 @@ export interface AnimeTranslationItem {
   source_hash: string | null;
   translation_status: 'draft' | 'reviewed' | 'published';
   updated_by: string | null;
+  is_locked?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -2602,7 +2603,318 @@ class CloudflareApiService {
     const history = await this.fetchChatHistory({ limit: 50 });
     return history;
   }
+
+  /**
+   * ADMIN OPS PRO (Phase 2): 1-Click Metadata Auto-Fill (AniList / Jikan Server-Side Adapter)
+   */
+  public async searchExternalMetadata(
+    query: string,
+    provider: 'anilist' | 'jikan' = 'anilist'
+  ): Promise<{
+    success: boolean;
+    provider: 'anilist' | 'jikan';
+    candidates: import('../utils/adminOpsPro').ExternalMetadataCandidate[];
+    error?: string;
+  }> {
+    const qs = new URLSearchParams({
+      q: query.trim(),
+      provider,
+    });
+    const res = await this.smartFetch(`/api/admin/metadata-search?${qs.toString()}`, {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Metadata search failed (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      provider: json?.provider === 'jikan' ? 'jikan' : 'anilist',
+      candidates: Array.isArray(json?.candidates) ? json.candidates : [],
+    };
+  }
+
+  /**
+   * ADMIN OPS PRO (Phase 2): Bulk Dub Intelligence & Episode Matrix Editor
+   */
+  public async fetchAdminDubMatrix(options?: {
+    animeId?: string | number;
+    language?: string;
+  }): Promise<{
+    success: boolean;
+    tableReady: boolean;
+    rows: import('../utils/adminOpsPro').DubMatrixRowInput[];
+  }> {
+    const qs = new URLSearchParams();
+    if (options?.animeId !== undefined && String(options.animeId).trim()) {
+      qs.set('animeId', String(options.animeId).trim());
+    }
+    if (options?.language && options.language !== 'all') {
+      qs.set('language', options.language);
+    }
+    const endpoint = `/api/admin/dub-matrix${qs.toString() ? `?${qs.toString()}` : ''}`;
+    const res = await this.smartFetch(endpoint, {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load dub matrix (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      tableReady: json?.tableReady !== false,
+      rows: Array.isArray(json?.rows) ? json.rows : [],
+    };
+  }
+
+  public async saveAdminDubMatrixBulk(
+    entries: import('../utils/adminOpsPro').DubMatrixRowInput[]
+  ): Promise<{
+    success: boolean;
+    tableReady?: boolean;
+    savedCount: number;
+    affectedAnimeIds: string[];
+    notice?: string;
+  }> {
+    const res = await this.smartFetch('/api/admin/dub-matrix/bulk', {
+      method: 'PUT',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ entries }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Bulk dub matrix update failed (HTTP ${res.status})`);
+    }
+    this.clearCatalogIndexCache();
+    return {
+      success: Boolean(json?.success),
+      tableReady: json?.tableReady,
+      savedCount: Number(json?.savedCount) || 0,
+      affectedAnimeIds: Array.isArray(json?.affectedAnimeIds) ? json.affectedAnimeIds : [],
+      notice: json?.notice,
+    };
+  }
+
+  /**
+   * ADMIN OPS PRO (Phase 2): Catalog Data Health & QA Scanner
+   */
+  public async fetchAdminDataHealth(): Promise<{
+    success: boolean;
+    scannedAt?: string;
+    report: import('../utils/adminOpsPro').DataHealthScanReport;
+  }> {
+    const res = await this.smartFetch('/api/admin/data-health', {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to scan catalog data health (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      scannedAt: json?.scannedAt,
+      report: json?.report,
+    };
+  }
+
+  /**
+   * ADMIN OPS PRO (Phase 2): Workers AI Translation Studio Generation & Manual Lock
+   */
+  public async generateAdminTranslationWithAi(payload: {
+    anime_id: string | number;
+    locale: string;
+    title?: string;
+    synopsis?: string;
+    forceUnlock?: boolean;
+  }): Promise<{
+    success: boolean;
+    provider?: string;
+    locale: string;
+    localized_title: string | null;
+    synopsis: string;
+    description: string;
+    source_hash: string;
+    savedToDb?: boolean;
+  }> {
+    const res = await this.smartFetch('/api/admin/translations/generate', {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Workers AI translation failed (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  public async toggleAdminTranslationLock(
+    animeId: string | number,
+    locale: string,
+    locked: boolean
+  ): Promise<{ success: boolean; is_locked: boolean }> {
+    const safeId = encodeURIComponent(String(animeId).trim());
+    const safeLocale = encodeURIComponent(String(locale).trim().toLowerCase());
+    const res = await this.smartFetch(`/api/admin/translations/${safeId}/${safeLocale}/lock`, {
+      method: 'PATCH',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ locked }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to update translation lock (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      is_locked: Boolean(json?.is_locked),
+    };
+  }
+
+  /**
+   * ADMIN OPS PRO (Phase 2): Unified Moderation Inbox (Pending Submissions, 5-Slider Dub Reviews, General Reviews, Feedback)
+   */
+  public async fetchAdminModerationInbox(): Promise<{
+    success: boolean;
+    pendingSubmissions: any[];
+    dubReviews: any[];
+    generalReviews: any[];
+    feedbackItems: any[];
+    counts: {
+      pendingSubmissions: number;
+      dubReviews: number;
+      flaggedDubReviews: number;
+      generalReviews: number;
+      openFeedback: number;
+    };
+  }> {
+    const res = await this.smartFetch('/api/admin/moderation-inbox', {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load moderation inbox (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      pendingSubmissions: Array.isArray(json?.pendingSubmissions) ? json.pendingSubmissions : [],
+      dubReviews: Array.isArray(json?.dubReviews) ? json.dubReviews : [],
+      generalReviews: Array.isArray(json?.generalReviews) ? json.generalReviews : [],
+      feedbackItems: Array.isArray(json?.feedbackItems) ? json.feedbackItems : [],
+      counts: json?.counts || {
+        pendingSubmissions: 0,
+        dubReviews: 0,
+        flaggedDubReviews: 0,
+        generalReviews: 0,
+        openFeedback: 0,
+      },
+    };
+  }
+
+  public async moderateAdminDubReview(
+    reviewId: number,
+    payload: { status?: 'published' | 'hidden' | 'flagged'; has_spoilers?: boolean }
+  ): Promise<{ success: boolean; review?: any }> {
+    const res = await this.smartFetch(`/api/admin/dub-reviews/${reviewId}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to moderate dub review (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  public async moderateAdminGeneralReview(
+    reviewId: number,
+    payload: { status?: string; is_spoiler?: boolean }
+  ): Promise<{ success: boolean }> {
+    const res = await this.smartFetch(`/api/admin/reviews/${reviewId}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to moderate review (HTTP ${res.status})`);
+    }
+    return { success: true };
+  }
+
+  public async deleteAdminGeneralReview(reviewId: number): Promise<{ success: boolean }> {
+    const res = await this.smartFetch(`/api/admin/reviews/${reviewId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to delete review (HTTP ${res.status})`);
+    }
+    return { success: true };
+  }
+
+  /**
+   * ADMIN OPS PRO (Phase 2): Safe CSV Import Dry-Run Preview
+   */
+  public async dryRunImportCsv(
+    animeList: Record<string, unknown>[]
+  ): Promise<{
+    success: boolean;
+    dryRun: boolean;
+    report: import('../utils/adminOpsPro').CsvDryRunSummary;
+  }> {
+    const res = await this.smartFetch('/api/admin/import-csv/dry-run', {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ animeList }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `CSV dry-run failed (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  /**
+   * ADMIN OPS PRO (Phase 2): Admin Activity Log
+   */
+  public async fetchAdminActivityLogs(filters?: {
+    action?: string;
+    entityType?: string;
+    search?: string;
+    limit?: number;
+  }): Promise<{
+    success: boolean;
+    tableReady: boolean;
+    logs: import('../utils/adminOpsPro').AdminActivityLogItem[];
+  }> {
+    const qs = new URLSearchParams();
+    if (filters?.action && filters.action !== 'all') qs.set('action', filters.action);
+    if (filters?.entityType && filters.entityType !== 'all') qs.set('entityType', filters.entityType);
+    if (filters?.search && filters.search.trim()) qs.set('search', filters.search.trim());
+    if (filters?.limit) qs.set('limit', String(filters.limit));
+    const endpoint = `/api/admin/activity-logs${qs.toString() ? `?${qs.toString()}` : ''}`;
+    const res = await this.smartFetch(endpoint, {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to fetch activity logs (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      tableReady: json?.tableReady !== false,
+      logs: Array.isArray(json?.logs) ? json.logs : [],
+    };
+  }
 }
 
 export const cloudflareApi = new CloudflareApiService();
+
 

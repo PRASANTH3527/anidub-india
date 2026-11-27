@@ -56,6 +56,9 @@ export interface CloudflareEnv {
   ENVIRONMENT?: string;
   ASSETS?: { fetch: (request: Request) => Promise<Response> };
   RATE_LIMIT_KV?: RateLimitKvLike | null;
+  AI?: {
+    run: (model: string, input: Record<string, unknown>) => Promise<any>;
+  } | null;
 }
 
 export type CloudflareEnvInput = Omit<CloudflareEnv, 'DB'> & {

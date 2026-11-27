@@ -23,6 +23,7 @@ import { FREE_LEGAL_PLATFORM_PATTERNS, getPlatformSqlAliases } from '../../utils
 import { expandSearchQueryVariants } from '../../utils/searchFilterState';
 import { mergePublishedTranslation, normalizeTranslationLocale } from '../../utils/animeTranslations';
 import { fetchPublishedTranslationsMap } from './translationRoutes';
+import { recordAdminActivityLog } from './adminOpsProRoutes';
 import { getErrorMessage, isMissingColumnError, sendTelegramAlert, type RouteContext } from './shared';
 
 const BASE_PUBLISHED_CLAUSE =
@@ -705,6 +706,20 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
         `📺 *Platform:* ${normalizedPlatform || 'Not specified'}\n\n` +
         `💬 _"${String(body.synopsis || '').slice(0, 120)}"_`;
       await sendTelegramAlert(env, tgMsg);
+
+      await recordAdminActivityLog(env.DB, {
+        actor_email: session.email || session.userId,
+        action_type: 'CREATE_ANIME',
+        entity_type: 'anime',
+        entity_id: String(createdId || body.title),
+        summary: `Created anime "${String(body.title).trim()}" (${finalStatus})`,
+        payload_json: {
+          title: body.title,
+          status: finalStatus,
+          languages: resolvedLanguages,
+          platform: normalizedPlatform,
+        },
+      });
 
       return jsonResponse(
         {
@@ -1515,6 +1530,21 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             }
           }
 
+          await recordAdminActivityLog(env.DB, {
+            actor_email: session.email || session.userId,
+            action_type: 'UPDATE_ANIME',
+            entity_type: 'anime',
+            entity_id: String(id),
+            summary: `Updated anime #${id}${body.title ? ` ("${String(body.title).trim()}")` : ''}`,
+            payload_json: {
+              id,
+              title: body.title,
+              status: incomingStatus || undefined,
+              languages: resolvedUpdateLanguages || undefined,
+              platform: normalizedPlatformUpdate || undefined,
+            },
+          });
+
           return jsonResponse(
             {
               success: true,
@@ -1561,10 +1591,21 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
       }
       try {
         if (env.DB) {
+          const existingRow = await env.DB.prepare('SELECT id, title FROM anime WHERE id = ? OR slug = ? LIMIT 1')
+            .bind(id, id)
+            .first()
+            .catch(() => null);
           const delRes = await env.DB.prepare('DELETE FROM anime WHERE id = ? OR slug = ?').bind(id, id).run();
           if (delRes?.meta?.changes === 0) {
             return jsonResponse({ success: false, error: 'Anime not found' }, 404, request);
           }
+          await recordAdminActivityLog(env.DB, {
+            actor_email: session.email || session.userId,
+            action_type: 'DELETE_ANIME',
+            entity_type: 'anime',
+            entity_id: String(id),
+            summary: `Deleted anime #${id}${existingRow?.title ? ` ("${String(existingRow.title)}")` : ''}`,
+          });
         }
         return jsonResponse({ success: true, id }, 200, request);
       } catch (err) {
