@@ -1184,7 +1184,7 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
           .all<Record<string, any>>()
           .catch(() => ({ results: [] })),
         env.DB.prepare(
-          "SELECT * FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' ORDER BY id DESC LIMIT 100"
+          "SELECT * FROM anime WHERE LOWER(COALESCE(status, '')) = 'pending' OR LOWER(COALESCE(submissionStatus, '')) = 'pending' OR LOWER(COALESCE(approval_status, '')) = 'pending' OR is_published = 0 OR is_published = false ORDER BY id DESC LIMIT 100"
         )
           .all<Record<string, any>>()
           .catch(() => ({ results: [] })),

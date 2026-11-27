@@ -467,7 +467,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
           `SELECT
             COUNT(*) as totalCount,
             SUM(CASE WHEN (is_published = 1 OR is_published = true) AND status != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL) THEN 1 ELSE 0 END) as activeCount,
-            SUM(CASE WHEN status = 'pending' OR submissionStatus = 'pending' OR approval_status = 'pending' THEN 1 ELSE 0 END) as pendingCount,
+            SUM(CASE WHEN LOWER(COALESCE(status, '')) = 'pending' OR LOWER(COALESCE(submissionStatus, '')) = 'pending' OR LOWER(COALESCE(approval_status, '')) = 'pending' OR is_published = 0 OR is_published = false THEN 1 ELSE 0 END) as pendingCount,
             SUM(CASE WHEN TRIM(COALESCE(languages, '')) = '' THEN 1 ELSE 0 END) as unverifiedCount,
             SUM(CASE WHEN LOWER(COALESCE(languages, '')) LIKE '%hindi%' THEN 1 ELSE 0 END) as hindiCount,
             SUM(CASE WHEN LOWER(COALESCE(languages, '')) LIKE '%tamil%' THEN 1 ELSE 0 END) as tamilCount,
@@ -716,7 +716,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
     try {
       if (env.DB) {
         const res = await env.DB.prepare(
-          "SELECT * FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' ORDER BY id DESC"
+          "SELECT * FROM anime WHERE LOWER(COALESCE(status, '')) = 'pending' OR LOWER(COALESCE(submissionStatus, '')) = 'pending' OR LOWER(COALESCE(approval_status, '')) = 'pending' OR is_published = 0 OR is_published = false ORDER BY id DESC"
         ).all();
         const hydrated = ((res.results || []) as Array<Record<string, unknown>>).map((row) => {
           const fromPlatformsData = normalizeStreamingPartners(row.platforms_data);
