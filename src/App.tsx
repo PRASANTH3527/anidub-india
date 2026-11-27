@@ -44,6 +44,7 @@ import {
 import { OfflineIndicator } from './components/PWAInstallButton';
 import { PageViewSkeleton, DetailModalSkeleton } from './components/SkeletonGrid';
 import { Button } from './components/ui/Button';
+import { useToast } from './components/Toast';
 
 const ViewLoadingFallback: React.FC<{ tab?: string }> = ({ tab }) => (
   <PageViewSkeleton tab={tab} />
@@ -282,6 +283,31 @@ export default function App() {
     [ensureFullCatalogIndex]
   );
 
+  const { showToast } = useToast();
+
+  const handleAppToast = useCallback(
+    (msg: string, type: 'success' | 'info' | 'error' = 'info') => {
+      showToast(
+        type === 'error' ? 'Notice' : type === 'success' ? 'Done' : 'AniDub India',
+        msg,
+        type === 'error' ? 'warning' : type
+      );
+    },
+    [showToast]
+  );
+
+  const currentUserSummary = useMemo(() => {
+    if (!isSignedIn || !clerkUser) return null;
+    const email = clerkUser.primaryEmailAddress?.emailAddress || '';
+    return {
+      id: clerkUser.id,
+      name: clerkUser.fullName || clerkUser.username || email.split('@')[0] || 'Member',
+      email,
+      avatar: clerkUser.imageUrl,
+      isAdmin: isClerkAdmin,
+    };
+  }, [isSignedIn, clerkUser, isClerkAdmin]);
+
   const handleNavigateTab = useCallback((nextTab: string) => {
     const resolvedTab = nextTab === 'home' ? 'explore' : nextTab;
     setActiveTab(resolvedTab);
@@ -299,18 +325,26 @@ export default function App() {
           recommendations: '/recommendations',
           feedback: '/feedback',
           privacy: '/privacy',
+          terms: '/terms',
           copyright: '/copyright',
           profile: '/profile',
           admin: '/admin',
         };
-        const targetPath = pathByTab[nextTab];
+        const targetPath = pathByTab[resolvedTab];
         if (targetPath && window.location.pathname !== targetPath) {
-          window.history.pushState({ tab: nextTab }, '', targetPath);
+          window.history.pushState({ tab: resolvedTab }, '', targetPath);
         }
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     }
   }, []);
+
+  const handleOpenLegal = useCallback(
+    (page: 'privacy' | 'terms' | 'dmca' = 'privacy') => {
+      handleNavigateTab(page === 'dmca' ? 'copyright' : page);
+    },
+    [handleNavigateTab]
+  );
 
   const handleNavigateLanguage = useCallback((language: string) => {
     const normalized = normalizeLanguageName(language) || 'Hindi';
@@ -482,6 +516,8 @@ export default function App() {
       setActiveTab('schedule');
     } else if (pathname === '/privacy' || pathname === '/privacy-policy') {
       setActiveTab('privacy');
+    } else if (pathname === '/terms' || pathname === '/terms-of-service') {
+      setActiveTab('terms');
     } else if (pathname === '/copyright' || pathname === '/dmca' || pathname === '/takedown') {
       setActiveTab('copyright');
     } else if (pathname === '/feedback') {
@@ -545,6 +581,8 @@ export default function App() {
           setActiveTab('schedule');
         } else if (pathname === '/privacy' || pathname === '/privacy-policy') {
           setActiveTab('privacy');
+        } else if (pathname === '/terms' || pathname === '/terms-of-service') {
+          setActiveTab('terms');
         } else if (pathname === '/copyright' || pathname === '/dmca' || pathname === '/takedown') {
           setActiveTab('copyright');
         } else if (pathname === '/feedback') {
@@ -603,6 +641,20 @@ export default function App() {
         description:
           'Learn how AniDub India handles account preferences, watchlist sync, and privacy as a legal Indian dubbed anime directory.',
         canonicalUrl: `${origin}/privacy`,
+        ogType: 'website',
+      });
+      return;
+    }
+
+    if (activeTab === 'terms') {
+      const base = buildDefaultSeoMeta(origin);
+      updateDocumentSeoMeta({
+        ...base,
+        title: 'Terms of Service | AniDub India',
+        ogTitle: 'Terms of Service | AniDub India',
+        description:
+          'Read the Terms of Service for AniDub India, a legal regional anime dub metadata and OTT discovery directory in India.',
+        canonicalUrl: `${origin}/terms`,
         ogType: 'website',
       });
       return;
@@ -1230,6 +1282,10 @@ export default function App() {
                   onToggleWatchlist={handleToggleWatchlist}
                   onOpenCreateCollection={() => setIsCollectionOpen(true)}
                   onNavigateToCatalog={() => handleNavigateTab('explore')}
+                  onOpenSubmitDub={() => setIsDubModalOpen(true)}
+                  onOpenFeedback={() => handleNavigateTab('feedback')}
+                  onOpenLegal={handleOpenLegal}
+                  onShowToast={handleAppToast}
                 />
               </Suspense>
             )}
@@ -1288,17 +1344,25 @@ export default function App() {
                   mode="full"
                   onSubmitDub={() => setIsDubModalOpen(true)}
                   onNavigateLanguage={handleNavigateLanguage}
+                  onOpenLegal={handleOpenLegal}
                   onOpenPrivacy={() => handleNavigateTab('privacy')}
                   onOpenCopyright={() => handleNavigateTab('copyright')}
+                  onShowToast={handleAppToast}
                 />
               </Suspense>
             )}
 
-            {/* PUBLIC LEGAL PAGES: PRIVACY POLICY (/privacy) & COPYRIGHT/TAKEDOWN (/copyright) */}
-            {(activeTab === 'privacy' || activeTab === 'copyright') && (
+            {/* PUBLIC LEGAL PAGES: PRIVACY POLICY (/privacy), TERMS (/terms) & COPYRIGHT/TAKEDOWN (/copyright) */}
+            {(activeTab === 'privacy' || activeTab === 'copyright' || activeTab === 'terms') && (
               <Suspense fallback={<ViewLoadingFallback />}>
                 <LegalPage
-                  page={activeTab === 'copyright' ? 'copyright' : 'privacy'}
+                  page={
+                    activeTab === 'copyright'
+                      ? 'copyright'
+                      : activeTab === 'terms'
+                        ? 'terms'
+                        : 'privacy'
+                  }
                   onNavigateHome={() => handleNavigateTab('explore')}
                   onSwitchLegalPage={(nextPage) => handleNavigateTab(nextPage)}
                   onOpenFeedback={() => handleNavigateTab('feedback')}
@@ -1317,8 +1381,10 @@ export default function App() {
             onSubmitDub={() => setIsDubModalOpen(true)}
             onNavigateLanguage={handleNavigateLanguage}
             onOpenFeedbackPage={() => handleNavigateTab('feedback')}
+            onOpenLegal={handleOpenLegal}
             onOpenPrivacy={() => handleNavigateTab('privacy')}
             onOpenCopyright={() => handleNavigateTab('copyright')}
+            onShowToast={handleAppToast}
           />
         </Suspense>
       )}
@@ -1368,6 +1434,8 @@ export default function App() {
               key="anime-detail-modal"
               animeId={selectedAnimeId}
               initialAnime={selectedAnimeRecord}
+              allAnime={effectiveFullCatalog}
+              user={currentUserSummary}
               onResolvedAnime={(resolved) => {
                 setSelectedAnimeRecord(resolved);
                 if (typeof window !== 'undefined' && resolved?.slug) {
@@ -1381,10 +1449,15 @@ export default function App() {
                   }
                 }
               }}
+              onSelectAnime={(anime) => {
+                handleOpenAnime(anime);
+                addToRecentlyViewed(anime);
+              }}
               onClose={() => handleOpenAnime(null)}
               watchlist={watchlist}
               onToggleWatchlist={handleToggleWatchlist}
               onCompareAnime={(anime) => handleOpenCompare(anime)}
+              onShowToast={handleAppToast}
             />
           </Suspense>
         )}

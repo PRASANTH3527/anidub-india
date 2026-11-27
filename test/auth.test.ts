@@ -449,7 +449,7 @@ test('Security headers (_headers), .gitignore, SEO assets, and non-sensitive rev
   assert.equal(fs.existsSync(path.join(process.cwd(), 'functions/sitemap.xml.ts')), true);
 
   const indexHtml = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
-  assert.ok(indexHtml.includes('content="https://anidub.in/logo.png"'));
+  assert.ok(indexHtml.includes('content="https://anidub.in/social-banner.png"'));
   assert.equal(indexHtml.includes('property="og:image" content="/logo.png"'), false);
   assert.equal(indexHtml.includes('images.unsplash.com'), false);
   assert.ok(

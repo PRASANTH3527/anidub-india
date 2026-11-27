@@ -23,6 +23,9 @@ import {
 } from '../utils/dubProgress';
 import { DetailModalSkeleton } from './ui/EclipseState';
 import { buildAnimeJsonLd } from '../utils/seo';
+import { useAuth } from '../lib/clerk';
+import { getCloudflareWsUrl } from '../config/cloudflare';
+import { getVerifiedClerkUsername } from '../utils/chatIdentity';
 
 export interface FranchiseEntry {
   id: string;
@@ -161,9 +164,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   asPage = false,
   isLoading: isLoadingProp = false,
 }) => {
+  const { getToken } = useAuth();
   const [fetchedRecord, setFetchedRecord] = useState<any | null>(null);
   const [fetchingDetail, setFetchingDetail] = useState<boolean>(false);
   const [internalReportOpen, setInternalReportOpen] = useState<boolean>(false);
+  const [wsReviewError, setWsReviewError] = useState<string | null>(null);
 
   useEffect(() => {
     const rawTarget = animeProp || initialAnime;
@@ -323,6 +328,79 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     }
   }, [anime?.id, followedIds]);
 
+  // Live authenticated WebSocket listener for real-time review updates & error propagation
+  useEffect(() => {
+    if (!anime?.id || typeof WebSocket === 'undefined') return;
+    let isMounted = true;
+    let ws: WebSocket | null = null;
+    try {
+      const wsUrl = getCloudflareWsUrl('/ws');
+      ws = new WebSocket(wsUrl);
+      ws.onopen = async () => {
+        if (!isMounted || !ws || ws.readyState !== WebSocket.OPEN) return;
+        if (user) {
+          try {
+            const token = await getToken();
+            if (token && ws.readyState === WebSocket.OPEN) {
+              ws.send(
+                JSON.stringify({
+                  type: 'auth',
+                  token,
+                  username: getVerifiedClerkUsername(user) || user.name || 'AnimeFan_IN',
+                })
+              );
+            }
+          } catch {
+            // Non-fatal auth handshake fallback
+          }
+        }
+      };
+      ws.onmessage = (event) => {
+        if (!isMounted) return;
+        try {
+          const msgData = JSON.parse(event.data);
+          if (msgData?.type === 'error') {
+            const errMsg = msgData.error || msgData.message || 'Live update error.';
+            setWsReviewError(errMsg);
+            return;
+          }
+          if (msgData?.type === 'review' && String(msgData.anime_id) === String(anime.id)) {
+            setReviews((prev) => {
+              const incomingId = String(msgData.id || Date.now());
+              if (prev.some((r) => r.id === incomingId)) return prev;
+              return [
+                {
+                  id: incomingId,
+                  userName: msgData.user_name || msgData.userName || 'AnimeFan_IN',
+                  rating: Number(msgData.rating) || 8,
+                  comment: msgData.comment || '',
+                  date: 'Just now',
+                  likes: 0,
+                  isSpoiler: Boolean(msgData.isSpoiler),
+                },
+                ...prev,
+              ];
+            });
+          }
+        } catch {
+          // Ignore malformed payloads
+        }
+      };
+    } catch {
+      // Fallback to REST reviews
+    }
+    return () => {
+      isMounted = false;
+      if (ws) {
+        try {
+          ws.close();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [anime?.id, user, getToken]);
+
   if (isLoading) {
     return (
       <div className={asPage ? 'max-w-[1280px] mx-auto px-4 py-6' : 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm'}>
@@ -408,10 +486,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     const commentText = (retryText ?? newComment).trim();
     if (!commentText) return;
 
+    const verifiedReviewerName = getVerifiedClerkUsername(user) || user?.name || 'AnimeFan_IN';
     const autoSpoiler = /spoiler|dies|death|ending|betray|final boss/i.test(commentText);
     const review: ReviewItem = {
       id: Date.now().toString(),
-      userName: user?.name || 'AnimeFan_IN',
+      userName: verifiedReviewerName,
       rating: newRating,
       comment: commentText,
       date: 'Just now',
@@ -530,8 +609,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       ref={modalContainerRef}
       className={
         asPage
-          ? 'w-full bg-[#0B0A10] text-[#F4F3FA] pb-24'
-          : 'relative w-full max-w-4xl max-h-[92vh] bg-[#0B0A10] rounded-t-[20px] sm:rounded-[20px] border border-[#292B39] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-180'
+          ? 'w-full overflow-x-clip bg-[#0B0A10] text-[#F4F3FA] pb-24'
+          : 'relative w-full max-w-[calc(100vw-1.5rem)] sm:max-w-4xl max-h-[92vh] overflow-x-clip bg-[#0B0A10] rounded-t-[20px] sm:rounded-[20px] border border-[#292B39] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-180'
       }
     >
       {/* Top Bar for Page or Modal */}
@@ -936,6 +1015,41 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   <div className="text-[14px] font-semibold text-[#F4F3FA]">
                     {anime.studio && anime.studio.trim() ? anime.studio : 'Studio not verified'}
                   </div>
+                </div>
+
+                <div>
+                  <div className="text-[12px] font-semibold text-[#A1A5B5] uppercase tracking-wider mb-1.5">
+                    SEASONS &amp; EPISODES
+                  </div>
+                  <div className="text-[14px] font-semibold text-[#F4F3FA]">
+                    {(anime as any).seasonEpisodeCount ||
+                      (anime as any).season_episode_count ||
+                      dubProgress?.overallBadgeText ||
+                      (anime.episodesCount && anime.episodesCount > 0
+                        ? `${anime.episodesCount} Episodes`
+                        : UNVERIFIED_COUNT_LABEL)}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[12px] font-semibold text-[#A1A5B5] uppercase tracking-wider mb-1.5">
+                    OFFICIAL SOURCE
+                  </div>
+                  {(anime as any).officialSourceUrl || (anime as any).official_source_url ? (
+                    <a
+                      href={(anime as any).officialSourceUrl || (anime as any).official_source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#B49AF8] hover:text-[#CBB6FF] break-all"
+                    >
+                      <span>Verified Official Announcement</span>
+                      <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                    </a>
+                  ) : (
+                    <div className="text-[14px] font-semibold text-[#F4F3FA]">
+                      {verifiedPlatforms.length > 0 ? verifiedPlatforms.join(', ') : 'Source not verified'}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1349,6 +1463,23 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 </div>
               </div>
             </form>
+
+            {wsReviewError && (
+              <div
+                role="alert"
+                className="rounded-[12px] bg-red-500/10 border border-red-500/30 px-4 py-2.5 flex items-center justify-between gap-2 text-[12px] text-[#F87171]"
+              >
+                <span>{wsReviewError}</span>
+                <button
+                  type="button"
+                  onClick={() => setWsReviewError(null)}
+                  aria-label="Dismiss review notice"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-[8px] hover:bg-red-500/15"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
             {/* Spoiler Shield Controls Bar */}
             <div className="rounded-[12px] bg-[#12141E] border border-[#292B39] px-4 py-2.5 flex items-center justify-between gap-3">

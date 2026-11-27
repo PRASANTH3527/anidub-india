@@ -23,9 +23,18 @@ const FEEDBACK_CATEGORIES = [
   { id: 'other', label: 'Other feedback', icon: HelpCircle },
 ] as const;
 
+const REGIONAL_FOOTER_LANGUAGES = [
+  { name: 'Hindi', slug: 'hindi' },
+  { name: 'Tamil', slug: 'tamil' },
+  { name: 'Telugu', slug: 'telugu' },
+  { name: 'Malayalam', slug: 'malayalam' },
+  { name: 'Kannada', slug: 'kannada' },
+] as const;
+
 export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   onShowToast,
   onOpenLegal,
+  onNavigateLanguage,
   onOpenPrivacy,
   onOpenCopyright,
   mode = 'footer',
@@ -84,13 +93,42 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   if (mode === 'footer') {
     return (
       <footer className="relative mt-16 border-t border-[#292B39] bg-[#0B0A10] pb-24 md:pb-8 overflow-hidden">
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-5">
+          {/* Compact Regional Dubbed Anime SEO Directory Links */}
+          <nav
+            aria-label="Regional Dubbed Anime Languages"
+            className="flex flex-wrap items-center justify-center md:justify-between gap-2 pb-4 border-b border-[#292B39]/70"
+          >
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
+              Regional Dubbed Anime Languages
+            </span>
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {REGIONAL_FOOTER_LANGUAGES.map((lang) => (
+                <a
+                  key={lang.slug}
+                  href={`/dubbed-anime/${lang.slug}`}
+                  onClick={(e) => {
+                    if (onNavigateLanguage) {
+                      e.preventDefault();
+                      onNavigateLanguage(lang.name);
+                    }
+                  }}
+                  className="min-h-[40px] px-3 py-1.5 rounded-[8px] bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/40 text-[12px] font-semibold text-[#A1A5B5] hover:text-[#F4F3FA] inline-flex items-center transition-colors"
+                >
+                  {lang.name} Dubbed Anime
+                </a>
+              ))}
+            </div>
+          </nav>
+
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-[12px] text-[#A1A5B5]">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-[#191C29] border border-[#292B39] flex items-center justify-center font-bold text-[#B49AF8] text-[10px]">
-                AD
-              </div>
-              <span className="font-semibold text-[#F4F3FA]">AniDub India</span>
+              <img
+                src="/logo.png?v=2"
+                alt="AniDub India"
+                loading="lazy"
+                className="h-7 w-auto object-contain"
+              />
               <span>© {new Date().getFullYear()} All rights reserved.</span>
             </div>
 
@@ -98,21 +136,21 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
               <button
                 type="button"
                 onClick={() => (onOpenLegal ? onOpenLegal('privacy') : onOpenPrivacy?.())}
-                className="min-h-[44px] px-2 hover:text-[#F4F3FA] transition-colors"
+                className="min-h-[44px] px-2 hover:text-[#F4F3FA] transition-colors cursor-pointer"
               >
                 Privacy Policy
               </button>
               <button
                 type="button"
                 onClick={() => (onOpenLegal ? onOpenLegal('terms') : onOpenCopyright?.())}
-                className="min-h-[44px] px-2 hover:text-[#F4F3FA] transition-colors"
+                className="min-h-[44px] px-2 hover:text-[#F4F3FA] transition-colors cursor-pointer"
               >
                 Terms of Service
               </button>
               <button
                 type="button"
                 onClick={() => (onOpenLegal ? onOpenLegal('dmca') : onOpenCopyright?.())}
-                className="min-h-[44px] px-2 hover:text-[#F4F3FA] transition-colors"
+                className="min-h-[44px] px-2 hover:text-[#F4F3FA] transition-colors cursor-pointer"
               >
                 DMCA / Rights-Holder
               </button>

@@ -2,7 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   MessageSquare, X, Send, Users, Reply, Flag, RefreshCw, AlertCircle, Wifi, WifiOff
 } from 'lucide-react';
+import { useAuth } from '@clerk/clerk-react';
 import { cloudflareApi } from '../services/cloudflareApi';
+import { getCloudflareWsUrl } from '../config/cloudflare';
+import { getVerifiedClerkUsername } from '../utils/chatIdentity';
 
 interface Message {
   id: string;
@@ -34,10 +37,12 @@ export const LiveChat: React.FC<LiveChatProps> = ({
   embedded = false,
   activeRoom = 'Global',
 }) => {
+  const { getToken } = useAuth();
   const [isOpen, setIsOpen] = useState(embedded);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [connectionState, setConnectionState] = useState<ConnectionState>('Connecting');
+  const [chatError, setChatError] = useState<string | null>(null);
   const [replyTarget, setReplyTarget] = useState<{ user: string; text: string } | null>(null);
   const [mutedUsers, setMutedUsers] = useState<string[]>(() => {
     try {
@@ -54,6 +59,9 @@ export const LiveChat: React.FC<LiveChatProps> = ({
     }
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  const verifiedUsername = getVerifiedClerkUsername(user) || user?.name || 'AnimeFan';
 
   const handleToggleSpoilerShield = () => {
     const next = !spoilerShield;
@@ -90,19 +98,20 @@ export const LiveChat: React.FC<LiveChatProps> = ({
         setConnectionState('Connected');
         if (Array.isArray(cfMessages)) {
           const formatted: Message[] = cfMessages.map((m: any) => ({
-            id: m.id,
-            user: m.user_name || 'AnimeFan',
+            id: String(m.id),
+            user: m.user_name || m.user || 'AnimeFan',
             avatar: m.user_avatar || undefined,
-            text: m.message,
-            timestamp: new Date(m.created_at).toLocaleTimeString([], {
+            text: m.message || m.text || '',
+            timestamp: new Date(m.created_at || Date.now()).toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
             }),
-            isSelf: Boolean(user && m.user_name === user.name),
+            isSelf: Boolean(user && (m.user_name || m.user) === verifiedUsername),
             deliveryState: 'sent',
           }));
           setMessages((prev) => {
-            const pendingOrFailed = prev.filter((p) => p.deliveryState !== 'sent');
+            const seen = new Set(formatted.map((f) => f.id));
+            const pendingOrFailed = prev.filter((p) => p.deliveryState !== 'sent' && !seen.has(p.id));
             return [...formatted, ...pendingOrFailed];
           });
         }
@@ -114,12 +123,99 @@ export const LiveChat: React.FC<LiveChatProps> = ({
     };
 
     fetchMessages(true);
-    const interval = setInterval(() => fetchMessages(false), 6000);
+    const interval = setInterval(() => fetchMessages(false), 12000);
+
+    let ws: WebSocket | null = null;
+    if (typeof WebSocket !== 'undefined') {
+      try {
+        const wsUrl = getCloudflareWsUrl('/ws');
+        ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = async () => {
+          if (!isMounted) return;
+          setConnectionState('Connected');
+          setChatError(null);
+          if (user) {
+            try {
+              const token = await getToken();
+              if (token && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(
+                  JSON.stringify({
+                    type: 'auth',
+                    token,
+                    username: verifiedUsername,
+                  })
+                );
+              }
+            } catch {
+              // Token handshake best-effort
+            }
+          }
+        };
+
+        ws.onmessage = (event) => {
+          if (!isMounted) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'error') {
+              const errorText = data.error || data.message || 'Unable to send chat message.';
+              setChatError(errorText);
+              onShowToast?.(errorText, 'error');
+              return;
+            }
+            if (data.type === 'message' || (data.text && data.user)) {
+              const incomingId = String(data.id || Date.now());
+              const incoming: Message = {
+                id: incomingId,
+                user: data.user || data.username || 'AnimeFan',
+                text: data.text || data.message || '',
+                timestamp: new Date(data.timestamp || Date.now()).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+                isSelf: Boolean(user && (data.user || data.username) === verifiedUsername),
+                deliveryState: 'sent',
+                room: data.room || activeRoom,
+              };
+              setMessages((prev) => {
+                const exists = prev.some((m) => m.id === incomingId);
+                if (exists) {
+                  return prev.map((m) => (m.id === incomingId ? { ...m, deliveryState: 'sent' } : m));
+                }
+                return [...prev, incoming];
+              });
+            }
+          } catch {
+            // Ignore malformed socket frames
+          }
+        };
+
+        ws.onerror = () => {
+          if (isMounted) setConnectionState((prev) => (prev === 'Connected' ? 'Reconnecting' : prev));
+        };
+
+        ws.onclose = () => {
+          if (wsRef.current === ws) wsRef.current = null;
+        };
+      } catch {
+        // Fallback silently to REST polling
+      }
+    }
+
     return () => {
       isMounted = false;
       clearInterval(interval);
+      if (ws) {
+        try {
+          ws.close();
+        } catch {
+          // ignore
+        }
+      }
+      if (wsRef.current === ws) wsRef.current = null;
     };
-  }, [isOpen, embedded, user]);
+  }, [isOpen, embedded, user, verifiedUsername, getToken, activeRoom]);
 
   useEffect(() => {
     if ((isOpen || embedded) && messagesEndRef.current) {
@@ -129,10 +225,25 @@ export const LiveChat: React.FC<LiveChatProps> = ({
 
   const sendPayload = async (tempId: string, rawText: string) => {
     if (!user) return;
+    setChatError(null);
     try {
+      const token = await getToken();
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            id: tempId,
+            type: 'message',
+            user: verifiedUsername,
+            username: verifiedUsername,
+            text: rawText,
+            token: token || undefined,
+            room: activeRoom,
+          })
+        );
+      }
       await cloudflareApi.sendChatMessage({
         id: tempId,
-        user_name: user.name,
+        user_name: verifiedUsername,
         user_avatar: user.avatar || '',
         message: rawText,
       });
@@ -140,12 +251,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({
         prev.map((m) => (m.id === tempId ? { ...m, deliveryState: 'sent' } : m))
       );
       setConnectionState('Connected');
-    } catch {
+    } catch (err: any) {
+      const errorText = err?.message || 'Failed to send message. Tap Retry.';
+      setChatError(errorText);
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, deliveryState: 'failed' } : m))
       );
       if (onShowToast) {
-        onShowToast('Failed to send message. Tap Retry.', 'error');
+        onShowToast(errorText, 'error');
       }
     }
   };
@@ -165,7 +278,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({
 
     const optimisticMsg: Message = {
       id: tempId,
-      user: user.name,
+      user: verifiedUsername,
       avatar: user.avatar,
       text: formattedText,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -270,6 +383,26 @@ export const LiveChat: React.FC<LiveChatProps> = ({
           )}
         </div>
       </div>
+
+      {chatError && (
+        <div
+          role="alert"
+          className="px-4 py-2 bg-red-500/10 border-b border-red-500/30 flex items-center justify-between gap-2 text-[12px] text-[#F87171]"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="truncate">{chatError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setChatError(null)}
+            aria-label="Dismiss chat error"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[8px] hover:bg-red-500/15 flex items-center justify-center shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Messages Stream */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

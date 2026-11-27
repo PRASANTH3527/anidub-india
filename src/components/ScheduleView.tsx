@@ -4,6 +4,7 @@ import { Anime, normalizeAnimeList } from '../types';
 import { PlatformIcon } from './PlatformIcons';
 import { OptimizedImage } from './OptimizedImage';
 import { SchedulePageSkeleton } from './ui/EclipseState';
+import { countAiringSimulcasts } from '../utils/schedule';
 
 export interface ScheduleViewProps {
   animeList?: any[];
@@ -55,6 +56,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
     () => normalizeAnimeList(animeListProp || catalogList || []),
     [animeListProp, catalogList]
   );
+
+  const airingSimulcastCount = useMemo(() => countAiringSimulcasts(animeList), [animeList]);
 
   const todayIndex = new Date().getDay();
   const adjustedTodayIndex = todayIndex === 0 ? 6 : todayIndex - 1;
@@ -235,12 +238,21 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
       <div className="flex flex-col gap-4 mb-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#B49AF8] mb-1">
-              <Calendar className="w-3.5 h-3.5" />
-              <span>Indian Standard Time (IST) • Official Streams</span>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#B49AF8]">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Indian Standard Time (IST) • Official Streams</span>
+              </div>
+              <span
+                data-testid="simulcast-airing-count"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[6px] bg-emerald-500/10 border border-emerald-500/30 text-[#34D399] text-[11px] font-bold"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
+                {airingSimulcastCount} Airing
+              </span>
             </div>
             <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em]">
-              simulcast &amp; dub schedule
+              Simulcast &amp; Dub Schedule
             </h1>
             <span className="sr-only">Release Schedule</span>
           </div>

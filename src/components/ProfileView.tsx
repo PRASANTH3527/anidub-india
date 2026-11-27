@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   User, Bookmark, CheckCircle, Play, LogOut, Shield, Sparkles, Lock,
-  MessageSquare, FileText, Globe, Bell, Cloud, ChevronRight, Check
+  MessageSquare, FileText, Globe, Bell, Cloud, ChevronRight, Check, Camera, X
 } from 'lucide-react';
 import {
   Anime,
@@ -41,7 +41,63 @@ export interface ProfileViewProps {
 
 const REGIONAL_LANGUAGES = ['Tamil', 'Hindi', 'Telugu', 'Malayalam', 'Kannada', 'Bengali'] as const;
 
-export const ProfileView: React.FC<ProfileViewProps> = ({
+export interface AnimeAvatarOption {
+  name: string;
+  category: 'Shonen' | 'Villains' | 'Swordsmen' | 'Hunters' | 'Ninjas';
+  url: string;
+}
+
+const AVATAR_CATEGORIES = ['All', 'Shonen', 'Villains', 'Swordsmen', 'Hunters', 'Ninjas'] as const;
+
+const RICH_ANIME_AVATARS: AnimeAvatarOption[] = [
+  { name: 'Sung Jin-woo', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b129928-i1C9G8G7nA5R.png' },
+  { name: 'Cha Hae-in', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b136071-e6P4J7Y8nX3Z.png' },
+  { name: 'Roronoa Zoro', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b62-Wixe3k3YOgpH.png' },
+  { name: 'Sanji', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b305-t221469103.png' },
+  { name: 'Itachi Uchiha', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b14-9Kb1E5g6c7L9.png' },
+  { name: 'Kakashi Hatake', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b85-mkVBh2yjLNag.png' },
+  { name: 'Madara Uchiha', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b53901-8x9S7x9X6X9X.png' },
+  { name: 'Levi Ackerman', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b45627-CR68RyZmGiOV.png' },
+  { name: 'Eren Yeager', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40882-dsj7IP943WFF.jpg' },
+  { name: 'Mikasa Ackerman', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40881-F3gr1PkreDvj.png' },
+  { name: 'Nezuko Kamado', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127518-NRlq1CQ1v1ro.png' },
+  { name: 'Zenitsu Agatsuma', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b129131-F1e3b4G7rX9S.png' },
+  { name: 'Kyojuro Rengoku', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b129130-k5W5g6H9mP2B.png' },
+  { name: 'Tengen Uzui', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b129132-8h4V1f5nM7C2.png' },
+  { name: 'Yuji Itadori', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127212-F8g2H4k7M9N1.png' },
+  { name: 'Sukuna', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b133700-3R7t9X2vL8Q5.png' },
+  { name: 'Toji Fushiguro', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b165352-9T2w4K6pX1V8.png' },
+  { name: 'Saitama', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b73935-b2V4y6K8nM1Q.png' },
+  { name: 'Garou', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b89695-4L7m9R2xN6B3.png' },
+  { name: 'Light Yagami', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b80-5E8w2K9pT4C1.png' },
+  { name: 'L Lawliet', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b71-7R3n5X1vB8M4.png' },
+  { name: 'Goku', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b246-6Q9m2N4xP7L5.png' },
+  { name: 'Vegeta', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b913-2T5k8R1vW3C9.png' },
+  { name: 'Ichigo Kurosaki', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b5-9M2v4K7xR1N6.png' },
+  { name: 'Sosuke Aizen', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b1086-3X6n8T2pL5Q7.png' },
+  { name: 'Naruto Uzumaki', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b17-IInspectable1.png' },
+  { name: 'Sasuke Uchiha', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b13-8N4k2V6mX9P3.png' },
+  { name: 'Minato Namikaze', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b2535-7T1p4R9vL2C8.png' },
+  { name: 'Jiraiya', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b2423-5K8m3X1nP6Q4.png' },
+  { name: 'Monkey D. Luffy', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b40-9R2v6N4kT7M1.png' },
+  { name: 'Satoru Gojo', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b127691-Um2d9X5pL8C4.png' },
+  { name: 'Megumi Fushiguro', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b126635-2V7k4R9nM1Q6.png' },
+  { name: 'Tanjiro Kamado', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b126071-BTJEtoken123.png' },
+  { name: 'Giyu Tomioka', category: 'Swordsmen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b146736-4R8m2K6pX9N3.png' },
+  { name: 'Gon Freecss', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b30-6N9v3T1kL5C7.png' },
+  { name: 'Killua Zoldyck', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b27-8K2m5X7pR4Q1.png' },
+  { name: 'Kurapika', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b28-3T6n9R2vL8M4.png' },
+  { name: 'Hisoka Morow', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b31-5M8k2V4nX7P9.png' },
+  { name: 'Chrollo Lucilfer', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b58-7P1r4N8vK3C6.png' },
+  { name: 'Denji', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b137079-9X4m2T7pR5L1.png' },
+  { name: 'Makima', category: 'Villains', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b137080-2K6n8V3pM9Q4.png' },
+  { name: 'Aki Hayakawa', category: 'Hunters', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b137081-4R9t1X5vN2C8.png' },
+  { name: 'Izuku Midoriya', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b89028-6T3k7M2pL9V5.png' },
+  { name: 'Katsuki Bakugo', category: 'Shonen', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b88892-8N5v2R4kX1Q7.png' },
+  { name: 'Pain Nagato', category: 'Ninjas', url: 'https://s4.anilist.co/file/anilistcdn/character/large/b3180-1M7p4K9nT6C3.png' },
+];
+
+export function ProfileView({
   user: userProp,
   watchlist: watchlistProp = [],
   animeList: animeListProp,
@@ -55,7 +111,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onOpenLegal,
   onShowToast,
   isLoading = false,
-}) => {
+}: ProfileViewProps) {
   const { isSignedIn, user: clerkUser } = useUser();
   const { signOut: clerkSignOut, openSignIn: clerkOpenSignIn } = useClerk();
 
@@ -114,6 +170,41 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }
   });
   const [showLangPicker, setShowLangPicker] = useState(false);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [avatarCategory, setAvatarCategory] = useState<(typeof AVATAR_CATEGORIES)[number]>('All');
+  const [customAvatarUrl, setCustomAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setCustomAvatarUrl(null);
+      return;
+    }
+    try {
+      const key = `anidub_custom_avatar_${user.id || user.email}`;
+      setCustomAvatarUrl(localStorage.getItem(key));
+    } catch {
+      setCustomAvatarUrl(null);
+    }
+  }, [user]);
+
+  const activeAvatarUrl = customAvatarUrl || user?.avatar || null;
+  const filteredAvatars =
+    avatarCategory === 'All'
+      ? RICH_ANIME_AVATARS
+      : RICH_ANIME_AVATARS.filter((a) => a.category === avatarCategory);
+
+  const handleSelectAvatar = (avatar: AnimeAvatarOption) => {
+    if (!user) return;
+    setCustomAvatarUrl(avatar.url);
+    setShowAvatarPicker(false);
+    try {
+      const key = `anidub_custom_avatar_${user.id || user.email}`;
+      localStorage.setItem(key, avatar.url);
+    } catch {
+      // ignore
+    }
+    onShowToast?.(`Profile avatar updated to ${avatar.name}`, 'success');
+  };
 
   const isAdminVerified = Boolean(user?.isAdmin && isAuthorizedClerkAdmin(user.email));
 
@@ -219,17 +310,27 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              {user.avatar ? (
-                <img
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-16 h-16 rounded-2xl object-cover border border-[#292B39]"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-2xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[22px] font-bold text-[#B49AF8]">
-                  {user.name.charAt(0).toUpperCase()}
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowAvatarPicker(true)}
+                aria-label="Choose anime avatar"
+                className="relative group w-16 h-16 rounded-2xl overflow-hidden bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8] flex items-center justify-center shrink-0 transition-colors cursor-pointer"
+              >
+                {activeAvatarUrl ? (
+                  <img
+                    src={activeAvatarUrl}
+                    alt={user.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-[22px] font-bold text-[#B49AF8]">
+                    {user.name.charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <span className="absolute inset-x-0 bottom-0 bg-[#0B0A10]/80 py-0.5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Camera className="w-3.5 h-3.5 text-[#CBB6FF]" />
+                </span>
+              </button>
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-[18px] sm:text-[20px] font-bold text-[#F4F3FA]">{user.name}</h2>
@@ -553,6 +654,84 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Eclipse Dark Anime Avatar Picker Modal */}
+      {showAvatarPicker && user && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose Anime Character Avatar"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm"
+        >
+          <div className="w-full sm:max-w-xl max-h-[85vh] rounded-t-[20px] sm:rounded-[20px] bg-[#12141E] border border-[#292B39] flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#292B39] flex items-center justify-between">
+              <div>
+                <h3 className="text-[16px] font-bold text-[#F4F3FA]">Choose Anime Avatar</h3>
+                <p className="text-[12px] text-[#A1A5B5]">
+                  Pick from {RICH_ANIME_AVATARS.length} iconic anime characters
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAvatarPicker(false)}
+                aria-label="Close avatar picker"
+                className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-5 py-3 border-b border-[#292B39] flex items-center gap-2 overflow-x-auto no-scrollbar">
+              {AVATAR_CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setAvatarCategory(cat)}
+                  className={`min-h-[40px] px-3.5 rounded-[10px] text-[12px] font-semibold whitespace-nowrap border transition-colors ${
+                    avatarCategory === cat
+                      ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
+                      : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-4 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 gap-3">
+              {filteredAvatars.map((avatar) => {
+                const isSelected = activeAvatarUrl === avatar.url;
+                return (
+                  <button
+                    key={avatar.name}
+                    type="button"
+                    onClick={() => handleSelectAvatar(avatar)}
+                    className={`p-2 rounded-[12px] border text-center transition-colors ${
+                      isSelected
+                        ? 'bg-[#B49AF8]/15 border-[#B49AF8] text-[#F4F3FA]'
+                        : 'bg-[#191C29] border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5]'
+                    }`}
+                  >
+                    <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden bg-[#12141E] border border-[#292B39] mb-1.5">
+                      <img
+                        src={avatar.url}
+                        alt={avatar.name}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="text-[11px] font-semibold text-[#F4F3FA] truncate">
+                      {avatar.name}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
-};
+}
+
+export { ProfileView as Profile };

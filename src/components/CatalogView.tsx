@@ -1135,64 +1135,66 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           )}
         </div>
 
-        {/* 2b. LANGUAGE FILTER PILLS (All, Tamil, Hindi, Telugu, More at 44px height) + FILTERS BUTTON (44px) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          {primaryLanguagePills.map((langItem) => {
-            const active =
-              selectedLanguage.toLowerCase() === langItem.value.toLowerCase() ||
-              (selectedLanguage === 'All' && langItem.value === 'All');
-            const nativeScript = NATIVE_LANGUAGE_SCRIPT[langItem.value.toLowerCase()];
-            return (
-              <button
-                key={langItem.value}
-                type="button"
-                onClick={() => setSelectedLanguage(langItem.value)}
-                aria-pressed={active}
-                className={`h-[44px] min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold shrink-0 inline-flex items-center gap-1.5 border transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
-                  active
-                    ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
-                    : 'bg-[#12141E] border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA]'
-                }`}
-              >
-                <span>{langItem.label}</span>
-                {nativeScript && (
-                  <span
-                    className={`hidden sm:inline text-[11px] font-medium ${
-                      active ? 'text-[#0B0A10]/85' : 'text-[#CBB6FF]'
-                    }`}
-                  >
-                    {nativeScript}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        {/* 2b. LANGUAGE FILTER PILLS (All, Tamil, Hindi, Telugu, More at 44px height) + PINNED FILTERS BUTTON (44px) */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 min-w-0">
+            {primaryLanguagePills.map((langItem) => {
+              const active =
+                selectedLanguage.toLowerCase() === langItem.value.toLowerCase() ||
+                (selectedLanguage === 'All' && langItem.value === 'All');
+              const nativeScript = NATIVE_LANGUAGE_SCRIPT[langItem.value.toLowerCase()];
+              return (
+                <button
+                  key={langItem.value}
+                  type="button"
+                  onClick={() => setSelectedLanguage(langItem.value)}
+                  aria-pressed={active}
+                  className={`h-[44px] min-h-[44px] px-3 sm:px-3.5 py-2 rounded-[12px] text-xs font-semibold shrink-0 inline-flex items-center gap-1.5 border transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
+                    active
+                      ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
+                      : 'bg-[#12141E] border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA]'
+                  }`}
+                >
+                  <span>{langItem.label}</span>
+                  {nativeScript && (
+                    <span
+                      className={`hidden sm:inline text-[11px] font-medium ${
+                        active ? 'text-[#0B0A10]/85' : 'text-[#CBB6FF]'
+                      }`}
+                    >
+                      {nativeScript}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
 
-          {/* More Languages Pill */}
-          <button
-            type="button"
-            onClick={() => setIsMoreLanguagesOpen((prev) => !prev)}
-            aria-expanded={isMoreLanguagesOpen}
-            aria-pressed={isExtraLanguageActive}
-            className={`h-[44px] min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold shrink-0 inline-flex items-center gap-1 border transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
-              isExtraLanguageActive
-                ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
-                : isMoreLanguagesOpen
-                  ? 'bg-[#191C29] border-[#B49AF8] text-[#F4F3FA]'
-                  : 'bg-[#12141E] border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5] hover:text-[#F4F3FA]'
-            }`}
-          >
-            <span>{isExtraLanguageActive ? selectedLanguage : 'More'}</span>
-            {isMoreLanguagesOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </button>
+            {/* More Languages Pill */}
+            <button
+              type="button"
+              onClick={() => setIsMoreLanguagesOpen((prev) => !prev)}
+              aria-expanded={isMoreLanguagesOpen}
+              aria-pressed={isExtraLanguageActive}
+              className={`h-[44px] min-h-[44px] px-3 sm:px-3.5 py-2 rounded-[12px] text-xs font-semibold shrink-0 inline-flex items-center gap-1 border transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
+                isExtraLanguageActive
+                  ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
+                  : isMoreLanguagesOpen
+                    ? 'bg-[#191C29] border-[#B49AF8] text-[#F4F3FA]'
+                    : 'bg-[#12141E] border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5] hover:text-[#F4F3FA]'
+              }`}
+            >
+              <span>{isExtraLanguageActive ? selectedLanguage : 'More'}</span>
+              {isMoreLanguagesOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
 
-          {/* Compact 44px Filters Button (showing active filter count badge) next to language row */}
+          {/* Pinned 44px Filters Button (never clipped on 360px/390px mobile) */}
           <button
             type="button"
             onClick={() => setIsSmartFilterOpen((prev) => !prev)}
             aria-expanded={isSmartFilterOpen}
             aria-label="Toggle Smart Filters"
-            className={`h-[44px] min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-all duration-180 motion-reduce:transition-none cursor-pointer inline-flex items-center gap-1.5 shrink-0 ml-auto ${
+            className={`h-[44px] min-h-[44px] px-3 sm:px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-all duration-180 motion-reduce:transition-none cursor-pointer inline-flex items-center gap-1.5 shrink-0 ${
               isSmartFilterOpen || activeAdvancedFilterCount > 0
                 ? 'bg-[#191C29] border-[#B49AF8] text-[#F4F3FA]'
                 : 'bg-[#12141E] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/50'
