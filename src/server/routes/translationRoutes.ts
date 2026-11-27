@@ -9,6 +9,7 @@ import {
   validateTranslationPayload,
   type AnimeTranslationRecord,
 } from '../../utils/animeTranslations';
+import { recordTranslationVersion } from './adminPhase35Routes';
 import { getErrorMessage, type D1DatabaseLike, type RouteContext } from './shared';
 
 /**
@@ -390,6 +391,26 @@ export async function handleTranslationRoutes(ctx: RouteContext): Promise<Respon
       const actorTag = requestedLock
         ? `LOCKED:${auth.session.email || auth.session.userId || 'admin'}`
         : auth.session.email || auth.session.userId || 'admin';
+
+      // Save previous translation text into translation_versions before overwriting
+      try {
+        const existingTrans = await env.DB.prepare(
+          'SELECT synopsis FROM anime_translations WHERE anime_id = ? AND locale = ? LIMIT 1'
+        )
+          .bind(canonicalAnimeId, locale)
+          .first<{ synopsis?: string }>();
+        if (existingTrans?.synopsis && existingTrans.synopsis.trim() && existingTrans.synopsis.trim() !== String(synopsis || '').trim()) {
+          await recordTranslationVersion(env.DB, {
+            anime_id: Number(canonicalAnimeId) || 0,
+            language_code: locale,
+            synopsis_text: existingTrans.synopsis,
+            source_type: 'manual_backup',
+            saved_by: auth.session.email || auth.session.userId || 'admin',
+          });
+        }
+      } catch {
+        // ignore if table not ready
+      }
 
       try {
         await env.DB.prepare(

@@ -35,6 +35,13 @@ import {
   normalizeTranslationLocale,
 } from '../../utils/animeTranslations';
 import { normalizeStreamingPartners } from '../../utils/dataNormalization';
+import { scanExtendedDataHealth } from '../../utils/adminPhase35Polish';
+import {
+  archiveEntityToRecycleBin,
+  getTodayAiUsage,
+  incrementTodayAiUsage,
+  recordTranslationVersion,
+} from './adminPhase35Routes';
 import {
   getErrorMessage,
   isMissingColumnError,
@@ -748,7 +755,7 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
         animeRows = fallback.results || [];
       }
 
-      const [trRes, dmRes] = await Promise.all([
+      const [trRes, dmRes, frRes, castRes] = await Promise.all([
         env.DB.prepare(
           'SELECT anime_id, locale, translation_status FROM anime_translations'
         )
@@ -759,13 +766,69 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
         )
           .all<{ anime_id: string; availability_status: string; verified_at: string | null }>()
           .catch(() => ({ results: [] })),
+        env.DB.prepare(
+          'SELECT id, franchise_key, franchise_title, anime_id, relation_type, watch_order FROM anime_franchise_links'
+        )
+          .all<Record<string, any>>()
+          .catch(() => ({ results: [] })),
+        env.DB.prepare(
+          'SELECT id, anime_id, character_name, voice_actor_name, COALESCE(dub_language, language) as language, verified FROM anime_cast_entries'
+        )
+          .all<Record<string, any>>()
+          .catch(() => ({ results: [] })),
       ]);
 
-      const report = scanCatalogDataHealth(
+      const baseReport = scanCatalogDataHealth(
         animeRows,
         trRes.results || [],
         dmRes.results || []
       );
+
+      const extendedReport = scanExtendedDataHealth({
+        animeRows: animeRows.map((a) => ({
+          id: Number(a.id),
+          title: String(a.title || ''),
+          slug: a.slug ? String(a.slug) : null,
+          mal_id: a.mal_id ?? null,
+          anilist_id: a.anilist_id ?? null,
+          external_id: a.external_id ?? null,
+        })),
+        franchiseRows: (frRes.results || []).map((f) => ({
+          id: Number(f.id) || undefined,
+          franchise_key: String(f.franchise_key || ''),
+          franchise_title: f.franchise_title ? String(f.franchise_title) : null,
+          anime_id: Number(f.anime_id),
+          relation_type: f.relation_type ? String(f.relation_type) : null,
+          watch_order: Number(f.watch_order) || 1,
+        })),
+        castRows: (castRes.results || []).map((c) => ({
+          id: Number(c.id),
+          anime_id: Number(c.anime_id),
+          character_name: String(c.character_name || ''),
+          voice_actor_name: String(c.voice_actor_name || ''),
+          language: String(c.language || 'Hindi'),
+          verified: Number(c.verified) === 1 || c.verified === true,
+        })),
+      });
+
+      const report = {
+        ...baseReport,
+        categoryCounts: {
+          ...baseReport.categoryCounts,
+          orphan_franchise_links: extendedReport.orphanFranchiseLinks.length,
+          conflicting_watch_order: extendedReport.conflictingWatchOrders.length,
+          unverified_cast_entries: extendedReport.unverifiedCastEntries.length,
+          missing_external_ids: extendedReport.missingExternalIds.length,
+        },
+        countsByCategory: {
+          ...baseReport.countsByCategory,
+          orphan_franchise_links: extendedReport.orphanFranchiseLinks.length,
+          conflicting_watch_order: extendedReport.conflictingWatchOrders.length,
+          unverified_cast_entries: extendedReport.unverifiedCastEntries.length,
+          missing_external_ids: extendedReport.missingExternalIds.length,
+        },
+        extended: extendedReport,
+      };
 
       return jsonResponse(
         {
@@ -843,27 +906,60 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
           }
         }
 
-        // Check if manual edit lock is active
+        // Check if manual edit lock is active & fetch previous synopsis for version history
+        let previousSynopsisText = '';
         try {
           const existing = await env.DB.prepare(
-            'SELECT id, is_locked, translation_status FROM anime_translations WHERE anime_id = ? AND locale = ? LIMIT 1'
+            'SELECT id, synopsis, is_locked, updated_by, translation_status FROM anime_translations WHERE anime_id = ? AND locale = ? LIMIT 1'
           )
             .bind(animeId, locale)
             .first<Record<string, any>>();
-          if (existing && (Number(existing.is_locked) === 1 || existing.is_locked === true) && !forceUnlock) {
-            return jsonResponse(
-              {
-                success: false,
-                locked: true,
-                error:
-                  'This translation is locked ("Lock Manual Edit" is enabled) to prevent automatic overwrite. Unlock it first to regenerate.',
-              },
-              409,
-              request
-            );
+          if (existing) {
+            previousSynopsisText = String(existing.synopsis || '');
+            const isLocked =
+              Number(existing.is_locked) === 1 ||
+              existing.is_locked === true ||
+              String(existing.updated_by || '').startsWith('LOCKED:');
+            if (isLocked && !forceUnlock) {
+              return jsonResponse(
+                {
+                  success: false,
+                  locked: true,
+                  error:
+                    'This translation is locked ("Lock Manual Edit" is enabled) to prevent automatic overwrite. Unlock it first to regenerate.',
+                },
+                409,
+                request
+              );
+            }
           }
         } catch {
           // If is_locked column is not yet added, proceed safely
+        }
+
+        // Enforce Workers AI Daily Cost Guard
+        const aiUsageBefore = await getTodayAiUsage(env.DB);
+        if (!aiUsageBefore.allowed) {
+          return jsonResponse(
+            {
+              success: false,
+              quotaExceeded: true,
+              aiUsage: aiUsageBefore,
+              error: `Daily Workers AI translation cap reached (${aiUsageBefore.usedToday} / ${aiUsageBefore.dailyCap} daily AI runs). Increase the daily cap or wait until tomorrow.`,
+            },
+            429,
+            request
+          );
+        }
+
+        if (previousSynopsisText.trim()) {
+          await recordTranslationVersion(env.DB, {
+            anime_id: Number(animeId) || 0,
+            language_code: locale,
+            synopsis_text: previousSynopsisText,
+            source_type: 'pre_ai_backup',
+            saved_by: auth.session.email || auth.session.userId || 'admin',
+          });
         }
       }
 
@@ -903,6 +999,9 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
         generatedSynopsis = `[${meta.native} · ${meta.english} Draft] ${englishSynopsis}`;
       }
 
+      await incrementTodayAiUsage(env.DB);
+      const aiUsageAfter = await getTodayAiUsage(env.DB);
+
       generatedDescription = generatedSynopsis.slice(0, 155).trim();
 
       let savedRecord: Record<string, any> | null = null;
@@ -933,6 +1032,14 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
           }
         }
 
+        await recordTranslationVersion(env.DB, {
+          anime_id: Number(animeId) || 0,
+          language_code: locale,
+          synopsis_text: generatedSynopsis,
+          source_type: usedWorkersAi ? 'workers_ai' : 'ai_draft',
+          saved_by: auth.session.email || auth.session.userId || 'admin',
+        });
+
         await recordAdminActivityLog(env.DB, {
           actor_id: auth.session.userId,
           actor_email: auth.session.email,
@@ -952,6 +1059,7 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
           synopsis: generatedSynopsis,
           description: generatedDescription,
           translation: savedRecord,
+          aiUsage: aiUsageAfter,
         },
         200,
         request,
@@ -1175,7 +1283,23 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
 
     const revId = Number(genReviewModMatch[1]);
     if (method === 'DELETE') {
+      let recycleBinId: number | null = null;
       if (env.DB) {
+        const existingRev = await env.DB.prepare('SELECT * FROM reviews WHERE id = ?')
+          .bind(revId)
+          .first<Record<string, unknown>>()
+          .catch(() => null);
+
+        if (existingRev) {
+          recycleBinId = await archiveEntityToRecycleBin(env.DB, {
+            entity_type: 'reviews',
+            entity_id: revId,
+            title: `Review by ${existingRev.username || existingRev.user_name || 'User'} (Anime #${existingRev.anime_id})`,
+            payload: existingRev,
+            deleted_by: auth.session.email || auth.session.userId || 'admin',
+          });
+        }
+
         await env.DB.prepare('DELETE FROM reviews WHERE id = ?')
           .bind(revId)
           .run()
@@ -1186,10 +1310,10 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
           action: 'DELETE_GENERAL_REVIEW',
           entity_type: 'reviews',
           entity_id: revId,
-          summary: `Removed general community review #${revId}.`,
+          summary: `Soft-deleted general community review #${revId} into Recycle Bin.`,
         });
       }
-      return jsonResponse({ success: true, id: revId, deleted: true }, 200, request);
+      return jsonResponse({ success: true, id: revId, deleted: true, recycleBinId }, 200, request);
     }
 
     const body = (await request.json().catch(() => ({}))) as Record<string, any>;

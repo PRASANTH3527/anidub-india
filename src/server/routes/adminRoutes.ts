@@ -15,7 +15,9 @@ import {
 import { validateOfficialSourceUrl } from '../../utils/submissionValidation';
 import { classifyLinkHealthStatus, isSafePublicHttpUrl, type LinkHealthStatus } from '../../utils/linkHealth';
 import { validateCsvDryRunRows } from '../../utils/adminOpsPro';
+import { formatModerationRejectionSummary } from '../../utils/adminPhase35Polish';
 import { recordAdminActivityLog } from './adminOpsProRoutes';
+import { archiveEntityToRecycleBin } from './adminPhase35Routes';
 import { D1_DATABASE_ID, getErrorMessage, isMissingColumnError, type RouteContext } from './shared';
 
 interface CsvImportRow {
@@ -1128,21 +1130,60 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
     }
     try {
       const id = rejectMatch[1];
+      const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+      const reasonPreset = typeof body.reasonPreset === 'string' ? body.reasonPreset.trim() : null;
+      const moderatorNote = typeof body.moderatorNote === 'string' ? body.moderatorNote.trim() : null;
+      let recycleBinId: number | null = null;
+
       if (env.DB) {
+        const existingPending = await env.DB.prepare('SELECT * FROM anime WHERE id = ? LIMIT 1')
+          .bind(id)
+          .first<Record<string, unknown>>()
+          .catch(() => null);
+
+        if (!existingPending) {
+          return jsonResponse({ success: false, error: 'Anime not found' }, 404, request);
+        }
+
+        recycleBinId = await archiveEntityToRecycleBin(env.DB, {
+          entity_type: 'anime',
+          entity_id: String(existingPending.id ?? id),
+          title: String(existingPending.title || `Pending Anime #${id}`),
+          payload: {
+            ...existingPending,
+            rejection_reason_preset: reasonPreset,
+            moderator_note: moderatorNote,
+          },
+          deleted_by: session.email || session.userId || 'admin',
+        });
+
         const res = await env.DB.prepare('DELETE FROM anime WHERE id = ?').bind(id).run();
         if (res?.meta?.changes === 0) {
           return jsonResponse({ success: false, error: 'Anime not found' }, 404, request);
         }
+
+        const summary = formatModerationRejectionSummary(
+          id,
+          String(existingPending.title || 'Untitled'),
+          reasonPreset,
+          moderatorNote
+        );
+
         await recordAdminActivityLog(env.DB, {
           actor_id: session.userId,
           actor_email: session.email,
           action: 'REJECT_PENDING_ANIME',
           entity_type: 'anime',
           entity_id: id,
-          summary: `Rejected and removed pending anime submission #${id}.`,
+          summary,
+          diff_json: {
+            reasonPreset,
+            moderatorNote,
+            recycleBinId,
+          },
         });
       }
-      return jsonResponse({ success: true, id }, 200, request);
+      return jsonResponse({ success: true, id, recycleBinId, reasonPreset, moderatorNote }, 200, request);
     } catch (err) {
       return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
     }

@@ -1190,13 +1190,25 @@ class CloudflareApiService {
 
     if (!res.ok) {
       let errBody = '';
+      let parsedJson: any = null;
       try {
-        const json = await res.json();
-        errBody = json.error || json.message || JSON.stringify(json);
+        parsedJson = await res.json();
+        errBody = parsedJson.error || parsedJson.message || JSON.stringify(parsedJson);
       } catch {
         errBody = await res.text().catch(() => res.statusText);
       }
-      throw new Error(`[ERROR] Backend returned ${res.status} (${res.statusText}): ${errBody || 'Update rejected'}`);
+      const err: any = new Error(
+        res.status === 409
+          ? errBody || 'Conflict: This anime was modified in another session.'
+          : `[ERROR] Backend returned ${res.status} (${res.statusText}): ${errBody || 'Update rejected'}`
+      );
+      err.status = res.status;
+      if (parsedJson?.conflict) {
+        err.conflict = true;
+        err.currentRecord = parsedJson.currentRecord;
+        err.currentUpdatedAt = parsedJson.currentUpdatedAt;
+      }
+      throw err;
     }
 
     const updated = await res.json();
@@ -1205,9 +1217,9 @@ class CloudflareApiService {
   }
 
   /**
-   * DELETE: Deletes an anime from Cloudflare D1
+   * DELETE: Deletes an anime from Cloudflare D1 (archives into admin_recycle_bin first)
    */
-  public async deleteAnime(id: number | string): Promise<{ success: boolean }> {
+  public async deleteAnime(id: number | string): Promise<{ success: boolean; recycleBinId?: number | null }> {
     const endpoint = CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(id);
     let res: Response;
     try {
@@ -1221,7 +1233,6 @@ class CloudflareApiService {
     }
 
     if (res.status === 404 || res.status === 204) {
-      // If the anime is already not found on the backend, it is successfully purged/absent
       return { success: true };
     }
 
@@ -1246,10 +1257,23 @@ class CloudflareApiService {
   }
 
   /**
-   * REJECT: Rejects a pending submission from Cloudflare D1
+   * REJECT: Rejects a pending submission from Cloudflare D1 with optional preset reason and moderator note
    */
-  public async rejectAnime(id: number | string): Promise<{ success: boolean }> {
+  public async rejectAnime(
+    id: number | string,
+    options?: { reasonPreset?: string | null; moderatorNote?: string | null }
+  ): Promise<{ success: boolean; recycleBinId?: number | null }> {
     try {
+      const res = await this.smartFetch(`/api/admin/reject/${encodeURIComponent(String(id))}`, {
+        method: 'POST',
+        headers: this.getHeaders(true),
+        body: JSON.stringify(options || {}),
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({ success: true }));
+        this.clearCatalogIndexCache();
+        return data;
+      }
       return await this.deleteAnime(id);
     } catch (err: any) {
       if (/not found/i.test(err?.message || '')) {
@@ -2846,7 +2870,7 @@ class CloudflareApiService {
     return { success: true };
   }
 
-  public async deleteAdminGeneralReview(reviewId: number): Promise<{ success: boolean }> {
+  public async deleteAdminGeneralReview(reviewId: number): Promise<{ success: boolean; recycleBinId?: number | null }> {
     const res = await this.smartFetch(`/api/admin/reviews/${reviewId}`, {
       method: 'DELETE',
       headers: this.getHeaders(true),
@@ -2855,7 +2879,19 @@ class CloudflareApiService {
     if (!res.ok) {
       throw new Error(json?.error || `Failed to delete review (HTTP ${res.status})`);
     }
-    return { success: true };
+    return { success: true, recycleBinId: json?.recycleBinId ?? null };
+  }
+
+  public async deleteAdminDubReview(reviewId: number): Promise<{ success: boolean; recycleBinId?: number | null }> {
+    const res = await this.smartFetch(`/api/admin/dub-reviews/${reviewId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to delete dub review (HTTP ${res.status})`);
+    }
+    return { success: true, recycleBinId: json?.recycleBinId ?? null };
   }
 
   /**
@@ -2923,7 +2959,14 @@ class CloudflareApiService {
    * Uses keepalive: true and swallows errors so public UX is never slowed down.
    */
   public trackDemandEvent(payload: {
-    event_type: 'search_query' | 'ott_impression' | 'ott_click' | 'dub_language_filter';
+    event_type:
+      | 'search_query'
+      | 'ott_impression'
+      | 'ott_click'
+      | 'dub_language_filter'
+      | 'anime_detail_view'
+      | 'watchlist_add'
+      | 'translation_request';
     anime_id?: string | number | null;
     query_text?: string | null;
     language_code?: string | null;
@@ -3022,7 +3065,7 @@ class CloudflareApiService {
   public async deleteAdminFranchiseEntry(
     franchiseKey: string,
     animeId: string | number
-  ): Promise<{ success: boolean }> {
+  ): Promise<{ success: boolean; recycleBinId?: number | null }> {
     const safeKey = encodeURIComponent(franchiseKey.trim());
     const safeAnimeId = encodeURIComponent(String(animeId).trim());
     const res = await this.smartFetch(`/api/admin/franchises/${safeKey}/${safeAnimeId}`, {
@@ -3033,7 +3076,7 @@ class CloudflareApiService {
     if (!res.ok) {
       throw new Error(json?.error || `Failed to delete franchise entry (HTTP ${res.status})`);
     }
-    return { success: true };
+    return { success: true, recycleBinId: json?.recycleBinId ?? null };
   }
 
   /**
@@ -3126,7 +3169,7 @@ class CloudflareApiService {
     return json;
   }
 
-  public async deleteAdminCastEntry(castId: number): Promise<{ success: boolean }> {
+  public async deleteAdminCastEntry(castId: number): Promise<{ success: boolean; recycleBinId?: number | null }> {
     const res = await this.smartFetch(`/api/admin/cast/${castId}`, {
       method: 'DELETE',
       headers: this.getHeaders(true),
@@ -3135,7 +3178,7 @@ class CloudflareApiService {
     if (!res.ok) {
       throw new Error(json?.error || `Failed to delete cast entry (HTTP ${res.status})`);
     }
-    return { success: true };
+    return { success: true, recycleBinId: json?.recycleBinId ?? null };
   }
 
   /**
@@ -3167,6 +3210,7 @@ class CloudflareApiService {
       ctrPercent: number | null;
       ctrDisplay: string;
     }>;
+    highDemandMissingDubs: import('../utils/adminPhase35Polish').HighDemandMissingDubItem[];
     completenessGaps: {
       totalScanned: number;
       flaggedCount: number;
@@ -3193,6 +3237,7 @@ class CloudflareApiService {
       languageDemand: Array.isArray(json?.languageDemand) ? json.languageDemand : [],
       totalLanguageDemandEvents: Number(json?.totalLanguageDemandEvents) || 0,
       ottPerformance: Array.isArray(json?.ottPerformance) ? json.ottPerformance : [],
+      highDemandMissingDubs: Array.isArray(json?.highDemandMissingDubs) ? json.highDemandMissingDubs : [],
       completenessGaps: json?.completenessGaps || {
         totalScanned: 0,
         flaggedCount: 0,
@@ -3277,6 +3322,251 @@ class CloudflareApiService {
     if (!res.ok) {
       throw new Error(json?.error || `Backup dry-run validation failed (HTTP ${res.status})`);
     }
+    return json;
+  }
+
+  // ===========================================================================
+  // ADMIN DASHBOARD 2.0 (Phase 3.5: Final Polish, Recycle Bin & Power Ops)
+  // ===========================================================================
+
+  public async fetchAdminRecycleBin(options?: {
+    entity_type?: string;
+    include_restored?: boolean;
+  }): Promise<{
+    success: boolean;
+    items: Array<{
+      id: number;
+      entity_type: string;
+      entity_id: string;
+      title: string | null;
+      payload: Record<string, any>;
+      deleted_by: string | null;
+      deleted_at: string;
+      restored_at: string | null;
+    }>;
+  }> {
+    const qs = new URLSearchParams();
+    if (options?.entity_type && options.entity_type !== 'all') {
+      qs.set('entity_type', options.entity_type);
+    }
+    if (options?.include_restored) {
+      qs.set('include_restored', '1');
+    }
+    const endpoint = `/api/admin/recycle-bin${qs.toString() ? `?${qs.toString()}` : ''}`;
+    const res = await this.smartFetch(endpoint, {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load Recycle Bin (HTTP ${res.status})`);
+    }
+    return {
+      success: true,
+      items: Array.isArray(json?.items) ? json.items : [],
+    };
+  }
+
+  public async restoreAdminRecycleBinItem(binId: number): Promise<{
+    success: boolean;
+    restoredId: number;
+    entity_type: string;
+    entity_id: string;
+  }> {
+    const res = await this.smartFetch(`/api/admin/recycle-bin/${binId}/restore`, {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({}),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to restore item (HTTP ${res.status})`);
+    }
+    this.clearCatalogIndexCache();
+    return json;
+  }
+
+  public async purgeAdminRecycleBinItem(
+    binId: number,
+    confirm: string
+  ): Promise<{ success: boolean; purgedId: number }> {
+    const res = await this.smartFetch(`/api/admin/recycle-bin/${binId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ confirm }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to purge item (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  public async fetchAdminAiUsage(): Promise<{
+    success: boolean;
+    usage: {
+      usageDate: string;
+      usedToday: number;
+      dailyCap: number;
+      remaining: number;
+      allowed: boolean;
+    };
+    history: Array<{
+      usage_date: string;
+      translation_calls: number;
+      daily_cap: number;
+      updated_at: string;
+    }>;
+  }> {
+    const res = await this.smartFetch('/api/admin/ai-usage', {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load Workers AI daily usage (HTTP ${res.status})`);
+    }
+    return {
+      success: true,
+      usage: json?.usage || {
+        usageDate: new Date().toISOString().slice(0, 10),
+        usedToday: 0,
+        dailyCap: 100,
+        remaining: 100,
+        allowed: true,
+      },
+      history: Array.isArray(json?.history) ? json.history : [],
+    };
+  }
+
+  public async updateAdminAiDailyCap(dailyCap: number): Promise<{
+    success: boolean;
+    usage: {
+      usageDate: string;
+      usedToday: number;
+      dailyCap: number;
+      remaining: number;
+      allowed: boolean;
+    };
+  }> {
+    const res = await this.smartFetch('/api/admin/ai-usage/cap', {
+      method: 'PUT',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ dailyCap }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to update Workers AI daily cap (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  public async fetchAdminTranslationVersions(
+    animeId: string | number,
+    locale: string
+  ): Promise<{
+    success: boolean;
+    versions: Array<{
+      id: number;
+      anime_id: number;
+      language_code: string;
+      synopsis_text: string;
+      source_type: string;
+      saved_by: string | null;
+      created_at: string;
+    }>;
+  }> {
+    const res = await this.smartFetch(
+      `/api/admin/translations/${encodeURIComponent(String(animeId))}/${encodeURIComponent(locale)}/versions`,
+      {
+        method: 'GET',
+        headers: this.getHeaders(true),
+      }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load translation versions (HTTP ${res.status})`);
+    }
+    return {
+      success: true,
+      versions: Array.isArray(json?.versions) ? json.versions : [],
+    };
+  }
+
+  public async rollbackAdminTranslationVersion(
+    animeId: string | number,
+    locale: string,
+    versionId: number
+  ): Promise<{
+    success: boolean;
+    anime_id: number;
+    language_code: string;
+    synopsis: string;
+  }> {
+    const res = await this.smartFetch(
+      `/api/admin/translations/${encodeURIComponent(String(animeId))}/${encodeURIComponent(locale)}/rollback`,
+      {
+        method: 'POST',
+        headers: this.getHeaders(true),
+        body: JSON.stringify({ versionId }),
+      }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to rollback translation version (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  public async fetchAdminAnimeRevisions(animeId: string | number): Promise<{
+    success: boolean;
+    revisions: Array<{
+      id: number;
+      anime_id: number;
+      revision_summary: string | null;
+      snapshot: Record<string, any>;
+      edited_by: string | null;
+      created_at: string;
+    }>;
+  }> {
+    const res = await this.smartFetch(
+      `/api/admin/anime/${encodeURIComponent(String(animeId))}/revisions`,
+      {
+        method: 'GET',
+        headers: this.getHeaders(true),
+      }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load anime revision history (HTTP ${res.status})`);
+    }
+    return {
+      success: true,
+      revisions: Array.isArray(json?.revisions) ? json.revisions : [],
+    };
+  }
+
+  public async restoreAdminAnimeRevision(
+    animeId: string | number,
+    revisionId: number
+  ): Promise<{
+    success: boolean;
+    restoredRevisionId: number;
+    anime?: Record<string, any>;
+  }> {
+    const res = await this.smartFetch(
+      `/api/admin/anime/${encodeURIComponent(String(animeId))}/revisions/${revisionId}/restore`,
+      {
+        method: 'POST',
+        headers: this.getHeaders(true),
+        body: JSON.stringify({}),
+      }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to restore anime revision (HTTP ${res.status})`);
+    }
+    this.clearCatalogIndexCache();
     return json;
   }
 }

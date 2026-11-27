@@ -43,7 +43,9 @@ import {
   type CoreContentBackupTable,
 } from '../../utils/adminPhase3Intelligence';
 import { parseLanguageArray } from '../../types';
+import { computeHighDemandMissingDubs } from '../../utils/adminPhase35Polish';
 import { recordAdminActivityLog } from './adminOpsProRoutes';
+import { archiveEntityToRecycleBin } from './adminPhase35Routes';
 import {
   getErrorMessage,
   isMissingColumnError,
@@ -533,6 +535,24 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
     const animeId = decodeURIComponent(franchiseDelMatch[2]).trim();
 
     try {
+      const existingFr = await env.DB.prepare(
+        'SELECT * FROM anime_franchise_links WHERE franchise_key = ? AND anime_id = ? LIMIT 1'
+      )
+        .bind(franchiseKey, animeId)
+        .first<Record<string, unknown>>()
+        .catch(() => null);
+
+      let recycleBinId: number | null = null;
+      if (existingFr) {
+        recycleBinId = await archiveEntityToRecycleBin(env.DB, {
+          entity_type: 'anime_franchise_links',
+          entity_id: String(existingFr.id ?? `${franchiseKey}:${animeId}`),
+          title: `Franchise link ${franchiseKey} → Anime #${animeId}`,
+          payload: existingFr,
+          deleted_by: auth.session.email || auth.session.userId || 'admin',
+        });
+      }
+
       await env.DB.prepare(
         'DELETE FROM anime_franchise_links WHERE franchise_key = ? AND anime_id = ?'
       )
@@ -562,11 +582,11 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
         action: 'DELETE_FRANCHISE_LINK',
         entity_type: 'anime_franchise_links',
         entity_id: `${franchiseKey}:${animeId}`,
-        summary: `Removed anime #${animeId} from franchise "${franchiseKey}".`,
+        summary: `Soft-deleted anime #${animeId} from franchise "${franchiseKey}" into Recycle Bin.`,
       });
 
       return jsonResponse(
-        { success: true, franchiseKey, deletedAnimeId: animeId },
+        { success: true, franchiseKey, deletedAnimeId: animeId, recycleBinId },
         200,
         request,
         { 'Cache-Control': 'no-store' }
@@ -877,6 +897,22 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
 
     const castId = Number(castItemMatch[1]);
     try {
+      const existingCast = await env.DB.prepare('SELECT * FROM anime_cast_entries WHERE id = ? LIMIT 1')
+        .bind(castId)
+        .first<Record<string, unknown>>()
+        .catch(() => null);
+
+      let recycleBinId: number | null = null;
+      if (existingCast) {
+        recycleBinId = await archiveEntityToRecycleBin(env.DB, {
+          entity_type: 'anime_cast_entries',
+          entity_id: castId,
+          title: `${existingCast.character_name || 'Character'} — ${existingCast.voice_actor_name || 'Voice Actor'} (${existingCast.dub_language || existingCast.language || 'Dub'})`,
+          payload: existingCast,
+          deleted_by: auth.session.email || auth.session.userId || 'admin',
+        });
+      }
+
       await env.DB.prepare('DELETE FROM anime_cast_entries WHERE id = ?').bind(castId).run();
 
       await recordAdminActivityLog(env.DB, {
@@ -885,11 +921,11 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
         action: 'DELETE_CAST_ENTRY',
         entity_type: 'anime_cast_entries',
         entity_id: castId,
-        summary: `Deleted cast/voice actor entry #${castId}.`,
+        summary: `Soft-deleted cast/voice actor entry #${castId} into Recycle Bin.`,
       });
 
       return jsonResponse(
-        { success: true, deletedId: castId },
+        { success: true, deletedId: castId, recycleBinId },
         200,
         request,
         { 'Cache-Control': 'no-store' }
@@ -1104,19 +1140,59 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
         animeRows = fallback.results || [];
       }
 
-      const [trRes, dmRes] = await Promise.all([
+      const [trRes, dmRes, animeDemandRes] = await Promise.all([
         env.DB.prepare('SELECT anime_id, locale, translation_status FROM anime_translations')
           .all<{ anime_id: string; locale: string; translation_status: string }>()
           .catch(() => ({ results: [] })),
-        env.DB.prepare('SELECT anime_id, availability_status, verified_at FROM anime_dub_matrix')
-          .all<{ anime_id: string; availability_status: string; verified_at: string | null }>()
+        env.DB.prepare('SELECT anime_id, language, availability_status, verified_at, verified, status FROM anime_dub_matrix')
+          .all<Record<string, any>>()
+          .catch(async () => {
+            return env.DB!.prepare('SELECT anime_id, language, availability_status, verified_at FROM anime_dub_matrix')
+              .all<Record<string, any>>()
+              .catch(() => ({ results: [] }));
+          }),
+        env.DB.prepare(
+          `SELECT anime_id,
+                  SUM(CASE WHEN event_type = 'anime_detail_view' THEN 1 ELSE 0 END) as detail_views,
+                  SUM(CASE WHEN event_type = 'watchlist_add' THEN 1 ELSE 0 END) as watchlist_adds,
+                  SUM(CASE WHEN event_type = 'ott_click' THEN 1 ELSE 0 END) as ott_clicks,
+                  SUM(CASE WHEN event_type = 'translation_request' THEN 1 ELSE 0 END) as translation_requests
+           FROM content_demand_events
+           WHERE anime_id IS NOT NULL
+             AND TRIM(CAST(anime_id AS TEXT)) != ''
+             AND ${sqlDateClause}
+           GROUP BY anime_id`
+        )
+          .all<Record<string, any>>()
           .catch(() => ({ results: [] })),
       ]);
 
       const healthReport = scanCatalogDataHealth(
         animeRows,
         trRes.results || [],
-        dmRes.results || []
+        (dmRes.results || []) as any
+      );
+
+      const highDemandMissingDubs = computeHighDemandMissingDubs(
+        animeRows.map((a) => ({
+          id: Number(a.id),
+          title: String(a.title || ''),
+          slug: a.slug ? String(a.slug) : null,
+          poster_url: (a.cover_image || a.poster_url) ? String(a.cover_image || a.poster_url) : null,
+        })),
+        (animeDemandRes.results || []).map((d) => ({
+          anime_id: Number(d.anime_id),
+          detail_views: Number(d.detail_views) || 0,
+          watchlist_adds: Number(d.watchlist_adds) || 0,
+          ott_clicks: Number(d.ott_clicks) || 0,
+          translation_requests: Number(d.translation_requests) || 0,
+        })),
+        (dmRes.results || []).map((m) => ({
+          anime_id: Number(m.anime_id),
+          language: String(m.language || ''),
+          verified: Boolean(m.verified_at || Number(m.verified) === 1 || m.verified === true),
+          status: String(m.availability_status || m.status || 'complete'),
+        }))
       );
 
       return jsonResponse(
@@ -1128,6 +1204,7 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
           languageDemand,
           totalLanguageDemandEvents: totalLangEvents,
           ottPerformance,
+          highDemandMissingDubs,
           completenessGaps: {
             totalScanned: healthReport.totalScanned,
             flaggedCount: healthReport.flaggedCount,

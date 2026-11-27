@@ -12,6 +12,7 @@ export type AdminActiveTab =
   | 'data_health'
   | 'analytics'
   | 'backup'
+  | 'recycle_bin'
   | 'activity_log'
   | 'settings';
 
@@ -35,6 +36,10 @@ export type DataHealthFilter =
   | 'unverified_dubs'
   | 'stale_verification'
   | 'missing_translations'
+  | 'orphan_franchise_links'
+  | 'conflicting_watch_order'
+  | 'unverified_cast_entries'
+  | 'missing_external_ids'
   | 'missing_stream_links'
   | 'missing_dub_langs'
   | 'missing_episode_counts'

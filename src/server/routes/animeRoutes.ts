@@ -24,6 +24,8 @@ import { expandSearchQueryVariants } from '../../utils/searchFilterState';
 import { mergePublishedTranslation, normalizeTranslationLocale } from '../../utils/animeTranslations';
 import { fetchPublishedTranslationsMap } from './translationRoutes';
 import { recordAdminActivityLog } from './adminOpsProRoutes';
+import { archiveEntityToRecycleBin, recordAnimeRevision } from './adminPhase35Routes';
+import { checkOptimisticConcurrencyConflict, computeAnimeRevisionDiff } from '../../utils/adminPhase35Polish';
 import { getErrorMessage, isMissingColumnError, sendTelegramAlert, type RouteContext } from './shared';
 
 const BASE_PUBLISHED_CLAUSE =
@@ -1058,6 +1060,34 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
       if (env.DB) {
         try {
           const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+          const existingRecordBeforeUpdate = await env.DB.prepare('SELECT * FROM anime WHERE id = ? OR slug = ? LIMIT 1')
+            .bind(id, id)
+            .first<Record<string, unknown>>()
+            .catch(() => null);
+
+          if (body.expected_updated_at && existingRecordBeforeUpdate) {
+            const dbTimestamp = String(
+              existingRecordBeforeUpdate.updated_at || existingRecordBeforeUpdate.last_verified_at || ''
+            ).trim();
+            const conflictCheck = checkOptimisticConcurrencyConflict(
+              String(body.expected_updated_at),
+              dbTimestamp
+            );
+            if (conflictCheck.conflict) {
+              return jsonResponse(
+                {
+                  error: 'Conflict: This anime was modified in another session since you loaded it. Please review or reload the latest version before saving.',
+                  conflict: true,
+                  expectedUpdatedAt: conflictCheck.expectedUpdatedAt,
+                  currentUpdatedAt: conflictCheck.currentDbUpdatedAt,
+                  currentRecord: existingRecordBeforeUpdate,
+                },
+                409,
+                request
+              );
+            }
+          }
+
           if (body.cover_image !== undefined) {
             const coverCheck = validateExternalImageUrl(body.cover_image, { required: false, fieldName: 'Cover Image URL' });
             if (!coverCheck.ok) {
@@ -1530,6 +1560,24 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             }
           }
 
+          const updatedRecordSnapshot = await env.DB.prepare('SELECT * FROM anime WHERE id = ? OR slug = ? LIMIT 1')
+            .bind(id, id)
+            .first<Record<string, unknown>>()
+            .catch(() => null);
+
+          if (updatedRecordSnapshot && updatedRecordSnapshot.id) {
+            const diffInfo = computeAnimeRevisionDiff(existingRecordBeforeUpdate, updatedRecordSnapshot);
+            await recordAnimeRevision(env.DB, {
+              anime_id: Number(updatedRecordSnapshot.id),
+              revision_summary:
+                typeof body.revision_summary === 'string' && body.revision_summary.trim()
+                  ? body.revision_summary.trim()
+                  : diffInfo.summary,
+              snapshot: updatedRecordSnapshot,
+              edited_by: session.email || session.userId || 'admin',
+            });
+          }
+
           await recordAdminActivityLog(env.DB, {
             actor_email: session.email || session.userId,
             action_type: 'UPDATE_ANIME',
@@ -1549,6 +1597,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             {
               success: true,
               id,
+              updated_at: updatedRecordSnapshot?.updated_at || updatedRecordSnapshot?.last_verified_at || new Date().toISOString(),
               status: incomingStatus,
               airing_status: incomingStatus,
               languages: resolvedUpdateLanguages,
@@ -1590,11 +1639,22 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
         return jsonResponse({ error: 'Forbidden: Only the authorized Admin user can delete anime entries' }, 403, request);
       }
       try {
+        let recycleBinId: number | null = null;
         if (env.DB) {
-          const existingRow = await env.DB.prepare('SELECT id, title FROM anime WHERE id = ? OR slug = ? LIMIT 1')
+          const existingRow = await env.DB.prepare('SELECT * FROM anime WHERE id = ? OR slug = ? LIMIT 1')
             .bind(id, id)
-            .first()
+            .first<Record<string, unknown>>()
             .catch(() => null);
+          if (!existingRow) {
+            return jsonResponse({ success: false, error: 'Anime not found' }, 404, request);
+          }
+          recycleBinId = await archiveEntityToRecycleBin(env.DB, {
+            entity_type: 'anime',
+            entity_id: String(existingRow.id ?? id),
+            title: String(existingRow.title || `Anime #${id}`),
+            payload: existingRow,
+            deleted_by: session.email || session.userId || 'admin',
+          });
           const delRes = await env.DB.prepare('DELETE FROM anime WHERE id = ? OR slug = ?').bind(id, id).run();
           if (delRes?.meta?.changes === 0) {
             return jsonResponse({ success: false, error: 'Anime not found' }, 404, request);
@@ -1603,11 +1663,11 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             actor_email: session.email || session.userId,
             action_type: 'DELETE_ANIME',
             entity_type: 'anime',
-            entity_id: String(id),
-            summary: `Deleted anime #${id}${existingRow?.title ? ` ("${String(existingRow.title)}")` : ''}`,
+            entity_id: String(existingRow.id ?? id),
+            summary: `Soft-deleted anime #${existingRow.id ?? id}${existingRow?.title ? ` ("${String(existingRow.title)}")` : ''} into Recycle Bin`,
           });
         }
-        return jsonResponse({ success: true, id }, 200, request);
+        return jsonResponse({ success: true, id, recycleBinId }, 200, request);
       } catch (err) {
         return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
       }

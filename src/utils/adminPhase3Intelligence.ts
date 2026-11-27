@@ -259,6 +259,9 @@ export const VALID_DEMAND_EVENT_TYPES = [
   'ott_impression',
   'ott_click',
   'dub_language_filter',
+  'anime_detail_view',
+  'watchlist_add',
+  'translation_request',
 ] as const;
 
 export type ContentDemandEventType = (typeof VALID_DEMAND_EVENT_TYPES)[number];
@@ -322,6 +325,18 @@ export function validateContentDemandEvent(
 
   const rawAnimeId = String(input.anime_id ?? input.animeId ?? '').trim();
   const animeId = rawAnimeId ? rawAnimeId.slice(0, 80) : null;
+
+  if (
+    (rawType === 'anime_detail_view' ||
+      rawType === 'watchlist_add' ||
+      rawType === 'translation_request') &&
+    !animeId
+  ) {
+    return {
+      ok: false,
+      error: `${rawType} event requires a non-empty anime_id.`,
+    };
+  }
 
   const queryText = sanitizeDemandQueryText(input.query_text ?? input.queryText);
   if (rawType === 'search_query' && !queryText) {
