@@ -1079,26 +1079,6 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
     }
   }
 
-  // 7. POST /api/admin/clear-pending
-  if (path === '/api/admin/clear-pending' && method === 'POST') {
-    const session = await getAdminAuth(request, env);
-    if (!session.userId || !session.isAdmin) {
-      return jsonResponse(
-        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
-        !session.userId ? 401 : 403,
-        request
-      );
-    }
-    try {
-      if (env.DB) {
-        await env.DB.prepare("DELETE FROM anime WHERE status = 'pending' OR submissionStatus = 'pending' OR approval_status = 'pending'").run();
-      }
-      return jsonResponse({ success: true, message: 'Pending queue wiped successfully' });
-    } catch (err) {
-      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500);
-    }
-  }
-
   // 8. POST /api/admin/approve/:id & POST /api/admin/reject/:id
   const approveMatch = path.match(/^\/api\/admin\/approve\/([0-9a-zA-Z_-]+)\/?$/);
   if (approveMatch && method === 'POST') {
@@ -1233,42 +1213,6 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
       return jsonResponse({ success: true, id, recycleBinId, reasonPreset, moderatorNote }, 200, request);
     } catch (err) {
       return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
-    }
-  }
-
-  // 9. POST /api/admin/reset-db (Admin only + strict "DELETE ALL" confirmation)
-  if (path === '/api/admin/reset-db' && method === 'POST') {
-    const session = await getAdminAuth(request, env);
-    if (!session.userId || !session.isAdmin) {
-      return jsonResponse(
-        { error: session.error || 'Unauthorized: Valid Clerk Admin session required' },
-        !session.userId ? 401 : 403,
-        request
-      );
-    }
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!body || typeof body !== 'object' || body.confirm !== 'DELETE ALL') {
-      return jsonResponse(
-        {
-          success: false,
-          error: 'Confirmation required: send JSON payload { "confirm": "DELETE ALL" }',
-        },
-        400,
-        request
-      );
-    }
-    try {
-      if (env.DB) {
-        await env.DB.prepare('DELETE FROM reviews').run();
-        await env.DB.prepare('DELETE FROM watchlist').run();
-        await env.DB.prepare('DELETE FROM episodes').run();
-        await env.DB.prepare('DELETE FROM feedback').run();
-        await env.DB.prepare('DELETE FROM anime').run();
-        await env.DB.prepare('DELETE FROM users').run();
-      }
-      return jsonResponse({ success: true, message: 'Database cleared successfully' });
-    } catch (err) {
-      return jsonResponse({ error: getErrorMessage(err) }, 500);
     }
   }
 
