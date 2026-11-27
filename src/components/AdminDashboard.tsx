@@ -1545,15 +1545,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleOpenModularEditor = useCallback(
     (anime: any | null, targetTab: AnimeEditorTabId = 'identity') => {
       setEditingAnime(anime);
-      setEditorTargetTab(targetTab);
-      setActiveTab('editor');
-      if (typeof window !== 'undefined') {
-        const targetPath =
-          anime && anime.id ? `/admin/catalog/${anime.id}/edit` : '/admin/catalog/new';
-        if (window.location.pathname !== targetPath) {
-          window.history.pushState(null, '', targetPath);
-        }
-      }
+      setIsAddModalOpen(true);
     },
     []
   );
