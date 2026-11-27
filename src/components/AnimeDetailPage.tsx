@@ -372,6 +372,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const whereToWatchRef = useRef<HTMLElement>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
   const lastInitializedAnimeIdRef = useRef<string | null>(null);
+  const lastTrackedOttImpressionAnimeIdRef = useRef<string | null>(null);
 
   const mergedAnimeRecord = useMemo(
     () => (anime ? { ...(rawAnimeRecord || {}), ...anime } : null),
@@ -554,6 +555,26 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       setPersonalWatchStatus(watchlistStatusProp);
     }
   }, [watchlistStatusProp]);
+
+  // Silent Phase 3 Demand Intelligence: track OTT impressions once per anime detail view
+  useEffect(() => {
+    if (!anime?.id) return;
+    const animeIdStr = String(anime.id);
+    if (lastTrackedOttImpressionAnimeIdRef.current === animeIdStr) return;
+    const platforms = Array.isArray(anime.platforms)
+      ? anime.platforms.filter((p) => Boolean(p && p.trim().length > 0))
+      : [];
+    if (platforms.length === 0) return;
+    lastTrackedOttImpressionAnimeIdRef.current = animeIdStr;
+    for (const platformName of platforms) {
+      void cloudflareApi.trackDemandEvent({
+        event_type: 'ott_impression',
+        anime_id: animeIdStr,
+        platform_name: platformName,
+        language_code: uiLocale,
+      });
+    }
+  }, [anime?.id, anime?.platforms, uiLocale]);
 
   // Live authenticated WebSocket listener for real-time review updates & error propagation
   useEffect(() => {
@@ -1692,6 +1713,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                               href={ottUrl}
                               target="_blank"
                               rel="noopener noreferrer"
+                              onClick={() => {
+                                void cloudflareApi.trackDemandEvent({
+                                  event_type: 'ott_click',
+                                  anime_id: String(anime.id),
+                                  platform_name: platform,
+                                  language_code: uiLocale,
+                                });
+                              }}
                               className="min-h-[56px] px-4 py-3 rounded-[12px] bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 flex items-center justify-between gap-3 transition-colors duration-180 group"
                             >
                               <div className="flex items-center gap-3 min-w-0">

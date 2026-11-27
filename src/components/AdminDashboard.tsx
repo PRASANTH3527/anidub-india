@@ -29,6 +29,8 @@ import {
   FileSpreadsheet,
   RefreshCw,
   Activity,
+  Layers,
+  Mic2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DubInfoModal } from './DubInfoModal';
@@ -64,6 +66,9 @@ import { AdminAnimeEditorView } from './admin/AdminAnimeEditorView';
 import { AdminDubMatrixTab } from './admin/AdminDubMatrixTab';
 import { AdminModerationInboxTab } from './admin/AdminModerationInboxTab';
 import { AdminActivityLogTab } from './admin/AdminActivityLogTab';
+import { AdminFranchiseBuilderTab } from './admin/AdminFranchiseBuilderTab';
+import { AdminCastManagerTab } from './admin/AdminCastManagerTab';
+import { AdminBackupCenterTab } from './admin/AdminBackupCenterTab';
 
 export interface AdminDashboardProps {
   onAnimeCreated?: (updatedAnime?: any, deletedId?: string | number) => void;
@@ -129,6 +134,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingAnime, setEditingAnime] = useState<any | null>(null);
   const [editorTargetTab, setEditorTargetTab] = useState<AnimeEditorTabId>('identity');
   const [translationTargetAnimeId, setTranslationTargetAnimeId] = useState<string | number | null>(null);
+  const [franchiseTargetKey, setFranchiseTargetKey] = useState<string | undefined>(undefined);
+  const [castTargetAnimeId, setCastTargetAnimeId] = useState<string | number | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
   const [cmdQuery, setCmdQuery] = useState<string>('');
   const [healthFilter, setHealthFilter] = useState<DataHealthFilter>('all');
@@ -305,7 +312,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     if (
       isClerkAdminAuthorized &&
-      (activeTab === 'data_health' || activeTab === 'translations' || activeTab === 'backup')
+      (activeTab === 'data_health' ||
+        activeTab === 'translations' ||
+        activeTab === 'backup' ||
+        activeTab === 'franchises' ||
+        activeTab === 'cast' ||
+        activeTab === 'dubs')
     ) {
       void fetchFullIndexForTools();
     }
@@ -1539,6 +1551,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           label: 'Translation Studio',
           icon: Languages,
         },
+        {
+          id: 'franchises',
+          label: 'Franchise Builder',
+          icon: Layers,
+        },
+        {
+          id: 'cast',
+          label: 'Cast & Voice Actors',
+          icon: Mic2,
+        },
       ],
     },
     {
@@ -1717,10 +1739,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {effectiveTab === 'editor' && (editingAnime ? 'Modular Anime Editor' : 'New Catalog Entry')}
                 {effectiveTab === 'dubs' && 'Bulk Dub Intelligence & Episode Matrix'}
                 {effectiveTab === 'translations' && 'Workers AI Translation Studio'}
+                {effectiveTab === 'franchises' && 'Anime Universe & Smart Watch Order Builder'}
+                {effectiveTab === 'cast' && 'Characters & Verified Indian Voice Actors'}
                 {effectiveTab === 'moderation' && 'Unified Moderation Inbox'}
                 {effectiveTab === 'data_health' && 'Catalog Data Health & QA Scanner'}
-                {effectiveTab === 'analytics' && 'Analytics & Edge Telemetry'}
-                {effectiveTab === 'backup' && 'Backup, Export & CSV Dry-Run'}
+                {effectiveTab === 'analytics' && 'Actionable Admin Analytics & Demand Intelligence'}
+                {effectiveTab === 'backup' && 'Full Backup, JSON Validator & CSV Dry-Run Center'}
                 {effectiveTab === 'activity_log' && 'Admin Activity & Audit Log'}
                 {effectiveTab === 'settings' && 'Workspace Settings'}
               </h1>
@@ -1807,6 +1831,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 setTranslationTargetAnimeId(animeId);
                 handleSelectNavTab('translations');
               }}
+              onOpenFranchiseBuilder={(fKey) => {
+                setFranchiseTargetKey(fKey);
+                handleSelectNavTab('franchises');
+              }}
+              onOpenCastManager={(animeId) => {
+                setCastTargetAnimeId(animeId);
+                handleSelectNavTab('cast');
+              }}
             />
           )}
 
@@ -1871,6 +1903,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
+          {/* SECTION 5B: ANIME UNIVERSE & SMART WATCH ORDER VISUAL BUILDER */}
+          {effectiveTab === 'franchises' && (
+            <AdminFranchiseBuilderTab
+              catalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
+              initialFranchiseKey={franchiseTargetKey}
+              onEditAnimeInEditor={(anime) => handleOpenModularEditor(anime, 'metadata')}
+              onSuccess={(msg) => showToast(msg, 'success')}
+            />
+          )}
+
+          {/* SECTION 5C: CHARACTERS & VERIFIED INDIAN VOICE ACTOR MANAGER */}
+          {effectiveTab === 'cast' && (
+            <AdminCastManagerTab
+              catalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
+              initialAnimeId={castTargetAnimeId}
+              onSuccess={(msg) => showToast(msg, 'success')}
+            />
+          )}
+
           {/* SECTION 6: UNIFIED MODERATION INBOX */}
           {effectiveTab === 'moderation' && (
             <AdminModerationInboxTab
@@ -1903,7 +1954,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* SECTION 8: ANALYTICS */}
+          {/* SECTION 8: ACTIONABLE ADMIN ANALYTICS 2.0 */}
           {effectiveTab === 'analytics' && (
             <AnalyticsDashboard
               onNavigateHome={onNavigateHome}
@@ -1911,205 +1962,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 setSearchQuery(slug);
                 setActiveTab('catalog');
               }}
+              onAddMissingAnimeTitle={(missingTitle) => {
+                handleOpenModularEditor({ title: missingTitle }, 'identity');
+              }}
+              onJumpToDataHealth={(filterKey) => {
+                if (filterKey) {
+                  setHealthFilter(filterKey as DataHealthFilter);
+                }
+                handleSelectNavTab('data_health');
+              }}
             />
           )}
 
-          {/* SECTION 9: BACKUP, EXPORT & SAFE CSV DRY-RUN */}
+          {/* SECTION 9: FULL BACKUP & RECOVERY CENTER */}
           {effectiveTab === 'backup' && (
-            <div data-testid="admin-backup-tab" className="max-w-4xl mx-auto space-y-6">
-              <div className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
-                    <Download className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-extrabold text-[var(--text-primary)]">
-                      Catalog Backup &amp; Safe CSV Import Dry-Run
-                    </h2>
-                    <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
-                      Export full Cloudflare D1 snapshots or run a safe CSV validation dry-run before committing rows to the Pending Moderation queue.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleExportCSV}
-                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-extrabold uppercase text-emerald-600 dark:text-emerald-400">
-                        CSV Snapshot
-                      </span>
-                      <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
-                    </div>
-                    <div className="text-sm font-bold text-[var(--text-primary)]">
-                      Export Catalog CSV
-                    </div>
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      Download all anime rows as a spreadsheet.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleExportSQL}
-                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-extrabold uppercase text-sky-600 dark:text-sky-400">
-                        D1 SQL Dump
-                      </span>
-                      <Database className="w-4 h-4 text-sky-500" />
-                    </div>
-                    <div className="text-sm font-bold text-[var(--text-primary)]">
-                      Export D1 SQL Backup
-                    </div>
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      Generate idempotent INSERT OR REPLACE SQL statements.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => csvInputRef.current?.click()}
-                    disabled={isUploadingCsv}
-                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all disabled:opacity-50 cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-extrabold uppercase text-[var(--accent-primary)]">
-                        Safe Dry-Run Upload
-                      </span>
-                      {isUploadingCsv ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-primary)]" />
-                      ) : (
-                        <Upload className="w-4 h-4 text-[var(--accent-primary)]" />
-                      )}
-                    </div>
-                    <div className="text-sm font-bold text-[var(--text-primary)]">
-                      Upload CSV (Dry-Run First)
-                    </div>
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      Preview &amp; validate rows before committing to D1.
-                    </p>
-                  </button>
-                </div>
-
-                {/* Safe CSV Dry-Run Report Preview */}
-                {csvDryRunReport && (
-                  <div
-                    data-testid="csv-dry-run-preview"
-                    className="p-4 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--accent-primary)]/40 space-y-4"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-                          CSV Dry-Run Validation Summary
-                        </h3>
-                        <p className="text-xs text-[var(--text-secondary)]">
-                          Review parsed rows and duplicates before committing to the Pending Moderation queue.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-                        <span className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
-                          Total: {csvDryRunReport.totalRows}
-                        </span>
-                        <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
-                          Valid: {csvDryRunReport.validCount}
-                        </span>
-                        <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-500 border border-amber-500/30">
-                          Duplicates: {csvDryRunReport.duplicateCount}
-                        </span>
-                        <span className="px-2.5 py-1 rounded-lg bg-red-500/15 text-red-500 border border-red-500/30">
-                          Errors: {csvDryRunReport.invalidCount}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="max-h-64 overflow-y-auto divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-                      {csvDryRunReport.rows.map((row) => (
-                        <div
-                          key={row.rowIndex}
-                          className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
-                        >
-                          <div className="min-w-0">
-                            <div className="font-bold text-[var(--text-primary)] truncate">
-                              Row #{row.rowIndex}: {row.title || '(Missing Title)'}
-                            </div>
-                            <div className="text-[11px] text-[var(--text-secondary)] truncate">
-                              {row.type} · {row.year || 'N/A'} · Languages:{' '}
-                              {row.languages || 'Unverified'} · OTT: {row.platform || 'Unverified'}
-                            </div>
-                            {row.errors.length > 0 && (
-                              <div className="text-[11px] text-red-500 font-semibold mt-0.5">
-                                {row.errors.join(' • ')}
-                              </div>
-                            )}
-                            {row.warnings.length > 0 && (
-                              <div className="text-[11px] text-amber-500 font-semibold mt-0.5">
-                                {row.warnings.join(' • ')}
-                              </div>
-                            )}
-                          </div>
-                          <span
-                            className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase shrink-0 ${
-                              row.status === 'valid'
-                                ? 'bg-emerald-500/15 text-emerald-500'
-                                : row.status === 'duplicate'
-                                  ? 'bg-amber-500/15 text-amber-500'
-                                  : 'bg-red-500/15 text-red-500'
-                            }`}
-                          >
-                            {row.status}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCsvDryRunReport(null);
-                          setStagedCsvRows([]);
-                        }}
-                        className="min-h-[44px] px-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] cursor-pointer"
-                      >
-                        Cancel Dry-Run
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isUploadingCsv || csvDryRunReport.validCount === 0}
-                        onClick={handleCommitStagedCsv}
-                        className="min-h-[44px] px-5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold cursor-pointer disabled:opacity-50"
-                      >
-                        Commit {csvDryRunReport.validCount} Valid Rows to Pending Queue
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="pt-3 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsCsvHelpOpen(true)}
-                    className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5"
-                  >
-                    <HelpCircle className="w-4 h-4 text-[var(--accent-primary)]" />
-                    View CSV Format Guide &amp; Sample Template
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDownloadSampleCSV}
-                    className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 text-xs font-bold text-[var(--accent-primary)] flex items-center gap-1.5"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download Sample CSV
-                  </button>
-                </div>
-              </div>
-            </div>
+            <AdminBackupCenterTab
+              onFallbackExportCsv={handleExportCSV}
+              onExportSql={handleExportSQL}
+              onTriggerCsvUpload={() => csvInputRef.current?.click()}
+              isUploadingCsv={isUploadingCsv}
+              csvDryRunReport={csvDryRunReport}
+              onCancelCsvDryRun={() => {
+                setCsvDryRunReport(null);
+                setStagedCsvRows([]);
+              }}
+              onCommitStagedCsv={handleCommitStagedCsv}
+              onOpenCsvHelp={() => setIsCsvHelpOpen(true)}
+              onDownloadSampleCsv={handleDownloadSampleCSV}
+              onSuccess={(msg) => showToast(msg, 'success')}
+              onError={(msg) => showToast(msg, 'error')}
+            />
           )}
 
           {/* SECTION 10: ADMIN ACTIVITY LOG */}
@@ -2189,9 +2071,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onClick={() => setIsMobileMoreOpen((prev) => !prev)}
           className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl transition-all ${
             isMobileMoreOpen ||
-            ['translations', 'data_health', 'analytics', 'backup', 'activity_log', 'settings'].includes(
-              effectiveTab
-            )
+            [
+              'translations',
+              'franchises',
+              'cast',
+              'data_health',
+              'analytics',
+              'backup',
+              'activity_log',
+              'settings',
+            ].includes(effectiveTab)
               ? 'text-[var(--accent-primary)] font-extrabold'
               : 'text-[var(--text-secondary)] font-semibold'
           }`}
@@ -2229,9 +2118,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {(
                 [
                   { id: 'translations', label: 'Translations', icon: Languages },
+                  { id: 'franchises', label: 'Franchise Builder', icon: Layers },
+                  { id: 'cast', label: 'Cast & VAs', icon: Mic2 },
                   { id: 'data_health', label: 'Data Health', icon: ShieldCheck },
                   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-                  { id: 'backup', label: 'Backup & CSV', icon: Download },
+                  { id: 'backup', label: 'Backup Center', icon: Download },
                   { id: 'activity_log', label: 'Activity Log', icon: Activity },
                   { id: 'settings', label: 'Settings', icon: Settings },
                 ] as const
@@ -2312,11 +2203,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         pendingCount={pendingItems.length}
         feedbackCount={overviewStats.openFeedbackCount}
         dataHealthCount={dataHealthReport.summary.all}
-        onOpenAddModal={() => handleOpenModularEditor(null, 'identity')}
+        onOpenAddModal={(prefillTitle) =>
+          handleOpenModularEditor(prefillTitle ? { title: prefillTitle } : null, 'identity')
+        }
         onSetActiveTab={handleSelectNavTab}
+        onFilterUnverifiedDubs={() => handleFilterCatalogByLanguage('Unverified')}
         onExportCSV={handleExportCSV}
         onRunDiagnostics={() => setIsDiagnosticsOpen(true)}
-        filteredCatalog={catalogItems}
+        filteredCatalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
         onEditAnime={(anime) => handleOpenModularEditor(anime, 'identity')}
       />
 

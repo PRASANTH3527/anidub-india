@@ -12,6 +12,9 @@ import {
   Languages,
   Globe,
   LayoutDashboard,
+  Layers,
+  Mic2,
+  Activity,
 } from 'lucide-react';
 import type { AdminActiveTab } from './types';
 
@@ -23,8 +26,9 @@ export interface AdminCommandPaletteProps {
   pendingCount: number;
   feedbackCount: number;
   dataHealthCount: number;
-  onOpenAddModal: () => void;
+  onOpenAddModal: (prefillTitle?: string) => void;
   onSetActiveTab: (tab: AdminActiveTab) => void;
+  onFilterUnverifiedDubs?: () => void;
   onExportCSV: () => void;
   onRunDiagnostics: () => void;
   filteredCatalog: any[];
@@ -41,6 +45,7 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
   dataHealthCount,
   onOpenAddModal,
   onSetActiveTab,
+  onFilterUnverifiedDubs,
   onExportCSV,
   onRunDiagnostics,
   filteredCatalog,
@@ -50,16 +55,94 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
 
   const actions = [
     {
-      label: 'Add New Anime Title',
+      label: cmdQuery.trim()
+        ? `Add New Anime Title: "${cmdQuery.trim()}"`
+        : 'Add New Anime Title',
       icon: Plus,
       color: 'text-[var(--accent-primary)]',
       action: () => {
-        onOpenAddModal();
+        onOpenAddModal(cmdQuery.trim() || undefined);
         onClose();
       },
     },
     {
-      label: 'Go to Command Center',
+      label: 'Quick Filter: Unverified Dubs',
+      icon: Globe,
+      color: 'text-amber-500',
+      action: () => {
+        if (onFilterUnverifiedDubs) {
+          onFilterUnverifiedDubs();
+        } else {
+          onSetActiveTab('dubs');
+        }
+        onClose();
+      },
+    },
+    {
+      label: 'Quick Filter: Missing Translations',
+      icon: Languages,
+      color: 'text-purple-500',
+      action: () => {
+        onSetActiveTab('translations');
+        onClose();
+      },
+    },
+    {
+      label: `Quick Filter: Data Health Issues (${dataHealthCount})`,
+      icon: ShieldCheck,
+      color: 'text-emerald-500',
+      action: () => {
+        onSetActiveTab('data_health');
+        onClose();
+      },
+    },
+    {
+      label: 'Open Franchise Builder (Anime Universe & Watch Order)',
+      icon: Layers,
+      color: 'text-[var(--accent-primary)]',
+      action: () => {
+        onSetActiveTab('franchises');
+        onClose();
+      },
+    },
+    {
+      label: 'Open Cast Manager (Characters & Indian Voice Actors)',
+      icon: Mic2,
+      color: 'text-sky-500',
+      action: () => {
+        onSetActiveTab('cast');
+        onClose();
+      },
+    },
+    {
+      label: `Open Moderation Inbox (${pendingCount + feedbackCount})`,
+      icon: Clock,
+      color: 'text-amber-500',
+      action: () => {
+        onSetActiveTab('moderation');
+        onClose();
+      },
+    },
+    {
+      label: 'Open Analytics (Content Demand Intelligence 2.0)',
+      icon: BarChart3,
+      color: 'text-sky-500',
+      action: () => {
+        onSetActiveTab('analytics');
+        onClose();
+      },
+    },
+    {
+      label: 'Open Backup Center (CSV, JSON Bundle & Dry-Run Validator)',
+      icon: Download,
+      color: 'text-emerald-500',
+      action: () => {
+        onSetActiveTab('backup');
+        onClose();
+      },
+    },
+    {
+      label: 'Go to Command Center Overview',
       icon: LayoutDashboard,
       color: 'text-[var(--accent-primary)]',
       action: () => {
@@ -77,56 +160,11 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
       },
     },
     {
-      label: 'Go to Regional Dubs Intelligence',
-      icon: Globe,
-      color: 'text-amber-500',
+      label: 'Go to Admin Activity & Audit Log',
+      icon: Activity,
+      color: 'text-[var(--text-secondary)]',
       action: () => {
-        onSetActiveTab('dubs');
-        onClose();
-      },
-    },
-    {
-      label: 'Go to Native Synopsis Translations',
-      icon: Languages,
-      color: 'text-purple-500',
-      action: () => {
-        onSetActiveTab('translations');
-        onClose();
-      },
-    },
-    {
-      label: `Go to Moderation & Feedback (${pendingCount + feedbackCount})`,
-      icon: Clock,
-      color: 'text-amber-500',
-      action: () => {
-        onSetActiveTab('moderation');
-        onClose();
-      },
-    },
-    {
-      label: `Go to Data Health Audit (${dataHealthCount} issues)`,
-      icon: ShieldCheck,
-      color: 'text-emerald-500',
-      action: () => {
-        onSetActiveTab('data_health');
-        onClose();
-      },
-    },
-    {
-      label: 'Go to Analytics & Edge Telemetry',
-      icon: BarChart3,
-      color: 'text-sky-500',
-      action: () => {
-        onSetActiveTab('analytics');
-        onClose();
-      },
-    },
-    {
-      label: 'Go to Backup & Export (CSV / SQL)',
-      icon: Download,
-      color: 'text-emerald-500',
-      action: () => {
-        onSetActiveTab('backup');
+        onSetActiveTab('activity_log');
         onClose();
       },
     },
@@ -157,10 +195,16 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
         onClose();
       },
     },
-  ].filter((item) => item.label.toLowerCase().includes(cmdQuery.toLowerCase()));
+  ].filter(
+    (item) =>
+      !cmdQuery.trim() ||
+      item.label.toLowerCase().includes(cmdQuery.toLowerCase()) ||
+      item.label.startsWith('Add New Anime Title:')
+  );
 
   return (
     <div
+      data-testid="admin-command-palette-modal"
       className="fixed inset-0 z-[120] flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/70 backdrop-blur-xs"
       onClick={onClose}
     >
@@ -173,15 +217,16 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
           <input
             type="text"
             autoFocus
+            data-testid="admin-command-palette-input"
             value={cmdQuery}
             onChange={(e) => setCmdQuery(e.target.value)}
-            placeholder="Type a command or search anime title..."
+            placeholder="Type a command, filter, or search anime title..."
             className="w-full bg-transparent text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)]/60 focus:outline-none"
           />
           <button
             type="button"
             onClick={onClose}
-            className="px-2 py-1 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] font-mono"
+            className="px-2 py-1 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] font-mono cursor-pointer"
           >
             ESC
           </button>
@@ -189,14 +234,14 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
 
         <div className="max-h-96 overflow-y-auto p-2 space-y-1">
           <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-            Workspace Navigation &amp; Actions
+            Quick Filters, Workspace Tools &amp; Actions
           </div>
           {actions.map((item, i) => (
             <button
               key={i}
               type="button"
               onClick={item.action}
-              className="w-full min-h-[42px] flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[var(--bg-elevated)] text-left text-xs sm:text-sm font-bold text-[var(--text-primary)] transition-all"
+              className="w-full min-h-[42px] flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[var(--bg-elevated)] text-left text-xs sm:text-sm font-bold text-[var(--text-primary)] transition-all cursor-pointer"
             >
               <item.icon className={`w-4 h-4 ${item.color} shrink-0`} />
               <span>{item.label}</span>
@@ -221,7 +266,7 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
                       onEditAnime(anime);
                       onClose();
                     }}
-                    className="w-full min-h-[44px] flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[var(--bg-elevated)] text-left transition-all"
+                    className="w-full min-h-[44px] flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[var(--bg-elevated)] text-left transition-all cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <img

@@ -16,6 +16,7 @@ import {
 } from '../../src/server/routes/shared';
 import { handleAdminRoutes } from '../../src/server/routes/adminRoutes';
 import { handleAdminOpsProRoutes } from '../../src/server/routes/adminOpsProRoutes';
+import { handleAdminPhase3Routes } from '../../src/server/routes/adminPhase3Routes';
 import { handleCommunityRoutes } from '../../src/server/routes/communityRoutes';
 import { handleUserRoutes } from '../../src/server/routes/userRoutes';
 import { handleAnimeRoutes } from '../../src/server/routes/animeRoutes';
@@ -23,6 +24,7 @@ import { handleAnimeDetailsV2Routes } from '../../src/server/routes/animeDetails
 import { handleTranslationRoutes } from '../../src/server/routes/translationRoutes';
 import { handleAnalyticsRoutes } from '../../src/server/routes/analyticsRoutes';
 const ROUTE_HANDLERS = [
+  handleAdminPhase3Routes,
   handleAdminOpsProRoutes,
   handleAdminRoutes,
   handleTranslationRoutes,

@@ -35,6 +35,8 @@ export interface AdminAnimeEditorViewProps {
   onCancel: () => void;
   onSaved: (savedAnime: any, isNew: boolean) => void;
   onOpenTranslationsForAnime?: (animeId: string | number) => void;
+  onOpenFranchiseBuilder?: (franchiseKey?: string) => void;
+  onOpenCastManager?: (animeId: string | number) => void;
 }
 
 interface PartnerDraft {
@@ -94,6 +96,8 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
   onCancel,
   onSaved,
   onOpenTranslationsForAnime,
+  onOpenFranchiseBuilder,
+  onOpenCastManager,
 }) => {
   const isEditing = Boolean(initialAnime && (initialAnime.id || initialAnime._id));
   const [activeTab, setActiveTab] = useState<AnimeEditorTabId>(initialTab);
@@ -1050,6 +1054,48 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
                   />
                 </div>
               </div>
+
+              {(onOpenFranchiseBuilder || (isEditing && initialAnime?.id && onOpenCastManager)) && (
+                <div className="pt-3 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="text-xs text-[var(--text-secondary)]">
+                    Manage multi-season watch orders &amp; verified Indian voice actors in dedicated Phase 3 studios:
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {onOpenFranchiseBuilder && (
+                      <button
+                        type="button"
+                        data-testid="editor-open-franchise-builder-btn"
+                        onClick={() =>
+                          onOpenFranchiseBuilder(
+                            franchiseId.trim() ||
+                              slug.trim() ||
+                              title
+                                .trim()
+                                .toLowerCase()
+                                .replace(/[^a-z0-9]+/g, '-')
+                                .replace(/^-|-$/g, '')
+                          )
+                        }
+                        className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--accent-primary)] inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>Open in Franchise &amp; Watch Order Builder</span>
+                      </button>
+                    )}
+                    {isEditing && initialAnime?.id && onOpenCastManager && (
+                      <button
+                        type="button"
+                        data-testid="editor-open-cast-manager-btn"
+                        onClick={() => onOpenCastManager(initialAnime.id)}
+                        className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-xs font-bold text-sky-500 inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>Manage Characters &amp; Voice Cast</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -472,6 +472,12 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     (nextLang: string) => {
       const persisted = writePreferredLanguage(nextLang, userId);
       setSelectedLanguageState(persisted);
+      if (persisted && !persisted.toLowerCase().startsWith('all')) {
+        void cloudflareApi.trackDemandEvent({
+          event_type: 'dub_language_filter',
+          language_code: persisted,
+        });
+      }
     },
     [userId]
   );
@@ -755,6 +761,21 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           setCatalogStatus(dedupedInitial.length === 0 ? 'empty' : 'success');
           setBatchesInCycle(1);
           setIsCyclePaused(false);
+          const trimmedQuery = normalizedApiSearch.trim();
+          if (trimmedQuery.length >= 2) {
+            void cloudflareApi.trackDemandEvent({
+              event_type: 'search_query',
+              query_text: trimmedQuery,
+              result_count:
+                typeof resolvedMeta.totalItems === 'number'
+                  ? resolvedMeta.totalItems
+                  : dedupedInitial.length,
+              language_code:
+                selectedLanguage && !selectedLanguage.toLowerCase().startsWith('all')
+                  ? selectedLanguage
+                  : undefined,
+            });
+          }
         } else {
           setRawAnimeList((prev) => {
             const merged = deduplicateAnimeById(prev, filteredNormalized);

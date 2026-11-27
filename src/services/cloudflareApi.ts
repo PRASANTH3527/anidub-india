@@ -2913,6 +2913,372 @@ class CloudflareApiService {
       logs: Array.isArray(json?.logs) ? json.logs : [],
     };
   }
+
+  // ===========================================================================
+  // ADMIN DASHBOARD 2.0 (Phase 3: Intelligence, Universe/Cast Ops & Backup Scale)
+  // ===========================================================================
+
+  /**
+   * Silent, non-blocking, privacy-safe public telemetry event (POST /api/analytics/event).
+   * Uses keepalive: true and swallows errors so public UX is never slowed down.
+   */
+  public trackDemandEvent(payload: {
+    event_type: 'search_query' | 'ott_impression' | 'ott_click' | 'dub_language_filter';
+    anime_id?: string | number | null;
+    query_text?: string | null;
+    language_code?: string | null;
+    platform_name?: string | null;
+    result_count?: number | null;
+  }): void {
+    try {
+      const url = getCloudflareUrl('/api/analytics/event');
+      void fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {
+      // Never block or throw on public telemetry
+    }
+  }
+
+  /**
+   * Franchise / Smart Watch Order Visual Builder APIs
+   */
+  public async fetchAdminFranchises(franchiseKey?: string): Promise<{
+    success: boolean;
+    tableReady: boolean;
+    franchises: Array<{ franchise_key: string; entry_count: number; updated_at: string }>;
+    selectedFranchiseKey: string | null;
+    entries: import('../utils/adminPhase3Intelligence').AdminFranchiseEntry[];
+  }> {
+    const qs = franchiseKey ? `?franchiseKey=${encodeURIComponent(franchiseKey)}` : '';
+    const res = await this.smartFetch(`/api/admin/franchises${qs}`, {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load franchise timelines (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      tableReady: json?.tableReady !== false,
+      franchises: Array.isArray(json?.franchises) ? json.franchises : [],
+      selectedFranchiseKey: json?.selectedFranchiseKey || null,
+      entries: Array.isArray(json?.entries) ? json.entries : [],
+    };
+  }
+
+  public async saveAdminFranchiseEntry(
+    franchiseKey: string,
+    payload: {
+      anime_id: string | number;
+      relation_label: string;
+      watch_order?: number;
+      note?: string | null;
+      allowOverwrite?: boolean;
+    }
+  ): Promise<{ success: boolean; entry?: any }> {
+    const safeKey = encodeURIComponent(franchiseKey.trim());
+    const res = await this.smartFetch(`/api/admin/franchises/${safeKey}`, {
+      method: 'PUT',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to save franchise entry (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  public async saveAdminFranchiseOrder(
+    franchiseKey: string,
+    entries: Array<{
+      anime_id: string | number;
+      relation_label: string;
+      watch_order: number;
+      note?: string | null;
+    }>
+  ): Promise<{ success: boolean; updatedCount: number }> {
+    const safeKey = encodeURIComponent(franchiseKey.trim());
+    const res = await this.smartFetch(`/api/admin/franchises/${safeKey}`, {
+      method: 'PUT',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ entries }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to save franchise watch order (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      updatedCount: Number(json?.updatedCount) || entries.length,
+    };
+  }
+
+  public async deleteAdminFranchiseEntry(
+    franchiseKey: string,
+    animeId: string | number
+  ): Promise<{ success: boolean }> {
+    const safeKey = encodeURIComponent(franchiseKey.trim());
+    const safeAnimeId = encodeURIComponent(String(animeId).trim());
+    const res = await this.smartFetch(`/api/admin/franchises/${safeKey}/${safeAnimeId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to delete franchise entry (HTTP ${res.status})`);
+    }
+    return { success: true };
+  }
+
+  /**
+   * Characters & Indian / Japanese Voice Actor Manager APIs
+   */
+  public async fetchAdminCastEntries(options?: {
+    animeId?: string | number;
+    lang?: string;
+  }): Promise<{
+    success: boolean;
+    tableReady: boolean;
+    entries: import('../utils/adminPhase3Intelligence').AdminCastEntry[];
+    supportedLanguages: string[];
+  }> {
+    const qs = new URLSearchParams();
+    if (options?.animeId !== undefined && String(options.animeId).trim()) {
+      qs.set('animeId', String(options.animeId).trim());
+    }
+    if (options?.lang && options.lang !== 'All' && options.lang !== 'all') {
+      qs.set('lang', options.lang);
+    }
+    const endpoint = `/api/admin/cast${qs.toString() ? `?${qs.toString()}` : ''}`;
+    const res = await this.smartFetch(endpoint, {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load cast entries (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      tableReady: json?.tableReady !== false,
+      entries: Array.isArray(json?.entries) ? json.entries : [],
+      supportedLanguages: Array.isArray(json?.supportedLanguages) ? json.supportedLanguages : [],
+    };
+  }
+
+  public async createAdminCastEntry(payload: {
+    anime_id: string | number;
+    character_name: string;
+    role: 'Main' | 'Supporting';
+    voice_actor_name: string;
+    dub_language: string;
+    character_image?: string | null;
+    actor_image?: string | null;
+    verified?: boolean;
+  }): Promise<{
+    success: boolean;
+    entry: import('../utils/adminPhase3Intelligence').AdminCastEntry;
+  }> {
+    const res = await this.smartFetch('/api/admin/cast', {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to create cast entry (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  public async updateAdminCastEntry(
+    castId: number,
+    payload: Partial<{
+      anime_id: string | number;
+      character_name: string;
+      role: 'Main' | 'Supporting';
+      voice_actor_name: string;
+      dub_language: string;
+      character_image: string | null;
+      actor_image: string | null;
+      verified: boolean;
+    }>
+  ): Promise<{
+    success: boolean;
+    entry?: import('../utils/adminPhase3Intelligence').AdminCastEntry;
+    verified?: boolean;
+  }> {
+    const res = await this.smartFetch(`/api/admin/cast/${castId}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to update cast entry (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  public async deleteAdminCastEntry(castId: number): Promise<{ success: boolean }> {
+    const res = await this.smartFetch(`/api/admin/cast/${castId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to delete cast entry (HTTP ${res.status})`);
+    }
+    return { success: true };
+  }
+
+  /**
+   * Actionable Admin Analytics 2.0 (Real Content Demand Intelligence)
+   */
+  public async fetchAdminDemandAnalytics(
+    timeframe: 'today' | '7d' | '30d' | '90d' = '30d'
+  ): Promise<{
+    success: boolean;
+    tableReady: boolean;
+    timeframe: string;
+    missingSearches: Array<{
+      queryText: string;
+      searchCount: number;
+      lastSearchedAt: string;
+    }>;
+    languageDemand: Array<{
+      code: string;
+      language: string;
+      nativeName: string;
+      eventCount: number;
+      sharePercent: number;
+    }>;
+    totalLanguageDemandEvents: number;
+    ottPerformance: Array<{
+      platform: string;
+      impressions: number;
+      clicks: number;
+      ctrPercent: number | null;
+      ctrDisplay: string;
+    }>;
+    completenessGaps: {
+      totalScanned: number;
+      flaggedCount: number;
+      healthyCount: number;
+      countsByCategory: Record<string, number>;
+    };
+  }> {
+    const res = await this.smartFetch(
+      `/api/admin/analytics/demand?timeframe=${encodeURIComponent(timeframe)}`,
+      {
+        method: 'GET',
+        headers: this.getHeaders(true),
+      }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load content demand analytics (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      tableReady: json?.tableReady !== false,
+      timeframe: json?.timeframe || timeframe,
+      missingSearches: Array.isArray(json?.missingSearches) ? json.missingSearches : [],
+      languageDemand: Array.isArray(json?.languageDemand) ? json.languageDemand : [],
+      totalLanguageDemandEvents: Number(json?.totalLanguageDemandEvents) || 0,
+      ottPerformance: Array.isArray(json?.ottPerformance) ? json.ottPerformance : [],
+      completenessGaps: json?.completenessGaps || {
+        totalScanned: 0,
+        flaggedCount: 0,
+        healthyCount: 0,
+        countsByCategory: {},
+      },
+    };
+  }
+
+  /**
+   * Full Backup & Recovery Center APIs
+   */
+  public async fetchAdminBackupStats(): Promise<{
+    success: boolean;
+    schemaVersion: string;
+    counts: Record<import('../utils/adminPhase3Intelligence').CoreContentBackupTable, number>;
+    tableReady: Record<import('../utils/adminPhase3Intelligence').CoreContentBackupTable, boolean>;
+  }> {
+    const res = await this.smartFetch('/api/admin/backup/stats', {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load D1 backup stats (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  public async exportFullCatalogCsvFromServer(): Promise<{
+    success: boolean;
+    rowCount: number;
+    exportedAt: string;
+    csv: string;
+  }> {
+    const res = await this.smartFetch('/api/admin/backup/export-csv', {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Server catalog CSV export failed (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  public async exportFullContentJsonBackup(): Promise<{
+    success: boolean;
+    bundle: {
+      schemaVersion: string;
+      exportedAt: string;
+      app: string;
+      excludesPrivateCredentials: boolean;
+      tableCounts: Record<string, number>;
+      tables: Record<string, any[]>;
+    };
+  }> {
+    const res = await this.smartFetch('/api/admin/backup/export-json', {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Full JSON content backup failed (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  public async validateContentBackupJson(
+    bundle: unknown
+  ): Promise<{
+    success: boolean;
+    dryRun: boolean;
+    report: import('../utils/adminPhase3Intelligence').ContentBackupValidationReport;
+  }> {
+    const res = await this.smartFetch('/api/admin/backup/validate', {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ bundle }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Backup dry-run validation failed (HTTP ${res.status})`);
+    }
+    return json;
+  }
 }
 
 export const cloudflareApi = new CloudflareApiService();

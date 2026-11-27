@@ -4,6 +4,8 @@ export type AdminActiveTab =
   | 'editor'
   | 'dubs'
   | 'translations'
+  | 'franchises'
+  | 'cast'
   | 'moderation'
   | 'pending'
   | 'feedback'
