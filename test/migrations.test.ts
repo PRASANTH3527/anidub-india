@@ -81,6 +81,7 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     '0010_add_dub_radar_and_requests.sql',
     '0011_p0_p2_upgrades.sql',
     '002_anime_translations.sql',
+    '003_anime_details_v2.sql',
   ]);
 
   const db = new DatabaseSync(':memory:');
@@ -97,7 +98,9 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
 
   for (const requiredTable of [
     'anime',
+    'anime_cast_entries',
     'anime_follows',
+    'anime_franchise_links',
     'anime_translations',
     'analytics_events',
     'analytics_pageviews',
@@ -108,6 +111,7 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     'dub_radar',
     'dub_request_votes',
     'dub_requests',
+    'dub_reviews',
     'dub_updates',
     'episodes',
     'feedback',

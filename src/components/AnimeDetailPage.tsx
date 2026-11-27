@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   X, Star, Tv, Calendar, Heart, CheckCircle, Play, ExternalLink,
-  Share2, Bell, BellOff, Edit, Send, ThumbsUp, AlertTriangle, Plus,
-  Minus, Flag, ArrowLeft, Layers, ShieldCheck, Globe, Eye, EyeOff,
+  Share2, Bell, BellOff, Edit, ThumbsUp, AlertTriangle, Plus,
+  Minus, Flag, ArrowLeft, ShieldCheck, Globe,
   ChevronDown, ChevronUp, Languages, RotateCcw, CheckCheck, Trash2, Compass
 } from 'lucide-react';
 import {
@@ -44,6 +44,17 @@ import { getVerifiedClerkUsername } from '../utils/chatIdentity';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { formatLocaleDate, formatLocaleNumber, LANGUAGE_REGISTRY } from '../i18n/languageRegistry';
+import {
+  resolveOfficialTrailerFromAnime,
+  type DubReviewAggregate,
+  type DubReviewRecord,
+  type FranchiseLinkItem,
+  type VerifiedCastEntry,
+} from '../utils/animeDetailsV2';
+import { OfficialTrailerCard } from './details/OfficialTrailerCard';
+import { AnimeUniverseSection } from './details/AnimeUniverseSection';
+import { VerifiedCastSection } from './details/VerifiedCastSection';
+import { RegionalDubReviewsPanel } from './details/RegionalDubReviewsPanel';
 
 export interface FranchiseEntry {
   id: string;
@@ -313,11 +324,30 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     watchlistStatusProp || 'Plan to Watch'
   );
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [newRating, setNewRating] = useState(9);
-  const [newIsSpoiler, setNewIsSpoiler] = useState(false);
-  const [reviewSyncState, setReviewSyncState] = useState<'idle' | 'posting' | 'failed'>('idle');
-  const [lastFailedComment, setLastFailedComment] = useState<string>('');
+  const [dubReviews, setDubReviews] = useState<DubReviewRecord[]>([]);
+  const [dubReviewsSummary, setDubReviewsSummary] = useState<DubReviewAggregate>({
+    count: 0,
+    overall: null,
+    voice_acting: null,
+    voice_casting: null,
+    translation_quality: null,
+    lip_sync: null,
+    emotional_delivery: null,
+  });
+  const [dubReviewsByLanguage, setDubReviewsByLanguage] = useState<
+    Record<string, DubReviewAggregate>
+  >({});
+  const [activeDubLangFilter, setActiveDubLangFilter] = useState<string>('All');
+  const [dubReviewSubmitState, setDubReviewSubmitState] = useState<'idle' | 'posting' | 'failed'>(
+    'idle'
+  );
+  const [dubReviewSubmitError, setDubReviewSubmitError] = useState<string | null>(null);
+  const [d1FranchiseEntries, setD1FranchiseEntries] = useState<FranchiseLinkItem[]>([]);
+  const [verifiedCastEntries, setVerifiedCastEntries] = useState<VerifiedCastEntry[]>([]);
+  const [verifiedCastLanguages, setVerifiedCastLanguages] = useState<string[]>([]);
+  const [verifiedCastByLanguage, setVerifiedCastByLanguage] = useState<
+    Record<string, VerifiedCastEntry[]>
+  >({});
   const [watchedEpisodesBySeason, setWatchedEpisodesBySeason] = useState<Record<number, number[]>>({
     1: [],
   });
@@ -367,6 +397,10 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     [anime, allAnime]
   );
   const heroRating = useMemo(() => (anime ? resolveSingleHeroRating(anime) : null), [anime]);
+  const officialTrailer = useMemo(
+    () => resolveOfficialTrailerFromAnime(mergedAnimeRecord),
+    [mergedAnimeRecord]
+  );
 
   // Accessibility: Focus trap, Escape key to close, and background scroll lock when rendered as modal
   useEffect(() => {
@@ -428,6 +462,13 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     setSelectedMatrixSeason(1);
     setIsSynopsisExpanded(false);
     setProgressUndoSnapshot(null);
+    setActiveDubLangFilter('All');
+    setDubReviewSubmitState('idle');
+    setDubReviewSubmitError(null);
+    setD1FranchiseEntries([]);
+    setVerifiedCastEntries([]);
+    setVerifiedCastLanguages([]);
+    setVerifiedCastByLanguage({});
 
     const storage = typeof window !== 'undefined' ? window.localStorage : null;
     setWatchedEpisodesBySeason(readStoredWatchedEpisodesBySeason(nextId, storage));
@@ -436,23 +477,55 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     );
 
     let cancelled = false;
-    const fetchReviews = async () => {
-      try {
-        const cfReviews = await cloudflareApi.getReviews(nextId);
-        if (cancelled) return;
-        if (cfReviews && cfReviews.length > 0) {
-          setReviews(cfReviews);
-        } else {
+    const fetchDetailsData = async () => {
+      let token: string | null = null;
+      if (user?.id) {
+        try {
+          token = await getToken();
+        } catch {
+          token = null;
+        }
+      }
+
+      const [legacyRes, dubReviewsRes, franchiseRes, castRes] = await Promise.allSettled([
+        cloudflareApi.getReviews(nextId),
+        cloudflareApi.fetchDubReviews(nextId, undefined, token),
+        cloudflareApi.fetchAnimeFranchise(nextId),
+        cloudflareApi.fetchAnimeCast(nextId),
+      ]);
+
+      if (cancelled) return;
+
+      if (legacyRes.status === 'fulfilled' && legacyRes.value && legacyRes.value.length > 0) {
+        setReviews(legacyRes.value);
+      } else {
+        try {
           const allReviews = JSON.parse(localStorage.getItem('anime_reviews') || '{}');
           setReviews(Array.isArray(allReviews[nextId]) ? allReviews[nextId] : []);
+        } catch {
+          setReviews([]);
         }
-      } catch {
-        if (cancelled) return;
-        const allReviews = JSON.parse(localStorage.getItem('anime_reviews') || '{}');
-        setReviews(Array.isArray(allReviews[nextId]) ? allReviews[nextId] : []);
+      }
+
+      if (dubReviewsRes.status === 'fulfilled') {
+        setDubReviews(dubReviewsRes.value.reviews);
+        setDubReviewsSummary(dubReviewsRes.value.summary);
+        setDubReviewsByLanguage(dubReviewsRes.value.byLanguage);
+      } else {
+        setDubReviews([]);
+      }
+
+      if (franchiseRes.status === 'fulfilled') {
+        setD1FranchiseEntries(franchiseRes.value.entries);
+      }
+
+      if (castRes.status === 'fulfilled') {
+        setVerifiedCastEntries(castRes.value.entries);
+        setVerifiedCastLanguages(castRes.value.languages);
+        setVerifiedCastByLanguage(castRes.value.byLanguage);
       }
     };
-    void fetchReviews();
+    void fetchDetailsData();
 
     return () => {
       cancelled = true;
@@ -733,42 +806,61 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     }
   };
 
-  const handleAddReview = async (e?: React.FormEvent, retryText?: string) => {
-    if (e) e.preventDefault();
-    const commentText = (retryText ?? newComment).trim();
-    if (!commentText) return;
+  const handleSubmitDubReview = async (payload: {
+    dub_language: string;
+    voice_acting: number;
+    voice_casting: number;
+    translation_quality: number;
+    lip_sync: number;
+    emotional_delivery: number;
+    review_text?: string;
+    has_spoilers?: boolean;
+  }) => {
+    if (!user?.id) {
+      setDubReviewSubmitError('Please sign in to publish your regional dub rating.');
+      throw new Error('Authentication required');
+    }
 
-    const verifiedReviewerName = getVerifiedClerkUsername(user) || user?.name || 'AnimeFan_IN';
-    const autoSpoiler = /spoiler|dies|death|ending|betray|final boss/i.test(commentText);
-    const review: ReviewItem = {
-      id: Date.now().toString(),
-      userName: verifiedReviewerName,
-      rating: newRating,
-      comment: commentText,
-      date: 'Just now',
-      likes: 0,
-      isSpoiler: newIsSpoiler || autoSpoiler,
-    };
-
-    setReviewSyncState('posting');
+    setDubReviewSubmitState('posting');
+    setDubReviewSubmitError(null);
     try {
-      await cloudflareApi.addReview(anime.id, review);
-      const updatedReviews = [review, ...reviews];
-      setReviews(updatedReviews);
+      const token = await getToken();
+      const verifiedReviewerName = getVerifiedClerkUsername(user) || user?.name || 'AnimeFan_IN';
+      await cloudflareApi.submitDubReview(
+        anime.id,
+        {
+          ...payload,
+          user_name: verifiedReviewerName,
+        },
+        token
+      );
+      const refreshed = await cloudflareApi.fetchDubReviews(anime.id, undefined, token);
+      setDubReviews(refreshed.reviews);
+      setDubReviewsSummary(refreshed.summary);
+      setDubReviewsByLanguage(refreshed.byLanguage);
+      setDubReviewSubmitState('idle');
+      onShowToast?.(`${payload.dub_language} dub rating published`, 'success');
+    } catch (err: any) {
+      const msg = err?.message || 'Could not publish dub review. Tap Retry.';
+      setDubReviewSubmitError(msg);
+      setDubReviewSubmitState('failed');
+      onShowToast?.('Could not publish dub review. Tap Retry.', 'error');
+      throw err;
+    }
+  };
 
-      const allReviews = JSON.parse(localStorage.getItem('anime_reviews') || '{}');
-      allReviews[anime.id] = updatedReviews;
-      localStorage.setItem('anime_reviews', JSON.stringify(allReviews));
-
-      setNewComment('');
-      setNewIsSpoiler(false);
-      setLastFailedComment('');
-      setReviewSyncState('idle');
-      if (onShowToast) onShowToast('Review published', 'success');
-    } catch {
-      setLastFailedComment(commentText);
-      setReviewSyncState('failed');
-      if (onShowToast) onShowToast('Could not publish review. Tap Retry.', 'error');
+  const handleDeleteDubReview = async (reviewId: number) => {
+    if (!user?.id) return;
+    try {
+      const token = await getToken();
+      await cloudflareApi.deleteDubReview(anime.id, reviewId, token);
+      const refreshed = await cloudflareApi.fetchDubReviews(anime.id, undefined, token);
+      setDubReviews(refreshed.reviews);
+      setDubReviewsSummary(refreshed.summary);
+      setDubReviewsByLanguage(refreshed.byLanguage);
+      onShowToast?.('Dub review removed', 'info');
+    } catch (err: any) {
+      onShowToast?.(err?.message || 'Could not delete dub review', 'error');
     }
   };
 
@@ -863,6 +955,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     return t(keyMap[status] || status, status);
   };
 
+  const totalReviewCount = dubReviews.length + reviews.length;
+
   const tabs: { id: DetailTabId; label: string; shortLabel?: string }[] = [
     { id: 'overview', label: t('animeDetails:tabs.overview', 'Overview') },
     { id: 'seasons-dubs', label: t('animeDetails:tabs.seasonsAndDubs', 'Seasons & Dubs') },
@@ -870,8 +964,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     {
       id: 'reviews',
       label: t('animeDetails:tabs.reviews', {
-        count: formatLocaleNumber(reviews.length, uiLocale),
-        defaultValue: `Reviews (${reviews.length})`,
+        count: formatLocaleNumber(totalReviewCount, uiLocale),
+        defaultValue: `Reviews (${totalReviewCount})`,
       }),
     },
   ];
@@ -1658,6 +1752,13 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     )}
                   </section>
 
+                  {/* Lazy-Loaded Official Trailer (Hides completely when no verified YouTube trailer exists) */}
+                  <OfficialTrailerCard
+                    trailer={officialTrailer}
+                    animeTitle={anime.title}
+                    fallbackPoster={anime.poster}
+                  />
+
                   {/* Structured Anime Information Card (Gracefully hides unverified optional fields) */}
                   <section className="rounded-[var(--radius-card)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5">
                     <h2 className="text-[16px] font-bold text-[var(--text-primary)] mb-4">
@@ -1720,76 +1821,23 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     </div>
                   </section>
 
-                  {/* Related / Franchise Horizontal Rail (Hidden completely when none exist) */}
-                  {franchiseEntries.length > 0 && (
-                    <section
-                      data-testid="franchise-watch-order"
-                      className="rounded-[var(--radius-card)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5"
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-3.5">
-                        <h2 className="text-[16px] font-bold text-[var(--text-primary)] flex items-center gap-2">
-                          <Layers className="w-4 h-4 text-[var(--accent-primary)]" />
-                          <span>{t('animeDetails:franchiseOrder', 'Franchise Watch Order')}</span>
-                        </h2>
-                        <span className="text-[12px] text-[var(--text-secondary)] tabular-nums">
-                          {franchiseEntries.length} entries
-                        </span>
-                      </div>
+                  {/* Anime Universe & Smart Watch Order (Hides completely when no verified links exist) */}
+                  <AnimeUniverseSection
+                    data-testid="franchise-watch-order"
+                    d1Entries={d1FranchiseEntries}
+                    fallbackEntries={franchiseEntries}
+                    currentAnimeId={anime.id}
+                    allAnime={allAnime}
+                    onSelectAnime={onSelectAnime}
+                    titleLabel={t('animeDetails:franchiseOrder', 'Anime Universe & Watch Order')}
+                  />
 
-                      <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
-                        {franchiseEntries.map((entry, idx) => {
-                          const isCurrent = entry.id === anime.id;
-                          const matchedAnime = allAnime.find((a) => String(a.id) === String(entry.id));
-                          return (
-                            <button
-                              key={entry.id}
-                              type="button"
-                              disabled={isCurrent || !matchedAnime || !onSelectAnime}
-                              onClick={() => {
-                                if (!isCurrent && matchedAnime && onSelectAnime) {
-                                  onSelectAnime(matchedAnime);
-                                }
-                              }}
-                              className={`w-[144px] sm:w-[158px] shrink-0 text-left rounded-[12px] border p-2 transition-colors ${
-                                isCurrent
-                                  ? 'bg-[var(--accent-soft)] border-[var(--accent-primary)]/50 cursor-default'
-                                  : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/40 cursor-pointer'
-                              }`}
-                            >
-                              <div className="relative aspect-[2/3] w-full rounded-[8px] overflow-hidden bg-[var(--bg-surface)] mb-2">
-                                {entry.poster ? (
-                                  <OptimizedImage
-                                    src={entry.poster}
-                                    alt={entry.title}
-                                    width={160}
-                                    height={240}
-                                    loading="lazy"
-                                    className="w-full h-full object-cover"
-                                    aspectRatio="portrait"
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)] text-[12px] font-bold">
-                                    #{idx + 1}
-                                  </div>
-                                )}
-                                <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-[6px] bg-black/75 text-white text-[10px] font-bold uppercase tracking-wide">
-                                  {isCurrent ? 'Current' : entry.relationType}
-                                </span>
-                              </div>
-                              <div className="text-[13px] font-bold text-[var(--text-primary)] line-clamp-2 leading-snug">
-                                {entry.title}
-                              </div>
-                              {entry.releaseYear && (
-                                <div className="text-[11px] text-[var(--text-secondary)] tabular-nums mt-0.5">
-                                  {entry.releaseYear}
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  )}
+                  {/* Verified Characters & Indian Voice Actors (Hides completely when no verified cast exists) */}
+                  <VerifiedCastSection
+                    entries={verifiedCastEntries}
+                    languages={verifiedCastLanguages}
+                    byLanguage={verifiedCastByLanguage}
+                  />
                 </div>
               )}
 
@@ -2321,106 +2369,27 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 </div>
               )}
 
-              {/* TAB 4: REVIEWS */}
+              {/* TAB 4: REGIONAL 5-SLIDER DUB REVIEWS */}
               {activeTab === 'reviews' && (
                 <div className="space-y-5" role="tabpanel" data-testid="detail-panel-reviews">
-                  {/* Write a Review Form */}
-                  <form
-                    onSubmit={(e) => handleAddReview(e)}
-                    className="rounded-[var(--radius-card)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5 space-y-4"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h2 className="text-[16px] font-bold text-[var(--text-primary)]">
-                        {t('animeDetails:reviews.writeReview', 'Write a review')}
-                      </h2>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[12px] text-[var(--text-secondary)]">
-                          {t('animeDetails:rating', 'Rating')}:
-                        </span>
-                        <span className="px-2.5 py-1 rounded-[8px] bg-[var(--accent-soft)] text-[var(--accent-primary)] border border-[var(--accent-primary)]/30 text-[13px] font-bold tabular-nums">
-                          {newRating} / 10
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Accessible 1-10 Rating Slider + 44px Quick Score Buttons */}
-                    <div className="space-y-2">
-                      <input
-                        type="range"
-                        min={1}
-                        max={10}
-                        step={1}
-                        aria-label="Review score slider from 1 to 10"
-                        value={newRating}
-                        onChange={(e) => setNewRating(Number(e.target.value))}
-                        className="w-full h-2 bg-[var(--bg-elevated)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-primary)]"
-                      />
-                      <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                          <button
-                            key={num}
-                            type="button"
-                            onClick={() => setNewRating(num)}
-                            className={`min-h-[44px] rounded-[10px] text-[13px] font-bold tabular-nums border transition-colors duration-180 cursor-pointer ${
-                              newRating === num
-                                ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
-                                : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
-                            }`}
-                          >
-                            {num}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <textarea
-                      rows={3}
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      placeholder={t(
-                        'animeDetails:reviews.placeholder',
-                        'Share your honest thoughts on the regional dub quality, voice acting, or translation...'
-                      )}
-                      className="w-full rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-3 text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
-                    />
-
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <label className="min-h-[44px] inline-flex items-center gap-2 text-[13px] text-[var(--text-secondary)] cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={newIsSpoiler}
-                          onChange={(e) => setNewIsSpoiler(e.target.checked)}
-                          className="w-4 h-4 rounded accent-[var(--accent-primary)]"
-                        />
-                        <span>Contains spoilers</span>
-                      </label>
-
-                      <div className="flex items-center gap-2">
-                        {reviewSyncState === 'failed' && lastFailedComment && (
-                          <button
-                            type="button"
-                            onClick={() => handleAddReview(undefined, lastFailedComment)}
-                            className="min-h-[44px] px-3.5 rounded-[10px] bg-red-500/15 text-[#DC2626] dark:text-[#F87171] border border-red-500/30 text-[12px] font-bold cursor-pointer"
-                          >
-                            {t('animeDetails:reviews.failedRetry', 'Failed — Retry')}
-                          </button>
-                        )}
-
-                        <button
-                          type="submit"
-                          disabled={reviewSyncState === 'posting' || !newComment.trim()}
-                          className="min-h-[44px] px-4 rounded-[10px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-[var(--accent-on-primary)] font-bold text-[13px] inline-flex items-center gap-2 transition-colors cursor-pointer"
-                        >
-                          <Send className="w-4 h-4" />
-                          <span>
-                            {reviewSyncState === 'posting'
-                              ? t('animeDetails:reviews.posting', 'Posting…')
-                              : t('animeDetails:reviews.submit', 'Post Review')}
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-                  </form>
+                  <RegionalDubReviewsPanel
+                    animeTitle={anime.title}
+                    availableLanguages={indianDubCards.map((c) => c.language)}
+                    dubReviews={dubReviews}
+                    summary={dubReviewsSummary}
+                    byLanguage={dubReviewsByLanguage}
+                    activeLangFilter={activeDubLangFilter}
+                    onSelectLangFilter={setActiveDubLangFilter}
+                    spoilerShieldEnabled={spoilerShieldEnabled}
+                    onToggleSpoilerShield={handleToggleSpoilerShield}
+                    user={user}
+                    submitState={dubReviewSubmitState}
+                    submitError={dubReviewSubmitError}
+                    onSubmitDubReview={handleSubmitDubReview}
+                    onDeleteDubReview={handleDeleteDubReview}
+                    postingLabel={t('animeDetails:reviews.posting', 'Posting…')}
+                    retryLabel={t('animeDetails:reviews.failedRetry', 'Failed — Retry')}
+                  />
 
                   {wsReviewError && (
                     <div
@@ -2439,42 +2408,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     </div>
                   )}
 
-                  {/* Spoiler Shield Controls Bar */}
-                  <div className="rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-4 py-2.5 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-[13px]">
-                      {spoilerShieldEnabled ? (
-                        <EyeOff className="w-4 h-4 text-[var(--accent-primary)]" />
-                      ) : (
-                        <Eye className="w-4 h-4 text-[var(--text-secondary)]" />
-                      )}
-                      <span className="font-semibold text-[var(--text-primary)]">
-                        Spoiler Shield
-                      </span>
-                      <span className="text-[12px] text-[var(--text-secondary)] hidden sm:inline">
-                        {spoilerShieldEnabled
-                          ? 'Masks reviews flagged with plot spoilers'
-                          : 'Showing all spoilers'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={spoilerShieldEnabled}
-                      onClick={handleToggleSpoilerShield}
-                      data-testid="spoiler-shield-toggle"
-                      className={`min-h-[44px] px-3.5 rounded-[10px] text-[12px] font-bold border transition-colors duration-180 cursor-pointer ${
-                        spoilerShieldEnabled
-                          ? 'bg-[var(--accent-soft)] text-[var(--accent-primary)] border-[var(--accent-primary)]/40'
-                          : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
-                      }`}
-                    >
-                      {spoilerShieldEnabled ? 'Spoiler Shield: ON' : 'Spoiler Shield: OFF'}
-                    </button>
-                  </div>
-
-                  {/* Reviews List */}
-                  {reviews.length > 0 ? (
-                    <div className="space-y-3">
+                  {/* Preserved Community Reviews from earlier endpoint (shown only if records exist) */}
+                  {reviews.length > 0 && (
+                    <div className="space-y-3 pt-2">
+                      <h3 className="text-[14px] font-bold text-[var(--text-secondary)]">
+                        Community Notes ({reviews.length})
+                      </h3>
                       {reviews.map((rev) => {
                         const isMasked = Boolean(
                           rev.isSpoiler && spoilerShieldEnabled && !revealedReviewIds[rev.id]
@@ -2538,18 +2477,6 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                           </div>
                         );
                       })}
-                    </div>
-                  ) : (
-                    <div className="rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 text-center text-[13px] text-[var(--text-secondary)]">
-                      <p className="font-semibold text-[var(--text-primary)] mb-1">
-                        {t('animeDetails:reviews.emptyTitle', 'No reviews yet')}
-                      </p>
-                      <p>
-                        {t(
-                          'animeDetails:reviews.emptySubtitle',
-                          'Be the first to share how this Indian dub sounds.'
-                        )}
-                      </p>
                     </div>
                   )}
                 </div>

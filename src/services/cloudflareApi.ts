@@ -763,6 +763,171 @@ class CloudflareApiService {
   }
 
   /**
+   * DETAILS 2.0 (Phase 2): Fetches regional 5-slider dub quality reviews & aggregates (safe fallback if unmigrated)
+   */
+  public async fetchDubReviews(
+    animeId: number | string,
+    lang?: string,
+    clerkToken?: string | null
+  ): Promise<{
+    tableReady: boolean;
+    reviews: import('../utils/animeDetailsV2').DubReviewRecord[];
+    summary: import('../utils/animeDetailsV2').DubReviewAggregate;
+    byLanguage: Record<string, import('../utils/animeDetailsV2').DubReviewAggregate>;
+  }> {
+    const emptyAgg = {
+      count: 0,
+      overall: null,
+      voice_acting: null,
+      voice_casting: null,
+      translation_quality: null,
+      lip_sync: null,
+      emotional_delivery: null,
+    };
+    try {
+      const safeId = encodeURIComponent(String(animeId).trim());
+      const qs = lang ? `?lang=${encodeURIComponent(lang)}` : '';
+      const headers: Record<string, string> = {
+        ...this.getHeaders(false),
+        ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
+      };
+      const res = await this.smartFetch(`/api/anime/${safeId}/dub-reviews${qs}`, {
+        method: 'GET',
+        headers,
+      });
+      if (!res.ok) {
+        return { tableReady: false, reviews: [], summary: emptyAgg, byLanguage: {} };
+      }
+      const json = await res.json().catch(() => null);
+      return {
+        tableReady: json?.tableReady !== false,
+        reviews: Array.isArray(json?.reviews) ? json.reviews : [],
+        summary: json?.summary || emptyAgg,
+        byLanguage: json?.byLanguage && typeof json.byLanguage === 'object' ? json.byLanguage : {},
+      };
+    } catch {
+      return { tableReady: false, reviews: [], summary: emptyAgg, byLanguage: {} };
+    }
+  }
+
+  /**
+   * DETAILS 2.0 (Phase 2): Submits or updates an authenticated user's 5-slider regional dub quality review
+   */
+  public async submitDubReview(
+    animeId: number | string,
+    payload: {
+      dub_language: string;
+      voice_acting: number;
+      voice_casting: number;
+      translation_quality: number;
+      lip_sync: number;
+      emotional_delivery: number;
+      review_text?: string;
+      has_spoilers?: boolean;
+      user_name?: string;
+    },
+    clerkToken?: string | null
+  ): Promise<{ success: boolean; review?: import('../utils/animeDetailsV2').DubReviewRecord }> {
+    const safeId = encodeURIComponent(String(animeId).trim());
+    const headers: Record<string, string> = {
+      ...this.getHeaders(false),
+      ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
+    };
+    const res = await this.smartFetch(`/api/anime/${safeId}/dub-reviews`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to publish dub review (HTTP ${res.status})`);
+    }
+    return { success: true, review: json?.review };
+  }
+
+  /**
+   * DETAILS 2.0 (Phase 2): Deletes an authenticated user's own regional dub review
+   */
+  public async deleteDubReview(
+    animeId: number | string,
+    reviewId: number,
+    clerkToken?: string | null
+  ): Promise<{ success: boolean }> {
+    const safeId = encodeURIComponent(String(animeId).trim());
+    const headers: Record<string, string> = {
+      ...this.getHeaders(false),
+      ...(clerkToken ? { Authorization: `Bearer ${clerkToken}` } : {}),
+    };
+    const res = await this.smartFetch(`/api/anime/${safeId}/dub-reviews/${reviewId}`, {
+      method: 'DELETE',
+      headers,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to delete dub review (HTTP ${res.status})`);
+    }
+    return { success: true };
+  }
+
+  /**
+   * DETAILS 2.0 (Phase 2): Fetches verified Anime Universe / Smart Watch Order links from D1
+   */
+  public async fetchAnimeFranchise(animeId: number | string): Promise<{
+    tableReady: boolean;
+    franchiseKey: string | null;
+    entries: import('../utils/animeDetailsV2').FranchiseLinkItem[];
+  }> {
+    try {
+      const safeId = encodeURIComponent(String(animeId).trim());
+      const res = await this.smartFetch(`/api/anime/${safeId}/franchise`, {
+        method: 'GET',
+        headers: this.getHeaders(false),
+      });
+      if (!res.ok) return { tableReady: false, franchiseKey: null, entries: [] };
+      const json = await res.json().catch(() => null);
+      return {
+        tableReady: json?.tableReady !== false,
+        franchiseKey: json?.franchiseKey || null,
+        entries: Array.isArray(json?.entries) ? json.entries : [],
+      };
+    } catch {
+      return { tableReady: false, franchiseKey: null, entries: [] };
+    }
+  }
+
+  /**
+   * DETAILS 2.0 (Phase 2): Fetches verified Characters & Indian Voice Actors from D1
+   */
+  public async fetchAnimeCast(
+    animeId: number | string,
+    lang?: string
+  ): Promise<{
+    tableReady: boolean;
+    entries: import('../utils/animeDetailsV2').VerifiedCastEntry[];
+    languages: string[];
+    byLanguage: Record<string, import('../utils/animeDetailsV2').VerifiedCastEntry[]>;
+  }> {
+    try {
+      const safeId = encodeURIComponent(String(animeId).trim());
+      const qs = lang ? `?lang=${encodeURIComponent(lang)}` : '';
+      const res = await this.smartFetch(`/api/anime/${safeId}/cast${qs}`, {
+        method: 'GET',
+        headers: this.getHeaders(false),
+      });
+      if (!res.ok) return { tableReady: false, entries: [], languages: [], byLanguage: {} };
+      const json = await res.json().catch(() => null);
+      return {
+        tableReady: json?.tableReady !== false,
+        entries: Array.isArray(json?.entries) ? json.entries : [],
+        languages: Array.isArray(json?.languages) ? json.languages : [],
+        byLanguage: json?.byLanguage && typeof json.byLanguage === 'object' ? json.byLanguage : {},
+      };
+    } catch {
+      return { tableReady: false, entries: [], languages: [], byLanguage: {} };
+    }
+  }
+
+  /**
    * ADMIN: Fetches all anime translations & per-locale coverage stats
    */
   public async fetchAdminTranslations(filters?: {
