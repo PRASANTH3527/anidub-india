@@ -33,8 +33,16 @@ import {
   Mic2,
   Trash2,
   RotateCcw,
+  Palette,
+  Sparkles,
+  ExternalLink,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useTheme } from '../context/ThemeContext';
+import {
+  ADMIN_QUICK_PILL_TABS,
+  resolveMobileAdminActiveGroup,
+} from '../utils/adminShellLayout';
 import { DubInfoModal } from './DubInfoModal';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { cloudflareApi, type AdminLinkCheckResponse } from '../services/cloudflareApi';
@@ -87,6 +95,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   catalogList = [],
 }) => {
   const { t } = useTranslation();
+  const { openAppearance, displayName } = useTheme();
   const { isSignedIn, user: clerkUser } = useUser();
   const { getToken } = useAuth();
   const [serverVerifiedAdmin, setServerVerifiedAdmin] = useState<boolean | null>(null);
@@ -111,6 +120,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   });
   const [moderationSubTab, setModerationSubTab] = useState<'all' | 'pending' | 'feedback'>('all');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isMobileStudioOpen, setIsMobileStudioOpen] = useState<boolean>(false);
   const [isMobileMoreOpen, setIsMobileMoreOpen] = useState<boolean>(false);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState<boolean>(false);
 
@@ -1633,6 +1643,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     ) {
       window.history.pushState(null, '', '/admin');
     }
+    setIsMobileStudioOpen(false);
     setIsMobileMoreOpen(false);
   };
 
@@ -1741,22 +1752,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           isSidebarCollapsed ? 'w-[72px]' : 'w-[240px]'
         }`}
       >
-        <div className="h-16 px-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
+        <div className="h-[52px] px-3.5 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
           {!isSidebarCollapsed && (
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <img
                 src="/logo.png"
                 alt="AniDub India"
-                className="w-8 h-8 rounded-lg object-contain shrink-0"
+                className="w-6 h-6 rounded-md object-contain shrink-0"
               />
-              <div className="min-w-0">
-                <div className="text-sm font-extrabold text-[var(--text-primary)] truncate">
-                  AniDub Admin
-                </div>
-                <div className="text-[11px] text-[var(--text-secondary)] truncate">
-                  Cloudflare D1 Studio
-                </div>
-              </div>
+              <span className="text-sm font-extrabold text-[var(--text-primary)] truncate">
+                AniDub Admin
+              </span>
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  overviewStats.d1Connected ? 'bg-emerald-500' : 'bg-amber-500'
+                }`}
+                title={overviewStats.d1Connected ? 'Cloudflare D1 Connected' : 'D1 Local Runtime'}
+              />
             </div>
           )}
           <button
@@ -1820,23 +1832,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </nav>
 
         <div className="p-3 border-t border-[var(--border-subtle)] space-y-1.5">
+          <button
+            type="button"
+            data-testid="admin-diagnostics-trigger"
+            onClick={() => setIsDiagnosticsOpen(true)}
+            title="Open Diagnostics Drawer"
+            className="w-full min-h-[38px] px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-2.5 cursor-pointer"
+          >
+            <Terminal className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+            {!isSidebarCollapsed && <span>Diagnostics</span>}
+          </button>
           {onNavigateHome && (
             <button
               type="button"
               onClick={onNavigateHome}
-              title="Back to Public App"
-              className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-2.5"
+              title="Exit to Site"
+              className="w-full min-h-[38px] px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-2.5 cursor-pointer"
             >
-              <ArrowLeft className="w-4 h-4 shrink-0" />
-              {!isSidebarCollapsed && <span>Back to App</span>}
+              <ExternalLink className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && <span>Exit to Site</span>}
             </button>
           )}
           {onLogout && (
             <button
               type="button"
               onClick={onLogout}
-              title="Exit Admin"
-              className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-2.5"
+              title="Lock Admin"
+              className="w-full min-h-[38px] px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-2.5 cursor-pointer"
             >
               <LogOut className="w-4 h-4 shrink-0" />
               {!isSidebarCollapsed && <span>Lock Admin</span>}
@@ -1847,79 +1869,173 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* 2. MAIN WORKSPACE COLUMN */}
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* Sticky Top Workspace Header */}
-        <header className="sticky top-0 z-30 h-16 px-3 sm:px-6 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/95 backdrop-blur-md flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            {onNavigateHome && (
-              <button
-                type="button"
-                onClick={onNavigateHome}
-                className="lg:hidden min-w-[44px] min-h-[44px] px-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center justify-center gap-1 shrink-0"
-                aria-label="Back to App"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            )}
-            <div className="min-w-0">
-              <h1 className="text-sm sm:text-base font-extrabold text-[var(--text-primary)] truncate">
+        {/* ONE Clean, Compact 52px Admin Top Bar */}
+        <header
+          data-testid="admin-top-bar"
+          className="sticky top-0 z-30 h-[52px] px-2.5 sm:px-5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/95 backdrop-blur-md flex items-center justify-between gap-2"
+        >
+          {/* Left: AniDub Admin Badge + Live D1 Green Dot (+ Desktop Active Section) */}
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => handleSelectNavTab('overview')}
+              className="lg:hidden flex items-center gap-1.5 min-h-[44px] pr-1 min-w-0 cursor-pointer"
+              aria-label="AniDub Admin Home"
+            >
+              <img
+                src="/logo.png"
+                alt="AniDub India"
+                className="w-6 h-6 rounded-md object-contain shrink-0"
+              />
+              <span className="text-sm font-extrabold text-[var(--text-primary)] whitespace-nowrap truncate">
+                AniDub Admin
+              </span>
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  overviewStats.d1Connected ? 'bg-emerald-500' : 'bg-amber-500'
+                }`}
+                title={overviewStats.d1Connected ? 'D1 Live Connected' : 'D1 Local Runtime'}
+              />
+            </button>
+
+            <div className="hidden lg:flex items-center gap-2 min-w-0">
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--text-secondary)] whitespace-nowrap shrink-0">
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    overviewStats.d1Connected ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                />
+                AniDub Admin
+              </span>
+              <span className="text-[var(--text-secondary)]/50 text-xs" aria-hidden="true">
+                /
+              </span>
+              <h1 className="text-sm font-extrabold text-[var(--text-primary)] truncate">
                 {effectiveTab === 'overview' && 'Command Center'}
                 {effectiveTab === 'catalog' && 'Anime Catalog'}
                 {effectiveTab === 'editor' && (editingAnime ? 'Modular Anime Editor' : 'New Catalog Entry')}
-                {effectiveTab === 'dubs' && 'Bulk Dub Intelligence & Episode Matrix'}
-                {effectiveTab === 'translations' && 'Workers AI Translation Studio'}
-                {effectiveTab === 'franchises' && 'Anime Universe & Smart Watch Order Builder'}
-                {effectiveTab === 'cast' && 'Characters & Verified Indian Voice Actors'}
-                {effectiveTab === 'moderation' && 'Unified Moderation Inbox'}
-                {effectiveTab === 'data_health' && 'Catalog Data Health & QA Scanner'}
-                {effectiveTab === 'analytics' && 'Actionable Admin Analytics & Demand Intelligence'}
-                {effectiveTab === 'backup' && 'Full Backup, JSON Validator & CSV Dry-Run Center'}
-                {effectiveTab === 'recycle_bin' && 'Recycle Bin & Safe Recovery'}
-                {effectiveTab === 'activity_log' && 'Admin Activity & Audit Log'}
-                {effectiveTab === 'settings' && 'Workspace Settings'}
+                {effectiveTab === 'dubs' && 'Dubs Matrix'}
+                {effectiveTab === 'translations' && 'Translation Studio'}
+                {effectiveTab === 'franchises' && 'Franchise Builder'}
+                {effectiveTab === 'cast' && 'Cast & Voice Actors'}
+                {effectiveTab === 'moderation' && 'Moderation Inbox'}
+                {effectiveTab === 'data_health' && 'Data Health QA'}
+                {effectiveTab === 'analytics' && 'Analytics 2.0'}
+                {effectiveTab === 'backup' && 'Backup & Export'}
+                {effectiveTab === 'recycle_bin' && 'Recycle Bin'}
+                {effectiveTab === 'activity_log' && 'Activity Log'}
+                {effectiveTab === 'settings' && 'Settings'}
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Right: Search/Ctrl+K, Theme Toggle, Quick + Add, Exit to Site */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <button
               type="button"
               data-testid="admin-quick-search-trigger"
               onClick={() => setIsCommandPaletteOpen(true)}
-              className="min-h-[44px] px-3 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-2"
-              title="Quick Search & Commands (⌘K)"
+              className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] sm:px-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              aria-label="Quick Search (Ctrl+K)"
+              title="Quick Search (Ctrl+K)"
             >
-              <Search className="w-4 h-4 text-[var(--accent-primary)]" />
-              <span className="hidden sm:inline">Quick Search</span>
-              <kbd className="hidden md:inline-block px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[10px] font-mono">
+              <Search className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+              <span className="hidden md:inline whitespace-nowrap">Search</span>
+              <kbd className="hidden md:inline-block px-1 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[10px] font-mono leading-none">
                 ⌘K
               </kbd>
             </button>
 
             <button
               type="button"
-              data-testid="admin-diagnostics-trigger"
-              onClick={() => setIsDiagnosticsOpen(true)}
-              className="min-h-[44px] px-3 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5"
-              title="Open Diagnostics Drawer"
+              data-testid="admin-theme-toggle"
+              onClick={() => openAppearance('presets')}
+              className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center cursor-pointer transition-colors"
+              aria-label={`Switch Theme (${displayName})`}
+              title={`Theme: ${displayName}`}
             >
-              <Terminal className="w-4 h-4 text-[var(--accent-primary)]" />
-              <span className="hidden md:inline">Diagnostics</span>
+              <Palette className="w-4 h-4 shrink-0" />
             </button>
 
             <button
               type="button"
               data-testid="admin-header-add-anime-btn"
               onClick={() => handleOpenModularEditor(null, 'identity')}
-              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-bold flex items-center gap-1.5 shadow-xs"
+              className="min-h-[44px] sm:min-h-[36px] px-2.5 sm:px-3 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-bold inline-flex items-center justify-center gap-1 whitespace-nowrap shrink-0 cursor-pointer hover:opacity-95 transition-opacity"
+              aria-label="Add Anime"
             >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Add Anime</span>
+              <Plus className="w-4 h-4 shrink-0" />
+              <span>Add</span>
             </button>
+
+            {onNavigateHome && (
+              <button
+                type="button"
+                data-testid="admin-exit-to-site-btn"
+                onClick={onNavigateHome}
+                className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] sm:px-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+                aria-label="Exit to Site"
+                title="Exit to Site"
+              >
+                <ExternalLink className="w-4 h-4 shrink-0" />
+                <span className="hidden lg:inline">Exit</span>
+              </button>
+            )}
           </div>
         </header>
 
+        {/* Sleek Horizontal Scrollable Quick-Tab Pill Bar (1-Tap Access to Every Major Section) */}
+        <div
+          data-testid="admin-quick-tab-bar"
+          role="tablist"
+          aria-label="Admin Quick Sections"
+          className="w-full max-w-full overflow-x-auto no-scrollbar border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/75 px-2.5 sm:px-5 py-1.5 flex items-center gap-1.5"
+        >
+          {ADMIN_QUICK_PILL_TABS.map((tabItem) => {
+            const isActive =
+              effectiveTab === tabItem.id ||
+              (tabItem.id === 'catalog' && effectiveTab === 'editor');
+            const badgeCount =
+              tabItem.id === 'moderation'
+                ? totalModerationBadge
+                : tabItem.id === 'data_health'
+                  ? dataHealthReport.summary.all
+                  : tabItem.id === 'dubs'
+                    ? overviewStats.unverifiedDubsCount
+                    : 0;
+            return (
+              <button
+                key={tabItem.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                data-testid={`admin-quick-tab-${tabItem.id}`}
+                onClick={() => handleSelectNavTab(tabItem.id)}
+                className={`min-h-[36px] px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  isActive
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)]'
+                    : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)]'
+                }`}
+              >
+                <span>{tabItem.label}</span>
+                {badgeCount > 0 && (
+                  <span
+                    className={`font-mono tabular-nums text-[10px] font-extrabold ${
+                      isActive
+                        ? 'text-[var(--accent-on-primary,#fff)]/90'
+                        : 'text-amber-500'
+                    }`}
+                  >
+                    {badgeCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Active Workspace Section Content */}
-        <div className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+        <div className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-5 py-3 sm:py-4">
           {/* SECTION 1: COMMAND CENTER (OVERVIEW) */}
           {effectiveTab === 'overview' && (
             <AdminOverviewTab
@@ -2177,112 +2293,133 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* 3. MOBILE 5-TAB BOTTOM NAVIGATION BAR (< 1024px) */}
-      <nav
-        data-testid="admin-mobile-bottom-nav"
-        aria-label="Admin Mobile Navigation"
-        className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-subtle)] grid grid-cols-5 items-center px-1"
-      >
-        {(
-          [
-            { id: 'overview', label: 'Home', icon: LayoutDashboard },
-            { id: 'catalog', label: 'Catalog', icon: Film },
-            { id: 'dubs', label: 'Dubs', icon: Globe },
-            {
-              id: 'moderation',
-              label: 'Moderation',
-              icon: Clock,
-              badge: totalModerationBadge,
-            },
-          ] as const
-        ).map((tab) => {
-          const Icon = tab.icon;
-          const isActive = effectiveTab === tab.id && !isMobileMoreOpen;
-          return (
+      {/* 3. DEDICATED ADMIN MOBILE 5-TAB BOTTOM NAVIGATION BAR (< 1024px) */}
+      {(() => {
+        const activeMobileGroup = resolveMobileAdminActiveGroup(effectiveTab);
+        return (
+          <nav
+            data-testid="admin-mobile-bottom-nav"
+            aria-label="Admin Mobile Navigation"
+            className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-[60px] bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-subtle)] grid grid-cols-5 items-center px-1"
+          >
+            {(
+              [
+                { id: 'overview', label: 'Home', icon: LayoutDashboard },
+                { id: 'catalog', label: 'Catalog', icon: Film },
+                { id: 'dubs', label: 'Dubs', icon: Globe },
+              ] as const
+            ).map((tab) => {
+              const Icon = tab.icon;
+              const isActive =
+                activeMobileGroup === tab.id && !isMobileStudioOpen && !isMobileMoreOpen;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  data-testid={`admin-mobile-tab-${tab.id}`}
+                  onClick={() => handleSelectNavTab(tab.id)}
+                  className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl relative transition-colors cursor-pointer ${
+                    isActive
+                      ? 'text-[var(--accent-primary)] font-extrabold'
+                      : 'text-[var(--text-secondary)] font-semibold'
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="text-[11px] truncate max-w-[68px]">{tab.label}</span>
+                </button>
+              );
+            })}
+
+            {/* Studio Tab -> Opens Translations / Franchise / Cast Bottom Sheet */}
             <button
-              key={tab.id}
               type="button"
-              data-testid={`admin-mobile-tab-${tab.id}`}
-              onClick={() => handleSelectNavTab(tab.id)}
-              className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl relative transition-all ${
-                isActive
+              data-testid="admin-mobile-tab-studio"
+              onClick={() => {
+                setIsMobileMoreOpen(false);
+                setIsMobileStudioOpen((prev) => !prev);
+              }}
+              className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl relative transition-colors cursor-pointer ${
+                isMobileStudioOpen || (activeMobileGroup === 'studio' && !isMobileMoreOpen)
                   ? 'text-[var(--accent-primary)] font-extrabold'
                   : 'text-[var(--text-secondary)] font-semibold'
               }`}
             >
-              <Icon className="w-5 h-5" />
-              <span className="text-[11px] truncate max-w-[68px]">{tab.label}</span>
-              {'badge' in tab && tab.badge !== undefined && tab.badge > 0 && (
-                <span className="absolute top-1 right-3 px-1.5 py-0.2 rounded-full bg-amber-500 text-black text-[10px] font-black">
-                  {tab.badge}
+              <Sparkles className="w-5 h-5" />
+              <span className="text-[11px]">Studio</span>
+            </button>
+
+            {/* More Tab -> Opens Moderation, Data Health, Analytics 2.0, Activity Log, Recycle Bin, Backup, Diagnostics, Settings */}
+            <button
+              type="button"
+              data-testid="admin-mobile-tab-more"
+              onClick={() => {
+                setIsMobileStudioOpen(false);
+                setIsMobileMoreOpen((prev) => !prev);
+              }}
+              className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl relative transition-colors cursor-pointer ${
+                isMobileMoreOpen || (activeMobileGroup === 'more' && !isMobileStudioOpen)
+                  ? 'text-[var(--accent-primary)] font-extrabold'
+                  : 'text-[var(--text-secondary)] font-semibold'
+              }`}
+            >
+              <MoreHorizontal className="w-5 h-5" />
+              <span className="text-[11px]">More</span>
+              {totalModerationBadge > 0 && (
+                <span className="absolute top-1.5 right-3 min-w-[16px] px-1 rounded-full bg-amber-500 text-black text-[9px] font-black font-mono leading-tight text-center">
+                  {totalModerationBadge}
                 </span>
               )}
             </button>
-          );
-        })}
+          </nav>
+        );
+      })()}
 
-        <button
-          type="button"
-          data-testid="admin-mobile-tab-more"
-          onClick={() => setIsMobileMoreOpen((prev) => !prev)}
-          className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl transition-all ${
-            isMobileMoreOpen ||
-            [
-              'translations',
-              'franchises',
-              'cast',
-              'data_health',
-              'analytics',
-              'backup',
-              'recycle_bin',
-              'activity_log',
-              'settings',
-            ].includes(effectiveTab)
-              ? 'text-[var(--accent-primary)] font-extrabold'
-              : 'text-[var(--text-secondary)] font-semibold'
-          }`}
-        >
-          <MoreHorizontal className="w-5 h-5" />
-          <span className="text-[11px]">More</span>
-        </button>
-      </nav>
-
-      {/* MOBILE "MORE" BOTTOM DRAWER */}
-      {isMobileMoreOpen && (
+      {/* MOBILE "STUDIO" BOTTOM SHEET (Translations / Franchise / Cast) */}
+      {isMobileStudioOpen && (
         <div
-          data-testid="admin-mobile-more-drawer"
+          data-testid="admin-mobile-studio-drawer"
           className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs"
-          onClick={() => setIsMobileMoreOpen(false)}
+          onClick={() => setIsMobileStudioOpen(false)}
         >
           <div
-            className="w-full bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] rounded-t-2xl p-4 space-y-3 shadow-2xl"
+            className="w-full bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] rounded-t-2xl p-4 pb-6 space-y-3 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
               <span className="text-sm font-extrabold text-[var(--text-primary)]">
-                More Admin Tools
+                Content Studio
               </span>
               <button
                 type="button"
-                onClick={() => setIsMobileMoreOpen(false)}
-                className="min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]"
+                aria-label="Close Studio Menu"
+                onClick={() => setIsMobileStudioOpen(false)}
+                className="min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 gap-2">
               {(
                 [
-                  { id: 'translations', label: 'Translations', icon: Languages },
-                  { id: 'franchises', label: 'Franchise Builder', icon: Layers },
-                  { id: 'cast', label: 'Cast & VAs', icon: Mic2 },
-                  { id: 'data_health', label: 'Data Health', icon: ShieldCheck },
-                  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-                  { id: 'backup', label: 'Backup Center', icon: Download },
-                  { id: 'recycle_bin', label: 'Recycle Bin', icon: Trash2 },
-                  { id: 'activity_log', label: 'Activity Log', icon: Activity },
-                  { id: 'settings', label: 'Settings', icon: Settings },
+                  {
+                    id: 'translations',
+                    label: 'Translation Studio',
+                    sub: '6 Indian scripts · AI Cost Guard · Rollback',
+                    icon: Languages,
+                  },
+                  {
+                    id: 'franchises',
+                    label: 'Franchise Builder',
+                    sub: 'Anime Universe & Smart Watch Order',
+                    icon: Layers,
+                  },
+                  {
+                    id: 'cast',
+                    label: 'Cast & Voice Actors',
+                    sub: 'Verified Indian & Japanese voice credits',
+                    icon: Mic2,
+                  },
                 ] as const
               ).map((item) => {
                 const Icon = item.icon;
@@ -2291,26 +2428,113 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     key={item.id}
                     type="button"
+                    data-testid={`admin-studio-tile-${item.id}`}
                     onClick={() => handleSelectNavTab(item.id)}
-                    className={`min-h-[48px] px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center gap-2.5 ${
+                    className={`min-h-[54px] px-3.5 py-2.5 rounded-xl border text-left flex items-center gap-3 cursor-pointer ${
                       isActive
                         ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
                         : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border-[var(--border-subtle)]'
                     }`}
                   >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span className="truncate">{item.label}</span>
+                    <Icon className="w-5 h-5 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-xs font-extrabold truncate">{item.label}</div>
+                      <div
+                        className={`text-[11px] truncate ${
+                          isActive
+                            ? 'text-[var(--accent-on-primary,#fff)]/80'
+                            : 'text-[var(--text-secondary)]'
+                        }`}
+                      >
+                        {item.sub}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MOBILE "MORE" BOTTOM SHEET (1-Tap Tiles for All Remaining Tools) */}
+      {isMobileMoreOpen && (
+        <div
+          data-testid="admin-mobile-more-drawer"
+          className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs"
+          onClick={() => setIsMobileMoreOpen(false)}
+        >
+          <div
+            className="w-full bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] rounded-t-2xl p-4 pb-6 space-y-3 shadow-2xl max-h-[82vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
+              <span className="text-sm font-extrabold text-[var(--text-primary)]">
+                Admin Tools &amp; System
+              </span>
+              <button
+                type="button"
+                aria-label="Close More Menu"
+                onClick={() => setIsMobileMoreOpen(false)}
+                className="min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  { id: 'moderation', label: 'Moderation', icon: Clock, badge: totalModerationBadge },
+                  { id: 'data_health', label: 'Data Health', icon: ShieldCheck, badge: dataHealthReport.summary.all },
+                  { id: 'analytics', label: 'Analytics 2.0', icon: BarChart3, badge: 0 },
+                  { id: 'activity_log', label: 'Activity Log', icon: Activity, badge: 0 },
+                  { id: 'recycle_bin', label: 'Recycle Bin', icon: Trash2, badge: 0 },
+                  { id: 'backup', label: 'Backup & Export', icon: Download, badge: 0 },
+                  { id: 'settings', label: 'Settings', icon: Settings, badge: 0 },
+                ] as const
+              ).map((item) => {
+                const Icon = item.icon;
+                const isActive = effectiveTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    data-testid={`admin-more-tile-${item.id}`}
+                    onClick={() => handleSelectNavTab(item.id)}
+                    className={`min-h-[48px] px-3 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 cursor-pointer ${
+                      isActive
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border-[var(--border-subtle)]'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </span>
+                    {item.badge > 0 && (
+                      <span
+                        className={`font-mono tabular-nums text-[10px] font-extrabold shrink-0 ${
+                          isActive
+                            ? 'text-[var(--accent-on-primary,#fff)]'
+                            : 'text-amber-500'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
                   </button>
                 );
               })}
 
               <button
                 type="button"
+                data-testid="admin-more-tile-diagnostics"
                 onClick={() => {
                   setIsMobileMoreOpen(false);
                   setIsDiagnosticsOpen(true);
                 }}
-                className="min-h-[48px] px-3.5 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-primary)] text-xs font-bold flex items-center gap-2.5"
+                className="min-h-[48px] px-3 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-primary)] text-xs font-bold flex items-center gap-2 cursor-pointer"
               >
                 <Terminal className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
                 <span className="truncate">Diagnostics</span>
@@ -2321,7 +2545,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 onClick={onLogout}
-                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold flex items-center justify-center gap-2"
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
                 Lock Admin Workspace

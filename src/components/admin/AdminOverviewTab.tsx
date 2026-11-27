@@ -8,12 +8,12 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowRight,
-  MessageSquare,
   ShieldAlert,
-  Activity,
   Database,
+  MessageSquare,
 } from 'lucide-react';
 import type { AdminActiveTab, AdminFeedbackItem, AdminOverviewStats } from './types';
+import { partitionOverviewAttentionChecks } from '../../utils/adminShellLayout';
 
 export interface AdminOverviewTabProps {
   stats: AdminOverviewStats;
@@ -39,124 +39,146 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
   const openFeedbackItems = (feedbackList || []).filter(
     (f) => String(f.status || 'open').toLowerCase() !== 'resolved'
   );
-  const totalModerationQueue = stats.pendingModerationCount + stats.openFeedbackCount;
+  const effectiveOpenTickets = Math.max(openFeedbackItems.length, stats.openFeedbackCount || 0);
+  const totalModerationQueue = stats.pendingModerationCount + effectiveOpenTickets;
+
+  const { actionableAlerts, healthySummaryText } = partitionOverviewAttentionChecks(
+    stats,
+    effectiveOpenTickets
+  );
 
   const languageOrder = [
-    { key: 'Hindi', label: 'Hindi Dubs', color: 'bg-amber-500' },
-    { key: 'Tamil', label: 'Tamil Dubs', color: 'bg-rose-500' },
-    { key: 'Telugu', label: 'Telugu Dubs', color: 'bg-sky-500' },
-    { key: 'Malayalam', label: 'Malayalam Dubs', color: 'bg-emerald-500' },
-    { key: 'Kannada', label: 'Kannada Dubs', color: 'bg-purple-500' },
-    { key: 'Bengali', label: 'Bengali Dubs', color: 'bg-pink-500' },
-    { key: 'Unverified', label: 'Unverified / No Dub Tags', color: 'bg-neutral-500' },
+    { key: 'Hindi', label: 'Hindi', color: 'bg-amber-500' },
+    { key: 'Tamil', label: 'Tamil', color: 'bg-rose-500' },
+    { key: 'Telugu', label: 'Telugu', color: 'bg-sky-500' },
+    { key: 'Malayalam', label: 'Malayalam', color: 'bg-emerald-500' },
+    { key: 'Kannada', label: 'Kannada', color: 'bg-purple-500' },
+    { key: 'Bengali', label: 'Bengali', color: 'bg-pink-500' },
+    { key: 'Unverified', label: 'Unverified', color: 'bg-neutral-500' },
   ];
 
+  const handleAlertAction = (alert: (typeof actionableAlerts)[number]) => {
+    if (alert.filterLanguage && onFilterCatalogByLanguage) {
+      onFilterCatalogByLanguage(alert.filterLanguage);
+      return;
+    }
+    onSetActiveTab(alert.targetTab);
+  };
+
   return (
-    <div data-testid="admin-overview-tab" className="space-y-6 text-[var(--text-primary)]">
-      {/* 1. COMMAND CENTER HEADER & QUICK ACTIONS */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-sm">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              {stats.d1Connected ? `Cloudflare D1 Connected (${stats.d1LatencyMs}ms)` : 'D1 Local Runtime'}
-            </span>
-            <span className="text-xs text-[var(--text-secondary)] font-mono">
-              {stats.totalAnimeCount.toLocaleString()} total records
-            </span>
-          </div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--text-primary)] tracking-tight">
-            Admin Command Center
-          </h2>
-          <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
-            Real-time Cloudflare D1 catalog health, regional dub coverage, and community moderation queue.
-          </p>
+    <div data-testid="admin-overview-tab" className="space-y-3 text-[var(--text-primary)]">
+      {/* 1. COMPACT TOP HERO BAR (D1 Connected + 3 Inline Action Pills) */}
+      <div
+        data-testid="admin-overview-hero"
+        className="px-3.5 py-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+      >
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--text-primary)] whitespace-nowrap">
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                stats.d1Connected ? 'bg-emerald-500' : 'bg-amber-500'
+              }`}
+              aria-hidden="true"
+            />
+            {stats.d1Connected ? 'D1 Connected' : 'D1 Local'}
+          </span>
+          <span className="text-[var(--text-secondary)] text-xs" aria-hidden="true">
+            ·
+          </span>
+          <span className="text-xs font-mono tabular-nums text-[var(--text-secondary)] whitespace-nowrap">
+            {stats.d1Connected ? `${stats.d1LatencyMs}ms` : 'Standby'} ·{' '}
+            {stats.totalAnimeCount.toLocaleString()} records
+          </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={onOpenAddModal}
             data-testid="command-center-add-anime"
-            className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs sm:text-sm font-bold flex items-center gap-2 shadow-sm transition-all"
+            className="min-h-[40px] sm:min-h-[36px] px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer hover:opacity-95 transition-opacity"
           >
-            <Plus className="w-4 h-4" />
-            Add Anime
+            <Plus className="w-3.5 h-3.5 shrink-0" />
+            <span>+ Add</span>
           </button>
+
           <button
             type="button"
             onClick={() => onSetActiveTab('catalog')}
-            className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs sm:text-sm font-bold flex items-center gap-2 transition-all"
+            className="min-h-[40px] sm:min-h-[36px] px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer transition-colors"
           >
-            <Film className="w-4 h-4 text-[var(--accent-primary)]" />
-            Open Catalog
+            <Film className="w-3.5 h-3.5 text-[var(--accent-primary)] shrink-0" />
+            <span>Catalog</span>
           </button>
+
           <button
             type="button"
             onClick={() => onSetActiveTab('moderation')}
-            className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs sm:text-sm font-bold flex items-center gap-2 transition-all"
+            className="min-h-[40px] sm:min-h-[36px] px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer transition-colors"
           >
-            <Clock className="w-4 h-4 text-amber-500" />
-            Open Moderation
+            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span>Moderation</span>
             {totalModerationQueue > 0 && (
-              <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-extrabold">
-                {totalModerationQueue}
+              <span className="font-mono tabular-nums text-[11px] font-extrabold text-amber-500">
+                ({totalModerationQueue})
               </span>
             )}
           </button>
         </div>
       </div>
 
-      {/* 2. FOUR CORE D1 KPI CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 2. COMPACT 2x2 KPI BENTO GRID (2x2 on Mobile, 4-Column Row on Desktop) */}
+      <div
+        data-testid="admin-kpi-bento-grid"
+        className="grid grid-cols-2 lg:grid-cols-4 gap-3"
+      >
         <button
           type="button"
+          data-testid="kpi-card-published"
           onClick={() => onSetActiveTab('catalog')}
-          className="text-left p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 transition-all flex flex-col justify-between gap-3 shadow-sm"
+          className="text-left p-3 sm:p-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/60 transition-colors flex flex-col justify-between gap-2 min-h-[88px] cursor-pointer"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] font-bold text-[var(--text-secondary)] truncate">
               Published Anime
             </span>
-            <div className="w-9 h-9 rounded-xl bg-[var(--accent-primary)]/15 flex items-center justify-center text-[var(--accent-primary)]">
-              <Film className="w-4 h-4" />
-            </div>
+            <Film className="w-3.5 h-3.5 text-[var(--accent-primary)] shrink-0" />
           </div>
           <div>
-            <div className="text-2xl sm:text-3xl font-black text-[var(--text-primary)] tracking-tight">
+            <div className="text-xl sm:text-2xl font-black font-mono tabular-nums text-[var(--text-primary)] leading-tight">
               {stats.publishedAnimeCount.toLocaleString()}
             </div>
-            <p className="text-xs text-[var(--text-secondary)] mt-1">
-              Live in public catalog • {stats.reviewsCount.toLocaleString()} reviews
+            <p className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5 tabular-nums">
+              {stats.reviewsCount.toLocaleString()} reviews
             </p>
           </div>
         </button>
 
         <button
           type="button"
+          data-testid="kpi-card-pending"
           onClick={() => onSetActiveTab('moderation')}
-          className="text-left p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-amber-500/50 transition-all flex flex-col justify-between gap-3 shadow-sm"
+          className="text-left p-3 sm:p-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-amber-500/60 transition-colors flex flex-col justify-between gap-2 min-h-[88px] cursor-pointer"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-              Pending &amp; Open Feedback
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] font-bold text-[var(--text-secondary)] truncate">
+              Pending
             </span>
-            <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-500">
-              <Clock className="w-4 h-4" />
-            </div>
+            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           </div>
           <div>
-            <div className="text-2xl sm:text-3xl font-black text-[var(--text-primary)] tracking-tight">
+            <div className="text-xl sm:text-2xl font-black font-mono tabular-nums text-[var(--text-primary)] leading-tight">
               {totalModerationQueue.toLocaleString()}
             </div>
-            <p className="text-xs text-[var(--text-secondary)] mt-1">
-              {stats.pendingModerationCount} pending dubs • {stats.openFeedbackCount} open tickets
+            <p className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5 tabular-nums">
+              {stats.pendingModerationCount} dubs · {effectiveOpenTickets} tickets
             </p>
           </div>
         </button>
 
         <button
           type="button"
+          data-testid="kpi-card-unverified"
           onClick={() => {
             if (onFilterCatalogByLanguage) {
               onFilterCatalogByLanguage('Unverified');
@@ -164,227 +186,155 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
               onSetActiveTab('dubs');
             }
           }}
-          className="text-left p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-rose-500/50 transition-all flex flex-col justify-between gap-3 shadow-sm"
+          className="text-left p-3 sm:p-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-rose-500/60 transition-colors flex flex-col justify-between gap-2 min-h-[88px] cursor-pointer"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] font-bold text-[var(--text-secondary)] truncate">
               Unverified Dubs
             </span>
-            <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center text-rose-500">
-              <ShieldAlert className="w-4 h-4" />
-            </div>
+            <ShieldAlert className="w-3.5 h-3.5 text-rose-500 shrink-0" />
           </div>
           <div>
-            <div className="text-2xl sm:text-3xl font-black text-[var(--text-primary)] tracking-tight">
+            <div className="text-xl sm:text-2xl font-black font-mono tabular-nums text-[var(--text-primary)] leading-tight">
               {stats.unverifiedDubsCount.toLocaleString()}
             </div>
-            <p className="text-xs text-[var(--text-secondary)] mt-1">
-              Anime entries without verified regional dub tags
+            <p className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">
+              {stats.unverifiedDubsCount > 0 ? 'Needs dub tags' : 'All verified'}
             </p>
           </div>
         </button>
 
         <button
           type="button"
+          data-testid="kpi-card-translations"
           onClick={() => onSetActiveTab('translations')}
-          className="text-left p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-sky-500/50 transition-all flex flex-col justify-between gap-3 shadow-sm"
+          className="text-left p-3 sm:p-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-sky-500/60 transition-colors flex flex-col justify-between gap-2 min-h-[88px] cursor-pointer"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] font-bold text-[var(--text-secondary)] truncate">
               Missing Translations
             </span>
-            <div className="w-9 h-9 rounded-xl bg-sky-500/15 flex items-center justify-center text-sky-500">
-              <Languages className="w-4 h-4" />
-            </div>
+            <Languages className="w-3.5 h-3.5 text-sky-500 shrink-0" />
           </div>
           <div>
-            <div className="text-2xl sm:text-3xl font-black text-[var(--text-primary)] tracking-tight">
+            <div className="text-xl sm:text-2xl font-black font-mono tabular-nums text-[var(--text-primary)] leading-tight">
               {stats.missingTranslationsCount.toLocaleString()}
             </div>
-            <p className="text-xs text-[var(--text-secondary)] mt-1">
-              Titles awaiting native regional synopsis translation
+            <p className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">
+              {stats.missingTranslationsCount > 0 ? 'Open studio →' : 'Up to date'}
             </p>
           </div>
         </button>
       </div>
 
-      {/* 3. ACTIONABLE "NEEDS YOUR ATTENTION" & REGIONAL DUB COVERAGE */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Needs Your Attention (7 cols) */}
+      {/* 3. DECLUTTERED NEEDS ATTENTION + REGIONAL DUB INTELLIGENCE */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        {/* Needs Your Attention (7 cols on desktop) */}
         <div
           data-testid="needs-your-attention-card"
-          className="lg:col-span-7 p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4 shadow-sm"
+          className="lg:col-span-7 p-3.5 sm:p-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3"
         >
-          <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3.5">
-            <div>
-              <h3 className="text-base font-extrabold text-[var(--text-primary)] flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-                Needs Your Attention
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)]">
-                Priority action items detected across Cloudflare D1 tables
-              </p>
-            </div>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-extrabold text-[var(--text-primary)] flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>Needs Your Attention</span>
+            </h3>
             <button
               type="button"
               onClick={() => onSetActiveTab('data_health')}
-              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--accent-primary)] flex items-center gap-1"
+              className="min-h-[36px] px-2.5 py-1 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--accent-primary)] inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
             >
-              Data Health <ArrowRight className="w-3.5 h-3.5" />
+              <span>Data Health</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <div className="space-y-3">
-            {/* Action Item 1: Pending Submissions */}
-            <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-[var(--text-primary)]">
-                    {stats.pendingModerationCount > 0
-                      ? `${stats.pendingModerationCount} Pending Community Dub Submissions`
-                      : 'Pending Moderation Queue Clear'}
-                  </h4>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    {stats.pendingModerationCount > 0
-                      ? 'Verify OTT partner links and dub language tags before publishing.'
-                      : 'All community anime submissions have been reviewed.'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => onSetActiveTab('moderation')}
-                className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-on-primary,#fff)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] shrink-0 transition-all"
-              >
-                Review Queue
-              </button>
+          {/* Single Compact 1-Line Green Status Strip for all 0-count healthy checks */}
+          {healthySummaryText && (
+            <div
+              data-testid="overview-healthy-strip"
+              className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-2 overflow-x-auto no-scrollbar"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap font-mono tabular-nums">{healthySummaryText}</span>
             </div>
+          )}
 
-            {/* Action Item 2: Open User Feedback Tickets */}
-            <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-sky-500/15 text-sky-500 flex items-center justify-center shrink-0 mt-0.5">
-                  <MessageSquare className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-[var(--text-primary)]">
-                    {openFeedbackItems.length > 0
-                      ? `${openFeedbackItems.length} Open User Feedback Tickets`
-                      : 'No Open User Feedback Tickets'}
-                  </h4>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    {openFeedbackItems.length > 0
-                      ? `Latest from ${openFeedbackItems[0]?.name || openFeedbackItems[0]?.author || 'Community Member'}`
-                      : 'All user feedback tickets are resolved.'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => onSetActiveTab('moderation')}
-                className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-on-primary,#fff)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] shrink-0 transition-all"
-              >
-                Open Tickets
-              </button>
+          {/* Actionable Non-Zero Alerts ONLY */}
+          {actionableAlerts.length > 0 && (
+            <div className="space-y-2">
+              {actionableAlerts.map((alert) => {
+                const iconEl =
+                  alert.id === 'moderation' ? (
+                    <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                  ) : alert.id === 'tickets' ? (
+                    <MessageSquare className="w-4 h-4 text-sky-500 shrink-0" />
+                  ) : alert.id === 'unverified' ? (
+                    <Globe className="w-4 h-4 text-rose-500 shrink-0" />
+                  ) : (
+                    <Languages className="w-4 h-4 text-purple-500 shrink-0" />
+                  );
+
+                return (
+                  <div
+                    key={alert.id}
+                    data-testid={`overview-alert-${alert.id}`}
+                    className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-between gap-2.5"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {iconEl}
+                      <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)] truncate tabular-nums">
+                        {alert.title}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAlertAction(alert)}
+                      className="min-h-[36px] px-3 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-on-primary,#fff)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--accent-primary)] whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+                    >
+                      {alert.actionLabel}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
+          )}
 
-            {/* Action Item 3: Unverified Dubs */}
-            <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-rose-500/15 text-rose-500 flex items-center justify-center shrink-0 mt-0.5">
-                  <Globe className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-[var(--text-primary)]">
-                    {stats.unverifiedDubsCount > 0
-                      ? `${stats.unverifiedDubsCount} Anime With Unverified Dub Languages`
-                      : 'All Catalog Entries Have Verified Dub Tags'}
-                  </h4>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    Entries without explicit regional dub tags remain marked Unverified (never auto-defaulted).
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (onFilterCatalogByLanguage) {
-                    onFilterCatalogByLanguage('Unverified');
-                  } else {
-                    onSetActiveTab('dubs');
-                  }
-                }}
-                className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-on-primary,#fff)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] shrink-0 transition-all"
-              >
-                Inspect Dubs
-              </button>
-            </div>
-
-            {/* Action Item 4: Missing Native Synopsis Translations */}
-            <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-purple-500/15 text-purple-500 flex items-center justify-center shrink-0 mt-0.5">
-                  <Languages className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-[var(--text-primary)]">
-                    {stats.missingTranslationsCount > 0
-                      ? `${stats.missingTranslationsCount} Titles Missing Native Translations`
-                      : 'Native Synopsis Translations Up to Date'}
-                  </h4>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    Manage additive Tamil, Hindi, Telugu, Malayalam, Kannada &amp; Bengali synopses.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => onSetActiveTab('translations')}
-                className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--accent-primary)] hover:text-[var(--accent-on-primary,#fff)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] shrink-0 transition-all"
-              >
-                Translations
-              </button>
-            </div>
-          </div>
-
-          {/* Inline Fast Approval Preview when pending items exist */}
+          {/* Compact Inline Fast-Approve Preview ONLY when real pending submissions exist */}
           {pendingItems.length > 0 && (
-            <div className="pt-3 border-t border-[var(--border-subtle)] space-y-2.5">
-              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] block">
+            <div className="pt-2.5 border-t border-[var(--border-subtle)] space-y-2">
+              <div className="text-[11px] font-bold text-[var(--text-secondary)]">
                 Latest Pending Submissions
-              </span>
+              </div>
               {pendingItems.slice(0, 3).map((item) => (
                 <div
                   key={item.id}
-                  className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-between gap-3"
+                  className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-between gap-2"
                 >
                   <div className="min-w-0">
-                    <h5 className="text-xs sm:text-sm font-bold text-[var(--text-primary)] truncate">
+                    <div className="text-xs font-bold text-[var(--text-primary)] truncate">
                       {item.title}
-                    </h5>
-                    <p className="text-xs text-[var(--text-secondary)] truncate">
+                    </div>
+                    <div className="text-[11px] text-[var(--text-secondary)] truncate">
                       {Array.isArray(item.languages) && item.languages.length > 0
                         ? item.languages.join(', ')
                         : typeof item.languages === 'string' && item.languages.trim()
                           ? item.languages
                           : 'Unverified Dubs'}
-                    </p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => onApprovePending(item.id)}
-                      className="min-h-[38px] px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold"
+                      className="min-h-[36px] px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold cursor-pointer"
                     >
                       Approve
                     </button>
                     <button
                       type="button"
                       onClick={() => onRejectPending(item.id)}
-                      className="min-h-[38px] px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold"
+                      className="min-h-[36px] px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold cursor-pointer"
                     >
                       Reject
                     </button>
@@ -395,29 +345,32 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
           )}
         </div>
 
-        {/* Regional Dub Coverage Breakdown (5 cols) */}
-        <div className="lg:col-span-5 p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col justify-between gap-5 shadow-sm">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3.5">
-              <div>
-                <h3 className="text-base font-extrabold text-[var(--text-primary)] flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-[var(--accent-primary)]" />
-                  Regional Dub Intelligence
+        {/* Regional Dub Intelligence (5 cols on desktop) */}
+        <div
+          data-testid="regional-dub-intelligence-card"
+          className="lg:col-span-5 p-3.5 sm:p-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col justify-between gap-3"
+        >
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="text-sm font-extrabold text-[var(--text-primary)] flex items-center gap-1.5">
+                  <Globe className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+                  <span className="truncate">Regional Dub Intelligence</span>
                 </h3>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Verified D1 language distribution across {stats.totalAnimeCount || 0} titles
+                <p className="text-[11px] text-[var(--text-secondary)] tabular-nums">
+                  {stats.totalAnimeCount || 0} catalog titles
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => onSetActiveTab('dubs')}
-                className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--accent-primary)]"
+                className="min-h-[36px] px-2.5 py-1 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--accent-primary)] whitespace-nowrap shrink-0 cursor-pointer"
               >
-                Manage Dubs
+                Dubs Matrix →
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-1 gap-x-3 gap-y-2">
               {languageOrder.map((lang) => {
                 const count = Number(stats.languageCounts?.[lang.key] || 0);
                 const denom = Math.max(1, stats.totalAnimeCount || stats.publishedAnimeCount || 1);
@@ -432,19 +385,19 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
                         ? onFilterCatalogByLanguage(lang.key)
                         : onSetActiveTab('catalog')
                     }
-                    className="w-full text-left space-y-1.5 group"
+                    className="w-full text-left space-y-1 group cursor-pointer py-0.5"
                   >
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-[var(--text-primary)] group-hover:text-[var(--accent-primary)] transition-colors">
+                    <div className="flex items-center justify-between text-xs gap-1">
+                      <span className="font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent-primary)] transition-colors truncate">
                         {lang.label}
                       </span>
-                      <span className="font-mono text-[var(--text-secondary)]">
-                        {count.toLocaleString()} ({pct}%)
+                      <span className="font-mono tabular-nums text-[11px] text-[var(--text-secondary)] shrink-0">
+                        {count.toLocaleString()} · {pct}%
                       </span>
                     </div>
-                    <div className="w-full h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
                       <div
-                        className={`h-full ${lang.color} rounded-full transition-all duration-500`}
+                        className={`h-full ${lang.color} rounded-full transition-all duration-300`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -454,13 +407,13 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
             </div>
           </div>
 
-          <div className="pt-4 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="flex items-center gap-1.5 font-semibold">
-              <Database className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-              Watchlist saves: {stats.watchlistCount.toLocaleString()}
+          <div className="pt-2.5 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-secondary)] font-mono tabular-nums">
+            <span className="inline-flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5 text-[var(--accent-primary)] shrink-0" />
+              Watchlists: {stats.watchlistCount.toLocaleString()}
             </span>
-            <span className="flex items-center gap-1.5 font-semibold">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="inline-flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
               Reports: {stats.reportsCount.toLocaleString()}
             </span>
           </div>

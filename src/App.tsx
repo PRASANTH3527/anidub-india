@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
+import { isAdminWorkspaceRoute } from './utils/adminShellLayout';
 import { CatalogView } from './components/CatalogView';
 import { ShieldCheck, Loader2, LogOut, ShieldAlert } from 'lucide-react';
 import { cloudflareApi } from './services/cloudflareApi';
@@ -1102,6 +1103,12 @@ export default function App() {
     }));
   }, []);
 
+  const isAdminRouteActive = isAdminWorkspaceRoute(
+    activeTab,
+    typeof window !== 'undefined' ? window.location.pathname : ''
+  );
+  const isAdminWorkspaceMounted = activeTab === 'admin' && isAdminAuthenticated && isClerkAdmin;
+
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col font-sans selection:bg-[var(--accent-primary)] selection:text-[var(--accent-on-primary)] transition-colors duration-200 box-border">
       
@@ -1113,37 +1120,39 @@ export default function App() {
       {/* OFFLINE STATUS INDICATOR (PWA) */}
       <OfflineIndicator />
 
-      {/* 1. NAVBAR */}
-      <Navbar
-        activeTab={activeTab}
-        setActiveTab={handleNavigateTab}
-        watchlistCount={Math.max(watchlist.length, realSavedWatchlist.length)}
-        onUnlockAdmin={() => {
-          if (!isAdminAuthenticated || !isClerkAdmin) {
-            setIsPasswordModalOpen(true);
-            setAdminAuthError('');
-          } else {
-            if (activeTab !== 'admin') {
-              handleNavigateTab('admin');
+      {/* 1. PUBLIC NAVBAR & PUBLIC BOTTOM NAV (Completely hidden inside /admin* routes) */}
+      {!isAdminRouteActive && (
+        <Navbar
+          activeTab={activeTab}
+          setActiveTab={handleNavigateTab}
+          watchlistCount={Math.max(watchlist.length, realSavedWatchlist.length)}
+          onUnlockAdmin={() => {
+            if (!isAdminAuthenticated || !isClerkAdmin) {
+              setIsPasswordModalOpen(true);
+              setAdminAuthError('');
             } else {
-              handleNavigateTab('explore');
+              if (activeTab !== 'admin') {
+                handleNavigateTab('admin');
+              } else {
+                handleNavigateTab('explore');
+              }
             }
-          }
-        }}
-        onOpenCollection={() => setIsCollectionOpen(true)}
-        onOpenCompare={() => handleOpenCompare(null)}
-        onSubmitDub={() => setIsDubModalOpen(true)}
-        onSelectAnime={(id) => handleOpenAnime(id)}
-        feedView={feedView}
-        setFeedView={setFeedView}
-        isAdminAuthenticated={isAdminAuthenticated && isClerkAdmin}
-        onLogout={handleAdminLogout}
-        currentLang={currentLang}
-        setCurrentLang={setCurrentLang}
-      />
+          }}
+          onOpenCollection={() => setIsCollectionOpen(true)}
+          onOpenCompare={() => handleOpenCompare(null)}
+          onSubmitDub={() => setIsDubModalOpen(true)}
+          onSelectAnime={(id) => handleOpenAnime(id)}
+          feedView={feedView}
+          setFeedView={setFeedView}
+          isAdminAuthenticated={isAdminAuthenticated && isClerkAdmin}
+          onLogout={handleAdminLogout}
+          currentLang={currentLang}
+          setCurrentLang={setCurrentLang}
+        />
+      )}
 
       {/* 2. ADMIN DASHBOARD (Protected strictly by Clerk Admin Auth) */}
-      {activeTab === 'admin' && isAdminAuthenticated && isClerkAdmin && (
+      {isAdminWorkspaceMounted && (
         <Suspense fallback={<ViewLoadingFallback />}>
           <AdminDashboard
             catalogList={catalogList}
@@ -1206,6 +1215,7 @@ export default function App() {
       )}
 
       {/* 3. MAIN CONTENT VIEWS WITH DEDICATED DEEP-LINKABLE ANIME DETAIL ROUTE */}
+      {!isAdminWorkspaceMounted && (
       <main
         className={`flex-grow w-full max-w-full overflow-x-clip ${
           isDetailRouteActive ? 'pt-0 pb-12 lg:pb-8' : 'pt-3 sm:pt-5 pb-24 lg:pb-16'
@@ -1510,9 +1520,10 @@ export default function App() {
         </AnimatePresence>
         )}
       </main>
+      )}
 
-      {/* COMPACT FOOTER WITH LEGAL LINKS (Hidden on full feedback page to avoid duplication) */}
-      {activeTab !== 'feedback' && activeTab !== 'admin' && (
+      {/* COMPACT FOOTER WITH LEGAL LINKS (Hidden on full feedback page and admin routes) */}
+      {activeTab !== 'feedback' && !isAdminRouteActive && (
         <Suspense fallback={null}>
           <FeedbackSection
             mode="footer"
@@ -1607,7 +1618,12 @@ export default function App() {
                   variant="secondary"
                   size="md"
                   fullWidth
-                  onClick={() => setIsPasswordModalOpen(false)}
+                  onClick={() => {
+                    setIsPasswordModalOpen(false);
+                    if (isAdminRouteActive) {
+                      handleNavigateTab('explore');
+                    }
+                  }}
                 >
                   Cancel
                 </Button>
@@ -1633,7 +1649,12 @@ export default function App() {
                     variant="secondary"
                     size="md"
                     className="flex-1"
-                    onClick={() => setIsPasswordModalOpen(false)}
+                    onClick={() => {
+                      setIsPasswordModalOpen(false);
+                      if (isAdminRouteActive) {
+                        handleNavigateTab('explore');
+                      }
+                    }}
                   >
                     Cancel
                   </Button>
