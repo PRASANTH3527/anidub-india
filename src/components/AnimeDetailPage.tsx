@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   X, Star, Tv, Calendar, Heart, CheckCircle, Play, ExternalLink, Clock, Sparkles,
   Share2, Bell, BellOff, Edit, MessageSquare, Send, ThumbsUp, AlertTriangle, Plus,
-  Minus, Flag, ArrowLeft, Layers, ShieldCheck, Globe, Eye, EyeOff, ChevronDown, ChevronUp
+  Minus, Flag, ArrowLeft, Layers, ShieldCheck, Globe, Eye, EyeOff, ChevronDown, ChevronUp, Languages
 } from 'lucide-react';
 import {
   Anime,
@@ -13,7 +13,7 @@ import {
 import { PlatformIcon } from './PlatformIcons';
 import { DualRating } from './DualRating';
 import { ReportModal } from './ReportModal';
-import { cloudflareApi } from '../services/cloudflareApi';
+import { cloudflareApi, type AnimeTranslationItem } from '../services/cloudflareApi';
 import { generateOttUrl } from '../utils/ottRedirect';
 import { OptimizedImage } from './OptimizedImage';
 import {
@@ -28,7 +28,7 @@ import { getCloudflareWsUrl } from '../config/cloudflare';
 import { getVerifiedClerkUsername } from '../utils/chatIdentity';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
-import { formatLocaleDate, formatLocaleNumber } from '../i18n/languageRegistry';
+import { formatLocaleDate, formatLocaleNumber, LANGUAGE_REGISTRY } from '../i18n/languageRegistry';
 
 export interface FranchiseEntry {
   id: string;
@@ -174,6 +174,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   const [fetchingDetail, setFetchingDetail] = useState<boolean>(false);
   const [internalReportOpen, setInternalReportOpen] = useState<boolean>(false);
   const [wsReviewError, setWsReviewError] = useState<string | null>(null);
+  const [publishedTranslation, setPublishedTranslation] = useState<AnimeTranslationItem | null>(null);
+  const [showOriginalSynopsis, setShowOriginalSynopsis] = useState<boolean>(false);
 
   useEffect(() => {
     const rawTarget = animeProp || initialAnime;
@@ -181,7 +183,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       let cancelled = false;
       if (!rawTarget) setFetchingDetail(true);
       cloudflareApi
-        .getAnimeById(animeId)
+        .getAnimeById(animeId, undefined, { locale: uiLocale })
         .then((res) => {
           if (cancelled || !res) return;
           setFetchedRecord(res);
@@ -198,13 +200,65 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       setFetchedRecord(null);
       setFetchingDetail(false);
     }
-  }, [animeId, animeProp]);
+  }, [animeId, animeProp, uiLocale]);
 
   const anime: Anime | null = useMemo(() => {
     const raw = animeProp || fetchedRecord || initialAnime;
     if (!raw) return null;
     return normalizeAnimeRecord(raw);
   }, [animeProp, fetchedRecord, initialAnime]);
+
+  // Fetch published localized synopsis/title whenever active UI locale is non-English
+  useEffect(() => {
+    setShowOriginalSynopsis(false);
+    if (!anime?.id || !uiLocale || uiLocale === 'en') {
+      setPublishedTranslation(null);
+      return;
+    }
+
+    // If the record already carries a published overlay for this locale, hydrate immediately
+    if (
+      anime.hasPublishedTranslation &&
+      anime.translationLocale === uiLocale &&
+      (anime.localizedSynopsis || anime.localizedTitle || anime.localizedDescription)
+    ) {
+      setPublishedTranslation({
+        id: 0,
+        anime_id: String(anime.id),
+        locale: uiLocale,
+        localized_title: anime.localizedTitle || null,
+        synopsis: anime.localizedSynopsis || null,
+        description: anime.localizedDescription || null,
+        source_hash: null,
+        translation_status: 'published',
+        updated_by: null,
+        created_at: '',
+        updated_at: '',
+      });
+      return;
+    }
+
+    let cancelled = false;
+    cloudflareApi
+      .fetchPublicAnimeTranslation(anime.id, uiLocale)
+      .then((tr) => {
+        if (!cancelled) setPublishedTranslation(tr);
+      })
+      .catch(() => {
+        if (!cancelled) setPublishedTranslation(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    anime?.id,
+    anime?.hasPublishedTranslation,
+    anime?.translationLocale,
+    anime?.localizedSynopsis,
+    anime?.localizedTitle,
+    anime?.localizedDescription,
+    uiLocale,
+  ]);
 
   const isLoading = isLoadingProp || (fetchingDetail && !anime);
 
@@ -621,7 +675,26 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     },
   ];
 
-  const synopsisText = anime.synopsis || t('animeDetails:noSynopsis', 'No verified synopsis available yet.');
+  const activeLocaleMeta = LANGUAGE_REGISTRY.find((lang) => lang.code === uiLocale);
+  const activeLocalizedTitle =
+    uiLocale !== 'en' && publishedTranslation?.localized_title
+      ? publishedTranslation.localized_title.trim()
+      : uiLocale !== 'en' && anime.hasPublishedTranslation && anime.translationLocale === uiLocale && anime.localizedTitle
+        ? anime.localizedTitle.trim()
+        : null;
+  const activeLocalizedSynopsis =
+    uiLocale !== 'en' && publishedTranslation?.synopsis
+      ? publishedTranslation.synopsis.trim()
+      : uiLocale !== 'en' && anime.hasPublishedTranslation && anime.translationLocale === uiLocale && anime.localizedSynopsis
+        ? anime.localizedSynopsis.trim()
+        : null;
+  const hasLocalizedSynopsis = Boolean(activeLocalizedSynopsis);
+  const originalEnglishSynopsis =
+    anime.synopsis || t('animeDetails:noSynopsis', 'No verified synopsis available yet.');
+  const synopsisText =
+    hasLocalizedSynopsis && !showOriginalSynopsis
+      ? (activeLocalizedSynopsis as string)
+      : originalEnglishSynopsis;
   const isLongSynopsis = synopsisText.length > 220;
 
   const activeMatrixSeason =
@@ -691,7 +764,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 genres: anime.genres,
                 studio: anime.studio,
               },
-              'https://anidub.in'
+              'https://anidub.in',
+              undefined,
+              {
+                locale: uiLocale,
+                translation: publishedTranslation,
+              }
             ),
           }}
         />
@@ -750,10 +828,19 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 )}
               </div>
 
-              {/* Crisp Title: 24px mobile / 30px desktop */}
+              {/* Crisp Title: 24px mobile / 30px desktop — Official English title preserved */}
               <h1 className="text-[24px] sm:text-[30px] font-bold text-[var(--text-primary)] leading-[1.2] tracking-[-0.02em] mb-1.5">
                 {anime.title}
               </h1>
+
+              {activeLocalizedTitle && activeLocalizedTitle.toLowerCase() !== anime.title.toLowerCase() && (
+                <p
+                  data-testid="localized-anime-subtitle"
+                  className="text-[14px] font-medium text-[var(--accent-primary)] mb-1.5 leading-snug"
+                >
+                  {activeLocalizedTitle}
+                </p>
+              )}
 
               {anime.japaneseTitle && (
                 <p className="text-[13px] text-[var(--text-secondary)] mb-3 truncate">{anime.japaneseTitle}</p>
@@ -995,10 +1082,38 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         {activeTab === 'overview' && (
           <div className="space-y-5" role="tabpanel">
             <div className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5">
-              <h3 className="text-[16px] font-bold text-[var(--text-primary)] mb-2">
-                {t('animeDetails:synopsis', 'Synopsis')}
-              </h3>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-[16px] font-bold text-[var(--text-primary)]">
+                    {t('animeDetails:synopsis', 'Synopsis')}
+                  </h3>
+                  {hasLocalizedSynopsis && !showOriginalSynopsis && (
+                    <span
+                      data-testid="synopsis-localized-badge"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[8px] text-[11px] font-semibold bg-[var(--accent-soft)] text-[var(--accent-primary)] border border-[var(--accent-primary)]/30"
+                    >
+                      <Languages className="w-3 h-3" />
+                      {activeLocaleMeta?.nativeName || uiLocale.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+
+                {hasLocalizedSynopsis && (
+                  <button
+                    type="button"
+                    data-testid="toggle-original-synopsis"
+                    onClick={() => setShowOriginalSynopsis((prev) => !prev)}
+                    className="min-h-[44px] px-3 rounded-[10px] bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] inline-flex items-center gap-1.5 text-[12px] font-semibold transition-colors"
+                  >
+                    <Languages className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                    {showOriginalSynopsis
+                      ? `${activeLocaleMeta?.nativeName || uiLocale.toUpperCase()}`
+                      : 'Original English'}
+                  </button>
+                )}
+              </div>
               <p
+                data-testid="anime-synopsis-text"
                 className={`text-[15px] text-[var(--text-secondary)] leading-[1.6] ${
                   !isSynopsisExpanded && isLongSynopsis ? 'line-clamp-3' : ''
                 }`}

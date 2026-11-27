@@ -1,8 +1,83 @@
 import { isExcludedLanguage, normalizeLanguageName } from './languages';
+import {
+  normalizeTranslationLocale,
+  TARGET_TRANSLATION_LOCALES,
+  type AnimeTranslationRecord,
+} from './animeTranslations';
 
 export const SITE_ORIGIN = 'https://anidub.in';
 export const SITE_NAME = 'ANIDUB INDIA';
 export const DEFAULT_OG_IMAGE = 'https://anidub.in/logo.png';
+
+export interface SeoHreflangConfig {
+  code: string;
+  hreflang: string;
+  ogLocale: string;
+  htmlLang: string;
+}
+
+export const SEO_HREFLANG_LOCALES: Record<string, SeoHreflangConfig> = {
+  en: { code: 'en', hreflang: 'en-IN', ogLocale: 'en_IN', htmlLang: 'en' },
+  ta: { code: 'ta', hreflang: 'ta-IN', ogLocale: 'ta_IN', htmlLang: 'ta' },
+  hi: { code: 'hi', hreflang: 'hi-IN', ogLocale: 'hi_IN', htmlLang: 'hi' },
+  te: { code: 'te', hreflang: 'te-IN', ogLocale: 'te_IN', htmlLang: 'te' },
+  ml: { code: 'ml', hreflang: 'ml-IN', ogLocale: 'ml_IN', htmlLang: 'ml' },
+  kn: { code: 'kn', hreflang: 'kn-IN', ogLocale: 'kn_IN', htmlLang: 'kn' },
+  bn: { code: 'bn', hreflang: 'bn-IN', ogLocale: 'bn_IN', htmlLang: 'bn' },
+};
+
+export interface SeoHreflangAlternate {
+  hreflang: string;
+  href: string;
+}
+
+export function stripLangQueryParam(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+    parsed.searchParams.delete('lang');
+    parsed.searchParams.delete('locale');
+    return parsed.toString();
+  } catch {
+    return rawUrl.replace(/([?&])(lang|locale)=[^&]*&?/g, '$1').replace(/[?&]$/, '');
+  }
+}
+
+export function appendLangQueryParam(baseUrl: string, locale: string): string {
+  try {
+    const parsed = new URL(baseUrl);
+    parsed.searchParams.set('lang', locale);
+    return parsed.toString();
+  } catch {
+    const sep = baseUrl.includes('?') ? '&' : '?';
+    return `${baseUrl}${sep}lang=${encodeURIComponent(locale)}`;
+  }
+}
+
+export function buildHreflangAlternates(
+  canonicalUrl: string,
+  regionalLocales: readonly string[] = TARGET_TRANSLATION_LOCALES
+): SeoHreflangAlternate[] {
+  const baseUrl = stripLangQueryParam(canonicalUrl);
+  const alternates: SeoHreflangAlternate[] = [
+    { hreflang: 'x-default', href: baseUrl },
+    { hreflang: 'en-IN', href: baseUrl },
+  ];
+
+  const seen = new Set<string>(['en']);
+  for (const rawLoc of regionalLocales) {
+    const code = normalizeTranslationLocale(rawLoc);
+    if (!code || code === 'en' || seen.has(code)) continue;
+    seen.add(code);
+    const cfg = SEO_HREFLANG_LOCALES[code];
+    if (!cfg) continue;
+    alternates.push({
+      hreflang: cfg.hreflang,
+      href: appendLangQueryParam(baseUrl, code),
+    });
+  }
+
+  return alternates;
+}
 
 export const PRIMARY_SEO_LANGUAGES = [
   'Hindi',
@@ -97,6 +172,9 @@ export interface SeoMetaPayload {
   canonicalUrl: string;
   ogType: 'website' | 'video.tv_show' | 'video.movie';
   htmlLang: string;
+  ogLocale?: string;
+  ogLocaleAlternates?: string[];
+  alternates?: SeoHreflangAlternate[];
   jsonLd?: string;
 }
 
@@ -249,6 +327,12 @@ function extractNormalizedDubLanguages(rawLanguages: unknown): string[] {
   return normalized.length > 0 ? normalized : ['Hindi', 'Tamil', 'Telugu'];
 }
 
+export interface BuildAnimeSeoOptions {
+  locale?: string | null;
+  translation?: Partial<AnimeTranslationRecord> | null;
+  availableLocales?: readonly string[];
+}
+
 /**
  * Generates Google-friendly Schema.org JSON-LD (`TVSeries` or `Movie`)
  * for anime detail pages and edge HTMLRewriter responses.
@@ -256,16 +340,49 @@ function extractNormalizedDubLanguages(rawLanguages: unknown): string[] {
 export function buildAnimeJsonLd(
   anime: Record<string, unknown>,
   originInput?: string,
-  fallbackIdOrSlug?: string
+  fallbackIdOrSlug?: string,
+  options?: BuildAnimeSeoOptions
 ): string {
   const origin = resolveOrigin(originInput);
   const title = String(anime.title || '').trim() || 'Anime Dub Details';
   const slugOrId = String(anime.slug || anime.id || fallbackIdOrSlug || '').trim();
-  const url = slugOrId ? `${origin}/anime/${encodeURIComponent(slugOrId)}` : `${origin}/`;
+  const baseUrl = slugOrId ? `${origin}/anime/${encodeURIComponent(slugOrId)}` : `${origin}/`;
   const dubLanguages = extractNormalizedDubLanguages(anime.languages);
   const langsFormatted = dubLanguages.join(', ');
 
-  const synopsis = truncateDescription(String(anime.synopsis || anime.description || ''), 300);
+  const requestedLocale = normalizeTranslationLocale(options?.locale);
+  const publishedTranslation =
+    requestedLocale &&
+    requestedLocale !== 'en' &&
+    options?.translation &&
+    (!options.translation.translation_status || options.translation.translation_status === 'published')
+      ? options.translation
+      : null;
+
+  const localizedTitle =
+    publishedTranslation && typeof publishedTranslation.localized_title === 'string'
+      ? publishedTranslation.localized_title.trim()
+      : typeof anime.localizedTitle === 'string' && anime.hasPublishedTranslation
+        ? anime.localizedTitle.trim()
+        : '';
+
+  const localizedSynopsis =
+    publishedTranslation &&
+    (typeof publishedTranslation.description === 'string' || typeof publishedTranslation.synopsis === 'string')
+      ? truncateDescription(
+          String(publishedTranslation.description || publishedTranslation.synopsis || ''),
+          300
+        )
+      : typeof anime.localizedSynopsis === 'string' && anime.hasPublishedTranslation
+        ? truncateDescription(anime.localizedSynopsis, 300)
+        : '';
+
+  const url =
+    publishedTranslation && requestedLocale && requestedLocale !== 'en'
+      ? appendLangQueryParam(baseUrl, requestedLocale)
+      : baseUrl;
+
+  const synopsis = localizedSynopsis || truncateDescription(String(anime.synopsis || anime.description || ''), 300);
   const description =
     synopsis ||
     `Watch ${title} with official ${langsFormatted} dubs legally in India on ANIDUB INDIA.`;
@@ -282,10 +399,16 @@ export function buildAnimeJsonLd(
     '@context': 'https://schema.org',
     '@type': isMovie ? 'Movie' : 'TVSeries',
     name: title,
+    ...(localizedTitle && localizedTitle.toLowerCase() !== title.toLowerCase()
+      ? { alternateName: localizedTitle }
+      : {}),
     description,
     image,
     url,
-    inLanguage: dubLanguages,
+    inLanguage:
+      publishedTranslation && requestedLocale && SEO_HREFLANG_LOCALES[requestedLocale]
+        ? Array.from(new Set([SEO_HREFLANG_LOCALES[requestedLocale].hreflang, ...dubLanguages]))
+        : dubLanguages,
   };
 
   const rawGenres = String(anime.genres || anime.genre || '').trim();
@@ -332,23 +455,73 @@ export function buildAnimeJsonLd(
   return serializeSafeJsonLd(jsonLdObj);
 }
 
-export function buildDefaultSeoMeta(originInput?: string): SeoMetaPayload {
+const DEFAULT_SEO_BY_LOCALE: Record<string, { title: string; description: string }> = {
+  ta: {
+    title: 'ANIDUB INDIA | தமிழ் & இந்திய டப் அனிமே வழிகாட்டி',
+    description:
+      'இந்தியாவில் அதிகாரப்பூர்வ தமிழ், இந்தி, தெலுங்கு, மலையாளம், கன்னடம் மற்றும் வங்காளம் டப் அனிமேக்களையும் OTT தளங்களையும் கண்டறியுங்கள்.',
+  },
+  hi: {
+    title: 'ANIDUB INDIA | हिंदी और भारतीय डब एनीमे गाइड',
+    description:
+      'भारत में आधिकारिक हिंदी, तमिल, तेलुगु, मलयालम, कन्नड़ और बंगाली डब एनीमे और लीगल OTT स्ट्रीमिंग लिंक खोजें।',
+  },
+  te: {
+    title: 'ANIDUB INDIA | తెలుగు & ఇండియన్ డబ్ అనిమే గైడ్',
+    description:
+      'భారతదేశంలో అధికారిక తెలుగు, హిందీ, తమిళం, మలయాళం, కన్నడ మరియు బెంగాలీ డబ్ అనిమేలు మరియు OTT లింక్‌లను కనుగొనండి.',
+  },
+  ml: {
+    title: 'ANIDUB INDIA | മലയാളം & ഇന്ത്യൻ ഡബ്ബ് അനിമേ ഗൈഡ്',
+    description:
+      'ഇന്ത്യയിലെ ഔദ്യോഗിക മലയാളം, ഹിന്ദി, തമിഴ്, തെലുങ്ക്, കന്നഡ, ബംഗാളി ഡബ്ബ് അനിമേകളും നിയമപരമായ OTT ലിങ്കുകളും കണ്ടെത്തുക.',
+  },
+  kn: {
+    title: 'ANIDUB INDIA | ಕನ್ನಡ & ಭಾರತೀಯ ಡಬ್ ಅನಿಮೆ ಗೈಡ್',
+    description:
+      'ಭಾರತದಲ್ಲಿ ಅಧಿಕೃತ ಕನ್ನಡ, ಹಿಂದಿ, ತಮಿಳು, ತೆಲುಗು, ಮಲಯಾಳಂ ಮತ್ತು ಬಂಗಾಳಿ ಡಬ್ ಅನಿಮೆಗಳು ಹಾಗೂ OTT ಲಿಂಕ್‌ಗಳನ್ನು ಹುಡುಕಿ.',
+  },
+  bn: {
+    title: 'ANIDUB INDIA | বাংলা ও ভারতীয় ডাবড অ্যানিমে গাইড',
+    description:
+      'ভারতে অফিসিয়াল বাংলা, হিন্দি, তামিল, তেলুগু, মালায়ালাম ও কন্নড় ডাবড অ্যানিমে এবং লিগ্যাল OTT স্ট্রিমিং লিংক খুঁজুন।',
+  },
+};
+
+export function buildDefaultSeoMeta(originInput?: string, uiLocale?: string | null): SeoMetaPayload {
   const origin = resolveOrigin(originInput);
+  const normalizedLocale = normalizeTranslationLocale(uiLocale) || 'en';
+  const localeCfg = SEO_HREFLANG_LOCALES[normalizedLocale] || SEO_HREFLANG_LOCALES.en;
+  const localizedCopy = normalizedLocale !== 'en' ? DEFAULT_SEO_BY_LOCALE[normalizedLocale] : null;
+  const baseCanonical = `${origin}/`;
+  const canonicalUrl =
+    normalizedLocale !== 'en' ? appendLangQueryParam(baseCanonical, normalizedLocale) : baseCanonical;
+
+  const title =
+    localizedCopy?.title || 'ANIDUB INDIA | Indian Dubbed Anime Discovery & Streaming Guide';
   const description =
+    localizedCopy?.description ||
     'Indian Dubbed Anime Discovery & Streaming Guide. Find Hindi, Tamil, Telugu, Malayalam, and Kannada dubbed anime with official OTT streaming links on ANIDUB INDIA.';
+
   return {
-    title: 'ANIDUB INDIA | Indian Dubbed Anime Discovery & Streaming Guide',
-    ogTitle: 'ANIDUB INDIA | Indian Dubbed Anime Discovery & Streaming Guide',
+    title,
+    ogTitle: title,
     description,
     image: DEFAULT_OG_IMAGE,
-    canonicalUrl: `${origin}/`,
+    canonicalUrl,
     ogType: 'website',
-    htmlLang: 'en',
+    htmlLang: localeCfg.htmlLang,
+    ogLocale: localeCfg.ogLocale,
+    ogLocaleAlternates: Object.values(SEO_HREFLANG_LOCALES)
+      .map((c) => c.ogLocale)
+      .filter((loc) => loc !== localeCfg.ogLocale),
+    alternates: buildHreflangAlternates(baseCanonical),
     jsonLd: serializeSafeJsonLd({
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       name: SITE_NAME,
-      url: `${origin}/`,
+      url: canonicalUrl,
+      inLanguage: localeCfg.hreflang,
       description,
     }),
   };
@@ -357,20 +530,44 @@ export function buildDefaultSeoMeta(originInput?: string): SeoMetaPayload {
 export function buildAnimeSeoMeta(
   anime: Record<string, unknown>,
   originInput?: string,
-  fallbackIdOrSlug?: string
+  fallbackIdOrSlug?: string,
+  options?: BuildAnimeSeoOptions
 ): SeoMetaPayload {
   const origin = resolveOrigin(originInput);
   const title = String(anime.title || '').trim() || 'Anime Dub Details';
   const slugOrId = String(anime.slug || anime.id || fallbackIdOrSlug || '').trim();
-  const canonicalUrl = slugOrId ? `${origin}/anime/${encodeURIComponent(slugOrId)}` : `${origin}/`;
+  const baseCanonicalUrl = slugOrId ? `${origin}/anime/${encodeURIComponent(slugOrId)}` : `${origin}/`;
 
   const dubLanguages = extractNormalizedDubLanguages(anime.languages);
   const langsFormatted = dubLanguages.join(', ');
 
-  const synopsis = truncateDescription(String(anime.synopsis || anime.description || ''), 145);
+  const requestedLocale = normalizeTranslationLocale(options?.locale);
+  const publishedTranslation =
+    requestedLocale &&
+    requestedLocale !== 'en' &&
+    options?.translation &&
+    (!options.translation.translation_status || options.translation.translation_status === 'published')
+      ? options.translation
+      : null;
+
+  const activeLocale = publishedTranslation && requestedLocale ? requestedLocale : 'en';
+  const localeCfg = SEO_HREFLANG_LOCALES[activeLocale] || SEO_HREFLANG_LOCALES.en;
+  const canonicalUrl =
+    activeLocale !== 'en'
+      ? appendLangQueryParam(baseCanonicalUrl, activeLocale)
+      : baseCanonicalUrl;
+
+  const localizedSummary = publishedTranslation
+    ? truncateDescription(
+        String(publishedTranslation.description || publishedTranslation.synopsis || ''),
+        145
+      )
+    : '';
+  const englishSynopsis = truncateDescription(String(anime.synopsis || anime.description || ''), 145);
+  const chosenSynopsis = localizedSummary || englishSynopsis;
   const fallbackDesc = `Watch ${title} in ${langsFormatted} dubs legally in India. Streaming platforms, episode counts, and community ratings on ANIDUB INDIA.`;
-  const description = synopsis
-    ? truncateDescription(`${synopsis} (${langsFormatted} Dub)`, 160)
+  const description = chosenSynopsis
+    ? truncateDescription(`${chosenSynopsis} (${langsFormatted} Dub)`, 160)
     : truncateDescription(fallbackDesc, 160);
 
   const image = resolveAbsoluteImageUrl(
@@ -390,8 +587,13 @@ export function buildAnimeSeoMeta(
     image,
     canonicalUrl,
     ogType,
-    htmlLang: 'en',
-    jsonLd: buildAnimeJsonLd(anime, originInput, fallbackIdOrSlug),
+    htmlLang: localeCfg.htmlLang,
+    ogLocale: localeCfg.ogLocale,
+    ogLocaleAlternates: Object.values(SEO_HREFLANG_LOCALES)
+      .map((c) => c.ogLocale)
+      .filter((loc) => loc !== localeCfg.ogLocale),
+    alternates: buildHreflangAlternates(baseCanonicalUrl, options?.availableLocales),
+    jsonLd: buildAnimeJsonLd(anime, originInput, fallbackIdOrSlug, options),
   };
 }
 
@@ -406,6 +608,7 @@ export function buildLanguageSeoMeta(
   const description = `${localized.localizedSubtitle}. Browse the complete directory of official ${normalized} dubbed anime streaming legally in India on Crunchyroll, Netflix, JioHotstar, and Prime Video.`;
   const canonicalUrl = `${origin}/dubbed-anime/${slug}`;
   const fullTitle = `${localized.title} - Best ${normalized} Dubbed Anime in India | ANIDUB INDIA`;
+  const localeCfg = SEO_HREFLANG_LOCALES[localized.lang] || SEO_HREFLANG_LOCALES.en;
 
   return {
     title: fullTitle,
@@ -415,6 +618,11 @@ export function buildLanguageSeoMeta(
     canonicalUrl,
     ogType: 'website',
     htmlLang: localized.lang,
+    ogLocale: localeCfg.ogLocale,
+    ogLocaleAlternates: Object.values(SEO_HREFLANG_LOCALES)
+      .map((c) => c.ogLocale)
+      .filter((loc) => loc !== localeCfg.ogLocale),
+    alternates: buildHreflangAlternates(canonicalUrl),
     jsonLd: serializeSafeJsonLd({
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
@@ -508,6 +716,30 @@ export function applySeoMetaWithHtmlRewriter(
           el.setInnerContent(meta.jsonLd, { html: true });
         }
       },
+    })
+    .on('head', {
+      element(el) {
+        if (typeof el.append !== 'function') return;
+        const headTags: string[] = [];
+        if (meta.ogLocale) {
+          headTags.push(`<meta property="og:locale" content="${escapeXml(meta.ogLocale)}" />`);
+        }
+        if (Array.isArray(meta.ogLocaleAlternates)) {
+          for (const altLocale of meta.ogLocaleAlternates) {
+            headTags.push(`<meta property="og:locale:alternate" content="${escapeXml(altLocale)}" />`);
+          }
+        }
+        if (Array.isArray(meta.alternates)) {
+          for (const alt of meta.alternates) {
+            headTags.push(
+              `<link rel="alternate" hreflang="${escapeXml(alt.hreflang)}" href="${escapeXml(alt.href)}" />`
+            );
+          }
+        }
+        if (headTags.length > 0) {
+          el.append(`\n  ${headTags.join('\n  ')}\n`, { html: true });
+        }
+      },
     });
 
   const transformed = rewriter.transform(response);
@@ -547,6 +779,11 @@ export async function resolveAnimeSeoResponse(params: {
     return baseHtmlResponse;
   }
 
+  const reqUrl = new URL(request.url);
+  const requestedLocale = normalizeTranslationLocale(
+    reqUrl.searchParams.get('lang') || reqUrl.searchParams.get('locale')
+  );
+
   let animeRow: Record<string, unknown> | null = null;
   if (db && idOrSlug) {
     try {
@@ -562,10 +799,28 @@ export async function resolveAnimeSeoResponse(params: {
     }
   }
 
-  const origin = new URL(request.url).origin;
+  let publishedTranslation: Partial<AnimeTranslationRecord> | null = null;
+  if (animeRow && db && requestedLocale && requestedLocale !== 'en') {
+    try {
+      publishedTranslation = await db
+        .prepare(
+          "SELECT locale, localized_title, synopsis, description, translation_status FROM anime_translations WHERE anime_id = ? AND locale = ? AND translation_status = 'published' LIMIT 1"
+        )
+        .bind(String(animeRow.id), requestedLocale)
+        .first<Partial<AnimeTranslationRecord>>();
+    } catch {
+      // Gracefully fall back to English when anime_translations is not yet migrated
+      publishedTranslation = null;
+    }
+  }
+
+  const origin = reqUrl.origin;
   const meta = animeRow
-    ? buildAnimeSeoMeta(animeRow, origin, idOrSlug)
-    : buildDefaultSeoMeta(origin);
+    ? buildAnimeSeoMeta(animeRow, origin, idOrSlug, {
+        locale: requestedLocale,
+        translation: publishedTranslation,
+      })
+    : buildDefaultSeoMeta(origin, requestedLocale);
 
   return applySeoMetaWithHtmlRewriter(baseHtmlResponse, meta, RewriterCtor);
 }
@@ -620,6 +875,32 @@ export function updateDocumentSeoMeta(meta: SeoMetaPayload): void {
   setMeta('meta[name="twitter:description"]', 'content', meta.description);
   setMeta('meta[name="twitter:image"]', 'content', meta.image);
   setMeta('link[rel="canonical"]', 'href', meta.canonicalUrl);
+
+  // Sync og:locale
+  const effectiveLocale =
+    (activeUiLang && SEO_HREFLANG_LOCALES[activeUiLang]?.ogLocale) || meta.ogLocale || 'en_IN';
+  let ogLocaleEl = document.head.querySelector('meta[property="og:locale"]');
+  if (!ogLocaleEl) {
+    ogLocaleEl = document.createElement('meta');
+    ogLocaleEl.setAttribute('property', 'og:locale');
+    document.head.appendChild(ogLocaleEl);
+  }
+  ogLocaleEl.setAttribute('content', effectiveLocale);
+
+  // Sync managed hreflang alternate links cleanly without duplicating
+  document.head
+    .querySelectorAll('link[rel="alternate"][data-managed-hreflang="true"]')
+    .forEach((node) => node.remove());
+  const alternates = meta.alternates || buildHreflangAlternates(meta.canonicalUrl);
+  for (const alt of alternates) {
+    const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'alternate');
+    linkEl.setAttribute('hreflang', alt.hreflang);
+    linkEl.setAttribute('href', alt.href);
+    linkEl.setAttribute('data-managed-hreflang', 'true');
+    document.head.appendChild(linkEl);
+  }
+
   if (meta.jsonLd) {
     const ldEl = document.head.querySelector('script[type="application/ld+json"]');
     if (ldEl) {
@@ -651,38 +932,56 @@ function formatSitemapLastmod(rawDate: unknown): string | null {
 }
 
 /**
- * Generates a valid XML sitemap combining static directory routes,
- * regional dubbed language landing pages, and published D1 anime pages.
+ * Generates a valid multilingual XML sitemap combining static directory routes,
+ * regional dubbed language landing pages, published D1 anime pages, and
+ * xhtml:link hreflang alternates for localized pages.
  */
 export function buildDynamicSitemapXml(
   animeRows: SitemapAnimeRow[],
-  originInput?: string
+  originInput?: string,
+  publishedTranslationsByAnimeId?: Record<string, string[]> | Map<string, string[]>
 ): string {
   const origin = resolveOrigin(originInput);
   const seenUrls = new Set<string>();
   const urlEntries: string[] = [];
 
+  const getLocalesForAnime = (animeId: string): string[] => {
+    if (!publishedTranslationsByAnimeId || !animeId) return [];
+    if (publishedTranslationsByAnimeId instanceof Map) {
+      return publishedTranslationsByAnimeId.get(animeId) || [];
+    }
+    return publishedTranslationsByAnimeId[animeId] || [];
+  };
+
   const pushEntry = (
     loc: string,
     changefreq: 'daily' | 'weekly' | 'monthly',
     priority: string,
-    lastmod?: string | null
+    lastmod?: string | null,
+    alternates?: SeoHreflangAlternate[]
   ) => {
     if (!loc || seenUrls.has(loc)) return;
     seenUrls.add(loc);
+    const altLines = Array.isArray(alternates)
+      ? alternates.map(
+          (alt) =>
+            `    <xhtml:link rel="alternate" hreflang="${escapeXml(alt.hreflang)}" href="${escapeXml(alt.href)}" />`
+        )
+      : [];
     const lines = [
       '  <url>',
       `    <loc>${escapeXml(loc)}</loc>`,
       ...(lastmod ? [`    <lastmod>${escapeXml(lastmod)}</lastmod>`] : []),
       `    <changefreq>${changefreq}</changefreq>`,
       `    <priority>${priority}</priority>`,
+      ...altLines,
       '  </url>',
     ];
     urlEntries.push(lines.join('\n'));
   };
 
-  // Core static pages
-  pushEntry(`${origin}/`, 'daily', '1.0');
+  // Core static pages (homepage includes all 7 UI language hreflang alternates)
+  pushEntry(`${origin}/`, 'daily', '1.0', null, buildHreflangAlternates(`${origin}/`));
   pushEntry(`${origin}/schedule`, 'daily', '0.8');
   pushEntry(`${origin}/recommendations`, 'weekly', '0.8');
   pushEntry(`${origin}/tierlist`, 'weekly', '0.7');
@@ -699,7 +998,7 @@ export function buildDynamicSitemapXml(
     );
   }
 
-  // Dynamic published anime pages from D1
+  // Dynamic published anime pages from D1 (with xhtml:link alternates for published translations)
   if (Array.isArray(animeRows)) {
     for (const row of animeRows) {
       if (!row) continue;
@@ -707,13 +1006,17 @@ export function buildDynamicSitemapXml(
       if (!slugOrId) continue;
       const loc = `${origin}/anime/${encodeURIComponent(slugOrId)}`;
       const lastmod = formatSitemapLastmod(row.created_at);
-      pushEntry(loc, 'weekly', '0.8', lastmod);
+      const animeIdStr = row.id !== undefined && row.id !== null ? String(row.id) : '';
+      const publishedLocales = getLocalesForAnime(animeIdStr);
+      const alternates =
+        publishedLocales.length > 0 ? buildHreflangAlternates(loc, publishedLocales) : undefined;
+      pushEntry(loc, 'weekly', '0.8', lastmod, alternates);
     }
   }
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
     ...urlEntries,
     '</urlset>',
     '',

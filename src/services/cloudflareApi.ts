@@ -287,7 +287,43 @@ export interface FetchCatalogOptions {
   sort?: string;
   includePending?: boolean;
   fresh?: boolean;
+  locale?: string;
   signal?: AbortSignal;
+}
+
+export interface AnimeTranslationItem {
+  id: number;
+  anime_id: string;
+  locale: string;
+  localized_title: string | null;
+  synopsis: string | null;
+  description: string | null;
+  source_hash: string | null;
+  translation_status: 'draft' | 'reviewed' | 'published';
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LocaleCoverageItem {
+  locale: string;
+  totalAnime: number;
+  published: number;
+  reviewed: number;
+  draft: number;
+  missing: number;
+  outdated: number;
+  percentPublished: number;
+}
+
+export interface AdminTranslationsResponse {
+  success: boolean;
+  tableReady: boolean;
+  notice?: string;
+  totalAnime: number;
+  translations: AnimeTranslationItem[];
+  coverage: LocaleCoverageItem[];
+  animeSourceHashes: Record<string, string>;
 }
 
 export interface CatalogMeta {
@@ -438,6 +474,7 @@ class CloudflareApiService {
     if (options.freeLegal) queryParams.set('freeLegal', 'true');
     if (options.sort) queryParams.set('sort', options.sort);
     if (options.includePending) queryParams.set('includePending', 'true');
+    if (options.locale && options.locale !== 'en') queryParams.set('locale', options.locale);
     if (options.fresh || options.includePending) {
       queryParams.set('fresh', '1');
       queryParams.set('_t', String(Date.now()));
@@ -677,9 +714,17 @@ class CloudflareApiService {
   /**
    * READ: Fetches single anime details by ID or slug from Cloudflare Worker / D1
    */
-  public async getAnimeById(id: number | string, _userId?: string): Promise<AnimePayload | null> {
+  public async getAnimeById(
+    id: number | string,
+    _userId?: string,
+    options?: { locale?: string }
+  ): Promise<AnimePayload | null> {
     const safeSegment = encodeURIComponent(String(id).trim());
-    const endpoint = CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(safeSegment);
+    const localeQuery =
+      options?.locale && options.locale !== 'en'
+        ? `?locale=${encodeURIComponent(options.locale)}`
+        : '';
+    const endpoint = `${CLOUDFLARE_ENDPOINTS.ANIME_BY_ID(safeSegment)}${localeQuery}`;
     const res = await this.smartFetch(endpoint, {
       method: 'GET',
       headers: this.getHeaders()
@@ -691,6 +736,131 @@ class CloudflareApiService {
     }
 
     return await res.json();
+  }
+
+  /**
+   * READ: Fetches published translation for an anime and locale (gracefully returns null if none/unmigrated)
+   */
+  public async fetchPublicAnimeTranslation(
+    animeId: number | string,
+    locale: string
+  ): Promise<AnimeTranslationItem | null> {
+    if (!animeId || !locale || locale === 'en') return null;
+    try {
+      const safeId = encodeURIComponent(String(animeId).trim());
+      const endpoint = `/api/anime/${safeId}/translations?locale=${encodeURIComponent(locale)}`;
+      const res = await this.smartFetch(endpoint, {
+        method: 'GET',
+        headers: this.getHeaders(false),
+      });
+      if (!res.ok) return null;
+      const json = await res.json().catch(() => null);
+      if (!json || !json.translation) return null;
+      return json.translation as AnimeTranslationItem;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * ADMIN: Fetches all anime translations & per-locale coverage stats
+   */
+  public async fetchAdminTranslations(filters?: {
+    locale?: string;
+    status?: string;
+    animeId?: string | number;
+  }): Promise<AdminTranslationsResponse> {
+    const qs = new URLSearchParams();
+    if (filters?.locale) qs.set('locale', filters.locale);
+    if (filters?.status) qs.set('status', filters.status);
+    if (filters?.animeId !== undefined) qs.set('animeId', String(filters.animeId));
+    const endpoint = `/api/admin/translations${qs.toString() ? `?${qs.toString()}` : ''}`;
+    const res = await this.smartFetch(endpoint, {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load translations (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json.success),
+      tableReady: json.tableReady !== false,
+      notice: json.notice,
+      totalAnime: Number(json.totalAnime) || 0,
+      translations: Array.isArray(json.translations) ? json.translations : [],
+      coverage: Array.isArray(json.coverage) ? json.coverage : [],
+      animeSourceHashes: (json.animeSourceHashes && typeof json.animeSourceHashes === 'object')
+        ? json.animeSourceHashes
+        : {},
+    };
+  }
+
+  /**
+   * ADMIN: Upserts an anime translation record (never modifies English catalog tables)
+   */
+  public async upsertAdminTranslation(payload: {
+    anime_id: string | number;
+    locale: string;
+    localized_title?: string | null;
+    synopsis?: string | null;
+    description?: string | null;
+    translation_status?: 'draft' | 'reviewed' | 'published';
+  }): Promise<{ success: boolean; translation: AnimeTranslationItem }> {
+    const safeId = encodeURIComponent(String(payload.anime_id).trim());
+    const safeLocale = encodeURIComponent(String(payload.locale).trim().toLowerCase());
+    const res = await this.smartFetch(`/api/admin/translations/${safeId}/${safeLocale}`, {
+      method: 'PUT',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to save translation (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  /**
+   * ADMIN: Updates workflow status (draft | reviewed | published)
+   */
+  public async updateAdminTranslationStatus(
+    animeId: string | number,
+    locale: string,
+    translation_status: 'draft' | 'reviewed' | 'published'
+  ): Promise<{ success: boolean; translation: AnimeTranslationItem }> {
+    const safeId = encodeURIComponent(String(animeId).trim());
+    const safeLocale = encodeURIComponent(String(locale).trim().toLowerCase());
+    const res = await this.smartFetch(`/api/admin/translations/${safeId}/${safeLocale}/status`, {
+      method: 'PATCH',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ translation_status }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to update translation status (HTTP ${res.status})`);
+    }
+    return json;
+  }
+
+  /**
+   * ADMIN: Deletes a translation row from anime_translations only
+   */
+  public async deleteAdminTranslation(
+    animeId: string | number,
+    locale: string
+  ): Promise<{ success: boolean }> {
+    const safeId = encodeURIComponent(String(animeId).trim());
+    const safeLocale = encodeURIComponent(String(locale).trim().toLowerCase());
+    const res = await this.smartFetch(`/api/admin/translations/${safeId}/${safeLocale}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to delete translation (HTTP ${res.status})`);
+    }
+    return { success: true };
   }
 
   /**

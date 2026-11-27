@@ -68,6 +68,11 @@ export interface Anime {
   broadcastDay?: string;
   broadcastTime?: string;
   lastUpdated?: string;
+  localizedTitle?: string | null;
+  localizedSynopsis?: string | null;
+  localizedDescription?: string | null;
+  translationLocale?: string | null;
+  hasPublishedTranslation?: boolean;
   [key: string]: any;
 }
 
@@ -256,6 +261,27 @@ export function normalizeAnimeRecord(raw: any): Anime {
     broadcastDay,
     broadcastTime,
     lastUpdated: raw.lastUpdated || raw.last_verified_at || raw.updated_at || raw.created_at || undefined,
+    localizedTitle:
+      typeof (raw.localizedTitle ?? raw.localized_title) === 'string' &&
+      String(raw.localizedTitle ?? raw.localized_title).trim()
+        ? String(raw.localizedTitle ?? raw.localized_title).trim()
+        : null,
+    localizedSynopsis:
+      typeof (raw.localizedSynopsis ?? raw.localized_synopsis) === 'string' &&
+      String(raw.localizedSynopsis ?? raw.localized_synopsis).trim()
+        ? String(raw.localizedSynopsis ?? raw.localized_synopsis).trim()
+        : null,
+    localizedDescription:
+      typeof (raw.localizedDescription ?? raw.localized_description) === 'string' &&
+      String(raw.localizedDescription ?? raw.localized_description).trim()
+        ? String(raw.localizedDescription ?? raw.localized_description).trim()
+        : null,
+    translationLocale:
+      typeof (raw.translationLocale ?? raw.translation_locale) === 'string' &&
+      String(raw.translationLocale ?? raw.translation_locale).trim()
+        ? String(raw.translationLocale ?? raw.translation_locale).trim()
+        : null,
+    hasPublishedTranslation: Boolean(raw.hasPublishedTranslation ?? raw.has_published_translation),
   };
 }
 

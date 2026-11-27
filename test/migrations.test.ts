@@ -80,6 +80,7 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     '0009_sync_canonical_airing_status.sql',
     '0010_add_dub_radar_and_requests.sql',
     '0011_p0_p2_upgrades.sql',
+    '002_anime_translations.sql',
   ]);
 
   const db = new DatabaseSync(':memory:');
@@ -97,6 +98,7 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
   for (const requiredTable of [
     'anime',
     'anime_follows',
+    'anime_translations',
     'analytics_events',
     'analytics_pageviews',
     'analytics_sessions',

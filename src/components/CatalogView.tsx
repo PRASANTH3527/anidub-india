@@ -364,6 +364,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         verifiedOnly,
         freeLegalOnly,
         subs: activeSubscriptionPlatforms,
+        uiLocale,
       }),
     [
       normalizedApiSearch,
@@ -379,6 +380,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       verifiedOnly,
       freeLegalOnly,
       activeSubscriptionPlatforms,
+      uiLocale,
     ]
   );
 
@@ -703,6 +705,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           fullyDubbed: fullyDubbedOnly,
           freeLegal: freeLegalOnly,
           platforms: activeSubscriptionPlatforms,
+          locale: uiLocale,
           signal: controller.signal,
         });
 

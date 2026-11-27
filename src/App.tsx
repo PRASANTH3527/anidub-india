@@ -27,6 +27,7 @@ import {
   updateDocumentSeoMeta,
 } from './utils/seoMeta';
 import { normalizeLanguageName } from './utils/languages';
+import { useLanguage } from './context/LanguageContext';
 import {
   readMySubscriptions,
   writeMySubscriptions,
@@ -75,6 +76,7 @@ const CompareAnimeModal = lazy(() => import('./components/CompareAnimeModal').th
 
 
 export default function App() {
+  const { language: uiLocale } = useLanguage();
   const [activeTab, setActiveTab] = useState('explore');
   const [selectedSeoLanguage, setSelectedSeoLanguage] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -630,7 +632,11 @@ export default function App() {
     if (selectedAnimeId !== null) {
       const matched = findLoadedAnimeBySlugOrId(selectedAnimeId);
       if (matched) {
-        updateDocumentSeoMeta(buildAnimeSeoMeta(matched, origin, String(matched.slug || selectedAnimeId)));
+        updateDocumentSeoMeta(
+          buildAnimeSeoMeta(matched, origin, String(matched.slug || selectedAnimeId), {
+            locale: uiLocale,
+          })
+        );
         return;
       }
     }
@@ -641,7 +647,7 @@ export default function App() {
     }
 
     if (activeTab === 'privacy') {
-      const base = buildDefaultSeoMeta(origin);
+      const base = buildDefaultSeoMeta(origin, uiLocale);
       updateDocumentSeoMeta({
         ...base,
         title: 'Privacy Policy | AniDub India',
@@ -655,7 +661,7 @@ export default function App() {
     }
 
     if (activeTab === 'terms') {
-      const base = buildDefaultSeoMeta(origin);
+      const base = buildDefaultSeoMeta(origin, uiLocale);
       updateDocumentSeoMeta({
         ...base,
         title: 'Terms of Service | AniDub India',
@@ -669,7 +675,7 @@ export default function App() {
     }
 
     if (activeTab === 'copyright') {
-      const base = buildDefaultSeoMeta(origin);
+      const base = buildDefaultSeoMeta(origin, uiLocale);
       updateDocumentSeoMeta({
         ...base,
         title: 'Copyright & Takedown Policy | AniDub India',
@@ -682,8 +688,8 @@ export default function App() {
       return;
     }
 
-    updateDocumentSeoMeta(buildDefaultSeoMeta(origin));
-  }, [activeTab, selectedSeoLanguage, selectedAnimeId, findLoadedAnimeBySlugOrId]);
+    updateDocumentSeoMeta(buildDefaultSeoMeta(origin, uiLocale));
+  }, [activeTab, selectedSeoLanguage, selectedAnimeId, findLoadedAnimeBySlugOrId, uiLocale]);
 
   useEffect(() => {
     fetchCatalogList();

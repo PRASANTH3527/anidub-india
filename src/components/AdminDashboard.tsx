@@ -1,31 +1,8 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import {
-  Plus,
-  Sparkles,
-  Loader2,
-  CheckCircle2,
-  Zap,
-  RefreshCw,
-  Globe,
-  LogOut,
-  Inbox,
-  Database,
-  FileSpreadsheet,
-  Download,
-  X,
-  HelpCircle,
-  Shield,
-  ShieldAlert,
-  AlertTriangle,
-  Sliders,
-  HardDrive,
-  Activity,
-  Terminal,
-  Command,
-  ChevronRight,
-  PanelLeftClose,
-  PanelLeft,
-  Radio,
+  Plus, Sparkles, Loader2, CheckCircle2, Zap, RefreshCw, Globe, LogOut, Inbox, Database,
+  FileSpreadsheet, Download, X, HelpCircle, Shield, ShieldAlert, AlertTriangle, Sliders,
+  HardDrive, Activity, Terminal, Command, ChevronRight, PanelLeftClose, PanelLeft, Radio, Languages,
 } from 'lucide-react';
 import { DubInfoModal } from './DubInfoModal';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
@@ -50,6 +27,7 @@ import { isAuthorizedClerkAdmin } from '../utils/auth';
 import { AdminOverviewTab, type GenreStatBar } from './admin/AdminOverviewTab';
 import { AdminPendingTab } from './admin/AdminPendingTab';
 import { AdminCatalogTab } from './admin/AdminCatalogTab';
+import { AdminTranslationsTab } from './admin/AdminTranslationsTab';
 import { AdminDataHealthTab } from './admin/AdminDataHealthTab';
 import { AdminFeedbackTab } from './admin/AdminFeedbackTab';
 import { AdminSettingsTab } from './admin/AdminSettingsTab';
@@ -1442,6 +1420,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
       { id: 'nav-overview', title: 'Dashboard Overview', desc: 'System metrics & telemetry charts', tab: 'overview', icon: Sliders },
       { id: 'nav-pending', title: `Community Pending Queue (${pendingCount})`, desc: 'Review & approve regional dub submissions', tab: 'pending', icon: Inbox },
       { id: 'nav-catalog', title: `Anime Catalog Matrix (${catalog.length})`, desc: 'Manage anime records on Cloudflare D1', tab: 'catalog', icon: Database },
+      { id: 'nav-translations', title: 'Multilingual Translation Center', desc: 'Manage Tamil, Hindi, Telugu, Malayalam, Kannada & Bengali synopses', tab: 'translations', icon: Languages },
       { id: 'nav-feedback', title: `User Feedback Reports (${feedbackList.length})`, desc: 'Issue reports & requests from users', tab: 'feedback', icon: Inbox },
       { id: 'nav-health', title: 'IMDb & Diagnostics Probe', desc: 'Missing streaming links & rating health', tab: 'data_health', icon: Shield },
       { id: 'nav-analytics', title: 'Cloudflare Edge Analytics', desc: 'Worker latency, hit rates & bandwidth', tab: 'analytics', icon: Activity },
@@ -1603,6 +1582,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
     { id: 'overview' as const, label: 'Overview', icon: Sliders },
     { id: 'pending' as const, label: 'Pending Reviews', count: pendingCount, icon: Inbox },
     { id: 'catalog' as const, label: 'Anime Catalog', count: catalog.length, icon: Database },
+    { id: 'translations' as const, label: 'Translations', icon: Languages },
     { id: 'feedback' as const, label: 'User Feedback', count: feedbackList.length, icon: Inbox },
     { id: 'data_health' as const, label: 'IMDb & Diagnostics', icon: Shield },
     { id: 'analytics' as const, label: 'Edge Analytics', icon: Activity },
@@ -1998,6 +1978,13 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                   }}
                   onOpenEditModal={handleOpenEditModal}
                   onDeleteAnime={handleDeleteCatalogAnime}
+                />
+              )}
+
+              {activeAdminTab === 'translations' && (
+                <AdminTranslationsTab
+                  catalog={catalog}
+                  onSuccess={(msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000); }}
                 />
               )}
 

@@ -21,6 +21,7 @@ export async function onRequest(context: PagesSitemapContext): Promise<Response>
   }
 
   let animeRows: SitemapAnimeRow[] = [];
+  const publishedTranslationsByAnimeId = new Map<string, string[]>();
   if (env?.DB && typeof env.DB.prepare === 'function') {
     try {
       const result = await env.DB.prepare(
@@ -32,10 +33,26 @@ export async function onRequest(context: PagesSitemapContext): Promise<Response>
     } catch {
       animeRows = [];
     }
+
+    try {
+      const trResult = await env.DB.prepare(
+        "SELECT at.anime_id, at.locale FROM anime_translations at INNER JOIN anime a ON CAST(a.id AS TEXT) = at.anime_id WHERE (a.is_published = 1 OR a.is_published = true) AND (a.status IS NULL OR a.status != 'pending') AND at.translation_status = 'published'"
+      ).all<{ anime_id?: string | number; locale?: string }>();
+      for (const tr of trResult?.results || []) {
+        const aId = tr?.anime_id !== undefined && tr?.anime_id !== null ? String(tr.anime_id) : '';
+        const loc = typeof tr?.locale === 'string' ? tr.locale.trim().toLowerCase() : '';
+        if (!aId || !loc) continue;
+        const list = publishedTranslationsByAnimeId.get(aId) || [];
+        if (!list.includes(loc)) list.push(loc);
+        publishedTranslationsByAnimeId.set(aId, list);
+      }
+    } catch {
+      // Gracefully omit localized sitemap alternates if anime_translations is not yet migrated
+    }
   }
 
   const origin = new URL(request.url).origin;
-  const xml = buildDynamicSitemapXml(animeRows, origin);
+  const xml = buildDynamicSitemapXml(animeRows, origin, publishedTranslationsByAnimeId);
 
   return new Response(request.method === 'HEAD' ? null : xml, {
     status: 200,

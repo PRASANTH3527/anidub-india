@@ -21,6 +21,8 @@ import {
 import { normalizeAnimeStatusFields, resolveCanonicalAnimeStatus } from '../../utils/animeStatus';
 import { FREE_LEGAL_PLATFORM_PATTERNS, getPlatformSqlAliases } from '../../utils/ottHub';
 import { expandSearchQueryVariants } from '../../utils/searchFilterState';
+import { mergePublishedTranslation, normalizeTranslationLocale } from '../../utils/animeTranslations';
+import { fetchPublishedTranslationsMap } from './translationRoutes';
 import { getErrorMessage, isMissingColumnError, sendTelegramAlert, type RouteContext } from './shared';
 
 const BASE_PUBLISHED_CLAUSE =
@@ -375,17 +377,31 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           if (totalItems > 0) {
             const queryParams = [...params, limit, offset];
             const dataRes = await env.DB.prepare(`SELECT * FROM anime ${whereSql} ${orderSql} LIMIT ? OFFSET ?`).bind(...queryParams).all();
-            results = (dataRes.results || []).map((row) => {
+            const localeParam = normalizeTranslationLocale(url.searchParams.get('locale') || url.searchParams.get('lang'));
+            const rawRows = dataRes.results || [];
+            const translationsByAnimeId =
+              localeParam && localeParam !== 'en'
+                ? await fetchPublishedTranslationsMap(
+                    env.DB,
+                    rawRows.map((r) => String(r.id)),
+                    localeParam
+                  )
+                : new Map();
+            results = rawRows.map((row) => {
               const { last_verified_date: _ignoredLastVerified, ...cleanRow } = row;
               const canonicalRow = normalizeAnimeStatusFields(cleanRow);
               const parsedPartners = normalizeStreamingPartners(canonicalRow.streaming_partners || canonicalRow.platforms_data);
-              if (parsedPartners.length === 0) return canonicalRow;
-              return {
-                ...canonicalRow,
-                streaming_partners: parsedPartners,
-                platforms_data: parsedPartners,
-                watch_providers: parsedPartners,
-              };
+              const baseRow =
+                parsedPartners.length === 0
+                  ? canonicalRow
+                  : {
+                      ...canonicalRow,
+                      streaming_partners: parsedPartners,
+                      platforms_data: parsedPartners,
+                      watch_providers: parsedPartners,
+                    };
+              if (!localeParam || localeParam === 'en') return baseRow;
+              return mergePublishedTranslation(baseRow, translationsByAnimeId.get(String(row.id)), localeParam);
             });
           }
 
@@ -957,30 +973,44 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               (typeof anime.created_at === 'string' && anime.created_at.trim()) ||
               null;
 
+            const localeParam = normalizeTranslationLocale(url.searchParams.get('locale') || url.searchParams.get('lang'));
+            let publishedTranslation = null;
+            if (localeParam && localeParam !== 'en') {
+              const trMap = await fetchPublishedTranslationsMap(env.DB, [String(anime.id)], localeParam);
+              publishedTranslation = trMap.get(String(anime.id)) || null;
+            }
+
+            const basePayload = {
+              ...cleanAnime,
+              last_verified_at: resolvedLastVerified,
+              franchise_id: rawFranchiseId || '',
+              relation_type: anime.relation_type || '',
+              sequence_number: anime.sequence_number ?? null,
+              franchise_entries: franchiseEntries,
+              streaming_partners: streamingPartners,
+              platforms_data: streamingPartners,
+              watch_providers: streamingPartners,
+              mixed_entries: mixedEntries,
+              mixedEntries,
+              episodes: episodes.results || [],
+              reviews: reviewRows,
+              average_score: communityRating,
+              averageScore: communityRating,
+              community_rating: communityRating,
+              communityRating,
+              total_votes: communityVotes,
+              totalVotes: communityVotes,
+              community_votes: communityVotes,
+              communityVotes,
+            };
+
+            const finalPayload =
+              localeParam && localeParam !== 'en'
+                ? mergePublishedTranslation(basePayload, publishedTranslation, localeParam)
+                : basePayload;
+
             return jsonResponse(
-              {
-                ...cleanAnime,
-                last_verified_at: resolvedLastVerified,
-                franchise_id: rawFranchiseId || '',
-                relation_type: anime.relation_type || '',
-                sequence_number: anime.sequence_number ?? null,
-                franchise_entries: franchiseEntries,
-                streaming_partners: streamingPartners,
-                platforms_data: streamingPartners,
-                watch_providers: streamingPartners,
-                mixed_entries: mixedEntries,
-                mixedEntries,
-                episodes: episodes.results || [],
-                reviews: reviewRows,
-                average_score: communityRating,
-                averageScore: communityRating,
-                community_rating: communityRating,
-                communityRating,
-                total_votes: communityVotes,
-                totalVotes: communityVotes,
-                community_votes: communityVotes,
-                communityVotes,
-              },
+              finalPayload,
               200,
               request,
               {
