@@ -123,7 +123,15 @@ export function partitionOverviewAttentionChecks(
   };
 }
 
-export type AdminMobileNavGroup = 'overview' | 'catalog' | 'dubs' | 'studio' | 'more';
+export type AdminMobileNavGroup = 'overview' | 'catalog' | 'dubs' | 'tools' | 'more';
+
+export const ADMIN_TOOLS_TABS: readonly AdminActiveTab[] = [
+  'imdb_checker',
+  'data_health',
+  'translations',
+  'franchises',
+  'cast',
+] as const;
 
 export const ADMIN_STUDIO_TABS: readonly AdminActiveTab[] = [
   'translations',
@@ -133,7 +141,6 @@ export const ADMIN_STUDIO_TABS: readonly AdminActiveTab[] = [
 
 export const ADMIN_MORE_TABS: readonly AdminActiveTab[] = [
   'moderation',
-  'data_health',
   'analytics',
   'activity_log',
   'recycle_bin',
@@ -148,22 +155,23 @@ export const ADMIN_QUICK_PILL_TABS: ReadonlyArray<{
   { id: 'overview', label: 'Home' },
   { id: 'catalog', label: 'Catalog' },
   { id: 'dubs', label: 'Dubs' },
+  { id: 'backup', label: 'Bulk CSV & Backup' },
+  { id: 'imdb_checker', label: 'IMDb Checker' },
+  { id: 'data_health', label: 'Data Health' },
   { id: 'translations', label: 'Translations' },
   { id: 'franchises', label: 'Franchise' },
   { id: 'cast', label: 'Cast' },
   { id: 'moderation', label: 'Moderation' },
-  { id: 'data_health', label: 'Data Health' },
   { id: 'analytics', label: 'Analytics 2.0' },
   { id: 'activity_log', label: 'Activity Log' },
   { id: 'recycle_bin', label: 'Recycle Bin' },
-  { id: 'backup', label: 'Backup' },
-  { id: 'settings', label: 'Settings' },
+  { id: 'settings', label: 'Telegram & Settings' },
 ];
 
 export function resolveMobileAdminActiveGroup(effectiveTab: AdminActiveTab): AdminMobileNavGroup {
   if (effectiveTab === 'overview') return 'overview';
   if (effectiveTab === 'catalog' || effectiveTab === 'editor') return 'catalog';
   if (effectiveTab === 'dubs') return 'dubs';
-  if (ADMIN_STUDIO_TABS.includes(effectiveTab)) return 'studio';
+  if (ADMIN_TOOLS_TABS.includes(effectiveTab)) return 'tools';
   return 'more';
 }

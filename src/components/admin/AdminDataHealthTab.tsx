@@ -9,6 +9,8 @@ import {
   ExternalLink,
   RefreshCw,
   XCircle,
+  Star,
+  Wrench,
 } from 'lucide-react';
 import type { DataHealthFilter } from './types';
 import { cloudflareApi, type AdminLinkCheckResponse } from '../../services/cloudflareApi';
@@ -138,6 +140,9 @@ export interface AdminDataHealthTabProps {
   onEditAnime: (anime: any, targetEditorTab?: AnimeEditorTabId) => void;
   onJumpToFranchises?: () => void;
   onJumpToCast?: () => void;
+  onOpenImdbChecker?: () => void;
+  onNormalizePlatforms?: () => void;
+  isNormalizingPlatforms?: boolean;
   linkCheckReport: AdminLinkCheckResponse | null;
   isCheckingLinks: boolean;
   onRunLinkCheck: () => void;
@@ -168,6 +173,9 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
   onEditAnime,
   onJumpToFranchises,
   onJumpToCast,
+  onOpenImdbChecker,
+  onNormalizePlatforms,
+  isNormalizingPlatforms = false,
   linkCheckReport,
   isCheckingLinks,
   onRunLinkCheck,
@@ -400,6 +408,35 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
               </>
             )}
           </button>
+
+          {onOpenImdbChecker && (
+            <button
+              type="button"
+              data-testid="data-health-imdb-checker-btn"
+              onClick={onOpenImdbChecker}
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Star className="w-4 h-4 shrink-0" />
+              <span>IMDb Ratings Checker</span>
+            </button>
+          )}
+
+          {onNormalizePlatforms && (
+            <button
+              type="button"
+              data-testid="data-health-normalize-platforms-btn"
+              onClick={onNormalizePlatforms}
+              disabled={isNormalizingPlatforms}
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {isNormalizingPlatforms ? (
+                <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-primary)]" />
+              ) : (
+                <Wrench className="w-4 h-4 text-[var(--accent-primary)]" />
+              )}
+              <span>Normalize OTT Tags</span>
+            </button>
+          )}
 
           {chunkedRunning && (
             <button

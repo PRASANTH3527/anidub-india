@@ -36,6 +36,8 @@ import {
   Palette,
   Sparkles,
   ExternalLink,
+  Star,
+  Wrench,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../context/ThemeContext';
@@ -80,6 +82,11 @@ import { AdminFranchiseBuilderTab } from './admin/AdminFranchiseBuilderTab';
 import { AdminCastManagerTab } from './admin/AdminCastManagerTab';
 import { AdminBackupCenterTab } from './admin/AdminBackupCenterTab';
 import { AdminRecycleBinTab } from './admin/AdminRecycleBinTab';
+import { AdminImdbCheckerTab } from './admin/AdminImdbCheckerTab';
+import {
+  computeGenreDistributionFromCatalog,
+  parseCsvTextToAnimeRows,
+} from '../utils/adminLegacyRestore';
 
 export interface AdminDashboardProps {
   onAnimeCreated?: (updatedAnime?: any, deletedId?: string | number) => void;
@@ -187,6 +194,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isCsvHelpOpen, setIsCsvHelpOpen] = useState<boolean>(false);
   const [csvDryRunReport, setCsvDryRunReport] = useState<CsvDryRunSummary | null>(null);
   const [stagedCsvRows, setStagedCsvRows] = useState<any[]>([]);
+  const [backupFocusSection, setBackupFocusSection] = useState<'csv' | 'backup'>('backup');
+  const [isNormalizingPlatforms, setIsNormalizingPlatforms] = useState<boolean>(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   // Diagnostics & D1 Status State
@@ -389,7 +398,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     if (
       isClerkAdminAuthorized &&
-      (activeTab === 'data_health' ||
+      (activeTab === 'overview' ||
+        activeTab === 'data_health' ||
+        activeTab === 'imdb_checker' ||
         activeTab === 'translations' ||
         activeTab === 'backup' ||
         activeTab === 'franchises' ||
@@ -672,6 +683,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ? d1.missingTranslationsCount
         : publishedAnimeCount;
 
+    const serverGenreCounts =
+      d1?.genreCounts && typeof d1.genreCounts === 'object' && Object.keys(d1.genreCounts).length > 0
+        ? d1.genreCounts
+        : computeGenreDistributionFromCatalog(fallbackPool, 20).genreCounts;
+
     return {
       publishedAnimeCount,
       totalAnimeCount,
@@ -689,6 +705,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       d1Connected: Boolean(d1?.connected),
       d1LatencyMs: Number(d1?.latencyMs || 12),
       languageCounts: d1?.languageCounts || computedLangCounts,
+      genreCounts: serverGenreCounts,
     };
   }, [cfStatus, fullAdminIndex, catalogItems, catalogTotalItems, pendingItems, feedbackList]);
 
@@ -1420,109 +1437,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     showToast(`Exported ${exportList.length} titles as D1 SQL Dump!`, 'success');
   };
 
-  const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const runCsvTextDryRun = async (rawCsvText: string) => {
     setIsUploadingCsv(true);
-
     try {
-      const text = await file.text();
-      const parseCSV = (raw: string): string[][] => {
-        const result: string[][] = [];
-        let row: string[] = [];
-        let current = '';
-        let inQuotes = false;
-        const cleanText = raw.replace(/^\uFEFF/, '');
-        for (let i = 0; i < cleanText.length; i++) {
-          const char = cleanText[i];
-          const nextChar = cleanText[i + 1];
-          if (char === '"') {
-            if (inQuotes && nextChar === '"') {
-              current += '"';
-              i++;
-            } else {
-              inQuotes = !inQuotes;
-            }
-          } else if (char === ',' && !inQuotes) {
-            row.push(current.trim());
-            current = '';
-          } else if ((char === '\r' || char === '\n') && !inQuotes) {
-            if (char === '\r' && nextChar === '\n') i++;
-            row.push(current.trim());
-            if (row.some((cell) => cell !== '')) result.push(row);
-            row = [];
-            current = '';
-          } else {
-            current += char;
-          }
-        }
-        if (current !== '' || row.length > 0) {
-          row.push(current.trim());
-          if (row.some((cell) => cell !== '')) result.push(row);
-        }
-        return result;
-      };
-
-      const rows = parseCSV(text);
-      if (rows.length < 2) {
-        showToast('CSV file is empty or missing data rows.', 'error');
-        setIsUploadingCsv(false);
+      const parsed = parseCsvTextToAnimeRows(rawCsvText);
+      if (parsed.error || parsed.rows.length === 0) {
+        showToast(parsed.error || 'Could not find valid anime rows in CSV.', 'error');
         return;
       }
 
-      const rawHeaders = rows[0].map((h) => h.replace(/^"|"$/g, '').trim());
-      const parsedItems: any[] = [];
-
-      for (let i = 1; i < rows.length; i++) {
-        const values = rows[i];
-        if (!values || values.length === 0) continue;
-        const rowObj: any = {};
-        rawHeaders.forEach((h, idx) => {
-          if (h) rowObj[h] = values[idx] !== undefined ? values[idx].replace(/^"|"$/g, '').trim() : '';
-        });
-
-        const getField = (possibleNames: string[]) => {
-          for (const key of Object.keys(rowObj)) {
-            const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (possibleNames.includes(normKey) && rowObj[key] !== '') {
-              return rowObj[key];
-            }
-          }
-          return '';
-        };
-
-        const title = getField(['title', 'name', 'animetitle', 'animename']) || values[0] || '';
-        if (!title || title.toLowerCase() === 'title') continue;
-
-        parsedItems.push({
-          ...rowObj,
-          title,
-          posterUrl: getField(['posterurl', 'poster', 'coverimage', 'image', 'cover']),
-          synopsis: getField(['synopsis', 'description', 'summary', 'plot']),
-          rating: getField(['rating', 'score', 'malscore']) || '8.5',
-          releaseYear: getField(['releaseyear', 'year', 'aired']) || '2024',
-          status: getField(['status', 'airingstatus']) || 'Completed',
-          type: getField(['type', 'format', 'mediatype']) || 'TV Series',
-          studio: getField(['studio', 'studios', 'producer']) || 'MAPPA',
-          genres: getField(['genres', 'genre', 'tags', 'categories']) || 'Action, Fantasy',
-          languages: getField(['languages', 'language', 'dublanguages', 'dub', 'audio']) || '',
-          platforms: getField(['platforms', 'platform', 'streaming', 'ott', 'watchon']) || '',
-          episodes: getField(['episodes', 'episodecount', 'totalepisodes', 'eps']) || '12',
-        });
-      }
-
-      if (parsedItems.length === 0) {
-        showToast('Could not find valid anime rows in CSV.', 'error');
-        setIsUploadingCsv(false);
-        return;
-      }
-
-      // Phase 2: Safe CSV Import Dry-Run before committing
+      const parsedItems = parsed.rows;
       setStagedCsvRows(parsedItems);
+
       try {
         const dryRes = await cloudflareApi.dryRunImportCsv(parsedItems);
         if (dryRes && dryRes.report) {
           setCsvDryRunReport(dryRes.report);
+          setBackupFocusSection('csv');
           setActiveTab('backup');
           showToast(
             `Dry-Run Complete: ${dryRes.report.validCount} valid, ${dryRes.report.duplicateCount} duplicates, ${dryRes.report.invalidCount} errors. Review before committing.`,
@@ -1535,6 +1466,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const existingSource = fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems;
         const localDryReport = validateCsvDryRunRows(parsedItems, existingSource);
         setCsvDryRunReport(localDryReport);
+        setBackupFocusSection('csv');
         setActiveTab('backup');
         showToast(
           `Dry-Run Complete: ${localDryReport.validCount} valid, ${localDryReport.duplicateCount} duplicates, ${localDryReport.invalidCount} errors.`,
@@ -1546,7 +1478,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       showToast(`CSV Dry-Run Failed: ${err?.message || 'Unknown error'}`, 'error');
     } finally {
       setIsUploadingCsv(false);
+    }
+  };
+
+  const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      await runCsvTextDryRun(text);
+    } finally {
       if (csvInputRef.current) csvInputRef.current.value = '';
+    }
+  };
+
+  const handleNormalizePlatforms = async () => {
+    setIsNormalizingPlatforms(true);
+    try {
+      const res = await cloudflareApi.normalizeAdminPlatforms();
+      addLog(
+        `OTT Platform Normalizer scanned ${res.totalScanned} rows, standardized ${res.updatedCount} rows.`,
+        'SUCCESS'
+      );
+      showToast(
+        res.updatedCount > 0
+          ? `Normalized OTT platform tags on ${res.updatedCount} anime title(s) (scanned ${res.totalScanned}).`
+          : `All ${res.totalScanned} catalog OTT platform tags are already normalized.`,
+        'success'
+      );
+      if (res.updatedCount > 0) {
+        void fetchPaginatedAdminCatalog(catalogPage);
+        void fetchFullIndexForTools();
+      }
+    } catch (err: any) {
+      addLog(`Platform normalizer error: ${err?.message || 'Unknown error'}`, 'ERROR');
+      showToast(err?.message || 'Platform normalization failed.', 'error');
+    } finally {
+      setIsNormalizingPlatforms(false);
     }
   };
 
@@ -1653,6 +1621,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setActiveTab(language === 'Unverified' ? 'dubs' : 'catalog');
   };
 
+  const handleFilterCatalogByGenre = (genre: string) => {
+    setSearchQuery(genre);
+    setCatalogPage(1);
+    setActiveTab('catalog');
+  };
+
+  const handleOpenBulkCsvUpload = () => {
+    setBackupFocusSection('csv');
+    handleSelectNavTab('backup');
+  };
+
   const totalModerationBadge =
     overviewStats.pendingModerationCount + overviewStats.openFeedbackCount;
 
@@ -1702,7 +1681,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       ],
     },
     {
-      groupLabel: 'Operations',
+      groupLabel: 'Operations & Tools',
       items: [
         {
           id: 'moderation',
@@ -1717,16 +1696,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           badge:
             dataHealthReport.summary.all > 0 ? dataHealthReport.summary.all : undefined,
         },
-        { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+        {
+          id: 'imdb_checker',
+          label: 'IMDb Ratings Checker',
+          icon: Star,
+        },
+        { id: 'analytics', label: 'Analytics 2.0', icon: BarChart3 },
       ],
     },
     {
       groupLabel: 'System',
       items: [
-        { id: 'backup', label: 'Backup & CSV', icon: Download },
+        { id: 'backup', label: 'Bulk CSV & Backup', icon: Upload },
         { id: 'recycle_bin', label: 'Recycle Bin', icon: Trash2 },
         { id: 'activity_log', label: 'Activity Log', icon: Activity },
-        { id: 'settings', label: 'Settings', icon: Settings },
+        { id: 'settings', label: 'Telegram & Settings', icon: Settings },
       ],
     },
   ];
@@ -1920,16 +1904,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {effectiveTab === 'cast' && 'Cast & Voice Actors'}
                 {effectiveTab === 'moderation' && 'Moderation Inbox'}
                 {effectiveTab === 'data_health' && 'Data Health QA'}
+                {effectiveTab === 'imdb_checker' && 'IMDb Ratings Checker'}
                 {effectiveTab === 'analytics' && 'Analytics 2.0'}
-                {effectiveTab === 'backup' && 'Backup & Export'}
+                {effectiveTab === 'backup' && 'Bulk CSV & Backup Center'}
                 {effectiveTab === 'recycle_bin' && 'Recycle Bin'}
                 {effectiveTab === 'activity_log' && 'Activity Log'}
-                {effectiveTab === 'settings' && 'Settings'}
+                {effectiveTab === 'settings' && 'Telegram & Settings'}
               </h1>
             </div>
           </div>
 
-          {/* Right: Search/Ctrl+K, Theme Toggle, Quick + Add, Exit to Site */}
+          {/* Right: Search/Ctrl+K, Terminal HUD (>_), Theme Toggle, Quick + Add, Exit to Site */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <button
               type="button"
@@ -1944,6 +1929,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <kbd className="hidden md:inline-block px-1 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[10px] font-mono leading-none">
                 ⌘K
               </kbd>
+            </button>
+
+            <button
+              type="button"
+              data-testid="admin-topbar-terminal-btn"
+              onClick={() => setIsDiagnosticsOpen(true)}
+              className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] sm:px-2 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] inline-flex items-center justify-center gap-1 cursor-pointer transition-colors"
+              aria-label="Open Terminal HUD & Diagnostics"
+              title="Terminal HUD & Edge Diagnostics"
+            >
+              <Terminal className="w-4 h-4 shrink-0" />
             </button>
 
             <button
@@ -2045,6 +2041,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onSetActiveTab={handleSelectNavTab}
               onOpenAddModal={() => handleOpenModularEditor(null, 'identity')}
               onFilterCatalogByLanguage={handleFilterCatalogByLanguage}
+              onFilterCatalogByGenre={handleFilterCatalogByGenre}
               onApprovePending={handleApprove}
               onRejectPending={handleReject}
             />
@@ -2206,9 +2203,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }
               onJumpToFranchises={() => handleSelectNavTab('franchises')}
               onJumpToCast={() => handleSelectNavTab('cast')}
+              onOpenImdbChecker={() => handleSelectNavTab('imdb_checker')}
+              onNormalizePlatforms={() => void handleNormalizePlatforms()}
+              isNormalizingPlatforms={isNormalizingPlatforms}
               linkCheckReport={linkCheckReport}
               isCheckingLinks={isCheckingLinks}
               onRunLinkCheck={handleRunLinkCheck}
+            />
+          )}
+
+          {/* SECTION 7B: RESTORED LEGACY IMDb & EXTERNAL RATINGS CHECKER */}
+          {effectiveTab === 'imdb_checker' && (
+            <AdminImdbCheckerTab
+              catalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
+              onSuccess={(msg) => showToast(msg, 'success')}
+              onError={(msg) => showToast(msg, 'error')}
+              onRatingsUpdated={() => {
+                void fetchPaginatedAdminCatalog(catalogPage);
+                void fetchFullIndexForTools();
+                void fetchD1StatusSummary();
+              }}
             />
           )}
 
@@ -2233,12 +2247,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* SECTION 9: FULL BACKUP & RECOVERY CENTER */}
+          {/* SECTION 9: FULL BACKUP & BULK CSV UPLOAD CENTER */}
           {effectiveTab === 'backup' && (
             <AdminBackupCenterTab
               onFallbackExportCsv={handleExportCSV}
               onExportSql={handleExportSQL}
               onTriggerCsvUpload={() => csvInputRef.current?.click()}
+              onDryRunPastedCsv={(csvText) => void runCsvTextDryRun(csvText)}
+              initialFocusSection={backupFocusSection}
               isUploadingCsv={isUploadingCsv}
               csvDryRunReport={csvDryRunReport}
               onCancelCsvDryRun={() => {
@@ -2330,25 +2346,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               );
             })}
 
-            {/* Studio Tab -> Opens Translations / Franchise / Cast Bottom Sheet */}
+            {/* Tools Tab -> Opens Bulk CSV Upload, IMDb Ratings Checker, Data Health, Translations, Franchise, Cast */}
             <button
               type="button"
-              data-testid="admin-mobile-tab-studio"
+              data-testid="admin-mobile-tab-tools"
               onClick={() => {
                 setIsMobileMoreOpen(false);
                 setIsMobileStudioOpen((prev) => !prev);
               }}
               className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl relative transition-colors cursor-pointer ${
-                isMobileStudioOpen || (activeMobileGroup === 'studio' && !isMobileMoreOpen)
+                isMobileStudioOpen || (activeMobileGroup === 'tools' && !isMobileMoreOpen)
                   ? 'text-[var(--accent-primary)] font-extrabold'
                   : 'text-[var(--text-secondary)] font-semibold'
               }`}
             >
-              <Sparkles className="w-5 h-5" />
-              <span className="text-[11px]">Studio</span>
+              <Wrench className="w-5 h-5" />
+              <span className="text-[11px]">Tools</span>
             </button>
 
-            {/* More Tab -> Opens Moderation, Data Health, Analytics 2.0, Activity Log, Recycle Bin, Backup, Diagnostics, Settings */}
+            {/* More Tab -> Opens Moderation, Analytics 2.0, Activity Log, Recycle Bin, Backup Center, Telegram & Settings, Terminal HUD */}
             <button
               type="button"
               data-testid="admin-mobile-tab-more"
@@ -2374,24 +2390,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         );
       })()}
 
-      {/* MOBILE "STUDIO" BOTTOM SHEET (Translations / Franchise / Cast) */}
+      {/* MOBILE "TOOLS" BOTTOM SHEET (Bulk CSV Upload, IMDb Ratings Checker, Data Health, Translations, Franchise, Cast) */}
       {isMobileStudioOpen && (
         <div
-          data-testid="admin-mobile-studio-drawer"
+          data-testid="admin-mobile-tools-drawer"
           className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs"
           onClick={() => setIsMobileStudioOpen(false)}
         >
           <div
-            className="w-full bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] rounded-t-2xl p-4 pb-6 space-y-3 shadow-2xl"
+            className="w-full bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] rounded-t-2xl p-4 pb-6 space-y-3 shadow-2xl max-h-[82vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
               <span className="text-sm font-extrabold text-[var(--text-primary)]">
-                Content Studio
+                Content Studio &amp; Tools
               </span>
               <button
                 type="button"
-                aria-label="Close Studio Menu"
+                aria-label="Close Tools Menu"
                 onClick={() => setIsMobileStudioOpen(false)}
                 className="min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer"
               >
@@ -2400,8 +2416,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <div className="grid grid-cols-1 gap-2">
+              <button
+                type="button"
+                data-testid="admin-tools-tile-bulk-csv"
+                onClick={handleOpenBulkCsvUpload}
+                className="min-h-[54px] px-3.5 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-primary)] text-left flex items-center gap-3 cursor-pointer"
+              >
+                <Upload className="w-5 h-5 text-[var(--accent-primary)] shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-xs font-extrabold truncate">Bulk CSV Upload</div>
+                  <div className="text-[11px] text-[var(--text-secondary)] truncate">
+                    File Picker · Paste CSV · Dry-Run &amp; Sample Template
+                  </div>
+                </div>
+              </button>
+
               {(
                 [
+                  {
+                    id: 'imdb_checker',
+                    label: 'IMDb Ratings Checker',
+                    sub: 'Live IMDb / MAL rating audit & batch sync',
+                    icon: Star,
+                  },
+                  {
+                    id: 'data_health',
+                    label: 'Data Health QA',
+                    sub: 'Artwork, OTT links, duplicates & platform cleanup',
+                    icon: ShieldCheck,
+                  },
                   {
                     id: 'translations',
                     label: 'Translation Studio',
@@ -2428,7 +2471,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     key={item.id}
                     type="button"
-                    data-testid={`admin-studio-tile-${item.id}`}
+                    data-testid={`admin-tools-tile-${item.id}`}
                     onClick={() => handleSelectNavTab(item.id)}
                     className={`min-h-[54px] px-3.5 py-2.5 rounded-xl border text-left flex items-center gap-3 cursor-pointer ${
                       isActive
@@ -2457,7 +2500,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* MOBILE "MORE" BOTTOM SHEET (1-Tap Tiles for All Remaining Tools) */}
+      {/* MOBILE "MORE" BOTTOM SHEET (1-Tap Tiles for Moderation, Analytics, Logs, Recycle Bin, Backup, Telegram & Terminal HUD) */}
       {isMobileMoreOpen && (
         <div
           data-testid="admin-mobile-more-drawer"
@@ -2470,7 +2513,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           >
             <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
               <span className="text-sm font-extrabold text-[var(--text-primary)]">
-                Admin Tools &amp; System
+                Admin Operations &amp; System
               </span>
               <button
                 type="button"
@@ -2486,12 +2529,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {(
                 [
                   { id: 'moderation', label: 'Moderation', icon: Clock, badge: totalModerationBadge },
-                  { id: 'data_health', label: 'Data Health', icon: ShieldCheck, badge: dataHealthReport.summary.all },
                   { id: 'analytics', label: 'Analytics 2.0', icon: BarChart3, badge: 0 },
                   { id: 'activity_log', label: 'Activity Log', icon: Activity, badge: 0 },
                   { id: 'recycle_bin', label: 'Recycle Bin', icon: Trash2, badge: 0 },
-                  { id: 'backup', label: 'Backup & Export', icon: Download, badge: 0 },
-                  { id: 'settings', label: 'Settings', icon: Settings, badge: 0 },
+                  { id: 'backup', label: 'Backup Center', icon: Download, badge: 0 },
+                  { id: 'settings', label: 'Telegram & Settings', icon: Settings, badge: 0 },
                 ] as const
               ).map((item) => {
                 const Icon = item.icon;
@@ -2501,7 +2543,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     key={item.id}
                     type="button"
                     data-testid={`admin-more-tile-${item.id}`}
-                    onClick={() => handleSelectNavTab(item.id)}
+                    onClick={() => {
+                      if (item.id === 'backup') setBackupFocusSection('backup');
+                      handleSelectNavTab(item.id);
+                    }}
                     className={`min-h-[48px] px-3 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 cursor-pointer ${
                       isActive
                         ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
@@ -2534,10 +2579,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   setIsMobileMoreOpen(false);
                   setIsDiagnosticsOpen(true);
                 }}
-                className="min-h-[48px] px-3 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-primary)] text-xs font-bold flex items-center gap-2 cursor-pointer"
+                className="min-h-[48px] px-3 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-primary)] text-xs font-bold flex items-center gap-2 cursor-pointer col-span-2"
               >
                 <Terminal className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
-                <span className="truncate">Diagnostics</span>
+                <span className="truncate">Terminal HUD &amp; Edge Diagnostics</span>
               </button>
             </div>
 
@@ -2555,7 +2600,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* 4. OPTIONAL COLLAPSIBLE DIAGNOSTICS DRAWER */}
+      {/* 4. OPTIONAL COLLAPSIBLE DIAGNOSTICS / TERMINAL HUD DRAWER */}
       <AdminTerminalHud
         isOpen={isDiagnosticsOpen}
         onClose={() => setIsDiagnosticsOpen(false)}
@@ -2574,6 +2619,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onExecuteD1Query={handleExecuteD1Query}
         onRunDiagnostics={() => void fetchD1StatusSummary()}
         isTestingApi={isTestingApi}
+        cfStatus={cfStatus}
+        onNormalizePlatforms={() => void handleNormalizePlatforms()}
+        isNormalizingPlatforms={isNormalizingPlatforms}
       />
 
       {/* 5. GLOBAL COMMAND PALETTE (⌘K) */}

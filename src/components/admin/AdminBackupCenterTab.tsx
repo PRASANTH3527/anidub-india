@@ -25,6 +25,8 @@ export interface AdminBackupCenterTabProps {
   onFallbackExportCsv: () => void;
   onExportSql: () => void;
   onTriggerCsvUpload: () => void;
+  onDryRunPastedCsv?: (csvText: string) => void;
+  initialFocusSection?: 'csv' | 'backup';
   isUploadingCsv: boolean;
   csvDryRunReport: CsvDryRunSummary | null;
   onCancelCsvDryRun: () => void;
@@ -77,6 +79,8 @@ export const AdminBackupCenterTab: React.FC<AdminBackupCenterTabProps> = ({
   onFallbackExportCsv,
   onExportSql,
   onTriggerCsvUpload,
+  onDryRunPastedCsv,
+  initialFocusSection = 'backup',
   isUploadingCsv,
   csvDryRunReport,
   onCancelCsvDryRun,
@@ -91,12 +95,24 @@ export const AdminBackupCenterTab: React.FC<AdminBackupCenterTabProps> = ({
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [isExportingJson, setIsExportingJson] = useState(false);
 
+  // Direct CSV Paste Input State (Restored Legacy Bulk CSV Feature)
+  const [pastedCsvText, setPastedCsvText] = useState<string>('');
+  const [showPasteBox, setShowPasteBox] = useState<boolean>(initialFocusSection === 'csv');
+  const csvSectionRef = useRef<HTMLDivElement>(null);
+
   // JSON Backup Dry-Run Validator State
   const [isValidatingJson, setIsValidatingJson] = useState(false);
   const [selectedJsonFileName, setSelectedJsonFileName] = useState<string | null>(null);
   const [jsonValidationResult, setJsonValidationResult] =
     useState<ContentBackupValidationReport | null>(null);
   const jsonValidatorInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (initialFocusSection === 'csv') {
+      setShowPasteBox(true);
+      csvSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [initialFocusSection]);
 
   const loadBackupStats = useCallback(async () => {
     setLoadingCounts(true);
@@ -514,33 +530,115 @@ export const AdminBackupCenterTab: React.FC<AdminBackupCenterTabProps> = ({
         )}
       </div>
 
-      {/* 3. SAFE CSV IMPORT DRY-RUN CARD */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4 shadow-sm">
+      {/* 3. BULK CSV UPLOAD & SAFE DRY-RUN IMPORT CARD (File Picker + Direct Paste) */}
+      <div
+        ref={csvSectionRef}
+        data-testid="bulk-csv-upload-card"
+        className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4 shadow-sm"
+      >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-extrabold text-[var(--text-primary)] flex items-center gap-2">
               <Upload className="w-4 h-4 text-[var(--accent-primary)]" />
-              <span>Safe CSV Catalog Import (Dry-Run First)</span>
+              <span>Bulk CSV Upload &amp; Safe Import (Dry-Run First)</span>
             </h3>
             <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-              Upload a CSV spreadsheet to preview valid rows, duplicates, and validation warnings before committing to the Pending Moderation queue.
+              Upload a CSV file or paste CSV rows directly to preview valid items, duplicates, and validation errors before committing to the Pending Moderation queue.
             </p>
           </div>
-          <button
-            type="button"
-            data-testid="backup-upload-csv-btn"
-            onClick={onTriggerCsvUpload}
-            disabled={isUploadingCsv}
-            className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold inline-flex items-center gap-2 shrink-0 cursor-pointer disabled:opacity-50"
-          >
-            {isUploadingCsv ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Upload className="w-4 h-4" />
-            )}
-            <span>Select CSV File for Dry-Run</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              data-testid="backup-toggle-paste-csv-btn"
+              onClick={() => setShowPasteBox((prev) => !prev)}
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] cursor-pointer"
+            >
+              {showPasteBox ? 'Hide Paste Box' : 'Paste CSV Text'}
+            </button>
+            <button
+              type="button"
+              data-testid="backup-upload-csv-btn"
+              onClick={onTriggerCsvUpload}
+              disabled={isUploadingCsv}
+              className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold inline-flex items-center gap-2 shrink-0 cursor-pointer disabled:opacity-50"
+            >
+              {isUploadingCsv ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4" />
+              )}
+              <span>Select CSV File</span>
+            </button>
+          </div>
         </div>
+
+        {/* Direct CSV Paste Input */}
+        {showPasteBox && (
+          <div
+            data-testid="csv-paste-panel"
+            className="p-4 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] space-y-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label
+                htmlFor="admin-csv-paste-textarea"
+                className="text-xs font-extrabold text-[var(--text-primary)]"
+              >
+                Paste CSV Text (Header Row + Anime Rows)
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setPastedCsvText(
+                    'Title,Poster URL,Synopsis,Rating,Release Year,Status,Type,Studio,Genres,Languages,Platforms,Episodes\n' +
+                      '"Solo Leveling","https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx151807-m1gX3iwfIsLu.png","Sung Jinwoo awakens as a Hunter with a leveling system.",8.8,2024,Airing,TV Series,A-1 Pictures,"Action | Fantasy","Hindi | Tamil | Telugu",Crunchyroll,12'
+                  )
+                }
+                className="min-h-[36px] px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[11px] font-bold text-[var(--accent-primary)] cursor-pointer"
+              >
+                Insert Sample CSV Row
+              </button>
+            </div>
+            <textarea
+              id="admin-csv-paste-textarea"
+              data-testid="csv-paste-textarea"
+              rows={5}
+              value={pastedCsvText}
+              onChange={(e) => setPastedCsvText(e.target.value)}
+              placeholder={'Title,Rating,Release Year,Status,Genres,Languages,Platforms\n"Naruto Shippuden",8.7,2007,Completed,"Action | Adventure","Hindi | Tamil | Telugu",Crunchyroll'}
+              className="w-full p-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-secondary)]/60 focus:outline-none focus:border-[var(--accent-primary)]"
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] text-[var(--text-secondary)]">
+                Blank Languages remain cleanly Unverified—never auto-filled.
+              </span>
+              <div className="flex items-center gap-2">
+                {pastedCsvText.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => setPastedCsvText('')}
+                    className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+                <button
+                  type="button"
+                  data-testid="csv-paste-dry-run-btn"
+                  disabled={isUploadingCsv || !pastedCsvText.trim() || !onDryRunPastedCsv}
+                  onClick={() => onDryRunPastedCsv?.(pastedCsvText)}
+                  className="min-h-[40px] px-4 py-1.5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isUploadingCsv ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                  )}
+                  <span>Preview Pasted CSV (Dry-Run)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Safe CSV Dry-Run Report Preview */}
         {csvDryRunReport && (

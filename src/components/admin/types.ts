@@ -10,6 +10,7 @@ export type AdminActiveTab =
   | 'pending'
   | 'feedback'
   | 'data_health'
+  | 'imdb_checker'
   | 'analytics'
   | 'backup'
   | 'recycle_bin'
@@ -174,4 +175,5 @@ export interface AdminOverviewStats {
   d1Connected: boolean;
   d1LatencyMs: number;
   languageCounts: Record<string, number>;
+  genreCounts?: Record<string, number>;
 }

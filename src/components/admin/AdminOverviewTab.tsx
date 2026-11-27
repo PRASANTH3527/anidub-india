@@ -11,9 +11,11 @@ import {
   ShieldAlert,
   Database,
   MessageSquare,
+  Tag,
 } from 'lucide-react';
 import type { AdminActiveTab, AdminFeedbackItem, AdminOverviewStats } from './types';
 import { partitionOverviewAttentionChecks } from '../../utils/adminShellLayout';
+import { rankGenreCounts } from '../../utils/adminLegacyRestore';
 
 export interface AdminOverviewTabProps {
   stats: AdminOverviewStats;
@@ -22,6 +24,7 @@ export interface AdminOverviewTabProps {
   onSetActiveTab: (tab: AdminActiveTab) => void;
   onOpenAddModal: () => void;
   onFilterCatalogByLanguage?: (language: string) => void;
+  onFilterCatalogByGenre?: (genre: string) => void;
   onApprovePending: (id: number | string) => void;
   onRejectPending: (id: number | string) => void;
 }
@@ -33,6 +36,7 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
   onSetActiveTab,
   onOpenAddModal,
   onFilterCatalogByLanguage,
+  onFilterCatalogByGenre,
   onApprovePending,
   onRejectPending,
 }) => {
@@ -419,6 +423,99 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 4. RESTORED OVERVIEW GENRE DISTRIBUTION CHART (Real D1 Counts, 12-Theme Semantic Tokens) */}
+      {(() => {
+        const rankedGenres = rankGenreCounts(
+          stats.genreCounts,
+          stats.totalAnimeCount || stats.publishedAnimeCount || 1,
+          10
+        );
+        const maxGenreCount = Math.max(1, rankedGenres[0]?.count || 1);
+        const barColors = [
+          'bg-[var(--accent-primary)]',
+          'bg-amber-500',
+          'bg-sky-500',
+          'bg-emerald-500',
+          'bg-purple-500',
+          'bg-rose-500',
+          'bg-pink-500',
+          'bg-indigo-500',
+          'bg-teal-500',
+          'bg-orange-500',
+        ];
+
+        return (
+          <div
+            data-testid="overview-genre-distribution-card"
+            className="p-3.5 sm:p-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="text-sm font-extrabold text-[var(--text-primary)] flex items-center gap-1.5">
+                  <Tag className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+                  <span className="truncate">Catalog Genre Distribution</span>
+                </h3>
+                <p className="text-[11px] text-[var(--text-secondary)] tabular-nums">
+                  {rankedGenres.length > 0
+                    ? `Top ${rankedGenres.length} genres across ${(stats.totalAnimeCount || 0).toLocaleString()} D1 titles · Click any genre to filter`
+                    : 'Live genre tags synced from Cloudflare D1 catalog'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onSetActiveTab('analytics')}
+                className="min-h-[36px] px-2.5 py-1 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--accent-primary)] whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                Analytics 2.0 →
+              </button>
+            </div>
+
+            {rankedGenres.length === 0 ? (
+              <div className="px-3 py-4 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] text-center">
+                No genre tags recorded yet in D1 catalog.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-x-4 gap-y-2.5">
+                {rankedGenres.map((item, idx) => {
+                  const relativeWidth = Math.max(
+                    6,
+                    Math.round((item.count / maxGenreCount) * 100)
+                  );
+                  return (
+                    <button
+                      key={item.genre}
+                      type="button"
+                      data-testid={`overview-genre-bar-${item.genre.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                      onClick={() =>
+                        onFilterCatalogByGenre
+                          ? onFilterCatalogByGenre(item.genre)
+                          : onSetActiveTab('catalog')
+                      }
+                      className="w-full text-left space-y-1 group cursor-pointer py-0.5"
+                    >
+                      <div className="flex items-center justify-between text-xs gap-1.5">
+                        <span className="font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent-primary)] transition-colors truncate">
+                          {item.genre}
+                        </span>
+                        <span className="font-mono tabular-nums text-[11px] text-[var(--text-secondary)] shrink-0">
+                          {item.count.toLocaleString()} · {item.percentage}%
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${barColors[idx % barColors.length]} rounded-full transition-all duration-300`}
+                          style={{ width: `${relativeWidth}%` }}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 };

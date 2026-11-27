@@ -16,6 +16,8 @@ import {
   Mic2,
   Activity,
   Trash2,
+  Star,
+  Upload,
 } from 'lucide-react';
 import type { AdminActiveTab } from './types';
 
@@ -134,8 +136,17 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
       },
     },
     {
-      label: 'Open Backup Center (CSV, JSON Bundle & Dry-Run Validator)',
-      icon: Download,
+      label: 'Open IMDb & External Ratings Checker (Sync Ratings)',
+      icon: Star,
+      color: 'text-amber-500',
+      action: () => {
+        onSetActiveTab('imdb_checker');
+        onClose();
+      },
+    },
+    {
+      label: 'Open Bulk CSV Upload & Backup Center (File, Paste & Dry-Run)',
+      icon: Upload,
       color: 'text-emerald-500',
       action: () => {
         onSetActiveTab('backup');
@@ -188,7 +199,7 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
       },
     },
     {
-      label: 'Open Edge Diagnostics Drawer',
+      label: 'Open Terminal HUD & Edge Diagnostics (>_)',
       icon: Terminal,
       color: 'text-[var(--accent-primary)]',
       action: () => {
@@ -197,7 +208,7 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
       },
     },
     {
-      label: 'Go to System Settings',
+      label: 'Go to Telegram Bot & System Settings',
       icon: Settings,
       color: 'text-[var(--text-secondary)]',
       action: () => {

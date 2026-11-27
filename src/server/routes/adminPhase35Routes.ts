@@ -11,6 +11,12 @@ import {
   validateRecycleBinPurgeConfirmation,
   checkDailyAiUsageQuota,
 } from '../../utils/adminPhase35Polish';
+import {
+  evaluateImdbRatingDiff,
+  sanitizeRatingScore,
+  redactSensitiveTokens,
+  type ImdbRatingCandidate,
+} from '../../utils/adminLegacyRestore';
 
 function safeJsonParse<T>(raw: unknown, fallback: T): T {
   if (!raw || typeof raw !== 'string') return fallback;
@@ -289,7 +295,9 @@ export async function handleAdminPhase35Routes(ctx: RouteContext): Promise<Respo
     (path.startsWith('/api/admin/translations/') &&
       (path.endsWith('/versions') || path.endsWith('/rollback'))) ||
     (path.startsWith('/api/admin/anime/') && path.includes('/revisions')) ||
-    path.startsWith('/api/admin/dub-reviews/');
+    path.startsWith('/api/admin/dub-reviews/') ||
+    path === '/api/admin/imdb-ratings/check' ||
+    path === '/api/admin/imdb-ratings/apply';
 
   if (!isPhase35Route) {
     return null;
@@ -914,6 +922,290 @@ export async function handleAdminPhase35Routes(ctx: RouteContext): Promise<Respo
       return jsonResponse({ success: true, recycleBinId }, 200, request);
     } catch (e) {
       return jsonResponse({ error: getErrorMessage(e) || 'Failed to delete dub review' }, 500, request);
+    }
+  }
+
+  // =========================================================================
+  // 6. RESTORED LEGACY TOOL: IMDb RATINGS CHECKER & SYNC
+  //    - POST /api/admin/imdb-ratings/check (Real OMDb + Jikan/MAL live lookup, zero fake scores)
+  //    - POST /api/admin/imdb-ratings/apply (Safe single or batch rating update with activity log)
+  // =========================================================================
+  if (path === '/api/admin/imdb-ratings/check' && method === 'POST') {
+    if (!env.DB) {
+      return jsonResponse({ success: true, checkedAt: new Date().toISOString(), results: [] }, 200, request);
+    }
+
+    try {
+      const body = (await request.json().catch(() => ({}))) as {
+        animeIds?: number[];
+        filter?: 'missing' | 'default' | 'all';
+        limit?: number;
+        offset?: number;
+        search?: string;
+      };
+
+      const limit = Math.min(12, Math.max(1, Number(body.limit) || 8));
+      const offset = Math.max(0, Number(body.offset) || 0);
+      const filter = body.filter || 'missing';
+      const search = typeof body.search === 'string' ? body.search.trim() : '';
+
+      let rows: Array<Record<string, unknown>> = [];
+
+      const selectCols = 'id, title, slug, year, rating, cover_image, external_id, mal_id';
+      const fallbackSelectCols = 'id, title, slug, year, rating, cover_image';
+
+      const queryCatalogRows = async (cols: string) => {
+        if (Array.isArray(body.animeIds) && body.animeIds.length > 0) {
+          const cleanIds = body.animeIds
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0)
+            .slice(0, 12);
+          if (cleanIds.length === 0) return [];
+          const placeholders = cleanIds.map(() => '?').join(', ');
+          const res = await env.DB!.prepare(
+            `SELECT ${cols} FROM anime WHERE id IN (${placeholders}) ORDER BY id DESC`
+          )
+            .bind(...cleanIds)
+            .all<Record<string, unknown>>();
+          return res?.results || [];
+        }
+
+        const whereClauses: string[] = [];
+        const params: unknown[] = [];
+
+        if (search) {
+          whereClauses.push('LOWER(title) LIKE ?');
+          params.push(`%${search.toLowerCase()}%`);
+        }
+
+        if (filter === 'missing') {
+          whereClauses.push('(rating IS NULL OR rating = 0 OR CAST(rating AS TEXT) = "")');
+        } else if (filter === 'default') {
+          whereClauses.push('(rating IS NULL OR rating = 0 OR rating = 8.5 OR rating = 8.0)');
+        }
+
+        const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+        const res = await env.DB!.prepare(
+          `SELECT ${cols} FROM anime ${whereSql} ORDER BY id DESC LIMIT ? OFFSET ?`
+        )
+          .bind(...params, limit, offset)
+          .all<Record<string, unknown>>();
+        return res?.results || [];
+      };
+
+      try {
+        rows = await queryCatalogRows(selectCols);
+      } catch {
+        rows = await queryCatalogRows(fallbackSelectCols);
+      }
+
+      const omdbKey = String(env.OMDB_API_KEY || '').trim();
+      const results: ImdbRatingCandidate[] = [];
+
+      for (const row of rows) {
+        const animeId = Number(row.id);
+        const title = String(row.title || '').trim();
+        const year = row.year ? Number(row.year) : null;
+        const existingExternalId = String(row.external_id || '').trim();
+        const existingMalId = row.mal_id ? Number(row.mal_id) : null;
+
+        let fetchedScore: number | null = null;
+        let source = 'Not Found';
+        let matchedExternalId: string | null = existingExternalId || null;
+        let externalUrl: string | null = null;
+        let note = 'No verified rating found from live metadata sources.';
+
+        // 1. Live OMDb / IMDb lookup if OMDB_API_KEY is configured
+        if (omdbKey && title) {
+          try {
+            const isImdbId = /^tt\d{5,}$/i.test(existingExternalId);
+            const omdbParams = new URLSearchParams({ apikey: omdbKey });
+            if (isImdbId) {
+              omdbParams.set('i', existingExternalId);
+            } else {
+              omdbParams.set('t', title);
+              if (year && Number.isFinite(year)) omdbParams.set('y', String(year));
+            }
+            const omdbRes = await fetch(`https://www.omdbapi.com/?${omdbParams.toString()}`);
+            if (omdbRes.ok) {
+              const omdbData = (await omdbRes.json().catch(() => null)) as Record<string, any> | null;
+              const parsed = sanitizeRatingScore(omdbData?.imdbRating);
+              if (omdbData?.Response === 'True' && parsed !== null) {
+                fetchedScore = parsed;
+                source = 'IMDb (OMDb)';
+                if (typeof omdbData.imdbID === 'string' && omdbData.imdbID.startsWith('tt')) {
+                  matchedExternalId = omdbData.imdbID;
+                  externalUrl = `https://www.imdb.com/title/${omdbData.imdbID}/`;
+                }
+                note = omdbData.imdbVotes
+                  ? `Verified IMDb score (${omdbData.imdbVotes} votes)`
+                  : 'Verified IMDb score via OMDb API';
+              }
+            }
+          } catch {
+            // Fall through safely to Jikan/MAL public API
+          }
+        }
+
+        // 2. Real Live Jikan (MyAnimeList) Public API lookup fallback (zero API key required)
+        if (fetchedScore === null && title) {
+          try {
+            const jikanUrl = existingMalId
+              ? `https://api.jikan.moe/v4/anime/${existingMalId}`
+              : `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=3&sfw=true`;
+            const jRes = await fetch(jikanUrl, {
+              headers: { Accept: 'application/json' },
+            });
+            if (jRes.ok) {
+              const jJson = (await jRes.json().catch(() => null)) as { data?: any } | null;
+              const candidates = Array.isArray(jJson?.data)
+                ? jJson.data
+                : jJson?.data
+                  ? [jJson.data]
+                  : [];
+
+              const normTarget = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const best =
+                candidates.find((c: any) => {
+                  const t1 = String(c?.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                  const t2 = String(c?.title_english || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                  return t1 === normTarget || t2 === normTarget;
+                }) || candidates[0];
+
+              const parsed = sanitizeRatingScore(best?.score);
+              if (best && parsed !== null) {
+                fetchedScore = parsed;
+                source = 'MAL (Jikan Live)';
+                if (!matchedExternalId && best.mal_id) {
+                  matchedExternalId = `mal:${best.mal_id}`;
+                }
+                externalUrl = typeof best.url === 'string' ? best.url : null;
+                note = best.scored_by
+                  ? `Verified MAL score (${Number(best.scored_by).toLocaleString()} users)`
+                  : 'Verified live MyAnimeList score';
+              }
+            }
+          } catch {
+            // Leave fetchedScore null cleanly
+          }
+        }
+
+        const evalDiff = evaluateImdbRatingDiff(row.rating, fetchedScore);
+        results.push({
+          animeId,
+          title,
+          slug: row.slug ? String(row.slug) : null,
+          coverImage: row.cover_image ? String(row.cover_image) : null,
+          year: year ?? null,
+          currentRating: evalDiff.currentRating,
+          fetchedRating: evalDiff.fetchedRating,
+          delta: evalDiff.delta,
+          source,
+          externalId: matchedExternalId,
+          externalUrl,
+          status: evalDiff.status,
+          note,
+        });
+      }
+
+      return jsonResponse(
+        {
+          success: true,
+          checkedAt: new Date().toISOString(),
+          omdbConfigured: Boolean(omdbKey),
+          results,
+        },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    } catch (e) {
+      return jsonResponse(
+        { success: false, error: redactSensitiveTokens(getErrorMessage(e)) },
+        500,
+        request
+      );
+    }
+  }
+
+  if (path === '/api/admin/imdb-ratings/apply' && method === 'POST') {
+    if (!env.DB) {
+      return jsonResponse({ success: false, error: 'D1 database binding unavailable' }, 503, request);
+    }
+
+    try {
+      const body = (await request.json().catch(() => null)) as {
+        updates?: Array<{ animeId?: number; rating?: number; externalId?: string }>;
+      } | null;
+
+      const rawUpdates = Array.isArray(body?.updates) ? body.updates.slice(0, 50) : [];
+      if (rawUpdates.length === 0) {
+        return jsonResponse(
+          { success: false, error: 'Provide at least one validated rating update.' },
+          400,
+          request
+        );
+      }
+
+      const updatedIds: number[] = [];
+      for (const item of rawUpdates) {
+        const animeId = Number(item.animeId);
+        const validRating = sanitizeRatingScore(item.rating);
+        if (!Number.isInteger(animeId) || animeId <= 0 || validRating === null) continue;
+
+        const extId =
+          typeof item.externalId === 'string' && item.externalId.trim()
+            ? item.externalId.trim().slice(0, 64)
+            : null;
+
+        if (extId) {
+          try {
+            await env.DB.prepare(
+              `UPDATE anime
+               SET rating = ?,
+                   external_id = COALESCE(NULLIF(TRIM(external_id), ''), ?)
+               WHERE id = ?`
+            )
+              .bind(validRating, extId, animeId)
+              .run();
+          } catch {
+            await env.DB.prepare('UPDATE anime SET rating = ? WHERE id = ?')
+              .bind(validRating, animeId)
+              .run();
+          }
+        } else {
+          await env.DB.prepare('UPDATE anime SET rating = ? WHERE id = ?')
+            .bind(validRating, animeId)
+            .run();
+        }
+        updatedIds.push(animeId);
+      }
+
+      if (updatedIds.length > 0) {
+        await recordAdminActivityLog(env.DB, {
+          actor_email: adminActor,
+          action_type: 'SYNC_IMDB_RATINGS',
+          entity_type: 'anime',
+          entity_id: updatedIds.join(','),
+          summary: `Synced verified external ratings for ${updatedIds.length} anime title(s)`,
+        });
+      }
+
+      return jsonResponse(
+        {
+          success: true,
+          updatedCount: updatedIds.length,
+          updatedIds,
+        },
+        200,
+        request
+      );
+    } catch (e) {
+      return jsonResponse(
+        { success: false, error: redactSensitiveTokens(getErrorMessage(e)) },
+        500,
+        request
+      );
     }
   }
 

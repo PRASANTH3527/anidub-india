@@ -51,6 +51,7 @@ export interface CloudflareEnv {
   CLERK_AUTHORIZED_PARTIES?: string;
   ALLOWED_ORIGINS?: string;
   IMGBB_API_KEY?: string;
+  OMDB_API_KEY?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;
   ENVIRONMENT?: string;
@@ -99,13 +100,45 @@ export function isMissingColumnError(err: unknown): boolean {
   return msg.includes('no such column') || msg.includes('has no column named');
 }
 
+export async function resolveTelegramCredentials(
+  env: CloudflareEnv
+): Promise<{ token: string; chatId: string; source: 'env' | 'd1' | 'none' }> {
+  let token = String(env.TELEGRAM_BOT_TOKEN || '').trim();
+  let chatId = String(env.TELEGRAM_CHAT_ID || '').trim();
+  if (token && chatId) {
+    return { token, chatId, source: 'env' };
+  }
+
+  if (env.DB) {
+    try {
+      const res = await env.DB.prepare(
+        "SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('telegram_bot_token', 'telegram_chat_id')"
+      ).all<{ setting_key?: string; setting_value?: string }>();
+      for (const row of res?.results || []) {
+        if (row.setting_key === 'telegram_bot_token' && !token && row.setting_value) {
+          token = String(row.setting_value).trim();
+        }
+        if (row.setting_key === 'telegram_chat_id' && !chatId && row.setting_value) {
+          chatId = String(row.setting_value).trim();
+        }
+      }
+      if (token || chatId) {
+        return { token, chatId, source: 'd1' };
+      }
+    } catch {
+      // app_settings table may not exist yet; fail safely
+    }
+  }
+
+  return { token, chatId, source: token || chatId ? 'env' : 'none' };
+}
+
 export async function sendTelegramAlert(
   env: CloudflareEnv,
   text: string,
   photoUrl?: string
 ): Promise<void> {
-  const token = env.TELEGRAM_BOT_TOKEN;
-  const chatId = env.TELEGRAM_CHAT_ID;
+  const { token, chatId } = await resolveTelegramCredentials(env);
   if (!token || !chatId) return;
   try {
     if (photoUrl && (photoUrl.startsWith('http://') || photoUrl.startsWith('https://'))) {

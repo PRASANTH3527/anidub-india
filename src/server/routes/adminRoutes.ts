@@ -16,9 +16,16 @@ import { validateOfficialSourceUrl } from '../../utils/submissionValidation';
 import { classifyLinkHealthStatus, isSafePublicHttpUrl, type LinkHealthStatus } from '../../utils/linkHealth';
 import { validateCsvDryRunRows } from '../../utils/adminOpsPro';
 import { formatModerationRejectionSummary } from '../../utils/adminPhase35Polish';
+import { computeGenreDistributionFromCatalog, redactSensitiveTokens } from '../../utils/adminLegacyRestore';
 import { recordAdminActivityLog } from './adminOpsProRoutes';
 import { archiveEntityToRecycleBin } from './adminPhase35Routes';
-import { D1_DATABASE_ID, getErrorMessage, isMissingColumnError, type RouteContext } from './shared';
+import {
+  D1_DATABASE_ID,
+  getErrorMessage,
+  isMissingColumnError,
+  resolveTelegramCredentials,
+  type RouteContext,
+} from './shared';
 
 interface CsvImportRow {
   [key: string]: unknown;
@@ -450,6 +457,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
       Gujarati: 0,
       Unverified: 0,
     };
+    let genreCounts: Record<string, number> = {};
     let d1Connected = false;
     let dbLogs: Array<Record<string, unknown>> = [];
 
@@ -502,7 +510,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
           Unverified: unverifiedDubsCount,
         };
 
-        const [revRes, fbRes, openFbRes, repRes, wlRes, transRes, logsRes] = await Promise.all([
+        const [revRes, fbRes, openFbRes, repRes, wlRes, transRes, logsRes, genreRowsRes] = await Promise.all([
           env.DB.prepare('SELECT COUNT(*) as cnt FROM reviews').first<{ cnt?: number }>().catch(() => null),
           env.DB.prepare('SELECT COUNT(*) as cnt FROM feedback').first<{ cnt?: number }>().catch(() => null),
           env.DB.prepare("SELECT COUNT(*) as cnt FROM feedback WHERE COALESCE(LOWER(status), 'open') != 'resolved'")
@@ -520,6 +528,9 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
           )
             .all()
             .catch(() => ({ results: [] })),
+          env.DB.prepare('SELECT genres FROM anime WHERE genres IS NOT NULL AND TRIM(genres) != ""')
+            .all<{ genres?: string | null }>()
+            .catch(() => ({ results: [] })),
         ]);
 
         reviewsCount = Number(revRes?.cnt || 0);
@@ -530,6 +541,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         const translatedAnimeCount = Number(transRes?.translatedAnime || 0);
         missingTranslationsCount = Math.max(0, activeAnimeCount - translatedAnimeCount);
         dbLogs = (logsRes?.results || []) as Array<Record<string, unknown>>;
+        genreCounts = computeGenreDistributionFromCatalog(genreRowsRes?.results || [], 20).genreCounts;
 
         if (dbLogs.length === 0) {
           const recentAnimeRes = await env.DB.prepare(
@@ -592,6 +604,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
             reportsCount,
             watchlistCount,
             languageCounts,
+            genreCounts,
             latencyMs: d1LatencyMs,
           },
           clerk: {
@@ -1316,6 +1329,216 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
       );
     } catch (err) {
       return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
+    }
+  }
+
+  // 11. TELEGRAM BOT / CHANNEL SETTINGS (Strict Clerk Admin Auth — NEVER exposes raw bot token!)
+  if (
+    path === '/api/telegram/status' ||
+    path === '/api/telegram/settings' ||
+    path === '/api/telegram/test'
+  ) {
+    const session = await getAdminAuth(request, env);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse(
+        {
+          success: false,
+          error:
+            session.error ||
+            (!session.userId
+              ? 'Unauthorized: Valid Clerk Admin session required'
+              : 'Forbidden: Admin access required'),
+        },
+        !session.userId ? 401 : 403,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    }
+
+    const ensureSettingsTable = async () => {
+      if (!env.DB) return;
+      try {
+        await env.DB.prepare(
+          `CREATE TABLE IF NOT EXISTS app_settings (
+            setting_key TEXT PRIMARY KEY,
+            setting_value TEXT NOT NULL,
+            updated_by TEXT,
+            updated_at TEXT DEFAULT (datetime('now'))
+          )`
+        ).run();
+      } catch {
+        // Safe fallback if table creation is restricted
+      }
+    };
+
+    if (path === '/api/telegram/status' && method === 'GET') {
+      const creds = await resolveTelegramCredentials(env);
+      const botTokenSet = Boolean(creds.token);
+      const chatIdSet = Boolean(creds.chatId);
+      return jsonResponse(
+        {
+          configured: botTokenSet && chatIdSet,
+          botTokenSet,
+          chatIdSet,
+          source: creds.source,
+        },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    }
+
+    if (path === '/api/telegram/settings' && method === 'POST') {
+      try {
+        const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+        const incomingToken = typeof body?.token === 'string' ? body.token.trim() : '';
+        const incomingChatId = typeof body?.chatId === 'string' ? body.chatId.trim() : '';
+
+        if (!incomingToken && !incomingChatId) {
+          return jsonResponse(
+            { success: false, error: 'Provide a Bot API Token and/or Admin Chat ID to save.' },
+            400,
+            request
+          );
+        }
+
+        if (!env.DB) {
+          return jsonResponse(
+            {
+              success: false,
+              error:
+                'D1 database unavailable. Configure TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in Cloudflare Pages Environment Variables.',
+            },
+            503,
+            request
+          );
+        }
+
+        await ensureSettingsTable();
+        const actor = session.email || session.userId || 'admin';
+
+        if (incomingToken) {
+          await env.DB.prepare(
+            `INSERT INTO app_settings (setting_key, setting_value, updated_by, updated_at)
+             VALUES ('telegram_bot_token', ?, ?, datetime('now'))
+             ON CONFLICT(setting_key) DO UPDATE SET
+               setting_value = excluded.setting_value,
+               updated_by = excluded.updated_by,
+               updated_at = datetime('now')`
+          )
+            .bind(incomingToken, actor)
+            .run();
+        }
+
+        if (incomingChatId) {
+          await env.DB.prepare(
+            `INSERT INTO app_settings (setting_key, setting_value, updated_by, updated_at)
+             VALUES ('telegram_chat_id', ?, ?, datetime('now'))
+             ON CONFLICT(setting_key) DO UPDATE SET
+               setting_value = excluded.setting_value,
+               updated_by = excluded.updated_by,
+               updated_at = datetime('now')`
+          )
+            .bind(incomingChatId, actor)
+            .run();
+        }
+
+        await recordAdminActivityLog(env.DB, {
+          actor_email: actor,
+          action_type: 'UPDATE_TELEGRAM_SETTINGS',
+          entity_type: 'settings',
+          entity_id: 'telegram_bot',
+          summary: `Updated Telegram bot settings (${[incomingToken ? 'bot_token' : null, incomingChatId ? 'chat_id' : null].filter(Boolean).join(', ')})`,
+        });
+
+        const updatedCreds = await resolveTelegramCredentials(env);
+        return jsonResponse(
+          {
+            success: true,
+            configured: Boolean(updatedCreds.token && updatedCreds.chatId),
+            botTokenSet: Boolean(updatedCreds.token),
+            chatIdSet: Boolean(updatedCreds.chatId),
+            message: 'Telegram Bot credentials saved securely!',
+          },
+          200,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
+      } catch (err) {
+        return jsonResponse(
+          { success: false, error: redactSensitiveTokens(getErrorMessage(err)) },
+          500,
+          request
+        );
+      }
+    }
+
+    if (path === '/api/telegram/test' && method === 'POST') {
+      try {
+        const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+        const saved = await resolveTelegramCredentials(env);
+        const token =
+          typeof body?.token === 'string' && body.token.trim() ? body.token.trim() : saved.token;
+        const chatId =
+          typeof body?.chatId === 'string' && body.chatId.trim()
+            ? body.chatId.trim()
+            : saved.chatId;
+
+        if (!token || !chatId) {
+          return jsonResponse(
+            {
+              success: false,
+              error:
+                'Telegram Bot Token and Admin Chat ID must be configured before sending a test alert.',
+            },
+            400,
+            request
+          );
+        }
+
+        const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `✅ <b>AniDub India Admin Alert Test</b>\nConnected by ${session.email || 'Admin'} at ${new Date().toISOString()}`,
+            parse_mode: 'HTML',
+          }),
+        });
+        const tgData = (await tgRes.json().catch(() => null)) as {
+          ok?: boolean;
+          description?: string;
+        } | null;
+
+        if (!tgRes.ok || !tgData?.ok) {
+          return jsonResponse(
+            {
+              success: false,
+              error: redactSensitiveTokens(
+                tgData?.description || `Telegram API returned HTTP ${tgRes.status}`
+              ),
+            },
+            502,
+            request
+          );
+        }
+
+        return jsonResponse(
+          {
+            success: true,
+            message: 'Test alert delivered to your Telegram chat!',
+          },
+          200,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
+      } catch (err) {
+        return jsonResponse(
+          { success: false, error: redactSensitiveTokens(getErrorMessage(err)) },
+          500,
+          request
+        );
+      }
     }
   }
 

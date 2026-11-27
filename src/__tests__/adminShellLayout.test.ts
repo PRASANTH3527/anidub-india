@@ -4,7 +4,7 @@ import {
   isAdminWorkspaceRoute,
   partitionOverviewAttentionChecks,
   resolveMobileAdminActiveGroup,
-  ADMIN_STUDIO_TABS,
+  ADMIN_TOOLS_TABS,
   ADMIN_MORE_TABS,
   ADMIN_QUICK_PILL_TABS,
 } from '../utils/adminShellLayout';
@@ -62,23 +62,26 @@ test('partitionOverviewAttentionChecks collapses zero-count checks into a 1-line
   assert.equal(allActive.healthySummaryText, null);
 });
 
-test('resolveMobileAdminActiveGroup maps Studio and More sheets accurately and covers all Phase 1-3.5 tabs', () => {
+test('resolveMobileAdminActiveGroup maps Tools and More sheets accurately and covers all restored & Phase 1-3.5 tabs', () => {
   assert.equal(resolveMobileAdminActiveGroup('overview'), 'overview');
   assert.equal(resolveMobileAdminActiveGroup('catalog'), 'catalog');
   assert.equal(resolveMobileAdminActiveGroup('editor'), 'catalog');
   assert.equal(resolveMobileAdminActiveGroup('dubs'), 'dubs');
 
-  for (const studioTab of ADMIN_STUDIO_TABS) {
-    assert.equal(resolveMobileAdminActiveGroup(studioTab), 'studio');
+  for (const toolsTab of ADMIN_TOOLS_TABS) {
+    assert.equal(resolveMobileAdminActiveGroup(toolsTab), 'tools');
   }
-  assert.deepEqual([...ADMIN_STUDIO_TABS], ['translations', 'franchises', 'cast']);
+  assert.deepEqual(
+    [...ADMIN_TOOLS_TABS],
+    ['imdb_checker', 'data_health', 'translations', 'franchises', 'cast']
+  );
 
   for (const moreTab of ADMIN_MORE_TABS) {
     assert.equal(resolveMobileAdminActiveGroup(moreTab), 'more');
   }
   assert.deepEqual(
     [...ADMIN_MORE_TABS],
-    ['moderation', 'data_health', 'analytics', 'activity_log', 'recycle_bin', 'backup', 'settings']
+    ['moderation', 'analytics', 'activity_log', 'recycle_bin', 'backup', 'settings']
   );
 
   // Every major tab is reachable via the 1-tap horizontal quick-tab bar
@@ -87,15 +90,16 @@ test('resolveMobileAdminActiveGroup maps Studio and More sheets accurately and c
     'overview',
     'catalog',
     'dubs',
+    'backup',
+    'imdb_checker',
+    'data_health',
     'translations',
     'franchises',
     'cast',
     'moderation',
-    'data_health',
     'analytics',
     'activity_log',
     'recycle_bin',
-    'backup',
     'settings',
   ] as const) {
     assert.ok(pillIds.has(required), `Missing quick-tab pill for ${required}`);

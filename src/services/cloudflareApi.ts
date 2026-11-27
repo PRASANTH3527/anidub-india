@@ -2037,11 +2037,13 @@ class CloudflareApiService {
   }
 
   /**
-   * TELEGRAM: Fetches bot configuration status
+   * TELEGRAM: Fetches bot configuration status (Admin Auth Required)
    */
   public async fetchTelegramStatus(): Promise<TelegramStatusResponse> {
     try {
-      const res = await this.smartFetch('/api/telegram/status');
+      const res = await this.smartFetch('/api/telegram/status', {
+        headers: this.getHeaders(true),
+      });
       if (res.ok) return await res.json();
     } catch (err) {
       console.warn('Failed to fetch Telegram status:', err);
@@ -2050,7 +2052,7 @@ class CloudflareApiService {
   }
 
   /**
-   * TELEGRAM: Updates bot credentials
+   * TELEGRAM: Updates bot credentials (Admin Auth Required)
    */
   public async updateTelegramSettings(payload: { token: string; chatId: string }): Promise<{ success?: boolean; error?: string; message?: string }> {
     const res = await this.smartFetch('/api/telegram/settings', {
@@ -2062,12 +2064,12 @@ class CloudflareApiService {
   }
 
   /**
-   * TELEGRAM: Sends a test notification
+   * TELEGRAM: Sends a test notification (Admin Auth Required)
    */
   public async testTelegram(payload: Record<string, unknown> = {}): Promise<{ success?: boolean; error?: string; message?: string }> {
     const res = await this.smartFetch('/api/telegram/test', {
       method: 'POST',
-      headers: this.getHeaders(false),
+      headers: this.getHeaders(true),
       body: JSON.stringify(payload)
     });
     return await res.json();
@@ -3574,6 +3576,104 @@ class CloudflareApiService {
     }
     this.clearCatalogIndexCache();
     return json;
+  }
+
+  /**
+   * RESTORED LEGACY TOOL: IMDb / External Ratings Checker (Strict Clerk Admin Auth)
+   */
+  public async checkAdminImdbRatings(params: {
+    animeIds?: number[];
+    filter?: 'missing' | 'default' | 'all';
+    limit?: number;
+    offset?: number;
+    search?: string;
+  } = {}): Promise<{
+    success: boolean;
+    checkedAt: string;
+    omdbConfigured?: boolean;
+    results: Array<{
+      animeId: number;
+      title: string;
+      slug?: string | null;
+      coverImage?: string | null;
+      year?: number | string | null;
+      currentRating: number | null;
+      fetchedRating: number | null;
+      delta: number | null;
+      source: string;
+      externalId?: string | null;
+      externalUrl?: string | null;
+      status: 'missing_current' | 'outdated' | 'matched' | 'not_found';
+      note?: string;
+    }>;
+  }> {
+    const res = await this.smartFetch('/api/admin/imdb-ratings/check', {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(params),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `IMDb ratings check failed (HTTP ${res.status})`);
+    }
+    return {
+      success: true,
+      checkedAt: json?.checkedAt || new Date().toISOString(),
+      omdbConfigured: Boolean(json?.omdbConfigured),
+      results: Array.isArray(json?.results) ? json.results : [],
+    };
+  }
+
+  /**
+   * RESTORED LEGACY TOOL: Apply verified IMDb / External Ratings in single or batch mode
+   */
+  public async applyAdminImdbRatings(
+    updates: Array<{ animeId: number; rating: number; externalId?: string }>
+  ): Promise<{ success: boolean; updatedCount: number; updatedIds: number[] }> {
+    const res = await this.smartFetch('/api/admin/imdb-ratings/apply', {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ updates }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to apply rating updates (HTTP ${res.status})`);
+    }
+    this.clearCatalogIndexCache();
+    return {
+      success: true,
+      updatedCount: Number(json?.updatedCount || 0),
+      updatedIds: Array.isArray(json?.updatedIds) ? json.updatedIds : [],
+    };
+  }
+
+  /**
+   * RESTORED LEGACY TOOL: Normalize legacy OTT platform tags in D1
+   */
+  public async normalizeAdminPlatforms(): Promise<{
+    success: boolean;
+    totalScanned: number;
+    updatedCount: number;
+    unchangedCount: number;
+    updatedSamples: Array<{ id: number | string; before: string; after: string }>;
+  }> {
+    const res = await this.smartFetch('/api/admin/normalize-platforms', {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({}),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Platform normalization failed (HTTP ${res.status})`);
+    }
+    this.clearCatalogIndexCache();
+    return {
+      success: true,
+      totalScanned: Number(json?.totalScanned || 0),
+      updatedCount: Number(json?.updatedCount || 0),
+      unchangedCount: Number(json?.unchangedCount || 0),
+      updatedSamples: Array.isArray(json?.updatedSamples) ? json.updatedSamples : [],
+    };
   }
 }
 
