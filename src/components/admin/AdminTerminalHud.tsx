@@ -1,171 +1,236 @@
-import React, { useState } from 'react';
-import { Terminal, Minimize2, Maximize2, X, Loader2 } from 'lucide-react';
-import type { TerminalLogEntry } from './types';
+import React from 'react';
+import {
+  Terminal,
+  Trash2,
+  X,
+  Database,
+  Play,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
 
 export interface AdminTerminalHudProps {
   isOpen: boolean;
-  isExpanded: boolean;
-  logs: TerminalLogEntry[];
-  onToggleOpen: () => void;
-  onToggleExpand: () => void;
   onClose: () => void;
+  terminalLogs: string[];
   onClearLogs: () => void;
-  onAddLog: (level: string, msg: string) => void;
-  onRunProbe?: (probe: 'ping' | 'd1' | 'health') => Promise<void>;
+  d1Table: 'anime' | 'users' | 'logs';
+  setD1Table: (t: 'anime' | 'users' | 'logs') => void;
+  d1AnimeId: string;
+  setD1AnimeId: (v: string) => void;
+  d1TitleSearch: string;
+  setD1TitleSearch: (v: string) => void;
+  d1Limit: number;
+  setD1Limit: (n: number) => void;
+  d1QueryResult: any;
+  isExecutingQuery: boolean;
+  onExecuteD1Query: (e: React.FormEvent) => void;
+  onRunDiagnostics: () => void;
+  isTestingApi: boolean;
 }
 
 export const AdminTerminalHud: React.FC<AdminTerminalHudProps> = ({
   isOpen,
-  isExpanded,
-  logs,
-  onToggleOpen,
-  onToggleExpand,
   onClose,
+  terminalLogs,
   onClearLogs,
-  onAddLog,
-  onRunProbe,
+  d1Table,
+  setD1Table,
+  d1AnimeId,
+  setD1AnimeId,
+  d1TitleSearch,
+  setD1TitleSearch,
+  d1Limit,
+  setD1Limit,
+  d1QueryResult,
+  isExecutingQuery,
+  onExecuteD1Query,
+  onRunDiagnostics,
+  isTestingApi,
 }) => {
-  const [runningProbe, setRunningProbe] = useState<'ping' | 'd1' | 'health' | null>(null);
-
-  const triggerProbe = async (probe: 'ping' | 'd1' | 'health') => {
-    if (runningProbe) return;
-    if (onRunProbe) {
-      setRunningProbe(probe);
-      try {
-        await onRunProbe(probe);
-      } finally {
-        setRunningProbe(null);
-      }
-    } else {
-      onAddLog('WARN', 'Diagnostics handler not attached.');
-    }
-  };
-
-  if (!isOpen) {
-    return (
-      <button
-        type="button"
-        onClick={onToggleOpen}
-        className="fixed bottom-20 md:bottom-5 right-4 md:right-5 z-40 bg-[#070b16]/90 backdrop-blur-xl border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 px-3.5 py-2 rounded-xl shadow-[0_0_25px_rgba(6,182,212,0.25)] flex items-center gap-2.5 text-xs font-mono font-bold cursor-pointer hover:scale-105 active:scale-95 transition-all group"
-        title="Open Live System Terminal"
-      >
-        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-        <Terminal className="w-4 h-4 text-cyan-400 group-hover:rotate-12 transition-transform" />
-        <span>SYS_TERM</span>
-        <span className="text-[10px] text-neutral-400 font-normal hidden sm:inline">LIVE</span>
-      </button>
-    );
-  }
+  if (!isOpen) return null;
 
   return (
     <div
-      className={`fixed bottom-4 right-4 z-50 w-[94vw] sm:w-[640px] bg-[#050811]/95 backdrop-blur-2xl border border-cyan-500/40 rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.3)] flex flex-col overflow-hidden transition-all duration-300 ${
-        isExpanded ? 'h-[520px]' : 'h-[340px]'
-      }`}
+      data-testid="admin-diagnostics-drawer"
+      className="fixed inset-0 z-[110] flex justify-end bg-black/60 backdrop-blur-xs"
     >
-      <div className="px-4 py-2.5 bg-[#0a0f1d] border-b border-cyan-500/30 flex items-center justify-between select-none">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block" />
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
-          <div className="ml-2 text-xs font-mono font-bold text-cyan-300 flex items-center gap-2">
-            <Terminal className="w-3.5 h-3.5 text-cyan-400" />
-            <span>anidub-edge@cloudflare: ~ (LIVE_DIAGNOSTICS)</span>
+      <div className="w-full max-w-xl h-full bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] text-[var(--text-primary)] flex flex-col shadow-2xl overflow-hidden">
+        {/* Drawer Header */}
+        <div className="px-5 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)] flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Terminal className="w-5 h-5 text-[var(--accent-primary)] shrink-0" />
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-base font-extrabold text-[var(--text-primary)] truncate">
+                Edge Diagnostics &amp; D1 Inspector
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] truncate">
+                Parameterized D1 table queries &amp; live runtime logs
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={onRunDiagnostics}
+              disabled={isTestingApi}
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isTestingApi ? 'animate-spin text-[var(--accent-primary)]' : ''}`} />
+              Probe API
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close Diagnostics Drawer"
+              className="min-w-[40px] min-h-[40px] rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onToggleExpand}
-            className="p-1 rounded-md text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-            title={isExpanded ? 'Collapse Terminal' : 'Expand Terminal'}
-          >
-            {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded-md text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-            title="Close Terminal"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
 
-      <div className="px-3 py-1.5 bg-[#060a16] border-b border-white/5 flex items-center justify-between text-[10px] font-mono">
-        <div className="flex items-center gap-2">
-          <span className="text-neutral-400 hidden sm:inline">PROBES:</span>
-          <button
-            type="button"
-            onClick={() => triggerProbe('ping')}
-            disabled={runningProbe !== null}
-            className="px-2 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
-          >
-            {runningProbe === 'ping' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
-            <span>PING EDGE</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => triggerProbe('d1')}
-            disabled={runningProbe !== null}
-            className="px-2 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
-          >
-            {runningProbe === 'd1' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
-            <span>D1 DIAGNOSTICS</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => triggerProbe('health')}
-            disabled={runningProbe !== null}
-            className="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
-          >
-            {runningProbe === 'health' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
-            <span>CLERK & HEALTH</span>
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={onClearLogs}
-          className="text-neutral-400 hover:text-neutral-200 transition-colors underline cursor-pointer"
-        >
-          CLEAR
-        </button>
-      </div>
+        {/* Drawer Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {/* 1. Parameterized D1 Query Inspector */}
+          <div className="p-4 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-primary)] flex items-center gap-1.5">
+                <Database className="w-4 h-4 text-[var(--accent-primary)]" />
+                Parameterized D1 Table Query
+              </h4>
+              <span className="text-[11px] font-mono text-[var(--text-secondary)]">
+                Read-only • SQLi Protected
+              </span>
+            </div>
 
-      <div className="flex-1 p-3 overflow-y-auto space-y-1.5 font-mono text-[11px] bg-[#04060d] text-slate-300 select-text">
-        {logs.length === 0 ? (
-          <div className="text-neutral-500 italic py-4 text-center">
-            Log stream cleared. Click any live probe above to fetch D1 & Clerk diagnostics...
-          </div>
-        ) : (
-          logs.map((log, idx) => {
-            let badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/40';
-            if (log.level === 'OK') badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
-            else if (log.level === 'WARN') badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
-            else if (log.level === 'ERR') badgeColor = 'bg-rose-500/20 text-rose-300 border-rose-500/40';
-            else if (log.level === 'EDGE') badgeColor = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
-            else if (log.level === 'D1') badgeColor = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
-            else if (log.level === 'MUT') badgeColor = 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/40';
-            else if (log.level === 'CLERK') badgeColor = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
+            <form onSubmit={onExecuteD1Query} className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block mb-1">
+                    Table
+                  </label>
+                  <select
+                    value={d1Table}
+                    onChange={(e) => setD1Table(e.target.value as 'anime' | 'users' | 'logs')}
+                    className="w-full min-h-[40px] px-2.5 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)]"
+                  >
+                    <option value="anime">anime</option>
+                    <option value="users">users</option>
+                    <option value="logs">cloudflare_logs</option>
+                  </select>
+                </div>
 
-            return (
-              <div key={`terminal-log-${log.id}-${idx}`} className="flex items-start gap-2 leading-relaxed">
-                <span className="text-neutral-500 shrink-0 text-[10px]">[{log.time}]</span>
-                <span className={`px-1.5 py-0.2 rounded text-[9px] border font-bold shrink-0 ${badgeColor}`}>
-                  {log.level}
-                </span>
-                <span className="text-slate-200 break-all">{log.msg}</span>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block mb-1">
+                    Record ID
+                  </label>
+                  <input
+                    type="number"
+                    value={d1AnimeId}
+                    onChange={(e) => setD1AnimeId(e.target.value)}
+                    placeholder="Any"
+                    disabled={d1Table !== 'anime'}
+                    className="w-full min-h-[40px] px-2.5 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] font-mono disabled:opacity-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block mb-1">
+                    Title Match
+                  </label>
+                  <input
+                    type="text"
+                    value={d1TitleSearch}
+                    onChange={(e) => setD1TitleSearch(e.target.value)}
+                    placeholder="Title..."
+                    disabled={d1Table !== 'anime'}
+                    className="w-full min-h-[40px] px-2.5 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] disabled:opacity-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block mb-1">
+                    Limit
+                  </label>
+                  <select
+                    value={d1Limit}
+                    onChange={(e) => setD1Limit(Number(e.target.value))}
+                    className="w-full min-h-[40px] px-2.5 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)]"
+                  >
+                    <option value={5}>5 rows</option>
+                    <option value={10}>10 rows</option>
+                    <option value={25}>25 rows</option>
+                  </select>
+                </div>
               </div>
-            );
-          })
-        )}
-        <div className="pt-2 text-cyan-400 flex items-center gap-1.5 text-xs">
-          <span className="text-emerald-400">admin@anidub-edge</span>
-          <span className="text-neutral-500">:</span>
-          <span className="text-purple-400">~</span>
-          <span className="text-neutral-400">$</span>
-          <span className="w-2 h-4 bg-cyan-400 animate-pulse inline-block" />
+
+              <button
+                type="submit"
+                disabled={isExecutingQuery}
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-bold flex items-center gap-1.5"
+              >
+                {isExecutingQuery ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Play className="w-3.5 h-3.5" />
+                )}
+                Run Parameterized Query
+              </button>
+            </form>
+
+            {d1QueryResult && (
+              <div className="p-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] max-h-56 overflow-auto font-mono text-xs">
+                {d1QueryResult.error ? (
+                  <span className="text-red-500">{d1QueryResult.error}</span>
+                ) : (
+                  <pre className="text-[11px] text-[var(--text-primary)] whitespace-pre-wrap break-words">
+                    {JSON.stringify(d1QueryResult.results || [], null, 2)}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 2. Live Runtime Console Logs */}
+          <div className="p-4 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-primary)]">
+                Diagnostic Stream ({terminalLogs.length})
+              </h4>
+              <button
+                type="button"
+                onClick={onClearLogs}
+                className="min-h-[32px] px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1"
+              >
+                <Trash2 className="w-3 h-3" /> Clear
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] max-h-64 overflow-y-auto font-mono text-xs space-y-1.5">
+              {terminalLogs.length === 0 ? (
+                <p className="text-[var(--text-secondary)] italic">
+                  No diagnostic events logged yet.
+                </p>
+              ) : (
+                terminalLogs.map((log, i) => (
+                  <div
+                    key={i}
+                    className={`leading-relaxed break-words ${
+                      log.includes('[ERROR]') || log.includes('[FATAL]')
+                        ? 'text-red-500'
+                        : log.includes('[SUCCESS]')
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-[var(--text-secondary)]'
+                    }`}
+                  >
+                    {log}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

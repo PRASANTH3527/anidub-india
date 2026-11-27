@@ -86,11 +86,13 @@ export async function handleAnalyticsRoutes(ctx: RouteContext): Promise<Response
       }
 
       const cfReq = request as CloudflareRequestWithCf;
-      const country = cfReq.cf?.country || request.headers.get('cf-ipcountry') || 'IN';
+      const rawCountry = cfReq.cf?.country || request.headers.get('cf-ipcountry') || '';
+      const country = rawCountry && String(rawCountry).trim() ? String(rawCountry).trim() : 'Unknown';
       const rawRegion =
         cfReq.cf?.region || request.headers.get('cf-region') || request.headers.get('cf-region-code') || payload?.region || '';
-      const region = rawRegion ? decodeURIComponent(rawRegion) : 'Tamil Nadu';
-      const city = cfReq.cf?.city || request.headers.get('cf-ipcity') || request.headers.get('cf-city') || 'Chennai';
+      const region = rawRegion && String(rawRegion).trim() ? decodeURIComponent(String(rawRegion).trim()) : 'Unknown';
+      const rawCity = cfReq.cf?.city || request.headers.get('cf-ipcity') || request.headers.get('cf-city') || '';
+      const city = rawCity && String(rawCity).trim() ? decodeURIComponent(String(rawCity).trim()) : 'Unknown';
       const rawIp = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || '127.0.0.1';
 
       let ipHash = 'anon_visitor';
@@ -231,14 +233,14 @@ export async function handleAnalyticsRoutes(ctx: RouteContext): Promise<Response
           env.DB.prepare(`SELECT COUNT(*) as count, ROUND(AVG(time_spent_seconds)) as avgDuration, ROUND(AVG(max_scroll_depth)) as avgScroll FROM analytics_pageviews WHERE ${timeFilter}`).first(),
           env.DB.prepare(`SELECT COUNT(*) as count FROM (SELECT session_id FROM analytics_pageviews WHERE ${timeFilter} GROUP BY session_id HAVING COUNT(*) = 1)`).first(),
           env.DB.prepare(`SELECT path, COUNT(*) as views, ROUND(AVG(time_spent_seconds)) as avgTime, ROUND(AVG(max_scroll_depth)) as avgScroll FROM analytics_pageviews WHERE ${timeFilter} GROUP BY path ORDER BY views DESC LIMIT 10`).all(),
-          env.DB.prepare(`SELECT COALESCE(NULLIF(region, ''), city, 'Tamil Nadu') as region, country, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY COALESCE(NULLIF(region, ''), city, 'Tamil Nadu'), country ORDER BY count DESC LIMIT 10`).all(),
-          env.DB.prepare(`SELECT city, country, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY city, country ORDER BY count DESC LIMIT 10`).all(),
-          env.DB.prepare(`SELECT country, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY country ORDER BY count DESC LIMIT 8`).all(),
-          env.DB.prepare(`SELECT device_type as device, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY device_type ORDER BY count DESC`).all(),
-          env.DB.prepare(`SELECT browser, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY browser ORDER BY count DESC LIMIT 6`).all(),
-          env.DB.prepare(`SELECT os, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY os ORDER BY count DESC LIMIT 6`).all(),
+          env.DB.prepare(`SELECT COALESCE(NULLIF(TRIM(region), ''), NULLIF(TRIM(city), ''), 'Unknown') as region, COALESCE(NULLIF(TRIM(country), ''), 'Unknown') as country, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY COALESCE(NULLIF(TRIM(region), ''), NULLIF(TRIM(city), ''), 'Unknown'), COALESCE(NULLIF(TRIM(country), ''), 'Unknown') ORDER BY count DESC LIMIT 10`).all(),
+          env.DB.prepare(`SELECT COALESCE(NULLIF(TRIM(city), ''), 'Unknown') as city, COALESCE(NULLIF(TRIM(country), ''), 'Unknown') as country, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY COALESCE(NULLIF(TRIM(city), ''), 'Unknown'), COALESCE(NULLIF(TRIM(country), ''), 'Unknown') ORDER BY count DESC LIMIT 10`).all(),
+          env.DB.prepare(`SELECT COALESCE(NULLIF(TRIM(country), ''), 'Unknown') as country, COUNT(*) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY COALESCE(NULLIF(TRIM(country), ''), 'Unknown') ORDER BY count DESC LIMIT 8`).all(),
+          env.DB.prepare(`SELECT COALESCE(NULLIF(TRIM(device_type), ''), 'Unknown') as device, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY COALESCE(NULLIF(TRIM(device_type), ''), 'Unknown') ORDER BY count DESC`).all(),
+          env.DB.prepare(`SELECT COALESCE(NULLIF(TRIM(browser), ''), 'Unknown') as browser, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY COALESCE(NULLIF(TRIM(browser), ''), 'Unknown') ORDER BY count DESC LIMIT 6`).all(),
+          env.DB.prepare(`SELECT COALESCE(NULLIF(TRIM(os), ''), 'Unknown') as os, COUNT(DISTINCT COALESCE(clerk_user_id, ip_hash)) as count FROM analytics_sessions WHERE ${sessionFilter} GROUP BY COALESCE(NULLIF(TRIM(os), ''), 'Unknown') ORDER BY count DESC LIMIT 6`).all(),
           env.DB.prepare(`SELECT target_id as url, COUNT(*) as clicks, event_type as provider FROM analytics_events WHERE ${timeFilter} AND event_type LIKE 'clicked_%' GROUP BY target_id, event_type ORDER BY clicks DESC LIMIT 10`).all(),
-          env.DB.prepare(`SELECT e.id, e.session_id, e.event_type, e.target_id, e.created_at, COALESCE(s.region, s.city, 'Tamil Nadu') as region, s.city, s.country FROM analytics_events e LEFT JOIN analytics_sessions s ON e.session_id = s.session_id ORDER BY e.id DESC LIMIT 20`).all(),
+          env.DB.prepare(`SELECT e.id, e.session_id, e.event_type, e.target_id, e.created_at, COALESCE(NULLIF(TRIM(s.region), ''), NULLIF(TRIM(s.city), ''), 'Unknown') as region, COALESCE(NULLIF(TRIM(s.city), ''), 'Unknown') as city, COALESCE(NULLIF(TRIM(s.country), ''), 'Unknown') as country FROM analytics_events e LEFT JOIN analytics_sessions s ON e.session_id = s.session_id ORDER BY e.id DESC LIMIT 20`).all(),
         ]);
 
       const liveUsersCount = Number(liveRes?.count) || 0;

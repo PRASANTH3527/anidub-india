@@ -2053,10 +2053,19 @@ class CloudflareApiService {
    */
   public async fetchFeedback(): Promise<FeedbackRecord[]> {
     try {
-      const res = await this.smartFetch('/api/feedback');
+      const res = await this.smartFetch('/api/feedback', {
+        headers: this.getHeaders(true),
+      });
       if (res.ok) {
         const data = await res.json();
-        return data.feedback || [];
+        const list = Array.isArray(data.feedback) ? data.feedback : [];
+        return list.map((f: any) => ({
+          ...f,
+          status:
+            typeof f.status === 'string' && ['open', 'in_progress', 'resolved'].includes(f.status.toLowerCase())
+              ? f.status.toLowerCase()
+              : 'open',
+        }));
       }
     } catch (err) {
       console.warn('Failed to fetch feedback:', err);
@@ -2065,17 +2074,53 @@ class CloudflareApiService {
   }
 
   /**
-   * FEEDBACK: Deletes / resolves feedback item
+   * FEEDBACK: Updates feedback ticket workflow status (open -> in_progress -> resolved)
    */
-  public async deleteFeedback(id: number | string): Promise<{ success: boolean }> {
+  public async updateFeedbackStatus(
+    id: number | string,
+    status: 'open' | 'in_progress' | 'resolved'
+  ): Promise<{ success: boolean; status?: 'open' | 'in_progress' | 'resolved'; error?: string }> {
+    try {
+      const res = await this.smartFetch(`/api/feedback/${encodeURIComponent(String(id))}`, {
+        method: 'PATCH',
+        headers: this.getHeaders(true),
+        body: JSON.stringify({ status }),
+      });
+      const json: any = await res.json().catch(() => ({}));
+      if (res.ok && json?.success !== false) {
+        return {
+          success: true,
+          status: (json?.status as 'open' | 'in_progress' | 'resolved') || status,
+        };
+      }
+      return {
+        success: false,
+        error: json?.error || `Failed to update feedback status (HTTP ${res.status})`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || 'Network error while updating feedback status',
+      };
+    }
+  }
+
+  /**
+   * FEEDBACK: Deletes feedback item
+   */
+  public async deleteFeedback(id: number | string): Promise<{ success: boolean; error?: string }> {
     try {
       const res = await this.smartFetch(`/api/feedback/${id}`, {
         method: 'DELETE',
-        headers: this.getHeaders(true)
+        headers: this.getHeaders(true),
       });
-      return { success: res.ok };
-    } catch {
-      return { success: false };
+      const json: any = await res.json().catch(() => ({}));
+      if (res.ok && json?.success !== false) {
+        return { success: true };
+      }
+      return { success: false, error: json?.error || `HTTP ${res.status}` };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error' };
     }
   }
 
@@ -2090,7 +2135,7 @@ class CloudflareApiService {
       const res = await this.smartFetch('/api/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
       return res.ok;
     } catch (err) {
@@ -2100,21 +2145,44 @@ class CloudflareApiService {
   }
 
   /**
+   * GOD-MODE ANALYTICS: Fetch live dashboard metrics from D1 Edge Analytics with explicit error diagnostics
+   */
+  public async fetchAnalyticsDashboardDetailed(
+    range: string = 'all'
+  ): Promise<{ ok: boolean; data: any | null; error?: string; status?: number }> {
+    try {
+      const res = await this.smartFetch(`/api/analytics/dashboard?range=${encodeURIComponent(range)}`, {
+        headers: this.getHeaders(true),
+      });
+      const json: any = await res.json().catch(() => ({}));
+      if (res.ok && json?.success !== false) {
+        return {
+          ok: true,
+          data: json?.data || json,
+          status: res.status,
+        };
+      }
+      return {
+        ok: false,
+        data: null,
+        status: res.status,
+        error: json?.error || `Analytics server returned HTTP ${res.status}`,
+      };
+    } catch (err: any) {
+      return {
+        ok: false,
+        data: null,
+        error: err?.message || 'Unable to connect to D1 Edge Analytics API',
+      };
+    }
+  }
+
+  /**
    * GOD-MODE ANALYTICS: Fetch live dashboard metrics from D1 Edge Analytics
    */
   public async fetchAnalyticsDashboard(range: string = 'all'): Promise<any> {
-    try {
-      const res = await this.smartFetch(`/api/analytics/dashboard?range=${encodeURIComponent(range)}`, {
-        headers: this.getHeaders(true)
-      });
-      if (res.ok) {
-        const json = await res.json();
-        return json?.data || json;
-      }
-    } catch (err) {
-      console.warn('[cloudflareApi] fetchAnalyticsDashboard error:', err);
-    }
-    return null;
+    const detailed = await this.fetchAnalyticsDashboardDetailed(range);
+    return detailed.ok ? detailed.data : null;
   }
 
   public async fetchAnalytics(): Promise<any> {

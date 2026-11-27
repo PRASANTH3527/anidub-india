@@ -1,75 +1,278 @@
-import React from 'react';
-import { Inbox, Check } from 'lucide-react';
-import type { FeedbackTicket } from './types';
+import React, { useState, useMemo } from 'react';
+import {
+  MessageSquare,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Search,
+  RefreshCw,
+  Loader2,
+  RotateCcw,
+} from 'lucide-react';
+import type { AdminFeedbackItem, FeedbackStatus } from './types';
 
 export interface AdminFeedbackTabProps {
-  feedbackList: FeedbackTicket[];
-  onResolveFeedback: (id: number | string) => void;
+  feedbackList: AdminFeedbackItem[];
+  onUpdateFeedbackStatus: (id: number | string, nextStatus: FeedbackStatus) => Promise<void>;
+  onRefreshFeedback?: () => void;
+  updatingFeedbackId?: number | string | null;
+  feedbackError?: string | null;
 }
 
 export const AdminFeedbackTab: React.FC<AdminFeedbackTabProps> = ({
   feedbackList,
-  onResolveFeedback,
+  onUpdateFeedbackStatus,
+  onRefreshFeedback,
+  updatingFeedbackId = null,
+  feedbackError = null,
 }) => {
+  const [statusFilter, setStatusFilter] = useState<'all' | FeedbackStatus>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const normalizedList = useMemo(() => {
+    return (feedbackList || []).map((item) => {
+      const rawStatus = String(item.status || 'open').toLowerCase();
+      const status: FeedbackStatus =
+        rawStatus === 'resolved'
+          ? 'resolved'
+          : rawStatus === 'in_progress'
+            ? 'in_progress'
+            : 'open';
+      return {
+        ...item,
+        status,
+      };
+    });
+  }, [feedbackList]);
+
+  const counts = useMemo(() => {
+    const res = { all: normalizedList.length, open: 0, in_progress: 0, resolved: 0 };
+    for (const item of normalizedList) {
+      if (item.status === 'resolved') res.resolved++;
+      else if (item.status === 'in_progress') res.in_progress++;
+      else res.open++;
+    }
+    return res;
+  }, [normalizedList]);
+
+  const filteredList = useMemo(() => {
+    return normalizedList.filter((item) => {
+      if (statusFilter !== 'all' && item.status !== statusFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const hay = `${item.name || ''} ${item.author || ''} ${item.email || ''} ${item.message || ''} ${item.content || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [normalizedList, statusFilter, searchQuery]);
+
+  const getStatusBadge = (status?: FeedbackStatus) => {
+    if (status === 'resolved') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          Resolved
+        </span>
+      );
+    }
+    if (status === 'in_progress') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold">
+          <Clock className="w-3.5 h-3.5" />
+          In Progress
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sky-500/15 border border-sky-500/30 text-sky-600 dark:text-sky-400 text-xs font-bold">
+        <MessageSquare className="w-3.5 h-3.5" />
+        Open
+      </span>
+    );
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="p-5 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-xl flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.2)]">
-            <Inbox className="w-5 h-5" />
-          </div>
+    <div data-testid="admin-feedback-tab" className="space-y-5 text-[var(--text-primary)]">
+      {/* Header & Status Filter Bar */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">Community Feedback Terminal</h2>
-            <p className="text-xs text-neutral-400">User reviews, missing dub requests, and voice actor reports</p>
+            <h2 className="text-lg font-extrabold text-[var(--text-primary)] flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-[var(--accent-primary)]" />
+              User Feedback &amp; Ticket Workflow
+            </h2>
+            <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
+              Track community tickets through Open &rarr; In Progress &rarr; Resolved without losing ticket history.
+            </p>
+          </div>
+          {onRefreshFeedback && (
+            <button
+              type="button"
+              onClick={onRefreshFeedback}
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold flex items-center gap-1.5 self-start sm:self-center"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Refresh Tickets
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(
+              [
+                { id: 'all', label: `All (${counts.all})` },
+                { id: 'open', label: `Open (${counts.open})` },
+                { id: 'in_progress', label: `In Progress (${counts.in_progress})` },
+                { id: 'resolved', label: `Resolved (${counts.resolved})` },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setStatusFilter(tab.id)}
+                className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                  statusFilter === tab.id
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
+                    : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative w-full md:w-72">
+            <Search className="w-4 h-4 text-[var(--text-secondary)] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search name, email, or message..."
+              className="w-full min-h-[44px] pl-9 pr-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)]/60 focus:outline-none focus:border-[var(--accent-primary)]"
+            />
           </div>
         </div>
-        <span className="px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs font-mono text-neutral-300">
-          {feedbackList.length} INCOMING MESSAGES
-        </span>
       </div>
 
-      {feedbackList.length === 0 ? (
-        <div className="text-center py-20 bg-white/[0.025] backdrop-blur-xl border border-white/10 rounded-2xl p-8 space-y-3 shadow-xl">
-          <div className="w-14 h-14 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-300 flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(168,85,247,0.25)]">
-            <Inbox className="w-7 h-7" />
-          </div>
-          <h3 className="text-base font-bold text-white">No Pending Feedback Messages</h3>
-          <p className="text-xs text-neutral-400 max-w-sm mx-auto">
-            When Indian anime enthusiasts submit request tickets or suggestions from the public site, they will stream here.
+      {/* Error Banner if API Status Update Failed */}
+      {feedbackError && (
+        <div
+          data-testid="feedback-error-banner"
+          className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs sm:text-sm font-semibold flex items-center gap-2.5"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{feedbackError}</span>
+        </div>
+      )}
+
+      {/* Tickets List */}
+      {filteredList.length === 0 ? (
+        <div className="text-center py-14 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-subtle)] px-4">
+          <MessageSquare className="w-10 h-10 text-[var(--text-secondary)] opacity-50 mx-auto mb-3" />
+          <p className="text-base font-bold text-[var(--text-primary)]">
+            {normalizedList.length === 0
+              ? 'No user feedback tickets yet'
+              : 'No tickets match your current filter'}
+          </p>
+          <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
+            Community feedback and dub issue reports submitted by users appear here.
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {feedbackList.map((fb, idx) => (
-            <div key={`feedback_ticket_${fb.id ?? idx}`} className="p-5 sm:p-6 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-purple-500/40 shadow-xl hover:shadow-[0_0_30px_rgba(168,85,247,0.12)] transition-all duration-300 hover:scale-[1.01] space-y-3">
-              <div className="flex justify-between items-start gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-purple-600/20 border border-purple-400/30 text-purple-300 flex items-center justify-center font-bold text-xs font-mono">
-                    {(fb.name_or_insta || 'A')[0].toUpperCase()}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredList.map((fb) => {
+            const isUpdating = updatingFeedbackId !== null && String(updatingFeedbackId) === String(fb.id);
+            const authorLabel = fb.name || fb.author || 'Anonymous User';
+            const messageText = fb.message || fb.content || '';
+            const timestampLabel = fb.date || fb.created_at || 'Recent';
+
+            return (
+              <div
+                key={fb.id}
+                data-testid={`feedback-ticket-${fb.id}`}
+                className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col justify-between gap-4 shadow-sm"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 flex items-center justify-center font-extrabold text-[var(--accent-primary)] text-sm shrink-0">
+                        {authorLabel[0]?.toUpperCase() || 'U'}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-[var(--text-primary)] text-sm truncate">
+                          {authorLabel}
+                        </h4>
+                        <span className="text-xs text-[var(--text-secondary)] block truncate">
+                          {fb.email ? `${fb.email} • ` : ''}
+                          {timestampLabel}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="shrink-0">{getStatusBadge(fb.status)}</div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-white text-sm">{fb.name_or_insta || 'Anonymous Fan'}</h4>
-                    <span className="text-[10px] text-neutral-500 font-mono">{fb.created_at || 'Just now'}</span>
+
+                  <p className="text-sm text-[var(--text-primary)] leading-relaxed bg-[var(--bg-elevated)] p-3.5 rounded-xl border border-[var(--border-subtle)] break-words">
+                    &ldquo;{messageText}&rdquo;
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[var(--border-subtle)]">
+                  <span className="text-xs font-mono text-[var(--text-secondary)]">
+                    Ticket #{fb.id}
+                  </span>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {fb.status !== 'open' && (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={() => void onUpdateFeedbackStatus(fb.id, 'open')}
+                        className="min-h-[44px] px-3 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Reopen
+                      </button>
+                    )}
+
+                    {fb.status !== 'in_progress' && (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={() => void onUpdateFeedbackStatus(fb.id, 'in_progress')}
+                        className="min-h-[44px] px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                      >
+                        {isUpdating ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Clock className="w-3.5 h-3.5" />
+                        )}
+                        In Progress
+                      </button>
+                    )}
+
+                    {fb.status !== 'resolved' && (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        data-testid={`resolve-feedback-btn-${fb.id}`}
+                        onClick={() => void onUpdateFeedbackStatus(fb.id, 'resolved')}
+                        className="min-h-[44px] px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                      >
+                        {isUpdating ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                        Resolve
+                      </button>
+                    )}
                   </div>
                 </div>
-                <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[10px] font-mono">
-                  Community Ticket
-                </span>
               </div>
-              <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed bg-white/[0.02] p-3 rounded-xl border border-white/5 font-sans">
-                "{fb.feedback_text}"
-              </p>
-              <div className="pt-2 flex justify-end">
-                <button
-                  onClick={() => onResolveFeedback(fb.id ?? idx)}
-                  className="h-8 px-3 rounded-lg bg-white/[0.05] hover:bg-emerald-600/20 border border-white/10 hover:border-emerald-400/40 text-[11px] font-semibold text-emerald-300 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5"
-                >
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Mark Resolved</span>
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

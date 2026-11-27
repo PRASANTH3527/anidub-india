@@ -1,241 +1,251 @@
 import React from 'react';
 import {
-  HardDrive,
-  Download,
-  FileSpreadsheet,
   Send,
+  ShieldCheck,
+  AlertCircle,
   Loader2,
   CheckCircle2,
-  AlertTriangle,
+  Zap,
+  Globe,
+  RefreshCw,
+  Check,
+  Terminal,
 } from 'lucide-react';
-import type { TelegramNotice, TelegramSettingsStatus } from './types';
 
 export interface AdminSettingsTabProps {
-  apiUrlOverride: string;
-  onApiUrlOverrideChange: (val: string) => void;
-  onSaveApiUrlOverride: () => void;
-  onResetApiUrl: () => void;
-  onExportFullJson: () => void;
-  onExportCsv: () => void;
-  telegramStatus: TelegramSettingsStatus;
-  telegramNotice: TelegramNotice | null;
-  telegramToken: string;
-  telegramChatId: string;
-  onTelegramTokenChange: (val: string) => void;
-  onTelegramChatIdChange: (val: string) => void;
-  isSavingTelegram: boolean;
-  isTestingTelegram: boolean;
-  onSaveTelegram: () => void;
+  tgStatus: { configured: boolean; botTokenSet?: boolean; chatIdSet?: boolean };
+  tgToken: string;
+  setTgToken: (val: string) => void;
+  tgChatId: string;
+  setTgChatId: (val: string) => void;
+  isSavingTg: boolean;
+  isTestingTg: boolean;
+  onSaveTelegram: (e: React.FormEvent) => void;
   onTestTelegram: () => void;
-  confirmPurge: boolean;
-  onPurgeCache: () => void;
+  customWorkerUrl: string;
+  setCustomWorkerUrl: (val: string) => void;
+  isUrlSaved: boolean;
+  onSaveWorkerUrl: (e: React.FormEvent) => void;
+  onResetWorkerUrl: () => void;
+  onRefreshLocalCache: () => void;
+  onOpenDiagnosticsDrawer?: () => void;
 }
 
 export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
-  apiUrlOverride,
-  onApiUrlOverrideChange,
-  onSaveApiUrlOverride,
-  onResetApiUrl,
-  onExportFullJson,
-  onExportCsv,
-  telegramStatus,
-  telegramNotice,
-  telegramToken,
-  telegramChatId,
-  onTelegramTokenChange,
-  onTelegramChatIdChange,
-  isSavingTelegram,
-  isTestingTelegram,
+  tgStatus,
+  tgToken,
+  setTgToken,
+  tgChatId,
+  setTgChatId,
+  isSavingTg,
+  isTestingTg,
   onSaveTelegram,
   onTestTelegram,
-  confirmPurge,
-  onPurgeCache,
+  customWorkerUrl,
+  setCustomWorkerUrl,
+  isUrlSaved,
+  onSaveWorkerUrl,
+  onResetWorkerUrl,
+  onRefreshLocalCache,
+  onOpenDiagnosticsDrawer,
 }) => {
   return (
-    <div className="space-y-6">
-      <div className="p-6 sm:p-8 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-2xl space-y-6">
-        <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(168,85,247,0.2)]">
-            <HardDrive className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">Cloudflare Infrastructure &amp; Persistence</h3>
-            <p className="text-xs text-neutral-400">Global Worker connection, D1 database snapshots, and local cache controls</p>
-          </div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-[#07090e]/80 border border-white/10 space-y-4 shadow-inner">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 ml-1">
-              API Worker Hostname
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={apiUrlOverride}
-                onChange={(e) => onApiUrlOverrideChange(e.target.value)}
-                placeholder="e.g. https://your-worker.workers.dev (Leave empty for relative paths)"
-                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-cyan-300 font-mono focus:border-purple-500/50 outline-none transition-all"
-              />
-              <button
-                onClick={onSaveApiUrlOverride}
-                className="px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-black uppercase tracking-tighter transition-all cursor-pointer active:scale-95 flex items-center justify-center shrink-0"
-              >
-                Save &amp; Sync
-              </button>
-              <button
-                onClick={onResetApiUrl}
-                className="px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[10px] font-black uppercase tracking-tighter transition-all cursor-pointer active:scale-95 flex items-center justify-center shrink-0"
-              >
-                Reset
-              </button>
+    <div
+      data-testid="admin-settings-tab"
+      className="max-w-4xl mx-auto space-y-6 pb-8 text-[var(--text-primary)]"
+    >
+      {/* 1. Telegram Notification Bot Settings */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center shrink-0">
+              <Send className="w-5 h-5 text-sky-500" />
             </div>
-            <p className="text-[9px] text-neutral-500 italic ml-1">
-              Tip: Use an absolute URL if your frontend and worker are on different subdomains.
-            </p>
+            <div>
+              <h2 className="text-lg font-extrabold text-[var(--text-primary)]">
+                Telegram Notification Bot
+              </h2>
+              <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
+                Receive instant alerts for community dub submissions, issue reports, and user feedback.
+              </p>
+            </div>
           </div>
-
-          <div className="h-px bg-white/5 mx-2" />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-[10px]">
-            <div className="space-y-1">
-              <span className="text-neutral-500 block">D1 Database Binding</span>
-              <span className="text-purple-300 font-bold block bg-purple-950/20 rounded-lg px-2 py-1 border border-purple-500/10">
-                DB (ID: 75f053ab...9426)
+          <div className="flex items-center gap-2">
+            {tgStatus.configured ? (
+              <span className="px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4" /> Active &amp; Connected
               </span>
-            </div>
-            <div className="space-y-1">
-              <span className="text-neutral-500 block">Edge Connectivity</span>
-              <div className="flex items-center gap-2 bg-emerald-950/20 rounded-lg px-2 py-1 border border-emerald-500/10">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-emerald-400 font-bold">Live Production Anycast</span>
-              </div>
-            </div>
+            ) : (
+              <span className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4" /> Setup Required
+              </span>
+            )}
           </div>
         </div>
 
-        <div className="pt-2 flex flex-wrap gap-3">
-          <button
-            onClick={onExportFullJson}
-            className="h-10 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold shadow-[0_0_20px_rgba(168,85,247,0.35)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer inline-flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            <span>Download Full JSON Snapshot</span>
-          </button>
-          <button
-            onClick={onExportCsv}
-            className="h-10 px-5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white text-xs font-semibold transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer inline-flex items-center gap-2"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-            <span>Export Catalog CSV</span>
-          </button>
-        </div>
-
-        <div className="mt-6 p-5 sm:p-6 rounded-2xl bg-[#090d19]/90 border border-sky-500/30 space-y-4 shadow-xl">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center shrink-0">
-                <Send className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                  <span>Telegram Channel &amp; Bot Notifications</span>
-                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
-                    telegramStatus.configured
-                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                      : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                  }`}>
-                    {telegramStatus.configured ? 'ACTIVE & CONNECTED' : 'SETUP REQUIRED'}
-                  </span>
-                </h4>
-                <p className="text-xs text-neutral-400">
-                  Automatically broadcasts new anime to your Telegram subscribers when approved in admin panel
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {telegramNotice && (
-            <div className={`p-3 rounded-xl border text-xs font-medium ${
-              telegramNotice.type === 'success'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-            }`}>
-              {telegramNotice.message}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={onSaveTelegram} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-mono text-neutral-300">
-                Telegram Bot Token:
+              <label className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center justify-between">
+                <span>Bot API Token</span>
+                {tgStatus.botTokenSet && (
+                  <span className="text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold">
+                    ✓ Configured
+                  </span>
+                )}
               </label>
               <input
                 type="password"
-                value={telegramToken}
-                onChange={(e) => onTelegramTokenChange(e.target.value)}
-                placeholder={telegramStatus.tokenMasked || '123456789:ABCdefGHIjklMNO...'}
-                className="w-full px-3 py-2 rounded-xl bg-[#050811] border border-white/10 text-white text-xs font-mono placeholder-neutral-600 focus:border-sky-500 focus:outline-none"
+                value={tgToken}
+                onChange={(e) => setTgToken(e.target.value)}
+                placeholder={
+                  tgStatus.botTokenSet
+                    ? '•••••••••••••••••••••••••••••• (Saved)'
+                    : 'e.g. 123456789:ABCdefGHIjklMNOpqrSTUvwxYZ'
+                }
+                className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)]/60 focus:outline-none focus:border-[var(--accent-primary)] transition-all font-mono"
               />
-              <span className="text-[10px] text-neutral-500">Obtained from @BotFather on Telegram</span>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Create a bot via <span className="text-sky-500 font-semibold">@BotFather</span> on Telegram to get your token.
+              </p>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-mono text-neutral-300">
-                Chat / Channel ID:
+              <label className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center justify-between">
+                <span>Admin Chat ID</span>
+                {tgStatus.chatIdSet && (
+                  <span className="text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold">
+                    ✓ Configured
+                  </span>
+                )}
               </label>
               <input
                 type="text"
-                value={telegramChatId}
-                onChange={(e) => onTelegramChatIdChange(e.target.value)}
-                placeholder={telegramStatus.chatId || '@anidub_india or -100123456789'}
-                className="w-full px-3 py-2 rounded-xl bg-[#050811] border border-white/10 text-white text-xs font-mono placeholder-neutral-600 focus:border-sky-500 focus:outline-none"
+                value={tgChatId}
+                onChange={(e) => setTgChatId(e.target.value)}
+                placeholder={tgStatus.chatIdSet ? '•••••••••• (Saved)' : 'e.g. 987654321'}
+                className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)]/60 focus:outline-none focus:border-[var(--accent-primary)] transition-all font-mono"
               />
-              <span className="text-[10px] text-neutral-500">Public channel username with @ or private chat ID</span>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Message <span className="text-sky-500 font-semibold">@userinfobot</span> on Telegram to find your numeric Chat ID.
+              </p>
             </div>
           </div>
 
-          <div className="pt-2 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={onSaveTelegram}
-              disabled={isSavingTelegram}
-              className="h-9 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-            >
-              {isSavingTelegram ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-              <span>Save Credentials</span>
-            </button>
+          <div className="pt-2 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="submit"
+                disabled={isSavingTg}
+                className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] font-bold text-xs sm:text-sm transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSavingTg ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Save Credentials
+              </button>
 
-            <button
-              type="button"
-              onClick={onTestTelegram}
-              disabled={isTestingTelegram}
-              className="h-9 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-sky-400/30 text-sky-300 text-xs font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-            >
-              {isTestingTelegram ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              <span>Send Test Notification</span>
-            </button>
+              <button
+                type="button"
+                onClick={onTestTelegram}
+                disabled={isTestingTg}
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] font-bold text-xs sm:text-sm transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {isTestingTg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 text-amber-500" />}
+                Send Test Alert
+              </button>
+            </div>
+
+            <span className="text-xs text-[var(--text-secondary)] font-mono">
+              Secrets encrypted in server runtime
+            </span>
           </div>
+        </form>
+      </div>
+
+      {/* 2. Cloudflare Pages & API Hostname Configuration */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <Globe className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <h2 className="text-lg font-extrabold text-[var(--text-primary)]">
+                Cloudflare API Hostname Override
+              </h2>
+              <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
+                Leave empty for default same-origin <code className="text-[var(--accent-primary)]">/api/*</code> routing on Cloudflare Pages.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold self-start sm:self-center">
+            Same-Origin Ready
+          </span>
         </div>
 
-        <div className="mt-6 p-5 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-3">
-          <div className="flex items-center gap-2 text-rose-400 text-xs font-bold font-mono uppercase tracking-wider">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span>Administrative Emergency Controls</span>
+        <form onSubmit={onSaveWorkerUrl} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+              Custom Worker / Pages Origin URL (Optional)
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2.5">
+              <input
+                type="url"
+                value={customWorkerUrl}
+                onChange={(e) => setCustomWorkerUrl(e.target.value)}
+                placeholder="Leave blank for automatic same-origin (/api/anime)"
+                className="flex-1 min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)]/60 focus:outline-none focus:border-[var(--accent-primary)] font-mono"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="submit"
+                  className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] font-bold text-xs sm:text-sm transition-all flex items-center gap-2 shrink-0"
+                >
+                  {isUrlSaved ? <Check className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
+                  {isUrlSaved ? 'Saved' : 'Apply URL'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onResetWorkerUrl}
+                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all shrink-0"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
           </div>
-          <p className="text-[11px] text-neutral-400 leading-relaxed">
-            Resetting will clear client cached records and wipe all D1 database tables (anime, users, reviews, watchlists, episodes, feedback). You will be prompted to type <span className="font-mono text-rose-300 font-semibold">DELETE ALL</span> to confirm.
+        </form>
+      </div>
+
+      {/* 3. Safe Non-Destructive Cache & Diagnostics Controls */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+        <div className="space-y-1">
+          <h3 className="text-base font-extrabold text-[var(--text-primary)] flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-[var(--accent-primary)]" />
+            Local Admin Workspace Cache &amp; Diagnostics
+          </h3>
+          <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
+            Safely refresh local browser caches and re-sync catalog metadata from Cloudflare D1 without modifying any database tables.
           </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {onOpenDiagnosticsDrawer && (
+            <button
+              type="button"
+              onClick={onOpenDiagnosticsDrawer}
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs sm:text-sm font-bold flex items-center gap-2 transition-all"
+            >
+              <Terminal className="w-4 h-4 text-[var(--accent-primary)]" />
+              Open Diagnostics Drawer
+            </button>
+          )}
           <button
             type="button"
-            onClick={onPurgeCache}
-            className={`h-9 px-4 rounded-xl border text-xs font-semibold transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-sm ${
-              confirmPurge
-                ? 'bg-rose-600 border-rose-400 text-white shadow-[0_0_20px_rgba(244,63,94,0.5)] animate-pulse'
-                : 'bg-rose-500/10 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 hover:text-white hover:shadow-[0_0_15px_rgba(244,63,94,0.3)]'
-            }`}
+            data-testid="refresh-local-cache-btn"
+            onClick={onRefreshLocalCache}
+            className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs sm:text-sm font-bold flex items-center gap-2 transition-all"
           >
-            Reset Database &amp; Cache
+            <RefreshCw className="w-4 h-4" />
+            Refresh Local Cache
           </button>
         </div>
       </div>

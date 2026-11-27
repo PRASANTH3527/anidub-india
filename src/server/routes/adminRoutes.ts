@@ -394,10 +394,24 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
     let totalAnimeCount = 0;
     let activeAnimeCount = 0;
     let pendingAnimeCount = 0;
+    let unverifiedDubsCount = 0;
+    let missingTranslationsCount = 0;
     let reviewsCount = 0;
     let feedbackCount = 0;
+    let openFeedbackCount = 0;
     let reportsCount = 0;
     let watchlistCount = 0;
+    let languageCounts: Record<string, number> = {
+      Hindi: 0,
+      Tamil: 0,
+      Telugu: 0,
+      Malayalam: 0,
+      Kannada: 0,
+      Bengali: 0,
+      Marathi: 0,
+      Gujarati: 0,
+      Unverified: 0,
+    };
     let d1Connected = false;
     let dbLogs: Array<Record<string, unknown>> = [];
 
@@ -407,20 +421,62 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
           `SELECT
             COUNT(*) as totalCount,
             SUM(CASE WHEN (is_published = 1 OR is_published = true) AND status != 'pending' AND (submissionStatus = 'approved' OR submissionStatus IS NULL) THEN 1 ELSE 0 END) as activeCount,
-            SUM(CASE WHEN status = 'pending' OR submissionStatus = 'pending' OR approval_status = 'pending' THEN 1 ELSE 0 END) as pendingCount
+            SUM(CASE WHEN status = 'pending' OR submissionStatus = 'pending' OR approval_status = 'pending' THEN 1 ELSE 0 END) as pendingCount,
+            SUM(CASE WHEN TRIM(COALESCE(languages, '')) = '' THEN 1 ELSE 0 END) as unverifiedCount,
+            SUM(CASE WHEN LOWER(COALESCE(languages, '')) LIKE '%hindi%' THEN 1 ELSE 0 END) as hindiCount,
+            SUM(CASE WHEN LOWER(COALESCE(languages, '')) LIKE '%tamil%' THEN 1 ELSE 0 END) as tamilCount,
+            SUM(CASE WHEN LOWER(COALESCE(languages, '')) LIKE '%telugu%' THEN 1 ELSE 0 END) as teluguCount,
+            SUM(CASE WHEN LOWER(COALESCE(languages, '')) LIKE '%malayalam%' THEN 1 ELSE 0 END) as malayalamCount,
+            SUM(CASE WHEN LOWER(COALESCE(languages, '')) LIKE '%kannada%' THEN 1 ELSE 0 END) as kannadaCount,
+            SUM(CASE WHEN LOWER(COALESCE(languages, '')) LIKE '%bengali%' THEN 1 ELSE 0 END) as bengaliCount,
+            SUM(CASE WHEN LOWER(COALESCE(languages, '')) LIKE '%marathi%' THEN 1 ELSE 0 END) as marathiCount,
+            SUM(CASE WHEN LOWER(COALESCE(languages, '')) LIKE '%gujarati%' THEN 1 ELSE 0 END) as gujaratiCount
           FROM anime`
-        ).first<{ totalCount?: number; activeCount?: number; pendingCount?: number }>();
+        ).first<{
+          totalCount?: number;
+          activeCount?: number;
+          pendingCount?: number;
+          unverifiedCount?: number;
+          hindiCount?: number;
+          tamilCount?: number;
+          teluguCount?: number;
+          malayalamCount?: number;
+          kannadaCount?: number;
+          bengaliCount?: number;
+          marathiCount?: number;
+          gujaratiCount?: number;
+        }>();
 
         d1Connected = true;
         totalAnimeCount = Number(countsRow?.totalCount || 0);
         activeAnimeCount = Number(countsRow?.activeCount || 0);
         pendingAnimeCount = Number(countsRow?.pendingCount || 0);
+        unverifiedDubsCount = Number(countsRow?.unverifiedCount || 0);
+        languageCounts = {
+          Hindi: Number(countsRow?.hindiCount || 0),
+          Tamil: Number(countsRow?.tamilCount || 0),
+          Telugu: Number(countsRow?.teluguCount || 0),
+          Malayalam: Number(countsRow?.malayalamCount || 0),
+          Kannada: Number(countsRow?.kannadaCount || 0),
+          Bengali: Number(countsRow?.bengaliCount || 0),
+          Marathi: Number(countsRow?.marathiCount || 0),
+          Gujarati: Number(countsRow?.gujaratiCount || 0),
+          Unverified: unverifiedDubsCount,
+        };
 
-        const [revRes, fbRes, repRes, wlRes, logsRes] = await Promise.all([
+        const [revRes, fbRes, openFbRes, repRes, wlRes, transRes, logsRes] = await Promise.all([
           env.DB.prepare('SELECT COUNT(*) as cnt FROM reviews').first<{ cnt?: number }>().catch(() => null),
           env.DB.prepare('SELECT COUNT(*) as cnt FROM feedback').first<{ cnt?: number }>().catch(() => null),
+          env.DB.prepare("SELECT COUNT(*) as cnt FROM feedback WHERE COALESCE(LOWER(status), 'open') != 'resolved'")
+            .first<{ cnt?: number }>()
+            .catch(() => null),
           env.DB.prepare('SELECT COUNT(*) as cnt FROM reports').first<{ cnt?: number }>().catch(() => null),
           env.DB.prepare('SELECT COUNT(*) as cnt FROM watchlist').first<{ cnt?: number }>().catch(() => null),
+          env.DB.prepare(
+            "SELECT COUNT(DISTINCT anime_id) as translatedAnime FROM anime_translations WHERE translation_status = 'published'"
+          )
+            .first<{ translatedAnime?: number }>()
+            .catch(() => null),
           env.DB.prepare(
             'SELECT id, timestamp, service, event_type, status_code, latency_ms, details FROM cloudflare_logs ORDER BY id DESC LIMIT 12'
           )
@@ -430,8 +486,11 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
         reviewsCount = Number(revRes?.cnt || 0);
         feedbackCount = Number(fbRes?.cnt || 0);
+        openFeedbackCount = openFbRes && typeof openFbRes.cnt === 'number' ? Number(openFbRes.cnt) : feedbackCount;
         reportsCount = Number(repRes?.cnt || 0);
         watchlistCount = Number(wlRes?.cnt || 0);
+        const translatedAnimeCount = Number(transRes?.translatedAnime || 0);
+        missingTranslationsCount = Math.max(0, activeAnimeCount - translatedAnimeCount);
         dbLogs = (logsRes?.results || []) as Array<Record<string, unknown>>;
 
         if (dbLogs.length === 0) {
@@ -487,10 +546,14 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
             recordsCount: totalAnimeCount,
             activeAnimeCount,
             pendingAnimeCount,
+            unverifiedDubsCount,
+            missingTranslationsCount,
             reviewsCount,
             feedbackCount,
+            openFeedbackCount,
             reportsCount,
             watchlistCount,
+            languageCounts,
             latencyMs: d1LatencyMs,
           },
           clerk: {
@@ -732,7 +795,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
                 .split('|')
                 .map((l) => l.trim())
                 .join(', ')
-            : String(row.languages || row.Languages || 'Tamil, Hindi').trim();
+            : String(row.languages || row.Languages || '').trim();
         const parsedLanguagesList = normalizePartnerLanguages(languages);
 
         const firstNonEmptyPlatformString = (...candidates: unknown[]): unknown => {

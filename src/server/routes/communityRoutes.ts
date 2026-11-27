@@ -442,17 +442,24 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
     try {
       if (env.DB) {
         const res = await env.DB.prepare('SELECT * FROM feedback ORDER BY id DESC').all();
-        return jsonResponse({ feedback: res.results || [] });
+        const rows = (res.results || []).map((row: Record<string, unknown>) => ({
+          ...row,
+          status:
+            typeof row.status === 'string' && ['open', 'in_progress', 'resolved'].includes(row.status.toLowerCase())
+              ? row.status.toLowerCase()
+              : 'open',
+        }));
+        return jsonResponse({ feedback: rows }, 200, request);
       }
-      return jsonResponse({ feedback: [] });
+      return jsonResponse({ feedback: [] }, 200, request);
     } catch (err) {
-      return jsonResponse({ error: getErrorMessage(err) }, 500);
+      return jsonResponse({ error: getErrorMessage(err) }, 500, request);
     }
   }
 
-  // 5b. DELETE /api/feedback/:id (Admin only)
-  const deleteFeedbackMatch = path.match(/^\/api\/feedback\/([0-9]+)\/?$/);
-  if (deleteFeedbackMatch && method === 'DELETE') {
+  // 5a. PATCH / PUT /api/feedback/:id (Admin only - safe status workflow: open -> in_progress -> resolved)
+  const feedbackItemMatch = path.match(/^\/api\/feedback\/([0-9]+)\/?$/);
+  if (feedbackItemMatch && (method === 'PATCH' || method === 'PUT')) {
     const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
@@ -462,7 +469,51 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
       );
     }
     try {
-      const feedbackId = Number(deleteFeedbackMatch[1]);
+      const feedbackId = Number(feedbackItemMatch[1]);
+      const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+      const rawStatus = String(body?.status || 'resolved').trim().toLowerCase().replace(/\s+/g, '_');
+      const allowedStatuses = ['open', 'in_progress', 'resolved'];
+      const nextStatus = allowedStatuses.includes(rawStatus) ? rawStatus : 'resolved';
+
+      if (env.DB) {
+        let updateRes;
+        try {
+          updateRes = await env.DB.prepare('UPDATE feedback SET status = ? WHERE id = ?')
+            .bind(nextStatus, feedbackId)
+            .run();
+        } catch (colErr) {
+          const msg = getErrorMessage(colErr);
+          if (/no such column:\s*status/i.test(msg)) {
+            await env.DB.prepare("ALTER TABLE feedback ADD COLUMN status TEXT DEFAULT 'open'").run();
+            updateRes = await env.DB.prepare('UPDATE feedback SET status = ? WHERE id = ?')
+              .bind(nextStatus, feedbackId)
+              .run();
+          } else {
+            throw colErr;
+          }
+        }
+        if (updateRes?.meta?.changes === 0) {
+          return jsonResponse({ success: false, error: 'Feedback entry not found' }, 404, request);
+        }
+      }
+      return jsonResponse({ success: true, id: feedbackId, status: nextStatus }, 200, request);
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
+    }
+  }
+
+  // 5b. DELETE /api/feedback/:id (Admin only)
+  if (feedbackItemMatch && method === 'DELETE') {
+    const session = await getAdminAuth(request, env);
+    if (!session.userId || !session.isAdmin) {
+      return jsonResponse(
+        { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
+        !session.userId ? 401 : 403,
+        request
+      );
+    }
+    try {
+      const feedbackId = Number(feedbackItemMatch[1]);
       if (env.DB) {
         const delRes = await env.DB.prepare('DELETE FROM feedback WHERE id = ?').bind(feedbackId).run();
         if (delRes?.meta?.changes === 0) {

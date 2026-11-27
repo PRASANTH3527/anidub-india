@@ -12,12 +12,11 @@ import { createClerkClient, verifyToken } from '@clerk/backend';
  */
 
 /**
- * TEMPORARY ADMIN AUTH BYPASS FLAG
- * Set to `true` to temporarily bypass Clerk authentication and admin email/role guards
- * for `/admin` and all `/api/admin/*` endpoints so `/admin` can be inspected directly.
- * Flip back to `false` before production deployment to immediately restore strict Clerk admin auth.
+ * PRODUCTION CLERK ADMIN AUTH ENFORCEMENT FLAG
+ * Kept strictly `false` in production so all `/admin` and `/api/admin/*` endpoints
+ * require cryptographic Clerk session verification and authorized admin role/email.
  */
-export const TEMP_BYPASS_ADMIN_AUTH = true;
+export const TEMP_BYPASS_ADMIN_AUTH = false;
 
 export interface EnvBindings {
   ADMIN_EMAIL?: string;
@@ -656,28 +655,13 @@ export async function auth(req?: any, env?: EnvBindings | null): Promise<Verifie
 
 /**
  * Admin-scoped authentication helper for `/api/admin/*` and admin management endpoints.
- * When `TEMP_BYPASS_ADMIN_AUTH` is `true`, bypasses Clerk token & `ADMIN_EMAIL` verification.
- * When `false`, delegates directly to `getAuth(req, env)` so existing Clerk admin checks apply.
+ * Delegates strictly to `getAuth(req, env)` so cryptographic Clerk session & admin role/email checks always apply.
  */
 export async function getAdminAuth(
   req?: any,
   env?: EnvBindings | null
 ): Promise<VerifiedClerkSession> {
-  if (TEMP_BYPASS_ADMIN_AUTH) {
-    return {
-      userId: 'temp_admin_bypass',
-      sessionId: 'temp_admin_session',
-      email: getAuthorizedAdminEmail(env) || 'admin-bypass@anidub.local',
-      username: 'Admin (Temp Bypass)',
-      clerkUser: null,
-      isAdmin: true,
-      authenticated: true,
-      isAuthenticated: true,
-      claims: { role: 'admin', tempBypass: true },
-    };
-  } else {
-    return getAuth(req, env);
-  }
+  return getAuth(req, env);
 }
 
 /**

@@ -113,7 +113,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         entryType: 'Season',
         seasonNumber: '1',
         episodes: '12',
-        languages: ['Tamil', 'Hindi'] as DubLanguage[]
+        languages: [] as DubLanguage[]
       }
     ];
 
@@ -137,14 +137,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         seasonNumber: e.seasonNumber || e.label || e.name || e.number || String(idx + 1),
         episodes: String(e.episodes !== undefined && e.episodes !== null ? e.episodes : (e.episodeCount !== undefined ? e.episodeCount : 12)),
         languages: (Array.isArray(e.languages) 
-          ? e.languages 
-          : (typeof e.languages === 'string' ? e.languages.split(',').map((s: string) => s.trim()) : ['Tamil', 'Hindi'])) as DubLanguage[]
+          ? e.languages.filter(Boolean)
+          : (typeof e.languages === 'string' ? e.languages.split(',').map((s: string) => s.trim()).filter(Boolean) : [])) as DubLanguage[]
       }));
     }
 
     const defaultLangs = (Array.isArray(data.languages) 
-      ? data.languages 
-      : (data.languages || 'Tamil, Hindi').split(',').map((s: string) => s.trim())) as DubLanguage[];
+      ? data.languages.filter(Boolean)
+      : (typeof data.languages === 'string' && data.languages.trim() ? data.languages.split(',').map((s: string) => s.trim()).filter(Boolean) : [])) as DubLanguage[];
     const rawEp = data.episodes_per_season || data.Episodes || data.episodes || data.episodes_count;
 
     if (rawEp) {
@@ -185,7 +185,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     type: (entry.entryType as any) || 'Season',
     label: entry.seasonNumber || '1',
     episodeCount: entry.episodes === '' ? '' : Number(entry.episodes) || 0,
-    languages: entry.languages || ['Tamil', 'Hindi']
+    languages: entry.languages || []
   }));
 
   const [currentSeason, setCurrentSeason] = useState<string>(initialData?.release_season || initDataAny?.season || '');
@@ -193,7 +193,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
   // Helper to safely parse and reconstruct streaming partners from initialData
   const parseStreamingPartners = (data: any): { name: string; url: string; languages: string[] }[] => {
-    if (!data) return [{ name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] }];
+    if (!data) return [{ name: 'Crunchyroll', url: '', languages: [] }];
     const raw =
       data.streaming_partners ||
       data.streamingPartners ||
@@ -213,7 +213,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     }
 
     const fallbackLangs = normalizePartnerLanguages(data.languages);
-    const initialLangs = fallbackLangs.length > 0 ? fallbackLangs : ['Tamil', 'Hindi'];
+    const initialLangs = fallbackLangs;
 
     if (list.length > 0) {
       return list.map((item: any) => ({
@@ -347,10 +347,10 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
           entryType: 'Season',
           seasonNumber: '1',
           episodes: '12',
-          languages: ['Tamil', 'Hindi'] as DubLanguage[]
+          languages: [] as DubLanguage[]
         }
       ]);
-      setStreamingPartners([{ name: 'Crunchyroll', url: '', languages: ['Tamil', 'Hindi'] }]);
+      setStreamingPartners([{ name: 'Crunchyroll', url: '', languages: [] }]);
       setFormData({ type: 'TV Series', status: 'Airing' });
     }
   }, [initialData]);
@@ -468,7 +468,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         entryType: 'Season',
         seasonNumber: nextNum,
         episodes: '12',
-        languages: lastEntry?.languages || ['Tamil']
+        languages: lastEntry?.languages || []
       }];
     });
   };

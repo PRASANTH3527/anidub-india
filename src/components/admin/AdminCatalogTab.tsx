@@ -1,282 +1,731 @@
 import React from 'react';
 import {
-  Database,
-  Loader2,
-  Upload,
-  Download,
-  HelpCircle,
-  Info,
-  Plus,
   Search,
-  X,
-  Star,
+  Filter,
+  Globe,
+  Film,
+  Check,
+  CheckCircle2,
+  EyeOff,
   Edit3,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  Plus,
+  ArrowUpDown,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
-import type { AdminAnimeRecord } from './types';
+import { OFFICIAL_INDIAN_LANGUAGES } from './types';
 
 export interface AdminCatalogTabProps {
-  loading: boolean;
-  isImporting: boolean;
-  catalogCount: number;
-  filteredCatalog: AdminAnimeRecord[];
+  items: any[];
+  totalItems: number;
+  currentPage: number;
+  totalPages: number;
+  pageSize: number;
+  isLoading: boolean;
+  errorMsg?: string | null;
   searchQuery: string;
-  deletingId: number | string | null;
-  onSearchChange: (q: string) => void;
-  onTriggerFileUpload: () => void;
-  onExportCsv: () => void;
-  onOpenCsvHelp: () => void;
+  setSearchQuery: (q: string) => void;
+  filterStatus: string;
+  setFilterStatus: (s: string) => void;
+  filterLanguage: string;
+  setFilterLanguage: (l: string) => void;
+  sortBy: string;
+  setSortBy: (s: string) => void;
+  onPageChange: (page: number) => void;
+  onRefresh: () => void;
   onOpenAddModal: () => void;
-  onOpenEditModal: (anime: AdminAnimeRecord) => void;
-  onDeleteAnime: (e: React.MouseEvent, anime: AdminAnimeRecord) => void;
+  selectedCatalogIds: number[];
+  setSelectedCatalogIds: React.Dispatch<React.SetStateAction<number[]>>;
+  bulkLanguage: string;
+  setBulkLanguage: (l: string) => void;
+  isBulkProcessing: boolean;
+  onSelectAllCatalog: () => void;
+  onToggleSelectCatalog: (id: number) => void;
+  onBulkUpdateStatus: (status: string) => void;
+  onBulkAssignLanguage: () => void;
+  onBulkToggleVisibility: (publish: boolean) => void;
+  onBulkDeleteSelected: () => void;
+  onToggleVisibility: (anime: any) => void;
+  onEditAnime: (anime: any) => void;
+  onDeleteCatalogAnime: (id: number, title: string) => void;
+  mode?: 'catalog' | 'dubs';
 }
 
 export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
-  loading,
-  isImporting,
-  catalogCount,
-  filteredCatalog,
+  items,
+  totalItems,
+  currentPage,
+  totalPages,
+  pageSize,
+  isLoading,
+  errorMsg,
   searchQuery,
-  deletingId,
-  onSearchChange,
-  onTriggerFileUpload,
-  onExportCsv,
-  onOpenCsvHelp,
+  setSearchQuery,
+  filterStatus,
+  setFilterStatus,
+  filterLanguage,
+  setFilterLanguage,
+  sortBy,
+  setSortBy,
+  onPageChange,
+  onRefresh,
   onOpenAddModal,
-  onOpenEditModal,
-  onDeleteAnime,
+  selectedCatalogIds,
+  setSelectedCatalogIds,
+  bulkLanguage,
+  setBulkLanguage,
+  isBulkProcessing,
+  onSelectAllCatalog,
+  onToggleSelectCatalog,
+  onBulkUpdateStatus,
+  onBulkAssignLanguage,
+  onBulkToggleVisibility,
+  onBulkDeleteSelected,
+  onToggleVisibility,
+  onEditAnime,
+  onDeleteCatalogAnime,
+  mode = 'catalog',
 }) => {
+  const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(totalItems, currentPage * pageSize);
+
+  const dubQuickFilters = [
+    'All',
+    'Unverified',
+    'Hindi',
+    'Tamil',
+    'Telugu',
+    'Malayalam',
+    'Kannada',
+    'Bengali',
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="p-5 sm:p-6 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-2xl space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(168,85,247,0.2)]">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">Catalog Matrix Control</h2>
-              <p className="text-xs text-neutral-400">Direct global data persistence on Cloudflare Worker &amp; D1</p>
-            </div>
+    <div
+      data-testid={mode === 'dubs' ? 'admin-dubs-tab' : 'admin-catalog-tab'}
+      className="space-y-4 w-full max-w-full overflow-x-clip text-[var(--text-primary)]"
+    >
+      {/* 1. HEADER & SERVER-SIDE SEARCH / FILTER BAR */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg sm:text-xl font-extrabold text-[var(--text-primary)] flex items-center gap-2">
+              {mode === 'dubs' ? (
+                <>
+                  <Globe className="w-5 h-5 text-[var(--accent-primary)]" />
+                  <span>Regional Dub Intelligence &amp; Tag Verification</span>
+                </>
+              ) : (
+                <>
+                  <Film className="w-5 h-5 text-[var(--accent-primary)]" />
+                  <span>Anime Catalog (Server-Side D1 Pagination)</span>
+                </>
+              )}
+            </h2>
+            <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
+              {totalItems.toLocaleString()} matching D1 records • Page {currentPage} of {totalPages}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs font-mono text-neutral-300">
-              <strong className="text-white font-bold">{filteredCatalog.length}</strong> ACTIVE ENTRIES
-            </span>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-[var(--accent-primary)]' : ''}`} />
+              <span>Refresh</span>
+            </button>
+            <button
+              type="button"
+              onClick={onOpenAddModal}
+              className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Anime</span>
+            </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={onTriggerFileUpload}
-              className="h-9 px-3.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-purple-400/50 text-neutral-200 hover:text-white text-xs font-semibold inline-flex items-center gap-2 transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
-            >
-              {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" /> : <Upload className="w-3.5 h-3.5 text-purple-400" />}
-              <span>Import CSV</span>
-            </button>
-
-            <button
-              onClick={onExportCsv}
-              className="h-9 px-3.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-emerald-400/50 text-neutral-200 hover:text-white text-xs font-semibold inline-flex items-center gap-2 transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Export CSV</span>
-            </button>
-
-            <div className="relative group inline-flex items-center">
+        {/* Dub Quick Filter Chips when in Dubs view */}
+        {mode === 'dubs' && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            {dubQuickFilters.map((lang) => (
               <button
-                onClick={onOpenCsvHelp}
-                aria-label="CSV Format & Header Guide"
-                className="h-9 px-3 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 hover:border-purple-400/60 text-purple-300 hover:text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
+                key={lang}
+                type="button"
+                onClick={() => setFilterLanguage(lang)}
+                className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                  filterLanguage === lang
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
+                    : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+                }`}
               >
-                <HelpCircle className="w-3.5 h-3.5 text-purple-400" />
-                <span>CSV Guide</span>
+                {lang === 'All' ? 'All Languages' : lang === 'Unverified' ? 'Unverified Dubs' : `${lang} Dub`}
               </button>
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:flex flex-col items-center pointer-events-none z-30">
-                <div className="px-3 py-1.5 rounded-lg bg-[#090d18] text-white text-[11px] font-mono border border-purple-500/40 shadow-2xl whitespace-nowrap flex items-center gap-1.5">
-                  <Info className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span>Exact 13 headers &amp; pipe '|' separator rules</span>
-                </div>
-                <div className="w-2 h-2 bg-[#090d18] border-r border-b border-purple-500/40 rotate-45 -mt-1" />
-              </div>
-            </div>
+            ))}
           </div>
+        )}
 
-          <button
-            onClick={onOpenAddModal}
-            className="h-9 px-5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 bg-[length:200%_200%] animate-gradient text-white text-xs font-black tracking-wider uppercase inline-flex items-center gap-2 shadow-[0_0_25px_rgba(168,85,247,0.4)] ring-1 ring-white/20 hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>ADD NEW ANIME</span>
-          </button>
-        </div>
-
-        <div className="space-y-1.5 pt-1">
-          <div className="relative">
-            <Search className="w-4 h-4 text-cyan-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        {/* Search + Status + Language + Sort Controls */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5">
+          <div className="sm:col-span-2 lg:col-span-5 relative">
+            <Search className="w-4 h-4 text-[var(--text-secondary)] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
+              data-testid="admin-catalog-search"
+              placeholder="Search title, slug, or ID across D1..."
               value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Filter catalog by anime title, ID, language, genre, studio..."
-              className="w-full bg-[#0a0d16]/90 border border-white/10 focus:border-cyan-400 focus:shadow-[0_0_20px_rgba(6,182,212,0.25)] rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-neutral-500 outline-none transition-all duration-300"
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full min-h-[44px] pl-10 pr-4 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)]/60 focus:outline-none focus:border-[var(--accent-primary)] transition-all"
             />
-            {searchQuery && (
-              <button
-                onClick={() => onSearchChange('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
-                title="Clear filter"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
-          {searchQuery && (
-            <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1 font-mono">
-              <span>Filtering catalog for: "{searchQuery}"</span>
-              <span className="text-cyan-300 font-bold">{filteredCatalog.length} of {catalogCount} titles</span>
-            </div>
-          )}
+
+          <div className="lg:col-span-2 relative">
+            <Filter className="w-3.5 h-3.5 text-[var(--text-secondary)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              aria-label="Filter by Status"
+              className="w-full min-h-[44px] pl-8 pr-6 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer"
+            >
+              <option value="All">All Status</option>
+              <option value="Airing">Airing</option>
+              <option value="Completed">Completed</option>
+              <option value="Upcoming">Upcoming</option>
+              <option value="Pending">Pending</option>
+            </select>
+          </div>
+
+          <div className="lg:col-span-3 relative">
+            <Globe className="w-3.5 h-3.5 text-[var(--text-secondary)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <select
+              value={filterLanguage}
+              onChange={(e) => setFilterLanguage(e.target.value)}
+              aria-label="Filter by Language"
+              className="w-full min-h-[44px] pl-8 pr-6 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer"
+            >
+              <option value="All">All Languages</option>
+              <option value="Unverified">Unverified (No Dubs)</option>
+              {OFFICIAL_INDIAN_LANGUAGES.map((lang) => (
+                <option key={lang} value={lang}>
+                  {lang}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="lg:col-span-2 relative">
+            <ArrowUpDown className="w-3.5 h-3.5 text-[var(--text-secondary)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              aria-label="Sort Catalog"
+              className="w-full min-h-[44px] pl-8 pr-6 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer"
+            >
+              <option value="popularity">Sort: Popularity</option>
+              <option value="id_desc">Sort: Newest ID</option>
+              <option value="newest">Sort: Release Year</option>
+              <option value="rating">Sort: Highest Rated</option>
+              <option value="title">Sort: Title (A–Z)</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-3">
-        {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <div key={`catalog_skeleton_${n}`} className="relative overflow-hidden p-4 sm:p-5 rounded-2xl bg-white/[0.025] backdrop-blur-xl border border-white/10 shadow-lg flex items-center justify-between gap-4">
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.05] to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-20 sm:w-16 sm:h-22 rounded-xl bg-white/10 shrink-0" />
-                  <div className="space-y-2">
-                    <div className="h-4 w-44 sm:w-64 bg-white/10 rounded" />
-                    <div className="h-3 w-32 bg-white/10 rounded" />
-                    <div className="flex gap-2">
-                      <div className="h-4 w-12 bg-white/10 rounded" />
-                      <div className="h-4 w-12 bg-white/10 rounded" />
+      {/* 2. BULK ACTION TOOLBAR */}
+      {selectedCatalogIds.length > 0 && (
+        <div className="p-3.5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--accent-primary)]/40 flex flex-wrap items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-2.5">
+            <span className="px-2.5 py-1 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold">
+              {selectedCatalogIds.length} Selected
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedCatalogIds([])}
+              className="min-h-[36px] px-2.5 py-1 text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] underline"
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onBulkToggleVisibility(true)}
+              disabled={isBulkProcessing}
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold"
+            >
+              Publish
+            </button>
+            <button
+              type="button"
+              onClick={() => onBulkToggleVisibility(false)}
+              disabled={isBulkProcessing}
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold"
+            >
+              Unpublish
+            </button>
+            <button
+              type="button"
+              onClick={() => onBulkUpdateStatus('Airing')}
+              disabled={isBulkProcessing}
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold"
+            >
+              Set Airing
+            </button>
+            <button
+              type="button"
+              onClick={() => onBulkUpdateStatus('Completed')}
+              disabled={isBulkProcessing}
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-600 dark:text-sky-400 text-xs font-bold"
+            >
+              Set Completed
+            </button>
+
+            <div className="flex items-center gap-1.5">
+              <select
+                value={bulkLanguage}
+                onChange={(e) => setBulkLanguage(e.target.value)}
+                disabled={isBulkProcessing}
+                className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)]"
+              >
+                {OFFICIAL_INDIAN_LANGUAGES.map((lang) => (
+                  <option key={lang} value={lang}>
+                    + {lang}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={onBulkAssignLanguage}
+                disabled={isBulkProcessing}
+                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold"
+              >
+                Add Dub Tag
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={onBulkDeleteSelected}
+              disabled={isBulkProcessing}
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold flex items-center gap-1"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. ERROR OR LOADING STATES */}
+      {errorMsg && (
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs sm:text-sm font-semibold flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {isLoading && items.length === 0 ? (
+        <div className="p-12 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-center space-y-3">
+          <Loader2 className="w-7 h-7 text-[var(--accent-primary)] animate-spin mx-auto" />
+          <p className="text-sm font-bold text-[var(--text-primary)]">
+            Loading D1 Catalog Page {currentPage}...
+          </p>
+        </div>
+      ) : items.length === 0 ? (
+        <div className="text-center py-14 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-subtle)] px-4">
+          <Film className="w-10 h-10 text-[var(--text-secondary)] opacity-50 mx-auto mb-3" />
+          <p className="text-base font-bold text-[var(--text-primary)]">
+            No anime found matching your filter criteria
+          </p>
+          <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
+            Try clearing your search query or switching language/status filters.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* 4A. MOBILE COMPACT CARDS (< 768px, 0px horizontal overflow, 44x44px touch targets) */}
+          <div className="md:hidden space-y-3">
+            {items.map((anime) => {
+              const isSelected = selectedCatalogIds.includes(Number(anime.id));
+              const isPublished =
+                anime.is_published !== 0 &&
+                anime.is_published !== false &&
+                anime.status !== 'pending';
+              const langsList = Array.isArray(anime.languages)
+                ? anime.languages.filter(Boolean)
+                : typeof anime.languages === 'string' && anime.languages.trim()
+                  ? anime.languages.split(',').map((s: string) => s.trim()).filter(Boolean)
+                  : [];
+
+              return (
+                <div
+                  key={anime.id}
+                  data-testid={`mobile-catalog-card-${anime.id}`}
+                  className={`p-3.5 rounded-2xl border transition-all ${
+                    isSelected
+                      ? 'bg-[var(--accent-primary)]/10 border-[var(--accent-primary)]/40'
+                      : 'bg-[var(--bg-surface)] border-[var(--border-subtle)]'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <button
+                      type="button"
+                      onClick={() => onToggleSelectCatalog(Number(anime.id))}
+                      aria-label={`Select ${anime.title}`}
+                      className="min-w-[44px] min-h-[44px] -m-1.5 flex items-center justify-center shrink-0"
+                    >
+                      <span
+                        className={`w-5 h-5 rounded-md border flex items-center justify-center ${
+                          isSelected
+                            ? 'bg-[var(--accent-primary)] border-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)]'
+                            : 'border-[var(--border-subtle)] bg-[var(--bg-elevated)]'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3.5 h-3.5" />}
+                      </span>
+                    </button>
+
+                    <img
+                      src={
+                        anime.posterUrl ||
+                        anime.image ||
+                        anime.cover_image ||
+                        anime.poster ||
+                        'https://picsum.photos/seed/anime/100/150'
+                      }
+                      alt={anime.title}
+                      loading="lazy"
+                      className="w-12 h-16 rounded-lg object-cover border border-[var(--border-subtle)] shrink-0"
+                    />
+
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="text-sm font-extrabold text-[var(--text-primary)] line-clamp-1">
+                          {anime.title}
+                        </h4>
+                        <span className="text-xs font-mono text-[var(--text-secondary)] shrink-0">
+                          #{anime.id}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <span
+                          className={`px-2 py-0.5 rounded-md font-bold text-[11px] border ${
+                            anime.status === 'Airing'
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                              : anime.status === 'Upcoming'
+                                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
+                          }`}
+                        >
+                          {anime.status || 'Airing'}
+                        </span>
+                        <span className="text-[var(--text-secondary)]">
+                          ★ {anime.rating || '8.5'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1 pt-0.5">
+                        {langsList.length > 0 ? (
+                          langsList.map((lang: string, i: number) => (
+                            <span
+                              key={i}
+                              className="px-2 py-0.5 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--text-primary)]"
+                            >
+                              {lang}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                            Unverified Dubs
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-[var(--border-subtle)]">
+                    <button
+                      type="button"
+                      onClick={() => onToggleVisibility(anime)}
+                      className={`min-h-[44px] px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 ${
+                        isPublished
+                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
+                      }`}
+                    >
+                      {isPublished ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Published
+                        </>
+                      ) : (
+                        <>
+                          <EyeOff className="w-3.5 h-3.5" /> Hidden
+                        </>
+                      )}
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onEditAnime(anime)}
+                        className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteCatalogAnime(Number(anime.id), anime.title)}
+                        aria-label={`Delete ${anime.title}`}
+                        className="min-w-[44px] min-h-[44px] rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 flex items-center justify-center"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-16 bg-white/10 rounded-xl" />
-                  <div className="h-8 w-8 bg-white/10 rounded-xl" />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-        ) : filteredCatalog.length === 0 ? (
-          <div className="text-center py-16 bg-white/[0.025] backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
-            <p className="text-xs text-neutral-400 font-mono">No catalog records match your query.</p>
-          </div>
-        ) : (
-          filteredCatalog.map((anime) => (
-            <div
-              key={`catalog_entry_${anime.id}_${anime.image || anime.posterUrl || anime.cover_image || ''}`}
-              className="group relative p-4 sm:p-5 rounded-2xl bg-white/[0.025] hover:bg-white/[0.06] backdrop-blur-xl border border-white/10 hover:border-purple-500/50 shadow-lg hover:shadow-[0_0_30px_rgba(168,85,247,0.15)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300 hover:scale-[1.01]"
-            >
-              <div className="absolute top-0 left-6 right-6 h-[1px] bg-gradient-to-r from-transparent via-purple-500/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-              <div className="flex items-center gap-4 min-w-0">
-                <div className="relative shrink-0 group-hover:scale-105 transition-transform duration-300">
-                  <img
-                    src={anime.image || anime.posterUrl || anime.cover_image || anime.poster || '/logo.png'}
-                    alt={anime.title}
-                    className="w-14 h-20 sm:w-16 sm:h-22 rounded-xl object-cover ring-1 ring-white/15 shadow-md shadow-black/60 group-hover:ring-purple-400/50"
-                  />
-                  {anime.type && (
-                    <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-[9px] font-mono text-cyan-300 border border-cyan-500/30">
-                      {anime.type}
-                    </span>
-                  )}
-                </div>
+          {/* 4B. DESKTOP / TABLET STRUCTURED TABLE (>= 768px) */}
+          <div className="hidden md:block rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
+                    <th className="py-3.5 pl-4 pr-2 w-10">
+                      <button
+                        type="button"
+                        onClick={onSelectAllCatalog}
+                        aria-label="Select all on current page"
+                        className="w-5 h-5 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex items-center justify-center"
+                      >
+                        {selectedCatalogIds.length === items.length && items.length > 0 && (
+                          <Check className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                        )}
+                      </button>
+                    </th>
+                    <th className="py-3.5 px-3 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                      Anime Title &amp; Metadata
+                    </th>
+                    <th className="py-3.5 px-3 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="py-3.5 px-3 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                      Verified Dub Languages
+                    </th>
+                    <th className="py-3.5 px-3 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                      Visibility
+                    </th>
+                    <th className="py-3.5 pl-3 pr-5 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider text-right">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-subtle)]">
+                  {items.map((anime) => {
+                    const isSelected = selectedCatalogIds.includes(Number(anime.id));
+                    const isPublished =
+                      anime.is_published !== 0 &&
+                      anime.is_published !== false &&
+                      anime.status !== 'pending';
+                    const langsList = Array.isArray(anime.languages)
+                      ? anime.languages.filter(Boolean)
+                      : typeof anime.languages === 'string' && anime.languages.trim()
+                        ? anime.languages.split(',').map((s: string) => s.trim()).filter(Boolean)
+                        : [];
 
-                <div className="min-w-0 space-y-1.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono font-semibold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span>Live D1</span>
-                    </span>
-                    <span className="text-[11px] text-neutral-400 font-mono">#{anime.id}</span>
-                    {anime.rating && (
-                      <span className="px-1.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 font-mono font-semibold flex items-center gap-1">
-                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        <span>{anime.rating}</span>
-                      </span>
-                    )}
-                    {anime.platform && (
-                      <span className="px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[10px] font-mono">
-                        {anime.platform}
-                      </span>
-                    )}
-                  </div>
+                    return (
+                      <tr
+                        key={anime.id}
+                        className={`transition-colors ${
+                          isSelected
+                            ? 'bg-[var(--accent-primary)]/10'
+                            : 'hover:bg-[var(--bg-elevated)]/60'
+                        }`}
+                      >
+                        <td className="py-3 pl-4 pr-2">
+                          <button
+                            type="button"
+                            onClick={() => onToggleSelectCatalog(Number(anime.id))}
+                            aria-label={`Select ${anime.title}`}
+                            className={`w-5 h-5 rounded-md border flex items-center justify-center ${
+                              isSelected
+                                ? 'bg-[var(--accent-primary)] border-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)]'
+                                : 'border-[var(--border-subtle)] bg-[var(--bg-elevated)]'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-3.5 h-3.5" />}
+                          </button>
+                        </td>
 
-                  <h4 className="text-sm sm:text-base font-bold text-white group-hover:text-purple-200 transition-colors truncate max-w-md">
-                    {anime.title}
-                  </h4>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={
+                                anime.posterUrl ||
+                                anime.image ||
+                                anime.cover_image ||
+                                anime.poster ||
+                                'https://picsum.photos/seed/anime/100/150'
+                              }
+                              alt={anime.title}
+                              loading="lazy"
+                              className="w-10 h-14 rounded-lg object-cover border border-[var(--border-subtle)] shrink-0"
+                            />
+                            <div className="min-w-0 max-w-xs xl:max-w-md">
+                              <h4 className="font-bold text-[var(--text-primary)] text-sm truncate">
+                                {anime.title}
+                              </h4>
+                              <div className="flex items-center gap-2 mt-0.5 text-xs text-[var(--text-secondary)]">
+                                <span className="font-mono">#{anime.id}</span>
+                                <span>•</span>
+                                <span>{anime.type || 'TV Series'}</span>
+                                <span>•</span>
+                                <span className="text-amber-500 font-bold">
+                                  ★ {anime.rating || '8.5'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
 
-                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                    {anime.hindi && (
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono font-semibold shadow-[0_0_10px_rgba(16,185,129,0.15)]">
-                        Hindi
-                      </span>
-                    )}
-                    {anime.tamil && (
-                      <span className="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-mono font-semibold shadow-[0_0_10px_rgba(245,158,11,0.15)]">
-                        Tamil
-                      </span>
-                    )}
-                    {anime.telugu && (
-                      <span className="px-2 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[10px] font-mono font-semibold shadow-[0_0_10px_rgba(6,182,212,0.15)]">
-                        Telugu
-                      </span>
-                    )}
-                    {anime.studio && (
-                      <span className="text-[11px] text-neutral-400 ml-1 font-mono">
-                        Studio: <span className="text-purple-300 font-sans">{anime.studio}</span>
-                      </span>
-                    )}
-                    {anime.season_episode_count && (
-                      <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[10px] font-mono">
-                        {anime.season_episode_count}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
+                        <td className="py-3 px-3">
+                          <span
+                            className={`px-2.5 py-1 rounded-md text-xs font-bold border ${
+                              anime.status === 'Airing'
+                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                : anime.status === 'Upcoming'
+                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                  : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
+                            }`}
+                          >
+                            {anime.status || 'Airing'}
+                          </span>
+                        </td>
 
-              <div className="flex items-center justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5 shrink-0">
-                <button
-                  onClick={() => onOpenEditModal(anime)}
-                  className="h-9 px-4 rounded-xl bg-white/[0.05] hover:bg-purple-600/20 border border-white/10 hover:border-purple-400/50 text-white hover:text-purple-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-sm hover:shadow-[0_0_15px_rgba(168,85,247,0.25)]"
-                >
-                  <Edit3 className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Edit</span>
-                </button>
+                        <td className="py-3 px-3">
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {langsList.length > 0 ? (
+                              langsList.map((lang: string, i: number) => (
+                                <span
+                                  key={i}
+                                  className="px-2 py-0.5 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)]"
+                                >
+                                  {lang}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-xs font-bold text-rose-600 dark:text-rose-400">
+                                Unverified
+                              </span>
+                            )}
+                          </div>
+                        </td>
 
-                <button
-                  type="button"
-                  disabled={deletingId === (anime.id || anime._id)}
-                  onClick={(e) => onDeleteAnime(e, anime)}
-                  className="h-9 px-4 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-400/60 text-rose-300 hover:text-rose-100 flex items-center justify-center gap-1.5 text-xs font-semibold transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shadow-sm hover:shadow-[0_0_15px_rgba(244,63,94,0.25)] disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={deletingId === (anime.id || anime._id) ? 'Deleting from Cloudflare...' : 'Delete from catalog'}
-                >
-                  {deletingId === (anime.id || anime._id) ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-400" />
-                      <span className="hidden sm:inline">Purging...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-3.5 h-3.5 pointer-events-none" />
-                      <span className="hidden sm:inline">Delete</span>
-                    </>
-                  )}
-                </button>
-              </div>
+                        <td className="py-3 px-3">
+                          <button
+                            type="button"
+                            onClick={() => onToggleVisibility(anime)}
+                            className={`min-h-[36px] px-3 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all ${
+                              isPublished
+                                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
+                            }`}
+                          >
+                            {isPublished ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Published
+                              </>
+                            ) : (
+                              <>
+                                <EyeOff className="w-3.5 h-3.5" /> Hidden
+                              </>
+                            )}
+                          </button>
+                        </td>
+
+                        <td className="py-3 pl-3 pr-5 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => onEditAnime(anime)}
+                              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5 transition-all"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteCatalogAnime(Number(anime.id), anime.title)}
+                              aria-label={`Delete ${anime.title}`}
+                              className="min-w-[38px] min-h-[38px] p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-600 dark:text-red-400 flex items-center justify-center transition-all"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ))
-        )}
+          </div>
+        </>
+      )}
+
+      {/* 5. SERVER-SIDE PAGINATION FOOTER */}
+      <div
+        data-testid="admin-catalog-pagination"
+        className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col sm:flex-row items-center justify-between gap-3"
+      >
+        <div className="text-xs sm:text-sm text-[var(--text-secondary)] font-medium">
+          Showing <strong className="text-[var(--text-primary)]">{startItem}</strong>–
+          <strong className="text-[var(--text-primary)]">{endItem}</strong> of{' '}
+          <strong className="text-[var(--text-primary)]">{totalItems.toLocaleString()}</strong> anime
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={currentPage <= 1 || isLoading}
+            onClick={() => onPageChange(currentPage - 1)}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1 disabled:opacity-40 transition-all"
+          >
+            <ChevronLeft className="w-4 h-4" /> Prev
+          </button>
+
+          <span className="px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-extrabold text-[var(--text-primary)]">
+            Page {currentPage} / {totalPages}
+          </span>
+
+          <button
+            type="button"
+            disabled={currentPage >= totalPages || isLoading}
+            onClick={() => onPageChange(currentPage + 1)}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1 disabled:opacity-40 transition-all"
+          >
+            Next <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );

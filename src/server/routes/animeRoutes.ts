@@ -253,12 +253,16 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             whereClauses.push(basePublishedClause);
           }
 
-          if (language && language !== 'All') {
-            const langPatterns = buildLanguageLikePatterns(language);
-            if (langPatterns.length > 0) {
-              const langOr = langPatterns.map(() => "LOWER(COALESCE(languages, '')) LIKE ?").join(' OR ');
-              whereClauses.push(`(${langOr})`);
-              params.push(...langPatterns);
+          if (language && language !== 'All' && language !== 'All Languages') {
+            if (language.trim().toLowerCase() === 'unverified') {
+              whereClauses.push("TRIM(COALESCE(languages, '')) = ''");
+            } else {
+              const langPatterns = buildLanguageLikePatterns(language);
+              if (langPatterns.length > 0) {
+                const langOr = langPatterns.map(() => "LOWER(COALESCE(languages, '')) LIKE ?").join(' OR ');
+                whereClauses.push(`(${langOr})`);
+                params.push(...langPatterns);
+              }
             }
           }
 
@@ -354,9 +358,9 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
             for (const variant of variants) {
               const likeSearch = `%${variant.toLowerCase()}%`;
               variantClauses.push(
-                "(LOWER(title) LIKE ? OR LOWER(COALESCE(slug, '')) LIKE ? OR LOWER(COALESCE(synopsis, '')) LIKE ? OR LOWER(COALESCE(genres, '')) LIKE ? OR LOWER(COALESCE(studio, '')) LIKE ?)"
+                "(CAST(id AS TEXT) = ? OR LOWER(title) LIKE ? OR LOWER(COALESCE(slug, '')) LIKE ? OR LOWER(COALESCE(synopsis, '')) LIKE ? OR LOWER(COALESCE(genres, '')) LIKE ? OR LOWER(COALESCE(studio, '')) LIKE ?)"
               );
-              params.push(likeSearch, likeSearch, likeSearch, likeSearch, likeSearch);
+              params.push(variant.trim(), likeSearch, likeSearch, likeSearch, likeSearch, likeSearch);
             }
             if (variantClauses.length > 0) {
               whereClauses.push(`(${variantClauses.join(' OR ')})`);
@@ -368,6 +372,8 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           if (sort === 'rating') orderSql = 'ORDER BY rating DESC, id DESC';
           else if (sort === 'newest') orderSql = 'ORDER BY year DESC, id DESC';
           else if (sort === 'title') orderSql = 'ORDER BY title ASC, id DESC';
+          else if (sort === 'id_desc') orderSql = 'ORDER BY id DESC';
+          else if (sort === 'id_asc') orderSql = 'ORDER BY id ASC';
 
           const countRes = await env.DB.prepare(`SELECT COUNT(*) as total FROM anime ${whereSql}`).bind(...params).first();
           const totalItems = countRes ? Number(countRes.total) : 0;
@@ -559,7 +565,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
         (typeof body.languages === 'string' && body.languages.trim()) ||
         (Array.isArray(body.languages) && body.languages.length > 0 ? body.languages.join(', ') : '') ||
         derivedPartnerLanguages ||
-        'Tamil, Telugu, Hindi';
+        '';
 
       const rawMixed =
         body.mixed_entries !== undefined

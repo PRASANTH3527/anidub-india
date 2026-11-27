@@ -1,2182 +1,2238 @@
-import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  Plus, Sparkles, Loader2, CheckCircle2, Zap, RefreshCw, Globe, LogOut, Inbox, Database,
-  FileSpreadsheet, Download, X, HelpCircle, Shield, ShieldAlert, AlertTriangle, Sliders,
-  HardDrive, Activity, Terminal, Command, ChevronRight, PanelLeftClose, PanelLeft, Radio, Languages,
+  CheckCircle2,
+  XCircle,
+  Plus,
+  Search,
+  Globe,
+  ShieldAlert,
+  Clock,
+  Film,
+  Download,
+  Upload,
+  HelpCircle,
+  Loader2,
+  Database,
+  LogOut,
+  Terminal,
+  BarChart3,
+  MessageSquare,
+  Settings,
+  ArrowLeft,
+  ShieldCheck,
+  Languages,
+  LayoutDashboard,
+  PanelLeftClose,
+  PanelLeftOpen,
+  MoreHorizontal,
+  X,
+  FileSpreadsheet,
+  RefreshCw,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { DubInfoModal } from './DubInfoModal';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { dbService } from '../services/databaseService';
-import { cloudflareApi } from '../services/cloudflareApi';
-import { CLOUDFLARE_API_URL } from '../config/cloudflare';
-import Papa from 'papaparse';
-import { AniDubLogo } from './AniDubLogo';
+import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { cloudflareApi, type AdminLinkCheckResponse } from '../services/cloudflareApi';
+import { getCloudflareUrl } from '../config/cloudflare';
+import { useUser, useAuth, getClerkSessionToken } from '../lib/clerk';
+import { isAuthorizedClerkAdmin } from '../utils/auth';
 import {
-  normalizePlatformString,
-  normalizeStreamingPartners,
-  deriveAggregateLanguagesFromPartners,
-  deriveSeasonEpisodeCountSummary,
-  parseCsvMixedEntriesAndEpisodesPerSeason,
-  parseCsvPlatformsField,
-  parseOptionalEpisodesCount,
-  parseOptionalSeason,
-  normalizeSeasonEpisodeCount,
-} from '../utils/dataNormalization';
-import { useUser, SignIn } from '../lib/clerk';
-import { isAuthorizedClerkAdmin, TEMP_BYPASS_ADMIN_AUTH } from '../utils/auth';
-import { AdminOverviewTab, type GenreStatBar } from './admin/AdminOverviewTab';
-import { AdminPendingTab } from './admin/AdminPendingTab';
-import { AdminCatalogTab } from './admin/AdminCatalogTab';
+  auditAnimeDataHealth,
+  type DataHealthFilter,
+  type AdminActiveTab,
+  type AdminFeedbackItem,
+  type AdminOverviewStats,
+  type FeedbackStatus,
+} from './admin/types';
 import { AdminTranslationsTab } from './admin/AdminTranslationsTab';
+import { AdminOverviewTab } from './admin/AdminOverviewTab';
+import { AdminCatalogTab } from './admin/AdminCatalogTab';
+import { AdminPendingTab } from './admin/AdminPendingTab';
 import { AdminDataHealthTab } from './admin/AdminDataHealthTab';
 import { AdminFeedbackTab } from './admin/AdminFeedbackTab';
 import { AdminSettingsTab } from './admin/AdminSettingsTab';
 import { AdminTerminalHud } from './admin/AdminTerminalHud';
 import { AdminCommandPalette } from './admin/AdminCommandPalette';
 import { AdminCsvHelpModal } from './admin/AdminCsvHelpModal';
-import { ConfirmDialog } from './ui/EclipseState';
-import { AdminSkeleton } from './SkeletonGrid';
-import {
-  type AdminTabId,
-  type AdminAnimeRecord,
-  type RatingCorrection,
-  type FeedbackTicket,
-  type TelegramSettingsStatus,
-  type TelegramNotice,
-  type TerminalLogEntry,
-  type CommandPaletteActionItem,
-  type CommandPaletteNavItem,
-  KNOWN_IMDB_MAP,
-  getCleanOmdbQueryTitles,
-  formatLanguageText,
-} from './admin/types';
-
-const AnalyticsDashboard = lazy(() =>
-  import('./AnalyticsDashboard').then((m) => ({ default: m.AnalyticsDashboard }))
-);
 
 export interface AdminDashboardProps {
-  onAnimeCreated?: (anime?: AdminAnimeRecord, deletedId?: string | number) => void;
+  onAnimeCreated?: (updatedAnime?: any, deletedId?: string | number) => void;
   onLogout?: () => void;
   onNavigateHome?: () => void;
-  onToast?: (msg: string) => void;
-  catalogList?: AdminAnimeRecord[];
-}
-
-interface ParsedCsvRow {
-  [key: string]: string | undefined;
+  catalogList?: any[];
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAnimeCreated,
   onLogout,
   onNavigateHome,
-  catalogList,
+  catalogList = [],
 }) => {
-  const shouldReduceMotion = useReducedMotion();
+  const { t } = useTranslation();
   const { isSignedIn, user: clerkUser } = useUser();
-  const isLocalClerkAdminAuthorized = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
-  const [serverAdminVerified, setServerAdminVerified] = useState<boolean | null>(
-    TEMP_BYPASS_ADMIN_AUTH ? true : null
-  );
-  const isClerkAdminAuthorized = TEMP_BYPASS_ADMIN_AUTH
-    ? true
-    : (isLocalClerkAdminAuthorized || serverAdminVerified === true);
+  const { getToken } = useAuth();
+  const [serverVerifiedAdmin, setServerVerifiedAdmin] = useState<boolean | null>(null);
 
-  const [catalog, setCatalog] = useState<AdminAnimeRecord[]>(() =>
-    catalogList && catalogList.length > 0 ? catalogList : []
-  );
+  const isClerkAdminAuthorized =
+    Boolean(isSignedIn && clerkUser && (isAuthorizedClerkAdmin(clerkUser) || serverVerifiedAdmin === true)) &&
+    serverVerifiedAdmin !== false;
 
-  useEffect(() => {
-    if (catalogList && catalogList.length > 0) {
-      setCatalog(catalogList);
+  // Navigation & Responsive Shell State
+  const [activeTab, setActiveTab] = useState<AdminActiveTab>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname === '/admin/analytics') {
+      return 'analytics';
     }
-  }, [catalogList]);
+    return 'overview';
+  });
+  const [moderationSubTab, setModerationSubTab] = useState<'all' | 'pending' | 'feedback'>('all');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isMobileMoreOpen, setIsMobileMoreOpen] = useState<boolean>(false);
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState<boolean>(false);
 
-  const [loading, setLoading] = useState(true);
-  const [successMsg, setSuccessMsg] = useState('');
-  const [apiError, setApiError] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | number | null>(null);
-  const [cloudSyncing, setCloudSyncing] = useState(false);
-  const [cloudStatusText, setCloudStatusText] = useState('');
+  // Server-Side Paginated Catalog State
+  const [catalogItems, setCatalogItems] = useState<any[]>(catalogList);
+  const [catalogPage, setCatalogPage] = useState<number>(1);
+  const [catalogPageSize] = useState<number>(25);
+  const [catalogTotalItems, setCatalogTotalItems] = useState<number>(catalogList.length);
+  const [catalogTotalPages, setCatalogTotalPages] = useState<number>(1);
+  const [isCatalogLoading, setIsCatalogLoading] = useState<boolean>(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [filterLanguage, setFilterLanguage] = useState<string>('All');
+  const [sortBy, setSortBy] = useState<string>('id_desc');
+  const catalogAbortRef = useRef<AbortController | null>(null);
 
-  // DubInfoModal & ConfirmDialog state
-  const [isDubModalOpen, setIsDubModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<'submit' | 'edit'>('submit');
-  const [editingAnime, setEditingAnime] = useState<AdminAnimeRecord | null>(null);
-  const [confirmClearPendingOpen, setConfirmClearPendingOpen] = useState(false);
-  const [pendingDeleteAnime, setPendingDeleteAnime] = useState<AdminAnimeRecord | null>(null);
+  // Full Catalog Index for Data Health & Translations
+  const [fullAdminIndex, setFullAdminIndex] = useState<any[]>(catalogList);
 
-  // Tabs & list state
-  const [activeAdminTab, setActiveAdminTab] = useState<AdminTabId>('overview');
-  const [feedbackList, setFeedbackList] = useState<FeedbackTicket[]>([]);
-  const [pendingItems, setPendingItems] = useState<AdminAnimeRecord[]>([]);
-  const [pendingSearchQuery, setPendingSearchQuery] = useState('');
+  // Bulk Actions & Modals State
+  const [selectedCatalogIds, setSelectedCatalogIds] = useState<number[]>([]);
+  const [bulkLanguage, setBulkLanguage] = useState<string>('Hindi');
+  const [isBulkProcessing, setIsBulkProcessing] = useState<boolean>(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [editingAnime, setEditingAnime] = useState<any | null>(null);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
+  const [cmdQuery, setCmdQuery] = useState<string>('');
+  const [healthFilter, setHealthFilter] = useState<DataHealthFilter>('all');
 
-  // Catalog & CSV states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isImporting, setIsImporting] = useState(false);
-  const [showImportToast, setShowImportToast] = useState(false);
-  const [importedCount, setImportedCount] = useState(0);
-  const [showCsvHelpModal, setShowCsvHelpModal] = useState(false);
-  const [hasCopiedHeaders, setHasCopiedHeaders] = useState(false);
-  const [hasCopiedSnippet, setHasCopiedSnippet] = useState(false);
+  // Pending Moderation & Feedback State
+  const [pendingItems, setPendingItems] = useState<any[]>([]);
+  const [feedbackList, setFeedbackList] = useState<AdminFeedbackItem[]>([]);
+  const [updatingFeedbackId, setUpdatingFeedbackId] = useState<number | string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
-  // Command Palette & Terminal states
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
-  const [isTerminalExpanded, setIsTerminalExpanded] = useState(false);
-  const [terminalLogs, setTerminalLogs] = useState<TerminalLogEntry[]>([]);
+  // Data Health & Link Checker State
+  const [linkCheckReport, setLinkCheckReport] = useState<AdminLinkCheckResponse | null>(null);
+  const [isCheckingLinks, setIsCheckingLinks] = useState<boolean>(false);
 
-  const addTerminalLog = (level: string, msg: string) => {
-    const newEntry: TerminalLogEntry = {
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-      time: new Date().toLocaleTimeString(),
-      level,
-      msg,
-    };
-    setTerminalLogs((prev) => [newEntry, ...prev.slice(0, 79)]);
-  };
+  // CSV Import / Export State
+  const [isUploadingCsv, setIsUploadingCsv] = useState<boolean>(false);
+  const [isCsvHelpOpen, setIsCsvHelpOpen] = useState<boolean>(false);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
-  const runRealTerminalProbe = async (probe: 'ping' | 'd1' | 'health' | 'full' = 'full') => {
-    if (probe === 'ping' || probe === 'full') {
-      const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
-      try {
-        const res = await fetch('/api/anime?limit=1', { cache: 'no-store' });
-        const rtt = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0);
-        addTerminalLog(
-          res.ok ? 'EDGE' : 'WARN',
-          `GET /api/anime?limit=1 -> HTTP ${res.status} (${rtt}ms RTT) [${window.location.host}]`
-        );
-      } catch (err: any) {
-        addTerminalLog('ERR', `Edge ping failed: ${err?.message || 'Network unreachable'}`);
-      }
-    }
+  // Diagnostics & D1 Status State
+  const [cfStatus, setCfStatus] = useState<any>(null);
+  const [terminalLogs, setTerminalLogs] = useState<string[]>([
+    `[${new Date().toLocaleTimeString()}] [SYSTEM] AniDub India Admin Workspace 2.0 initialized.`,
+  ]);
+  const [isTestingApi, setIsTestingApi] = useState<boolean>(false);
+  const [d1Table, setD1Table] = useState<'anime' | 'users' | 'logs'>('anime');
+  const [d1AnimeId, setD1AnimeId] = useState<string>('');
+  const [d1TitleSearch, setD1TitleSearch] = useState<string>('');
+  const [d1Limit, setD1Limit] = useState<number>(5);
+  const [d1QueryResult, setD1QueryResult] = useState<any>(null);
+  const [isExecutingQuery, setIsExecutingQuery] = useState<boolean>(false);
 
-    if (probe === 'd1' || probe === 'health' || probe === 'full') {
-      const diagStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
-      const status = await cloudflareApi.fetchCloudflareStatus();
-      const apiRtt = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - diagStart);
-
-      if (!status) {
-        addTerminalLog('ERR', `Failed to fetch live diagnostics from /api/cloudflare/status (${apiRtt}ms)`);
-        return;
-      }
-
-      const d1 = status.services?.d1 || {};
-      const clerk = status.services?.clerk || {};
-      const imgbb = status.services?.imgbb || {};
-      const pages = status.services?.pages || {};
-
-      if (probe === 'd1' || probe === 'full') {
-        addTerminalLog(
-          d1.connected ? 'D1' : 'WARN',
-          `D1 [${d1.databaseName || 'anime-db'}] ${d1.status || 'Unknown'} (${d1.latencyMs ?? apiRtt}ms) | Active: ${d1.activeAnimeCount ?? 0} | Pending: ${d1.pendingAnimeCount ?? 0} | Total: ${d1.recordsCount ?? 0}`
-        );
-        addTerminalLog(
-          'D1',
-          `Tables -> Reviews: ${d1.reviewsCount ?? 0} | Reports: ${d1.reportsCount ?? 0} | Feedback: ${d1.feedbackCount ?? 0} | Watchlists: ${d1.watchlistCount ?? 0}`
-        );
-      }
-
-      if (probe === 'health' || probe === 'full') {
-        addTerminalLog(
-          clerk.configured && clerk.isAdmin ? 'CLERK' : 'WARN',
-          `Clerk Auth: ${clerk.status || 'Unknown'} | User: ${clerk.email || clerk.userId || 'None'} | SecretKey: ${clerk.configured ? 'SET' : 'MISSING'}`
-        );
-        addTerminalLog(
-          imgbb.apiKeyConfigured ? 'OK' : 'WARN',
-          `Edge POP: ${pages.region || 'EDGE'} | ImgBB CDN: ${imgbb.status || 'Unknown'} | API RTT: ${apiRtt}ms`
-        );
-      }
-
-      const recentLogs = Array.isArray(status.logs) ? status.logs.slice(0, 5) : [];
-      for (const entry of recentLogs) {
-        addTerminalLog(
-          String(entry.service || 'D1').toUpperCase(),
-          `${entry.event_type || 'DB_LOG'} [${entry.status_code ?? 200}] ${entry.latency_ms !== undefined ? `(${entry.latency_ms}ms) ` : ''}${entry.details || ''}`
-        );
-      }
-    }
-  };
-
-  // Cloud Infrastructure Settings
-  const [apiUrlOverride, setApiUrlOverride] = useState(() => {
+  // Settings State
+  const [tgToken, setTgToken] = useState<string>('');
+  const [tgChatId, setTgChatId] = useState<string>('');
+  const [tgStatus, setTgStatus] = useState<{
+    configured: boolean;
+    botTokenSet?: boolean;
+    chatIdSet?: boolean;
+  }>({ configured: false });
+  const [isSavingTg, setIsSavingTg] = useState<boolean>(false);
+  const [isTestingTg, setIsTestingTg] = useState<boolean>(false);
+  const [customWorkerUrl, setCustomWorkerUrl] = useState<string>(() => {
     try {
       return localStorage.getItem('cf_api_url_override') || '';
     } catch {
       return '';
     }
   });
+  const [isUrlSaved, setIsUrlSaved] = useState<boolean>(false);
 
-  const handleResetApiUrl = () => {
-    try {
-      localStorage.removeItem('cf_api_url_override');
-      setApiUrlOverride('');
-      addTerminalLog('SET', 'API Worker URL reset to default (Relative Paths)');
-      setSuccessMsg('API URL reset! Refreshing catalog...');
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  // Toast Notification Banner State
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
 
-  const handleSaveApiUrlOverride = () => {
-    try {
-      localStorage.setItem('cf_api_url_override', apiUrlOverride.trim());
-      addTerminalLog('SET', `API Worker URL updated to: ${apiUrlOverride || 'Relative Paths'}`);
-      setSuccessMsg('API URL configuration saved! Refreshing catalog...');
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    window.setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 4500);
+  }, []);
 
-  // Data Health states
-  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
-  const [pendingCorrections, setPendingCorrections] = useState<RatingCorrection[]>([]);
+  const addLog = useCallback((msg: string, type: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR' = 'INFO') => {
+    const time = new Date().toLocaleTimeString();
+    setTerminalLogs((prev) => [...prev.slice(-49), `[${time}] [${type}] ${msg}`]);
+  }, []);
 
-  // Telegram Bot integration state
-  const [telegramToken, setTelegramToken] = useState('');
-  const [telegramChatId, setTelegramChatId] = useState('');
-  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
-  const [isSavingTelegram, setIsSavingTelegram] = useState(false);
-  const [telegramStatus, setTelegramStatus] = useState<TelegramSettingsStatus>({
-    configured: false,
-    hasToken: false,
-    hasChatId: false,
-  });
-  const [telegramNotice, setTelegramNotice] = useState<TelegramNotice | null>(null);
-
-  const [confirmPurge, setConfirmPurge] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const fetchTelegramStatus = async () => {
-    try {
-      const data = await cloudflareApi.fetchTelegramStatus();
-      setTelegramStatus({
-        configured: Boolean(data.configured),
-        hasToken: Boolean(data.hasToken ?? data.configured),
-        hasChatId: Boolean(data.hasChatId ?? data.chatId),
-      });
-      if (data.chatId && !telegramChatId) setTelegramChatId(data.chatId);
-    } catch {
-      // Ignore optional settings probe failures
-    }
-  };
-
-  const handleSaveTelegram = async () => {
-    setIsSavingTelegram(true);
-    setTelegramNotice(null);
-    try {
-      const data = await cloudflareApi.updateTelegramSettings({
-        token: telegramToken,
-        chatId: telegramChatId,
-      });
-      if (data.success) {
-        setTelegramNotice({ type: 'success', message: 'Telegram credentials saved successfully!' });
-        addTerminalLog('OK', `Telegram credentials updated: chat_id=${telegramChatId}`);
-        fetchTelegramStatus();
-      } else {
-        setTelegramNotice({ type: 'error', message: data.error || 'Failed to save credentials' });
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Network error saving credentials';
-      setTelegramNotice({ type: 'error', message });
-    } finally {
-      setIsSavingTelegram(false);
-    }
-  };
-
-  const handleTestTelegram = async () => {
-    setIsTestingTelegram(true);
-    setTelegramNotice(null);
-    addTerminalLog('TG', 'Dispatching test notification probe to Telegram API...');
-    try {
-      const data = await cloudflareApi.testTelegram({
-        token: telegramToken || undefined,
-        chatId: telegramChatId || undefined,
-      });
-      if (data.success) {
-        setTelegramNotice({
-          type: 'success',
-          message: 'Test message sent! Check your Telegram channel/group.',
-        });
-        addTerminalLog('OK', 'Telegram test notification DELIVERED successfully (HTTP 200)');
-      } else {
-        const errMsg = data.error || 'Telegram rejected test notification';
-        setTelegramNotice({ type: 'error', message: errMsg });
-        addTerminalLog('ERR', `Telegram test notification failed: ${errMsg}`);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Connection to Telegram API failed';
-      setTelegramNotice({ type: 'error', message: msg });
-      addTerminalLog('ERR', `Telegram probe exception: ${msg}`);
-    } finally {
-      setIsTestingTelegram(false);
-    }
-  };
-
-  const fetchFeedback = async () => {
-    try {
-      const data = (await cloudflareApi.fetchFeedback()) as FeedbackTicket[];
-      setFeedbackList(data);
-      addTerminalLog('FEED', `Loaded ${data.length} user request tickets`);
-    } catch (err) {
-      console.error('Failed to fetch feedback:', err);
-    }
-  };
-
-  const handleResolveFeedback = async (id: number | string) => {
-    try {
-      addTerminalLog('FEED', `Resolving feedback ticket #${id}...`);
-      await cloudflareApi.deleteFeedback(id);
-      setFeedbackList((prev) => prev.filter((fb) => fb.id !== id && fb.id !== Number(id)));
-      setSuccessMsg('Feedback ticket marked resolved and archived.');
-      addTerminalLog('OK', `Feedback ticket #${id} resolved.`);
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err) {
-      console.warn('Error resolving feedback:', err);
-      setFeedbackList((prev) => prev.filter((fb) => fb.id !== id && fb.id !== Number(id)));
-    }
-  };
-
-  const handlePurgeCache = async () => {
-    const typedConfirmation = window.prompt(
-      'DANGER: This will permanently delete all anime, users, reviews, watchlists, episodes, and feedback from the database.\n\nType "DELETE ALL" to confirm:'
-    );
-    if (typedConfirmation !== 'DELETE ALL') {
-      setConfirmPurge(false);
-      addTerminalLog('WARN', 'Database reset cancelled: exact confirmation "DELETE ALL" was not entered.');
-      setSuccessMsg('Reset cancelled. You must type "DELETE ALL" to confirm.');
-      setTimeout(() => setSuccessMsg(''), 4000);
-      return;
-    }
-
-    const res = await dbService.clearAllData(typedConfirmation);
-    if (!res.success) {
-      setConfirmPurge(false);
-      addTerminalLog('ERR', `Database reset failed: ${res.error || 'Server error'}`);
-      setSuccessMsg(`Database reset failed: ${res.error || 'Server error'}`);
-      setTimeout(() => setSuccessMsg(''), 5000);
-      return;
-    }
-
-    try {
-      localStorage.removeItem('cf_admin_catalog_cache');
-      localStorage.removeItem('cf_admin_pending_cache');
-    } catch {
-      // Ignore storage failures
-    }
-    setConfirmPurge(false);
-    setSuccessMsg('Database and local storage cache reset successfully!');
-    addTerminalLog('OK', 'Database reset confirmed ("DELETE ALL") and local cache cleared.');
-    setTimeout(() => setSuccessMsg(''), 4000);
-  };
-
-  const fetchPendingItems = async () => {
-    try {
-      const data = (await cloudflareApi.fetchPendingItems()) as AdminAnimeRecord[];
-      const pending = (data || []).map((item) => ({
-        ...item,
-        type: item.type || item.Type || 'TV Series',
-        Type: item.type || item.Type || 'TV Series',
-        languages:
-          typeof item.languages === 'string'
-            ? item.languages.split(',').map((s) => s.trim())
-            : item.languages || ['Hindi', 'Tamil', 'Telugu'],
-      }));
-      setPendingItems(pending);
-      addTerminalLog('QUEUE', `Pending review queue: ${pending.length} submissions awaiting mod`);
-      try {
-        localStorage.setItem('cf_admin_pending_cache', JSON.stringify(pending));
-      } catch {
-        // Ignore storage failures
-      }
-    } catch (err) {
-      console.warn('Network notice fetching pending items from Cloudflare Worker, using local cache:', err);
-      try {
-        const cached = localStorage.getItem('cf_admin_pending_cache');
-        if (cached) setPendingItems(JSON.parse(cached) as AdminAnimeRecord[]);
-      } catch {
-        // Ignore cache parse failures
-      }
-    }
-  };
-
-  const fetchAnime = async () => {
-    setLoading(true);
-    setCloudSyncing(true);
-    setCloudStatusText('Fetching catalog from Cloudflare D1...');
-    addTerminalLog('SYNC', 'Querying Cloudflare Edge D1 endpoint: /api/anime');
-    setApiError(false);
-    try {
-      const { data, meta } = await cloudflareApi.fetchCatalog({ page: 1, limit: 100, fresh: true });
-      const allData = [...(data || [])];
-      if (meta && meta.totalPages > 1) {
-        const extraPages = Math.min(meta.totalPages, 10);
-        for (let p = 2; p <= extraPages; p++) {
-          const nextRes = await cloudflareApi.fetchCatalog({ page: p, limit: 100, fresh: true });
-          if (nextRes?.data?.length) allData.push(...nextRes.data);
-        }
-      }
-      const items: AdminAnimeRecord[] = allData.map((item) => ({
-        ...(item as AdminAnimeRecord),
-        type: item.type || 'TV Series',
-        Type: item.type || 'TV Series',
-      }));
-      setCatalog(items);
-      addTerminalLog('OK', `Synchronized ${items.length} titles from Cloudflare D1 into active state`);
-      try {
-        localStorage.setItem('cf_admin_catalog_cache', JSON.stringify(items));
-      } catch {
-        // Ignore storage errors
-      }
-      await fetchPendingItems();
-    } catch (err) {
-      console.warn('Network notice fetching anime from Cloudflare D1:', err);
-      const errorMsg = err instanceof Error ? err.message : 'Unknown API Error';
-      addTerminalLog('ERR', `[CRITICAL] Failed to reach Cloudflare D1: ${errorMsg}`);
-      setApiError(true);
-
-      if (catalogList && catalogList.length > 0) {
-        setCatalog(catalogList);
-      } else {
-        const cached = localStorage.getItem('cf_admin_catalog_cache');
-        if (cached) {
-          try {
-            setCatalog(JSON.parse(cached) as AdminAnimeRecord[]);
-          } catch {
-            setCatalog([]);
-          }
-        } else {
-          setCatalog([]);
-        }
-      }
-      await fetchPendingItems();
-    } finally {
-      setLoading(false);
-      setCloudSyncing(false);
-      setCloudStatusText('');
-    }
-  };
-
+  // Global ⌘K / Ctrl+K shortcut for Command Palette
   useEffect(() => {
-    if (TEMP_BYPASS_ADMIN_AUTH) {
-      setServerAdminVerified(true);
-      return;
-    } else {
-      if (!isSignedIn || !clerkUser) {
-        setServerAdminVerified(false);
-        return;
-      }
-      if (isLocalClerkAdminAuthorized) {
-        setServerAdminVerified(true);
-        return;
-      }
-      let cancelled = false;
-      setServerAdminVerified(null);
-      cloudflareApi
-        .verifyAdminDetailed()
-        .then((res) => {
-          if (!cancelled) setServerAdminVerified(Boolean(res.ok));
-        })
-        .catch(() => {
-          if (!cancelled) setServerAdminVerified(false);
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [isSignedIn, clerkUser?.id, isLocalClerkAdminAuthorized]);
-
-  useEffect(() => {
-    if (isClerkAdminAuthorized) {
-      fetchAnime();
-      fetchFeedback();
-      fetchTelegramStatus();
-      runRealTerminalProbe('full');
-    }
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
-      }
-      if (e.key === 'Escape') {
+      } else if (e.key === 'Escape') {
         setIsCommandPaletteOpen(false);
-        setShowCsvHelpModal(false);
+        setIsMobileMoreOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isClerkAdminAuthorized]);
+  }, []);
 
-  const handleApprovePending = async (itemId: number | string) => {
-    const item = pendingItems.find((p) => p.id === itemId);
-    if (!item) return;
+  // Debounce catalog search query (250ms) and reset page to 1
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setCatalogPage(1);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
-    setCloudSyncing(true);
-    setCloudStatusText(`Approving ${item.title || `#${itemId}`} on Cloudflare Edge...`);
-    addTerminalLog('EDGE', `Approving #${itemId} (${item.title || 'Untitled'}) -> Promoting to Live`);
-    try {
-      const rawType = item.type || item.Type || 'TV Series';
-      const rawStatusIn = String(item.status || item.airing_status || '').trim().toLowerCase();
-      const targetStatus =
-        rawStatusIn.includes('complete') || rawStatusIn === 'finished' || rawStatusIn === 'ended'
-          ? 'Completed'
-          : rawStatusIn.includes('upcoming')
-            ? 'Upcoming'
-            : rawStatusIn.includes('ongoing') || rawStatusIn.includes('simulcast')
-              ? 'Ongoing'
-              : rawStatusIn.includes('airing')
-                ? 'Airing'
-                : rawType === 'Movie'
-                  ? 'Completed'
-                  : 'Airing';
+  // Reset to page 1 when status, language, or sort changes
+  useEffect(() => {
+    setCatalogPage(1);
+  }, [filterStatus, filterLanguage, sortBy]);
 
-      const res = await cloudflareApi.approveAnime(itemId, targetStatus);
-      if (!res || res.success === false) {
-        throw new Error(res?.error || 'Failed to approve anime on backend');
+  // 1. Server-Side Paginated D1 Catalog Loader with AbortController cancellation
+  const fetchPaginatedAdminCatalog = useCallback(
+    async (pageToLoad: number = catalogPage) => {
+      if (catalogAbortRef.current) {
+        catalogAbortRef.current.abort();
       }
+      const controller = new AbortController();
+      catalogAbortRef.current = controller;
 
-      setPendingItems((prev) => {
-        const updated = prev.filter((p) => p.id !== itemId);
-        try {
-          localStorage.setItem('cf_admin_pending_cache', JSON.stringify(updated));
-        } catch {
-          // Ignore storage error
+      setIsCatalogLoading(true);
+      setCatalogError(null);
+
+      try {
+        const res = await cloudflareApi.fetchCatalog({
+          page: pageToLoad,
+          limit: catalogPageSize,
+          search: debouncedSearch || undefined,
+          status: filterStatus !== 'All' ? filterStatus : undefined,
+          language: filterLanguage !== 'All' ? filterLanguage : undefined,
+          sort: sortBy,
+          includePending: true,
+          fresh: true,
+          signal: controller.signal,
+        });
+
+        if (controller.signal.aborted) return;
+
+        if (res.ok) {
+          setCatalogItems(res.data || []);
+          setCatalogTotalItems(res.meta.totalItems);
+          setCatalogTotalPages(res.meta.totalPages);
+        } else {
+          setCatalogError(res.error || 'Failed to load catalog page from Cloudflare D1.');
         }
-        return updated;
-      });
-      setSuccessMsg('Anime Approved & Published globally on Cloudflare Edge.');
-      addTerminalLog('OK', `Approval committed globally. #${itemId} is now live with status "${targetStatus}".`);
-      await fetchAnime();
-      if (typeof onAnimeCreated === 'function') {
-        onAnimeCreated();
-      }
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err) {
-      console.error('Cloudflare Approval error:', err);
-      const errMsg = err instanceof Error ? err.message : 'Server error';
-      setSuccessMsg(`Approval Failed: ${errMsg}`);
-      addTerminalLog('ERR', `[APPROVAL ERROR] Failed to approve #${itemId}: ${errMsg}`);
-      setTimeout(() => setSuccessMsg(''), 5000);
-    } finally {
-      setCloudSyncing(false);
-      setCloudStatusText('');
-    }
-  };
-
-  const handleRejectPending = async (itemId: number | string) => {
-    const item = pendingItems.find((p) => p.id === itemId);
-    setCloudSyncing(true);
-    setCloudStatusText('Rejecting submission from Cloudflare D1...');
-    addTerminalLog('REJ', `Rejecting submission #${itemId} (${item?.title || 'Unknown'})`);
-    try {
-      await cloudflareApi.deleteAnime(itemId);
-      addTerminalLog('OK', `Submission #${itemId} purged from moderation queue.`);
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      if (/not found/i.test(errMsg)) {
-        addTerminalLog('OK', `Submission #${itemId} already removed from Cloudflare D1.`);
-      } else {
-        console.warn('Notice while deleting rejected submission from Cloudflare D1:', err);
-        addTerminalLog('WARN', `Notice while purging #${itemId} from D1: ${errMsg}`);
-      }
-    } finally {
-      setCloudSyncing(false);
-      setCloudStatusText('');
-    }
-    setPendingItems((prev) => {
-      const updated = prev.filter((p) => p.id !== itemId);
-      try {
-        localStorage.setItem('cf_admin_pending_cache', JSON.stringify(updated));
-      } catch {
-        // Ignore storage errors
-      }
-      return updated;
-    });
-    setSuccessMsg(`Rejected submission ${item?.title || itemId}.`);
-    setTimeout(() => setSuccessMsg(''), 4000);
-  };
-
-  const handleClearPendingQueue = () => {
-    setConfirmClearPendingOpen(true);
-  };
-
-  const executeClearPendingQueue = async () => {
-    setConfirmClearPendingOpen(false);
-    setCloudSyncing(true);
-    setCloudStatusText('Clearing pending moderation queue...');
-    addTerminalLog('PURGE', `Wiping pending moderation queue (${pendingItems.length} items)`);
-    try {
-      await cloudflareApi.clearPendingQueue();
-      setPendingItems([]);
-      try {
-        localStorage.setItem('cf_admin_pending_cache', JSON.stringify([]));
-      } catch {
-        // Ignore storage errors
-      }
-      setSuccessMsg('Pending moderation queue wiped successfully.');
-      addTerminalLog('OK', 'All pending submissions cleared from Cloudflare D1.');
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err) {
-      console.error('Clear pending error:', err);
-      const errMsg = err instanceof Error ? err.message : 'Server error';
-      setSuccessMsg(`Failed to clear queue: ${errMsg}`);
-      addTerminalLog('ERR', `Failed to wipe pending queue: ${errMsg}`);
-      setTimeout(() => setSuccessMsg(''), 5000);
-    } finally {
-      setCloudSyncing(false);
-      setCloudStatusText('');
-    }
-  };
-
-  const handleDeleteCatalogAnime = (e: React.MouseEvent, anime: AdminAnimeRecord) => {
-    e.stopPropagation();
-    setPendingDeleteAnime(anime);
-  };
-
-  const executeDeleteCatalogAnime = async (anime: AdminAnimeRecord) => {
-    const targetId = anime.id || anime._id;
-    setPendingDeleteAnime(null);
-    if (targetId === undefined || targetId === null) return;
-
-    setDeletingId(targetId);
-    setCloudSyncing(true);
-    setCloudStatusText(`Deleting #${targetId} from Cloudflare D1...`);
-    addTerminalLog('DEL', `Issuing HTTP DELETE /api/anime/${targetId} on Cloudflare Edge`);
-
-    try {
-      await cloudflareApi.deleteAnime(targetId);
-      addTerminalLog('OK', `Purged #${targetId} (${anime.title || 'Untitled'}) from Cloudflare D1`);
-
-      setCatalog((prev) => prev.filter((item) => String(item.id || item._id) !== String(targetId)));
-      try {
-        const cached = localStorage.getItem('cf_admin_catalog_cache');
-        if (cached) {
-          const list = JSON.parse(cached) as AdminAnimeRecord[];
-          localStorage.setItem(
-            'cf_admin_catalog_cache',
-            JSON.stringify(list.filter((item) => String(item.id || item._id) !== String(targetId)))
-          );
+      } catch (err: any) {
+        if (err?.name === 'AbortError' || controller.signal.aborted) return;
+        setCatalogError(err?.message || 'Unable to query D1 catalog.');
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsCatalogLoading(false);
         }
-      } catch {
-        // Ignore storage error
       }
+    },
+    [catalogPage, catalogPageSize, debouncedSearch, filterStatus, filterLanguage, sortBy]
+  );
 
-      setSuccessMsg('Successfully deleted from Cloudflare D1.');
-      setTimeout(() => setSuccessMsg(''), 4000);
+  useEffect(() => {
+    if (!isClerkAdminAuthorized) return;
+    void fetchPaginatedAdminCatalog(catalogPage);
+    return () => {
+      catalogAbortRef.current?.abort();
+    };
+  }, [isClerkAdminAuthorized, catalogPage, fetchPaginatedAdminCatalog]);
 
-      if (typeof onAnimeCreated === 'function') {
-        onAnimeCreated(undefined, targetId);
-      }
-    } catch (err) {
-      console.error('Cloudflare Delete error:', err);
-      const errMsg = err instanceof Error ? err.message : 'Server error';
-      setSuccessMsg(`Failed to delete anime: ${errMsg}`);
-      addTerminalLog('ERR', `[ERROR] Failed deleting #${targetId} on Edge: ${errMsg}`);
-      setTimeout(() => setSuccessMsg(''), 5000);
-    } finally {
-      setDeletingId(null);
-      setCloudSyncing(false);
-      setCloudStatusText('');
-    }
-  };
-
-  const handleOpenEditModal = (anime: AdminAnimeRecord) => {
-    setModalMode('edit');
-    const resolvedType = anime.type || anime.Type || 'TV Series';
-    const rawStatusStr = String(anime.status || anime.airing_status || '').trim().toLowerCase();
-    const resolvedStatus =
-      rawStatusStr.includes('complete') || rawStatusStr === 'finished' || rawStatusStr === 'ended'
-        ? 'Completed'
-        : rawStatusStr.includes('upcoming')
-          ? 'Upcoming'
-          : rawStatusStr.includes('ongoing') || rawStatusStr.includes('simulcast')
-            ? 'Ongoing'
-            : rawStatusStr.includes('airing')
-              ? 'Airing'
-              : resolvedType === 'Movie'
-                ? 'Completed'
-                : 'Airing';
-
-    setEditingAnime({
-      ...anime,
-      type: resolvedType,
-      Type: resolvedType,
-      status: resolvedStatus,
-      airing_status: resolvedStatus,
-    });
-    setIsDubModalOpen(true);
-  };
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsImporting(true);
-    addTerminalLog('CSV', `Loading raw CSV file: ${file.name} (${file.size} bytes)`);
-
+  // Load lightweight full index only when Data Health, Translations, or Backup tabs need it
+  const fetchFullIndexForTools = useCallback(async () => {
     try {
-      const rawText = await file.text();
-      const cleanText = rawText.replace(/^\uFEFF/, '').trim();
-      if (!cleanText) {
-        throw new Error('CSV file is empty');
+      const idx = await cloudflareApi.fetchCatalogIndex(true);
+      if (Array.isArray(idx) && idx.length > 0) {
+        setFullAdminIndex(idx);
       }
+    } catch {
+      // Fallback to catalogItems
+    }
+  }, []);
 
-      const parseResults = Papa.parse<ParsedCsvRow>(cleanText, {
-        header: true,
-        skipEmptyLines: 'greedy',
-        transformHeader: (header: string) => header.trim(),
-      });
+  useEffect(() => {
+    if (
+      isClerkAdminAuthorized &&
+      (activeTab === 'data_health' || activeTab === 'translations' || activeTab === 'backup')
+    ) {
+      void fetchFullIndexForTools();
+    }
+  }, [isClerkAdminAuthorized, activeTab, fetchFullIndexForTools]);
 
-      if (parseResults.errors && parseResults.errors.length > 0) {
-        console.warn('[CSV Parse Warnings/Errors]:', parseResults.errors);
-      }
-
-      const rawRows = parseResults.data || [];
-      if (rawRows.length === 0) {
-        throw new Error('No data rows found in CSV. Please verify column headers.');
-      }
-
-      addTerminalLog('CSV', `Detected headers: [${(parseResults.meta.fields || []).join(', ')}]`);
-
-      const cleanedRows = rawRows
-        .map((row) => {
-          const rawTitle = (
-            row['Title'] ||
-            row['title'] ||
-            row['Name'] ||
-            row['name'] ||
-            row['Anime'] ||
-            row['anime'] ||
-            row['Anime Title'] ||
-            row['anime_title'] ||
-            row['Series'] ||
-            row['series'] ||
-            row['Title (English)'] ||
-            Object.values(row)[0] ||
-            ''
-          )
-            .toString()
-            .trim();
-
-          const rawPoster = (
-            row['Cover Image'] ||
-            row['cover_image'] ||
-            row['Poster'] ||
-            row['poster_url'] ||
-            row['Poster URL'] ||
-            row['Image'] ||
-            row['image'] ||
-            ''
-          )
-            .toString()
-            .trim();
-
-          const rawLanguages =
-            row['Languages'] || row['languages'] || row['Language'] || row['language'] || row['Dub'] || row['dub'] || '';
-          const parsedLanguages = rawLanguages
-            .split('|')
-            .map((l) => l.trim())
-            .filter(Boolean);
-          const rawGenres = row['Genres'] || row['genres'] || row['Genre'] || row['genre'] || '';
-          const rawSeasons = row['Seasons'] || row['seasons'] || '';
-
-          const { mixedEntries, episodesPerSeason } = parseCsvMixedEntriesAndEpisodesPerSeason(
-            rawSeasons,
-            undefined,
-            row['episodes_per_season']
-          );
-
-          const parsedYear = parseInt(row['Release Year'] || row['year'] || row['Year'] || row['release_year'] || '', 10) || null;
-          const parsedEpisodes = parseOptionalEpisodesCount(row, mixedEntries);
-          const parsedSeason = parseOptionalSeason(row);
-          const rawPlatformsCell =
-            row['platforms'] ||
-            row['Platforms'] ||
-            row['Platform'] ||
-            row['platform'] ||
-            row['Streaming Partners'] ||
-            row['streaming_partners'] ||
-            '';
-          const rawWatchUrl = (row['watch_url'] || row['Watch URL'] || '').toString().trim();
-          const {
-            partners: parsedPartners,
-            platformString: normalizedPlatform,
-            primaryUrl: derivedPlatformUrl,
-          } = parseCsvPlatformsField(rawPlatformsCell, parsedLanguages, rawWatchUrl);
-          const explicitOfficialSource = (
-            row['Official Source Link'] ||
-            row['Official Source URL'] ||
-            row['official_source_url'] ||
-            row['Source URL'] ||
-            ''
-          )
-            .toString()
-            .trim();
-          const parsedRating =
-            parseFloat(row['Ratings'] || row['ratings'] || row['Rating'] || row['rating'] || row['Score'] || '') || null;
-          const status = String(row['Status'] || row['status'] || '')
-            .toLowerCase()
-            .includes('complete')
-            ? 'Completed'
-            : 'Airing';
-
+  // 2. Fetch Pending Submissions (Never auto-populating false default dub languages!)
+  const fetchPendingItems = useCallback(async () => {
+    try {
+      const list = await cloudflareApi.fetchPendingItems();
+      if (Array.isArray(list)) {
+        const formatted = list.map((item: any) => {
+          const parsedLangs = Array.isArray(item.languages)
+            ? item.languages.filter(Boolean)
+            : typeof item.languages === 'string' && item.languages.trim()
+              ? item.languages
+                  .split(',')
+                  .map((s: string) => s.trim())
+                  .filter(Boolean)
+              : [];
           return {
-            title: rawTitle,
-            poster_url: rawPoster,
-            cover_image: rawPoster,
-            year: parsedYear,
-            season: parsedSeason,
-            languages: parsedLanguages,
-            genres: rawGenres
-              .split('|')
-              .map((g) => g.trim())
-              .filter(Boolean),
-            studio: (row['Studio'] || row['studio'] || '').toString().trim(),
-            type: (row['Type'] || row['type'] || 'TV Series').toString().trim(),
-            status,
-            airing_status: status,
-            episodes: parsedEpisodes,
-            episodes_count: parsedEpisodes,
-            platform: normalizedPlatform,
-            platforms: rawPlatformsCell,
-            platforms_data: parsedPartners,
-            streaming_partners: parsedPartners,
-            watch_providers: parsedPartners,
-            watch_url: derivedPlatformUrl,
-            rating: parsedRating,
-            synopsis: (row['Synopsis'] || row['synopsis'] || row['Description'] || row['description'] || '').toString().trim(),
-            approval_status: 'pending',
-            submissionStatus: 'pending',
-            is_published: false,
-            mixed_entries: mixedEntries,
-            mixedEntries,
-            episodes_per_season: episodesPerSeason,
-            season_episode_count:
-              normalizeSeasonEpisodeCount(row) || deriveSeasonEpisodeCountSummary(mixedEntries),
-            official_source_url: explicitOfficialSource || derivedPlatformUrl,
-            slug: (rawTitle || 'untitled')
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, '-')
-              .replace(/(^-|-$)/g, ''),
+            ...item,
+            id: item.id,
+            title: item.title || 'Untitled Anime',
+            languages: parsedLangs,
+            platform: item.platform || item.streamingPlatform || 'Unverified',
+            submittedBy: item.submitted_by || item.submittedBy || 'Community User',
+            date: item.created_at
+              ? new Date(item.created_at).toLocaleDateString()
+              : item.date || 'Just now',
+            poster:
+              item.cover_image ||
+              item.poster ||
+              item.posterUrl ||
+              'https://picsum.photos/seed/pending/100/150',
+            status: 'pending',
           };
-        })
-        .filter((r) => Boolean(r.title));
+        });
+        setPendingItems(formatted);
+      }
+    } catch (err) {
+      console.warn('Error fetching pending anime:', err);
+    }
+  }, []);
 
-      addTerminalLog('CSV', `Cleaned ${cleanedRows.length} valid rows from CSV file.`);
+  // 3. Fetch User Feedback Tickets
+  const fetchFeedbackItems = useCallback(async () => {
+    try {
+      const fb = await cloudflareApi.fetchFeedback();
+      if (Array.isArray(fb)) {
+        setFeedbackList(
+          fb.map((f) => ({
+            ...f,
+            status:
+              f.status === 'in_progress' || f.status === 'resolved'
+                ? f.status
+                : ('open' as FeedbackStatus),
+          }))
+        );
+      }
+    } catch (err) {
+      console.warn('Error fetching feedback:', err);
+    }
+  }, []);
 
-      if (cleanedRows.length === 0) {
-        const emptyMsg = 'No valid anime rows with a title were found in the CSV file.';
-        setImportedCount(0);
-        setShowImportToast(true);
-        setSuccessMsg(emptyMsg);
-        addTerminalLog('ERR', emptyMsg);
-        setTimeout(() => {
-          setShowImportToast(false);
-          setSuccessMsg('');
-        }, 5000);
+  // 4. Fetch D1 Diagnostics & Status Summary
+  const fetchD1StatusSummary = useCallback(async () => {
+    setIsTestingApi(true);
+    try {
+      const cf = await cloudflareApi.fetchCloudflareStatus();
+      if (cf) {
+        setCfStatus(cf);
+        addLog(
+          `D1 connected (${cf.services?.d1?.recordsCount ?? 0} total rows, ${cf.services?.d1?.latencyMs ?? 12}ms).`,
+          'SUCCESS'
+        );
+      }
+    } catch (err: any) {
+      addLog(`D1 status probe error: ${err?.message || 'Unknown error'}`, 'ERROR');
+    } finally {
+      setIsTestingApi(false);
+    }
+  }, [addLog]);
+
+  // 5. Verify Clerk Admin Session on Mount & Hydrate Admin Workspace
+  useEffect(() => {
+    let cancelled = false;
+
+    const verifyAndHydrate = async () => {
+      if (!isSignedIn) {
+        setServerVerifiedAdmin(false);
         return;
       }
 
-      const res = await cloudflareApi.uploadCSV({ animeList: cleanedRows });
-      const totalAdded = res.insertedCount ?? res.count ?? 0;
-      const totalSkipped = res.skippedCount ?? 0;
-      const allSkippedTitles = Array.from(new Set(res.skippedTitles || []));
-
-      const feedbackMsg =
-        res.message || `Upload complete: ${totalAdded} added to pending queue, ${totalSkipped} duplicate titles skipped.`;
-
-      setImportedCount(totalAdded);
-      setShowImportToast(true);
-      setSuccessMsg(feedbackMsg);
-      addTerminalLog('OK', feedbackMsg);
-
-      if (allSkippedTitles.length > 0) {
-        addTerminalLog(
-          'REJ',
-          `Skipped duplicate titles: ${allSkippedTitles.slice(0, 8).join(', ')}${allSkippedTitles.length > 8 ? ` (+${allSkippedTitles.length - 8} more)` : ''}`
-        );
-      }
-
-      await fetchAnime();
-      await fetchPendingItems();
-      setActiveAdminTab('pending');
-      if (onAnimeCreated) onAnimeCreated();
-
-      setTimeout(() => {
-        setShowImportToast(false);
-        setSuccessMsg('');
-      }, 7000);
-    } catch (err) {
-      console.error('[CSV Import Error]:', err);
-      const errMsg = err instanceof Error ? err.message : 'CSV parsing error';
-      setSuccessMsg(`CSV Import Failed: ${errMsg}`);
-      addTerminalLog('ERR', `[IMPORT ERROR] ${errMsg}`);
-      setTimeout(() => setSuccessMsg(''), 6000);
-    } finally {
-      setIsImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const handleExportCsv = () => {
-    const headers =
-      'Title,Type,Status,Studio,Release Year,Rating,Genres,Synopsis,Streaming Partners,Languages,Episodes,Cover Image,Season & Episode Count,Official Source Link\n';
-    const rows = catalog
-      .map((a) => {
-        const clean = (val: unknown) => `"${String(val ?? '').replace(/"/g, '""')}"`;
-        return `${clean(a.title)},${clean(a.type || a.Type || 'TV Series')},${clean(a.status || a.airing_status || 'Airing')},${clean(a.studio || '')},${clean(a.year || a.release_year || 2024)},${clean(a.rating || 8.5)},${clean(a.genres || a.genre || '')},${clean(a.synopsis || a.description || '')},${clean(normalizePlatformString(a.platform || ''))},${clean(formatLanguageText(a.languages))},${clean(a.episodes_per_season || a.episodes_count || '')},${clean(a.cover_image || a.poster_url || '')},${clean(a.season_episode_count || '')},${clean(a.official_source_url || '')}`;
-      })
-      .join('\n');
-
-    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `anidub_india_catalog_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleExportFullJson = () => {
-    const jsonStr = JSON.stringify(catalog, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `anidub_india_full_backup_${Date.now()}.json`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleDownloadTemplate = () => {
-    const templateContent =
-      'Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,platforms,Ratings,Synopsis,Seasons\n' +
-      'Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Prime Video|Netflix,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"\n' +
-      'Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll|Netflix,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"\n' +
-      'Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"\n';
-    const blob = new Blob([templateContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'anidub_catalog_import_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleCopyHeaders = () => {
-    const headers = 'Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,platforms,Ratings,Synopsis,Seasons';
-    navigator.clipboard.writeText(headers);
-    setHasCopiedHeaders(true);
-    setTimeout(() => setHasCopiedHeaders(false), 2500);
-  };
-
-  const handleCopySnippet = () => {
-    const sample = `Title,Cover Image,Release Year,Languages,Genres,Studio,Type,Status,Episodes,platforms,Ratings,Synopsis,Seasons
-Solo Leveling,https://i.ibb.co/sample/solo-leveling.jpg,2024,Tamil|Telugu|Hindi,Action|Fantasy,A-1 Pictures,TV Series,Completed,12,Prime Video|Netflix,8.5,"In a world where hunters must battle deadly monsters, a weak hunter gets a second chance to level up.","Season 1:12"
-Demon Slayer: Hashira Training,https://i.ibb.co/sample/demon-slayer.jpg,2024,Tamil|Hindi,Action|Supernatural,Ufotable,TV Series,Airing,8,Crunchyroll|Netflix,8.9,"Tanjiro goes to see the Stone Hashira, Himejima, who intends to prepare him for the battles to come.","Season 1:26|Season 2:11|Season 3:11|Season 4:8"
-Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-Fi|Adventure,TMS Entertainment,TV Series,Completed,24,Crunchyroll,8.1,"After a blinding green light strikes the Earth, humanity is turned to stone.","Season 1:24|Season 2:11|Season 3:22"`;
-    navigator.clipboard.writeText(sample);
-    setHasCopiedSnippet(true);
-    setTimeout(() => setHasCopiedSnippet(false), 2500);
-  };
-
-  const handleRunHealthCheck = async (targetAnimeId?: number | string) => {
-    setIsCheckingHealth(true);
-    setIsTerminalOpen(true);
-    addTerminalLog('SYS', '=== [HEALTH PROBE INITIALIZED: OMDb & IMDb Auditor v4.5] ===');
-
-    const itemsToProbe = targetAnimeId
-      ? catalog.filter((a) => a.id === targetAnimeId || String(a.id) === String(targetAnimeId))
-      : catalog && catalog.length > 0
-        ? catalog
-        : [];
-
-    if (itemsToProbe.length === 0) {
-      addTerminalLog('WARN', 'Catalog empty in active memory. Refetching from Cloudflare Edge...');
-      await fetchAnime();
-    }
-
-    addTerminalLog('PROBE', `Beginning live audit across ${itemsToProbe.length} title(s)...`);
-
-    const collectedCorrections: RatingCorrection[] = [];
-
-    for (const anime of itemsToProbe) {
-      const currentRatingNum = Number(parseFloat(String(anime.rating || 0)).toFixed(1));
-      addTerminalLog('PROBE', `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      addTerminalLog('PROBE', `Auditing #${anime.id}: '${anime.title}' | Current DB Rating: ${currentRatingNum}`);
-
-      const normTitle = (anime.title || '').toLowerCase().trim();
-      const matchedKnownKey = Object.keys(KNOWN_IMDB_MAP).find(
-        (k) => normTitle.includes(k) || k.includes(normTitle)
-      );
-      const knownInfo = matchedKnownKey ? KNOWN_IMDB_MAP[matchedKnownKey] : null;
-
-      let resolvedScore: number | null = null;
-      let resolvedImdbId = anime.imdbID || anime.imdb_id || anime.imdbId || '';
-      let lastOmdbError = '';
-
-      const directCandidateIds: string[] = [];
-      if (resolvedImdbId) directCandidateIds.push(resolvedImdbId);
-      if (knownInfo) {
-        if (knownInfo.id && !directCandidateIds.includes(knownInfo.id)) {
-          directCandidateIds.push(knownInfo.id);
-        }
-        if (knownInfo.alternateIds) {
-          for (const alt of knownInfo.alternateIds) {
-            if (!directCandidateIds.includes(alt)) directCandidateIds.push(alt);
-          }
-        }
-      }
-
-      if (directCandidateIds.length > 0) {
-        addTerminalLog('PROBE', `[IMDb ID DIRECT LOOKUP] Candidate ID pool: [${directCandidateIds.join(', ')}]`);
-        for (const candId of directCandidateIds) {
-          try {
-            const reqUrl = `/api/omdb?i=${encodeURIComponent(candId)}`;
-            const startT = Date.now();
-            addTerminalLog('EDGE', `[API REQ] GET ${reqUrl}`);
-            const res = await fetch(reqUrl);
-            const latency = Date.now() - startT;
-            const data = (await res.json()) as {
-              Response?: string;
-              imdbRating?: string;
-              imdbID?: string;
-              Title?: string;
-              Year?: string;
-              Error?: string;
-            };
-            addTerminalLog('EDGE', `[API RES] HTTP ${res.status} ${res.statusText} (${latency}ms) -> Response: "${data.Response}"`);
-
-            if (data.Response === 'True' && data.imdbRating && data.imdbRating !== 'N/A') {
-              resolvedScore = parseFloat(data.imdbRating);
-              resolvedImdbId = data.imdbID || candId;
-              addTerminalLog('OK', `[OMDb MATCH] "${data.Title}" (${data.Year}) | IMDb: ${resolvedScore}/10 | ID: ${resolvedImdbId}`);
-              break;
-            } else {
-              lastOmdbError = data.Error || JSON.stringify(data);
-              addTerminalLog('WARN', `[OMDb NO MATCH] Candidate ID ${candId}: ${lastOmdbError}`);
-            }
-          } catch (e) {
-            lastOmdbError = e instanceof Error ? e.message : String(e);
-            addTerminalLog('ERR', `[FETCH ERROR] ID lookup for ${candId} failed: ${lastOmdbError}`);
-          }
-        }
-      }
-
-      if (resolvedScore === null) {
-        const queryCandidates = getCleanOmdbQueryTitles(knownInfo?.fallbackTitle || anime.title);
-        addTerminalLog('PROBE', `[FUZZY TITLE SEARCH] Candidate variations: [${queryCandidates.map((c) => `"${c}"`).join(', ')}]`);
-
-        for (const queryStr of queryCandidates) {
-          try {
-            const reqUrl = `/api/omdb?t=${encodeURIComponent(queryStr)}`;
-            const startT = Date.now();
-            addTerminalLog('EDGE', `[API REQ] GET ${reqUrl}`);
-            const res = await fetch(reqUrl);
-            const latency = Date.now() - startT;
-            const data = (await res.json()) as {
-              Response?: string;
-              imdbRating?: string;
-              imdbID?: string;
-              Title?: string;
-              Year?: string;
-              Error?: string;
-            };
-            addTerminalLog('EDGE', `[API RES] HTTP ${res.status} ${res.statusText} (${latency}ms) -> Response: "${data.Response}"`);
-
-            if (data.Response === 'True' && data.imdbRating && data.imdbRating !== 'N/A') {
-              resolvedScore = parseFloat(data.imdbRating);
-              resolvedImdbId = data.imdbID || resolvedImdbId;
-              addTerminalLog('OK', `[OMDb MATCH] "${data.Title}" (${data.Year}) | IMDb: ${resolvedScore}/10 | ID: ${data.imdbID || 'N/A'}`);
-              break;
-            } else {
-              lastOmdbError = data.Error || JSON.stringify(data);
-              addTerminalLog('WARN', `[OMDb NO MATCH] Query "${queryStr}": ${lastOmdbError}`);
-            }
-          } catch (err) {
-            lastOmdbError = err instanceof Error ? err.message : String(err);
-            addTerminalLog('ERR', `[FETCH ERROR] Query "${queryStr}": ${lastOmdbError}`);
-          }
-        }
-      }
-
-      if (resolvedScore === null && knownInfo?.benchmarkRating) {
-        resolvedScore = knownInfo.benchmarkRating;
-        resolvedImdbId = knownInfo.id;
-        addTerminalLog('OK', `[BENCHMARK MATCH] "${knownInfo.fallbackTitle}" | IMDb: ${resolvedScore}/10 | ID: ${resolvedImdbId}`);
-      }
-
-      if (resolvedScore !== null && !isNaN(resolvedScore)) {
-        const localRating = Number(parseFloat(String(anime.rating || 0)).toFixed(1));
-        const targetRating = Number(resolvedScore.toFixed(1));
-
-        if (localRating !== targetRating) {
-          addTerminalLog('PROBE', `[MISMATCH FOUND] Action required for '${anime.title}': Local DB ${localRating} != Real IMDb ${targetRating}`);
-          collectedCorrections.push({
-            anime,
-            currentLocalRating: localRating,
-            realImdbRating: targetRating,
-            imdbID: resolvedImdbId,
-          });
-        } else {
-          addTerminalLog('OK', `[VERIFIED SYNC] '${anime.title}': Local DB rating (${localRating}) matches IMDb (${targetRating}). No action required.`);
-        }
-      } else {
-        addTerminalLog('WARN', `[SKIPPED] '${anime.title}': Could not verify IMDb score. OMDb status: ${lastOmdbError || 'Unknown'}`);
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-
-    setIsCheckingHealth(false);
-    setPendingCorrections(collectedCorrections);
-    addTerminalLog('SYS', `=== [PROBE AUDIT COMPLETE] Audited: ${itemsToProbe.length} title(s) | Mismatches Found: ${collectedCorrections.length} pending admin approval ===`);
-    setSuccessMsg(`IMDb health probe complete: ${collectedCorrections.length} mismatch(es) found requiring admin approval.`);
-    setTimeout(() => setSuccessMsg(''), 5000);
-  };
-
-  const handleApproveCorrection = async (correction: RatingCorrection) => {
-    const { anime, realImdbRating, imdbID } = correction;
-    addTerminalLog('MUT', `[ADMIN APPROVAL] Pushing update for '${anime.title}' (${correction.currentLocalRating} -> ${realImdbRating}) to Cloudflare D1...`);
-    try {
-      const updatedPayload = {
-        ...anime,
-        rating: realImdbRating,
-        imdbID: imdbID || anime.imdbID || anime.imdb_id,
-        imdb_id: imdbID || anime.imdbID || anime.imdb_id,
-        id: anime.id,
-      };
-      await cloudflareApi.updateAnime(anime.id, updatedPayload);
-
-      setCatalog((prev) =>
-        prev.map((item) =>
-          item.id === anime.id || String(item.id) === String(anime.id)
-            ? { ...item, rating: realImdbRating, imdbID }
-            : item
-        )
-      );
-      setPendingCorrections((prev) => prev.filter((c) => c.anime.id !== anime.id));
-      addTerminalLog('OK', `[SUCCESS] Admin approved update for '${anime.title}'`);
-      setSuccessMsg(`Approved & pushed rating update for ${anime.title}`);
-      setTimeout(() => setSuccessMsg(''), 4000);
-      if (typeof onAnimeCreated === 'function') onAnimeCreated();
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      addTerminalLog('ERR', `[ERROR] Failed updating #${anime.id}: ${errMsg}`);
-      setSuccessMsg(`Failed to push update for ${anime.title}`);
-      setTimeout(() => setSuccessMsg(''), 4000);
-    }
-  };
-
-  const handleApproveAllCorrections = async () => {
-    for (const correction of [...pendingCorrections]) {
-      await handleApproveCorrection(correction);
-    }
-  };
-
-  // --- DYNAMIC DASHBOARD CALCULATIONS ---
-  const totalUpvotes = catalog.reduce((acc, a) => acc + (Number(a.popularity) || 0), 0);
-  const verifiedLinks = catalog.filter((a) => a.platform).length;
-
-  const langStats = catalog.reduce(
-    (acc, anime) => {
-      const langs = formatLanguageText(anime.languages)
-        .split(',')
-        .map((l) => l.trim().toUpperCase());
-      if (langs.length === 0 || (langs.length === 1 && langs[0] === '')) {
-        acc.Hindi += 1;
-        acc.Tamil += 1;
-        acc.Telugu += 1;
-      } else {
-        langs.forEach((l) => {
-          if (l.includes('HIN')) acc.Hindi += 1;
-          else if (l.includes('TAM')) acc.Tamil += 1;
-          else if (l.includes('TEL')) acc.Telugu += 1;
-          else {
-            acc.Hindi += 1;
-            acc.Tamil += 1;
-            acc.Telugu += 1;
-          }
+      try {
+        const token = (await getToken()) || (await getClerkSessionToken());
+        const verifyRes = await fetch(getCloudflareUrl('/api/admin/verify'), {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
         });
+
+        if (cancelled) return;
+
+        if (!verifyRes.ok) {
+          setServerVerifiedAdmin(false);
+          onLogout?.();
+          return;
+        }
+        setServerVerifiedAdmin(true);
+      } catch {
+        if (!cancelled) {
+          setServerVerifiedAdmin(Boolean(clerkUser && isAuthorizedClerkAdmin(clerkUser)));
+        }
       }
-      return acc;
-    },
-    { Hindi: 0, Tamil: 0, Telugu: 0 }
-  );
 
-  const totalLangs = langStats.Hindi + langStats.Tamil + langStats.Telugu;
-  const hPct = totalLangs > 0 ? Math.round((langStats.Hindi / totalLangs) * 100) : 0;
-  const tPct = totalLangs > 0 ? Math.round((langStats.Tamil / totalLangs) * 100) : 0;
-  const tePct = totalLangs > 0 ? Math.max(100 - hPct - tPct, 0) : 0;
+      if (cancelled) return;
 
-  const genreMap = catalog.reduce<Record<string, number>>((acc, anime) => {
-    const gs = (anime.genres || '').split(',').map((g) => g.trim());
-    gs.forEach((g) => {
-      if (g) acc[g] = (acc[g] || 0) + 1;
-    });
-    return acc;
-  }, {});
-
-  const sortedGenres: GenreStatBar[] = Object.entries(genreMap)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([genre, count]) => ({
-      genre,
-      count,
-      height: catalog.length > 0 ? `${Math.max(Math.round((count / catalog.length) * 100), 10)}%` : '10%',
-    }));
-
-  const pendingCount = pendingItems.length;
-
-  const filteredCatalog = catalog.filter((a) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase().trim();
-    const title = String(a.title || '').toLowerCase();
-    const id = String(a.id || '');
-    const langs = formatLanguageText(a.languages).toLowerCase();
-    const genres = String(a.genres || '').toLowerCase();
-    const studio = String(a.studio || '').toLowerCase();
-    const platform = String(a.platform || '').toLowerCase();
-    const status = String(a.status || a.airing_status || '').toLowerCase();
-    return (
-      title.includes(q) ||
-      id.includes(q) ||
-      langs.includes(q) ||
-      genres.includes(q) ||
-      studio.includes(q) ||
-      platform.includes(q) ||
-      status.includes(q)
-    );
-  });
-
-  const filteredPendingItems = pendingItems.filter((item) => {
-    if (!pendingSearchQuery.trim()) return true;
-    const q = pendingSearchQuery.toLowerCase().trim();
-    const title = String(item.title || '').toLowerCase();
-    const id = String(item.id || '');
-    const langs = formatLanguageText(item.languages).toLowerCase();
-    const studio = String(item.studio || '').toLowerCase();
-    const platform = String(item.platform || '').toLowerCase();
-    const genres = String(item.genres || '').toLowerCase();
-    return (
-      title.includes(q) ||
-      id.includes(q) ||
-      langs.includes(q) ||
-      studio.includes(q) ||
-      platform.includes(q) ||
-      genres.includes(q)
-    );
-  });
-
-  const handleSaveEdit = async (editedData: AdminAnimeRecord & { _savedToServer?: boolean }) => {
-    if (!editedData) return;
-    const alreadySavedToServer = Boolean(editedData._savedToServer);
-    const { _savedToServer: _ignoredSavedFlag, ...cleanEditedInput } = editedData;
-    const targetId = cleanEditedInput.id || editingAnime?.id;
-    const resolvedImage = cleanEditedInput.posterUrl || cleanEditedInput.image || cleanEditedInput.cover_image || cleanEditedInput.poster;
-    const resolvedType = cleanEditedInput.type || cleanEditedInput.Type || editingAnime?.type || 'TV Series';
-    const rawStatusStr = String(cleanEditedInput.status || cleanEditedInput.airing_status || '').trim().toLowerCase();
-    const resolvedStatus =
-      rawStatusStr.includes('complete') || rawStatusStr === 'finished' || rawStatusStr === 'ended'
-        ? 'Completed'
-        : rawStatusStr.includes('upcoming')
-          ? 'Upcoming'
-          : rawStatusStr.includes('ongoing') || rawStatusStr.includes('simulcast')
-            ? 'Ongoing'
-            : rawStatusStr.includes('airing')
-              ? 'Airing'
-              : resolvedType === 'Movie'
-                ? 'Completed'
-                : 'Airing';
-    const isAiringStatus = resolvedStatus === 'Airing' || resolvedStatus === 'Ongoing';
-
-    const partnerSources =
-      cleanEditedInput.streaming_partners ||
-      cleanEditedInput.platforms_data ||
-      cleanEditedInput.watch_providers ||
-      editingAnime?.streaming_partners ||
-      editingAnime?.platforms_data ||
-      editingAnime?.watch_providers;
-    const partnersArray = normalizeStreamingPartners(partnerSources);
-    const derivedPartnerLangs = deriveAggregateLanguagesFromPartners(partnersArray);
-
-    const fullEditedData: AdminAnimeRecord = {
-      ...cleanEditedInput,
-      id: targetId || cleanEditedInput.id,
-      type: resolvedType,
-      Type: resolvedType,
-      status: resolvedStatus,
-      airing_status: resolvedStatus,
-      broadcast_day: isAiringStatus ? (cleanEditedInput.broadcast_day ?? null) : null,
-      broadcast_time: isAiringStatus ? (cleanEditedInput.broadcast_time ?? null) : null,
-      season: isAiringStatus ? (cleanEditedInput.season ?? null) : null,
-      current_season: isAiringStatus ? (cleanEditedInput.current_season ?? cleanEditedInput.season ?? null) : null,
-      live_episode: isAiringStatus ? (cleanEditedInput.live_episode ?? null) : null,
-      image: cleanEditedInput.posterUrl || cleanEditedInput.image || resolvedImage,
-      cover_image: cleanEditedInput.posterUrl || cleanEditedInput.cover_image || resolvedImage,
-      poster: cleanEditedInput.posterUrl || cleanEditedInput.poster || resolvedImage,
-      posterUrl: cleanEditedInput.posterUrl || resolvedImage,
-      poster_url: cleanEditedInput.posterUrl || resolvedImage,
-      languages: cleanEditedInput.languages || derivedPartnerLangs || editingAnime?.languages,
-      streaming_partners: partnersArray,
-      platforms_data: partnersArray,
-      watch_providers: partnersArray,
-      watch_url:
-        cleanEditedInput.watch_url !== undefined
-          ? String(cleanEditedInput.watch_url).trim()
-          : editingAnime?.watch_url
-            ? String(editingAnime.watch_url).trim()
-            : '',
-      platform:
-        cleanEditedInput.platform ||
-        normalizePlatformString(partnersArray.map((p) => p.name).filter(Boolean)) ||
-        editingAnime?.platform ||
-        '',
-      mixed_entries:
-        cleanEditedInput.mixed_entries !== undefined
-          ? cleanEditedInput.mixed_entries
-          : cleanEditedInput.mixedEntries !== undefined
-            ? cleanEditedInput.mixedEntries
-            : editingAnime?.mixed_entries || editingAnime?.mixedEntries || [],
-      mixedEntries:
-        cleanEditedInput.mixedEntries !== undefined
-          ? cleanEditedInput.mixedEntries
-          : cleanEditedInput.mixed_entries !== undefined
-            ? cleanEditedInput.mixed_entries
-            : editingAnime?.mixedEntries || editingAnime?.mixed_entries || [],
-      episodes_per_season:
-        cleanEditedInput.episodes_per_season !== undefined
-          ? cleanEditedInput.episodes_per_season
-          : editingAnime?.episodes_per_season || '',
-      season_episode_count:
-        cleanEditedInput.season_episode_count !== undefined
-          ? normalizeSeasonEpisodeCount(cleanEditedInput.season_episode_count)
-          : editingAnime?.season_episode_count || '',
-      official_source_url:
-        cleanEditedInput.official_source_url !== undefined
-          ? String(cleanEditedInput.official_source_url).trim()
-          : editingAnime?.official_source_url || '',
+      await Promise.all([
+        fetchPendingItems(),
+        fetchFeedbackItems(),
+        fetchD1StatusSummary(),
+        cloudflareApi
+          .fetchTelegramStatus()
+          .then((tg) => {
+            if (!cancelled && tg) setTgStatus(tg);
+          })
+          .catch(() => {}),
+      ]);
     };
 
-    setCatalog((prev) => {
-      const exists = Boolean(targetId) && prev.some((item) => item.id === targetId || String(item.id) === String(targetId));
-      const updated = exists
-        ? prev.map((item) =>
-            item.id === targetId || String(item.id) === String(targetId)
-              ? { ...item, ...fullEditedData, image: cleanEditedInput.posterUrl || cleanEditedInput.image || resolvedImage }
-              : item
-          )
-        : [fullEditedData, ...prev];
-      try {
-        localStorage.setItem('cf_admin_catalog_cache', JSON.stringify(updated));
-      } catch {
-        // Ignore storage errors
-      }
-      return updated;
-    });
+    void verifyAndHydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isSignedIn,
+    clerkUser,
+    getToken,
+    onLogout,
+    fetchPendingItems,
+    fetchFeedbackItems,
+    fetchD1StatusSummary,
+  ]);
 
-    if (targetId) {
-      setPendingItems((prev) =>
+  // 6. Safe Non-Destructive Feedback Status Workflow (Open -> In Progress -> Resolved)
+  const handleUpdateFeedbackStatus = async (
+    id: number | string,
+    nextStatus: FeedbackStatus
+  ) => {
+    setUpdatingFeedbackId(id);
+    setFeedbackError(null);
+    try {
+      const res = await cloudflareApi.updateFeedbackStatus(id, nextStatus);
+      if (!res.success) {
+        const errText =
+          res.error ||
+          `Failed to update Ticket #${id} status. The ticket remains unchanged.`;
+        setFeedbackError(errText);
+        showToast(errText, 'error');
+        return;
+      }
+
+      setFeedbackList((prev) =>
         prev.map((item) =>
-          item.id === targetId || String(item.id) === String(targetId)
-            ? { ...item, ...fullEditedData, image: cleanEditedInput.posterUrl || cleanEditedInput.image || resolvedImage }
+          String(item.id) === String(id)
+            ? { ...item, status: res.status || nextStatus }
             : item
         )
       );
-    }
-
-    if (onAnimeCreated) {
-      onAnimeCreated(fullEditedData);
-    }
-
-    setCloudSyncing(true);
-    setCloudStatusText(`Syncing #${targetId || 'new'} with Cloudflare D1...`);
-    addTerminalLog('MUT', `Pushed update for #${targetId || 'new'} (${fullEditedData.title}) [Status: ${resolvedStatus}] to Edge`);
-    try {
-      if (targetId && !alreadySavedToServer) {
-        await cloudflareApi.updateAnime(targetId, fullEditedData);
-      }
-      cloudflareApi.clearCatalogIndexCache();
-      setSuccessMsg('Changes saved to Cloudflare D1.');
-      addTerminalLog('OK', `Cloudflare D1 updated entry #${targetId || 'new'} (status: ${resolvedStatus})`);
-      setTimeout(() => setSuccessMsg(''), 4000);
-      await fetchAnime();
-    } catch (err) {
-      console.warn('Notice saving edit to Cloudflare D1:', err);
-      const errMsg = err instanceof Error ? err.message : 'Edge save error';
-      setSuccessMsg(`Failed to save changes: ${errMsg}`);
-      addTerminalLog('ERR', `Edge error saving edit #${targetId || 'new'}: ${errMsg}`);
-      setTimeout(() => setSuccessMsg(''), 5000);
+      const label =
+        nextStatus === 'resolved'
+          ? 'Resolved'
+          : nextStatus === 'in_progress'
+            ? 'In Progress'
+            : 'Open';
+      showToast(`Ticket #${id} marked as ${label}.`, 'success');
+      void fetchD1StatusSummary();
+    } catch (err: any) {
+      const errText =
+        err?.message ||
+        `Network error while updating Ticket #${id}. The ticket remains visible.`;
+      setFeedbackError(errText);
+      showToast(errText, 'error');
     } finally {
-      setCloudSyncing(false);
-      setCloudStatusText('');
+      setUpdatingFeedbackId(null);
     }
   };
 
-  const commandPaletteResults = React.useMemo(() => {
-    const q = commandPaletteQuery.toLowerCase().trim();
-    const navItems: CommandPaletteNavItem[] = [
-      { id: 'nav-overview', title: 'Dashboard Overview', desc: 'System metrics & telemetry charts', tab: 'overview', icon: Sliders },
-      { id: 'nav-pending', title: `Community Pending Queue (${pendingCount})`, desc: 'Review & approve regional dub submissions', tab: 'pending', icon: Inbox },
-      { id: 'nav-catalog', title: `Anime Catalog Matrix (${catalog.length})`, desc: 'Manage anime records on Cloudflare D1', tab: 'catalog', icon: Database },
-      { id: 'nav-translations', title: 'Multilingual Translation Center', desc: 'Manage Tamil, Hindi, Telugu, Malayalam, Kannada & Bengali synopses', tab: 'translations', icon: Languages },
-      { id: 'nav-feedback', title: `User Feedback Reports (${feedbackList.length})`, desc: 'Issue reports & requests from users', tab: 'feedback', icon: Inbox },
-      { id: 'nav-health', title: 'IMDb & Diagnostics Probe', desc: 'Missing streaming links & rating health', tab: 'data_health', icon: Shield },
-      { id: 'nav-analytics', title: 'Cloudflare Edge Analytics', desc: 'Worker latency, hit rates & bandwidth', tab: 'analytics', icon: Activity },
-      { id: 'nav-settings', title: 'Cloud Infrastructure & D1', desc: 'Worker bindings, backups & purges', tab: 'settings', icon: HardDrive },
-    ];
+  // 7. Safe Non-Destructive Local Cache Refresh (Never resets or drops D1 tables!)
+  const handleRefreshLocalCache = useCallback(() => {
+    try {
+      localStorage.removeItem('cf_admin_catalog_cache');
+      localStorage.removeItem('cf_admin_pending_cache');
+    } catch {}
+    cloudflareApi.clearCatalogIndexCache();
+    void fetchPaginatedAdminCatalog(1);
+    void fetchPendingItems();
+    void fetchFeedbackItems();
+    void fetchD1StatusSummary();
+    showToast('Local admin cache refreshed and re-synced with Cloudflare D1.', 'success');
+  }, [
+    fetchPaginatedAdminCatalog,
+    fetchPendingItems,
+    fetchFeedbackItems,
+    fetchD1StatusSummary,
+    showToast,
+  ]);
 
-    const actionItems: CommandPaletteActionItem[] = [
-      {
-        id: 'act-add',
-        title: 'Add New Anime to Catalog',
-        desc: 'Insert new entry to Cloudflare D1',
-        icon: Plus,
-        action: () => {
-          setModalMode('submit');
-          setEditingAnime(null);
-          setIsDubModalOpen(true);
-          setIsCommandPaletteOpen(false);
-        },
-      },
-      {
-        id: 'act-refresh',
-        title: 'Sync Live Cloudflare D1 Records',
-        desc: 'Refetch all database rows from edge worker',
-        icon: RefreshCw,
-        action: () => {
-          fetchAnime();
-          setIsCommandPaletteOpen(false);
-        },
-      },
-      {
-        id: 'act-term',
-        title: 'Toggle Live System Terminal',
-        desc: 'Open live D1, Edge & Clerk diagnostics log stream',
-        icon: Terminal,
-        action: () => {
-          setIsTerminalOpen((prev) => !prev);
-          setIsCommandPaletteOpen(false);
-        },
-      },
-      {
-        id: 'act-health',
-        title: 'Run Diagnostic Health Scanner',
-        desc: 'Scan missing links & ratings',
-        icon: ShieldAlert,
-        action: () => {
-          setActiveAdminTab('data_health');
-          setIsCommandPaletteOpen(false);
-        },
-      },
-      {
-        id: 'act-json',
-        title: 'Download Full JSON Snapshot',
-        desc: 'Complete offline backup file',
-        icon: Download,
-        action: () => {
-          handleExportFullJson();
-          setIsCommandPaletteOpen(false);
-        },
-      },
-      {
-        id: 'act-csv',
-        title: 'Export Anime Catalog to CSV',
-        desc: 'Spreadsheet compatible export',
-        icon: FileSpreadsheet,
-        action: () => {
-          handleExportCsv();
-          setIsCommandPaletteOpen(false);
-        },
-      },
-      {
-        id: 'act-csv-guide',
-        title: 'CSV Header & Pipe Format Guide',
-        desc: 'View required 13 headers, pipe (|) rules & season syntax',
-        icon: HelpCircle,
-        action: () => {
-          setShowCsvHelpModal(true);
-          setIsCommandPaletteOpen(false);
-        },
-      },
-      {
-        id: 'act-csv-template',
-        title: 'Download CSV Import Template',
-        desc: 'Pre-formatted template with pipe delimiters & seasons',
-        icon: Download,
-        action: () => {
-          handleDownloadTemplate();
-          setIsCommandPaletteOpen(false);
-        },
-      },
-    ];
+  // 8. Real D1 Overview Stats (Never attributing empty-language anime to Hindi/Tamil/Telugu!)
+  const overviewStats: AdminOverviewStats = useMemo(() => {
+    const d1 = cfStatus?.services?.d1;
+    const fallbackPool = fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems;
 
-    if (!q) {
-      return {
-        actions: actionItems,
-        nav: navItems,
-        animes: catalog.slice(0, 4),
-      };
+    // Accurate language tally from loaded pool if D1 summary hasn't arrived yet
+    const computedLangCounts: Record<string, number> = {
+      Hindi: 0,
+      Tamil: 0,
+      Telugu: 0,
+      Malayalam: 0,
+      Kannada: 0,
+      Bengali: 0,
+      Marathi: 0,
+      Gujarati: 0,
+      Unverified: 0,
+    };
+
+    for (const anime of fallbackPool) {
+      const rawLangs = Array.isArray(anime.languages)
+        ? anime.languages.filter(Boolean)
+        : typeof anime.languages === 'string' && anime.languages.trim()
+          ? anime.languages
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter(Boolean)
+          : [];
+      if (rawLangs.length === 0) {
+        computedLangCounts.Unverified += 1;
+      } else {
+        const joined = rawLangs.join(' ').toLowerCase();
+        if (joined.includes('hindi')) computedLangCounts.Hindi += 1;
+        if (joined.includes('tamil')) computedLangCounts.Tamil += 1;
+        if (joined.includes('telugu')) computedLangCounts.Telugu += 1;
+        if (joined.includes('malayalam')) computedLangCounts.Malayalam += 1;
+        if (joined.includes('kannada')) computedLangCounts.Kannada += 1;
+        if (joined.includes('bengali')) computedLangCounts.Bengali += 1;
+        if (joined.includes('marathi')) computedLangCounts.Marathi += 1;
+        if (joined.includes('gujarati')) computedLangCounts.Gujarati += 1;
+      }
     }
+
+    const openFeedbackCount = feedbackList.filter(
+      (f) => String(f.status || 'open').toLowerCase() !== 'resolved'
+    ).length;
+
+    const publishedAnimeCount =
+      typeof d1?.activeAnimeCount === 'number'
+        ? d1.activeAnimeCount
+        : Math.max(catalogTotalItems, fallbackPool.length);
+
+    const totalAnimeCount =
+      typeof d1?.recordsCount === 'number' && d1.recordsCount > 0
+        ? d1.recordsCount
+        : Math.max(catalogTotalItems, fallbackPool.length);
+
+    const unverifiedDubsCount =
+      typeof d1?.unverifiedDubsCount === 'number'
+        ? d1.unverifiedDubsCount
+        : computedLangCounts.Unverified;
+
+    const missingTranslationsCount =
+      typeof d1?.missingTranslationsCount === 'number'
+        ? d1.missingTranslationsCount
+        : publishedAnimeCount;
 
     return {
-      actions: actionItems.filter((a) => a.title.toLowerCase().includes(q) || a.desc.toLowerCase().includes(q)),
-      nav: navItems.filter((n) => n.title.toLowerCase().includes(q) || n.desc.toLowerCase().includes(q)),
-      animes: catalog
-        .filter(
-          (a) =>
-            (a.title && a.title.toLowerCase().includes(q)) ||
-            (a.hindiTitle && a.hindiTitle.toLowerCase().includes(q)) ||
-            formatLanguageText(a.languages).toLowerCase().includes(q) ||
-            (a.genres && String(a.genres).toLowerCase().includes(q)) ||
-            String(a.id).includes(q)
-        )
-        .slice(0, 6),
+      publishedAnimeCount,
+      totalAnimeCount,
+      pendingModerationCount: pendingItems.length,
+      openFeedbackCount:
+        typeof d1?.openFeedbackCount === 'number' && feedbackList.length === 0
+          ? d1.openFeedbackCount
+          : openFeedbackCount,
+      totalFeedbackCount: feedbackList.length || Number(d1?.feedbackCount || 0),
+      unverifiedDubsCount,
+      missingTranslationsCount,
+      reviewsCount: Number(d1?.reviewsCount || 0),
+      reportsCount: Number(d1?.reportsCount || 0),
+      watchlistCount: Number(d1?.watchlistCount || 0),
+      d1Connected: Boolean(d1?.connected),
+      d1LatencyMs: Number(d1?.latencyMs || 12),
+      languageCounts: d1?.languageCounts || computedLangCounts,
     };
-  }, [commandPaletteQuery, catalog, pendingCount, feedbackList.length]);
+  }, [cfStatus, fullAdminIndex, catalogItems, catalogTotalItems, pendingItems, feedbackList]);
 
-  if (!TEMP_BYPASS_ADMIN_AUTH && !isClerkAdminAuthorized) {
-    const isCheckingServerAdmin = Boolean(isSignedIn && clerkUser && serverAdminVerified === null);
+  // 9. Data Health Report
+  const dataHealthPool = useMemo(
+    () => (fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems),
+    [fullAdminIndex, catalogItems]
+  );
+
+  const dataHealthReport = useMemo(() => {
+    const audited = dataHealthPool
+      .map((anime) => auditAnimeDataHealth(anime))
+      .filter((r) => !r.isHealthy);
+
+    const counts = {
+      all: audited.length,
+      missing_stream_links: audited.filter((r) =>
+        r.issues.some((i) => i.code === 'missing_stream_links')
+      ).length,
+      missing_dub_langs: audited.filter((r) =>
+        r.issues.some((i) => i.code === 'missing_dub_langs')
+      ).length,
+      missing_episode_counts: audited.filter((r) =>
+        r.issues.some((i) => i.code === 'missing_episode_counts')
+      ).length,
+      unverified_metadata: audited.filter((r) =>
+        r.issues.some((i) => i.code === 'unverified_metadata')
+      ).length,
+      incomplete_schedule: audited.filter((r) =>
+        r.issues.some((i) => i.code === 'incomplete_schedule')
+      ).length,
+      healthyCount: Math.max(0, dataHealthPool.length - audited.length),
+    };
+
+    const filtered =
+      healthFilter === 'all'
+        ? audited
+        : audited.filter((r) => r.issues.some((i) => i.code === healthFilter));
+
+    return { items: filtered, summary: counts };
+  }, [dataHealthPool, healthFilter]);
+
+  // 10. Official OTT Link Checker
+  const handleRunLinkCheck = async () => {
+    setIsCheckingLinks(true);
+    try {
+      const report = await cloudflareApi.checkAdminLinks({ limit: 25 });
+      setLinkCheckReport(report);
+      if (report.success && report.summary) {
+        showToast(
+          `Checked ${report.summary.total} official links: ${report.summary.active} healthy, ${report.summary.broken} broken.`,
+          report.summary.broken > 0 ? 'error' : 'success'
+        );
+      } else if (report.error) {
+        showToast(report.error, 'error');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Link health check failed', 'error');
+    } finally {
+      setIsCheckingLinks(false);
+    }
+  };
+
+  // 11. Pending Moderation Actions
+  const handleApprove = async (id: number | string) => {
+    const itemToApprove = pendingItems.find((item) => String(item.id) === String(id));
+    if (!itemToApprove) return;
+    try {
+      const targetStatus =
+        itemToApprove.airing_status && itemToApprove.airing_status !== 'pending'
+          ? itemToApprove.airing_status
+          : itemToApprove.type === 'Movie'
+            ? 'Completed'
+            : 'Airing';
+
+      const res: any = await cloudflareApi.approveAnime(id, targetStatus);
+      if (!res || res.success === false) {
+        throw new Error(res?.error || 'Server rejected approval');
+      }
+
+      setPendingItems((prev) => prev.filter((item) => String(item.id) !== String(id)));
+      showToast(`Approved "${itemToApprove.title}" and published to D1 catalog!`, 'success');
+      void fetchPaginatedAdminCatalog(catalogPage);
+      void fetchD1StatusSummary();
+      onAnimeCreated?.({
+        ...itemToApprove,
+        status: targetStatus,
+        is_published: 1,
+      });
+    } catch (err: any) {
+      showToast(`Failed to approve: ${err?.message || 'Unknown error'}`, 'error');
+    }
+  };
+
+  const handleReject = async (id: number | string) => {
+    try {
+      const res: any = await cloudflareApi.rejectAnime(id);
+      if (!res || res.success === false) {
+        throw new Error(res?.error || 'Server rejected deletion');
+      }
+      setPendingItems((prev) => prev.filter((item) => String(item.id) !== String(id)));
+      showToast('Rejected and removed pending submission from D1.', 'success');
+      void fetchD1StatusSummary();
+    } catch (err: any) {
+      showToast(`Failed to reject submission: ${err?.message || 'Unknown error'}`, 'error');
+    }
+  };
+
+  const handleTogglePendingLanguage = async (id: number | string, lang: string) => {
+    const targetItem = pendingItems.find((i) => String(i.id) === String(id));
+    if (!targetItem) return;
+    const currentLangs: string[] = Array.isArray(targetItem.languages)
+      ? targetItem.languages
+      : typeof targetItem.languages === 'string' && targetItem.languages.trim()
+        ? targetItem.languages.split(',').map((s: string) => s.trim())
+        : [];
+    const updatedLangs = currentLangs.includes(lang)
+      ? currentLangs.filter((l: string) => l !== lang)
+      : [...currentLangs, lang];
+
+    setPendingItems((prev) =>
+      prev.map((item) =>
+        String(item.id) === String(id) ? { ...item, languages: updatedLangs } : item
+      )
+    );
+
+    try {
+      await cloudflareApi.updateAnime(id, {
+        ...targetItem,
+        languages: updatedLangs.join(', '),
+      });
+    } catch (err) {
+      console.error('Failed to sync pending language update:', err);
+    }
+  };
+
+  const handleApproveAllPending = () => {
+    if (pendingItems.length === 0) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Approve All Pending Submissions',
+      message: `Approve and publish all ${pendingItems.length} pending anime to the live Cloudflare D1 catalog?`,
+      confirmLabel: 'Approve All',
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        let approvedCount = 0;
+        for (const item of pendingItems) {
+          try {
+            const targetStatus = item.type === 'Movie' ? 'Completed' : 'Airing';
+            const res: any = await cloudflareApi.approveAnime(item.id, targetStatus);
+            if (res && res.success !== false) approvedCount++;
+          } catch {}
+        }
+        await fetchPendingItems();
+        await fetchPaginatedAdminCatalog(1);
+        await fetchD1StatusSummary();
+        onAnimeCreated?.();
+        showToast(`Approved and published ${approvedCount} titles to the catalog!`, 'success');
+      },
+    });
+  };
+
+  const handleClearAllPending = () => {
+    if (pendingItems.length === 0) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Clear Pending Moderation Queue',
+      message: `Reject and permanently delete all ${pendingItems.length} pending submissions? Published catalog titles will NOT be affected.`,
+      confirmLabel: 'Clear Queue',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        try {
+          const res: any = await cloudflareApi.clearPendingQueue();
+          if (!res || !res.success) {
+            throw new Error(res?.error || res?.message || 'Failed to clear pending queue');
+          }
+          setPendingItems([]);
+          showToast('Pending moderation queue cleared.', 'success');
+          void fetchD1StatusSummary();
+        } catch (err: any) {
+          showToast(`Failed to clear pending queue: ${err?.message || 'Unknown error'}`, 'error');
+        }
+      },
+    });
+  };
+
+  // 12. Catalog Row & Bulk Actions
+  const handleToggleVisibility = async (anime: any) => {
+    const currentlyPublished =
+      anime.is_published !== 0 && anime.is_published !== false && anime.status !== 'pending';
+    const nextPublished = currentlyPublished ? 0 : 1;
+    try {
+      const updated = await cloudflareApi.updateAnime(anime.id, {
+        ...anime,
+        is_published: nextPublished,
+      });
+      setCatalogItems((prev) =>
+        prev.map((a) => (String(a.id) === String(anime.id) ? { ...a, ...updated, is_published: nextPublished } : a))
+      );
+      showToast(
+        nextPublished ? `"${anime.title}" is now Published.` : `"${anime.title}" is now Hidden.`,
+        'success'
+      );
+      onAnimeCreated?.(updated);
+    } catch (err: any) {
+      showToast(`Visibility update failed: ${err?.message}`, 'error');
+    }
+  };
+
+  const handleDeleteCatalogAnime = (id: number, title: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Catalog Title',
+      message: `Permanently delete "${title}" (#${id}) from Cloudflare D1?`,
+      confirmLabel: 'Delete Permanently',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        try {
+          await cloudflareApi.deleteAnime(id);
+          setCatalogItems((prev) => prev.filter((a) => Number(a.id) !== Number(id)));
+          setCatalogTotalItems((prev) => Math.max(0, prev - 1));
+          onAnimeCreated?.(undefined, id);
+          showToast(`Deleted "${title}" from D1.`, 'success');
+          void fetchD1StatusSummary();
+        } catch (err: any) {
+          showToast(`Failed to delete "${title}": ${err?.message || 'Error'}`, 'error');
+        }
+      },
+    });
+  };
+
+  const handleToggleSelectCatalog = (id: number) => {
+    setSelectedCatalogIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllCatalog = () => {
+    if (selectedCatalogIds.length === catalogItems.length) {
+      setSelectedCatalogIds([]);
+    } else {
+      setSelectedCatalogIds(catalogItems.map((a) => Number(a.id)));
+    }
+  };
+
+  const handleBulkUpdateStatus = async (newStatus: string) => {
+    if (selectedCatalogIds.length === 0) return;
+    setIsBulkProcessing(true);
+    try {
+      for (const id of selectedCatalogIds) {
+        const target = catalogItems.find((a) => Number(a.id) === id);
+        if (target) {
+          await cloudflareApi.updateAnime(id, { ...target, status: newStatus });
+        }
+      }
+      showToast(`Updated ${selectedCatalogIds.length} titles to "${newStatus}"!`, 'success');
+      setSelectedCatalogIds([]);
+      await fetchPaginatedAdminCatalog(catalogPage);
+      onAnimeCreated?.();
+    } catch (err: any) {
+      showToast(`Bulk status update failed: ${err?.message}`, 'error');
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
+  const handleBulkAssignLanguage = async () => {
+    if (selectedCatalogIds.length === 0 || !bulkLanguage) return;
+    setIsBulkProcessing(true);
+    try {
+      for (const id of selectedCatalogIds) {
+        const target = catalogItems.find((a) => Number(a.id) === id);
+        if (target) {
+          const currentLangs = Array.isArray(target.languages)
+            ? target.languages.filter(Boolean)
+            : typeof target.languages === 'string' && target.languages.trim()
+              ? target.languages.split(',').map((s: string) => s.trim()).filter(Boolean)
+              : [];
+          if (!currentLangs.includes(bulkLanguage)) {
+            const nextLangs = [...currentLangs, bulkLanguage];
+            await cloudflareApi.updateAnime(id, {
+              ...target,
+              languages: nextLangs.join(', '),
+            });
+          }
+        }
+      }
+      showToast(`Added ${bulkLanguage} dub tag to ${selectedCatalogIds.length} titles!`, 'success');
+      setSelectedCatalogIds([]);
+      await fetchPaginatedAdminCatalog(catalogPage);
+      void fetchD1StatusSummary();
+      onAnimeCreated?.();
+    } catch (err: any) {
+      showToast(`Bulk language update failed: ${err?.message}`, 'error');
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
+  const handleBulkToggleVisibility = async (publish: boolean) => {
+    if (selectedCatalogIds.length === 0) return;
+    setIsBulkProcessing(true);
+    try {
+      for (const id of selectedCatalogIds) {
+        const target = catalogItems.find((a) => Number(a.id) === id);
+        if (target) {
+          await cloudflareApi.updateAnime(id, { ...target, is_published: publish ? 1 : 0 });
+        }
+      }
+      showToast(
+        `${publish ? 'Published' : 'Unpublished'} ${selectedCatalogIds.length} titles!`,
+        'success'
+      );
+      setSelectedCatalogIds([]);
+      await fetchPaginatedAdminCatalog(catalogPage);
+      void fetchD1StatusSummary();
+      onAnimeCreated?.();
+    } catch (err: any) {
+      showToast(`Bulk visibility update failed: ${err?.message}`, 'error');
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
+  const handleBulkDeleteSelected = () => {
+    if (selectedCatalogIds.length === 0) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Bulk Delete Catalog Titles',
+      message: `Permanently delete ${selectedCatalogIds.length} selected anime from Cloudflare D1?`,
+      confirmLabel: `Delete ${selectedCatalogIds.length} Titles`,
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setIsBulkProcessing(true);
+        try {
+          for (const id of selectedCatalogIds) {
+            await cloudflareApi.deleteAnime(id);
+          }
+          showToast(`Deleted ${selectedCatalogIds.length} titles from D1.`, 'success');
+          setSelectedCatalogIds([]);
+          await fetchPaginatedAdminCatalog(1);
+          void fetchD1StatusSummary();
+          onAnimeCreated?.();
+        } catch (err: any) {
+          showToast(`Bulk delete failed: ${err?.message}`, 'error');
+        } finally {
+          setIsBulkProcessing(false);
+        }
+      },
+    });
+  };
+
+  // 13. Add / Edit Submit Handler
+  const handleAddOrEditAnime = async (newAnimeData: any) => {
+    try {
+      const isEditing = Boolean(editingAnime && editingAnime.id);
+      const isPendingItem = Boolean(
+        editingAnime &&
+          (editingAnime.status === 'pending' ||
+            pendingItems.some((p) => String(p.id) === String(editingAnime.id)))
+      );
+
+      const savedRes: any = isEditing
+        ? await cloudflareApi.updateAnime(editingAnime.id, {
+            ...newAnimeData,
+            status: isPendingItem ? 'pending' : newAnimeData.status || editingAnime.status,
+            is_published: isPendingItem ? 0 : 1,
+          })
+        : await cloudflareApi.createAnime(newAnimeData);
+      const savedAnime = savedRes?.data || savedRes || newAnimeData;
+
+      if (isEditing && isPendingItem) {
+        setPendingItems((prev) =>
+          prev.map((item) =>
+            String(item.id) === String(editingAnime.id)
+              ? { ...item, ...savedAnime, id: editingAnime.id }
+              : item
+          )
+        );
+      } else {
+        onAnimeCreated?.(savedAnime);
+      }
+
+      setEditingAnime(null);
+      setIsAddModalOpen(false);
+      await fetchPaginatedAdminCatalog(catalogPage);
+      void fetchD1StatusSummary();
+      showToast(
+        isEditing
+          ? `Saved changes to "${savedAnime.title || newAnimeData.title}".`
+          : `Added "${savedAnime.title || newAnimeData.title}" to D1 catalog!`,
+        'success'
+      );
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to save anime to D1.', 'error');
+      throw error;
+    }
+  };
+
+  // 14. Settings & Diagnostics Handlers
+  const handleExecuteD1Query = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsExecutingQuery(true);
+    try {
+      const res = await cloudflareApi.executeD1Query({
+        table: d1Table,
+        animeId: d1AnimeId.trim() ? d1AnimeId.trim() : undefined,
+        title: d1TitleSearch.trim() ? d1TitleSearch.trim() : undefined,
+        limit: d1Limit,
+      });
+      setD1QueryResult(res);
+    } catch (err: any) {
+      setD1QueryResult({ error: err?.message || 'Failed to execute query' });
+    } finally {
+      setIsExecutingQuery(false);
+    }
+  };
+
+  const handleSaveTelegram = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingTg(true);
+    try {
+      const res = await cloudflareApi.updateTelegramSettings({
+        token: tgToken,
+        chatId: tgChatId,
+      });
+      if (res.success) {
+        setTgStatus({
+          configured: Boolean(tgToken && tgChatId),
+          botTokenSet: Boolean(tgToken),
+          chatIdSet: Boolean(tgChatId),
+        });
+        showToast(res.message || 'Telegram Bot settings saved!', 'success');
+      } else {
+        showToast(res.error || 'Failed to save settings', 'error');
+      }
+    } catch {
+      showToast('Network error while saving Telegram settings', 'error');
+    } finally {
+      setIsSavingTg(false);
+    }
+  };
+
+  const handleTestTelegram = async () => {
+    setIsTestingTg(true);
+    try {
+      const res = await cloudflareApi.testTelegram({
+        token: tgToken || undefined,
+        chatId: tgChatId || undefined,
+      });
+      if (res.success) {
+        showToast(res.message || 'Test alert sent to your Telegram!', 'success');
+      } else {
+        showToast(res.error || 'Failed to send test alert.', 'error');
+      }
+    } catch {
+      showToast('Error testing Telegram bot connection', 'error');
+    } finally {
+      setIsTestingTg(false);
+    }
+  };
+
+  const handleSaveWorkerUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (customWorkerUrl.trim()) {
+        localStorage.setItem('cf_api_url_override', customWorkerUrl.trim());
+      } else {
+        localStorage.removeItem('cf_api_url_override');
+      }
+    } catch {}
+    setIsUrlSaved(true);
+    window.setTimeout(() => setIsUrlSaved(false), 3000);
+    showToast(
+      customWorkerUrl.trim()
+        ? `Connected to Worker URL: ${customWorkerUrl.trim()}`
+        : 'Reset to default same-origin (/api/anime) endpoint',
+      'success'
+    );
+    void fetchD1StatusSummary();
+  };
+
+  const handleResetWorkerUrl = () => {
+    setCustomWorkerUrl('');
+    try {
+      localStorage.removeItem('cf_api_url_override');
+    } catch {}
+    showToast('Reset to same-origin /api/anime routing.', 'success');
+    void fetchD1StatusSummary();
+  };
+
+  // 15. CSV Import / Export & SQL Dump Handlers
+  const handleDownloadSampleCSV = () => {
+    const sampleHeaders = [
+      'Title',
+      'Poster URL',
+      'Synopsis',
+      'Rating',
+      'Release Year',
+      'Status',
+      'Type',
+      'Studio',
+      'Genres',
+      'Languages',
+      'Platforms',
+      'Episodes',
+      'Season',
+    ];
+    const sampleRows = [
+      [
+        '"Solo Leveling"',
+        '"https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx151807-m1gX3iwfIsLu.png"',
+        '"In a world where hunters must battle deadly monsters to protect humanity, Sung Jinwoo finds a mysterious program."',
+        '"8.8"',
+        '"2024"',
+        '"Airing"',
+        '"TV Series"',
+        '"A-1 Pictures"',
+        '"Action | Adventure | Fantasy"',
+        '"Tamil | Hindi | Telugu"',
+        '"Crunchyroll"',
+        '"12 | 13"',
+        '"Winter 2024"',
+      ],
+    ];
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [sampleHeaders.join(','), ...sampleRows.map((e) => e.join(','))].join('\n');
+    const link = document.createElement('a');
+    link.setAttribute('href', encodeURI(csvContent));
+    link.setAttribute('download', 'anidub_sample_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Downloaded sample CSV template!', 'success');
+  };
+
+  const handleExportCSV = () => {
+    const exportList = fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems;
+    if (exportList.length === 0) {
+      showToast('No catalog items loaded to export.', 'error');
+      return;
+    }
+
+    const headers = [
+      'ID',
+      'Title',
+      'Slug',
+      'Poster URL',
+      'Rating',
+      'Release Year',
+      'Status',
+      'Type',
+      'Studio',
+      'Genres',
+      'Languages',
+      'Platforms',
+      'Episodes Count',
+    ];
+
+    const escapeCsv = (val: any) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = exportList.map((a) => {
+      const genresStr = Array.isArray(a.genres) ? a.genres.join(' | ') : a.genres || '';
+      const langsStr = Array.isArray(a.languages) ? a.languages.join(' | ') : a.languages || '';
+      const platformsStr = Array.isArray(a.platforms)
+        ? a.platforms.join(' | ')
+        : a.platform || '';
+      return [
+        escapeCsv(a.id),
+        escapeCsv(a.title),
+        escapeCsv(a.slug || ''),
+        escapeCsv(a.posterUrl || a.image || a.cover_image || ''),
+        escapeCsv(a.rating || '8.5'),
+        escapeCsv(a.releaseYear || a.year || '2024'),
+        escapeCsv(a.status || 'Airing'),
+        escapeCsv(a.type || 'TV Series'),
+        escapeCsv(a.studio || ''),
+        escapeCsv(genresStr),
+        escapeCsv(langsStr),
+        escapeCsv(platformsStr),
+        escapeCsv(a.episodes_count || 12),
+      ].join(',');
+    });
+
+    const csvString = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute(
+      'download',
+      `anidub_catalog_export_${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${exportList.length} anime titles to CSV!`, 'success');
+  };
+
+  const handleExportSQL = () => {
+    const exportList = fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems;
+    if (exportList.length === 0) {
+      showToast('No catalog items loaded to export.', 'error');
+      return;
+    }
+
+    const escSql = (val: any) => {
+      if (val === null || val === undefined || val === '') return 'NULL';
+      if (typeof val === 'number') return String(val);
+      return `'${String(val).replace(/'/g, "''")}'`;
+    };
+
+    const lines: string[] = [
+      `-- AniDub India Cloudflare D1 SQL Backup`,
+      `-- Generated at: ${new Date().toISOString()}`,
+      `-- Total Titles: ${exportList.length}`,
+      ``,
+    ];
+
+    for (const a of exportList) {
+      const title = escSql(a.title);
+      const slug = escSql(
+        a.slug ||
+          String(a.title || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+      );
+      const synopsis = escSql(a.synopsis || '');
+      const cover = escSql(a.posterUrl || a.image || a.cover_image || '');
+      const rating = Number(a.rating) || 8.5;
+      const year = Number(a.releaseYear || a.year) || 2024;
+      const status = escSql(a.status || 'Airing');
+      const type = escSql(a.type || 'TV Series');
+      const studio = escSql(a.studio || 'MAPPA');
+      const genres = escSql(
+        Array.isArray(a.genres) ? a.genres.join(', ') : a.genres || ''
+      );
+      const langs = escSql(
+        Array.isArray(a.languages) ? a.languages.join(', ') : a.languages || ''
+      );
+      const platform = escSql(
+        Array.isArray(a.platforms) ? a.platforms[0] : a.platform || ''
+      );
+      const epCount = Number(a.episodes_count) || 12;
+
+      lines.push(
+        `INSERT OR REPLACE INTO anime (title, slug, synopsis, cover_image, rating, year, status, type, studio, genres, languages, platform, episodes_count, is_published, submissionStatus) VALUES (${title}, ${slug}, ${synopsis}, ${cover}, ${rating}, ${year}, ${status}, ${type}, ${studio}, ${genres}, ${langs}, ${platform}, ${epCount}, 1, 'approved');`
+      );
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'application/sql;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `anidub_d1_backup_${new Date().toISOString().slice(0, 10)}.sql`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${exportList.length} titles as D1 SQL Dump!`, 'success');
+  };
+
+  const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingCsv(true);
+
+    try {
+      const text = await file.text();
+      const parseCSV = (raw: string): string[][] => {
+        const result: string[][] = [];
+        let row: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        const cleanText = raw.replace(/^\uFEFF/, '');
+        for (let i = 0; i < cleanText.length; i++) {
+          const char = cleanText[i];
+          const nextChar = cleanText[i + 1];
+          if (char === '"') {
+            if (inQuotes && nextChar === '"') {
+              current += '"';
+              i++;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (char === ',' && !inQuotes) {
+            row.push(current.trim());
+            current = '';
+          } else if ((char === '\r' || char === '\n') && !inQuotes) {
+            if (char === '\r' && nextChar === '\n') i++;
+            row.push(current.trim());
+            if (row.some((cell) => cell !== '')) result.push(row);
+            row = [];
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        if (current !== '' || row.length > 0) {
+          row.push(current.trim());
+          if (row.some((cell) => cell !== '')) result.push(row);
+        }
+        return result;
+      };
+
+      const rows = parseCSV(text);
+      if (rows.length < 2) {
+        showToast('CSV file is empty or missing data rows.', 'error');
+        setIsUploadingCsv(false);
+        return;
+      }
+
+      const rawHeaders = rows[0].map((h) => h.replace(/^"|"$/g, '').trim());
+      const parsedItems: any[] = [];
+
+      for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
+        if (!values || values.length === 0) continue;
+        const rowObj: any = {};
+        rawHeaders.forEach((h, idx) => {
+          if (h) rowObj[h] = values[idx] !== undefined ? values[idx].replace(/^"|"$/g, '').trim() : '';
+        });
+
+        const getField = (possibleNames: string[]) => {
+          for (const key of Object.keys(rowObj)) {
+            const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (possibleNames.includes(normKey) && rowObj[key] !== '') {
+              return rowObj[key];
+            }
+          }
+          return '';
+        };
+
+        const title = getField(['title', 'name', 'animetitle', 'animename']) || values[0] || '';
+        if (!title || title.toLowerCase() === 'title') continue;
+
+        parsedItems.push({
+          ...rowObj,
+          title,
+          posterUrl: getField(['posterurl', 'poster', 'coverimage', 'image', 'cover']),
+          synopsis: getField(['synopsis', 'description', 'summary', 'plot']),
+          rating: getField(['rating', 'score', 'malscore']) || '8.5',
+          releaseYear: getField(['releaseyear', 'year', 'aired']) || '2024',
+          status: getField(['status', 'airingstatus']) || 'Completed',
+          type: getField(['type', 'format', 'mediatype']) || 'TV Series',
+          studio: getField(['studio', 'studios', 'producer']) || 'MAPPA',
+          genres: getField(['genres', 'genre', 'tags', 'categories']) || 'Action, Fantasy',
+          languages: getField(['languages', 'language', 'dublanguages', 'dub', 'audio']) || '',
+          platforms: getField(['platforms', 'platform', 'streaming', 'ott', 'watchon']) || '',
+          episodes: getField(['episodes', 'episodecount', 'totalepisodes', 'eps']) || '12',
+        });
+      }
+
+      if (parsedItems.length === 0) {
+        showToast('Could not find valid anime rows in CSV.', 'error');
+        setIsUploadingCsv(false);
+        return;
+      }
+
+      const res: any = await cloudflareApi.uploadCSV({ animeList: parsedItems });
+      if (res && res.success) {
+        const addedCount = res.insertedCount ?? res.inserted ?? res.count ?? parsedItems.length;
+        await fetchPendingItems();
+        void fetchD1StatusSummary();
+        setActiveTab('moderation');
+        setModerationSubTab('pending');
+        showToast(`Imported ${addedCount} titles into Pending Moderation queue!`, 'success');
+      } else {
+        showToast(res?.error || res?.message || 'Failed to import CSV rows', 'error');
+      }
+    } catch (err: any) {
+      showToast(`CSV Import Failed: ${err?.message || 'Unknown error'}`, 'error');
+    } finally {
+      setIsUploadingCsv(false);
+      if (csvInputRef.current) csvInputRef.current.value = '';
+    }
+  };
+
+  // STRICT CLERK ADMIN ROUTE GUARD (Production Enforced)
+  if (!isClerkAdminAuthorized) {
     return (
-      <div className="w-full min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-8 shadow-2xl text-center space-y-5">
-          <div className="w-12 h-12 rounded-2xl bg-[#F87171]/15 border border-[#F87171]/30 flex items-center justify-center mx-auto">
-            {isCheckingServerAdmin ? (
-              <Loader2 className="w-6 h-6 text-[var(--accent-primary)] animate-spin" />
-            ) : (
-              <ShieldAlert className="w-6 h-6 text-[#F87171]" />
-            )}
+      <div
+        data-testid="admin-auth-gate"
+        className="min-h-[75vh] flex items-center justify-center p-4 bg-[var(--bg-canvas)] text-[var(--text-primary)]"
+      >
+        <div className="max-w-md w-full p-6 sm:p-8 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-center space-y-4 shadow-xl">
+          <div className="w-12 h-12 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-6 h-6 text-red-500" />
           </div>
-          <div className="space-y-1.5">
-            <h2 className="text-lg font-black text-[var(--text-primary)]">
-              {isCheckingServerAdmin ? 'Verifying Admin Session...' : 'Protected Admin Route'}
-            </h2>
-            <p className="text-xs text-[var(--text-secondary)]">
-              {isCheckingServerAdmin
-                ? 'Checking Clerk administrator permissions with the backend.'
-                : <>Only the authorized Clerk Administrator can access <code className="text-[var(--accent-primary)]">/admin</code>.</>}
-            </p>
-          </div>
-          {!isSignedIn && (
-            <div className="flex justify-center">
-              <SignIn />
-            </div>
+          <h2 className="text-xl font-extrabold text-[var(--text-primary)]">
+            {t('admin.restrictedTitle', 'Admin Access Restricted')}
+          </h2>
+          <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed">
+            Strict Clerk Admin authentication and verified administrator credentials are required to access the AniDub India Admin Workspace.
+          </p>
+          {onNavigateHome && (
+            <button
+              type="button"
+              onClick={onNavigateHome}
+              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs sm:text-sm font-bold inline-flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Return to Public Catalog
+            </button>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              if (onNavigateHome) onNavigateHome();
-              else window.location.href = '/';
-            }}
-            className="w-full min-h-[44px] py-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] transition-colors duration-150 cursor-pointer"
-          >
-            Return to Home
-          </button>
         </div>
       </div>
     );
   }
 
-  const navItemsConfig = [
-    { id: 'overview' as const, label: 'Overview', icon: Sliders },
-    { id: 'pending' as const, label: 'Pending Reviews', count: pendingCount, icon: Inbox },
-    { id: 'catalog' as const, label: 'Anime Catalog', count: catalog.length, icon: Database },
-    { id: 'translations' as const, label: 'Translations', icon: Languages },
-    { id: 'feedback' as const, label: 'User Feedback', count: feedbackList.length, icon: Inbox },
-    { id: 'data_health' as const, label: 'IMDb & Diagnostics', icon: Shield },
-    { id: 'analytics' as const, label: 'Edge Analytics', icon: Activity },
-    { id: 'settings' as const, label: 'Cloud Infrastructure', icon: HardDrive },
+  // Normalized active tab for unified Moderation & Feedback
+  const effectiveTab: AdminActiveTab =
+    activeTab === 'pending' || activeTab === 'feedback' ? 'moderation' : activeTab;
+
+  const handleSelectNavTab = (tab: AdminActiveTab) => {
+    if (tab === 'pending') {
+      setActiveTab('moderation');
+      setModerationSubTab('pending');
+    } else if (tab === 'feedback') {
+      setActiveTab('moderation');
+      setModerationSubTab('feedback');
+    } else {
+      setActiveTab(tab);
+    }
+    setIsMobileMoreOpen(false);
+  };
+
+  const handleFilterCatalogByLanguage = (language: string) => {
+    setFilterLanguage(language);
+    setCatalogPage(1);
+    setActiveTab(language === 'Unverified' ? 'dubs' : 'catalog');
+  };
+
+  const totalModerationBadge =
+    overviewStats.pendingModerationCount + overviewStats.openFeedbackCount;
+
+  const sidebarGroups: Array<{
+    groupLabel: string;
+    items: Array<{
+      id: AdminActiveTab;
+      label: string;
+      icon: React.FC<{ className?: string }>;
+      badge?: number;
+    }>;
+  }> = [
+    {
+      groupLabel: 'Workspace',
+      items: [
+        { id: 'overview', label: 'Command Center', icon: LayoutDashboard },
+        {
+          id: 'catalog',
+          label: 'Anime Catalog',
+          icon: Film,
+          badge: overviewStats.publishedAnimeCount,
+        },
+        {
+          id: 'dubs',
+          label: 'Dubs',
+          icon: Globe,
+          badge:
+            overviewStats.unverifiedDubsCount > 0
+              ? overviewStats.unverifiedDubsCount
+              : undefined,
+        },
+        {
+          id: 'translations',
+          label: 'Translations',
+          icon: Languages,
+        },
+      ],
+    },
+    {
+      groupLabel: 'Operations',
+      items: [
+        {
+          id: 'moderation',
+          label: 'Moderation & Feedback',
+          icon: Clock,
+          badge: totalModerationBadge > 0 ? totalModerationBadge : undefined,
+        },
+        {
+          id: 'data_health',
+          label: 'Data Health',
+          icon: ShieldCheck,
+          badge:
+            dataHealthReport.summary.all > 0 ? dataHealthReport.summary.all : undefined,
+        },
+        { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+      ],
+    },
+    {
+      groupLabel: 'System',
+      items: [
+        { id: 'backup', label: 'Backup & Export', icon: Download },
+        { id: 'settings', label: 'Settings', icon: Settings },
+      ],
+    },
   ];
 
   return (
-    <div className="w-full min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans relative selection:bg-[var(--accent-primary)] selection:text-[var(--accent-on-primary)] overflow-x-clip">
+    <div
+      data-testid="admin-workspace-shell"
+      className="min-h-screen w-full max-w-full overflow-x-clip bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col lg:flex-row pb-20 lg:pb-0"
+    >
+      {/* Hidden CSV File Input */}
       <input
-        ref={fileInputRef}
         type="file"
         accept=".csv"
-        onChange={handleFileUpload}
+        ref={csvInputRef}
+        onChange={handleCsvUpload}
         className="hidden"
       />
 
-      {/* Desktop Sidebar */}
+      {/* 1. DESKTOP COLLAPSIBLE 240PX SIDEBAR */}
       <aside
-        className={`hidden md:flex flex-col shrink-0 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-all duration-200 relative z-30 sticky top-0 h-screen overflow-y-auto ${
-          isSidebarCollapsed ? 'w-20' : 'w-64'
+        data-testid="admin-desktop-sidebar"
+        className={`hidden lg:flex flex-col shrink-0 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-all duration-200 ${
+          isSidebarCollapsed ? 'w-[72px]' : 'w-[240px]'
         }`}
       >
-        <div className="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            {isSidebarCollapsed ? <AniDubLogo variant="icon" size="sm" /> : <AniDubLogo variant="horizontal" size="sm" />}
-            {!isSidebarCollapsed && (
-              <div className="min-w-0">
-                <div className="text-[10px] font-black tracking-[0.2em] uppercase text-[var(--text-secondary)] truncate">ADMIN CONSOLE</div>
-                <div className="text-[9px] text-[var(--accent-primary)] font-mono tracking-tight flex items-center gap-1 mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
-                  <span>v4.2 ECLIPSE</span>
-                </div>
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-            className="w-9 h-9 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors duration-150 cursor-pointer"
-            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {isSidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-          </button>
-        </div>
-
-        <div className="p-3">
-          <button
-            onClick={() => setIsCommandPaletteOpen(true)}
-            className={`w-full rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-150 cursor-pointer flex items-center gap-2 group ${
-              isSidebarCollapsed ? 'p-2.5 justify-center' : 'px-3 py-2 justify-between'
-            }`}
-            title="Open Command Palette (Ctrl+K)"
-          >
-            <div className="flex items-center gap-2">
-              <Command className="w-4 h-4 text-[var(--accent-primary)]" />
-              {!isSidebarCollapsed && <span className="text-xs font-medium text-[var(--text-primary)]">Command Palette</span>}
-            </div>
-            {!isSidebarCollapsed && (
-              <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] text-[10px] font-mono text-[var(--text-secondary)] border border-[var(--border-subtle)]">
-                ⌘K
-              </kbd>
-            )}
-          </button>
-        </div>
-
-        <nav className="flex-1 px-3 py-2 space-y-1">
-          {navItemsConfig.map((item) => {
-            const isActive = activeAdminTab === item.id;
-            const IconComp = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveAdminTab(item.id)}
-                className={`w-full rounded-xl transition-colors duration-150 flex items-center gap-3 cursor-pointer group relative ${
-                  isSidebarCollapsed ? 'p-3 justify-center' : 'px-3.5 py-2.5 justify-between'
-                } ${
-                  isActive
-                    ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] font-bold'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
-                }`}
-                title={item.label}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <IconComp className={`w-4 h-4 shrink-0 ${isActive ? 'text-[var(--accent-on-primary)]' : 'text-[var(--text-secondary)] group-hover:text-[var(--accent-primary)]'}`} />
-                  {!isSidebarCollapsed && <span className="text-xs truncate tracking-tight">{item.label}</span>}
-                </div>
-                {!isSidebarCollapsed && item.count !== undefined && item.count > 0 && (
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono font-bold ${
-                      isActive ? 'bg-[var(--bg-canvas)]/20 text-[var(--accent-on-primary)]' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
-                    }`}
-                  >
-                    {item.count}
-                  </span>
-                )}
-                {isSidebarCollapsed && item.count !== undefined && item.count > 0 && (
-                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[var(--accent-primary)]" />
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="p-3 border-t border-[var(--border-subtle)]">
-          <button
-            onClick={() => setIsTerminalOpen((prev) => !prev)}
-            className={`w-full rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 p-2.5 transition-colors duration-150 cursor-pointer flex items-center gap-2.5 text-left group ${
-              isSidebarCollapsed ? 'justify-center' : 'justify-between'
-            }`}
-            title="Open Live System Terminal"
-          >
+        <div className="h-16 px-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
+          {!isSidebarCollapsed && (
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-6 h-6 rounded-lg bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 flex items-center justify-center shrink-0">
-                <Terminal className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+              <img
+                src="/logo.png"
+                alt="AniDub India"
+                className="w-8 h-8 rounded-lg object-contain shrink-0"
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-extrabold text-[var(--text-primary)] truncate">
+                  AniDub Admin
+                </div>
+                <div className="text-[11px] text-[var(--text-secondary)] truncate">
+                  Cloudflare D1 Studio
+                </div>
               </div>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+            aria-label={isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+            className="min-w-[40px] min-h-[40px] rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center mx-auto"
+          >
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen className="w-4 h-4" />
+            ) : (
+              <PanelLeftClose className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto p-3 space-y-5">
+          {sidebarGroups.map((group) => (
+            <div key={group.groupLabel} className="space-y-1">
               {!isSidebarCollapsed && (
-                <div className="min-w-0">
-                  <div className="text-[11px] font-mono font-bold text-[var(--text-primary)] flex items-center gap-1.5">
-                    <span>SYS TERMINAL</span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
-                  </div>
-                  <div className="text-[9px] text-[var(--text-secondary)] font-mono truncate">LIVE LOG MATRIX</div>
+                <div className="px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">
+                  {group.groupLabel}
                 </div>
               )}
-            </div>
-            {!isSidebarCollapsed && (
-              <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" />
-            )}
-          </button>
-        </div>
-
-        <div className="p-3 border-t border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
-          <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : 'justify-between'}`}>
-            <button
-              onClick={() => {
-                if (onNavigateHome) onNavigateHome();
-                else window.location.href = '/';
-              }}
-              className="p-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-150 cursor-pointer flex items-center gap-2"
-              title="Return to Public Directory"
-            >
-              <Globe className="w-4 h-4 text-[var(--accent-primary)]" />
-              {!isSidebarCollapsed && <span className="text-xs">Public App</span>}
-            </button>
-            <button
-              onClick={() => {
-                if (onLogout) onLogout();
-                else window.location.href = '/';
-              }}
-              className="p-2 rounded-xl bg-[#F87171]/10 hover:bg-[#F87171]/20 border border-[#F87171]/30 text-[#F87171] hover:text-[var(--text-primary)] transition-colors duration-150 cursor-pointer flex items-center gap-2"
-              title="Sign Out"
-            >
-              <LogOut className="w-4 h-4" />
-              {!isSidebarCollapsed && <span className="text-xs">Logout</span>}
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content Workspace */}
-      <div className="flex-1 flex flex-col min-w-0 pb-24 md:pb-10 relative">
-        <header className="sticky top-0 z-30 bg-[var(--bg-surface)]/95 backdrop-blur-md border-b border-[var(--border-subtle)] px-4 sm:px-6 py-3.5">
-          <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="relative shrink-0 md:hidden">
-                <div className="w-9 h-9 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)]">
-                  <Zap className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-base sm:text-lg font-black tracking-tight text-[var(--text-primary)] flex items-center gap-2">
-                    <span>Admin Command Console</span>
-                  </h1>
-                  <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-                    <span className="px-2 py-0.5 rounded-md bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-[10px] font-mono tracking-wider uppercase font-semibold">
-                      Superadmin
-                    </span>
-                    <span className="px-2 py-0.5 rounded-md bg-[#34D399]/10 border border-[#34D399]/30 text-[#34D399] text-[10px] font-mono flex items-center gap-1.5 font-semibold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
-                      <span>Cloudflare Edge D1</span>
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-[11px] text-[var(--text-secondary)] truncate hidden lg:block">
-                    Regional Indian dubs moderation, Cloudflare D1 persistence &amp; IMDb telemetry
-                  </p>
-                  {cloudSyncing && (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--accent-primary)]">
-                      <Loader2 className="w-3 h-3 animate-spin text-[var(--accent-primary)]" />
-                      <span>{cloudStatusText || 'Syncing with Edge...'}</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => setIsCommandPaletteOpen(true)}
-                className="h-10 px-3 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-2 text-xs font-medium transition-colors duration-150 cursor-pointer"
-                title="Open Global Command Palette (Ctrl+K)"
-              >
-                <Command className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                <span className="hidden sm:inline">Search</span>
-                <kbd className="hidden sm:inline px-1 py-0.2 rounded bg-[var(--bg-surface)] text-[9px] font-mono text-[var(--text-secondary)] border border-[var(--border-subtle)]">
-                  ⌘K
-                </kbd>
-              </button>
-
-              <button
-                onClick={() => setIsTerminalOpen((prev) => !prev)}
-                className={`h-10 px-3 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 transition-colors duration-150 cursor-pointer ${
-                  isTerminalOpen
-                    ? 'bg-[var(--accent-primary)] border-[var(--accent-primary)] text-[var(--accent-on-primary)]'
-                    : 'bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-                title="Toggle System Terminal"
-              >
-                <Terminal className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">CLI</span>
-                <span className={`w-1.5 h-1.5 rounded-full ${isTerminalOpen ? 'bg-[var(--bg-canvas)]' : 'bg-[#34D399]'}`} />
-              </button>
-
-              <button
-                onClick={fetchAnime}
-                className="h-10 w-10 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors duration-150 cursor-pointer"
-                title="Refresh database records"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[var(--accent-primary)]' : ''}`} />
-              </button>
-
-              <button
-                onClick={() => {
-                  if (onNavigateHome) onNavigateHome();
-                  else window.location.href = '/';
-                }}
-                className="h-10 px-3 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-semibold hidden md:inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
-              >
-                <Globe className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                <span>Public App</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  if (onLogout) onLogout();
-                  else window.location.href = '/';
-                }}
-                className="h-10 w-10 rounded-xl bg-[#F87171]/10 hover:bg-[#F87171]/20 border border-[#F87171]/30 text-[#F87171] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors duration-150 cursor-pointer md:hidden"
-                title="Logout from admin session"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="max-w-6xl mx-auto mt-3 pt-2 border-t border-[var(--border-subtle)] md:hidden">
-            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
-              {navItemsConfig.map((tab) => {
-                const isActive = activeAdminTab === tab.id;
-                const IconComp = tab.icon;
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = effectiveTab === item.id;
                 return (
                   <button
-                    key={tab.id}
-                    onClick={() => setActiveAdminTab(tab.id)}
-                    className={`relative min-h-[40px] px-3.5 rounded-xl text-xs font-medium transition-colors duration-150 shrink-0 flex items-center gap-2 cursor-pointer ${
+                    key={item.id}
+                    type="button"
+                    data-testid={`admin-nav-${item.id}`}
+                    onClick={() => handleSelectNavTab(item.id)}
+                    title={item.label}
+                    className={`w-full min-h-[42px] px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between gap-2.5 transition-all ${
                       isActive
-                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] font-bold'
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] shadow-xs'
                         : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
                     }`}
                   >
-                    {IconComp && <IconComp className="w-3.5 h-3.5" />}
-                    <span>{tab.label}</span>
-                    {tab.count !== undefined && tab.count > 0 && (
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Icon className="w-4 h-4 shrink-0" />
+                      {!isSidebarCollapsed && <span className="truncate">{item.label}</span>}
+                    </div>
+                    {!isSidebarCollapsed && item.badge !== undefined && item.badge > 0 && (
                       <span
-                        className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
-                          isActive ? 'bg-[var(--bg-canvas)]/20 text-[var(--accent-on-primary)]' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
+                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${
+                          isActive
+                            ? 'bg-black/20 text-[var(--accent-on-primary,#fff)]'
+                            : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)]'
                         }`}
                       >
-                        {tab.count}
+                        {item.badge}
                       </span>
                     )}
                   </button>
                 );
               })}
             </div>
+          ))}
+        </nav>
+
+        <div className="p-3 border-t border-[var(--border-subtle)] space-y-1.5">
+          {onNavigateHome && (
+            <button
+              type="button"
+              onClick={onNavigateHome}
+              title="Back to Public App"
+              className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-2.5"
+            >
+              <ArrowLeft className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && <span>Back to App</span>}
+            </button>
+          )}
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              title="Exit Admin"
+              className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-2.5"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && <span>Lock Admin</span>}
+            </button>
+          )}
+        </div>
+      </aside>
+
+      {/* 2. MAIN WORKSPACE COLUMN */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* Sticky Top Workspace Header */}
+        <header className="sticky top-0 z-30 h-16 px-3 sm:px-6 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/95 backdrop-blur-md flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {onNavigateHome && (
+              <button
+                type="button"
+                onClick={onNavigateHome}
+                className="lg:hidden min-w-[44px] min-h-[44px] px-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center justify-center gap-1 shrink-0"
+                aria-label="Back to App"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-extrabold text-[var(--text-primary)] truncate">
+                {effectiveTab === 'overview' && 'Command Center'}
+                {effectiveTab === 'catalog' && 'Anime Catalog'}
+                {effectiveTab === 'dubs' && 'Regional Dubs Intelligence'}
+                {effectiveTab === 'translations' && 'Native Synopsis Translations'}
+                {effectiveTab === 'moderation' && 'Moderation & Feedback'}
+                {effectiveTab === 'data_health' && 'Data Health Audit'}
+                {effectiveTab === 'analytics' && 'Analytics & Edge Telemetry'}
+                {effectiveTab === 'backup' && 'Backup & Export'}
+                {effectiveTab === 'settings' && 'Workspace Settings'}
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              data-testid="admin-quick-search-trigger"
+              onClick={() => setIsCommandPaletteOpen(true)}
+              className="min-h-[44px] px-3 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-2"
+              title="Quick Search & Commands (⌘K)"
+            >
+              <Search className="w-4 h-4 text-[var(--accent-primary)]" />
+              <span className="hidden sm:inline">Quick Search</span>
+              <kbd className="hidden md:inline-block px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[10px] font-mono">
+                ⌘K
+              </kbd>
+            </button>
+
+            <button
+              type="button"
+              data-testid="admin-diagnostics-trigger"
+              onClick={() => setIsDiagnosticsOpen(true)}
+              className="min-h-[44px] px-3 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5"
+              title="Open Diagnostics Drawer"
+            >
+              <Terminal className="w-4 h-4 text-[var(--accent-primary)]" />
+              <span className="hidden md:inline">Diagnostics</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setEditingAnime(null);
+                setIsAddModalOpen(true);
+              }}
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-bold flex items-center gap-1.5 shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Add Anime</span>
+            </button>
           </div>
         </header>
 
-        <div className="max-w-6xl mx-auto w-full px-4 pt-4 relative z-10">
-          {showImportToast && (
-            <div className="rounded-xl p-4 bg-[var(--bg-surface)] border border-[#34D399]/40 flex items-center justify-between text-[#34D399] text-xs font-semibold mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-[#34D399]/15 border border-[#34D399]/35 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-4 h-4 text-[#34D399]" />
-                </div>
-                <span>Import complete: Successfully synchronized {importedCount} anime entries to moderation queue.</span>
-              </div>
-              <button onClick={() => setShowImportToast(false)} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors p-1">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+        {/* Active Workspace Section Content */}
+        <div className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+          {/* SECTION 1: COMMAND CENTER (OVERVIEW) */}
+          {effectiveTab === 'overview' && (
+            <AdminOverviewTab
+              stats={overviewStats}
+              pendingItems={pendingItems}
+              feedbackList={feedbackList}
+              onSetActiveTab={handleSelectNavTab}
+              onOpenAddModal={() => {
+                setEditingAnime(null);
+                setIsAddModalOpen(true);
+              }}
+              onFilterCatalogByLanguage={handleFilterCatalogByLanguage}
+              onApprovePending={handleApprove}
+              onRejectPending={handleReject}
+            />
           )}
 
-          {successMsg && (
-            <div className="rounded-xl p-4 bg-[var(--bg-surface)] border border-[var(--accent-primary)]/40 flex items-center justify-between text-[var(--text-primary)] text-xs font-semibold mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/35 flex items-center justify-center shrink-0">
-                  <Sparkles className="w-4 h-4 text-[var(--accent-primary)]" />
-                </div>
-                <span>{successMsg}</span>
-              </div>
-              <button onClick={() => setSuccessMsg('')} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors p-1">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+          {/* SECTION 2 & 3: ANIME CATALOG & DUBS INTELLIGENCE */}
+          {(effectiveTab === 'catalog' || effectiveTab === 'dubs') && (
+            <AdminCatalogTab
+              mode={effectiveTab === 'dubs' ? 'dubs' : 'catalog'}
+              items={catalogItems}
+              totalItems={catalogTotalItems}
+              currentPage={catalogPage}
+              totalPages={catalogTotalPages}
+              pageSize={catalogPageSize}
+              isLoading={isCatalogLoading}
+              errorMsg={catalogError}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              filterStatus={filterStatus}
+              setFilterStatus={setFilterStatus}
+              filterLanguage={filterLanguage}
+              setFilterLanguage={setFilterLanguage}
+              sortBy={sortBy}
+              setSortBy={setSortBy}
+              onPageChange={(nextPage) => setCatalogPage(nextPage)}
+              onRefresh={() => void fetchPaginatedAdminCatalog(catalogPage)}
+              onOpenAddModal={() => {
+                setEditingAnime(null);
+                setIsAddModalOpen(true);
+              }}
+              selectedCatalogIds={selectedCatalogIds}
+              setSelectedCatalogIds={setSelectedCatalogIds}
+              bulkLanguage={bulkLanguage}
+              setBulkLanguage={setBulkLanguage}
+              isBulkProcessing={isBulkProcessing}
+              onSelectAllCatalog={handleSelectAllCatalog}
+              onToggleSelectCatalog={handleToggleSelectCatalog}
+              onBulkUpdateStatus={handleBulkUpdateStatus}
+              onBulkAssignLanguage={handleBulkAssignLanguage}
+              onBulkToggleVisibility={handleBulkToggleVisibility}
+              onBulkDeleteSelected={handleBulkDeleteSelected}
+              onToggleVisibility={handleToggleVisibility}
+              onEditAnime={(anime) => {
+                setEditingAnime(anime);
+                setIsAddModalOpen(true);
+              }}
+              onDeleteCatalogAnime={handleDeleteCatalogAnime}
+            />
           )}
 
-          {apiError && (
-            <div className="rounded-xl p-4 bg-[var(--bg-surface)] border border-[#F87171]/40 text-[#F87171] text-xs font-semibold mb-4 flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-[#F87171]" />
-                <span>Failed to reach anime catalog API. Operating in offline/cached session.</span>
-              </div>
-              {terminalLogs.length > 0 && terminalLogs[0].level === 'ERR' && (
-                <div className="mt-1 p-2 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] font-mono text-[10px] text-[#F87171] break-all">
-                  {terminalLogs[0].msg}
-                </div>
-              )}
-            </div>
+          {/* SECTION 4: TRANSLATIONS */}
+          {effectiveTab === 'translations' && (
+            <AdminTranslationsTab
+              catalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
+              onSuccess={(msg) => showToast(msg, 'success')}
+            />
           )}
-        </div>
 
-        <main className="max-w-6xl mx-auto w-full px-4 py-6 space-y-6 flex-1">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeAdminTab}
-              initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={shouldReduceMotion ? undefined : { opacity: 0, y: -6 }}
-              transition={{ duration: 0.16, ease: 'easeOut' }}
-              className="w-full space-y-6"
-            >
-              {activeAdminTab === 'overview' && (
-                <AdminOverviewTab
-                  loading={loading}
-                  catalogCount={catalog.length}
-                  verifiedLinks={verifiedLinks}
-                  pendingCount={pendingCount}
-                  totalUpvotes={totalUpvotes}
-                  hPct={hPct}
-                  tPct={tPct}
-                  tePct={tePct}
-                  sortedGenres={sortedGenres}
-                  shouldReduceMotion={shouldReduceMotion}
-                  onTriggerFileUpload={() => fileInputRef.current?.click()}
-                  onDownloadTemplate={handleDownloadTemplate}
-                  onOpenCsvGuide={() => setShowCsvHelpModal(true)}
-                  onSwitchTab={setActiveAdminTab}
-                  onExportFullJson={handleExportFullJson}
-                />
-              )}
+          {/* SECTION 5: MODERATION & FEEDBACK */}
+          {effectiveTab === 'moderation' && (
+            <div data-testid="admin-moderation-section" className="space-y-6">
+              <div className="p-3 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-wrap items-center gap-2">
+                {(
+                  [
+                    {
+                      id: 'all',
+                      label: `All Queues (${pendingItems.length + feedbackList.length})`,
+                    },
+                    {
+                      id: 'pending',
+                      label: `Pending Anime Submissions (${pendingItems.length})`,
+                    },
+                    {
+                      id: 'feedback',
+                      label: `User Feedback Tickets (${feedbackList.length})`,
+                    },
+                  ] as const
+                ).map((sub) => (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    onClick={() => setModerationSubTab(sub.id)}
+                    className={`min-h-[42px] px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                      moderationSubTab === sub.id
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
 
-              {activeAdminTab === 'pending' && (
+              {(moderationSubTab === 'all' || moderationSubTab === 'pending') && (
                 <AdminPendingTab
                   pendingItems={pendingItems}
-                  filteredPendingItems={filteredPendingItems}
-                  pendingSearchQuery={pendingSearchQuery}
-                  onPendingSearchChange={setPendingSearchQuery}
-                  onClearPendingQueue={handleClearPendingQueue}
-                  onApprovePending={handleApprovePending}
-                  onEditPending={handleOpenEditModal}
-                  onRejectPending={handleRejectPending}
-                />
-              )}
-
-              {activeAdminTab === 'catalog' && (
-                <AdminCatalogTab
-                  loading={loading}
-                  isImporting={isImporting}
-                  catalogCount={catalog.length}
-                  filteredCatalog={filteredCatalog}
-                  searchQuery={searchQuery}
-                  deletingId={deletingId}
-                  onSearchChange={setSearchQuery}
-                  onTriggerFileUpload={() => fileInputRef.current?.click()}
-                  onExportCsv={handleExportCsv}
-                  onOpenCsvHelp={() => setShowCsvHelpModal(true)}
-                  onOpenAddModal={() => {
-                    setModalMode('submit');
-                    setEditingAnime(null);
-                    setIsDubModalOpen(true);
+                  onApproveAllPending={handleApproveAllPending}
+                  onClearAllPending={handleClearAllPending}
+                  onEditPending={(item) => {
+                    setEditingAnime(item);
+                    setIsAddModalOpen(true);
                   }}
-                  onOpenEditModal={handleOpenEditModal}
-                  onDeleteAnime={handleDeleteCatalogAnime}
+                  onTogglePendingLanguage={handleTogglePendingLanguage}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
                 />
               )}
 
-              {activeAdminTab === 'translations' && (
-                <AdminTranslationsTab
-                  catalog={catalog}
-                  onSuccess={(msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000); }}
+              {(moderationSubTab === 'all' || moderationSubTab === 'feedback') && (
+                <AdminFeedbackTab
+                  feedbackList={feedbackList}
+                  onUpdateFeedbackStatus={handleUpdateFeedbackStatus}
+                  onRefreshFeedback={() => void fetchFeedbackItems()}
+                  updatingFeedbackId={updatingFeedbackId}
+                  feedbackError={feedbackError}
                 />
               )}
+            </div>
+          )}
 
-              {activeAdminTab === 'data_health' && (
-                <AdminDataHealthTab
-                  isCheckingHealth={isCheckingHealth}
-                  pendingCorrections={pendingCorrections}
-                  terminalLogs={terminalLogs}
-                  onRunHealthCheck={() => handleRunHealthCheck()}
-                  onApproveCorrection={handleApproveCorrection}
-                  onApproveAllCorrections={handleApproveAllCorrections}
-                  onOpenTerminal={() => setIsTerminalOpen(true)}
-                />
-              )}
+          {/* SECTION 6: DATA HEALTH */}
+          {effectiveTab === 'data_health' && (
+            <AdminDataHealthTab
+              dataHealthReport={dataHealthReport}
+              healthFilter={healthFilter}
+              setHealthFilter={setHealthFilter}
+              onEditAnime={(anime) => {
+                setEditingAnime(anime);
+                setIsAddModalOpen(true);
+              }}
+              linkCheckReport={linkCheckReport}
+              isCheckingLinks={isCheckingLinks}
+              onRunLinkCheck={handleRunLinkCheck}
+            />
+          )}
 
-              {activeAdminTab === 'feedback' && (
-                <AdminFeedbackTab feedbackList={feedbackList} onResolveFeedback={handleResolveFeedback} />
-              )}
+          {/* SECTION 7: ANALYTICS */}
+          {effectiveTab === 'analytics' && (
+            <AnalyticsDashboard
+              onNavigateHome={onNavigateHome}
+              onSelectAnimeSlug={(slug) => {
+                setSearchQuery(slug);
+                setActiveTab('catalog');
+              }}
+            />
+          )}
 
-              {activeAdminTab === 'analytics' && (
-                <Suspense fallback={<AdminSkeleton />}>
-                  <AnalyticsDashboard />
-                </Suspense>
-              )}
+          {/* SECTION 8: BACKUP & EXPORT */}
+          {effectiveTab === 'backup' && (
+            <div data-testid="admin-backup-tab" className="max-w-4xl mx-auto space-y-6">
+              <div className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
+                    <Download className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-extrabold text-[var(--text-primary)]">
+                      Catalog Backup &amp; Bulk CSV Import
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
+                      Export full Cloudflare D1 snapshots or import verified CSV spreadsheets into the Pending Moderation queue.
+                    </p>
+                  </div>
+                </div>
 
-              {activeAdminTab === 'settings' && (
-                <AdminSettingsTab
-                  apiUrlOverride={apiUrlOverride}
-                  onApiUrlOverrideChange={setApiUrlOverride}
-                  onSaveApiUrlOverride={handleSaveApiUrlOverride}
-                  onResetApiUrl={handleResetApiUrl}
-                  onExportFullJson={handleExportFullJson}
-                  onExportCsv={handleExportCsv}
-                  telegramStatus={telegramStatus}
-                  telegramNotice={telegramNotice}
-                  telegramToken={telegramToken}
-                  telegramChatId={telegramChatId}
-                  onTelegramTokenChange={setTelegramToken}
-                  onTelegramChatIdChange={setTelegramChatId}
-                  isSavingTelegram={isSavingTelegram}
-                  isTestingTelegram={isTestingTelegram}
-                  onSaveTelegram={handleSaveTelegram}
-                  onTestTelegram={handleTestTelegram}
-                  confirmPurge={confirmPurge}
-                  onPurgeCache={handlePurgeCache}
-                />
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </main>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleExportCSV}
+                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase text-emerald-600 dark:text-emerald-400">
+                        CSV Snapshot
+                      </span>
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                    </div>
+                    <div className="text-sm font-bold text-[var(--text-primary)]">
+                      Export Catalog CSV
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      Download all anime rows as a spreadsheet.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportSQL}
+                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase text-sky-600 dark:text-sky-400">
+                        D1 SQL Dump
+                      </span>
+                      <Database className="w-4 h-4 text-sky-500" />
+                    </div>
+                    <div className="text-sm font-bold text-[var(--text-primary)]">
+                      Export D1 SQL Backup
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      Generate idempotent INSERT OR REPLACE SQL statements.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => csvInputRef.current?.click()}
+                    disabled={isUploadingCsv}
+                    className="min-h-[48px] p-4 rounded-2xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-left space-y-1.5 transition-all disabled:opacity-50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase text-[var(--accent-primary)]">
+                        Bulk Upload
+                      </span>
+                      {isUploadingCsv ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-primary)]" />
+                      ) : (
+                        <Upload className="w-4 h-4 text-[var(--accent-primary)]" />
+                      )}
+                    </div>
+                    <div className="text-sm font-bold text-[var(--text-primary)]">
+                      Import CSV to Pending
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      Safely stage CSV rows into Pending Moderation.
+                    </p>
+                  </button>
+                </div>
+
+                <div className="pt-3 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsCsvHelpOpen(true)}
+                    className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5"
+                  >
+                    <HelpCircle className="w-4 h-4 text-[var(--accent-primary)]" />
+                    View CSV Format Guide &amp; Sample Template
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadSampleCSV}
+                    className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 text-xs font-bold text-[var(--accent-primary)] flex items-center gap-1.5"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Sample CSV
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SECTION 9: SETTINGS */}
+          {effectiveTab === 'settings' && (
+            <AdminSettingsTab
+              tgStatus={tgStatus}
+              tgToken={tgToken}
+              setTgToken={setTgToken}
+              tgChatId={tgChatId}
+              setTgChatId={setTgChatId}
+              isSavingTg={isSavingTg}
+              isTestingTg={isTestingTg}
+              onSaveTelegram={handleSaveTelegram}
+              onTestTelegram={handleTestTelegram}
+              customWorkerUrl={customWorkerUrl}
+              setCustomWorkerUrl={setCustomWorkerUrl}
+              isUrlSaved={isUrlSaved}
+              onSaveWorkerUrl={handleSaveWorkerUrl}
+              onResetWorkerUrl={handleResetWorkerUrl}
+              onRefreshLocalCache={handleRefreshLocalCache}
+              onOpenDiagnosticsDrawer={() => setIsDiagnosticsOpen(true)}
+            />
+          )}
+        </div>
       </div>
 
-      <AdminTerminalHud
-        isOpen={isTerminalOpen}
-        isExpanded={isTerminalExpanded}
-        logs={terminalLogs}
-        onToggleOpen={() => {
-          setIsTerminalOpen(true);
-          runRealTerminalProbe('full');
-        }}
-        onToggleExpand={() => setIsTerminalExpanded((prev) => !prev)}
-        onClose={() => setIsTerminalOpen(false)}
-        onClearLogs={() => setTerminalLogs([])}
-        onAddLog={addTerminalLog}
-        onRunProbe={(probe) => runRealTerminalProbe(probe)}
-      />
+      {/* 3. MOBILE 5-TAB BOTTOM NAVIGATION BAR (< 1024px) */}
+      <nav
+        data-testid="admin-mobile-bottom-nav"
+        aria-label="Admin Mobile Navigation"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-subtle)] grid grid-cols-5 items-center px-1"
+      >
+        {(
+          [
+            { id: 'overview', label: 'Home', icon: LayoutDashboard },
+            { id: 'catalog', label: 'Catalog', icon: Film },
+            { id: 'dubs', label: 'Dubs', icon: Globe },
+            {
+              id: 'moderation',
+              label: 'Moderation',
+              icon: Clock,
+              badge: totalModerationBadge,
+            },
+          ] as const
+        ).map((tab) => {
+          const Icon = tab.icon;
+          const isActive = effectiveTab === tab.id && !isMobileMoreOpen;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              data-testid={`admin-mobile-tab-${tab.id}`}
+              onClick={() => handleSelectNavTab(tab.id)}
+              className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl relative transition-all ${
+                isActive
+                  ? 'text-[var(--accent-primary)] font-extrabold'
+                  : 'text-[var(--text-secondary)] font-semibold'
+              }`}
+            >
+              <Icon className="w-5 h-5" />
+              <span className="text-[11px] truncate max-w-[68px]">{tab.label}</span>
+              {'badge' in tab && tab.badge !== undefined && tab.badge > 0 && (
+                <span className="absolute top-1 right-3 px-1.5 py-0.2 rounded-full bg-amber-500 text-black text-[10px] font-black">
+                  {tab.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
 
-      <AdminCommandPalette
-        isOpen={isCommandPaletteOpen}
-        query={commandPaletteQuery}
-        results={commandPaletteResults}
-        onQueryChange={setCommandPaletteQuery}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        onSelectTab={setActiveAdminTab}
-        onSelectAnime={(anime) => {
-          handleOpenEditModal(anime);
-        }}
-      />
-
-      {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-3 left-3 right-3 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border border-[var(--border-subtle)] rounded-2xl p-1.5 shadow-2xl flex items-center justify-around">
         <button
-          onClick={() => setActiveAdminTab('overview')}
-          className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
-            activeAdminTab === 'overview' ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/15' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+          type="button"
+          data-testid="admin-mobile-tab-more"
+          onClick={() => setIsMobileMoreOpen((prev) => !prev)}
+          className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl transition-all ${
+            isMobileMoreOpen ||
+            ['translations', 'data_health', 'analytics', 'backup', 'settings'].includes(
+              effectiveTab
+            )
+              ? 'text-[var(--accent-primary)] font-extrabold'
+              : 'text-[var(--text-secondary)] font-semibold'
           }`}
         >
-          <Sliders className="w-4 h-4" />
-          <span className="text-[9px] font-medium">Overview</span>
+          <MoreHorizontal className="w-5 h-5" />
+          <span className="text-[11px]">More</span>
         </button>
+      </nav>
 
-        <button
-          onClick={() => setActiveAdminTab('pending')}
-          className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 relative transition-colors duration-150 cursor-pointer ${
-            activeAdminTab === 'pending' ? 'text-[#F9C876] bg-[#F9C876]/15' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-          }`}
+      {/* MOBILE "MORE" BOTTOM DRAWER */}
+      {isMobileMoreOpen && (
+        <div
+          data-testid="admin-mobile-more-drawer"
+          className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs"
+          onClick={() => setIsMobileMoreOpen(false)}
         >
-          <Inbox className="w-4 h-4" />
-          <span className="text-[9px] font-medium">Pending</span>
-          {pendingCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#F9C876]" />}
-        </button>
+          <div
+            className="w-full bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] rounded-t-2xl p-4 space-y-3 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
+              <span className="text-sm font-extrabold text-[var(--text-primary)]">
+                More Admin Tools
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsMobileMoreOpen(false)}
+                className="min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-        <button
-          onClick={() => setActiveAdminTab('catalog')}
-          className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
-            activeAdminTab === 'catalog' ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/15' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-          }`}
-        >
-          <Database className="w-4 h-4" />
-          <span className="text-[9px] font-medium">Catalog</span>
-        </button>
+            <div className="grid grid-cols-2 gap-2.5">
+              {(
+                [
+                  { id: 'translations', label: 'Translations', icon: Languages },
+                  { id: 'data_health', label: 'Data Health', icon: ShieldCheck },
+                  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+                  { id: 'backup', label: 'Backup & Export', icon: Download },
+                  { id: 'settings', label: 'Settings', icon: Settings },
+                ] as const
+              ).map((item) => {
+                const Icon = item.icon;
+                const isActive = effectiveTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectNavTab(item.id)}
+                    className={`min-h-[48px] px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center gap-2.5 ${
+                      isActive
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border-[var(--border-subtle)]'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                );
+              })}
 
-        <button
-          onClick={() => setActiveAdminTab('analytics')}
-          className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
-            activeAdminTab === 'analytics' ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/15' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-          }`}
-        >
-          <Activity className="w-4 h-4" />
-          <span className="text-[9px] font-medium">Analytics</span>
-        </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMoreOpen(false);
+                  setIsDiagnosticsOpen(true);
+                }}
+                className="min-h-[48px] px-3.5 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-primary)] text-xs font-bold flex items-center gap-2.5"
+              >
+                <Terminal className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+                <span className="truncate">Diagnostics</span>
+              </button>
+            </div>
 
-        <button
-          onClick={() => setIsCommandPaletteOpen(true)}
-          className="min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 text-[var(--accent-primary)] hover:text-[var(--accent-hover)] cursor-pointer"
-        >
-          <Command className="w-4 h-4" />
-          <span className="text-[9px] font-mono">⌘K</span>
-        </button>
-
-        <button
-          onClick={() => setIsTerminalOpen((prev) => !prev)}
-          className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
-            isTerminalOpen ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/15' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-          }`}
-        >
-          <Terminal className="w-4 h-4" />
-          <span className="text-[9px] font-mono">CLI</span>
-        </button>
-      </div>
-
-      {isDubModalOpen && (
-        <DubInfoModal
-          isOpen={isDubModalOpen}
-          onClose={() => setIsDubModalOpen(false)}
-          onSubmit={handleSaveEdit}
-          initialData={editingAnime}
-          mode={modalMode}
-        />
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold flex items-center justify-center gap-2"
+              >
+                <LogOut className="w-4 h-4" />
+                Lock Admin Workspace
+              </button>
+            )}
+          </div>
+        </div>
       )}
 
-      <AdminCsvHelpModal
-        isOpen={showCsvHelpModal}
-        hasCopiedHeaders={hasCopiedHeaders}
-        hasCopiedSnippet={hasCopiedSnippet}
-        onClose={() => setShowCsvHelpModal(false)}
-        onCopyHeaders={handleCopyHeaders}
-        onCopySnippet={handleCopySnippet}
-        onDownloadTemplate={handleDownloadTemplate}
+      {/* 4. OPTIONAL COLLAPSIBLE DIAGNOSTICS DRAWER */}
+      <AdminTerminalHud
+        isOpen={isDiagnosticsOpen}
+        onClose={() => setIsDiagnosticsOpen(false)}
+        terminalLogs={terminalLogs}
+        onClearLogs={() => setTerminalLogs([])}
+        d1Table={d1Table}
+        setD1Table={setD1Table}
+        d1AnimeId={d1AnimeId}
+        setD1AnimeId={setD1AnimeId}
+        d1TitleSearch={d1TitleSearch}
+        setD1TitleSearch={setD1TitleSearch}
+        d1Limit={d1Limit}
+        setD1Limit={setD1Limit}
+        d1QueryResult={d1QueryResult}
+        isExecutingQuery={isExecutingQuery}
+        onExecuteD1Query={handleExecuteD1Query}
+        onRunDiagnostics={() => void fetchD1StatusSummary()}
+        isTestingApi={isTestingApi}
       />
 
-      <ConfirmDialog
-        isOpen={confirmClearPendingOpen}
-        onClose={() => setConfirmClearPendingOpen(false)}
-        onConfirm={executeClearPendingQueue}
-        title="Clear Pending Moderation Queue?"
-        description={`This will permanently remove all ${pendingItems.length} pending community submissions from Cloudflare D1.`}
-        confirmLabel="Clear Queue"
-        destructive
-      />
-
-      <ConfirmDialog
-        isOpen={Boolean(pendingDeleteAnime)}
-        onClose={() => setPendingDeleteAnime(null)}
-        onConfirm={() => {
-          if (pendingDeleteAnime) executeDeleteCatalogAnime(pendingDeleteAnime);
+      {/* 5. GLOBAL COMMAND PALETTE (⌘K) */}
+      <AdminCommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        cmdQuery={cmdQuery}
+        setCmdQuery={setCmdQuery}
+        pendingCount={pendingItems.length}
+        feedbackCount={overviewStats.openFeedbackCount}
+        dataHealthCount={dataHealthReport.summary.all}
+        onOpenAddModal={() => {
+          setEditingAnime(null);
+          setIsAddModalOpen(true);
         }}
-        title="Delete Anime from Catalog?"
-        description={`Remove "${pendingDeleteAnime?.title || 'this entry'}" permanently from the Cloudflare D1 database?`}
-        confirmLabel="Delete Anime"
-        destructive
-        loading={Boolean(deletingId)}
+        onSetActiveTab={handleSelectNavTab}
+        onExportCSV={handleExportCSV}
+        onRunDiagnostics={() => setIsDiagnosticsOpen(true)}
+        filteredCatalog={catalogItems}
+        onEditAnime={(anime) => {
+          setEditingAnime(anime);
+          setIsAddModalOpen(true);
+        }}
       />
+
+      {/* 6. CSV IMPORT HELP MODAL */}
+      <AdminCsvHelpModal
+        isOpen={isCsvHelpOpen}
+        onClose={() => setIsCsvHelpOpen(false)}
+        onDownloadSampleCSV={handleDownloadSampleCSV}
+        onTriggerCsvUpload={() => csvInputRef.current?.click()}
+      />
+
+      {/* 7. ADD / EDIT ANIME MODAL */}
+      <DubInfoModal
+        isOpen={isAddModalOpen}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setEditingAnime(null);
+        }}
+        onSubmit={handleAddOrEditAnime}
+        initialData={editingAnime}
+      />
+
+      {/* 8. NON-DESTRUCTIVE CONFIRMATION MODAL */}
+      {confirmDialog?.isOpen && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 shadow-2xl space-y-4 text-[var(--text-primary)]">
+            <h3 className="text-lg font-extrabold text-[var(--text-primary)]">
+              {confirmDialog.title}
+            </h3>
+            <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed">
+              {confirmDialog.message}
+            </p>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDialog.onConfirm}
+                className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold ${
+                  confirmDialog.isDanger
+                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    : 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)]'
+                }`}
+              >
+                {confirmDialog.confirmLabel || 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. TOAST NOTIFICATION BANNER */}
+      {toastMessage && (
+        <div
+          data-testid="admin-toast-banner"
+          className={`fixed bottom-20 lg:bottom-6 right-4 z-[140] flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border max-w-md ${
+            toastType === 'error'
+              ? 'bg-[var(--bg-surface)] border-red-500/50 text-red-600 dark:text-red-400'
+              : 'bg-[var(--bg-surface)] border-emerald-500/50 text-emerald-600 dark:text-emerald-400'
+          }`}
+        >
+          {toastType === 'error' ? (
+            <XCircle className="w-5 h-5 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
+          )}
+          <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)]">
+            {toastMessage}
+          </span>
+        </div>
+      )}
     </div>
   );
 };

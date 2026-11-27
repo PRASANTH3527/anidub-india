@@ -1,190 +1,305 @@
 import React from 'react';
-import { Star, RefreshCcw, AlertTriangle, Check, Terminal } from 'lucide-react';
-import type { RatingCorrection, TerminalLogEntry } from './types';
+import {
+  ShieldCheck,
+  CheckCircle2,
+  Edit3,
+  Link2,
+  Loader2,
+  AlertTriangle,
+  ExternalLink,
+} from 'lucide-react';
+import type { DataHealthFilter } from './types';
+import type { AdminLinkCheckResponse } from '../../services/cloudflareApi';
+
+export interface DataHealthReport {
+  items: Array<{
+    anime: any;
+    issues: Array<{ label: string; severity: 'critical' | 'warning' }>;
+  }>;
+  summary: {
+    all: number;
+    missing_stream_links: number;
+    missing_dub_langs: number;
+    missing_episode_counts: number;
+    unverified_metadata: number;
+    incomplete_schedule: number;
+    healthyCount: number;
+  };
+}
 
 export interface AdminDataHealthTabProps {
-  isCheckingHealth: boolean;
-  pendingCorrections: RatingCorrection[];
-  terminalLogs: TerminalLogEntry[];
-  onRunHealthCheck: () => void;
-  onApproveCorrection: (correction: RatingCorrection) => void;
-  onApproveAllCorrections: () => void;
-  onOpenTerminal: () => void;
+  dataHealthReport: DataHealthReport;
+  healthFilter: DataHealthFilter;
+  setHealthFilter: (filter: DataHealthFilter) => void;
+  onEditAnime: (anime: any) => void;
+  linkCheckReport: AdminLinkCheckResponse | null;
+  isCheckingLinks: boolean;
+  onRunLinkCheck: () => void;
 }
 
 export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
-  isCheckingHealth,
-  pendingCorrections,
-  terminalLogs,
-  onRunHealthCheck,
-  onApproveCorrection,
-  onApproveAllCorrections,
-  onOpenTerminal,
+  dataHealthReport,
+  healthFilter,
+  setHealthFilter,
+  onEditAnime,
+  linkCheckReport,
+  isCheckingLinks,
+  onRunLinkCheck,
 }) => {
   return (
-    <div className="space-y-6">
-      <div className="p-6 sm:p-8 rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-2xl space-y-6">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(245,158,11,0.25)]">
-              <Star className="w-6 h-6 fill-amber-400 text-amber-300" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-white tracking-tight">IMDb Telemetry &amp; Scoring Health Engine</h3>
-                <span className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-mono">Automated Probe</span>
-              </div>
-              <p className="text-xs text-neutral-400 leading-relaxed max-w-xl">
-                Performs real-time schema validation across all catalog titles, testing score consistency and streaming platform mappings against global records.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-wrap">
-            <button
-              onClick={onRunHealthCheck}
-              disabled={isCheckingHealth}
-              className="h-10 px-6 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-white text-xs font-bold inline-flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(245,158,11,0.35)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
-            >
-              <RefreshCcw className={`w-4 h-4 text-white ${isCheckingHealth ? 'animate-spin' : ''}`} />
-              <span>{isCheckingHealth ? 'Running Live OMDb Probe...' : 'Initiate Full Health Probe'}</span>
-            </button>
-          </div>
+    <div data-testid="admin-data-health-tab" className="space-y-6 text-[var(--text-primary)]">
+      {/* Header & Summary */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-sm">
+        <div>
+          <h2 className="text-lg sm:text-xl font-extrabold text-[var(--text-primary)] flex items-center gap-2.5">
+            <ShieldCheck className="w-5 h-5 text-emerald-500" />
+            Data Health &amp; Catalog Quality Audit
+          </h2>
+          <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
+            Automated scan for missing official streaming links, unverified dub language tags, missing episode counts, and incomplete broadcast schedules.
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
-            <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Title Schema Coverage</span>
-            <div className="text-2xl font-black text-white font-mono flex items-center gap-2">
-              <span>100%</span>
-              <span className="text-xs font-normal text-emerald-400">Verified</span>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={onRunLinkCheck}
+            disabled={isCheckingLinks}
+            className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+          >
+            {isCheckingLinks ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Checking OTT Links...
+              </>
+            ) : (
+              <>
+                <Link2 className="w-4 h-4" />
+                Check Official OTT Links
+              </>
+            )}
+          </button>
+          <div className="px-3.5 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-center">
+            <div className="text-base font-black text-emerald-600 dark:text-emerald-400">
+              {dataHealthReport.summary.healthyCount}
             </div>
-            <p className="text-[11px] text-neutral-500">All titles have valid metadata</p>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+              Healthy
+            </div>
           </div>
-
-          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
-            <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Corrupt Records Detected</span>
-            <div className="text-2xl font-black text-emerald-400 font-mono flex items-center gap-2">
-              <span>0</span>
-              <span className="text-xs font-normal text-neutral-400">Null fields</span>
+          <div className="px-3.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-center">
+            <div className="text-base font-black text-amber-600 dark:text-amber-400">
+              {dataHealthReport.summary.all}
             </div>
-            <p className="text-[11px] text-neutral-500">Database integrity intact</p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
-            <span className="text-[10px] font-mono uppercase text-neutral-400 font-semibold">Cloud Query Latency</span>
-            <div className="text-2xl font-black text-cyan-400 font-mono flex items-center gap-2">
-              <span>18ms</span>
-              <span className="text-xs font-normal text-neutral-400">HTTP/2 Edge</span>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              Needs Fix
             </div>
-            <p className="text-[11px] text-neutral-500">Cloudflare Anycast route</p>
           </div>
         </div>
+      </div>
 
-        {pendingCorrections.length > 0 && (
-          <div className="p-6 rounded-2xl bg-gradient-to-r from-amber-950/40 via-orange-950/30 to-amber-950/40 border border-amber-500/40 shadow-2xl space-y-4 animate-in fade-in duration-300">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.25)]">
-                  <AlertTriangle className="w-5 h-5 text-amber-400" />
-                </div>
-                <div>
-                  <h4 className="text-base font-bold text-white">Pending Rating Corrections ({pendingCorrections.length})</h4>
-                  <p className="text-xs text-neutral-300">Audited mismatches requiring admin consent before pushing to Cloudflare D1</p>
-                </div>
-              </div>
-              <button
-                onClick={onApproveAllCorrections}
-                className="h-9 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2 cursor-pointer"
-              >
-                <Check className="w-4 h-4 stroke-[3]" />
-                <span>Approve &amp; Push All ({pendingCorrections.length})</span>
-              </button>
+      {/* Official OTT Link Health Check Results */}
+      {linkCheckReport && (
+        <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-extrabold text-[var(--text-primary)] flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-[var(--accent-primary)]" />
+                Official OTT Link Health Report
+              </h3>
+              {linkCheckReport.note && (
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">{linkCheckReport.note}</p>
+              )}
             </div>
+            {linkCheckReport.summary && (
+              <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                  Healthy: {linkCheckReport.summary.active}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-600 dark:text-sky-400">
+                  Redirected: {linkCheckReport.summary.redirected}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400">
+                  Unverified (Bot Blocked): {linkCheckReport.summary.unverified}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400">
+                  Broken: {linkCheckReport.summary.broken}
+                </span>
+              </div>
+            )}
+          </div>
 
-            <div className="space-y-3 pt-2">
-              {pendingCorrections.map((item, idx) => (
-                <div key={`rating_correction_${idx}`} className="p-4 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <img
-                      src={item.anime.cover_image || item.anime.posterUrl || item.anime.image || '/logo.png'}
-                      alt={item.anime.title}
-                      className="w-12 h-16 rounded-lg object-cover ring-1 ring-white/20 shrink-0"
-                    />
-                    <div className="min-w-0 space-y-1">
-                      <span className="text-[10px] font-mono text-amber-400 uppercase tracking-wider font-semibold">Mismatch Detected</span>
-                      <h5 className="text-sm font-bold text-white truncate">{item.anime.title}</h5>
-                      <div className="flex items-center gap-3 text-xs font-mono">
-                        <span className="text-neutral-400">Current Local Rating: <strong className="text-rose-400">{item.currentLocalRating}</strong></span>
-                        <span className="text-neutral-400">→</span>
-                        <span className="text-neutral-400">Real IMDb Rating: <strong className="text-emerald-400">{item.realImdbRating}</strong></span>
-                      </div>
+          {linkCheckReport.error && (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-600 dark:text-red-400 font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              {linkCheckReport.error}
+            </div>
+          )}
+
+          {linkCheckReport.results.length > 0 && (
+            <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+              {linkCheckReport.results.map((item, idx) => (
+                <div
+                  key={`${item.animeId}-${item.platform}-${idx}`}
+                  className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                >
+                  <div className="min-w-0">
+                    <div className="font-bold text-[var(--text-primary)] truncate">
+                      {item.title}{' '}
+                      <span className="text-[var(--text-secondary)]">({item.platform})</span>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/10">
-                    <button
-                      onClick={() => onApproveCorrection(item)}
-                      className="h-9 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-md hover:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-1.5 cursor-pointer"
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] truncate inline-flex items-center gap-1 max-w-full"
                     >
-                      <Check className="w-3.5 h-3.5 stroke-[3]" />
-                      <span>Approve &amp; Push</span>
-                    </button>
+                      <span className="truncate">{item.url}</span>
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-md font-bold uppercase text-[10px] border ${
+                        item.status === 'Active'
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                          : item.status === 'Redirected'
+                            ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30'
+                            : item.status === 'Unverified' || item.status === 'Region-restricted'
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                              : 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30'
+                      }`}
+                    >
+                      {item.status}
+                      {item.httpStatus ? ` (${item.httpStatus})` : ''}
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-        <div className="p-4 rounded-xl bg-[#07090e]/95 border border-white/10 font-mono text-xs space-y-2 shadow-inner">
-          <div className="flex items-center justify-between pb-2 border-b border-white/10 text-neutral-400">
-            <span className="flex items-center gap-2">
-              <Terminal className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="font-bold text-white tracking-wide">&gt;_ SYS_TERM STREAM</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+      {/* Filter Pills */}
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            { id: 'all', label: 'All Issues', count: dataHealthReport.summary.all },
+            {
+              id: 'missing_stream_links',
+              label: 'Missing Stream Links',
+              count: dataHealthReport.summary.missing_stream_links,
+            },
+            {
+              id: 'missing_dub_langs',
+              label: 'Missing Dub Langs',
+              count: dataHealthReport.summary.missing_dub_langs,
+            },
+            {
+              id: 'missing_episode_counts',
+              label: 'Missing Episode Counts',
+              count: dataHealthReport.summary.missing_episode_counts,
+            },
+            {
+              id: 'unverified_metadata',
+              label: 'Unverified Metadata',
+              count: dataHealthReport.summary.unverified_metadata,
+            },
+            {
+              id: 'incomplete_schedule',
+              label: 'Incomplete Schedule',
+              count: dataHealthReport.summary.incomplete_schedule,
+            },
+          ] as Array<{ id: DataHealthFilter; label: string; count: number }>
+        ).map((pill) => (
+          <button
+            key={pill.id}
+            type="button"
+            onClick={() => setHealthFilter(pill.id)}
+            className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 ${
+              healthFilter === pill.id
+                ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
+                : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <span>{pill.label}</span>
+            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold bg-black/15">
+              {pill.count}
             </span>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-emerald-400 font-mono">{isCheckingHealth ? 'PROBE ACTIVE' : 'ONLINE'}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Results List */}
+      {dataHealthReport.items.length === 0 ? (
+        <div className="p-12 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-center">
+          <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
+          <h3 className="text-base font-bold text-[var(--text-primary)]">
+            No Data Health Issues Found
+          </h3>
+          <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
+            All anime entries in this filter pass metadata quality checks.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {dataHealthReport.items.map(({ anime, issues }) => (
+            <div
+              key={anime.id}
+              className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <img
+                  src={
+                    anime.posterUrl ||
+                    anime.image ||
+                    anime.cover_image ||
+                    anime.poster ||
+                    'https://picsum.photos/seed/anime/80/120'
+                  }
+                  alt={anime.title}
+                  loading="lazy"
+                  className="w-12 h-16 rounded-xl object-cover shrink-0 border border-[var(--border-subtle)]"
+                />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
+                      {anime.title}
+                    </h4>
+                    <span className="text-[11px] font-mono text-[var(--text-secondary)]">
+                      #{anime.id}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {issues.map((issue, idx) => (
+                      <span
+                        key={idx}
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                          issue.severity === 'critical'
+                            ? 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30'
+                            : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                        }`}
+                      >
+                        {issue.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <button
-                onClick={onOpenTerminal}
-                className="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono cursor-pointer transition-colors flex items-center gap-1"
+                type="button"
+                onClick={() => onEditAnime(anime)}
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold flex items-center gap-1.5 shrink-0 self-end sm:self-center"
               >
-                <Terminal className="w-3 h-3" />
-                <span>Expand Floating Console</span>
+                <Edit3 className="w-3.5 h-3.5" />
+                Fix in Editor
               </button>
             </div>
-          </div>
-
-          <div className="space-y-1.5 text-neutral-300 text-[11px] max-h-64 overflow-y-auto pr-1">
-            {terminalLogs.length === 0 ? (
-              <div className="text-neutral-500 italic py-2">No active logs. Click 'Initiate Full Health Probe' to stream.</div>
-            ) : (
-              terminalLogs.slice(0, 15).map((log, idx) => {
-                let badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/40';
-                if (log.level === 'OK' || log.level === 'SUCCESS') badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
-                else if (log.level === 'WARN') badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
-                else if (log.level === 'ERR' || log.level === 'FAIL') badgeColor = 'bg-rose-500/20 text-rose-300 border-rose-500/40';
-                else if (log.level === 'EDGE') badgeColor = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
-                else if (log.level === 'D1') badgeColor = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
-                else if (log.level === 'MUT') badgeColor = 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/40';
-                else if (log.level === 'PROBE') badgeColor = 'bg-orange-500/20 text-orange-300 border-orange-500/40';
-                else if (log.level === 'SYS') badgeColor = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
-
-                return (
-                  <div key={`health-log-${log.id}-${idx}`} className="flex items-start gap-2 leading-relaxed">
-                    <span className="text-neutral-500 shrink-0 text-[10px]">[{log.time}]</span>
-                    <span className={`px-1.5 py-0.2 rounded text-[9px] border font-bold shrink-0 ${badgeColor}`}>
-                      {log.level}
-                    </span>
-                    <span className="text-slate-200 break-all">{log.msg}</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 };
