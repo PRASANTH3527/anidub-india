@@ -1,4 +1,4 @@
-import { getAuth, extractClientIp } from '../../utils/auth';
+import { getAuth, getAdminAuth, extractClientIp } from '../../utils/auth';
 import { buildLanguageLikePatterns, buildPaginatedMeta, parsePaginationQuery } from '../../utils/pagination';
 import { computeDynamicLanguageFilters, extractUniqueLanguagesFromAnimeList, formatLanguagesBulletList } from '../../utils/languages';
 import {
@@ -136,7 +136,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
     try {
       const includePending = url.searchParams.get('includePending') === 'true';
       if (includePending) {
-        const session = await getAuth(request, env);
+        const session = await getAdminAuth(request, env);
         if (!session.userId || !session.isAdmin) {
           return jsonResponse(
             {
@@ -505,7 +505,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
 
   // 2. POST /api/anime (Admin creation)
   if (path === '/api/anime' && method === 'POST') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId) {
       return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -1027,7 +1027,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
     }
 
     if (method === 'PUT' || method === 'PATCH') {
-      const session = await getAuth(request, env);
+      const session = await getAdminAuth(request, env);
       if (!session.userId) {
         return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
       }
@@ -1546,7 +1546,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
     }
 
     if (method === 'DELETE') {
-      const session = await getAuth(request, env);
+      const session = await getAdminAuth(request, env);
       if (!session.userId) {
         return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
       }

@@ -1,4 +1,4 @@
-import { getAuth } from '../../utils/auth';
+import { getAuth, getAdminAuth } from '../../utils/auth';
 import { checkAnalyticsRateLimit } from '../../utils/rateLimiter';
 import { getErrorMessage, type RouteContext } from './shared';
 
@@ -178,7 +178,7 @@ export async function handleAnalyticsRoutes(ctx: RouteContext): Promise<Response
 
   // 2. GET /api/analytics/dashboard (Admin only)
   if (path === '/api/analytics/dashboard' && method === 'GET') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },

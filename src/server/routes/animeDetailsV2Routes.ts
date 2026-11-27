@@ -16,7 +16,7 @@
  * remains 100% functional even before migrations/003_anime_details_v2.sql is applied.
  */
 
-import { getAuth } from '../../utils/auth';
+import { getAuth, getAdminAuth } from '../../utils/auth';
 import {
   computeDubReviewAggregates,
   computeDubReviewAggregatesByLanguage,
@@ -73,7 +73,7 @@ async function requireClerkUser(ctx: RouteContext) {
 }
 
 async function requireClerkAdmin(ctx: RouteContext) {
-  const session = await getAuth(ctx.request, ctx.env);
+  const session = await getAdminAuth(ctx.request, ctx.env);
   if (!session.userId) {
     return {
       ok: false as const,

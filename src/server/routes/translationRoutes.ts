@@ -1,4 +1,4 @@
-import { getAuth } from '../../utils/auth';
+import { getAdminAuth } from '../../utils/auth';
 import {
   computeSourceHash,
   computeTranslationCoverage,
@@ -68,7 +68,7 @@ export async function fetchPublishedTranslationsMap(
 }
 
 async function requireAdminSession(ctx: RouteContext) {
-  const session = await getAuth(ctx.request, ctx.env);
+  const session = await getAdminAuth(ctx.request, ctx.env);
   if (!session.userId) {
     return {
       ok: false as const,

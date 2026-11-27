@@ -1,4 +1,4 @@
-import { getAuth } from '../../utils/auth';
+import { getAdminAuth } from '../../utils/auth';
 import {
   deriveSeasonEpisodeCountSummary,
   normalizeBroadcastDay,
@@ -30,7 +30,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   // 1. GET/POST /api/admin/verify & /api/admin/login
   if (path === '/api/admin/verify' && (method === 'GET' || method === 'POST')) {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       const statusCode = !session.userId ? 401 : 403;
       const descriptiveError =
@@ -68,7 +68,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
   }
 
   if (path === '/api/admin/login' && (method === 'POST' || method === 'GET')) {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       const statusCode = !session.userId ? 401 : 403;
       const descriptiveError =
@@ -111,7 +111,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   // 1b. POST /api/admin/check-links (P2 #4 SSRF-safe Official OTT Link Health Checker)
   if (path === '/api/admin/check-links' && method === 'POST') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         {
@@ -283,7 +283,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   // 2. GET /api/admin/export-csv
   if (path === '/api/admin/export-csv' && method === 'GET') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
@@ -377,7 +377,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   // 3. GET /api/cloudflare/status (Real D1 diagnostics, live anime counts, DB logs, and Clerk connection status)
   if (path === '/api/cloudflare/status') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
@@ -524,7 +524,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   // 4. POST /api/cloudflare/d1/query - Parameterized D1 Query Endpoint (Rejects Raw SQL from Client)
   if (path === '/api/cloudflare/d1/query' && method === 'POST') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId) {
       return jsonResponse({ error: session.error || 'Unauthorized: Valid Clerk Admin session required' }, 401, request);
     }
@@ -591,7 +591,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   // 5. GET /api/admin/pending
   if (path === '/api/admin/pending' && method === 'GET') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
@@ -629,7 +629,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   // 6. POST /api/admin/import-csv
   if (path === '/api/admin/import-csv' && method === 'POST') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
@@ -926,7 +926,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   // 7. POST /api/admin/clear-pending
   if (path === '/api/admin/clear-pending' && method === 'POST') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
@@ -947,7 +947,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
   // 8. POST /api/admin/approve/:id & POST /api/admin/reject/:id
   const approveMatch = path.match(/^\/api\/admin\/approve\/([0-9a-zA-Z_-]+)\/?$/);
   if (approveMatch && method === 'POST') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
@@ -1004,7 +1004,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   const rejectMatch = path.match(/^\/api\/admin\/reject\/([0-9a-zA-Z_-]+)\/?$/);
   if (rejectMatch && method === 'POST') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
@@ -1028,7 +1028,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   // 9. POST /api/admin/reset-db (Admin only + strict "DELETE ALL" confirmation)
   if (path === '/api/admin/reset-db' && method === 'POST') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || 'Unauthorized: Valid Clerk Admin session required' },
@@ -1064,7 +1064,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
   // 10. POST/GET /api/admin/normalize-platforms (Temporary admin cleanup endpoint)
   if (path === '/api/admin/normalize-platforms' && (method === 'POST' || method === 'GET')) {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },

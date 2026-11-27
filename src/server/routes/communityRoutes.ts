@@ -1,5 +1,6 @@
 import {
   getAuth,
+  getAdminAuth,
   verifyChatTokenDirect,
   extractExplicitChatToken,
   hasUrlQueryToken,
@@ -430,7 +431,7 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
 
   // 5. GET /api/feedback (Admin only)
   if (path === '/api/feedback' && method === 'GET') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
@@ -452,7 +453,7 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
   // 5b. DELETE /api/feedback/:id (Admin only)
   const deleteFeedbackMatch = path.match(/^\/api\/feedback\/([0-9]+)\/?$/);
   if (deleteFeedbackMatch && method === 'DELETE') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },
@@ -578,7 +579,7 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
 
   // 7. GET /api/admin/reports (Admin only)
   if (path === '/api/admin/reports' && method === 'GET') {
-    const session = await getAuth(request, env);
+    const session = await getAdminAuth(request, env);
     if (!session.userId || !session.isAdmin) {
       return jsonResponse(
         { error: session.error || (!session.userId ? 'Unauthorized: Valid Clerk Admin session required' : 'Forbidden: Admin access required') },

@@ -7,7 +7,7 @@ import { cloudflareApi } from './services/cloudflareApi';
 import { getCloudflareUrl } from './config/cloudflare';
 import { AniDubLogo } from './components/AniDubLogo';
 import { useUser, useAuth, useClerk, SignIn, getClerkSessionToken } from './lib/clerk';
-import { isAuthorizedClerkAdmin } from './utils/auth';
+import { isAuthorizedClerkAdmin, TEMP_BYPASS_ADMIN_AUTH } from './utils/auth';
 import {
   findMissingAnimeIds,
   mergeGuestAndServerWatchlist,
@@ -77,7 +77,16 @@ const CompareAnimeModal = lazy(() => import('./components/CompareAnimeModal').th
 
 export default function App() {
   const { language: uiLocale } = useLanguage();
-  const [activeTab, setActiveTab] = useState('explore');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (
+      TEMP_BYPASS_ADMIN_AUTH &&
+      typeof window !== 'undefined' &&
+      (window.location.pathname === '/admin' || window.location.pathname === '/admin/analytics')
+    ) {
+      return 'admin';
+    }
+    return 'explore';
+  });
   const [selectedSeoLanguage, setSelectedSeoLanguage] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     const parsed = parseLanguageFromPath(window.location.pathname);
@@ -270,10 +279,12 @@ export default function App() {
   }, [activeUserId]);
 
   const isClientClerkAdmin = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
-  const [isServerClerkAdmin, setIsServerClerkAdmin] = useState<boolean>(false);
-  const isClerkAdmin = isClientClerkAdmin || isServerClerkAdmin;
+  const [isServerClerkAdmin, setIsServerClerkAdmin] = useState<boolean>(TEMP_BYPASS_ADMIN_AUTH);
+  const isClerkAdmin = TEMP_BYPASS_ADMIN_AUTH ? true : (isClientClerkAdmin || isServerClerkAdmin);
 
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(isClerkAdmin);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(
+    TEMP_BYPASS_ADMIN_AUTH ? true : isClerkAdmin
+  );
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isDubModalOpen, setIsDubModalOpen] = useState(false);
   const [adminAuthError, setAdminAuthError] = useState<string>('');
@@ -530,7 +541,7 @@ export default function App() {
         void resolveDeepLinkAnime(slugOrId);
       }
     } else if (pathname === '/admin' || pathname === '/admin/analytics') {
-      if (isAdminAuthenticated) {
+      if (TEMP_BYPASS_ADMIN_AUTH || isAdminAuthenticated) {
         setActiveTab('admin');
         setIsPasswordModalOpen(false);
       } else {
@@ -604,7 +615,10 @@ export default function App() {
         setDeepLinkNotFoundSlug(null);
         setDeepLinkLoading(false);
         setSelectedSeoLanguage(null);
-        if (pathname === '/admin' && isAdminAuthenticated) {
+        if (
+          (pathname === '/admin' || pathname === '/admin/analytics') &&
+          (TEMP_BYPASS_ADMIN_AUTH || isAdminAuthenticated)
+        ) {
           setActiveTab('admin');
         } else if (pathname === '/explore' || pathname === '/catalog' || pathname === '/home') {
           setActiveTab('explore');
@@ -907,17 +921,81 @@ export default function App() {
   }, [isSignedIn, clerkUser?.id, getToken]);
 
   useEffect(() => {
-    if (!isSignedIn) {
-      setIsServerClerkAdmin(false);
-      setIsAdminAuthenticated(false);
-      if (activeTab === 'admin') {
-        setActiveTab('explore');
-      }
+    if (TEMP_BYPASS_ADMIN_AUTH) {
+      setIsServerClerkAdmin(true);
+      setIsAdminAuthenticated(true);
+      setIsPasswordModalOpen(false);
+      setAdminAuthError('');
       return;
-    }
+    } else {
+      if (!isSignedIn) {
+        setIsServerClerkAdmin(false);
+        setIsAdminAuthenticated(false);
+        if (activeTab === 'admin') {
+          setActiveTab('explore');
+        }
+        return;
+      }
 
-    let cancelled = false;
-    (async () => {
+      let cancelled = false;
+      (async () => {
+        try {
+          const token = (await getToken()) || (await getClerkSessionToken());
+          const res = await fetch(getCloudflareUrl('/api/admin/verify'), {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          });
+          if (res.status === 200) {
+            if (cancelled) return;
+            setIsServerClerkAdmin(true);
+            setIsAdminAuthenticated(true);
+            setIsPasswordModalOpen(false);
+            setAdminAuthError('');
+            if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+              setActiveTab('admin');
+            }
+            return;
+          }
+
+          const data: any = await res.json().catch(() => ({}));
+          if (cancelled) return;
+          const backendError = data.error || data.message || `HTTP ${res.status}`;
+          setIsServerClerkAdmin(false);
+          setIsAdminAuthenticated(false);
+          setAdminAuthError(`Backend Error: ${backendError}`);
+          if (activeTab === 'admin') setActiveTab('explore');
+        } catch (err: any) {
+          if (!cancelled) {
+            setAdminAuthError(`Backend Error: ${err?.message || 'Unable to verify Clerk Admin session.'}`);
+          }
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [isSignedIn, isClientClerkAdmin, activeTab, getToken]);
+
+  const handleVerifyClerkAdminUnlock = async () => {
+    if (TEMP_BYPASS_ADMIN_AUTH) {
+      setIsServerClerkAdmin(true);
+      setIsAdminAuthenticated(true);
+      setActiveTab('admin');
+      setIsPasswordModalOpen(false);
+      setAdminAuthError('');
+      return;
+    } else {
+      if (!isSignedIn) {
+        setAdminAuthError('Backend Error: Only the authorized Clerk Administrator can unlock /admin.');
+        return;
+      }
+      setAdminPasswordLoading(true);
+      setAdminAuthError('');
       try {
         const token = (await getToken()) || (await getClerkSessionToken());
         const res = await fetch(getCloudflareUrl('/api/admin/verify'), {
@@ -928,71 +1006,24 @@ export default function App() {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         });
+
         if (res.status === 200) {
-          if (cancelled) return;
           setIsServerClerkAdmin(true);
           setIsAdminAuthenticated(true);
+          setActiveTab('admin');
           setIsPasswordModalOpen(false);
           setAdminAuthError('');
-          if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
-            setActiveTab('admin');
-          }
           return;
         }
 
         const data: any = await res.json().catch(() => ({}));
-        if (cancelled) return;
         const backendError = data.error || data.message || `HTTP ${res.status}`;
-        setIsServerClerkAdmin(false);
-        setIsAdminAuthenticated(false);
         setAdminAuthError(`Backend Error: ${backendError}`);
-        if (activeTab === 'admin') setActiveTab('explore');
       } catch (err: any) {
-        if (!cancelled) {
-          setAdminAuthError(`Backend Error: ${err?.message || 'Unable to verify Clerk Admin session.'}`);
-        }
+        setAdminAuthError(`Backend Error: ${err?.message || 'Unable to verify Clerk Admin session.'}`);
+      } finally {
+        setAdminPasswordLoading(false);
       }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isSignedIn, isClientClerkAdmin, activeTab, getToken]);
-
-  const handleVerifyClerkAdminUnlock = async () => {
-    if (!isSignedIn) {
-      setAdminAuthError('Backend Error: Only the authorized Clerk Administrator can unlock /admin.');
-      return;
-    }
-    setAdminPasswordLoading(true);
-    setAdminAuthError('');
-    try {
-      const token = (await getToken()) || (await getClerkSessionToken());
-      const res = await fetch(getCloudflareUrl('/api/admin/verify'), {
-        method: 'GET',
-        cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-
-      if (res.status === 200) {
-        setIsServerClerkAdmin(true);
-        setIsAdminAuthenticated(true);
-        setActiveTab('admin');
-        setIsPasswordModalOpen(false);
-        setAdminAuthError('');
-        return;
-      }
-
-      const data: any = await res.json().catch(() => ({}));
-      const backendError = data.error || data.message || `HTTP ${res.status}`;
-      setAdminAuthError(`Backend Error: ${backendError}`);
-    } catch (err: any) {
-      setAdminAuthError(`Backend Error: ${err?.message || 'Unable to verify Clerk Admin session.'}`);
-    } finally {
-      setAdminPasswordLoading(false);
     }
   };
 
@@ -1001,7 +1032,9 @@ export default function App() {
       await cloudflareApi.logoutAdmin();
     } catch {}
 
-    setIsAdminAuthenticated(false);
+    if (!TEMP_BYPASS_ADMIN_AUTH) {
+      setIsAdminAuthenticated(false);
+    }
     setActiveTab('explore');
   };
 

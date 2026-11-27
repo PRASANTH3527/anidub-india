@@ -23,7 +23,7 @@ import {
   normalizeSeasonEpisodeCount,
 } from '../utils/dataNormalization';
 import { useUser, SignIn } from '../lib/clerk';
-import { isAuthorizedClerkAdmin } from '../utils/auth';
+import { isAuthorizedClerkAdmin, TEMP_BYPASS_ADMIN_AUTH } from '../utils/auth';
 import { AdminOverviewTab, type GenreStatBar } from './admin/AdminOverviewTab';
 import { AdminPendingTab } from './admin/AdminPendingTab';
 import { AdminCatalogTab } from './admin/AdminCatalogTab';
@@ -76,8 +76,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const shouldReduceMotion = useReducedMotion();
   const { isSignedIn, user: clerkUser } = useUser();
   const isLocalClerkAdminAuthorized = Boolean(isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser));
-  const [serverAdminVerified, setServerAdminVerified] = useState<boolean | null>(null);
-  const isClerkAdminAuthorized = isLocalClerkAdminAuthorized || serverAdminVerified === true;
+  const [serverAdminVerified, setServerAdminVerified] = useState<boolean | null>(
+    TEMP_BYPASS_ADMIN_AUTH ? true : null
+  );
+  const isClerkAdminAuthorized = TEMP_BYPASS_ADMIN_AUTH
+    ? true
+    : (isLocalClerkAdminAuthorized || serverAdminVerified === true);
 
   const [catalog, setCatalog] = useState<AdminAnimeRecord[]>(() =>
     catalogList && catalogList.length > 0 ? catalogList : []
@@ -460,27 +464,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   useEffect(() => {
-    if (!isSignedIn || !clerkUser) {
-      setServerAdminVerified(false);
-      return;
-    }
-    if (isLocalClerkAdminAuthorized) {
+    if (TEMP_BYPASS_ADMIN_AUTH) {
       setServerAdminVerified(true);
       return;
+    } else {
+      if (!isSignedIn || !clerkUser) {
+        setServerAdminVerified(false);
+        return;
+      }
+      if (isLocalClerkAdminAuthorized) {
+        setServerAdminVerified(true);
+        return;
+      }
+      let cancelled = false;
+      setServerAdminVerified(null);
+      cloudflareApi
+        .verifyAdminDetailed()
+        .then((res) => {
+          if (!cancelled) setServerAdminVerified(Boolean(res.ok));
+        })
+        .catch(() => {
+          if (!cancelled) setServerAdminVerified(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
-    let cancelled = false;
-    setServerAdminVerified(null);
-    cloudflareApi
-      .verifyAdminDetailed()
-      .then((res) => {
-        if (!cancelled) setServerAdminVerified(Boolean(res.ok));
-      })
-      .catch(() => {
-        if (!cancelled) setServerAdminVerified(false);
-      });
-    return () => {
-      cancelled = true;
-    };
   }, [isSignedIn, clerkUser?.id, isLocalClerkAdminAuthorized]);
 
   useEffect(() => {
@@ -1536,7 +1545,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
     };
   }, [commandPaletteQuery, catalog, pendingCount, feedbackList.length]);
 
-  if (!isClerkAdminAuthorized) {
+  if (!TEMP_BYPASS_ADMIN_AUTH && !isClerkAdminAuthorized) {
     const isCheckingServerAdmin = Boolean(isSignedIn && clerkUser && serverAdminVerified === null);
     return (
       <div className="w-full min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col items-center justify-center p-6">
