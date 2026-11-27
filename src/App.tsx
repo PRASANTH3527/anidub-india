@@ -59,7 +59,7 @@ const ModalLoadingFallback = () => <DetailModalSkeleton />;
 const GodModeTracker = lazy(() => import('./components/GodModeTracker').then(m => ({ default: m.GodModeTracker })));
 const FeedbackSection = lazy(() => import('./components/FeedbackSection').then(m => ({ default: m.FeedbackSection })));
 const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
-const AnimeDetailModal = lazy(() => import('./components/AnimeDetailPage').then(m => ({ default: m.AnimeDetailModal })));
+const AnimeDetailPage = lazy(() => import('./components/AnimeDetailPage').then(m => ({ default: m.AnimeDetailPage })));
 const RouletteModal = lazy(() => import('./components/RouletteModal').then(m => ({ default: m.RouletteModal })));
 const CreateCollectionModal = lazy(() => import('./components/CreateCollectionModal').then(m => ({ default: m.CreateCollectionModal })));
 const DubInfoModal = lazy(() => import('./components/DubInfoModal').then(m => ({ default: m.DubInfoModal })));
@@ -239,6 +239,10 @@ export default function App() {
     return found?.slug || undefined;
   }, [selectedAnimeId, findLoadedAnimeBySlugOrId]);
 
+  const exploreReturnScrollRef = useRef<number>(0);
+  const isDetailRouteActive =
+    selectedAnimeId !== null || deepLinkLoading || Boolean(deepLinkNotFoundSlug);
+
   // Strict Clerk Admin Authentication State & Account Data Isolation Scope
   const { isSignedIn, user: clerkUser } = useUser();
   const { getToken } = useAuth();
@@ -314,6 +318,10 @@ export default function App() {
 
   const handleNavigateTab = useCallback((nextTab: string) => {
     const resolvedTab = nextTab === 'home' ? 'explore' : nextTab;
+    setSelectedAnimeId(null);
+    setSelectedAnimeRecord(null);
+    setDeepLinkNotFoundSlug(null);
+    setDeepLinkLoading(false);
     setActiveTab(resolvedTab);
     if (resolvedTab !== 'language') {
       setSelectedSeoLanguage(null);
@@ -425,7 +433,7 @@ export default function App() {
     [findLoadedAnimeBySlugOrId]
   );
 
-  // Deep-link and history navigation handler (always preserves slug in URL when available)
+  // Deep-link and history navigation handler (dedicated full-page route with scroll restoration)
   const handleOpenAnime = useCallback(
     (animeOrId: number | string | { id: number; slug?: string } | null) => {
       setDeepLinkNotFoundSlug(null);
@@ -441,8 +449,24 @@ export default function App() {
               : '/';
           window.history.pushState(null, '', fallbackPath);
         }
+        if (typeof window !== 'undefined') {
+          const savedY = exploreReturnScrollRef.current;
+          requestAnimationFrame(() => {
+            window.scrollTo({ top: savedY, behavior: 'auto' });
+          });
+        }
         return;
       }
+
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/anime/')) {
+        exploreReturnScrollRef.current = window.scrollY || 0;
+      }
+
+      const scrollPageToTop = () => {
+        if (typeof window !== 'undefined') {
+          window.scrollTo({ top: 0, behavior: 'auto' });
+        }
+      };
 
       if (typeof animeOrId === 'object') {
         const idNum = Number(animeOrId.id);
@@ -457,6 +481,7 @@ export default function App() {
             window.history.pushState({ animeId: idNum, slug: resolvedSlug }, '', targetPath);
           }
         }
+        scrollPageToTop();
         return;
       }
 
@@ -471,6 +496,7 @@ export default function App() {
             window.history.pushState({ animeId: idNum, slug: found.slug }, '', targetPath);
           }
         }
+        scrollPageToTop();
         return;
       }
 
@@ -481,6 +507,7 @@ export default function App() {
           window.history.pushState({ animeId: animeOrId }, '', targetPath);
         }
       }
+      scrollPageToTop();
       void resolveDeepLinkAnime(String(animeOrId));
     },
     [findLoadedAnimeBySlugOrId, resolveDeepLinkAnime, activeTab, selectedSeoLanguage]
@@ -618,6 +645,10 @@ export default function App() {
         } else if (pathname === '/') {
           setActiveTab('explore');
         }
+        const savedY = exploreReturnScrollRef.current;
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: savedY, behavior: 'auto' });
+        });
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -1163,8 +1194,89 @@ export default function App() {
         </Suspense>
       )}
 
-      {/* 3. MAIN CONTENT VIEWS WITH SMOOTH PAGE TRANSITIONS */}
-      <main className="flex-grow w-full max-w-full overflow-x-clip pt-3 sm:pt-5 pb-24 lg:pb-16 transition-colors duration-150 box-border">
+      {/* 3. MAIN CONTENT VIEWS WITH DEDICATED DEEP-LINKABLE ANIME DETAIL ROUTE */}
+      <main
+        className={`flex-grow w-full max-w-full overflow-x-clip ${
+          isDetailRouteActive ? 'pt-0 pb-12 lg:pb-8' : 'pt-3 sm:pt-5 pb-24 lg:pb-16'
+        } transition-colors duration-150 box-border`}
+      >
+        {isDetailRouteActive ? (
+          <div className="w-full min-w-0 max-w-full overflow-x-clip">
+            {deepLinkLoading && selectedAnimeId === null ? (
+              <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6">
+                <DetailModalSkeleton />
+              </div>
+            ) : deepLinkNotFoundSlug && selectedAnimeId === null ? (
+              <div
+                data-testid="anime-not-found-page"
+                className="max-w-md mx-auto px-4 py-16 text-center"
+              >
+                <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 sm:p-8 space-y-4">
+                  <div className="inline-flex items-center justify-center px-3 py-1 rounded-lg bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] text-xs font-bold uppercase tracking-wider">
+                    404 • Not Found
+                  </div>
+                  <h1 className="text-xl sm:text-2xl font-extrabold text-[var(--text-primary)]">
+                    Anime Not Found
+                  </h1>
+                  <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed">
+                    We couldn&apos;t find a published anime matching{' '}
+                    <span className="text-[var(--text-primary)] font-semibold">
+                      &ldquo;{deepLinkNotFoundSlug}&rdquo;
+                    </span>{' '}
+                    in the AniDub India catalog.
+                  </p>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    fullWidth
+                    onClick={() => handleOpenAnime(null)}
+                  >
+                    Back to Catalog
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Suspense
+                fallback={
+                  <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6">
+                    <DetailModalSkeleton />
+                  </div>
+                }
+              >
+                <AnimeDetailPage
+                  key="anime-detail-page"
+                  asPage={true}
+                  animeId={selectedAnimeId}
+                  initialAnime={selectedAnimeRecord}
+                  allAnime={effectiveFullCatalog}
+                  user={currentUserSummary}
+                  onResolvedAnime={(resolved) => {
+                    setSelectedAnimeRecord(resolved);
+                    if (typeof window !== 'undefined' && resolved?.slug) {
+                      const canonicalPath = `/anime/${resolved.slug}`;
+                      if (window.location.pathname !== canonicalPath) {
+                        window.history.replaceState(
+                          { animeId: resolved.id, slug: resolved.slug },
+                          '',
+                          canonicalPath
+                        );
+                      }
+                    }
+                  }}
+                  onSelectAnime={(anime) => {
+                    handleOpenAnime(anime);
+                    addToRecentlyViewed(anime);
+                  }}
+                  onClose={() => handleOpenAnime(null)}
+                  watchlist={watchlist}
+                  onToggleWatchlist={handleToggleWatchlist}
+                  onCompareAnime={(anime) => handleOpenCompare(anime)}
+                  onShowToast={handleAppToast}
+                />
+              </Suspense>
+            )}
+          </div>
+        ) : (
         <AnimatePresence mode="wait">
           <motion.div
             key={`page_view_${activeTab}_${activeTab === 'explore' ? feedView : ''}`}
@@ -1385,6 +1497,7 @@ export default function App() {
             )}
           </motion.div>
         </AnimatePresence>
+        )}
       </main>
 
       {/* COMPACT FOOTER WITH LEGAL LINKS (Hidden on full feedback page to avoid duplication) */}
@@ -1406,76 +1519,6 @@ export default function App() {
 
       {/* MODALS WITH SPRING ANIMATEPRESENCE */}
       <AnimatePresence>
-        {/* 0. Deep-Link Loading Indicator */}
-        {deepLinkLoading && selectedAnimeId === null && (
-          <ModalLoadingFallback key="deep-link-loading" />
-        )}
-
-        {/* 0.5 Deep-Link 404 Not Found Modal */}
-        {deepLinkNotFoundSlug && selectedAnimeId === null && !deepLinkLoading && (
-          <div
-            key="anime-not-found-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Anime Not Found"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80"
-          >
-            <div className="max-w-md w-full rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 sm:p-8 shadow-2xl text-center space-y-4">
-              <div className="inline-flex items-center justify-center px-3 py-1 rounded-lg bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] text-xs font-bold uppercase tracking-wider">
-                404 • Not Found
-              </div>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--text-primary)]">Anime Not Found</h2>
-              <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed">
-                We couldn&apos;t find a published anime matching{' '}
-                <span className="text-[var(--text-primary)] font-semibold">&ldquo;{deepLinkNotFoundSlug}&rdquo;</span> in the AniDub India catalog.
-              </p>
-              <Button
-                variant="primary"
-                size="md"
-                fullWidth
-                onClick={() => handleOpenAnime(null)}
-              >
-                Back to Catalog
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* 1. Anime Detail Modal */}
-        {selectedAnimeId !== null && (
-          <Suspense fallback={<ModalLoadingFallback />}>
-            <AnimeDetailModal
-              key="anime-detail-modal"
-              animeId={selectedAnimeId}
-              initialAnime={selectedAnimeRecord}
-              allAnime={effectiveFullCatalog}
-              user={currentUserSummary}
-              onResolvedAnime={(resolved) => {
-                setSelectedAnimeRecord(resolved);
-                if (typeof window !== 'undefined' && resolved?.slug) {
-                  const canonicalPath = `/anime/${resolved.slug}`;
-                  if (window.location.pathname !== canonicalPath) {
-                    window.history.replaceState(
-                      { animeId: resolved.id, slug: resolved.slug },
-                      '',
-                      canonicalPath
-                    );
-                  }
-                }
-              }}
-              onSelectAnime={(anime) => {
-                handleOpenAnime(anime);
-                addToRecentlyViewed(anime);
-              }}
-              onClose={() => handleOpenAnime(null)}
-              watchlist={watchlist}
-              onToggleWatchlist={handleToggleWatchlist}
-              onCompareAnime={(anime) => handleOpenCompare(anime)}
-              onShowToast={handleAppToast}
-            />
-          </Suspense>
-        )}
-
         {/* 1.5 Compare Anime Side-by-Side Modal */}
         {isCompareOpen && (
           <Suspense fallback={<ModalLoadingFallback />}>

@@ -103,8 +103,8 @@ async function requireAdminSession(ctx: RouteContext) {
 export async function handleTranslationRoutes(ctx: RouteContext): Promise<Response | null> {
   const { request, env, url, path, method, jsonResponse } = ctx;
 
-  // 1. PUBLIC READ: GET /api/anime/:id/translations(?locale=ta)
-  const publicMatch = path.match(/^\/api\/anime\/([0-9a-zA-Z_-]+)\/translations\/?$/);
+  // 1. PUBLIC READ: GET /api/anime/:id/translation(s)(?locale=ta)
+  const publicMatch = path.match(/^\/api\/anime\/([0-9a-zA-Z_-]+)\/translations?\/?$/);
   if (publicMatch && method === 'GET') {
     const idOrSlug = decodeURIComponent(publicMatch[1]).trim();
     const localeParam = url.searchParams.get('locale');
