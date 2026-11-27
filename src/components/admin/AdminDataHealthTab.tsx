@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   ExternalLink,
   RefreshCw,
+  XCircle,
 } from 'lucide-react';
 import type { DataHealthFilter } from './types';
 import { cloudflareApi, type AdminLinkCheckResponse } from '../../services/cloudflareApi';
@@ -17,6 +18,101 @@ import {
   type DataHealthIssueCategory,
   type AnimeEditorTabId,
 } from '../../utils/adminOpsPro';
+import {
+  scanExtendedDataHealth,
+  type ExtendedDataHealthReport,
+} from '../../utils/adminPhase35Polish';
+
+type ExtendedDataHealthCategory =
+  | 'orphan_franchise_links'
+  | 'conflicting_watch_order'
+  | 'unverified_cast_entries'
+  | 'missing_external_ids';
+
+interface ExtendedDataHealthIssue {
+  category: ExtendedDataHealthCategory;
+  entityId: string;
+  animeId?: number;
+  title: string;
+  label: string;
+  detail: string;
+  severity: 'critical' | 'warning';
+  targetTab: 'franchises' | 'cast' | 'editor';
+}
+
+function normalizeExtendedHealthReport(ext: ExtendedDataHealthReport | null | undefined): {
+  issues: ExtendedDataHealthIssue[];
+  countsByCategory: Record<ExtendedDataHealthCategory, number>;
+} {
+  const safe = ext || {
+    orphanFranchiseLinks: [],
+    conflictingWatchOrders: [],
+    unverifiedCastEntries: [],
+    missingExternalIds: [],
+  };
+  const issues: ExtendedDataHealthIssue[] = [];
+
+  for (const item of safe.orphanFranchiseLinks || []) {
+    issues.push({
+      category: 'orphan_franchise_links',
+      entityId: String(item.id ?? item.anime_id),
+      animeId: item.anime_id,
+      title: item.franchise_title || item.franchise_key,
+      label: 'Orphan Franchise Link',
+      detail: `Franchise "${item.franchise_key}" (order #${item.watch_order}) points to missing anime #${item.anime_id}.`,
+      severity: 'critical',
+      targetTab: 'franchises',
+    });
+  }
+
+  for (const item of safe.conflictingWatchOrders || []) {
+    issues.push({
+      category: 'conflicting_watch_order',
+      entityId: `${item.franchise_key}-${item.watch_order}`,
+      title: `Franchise "${item.franchise_key}"`,
+      label: 'Conflicting Watch Order',
+      detail: `Multiple entries (${item.anime_ids.map((id) => `#${id}`).join(', ')}) share watch_order #${item.watch_order}.`,
+      severity: 'warning',
+      targetTab: 'franchises',
+    });
+  }
+
+  for (const item of safe.unverifiedCastEntries || []) {
+    issues.push({
+      category: 'unverified_cast_entries',
+      entityId: String(item.id),
+      animeId: item.anime_id,
+      title: `${item.character_name} — ${item.voice_actor_name}`,
+      label: 'Unverified Cast',
+      detail: `${item.anime_title} (${item.language} dub) voice actor credit is pending verification.`,
+      severity: 'warning',
+      targetTab: 'cast',
+    });
+  }
+
+  for (const item of safe.missingExternalIds || []) {
+    issues.push({
+      category: 'missing_external_ids',
+      entityId: String(item.anime_id),
+      animeId: item.anime_id,
+      title: item.title,
+      label: 'Missing External ID',
+      detail: `No MAL, AniList, or external catalog ID linked for "${item.title}".`,
+      severity: 'warning',
+      targetTab: 'editor',
+    });
+  }
+
+  return {
+    issues,
+    countsByCategory: {
+      orphan_franchise_links: (safe.orphanFranchiseLinks || []).length,
+      conflicting_watch_order: (safe.conflictingWatchOrders || []).length,
+      unverified_cast_entries: (safe.unverifiedCastEntries || []).length,
+      missing_external_ids: (safe.missingExternalIds || []).length,
+    },
+  };
+}
 
 export interface DataHealthReport {
   items: Array<{
@@ -40,13 +136,15 @@ export interface AdminDataHealthTabProps {
   healthFilter: DataHealthFilter;
   setHealthFilter: (filter: DataHealthFilter) => void;
   onEditAnime: (anime: any, targetEditorTab?: AnimeEditorTabId) => void;
+  onJumpToFranchises?: () => void;
+  onJumpToCast?: () => void;
   linkCheckReport: AdminLinkCheckResponse | null;
   isCheckingLinks: boolean;
   onRunLinkCheck: () => void;
 }
 
 const SCANNER_CATEGORIES: Array<{
-  id: 'all' | DataHealthIssueCategory;
+  id: 'all' | DataHealthIssueCategory | ExtendedDataHealthCategory;
   label: string;
 }> = [
   { id: 'all', label: 'All Flagged Issues' },
@@ -57,6 +155,10 @@ const SCANNER_CATEGORIES: Array<{
   { id: 'unverified_dubs', label: 'Unverified Dub Claims' },
   { id: 'stale_verification', label: 'Stale Verification (>90d)' },
   { id: 'missing_translations', label: 'Missing Translations' },
+  { id: 'orphan_franchise_links', label: 'Orphan Franchise Links' },
+  { id: 'conflicting_watch_order', label: 'Conflicting Watch Order' },
+  { id: 'unverified_cast_entries', label: 'Unverified Cast Entries' },
+  { id: 'missing_external_ids', label: 'Missing External IDs' },
 ];
 
 export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
@@ -64,32 +166,158 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
   healthFilter,
   setHealthFilter,
   onEditAnime,
+  onJumpToFranchises,
+  onJumpToCast,
   linkCheckReport,
   isCheckingLinks,
   onRunLinkCheck,
 }) => {
   const [serverScanReport, setServerScanReport] = useState<DataHealthScanReport | null>(null);
+  const [extendedIssues, setExtendedIssues] = useState<ExtendedDataHealthIssue[]>([]);
+  const [extendedCounts, setExtendedCounts] = useState<Record<ExtendedDataHealthCategory, number>>({
+    orphan_franchise_links: 0,
+    conflicting_watch_order: 0,
+    unverified_cast_entries: 0,
+    missing_external_ids: 0,
+  });
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanError, setScanError] = useState<string | null>(null);
+
+  // Phase 3.5: Bounded chunked OTT link checker with live progress & Cancel
+  const [chunkedLinkReport, setChunkedLinkReport] = useState<AdminLinkCheckResponse | null>(null);
+  const [chunkedRunning, setChunkedRunning] = useState(false);
+  const [chunkedProgress, setChunkedProgress] = useState<{
+    checkedBatches: number;
+    totalBatches: number;
+    checkedLinks: number;
+  } | null>(null);
+  const cancelLinksRef = useRef(false);
 
   const runServerScan = useCallback(async () => {
     setIsScanning(true);
     setScanError(null);
     try {
-      const res = await cloudflareApi.fetchAdminDataHealth();
+      const res: any = await cloudflareApi.fetchAdminDataHealth();
       if (res.report) {
         setServerScanReport(res.report);
       }
+      const extRaw: ExtendedDataHealthReport | undefined = res.report?.extended || res.extended;
+      if (extRaw) {
+        const normalized = normalizeExtendedHealthReport(extRaw);
+        setExtendedIssues(normalized.issues);
+        setExtendedCounts(normalized.countsByCategory);
+      } else {
+        const localExt = scanExtendedDataHealth({
+          animeRows: catalogList.map((a) => ({
+            id: Number(a.id),
+            title: String(a.title || ''),
+            slug: a.slug ?? null,
+            mal_id: a.mal_id ?? null,
+            anilist_id: a.anilist_id ?? null,
+            external_id: a.external_id ?? null,
+          })),
+          franchiseRows: [],
+          castRows: [],
+        });
+        const normalized = normalizeExtendedHealthReport(localExt);
+        setExtendedIssues(normalized.issues);
+        setExtendedCounts(normalized.countsByCategory);
+      }
     } catch (err: any) {
       setScanError(err?.message || 'Unable to run server Data Health scan; using local catalog audit.');
+      const localExt = scanExtendedDataHealth({
+        animeRows: catalogList.map((a) => ({
+          id: Number(a.id),
+          title: String(a.title || ''),
+          slug: a.slug ?? null,
+          mal_id: a.mal_id ?? null,
+          anilist_id: a.anilist_id ?? null,
+          external_id: a.external_id ?? null,
+        })),
+        franchiseRows: [],
+        castRows: [],
+      });
+      const normalized = normalizeExtendedHealthReport(localExt);
+      setExtendedIssues(normalized.issues);
+      setExtendedCounts(normalized.countsByCategory);
     } finally {
       setIsScanning(false);
     }
-  }, []);
+  }, [catalogList]);
 
   useEffect(() => {
     runServerScan();
   }, [runServerScan]);
+
+  const handleRunBoundedChunkedLinks = async () => {
+    const withUrls = catalogList
+      .filter((a) => a.watch_url || a.streamUrl || a.official_source_url || (Array.isArray(a.streaming_partners) && a.streaming_partners.length > 0))
+      .slice(0, 60);
+
+    if (withUrls.length === 0) {
+      onRunLinkCheck();
+      return;
+    }
+
+    cancelLinksRef.current = false;
+    setChunkedRunning(true);
+    const CHUNK_SIZE = 10;
+    const chunks: number[][] = [];
+    for (let i = 0; i < withUrls.length; i += CHUNK_SIZE) {
+      chunks.push(withUrls.slice(i, i + CHUNK_SIZE).map((a) => Number(a.id)).filter(Number.isFinite));
+    }
+
+    const aggregatedResults: AdminLinkCheckResponse['results'] = [];
+    const summary = {
+      total: 0,
+      active: 0,
+      redirected: 0,
+      broken: 0,
+      regionRestricted: 0,
+      unverified: 0,
+    };
+
+    setChunkedProgress({ checkedBatches: 0, totalBatches: chunks.length, checkedLinks: 0 });
+
+    for (let i = 0; i < chunks.length; i++) {
+      if (cancelLinksRef.current) break;
+      try {
+        const res = await cloudflareApi.checkAdminLinks({ animeIds: chunks[i], limit: 15 });
+        if (Array.isArray(res.results)) {
+          aggregatedResults.push(...res.results);
+        }
+        if (res.summary) {
+          summary.total += res.summary.total || 0;
+          summary.active += res.summary.active || 0;
+          summary.redirected += res.summary.redirected || 0;
+          summary.broken += res.summary.broken || 0;
+          summary.regionRestricted += res.summary.regionRestricted || 0;
+          summary.unverified += res.summary.unverified || 0;
+        }
+        setChunkedLinkReport({
+          success: true,
+          checkedAt: new Date().toISOString(),
+          summary: { ...summary },
+          results: [...aggregatedResults],
+          note: cancelLinksRef.current
+            ? 'Cancelled mid-scan — showing results collected before cancellation.'
+            : `Scanned ${i + 1}/${chunks.length} bounded batches (read-only; never auto-modifies links).`,
+        });
+      } catch {
+        // Continue remaining chunks cleanly
+      }
+      setChunkedProgress({
+        checkedBatches: i + 1,
+        totalBatches: chunks.length,
+        checkedLinks: aggregatedResults.length,
+      });
+    }
+
+    setChunkedRunning(false);
+  };
+
+  const activeLinkReport = chunkedLinkReport || linkCheckReport;
+  const effectiveCheckingLinks = chunkedRunning || isCheckingLinks;
 
   // Fallback local scan if server scan hasn't resolved yet
   const activeScanReport: DataHealthScanReport = useMemo(() => {
@@ -105,10 +333,29 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
     return map;
   }, [catalogList]);
 
+  const isExtendedFilter = (
+    f: string
+  ): f is ExtendedDataHealthCategory =>
+    f === 'orphan_franchise_links' ||
+    f === 'conflicting_watch_order' ||
+    f === 'unverified_cast_entries' ||
+    f === 'missing_external_ids';
+
   const filteredIssues = useMemo(() => {
+    if (isExtendedFilter(healthFilter)) return [];
     if (healthFilter === 'all') return activeScanReport.issues;
     return activeScanReport.issues.filter((iss) => iss.category === healthFilter);
   }, [activeScanReport, healthFilter]);
+
+  const filteredExtendedIssues = useMemo(() => {
+    if (healthFilter === 'all') return extendedIssues;
+    if (isExtendedFilter(healthFilter)) {
+      return extendedIssues.filter((iss) => iss.category === healthFilter);
+    }
+    return [];
+  }, [extendedIssues, healthFilter]);
+
+  const totalCombinedIssues = activeScanReport.issues.length + extendedIssues.length;
 
   return (
     <div data-testid="admin-data-health-tab" className="space-y-6 text-[var(--text-primary)]">
@@ -120,7 +367,7 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
             Catalog Data Health &amp; QA Scanner
           </h2>
           <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-            Read-only production QA scan for missing posters/banners, missing synopses, potential duplicate titles, inconsistent episode counts, unverified dub claims, stale OTT verification dates (&gt; 90 days), and missing translations.
+            Read-only production QA scan for artwork, synopses, duplicates, episodes, dub claims, translations, orphan franchise links, conflicting watch orders, unverified cast, and missing AniList/MAL IDs.
           </p>
         </div>
 
@@ -137,11 +384,11 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
 
           <button
             type="button"
-            onClick={onRunLinkCheck}
-            disabled={isCheckingLinks}
+            onClick={handleRunBoundedChunkedLinks}
+            disabled={effectiveCheckingLinks}
             className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
           >
-            {isCheckingLinks ? (
+            {effectiveCheckingLinks ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Checking OTT Links...
@@ -154,6 +401,19 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
             )}
           </button>
 
+          {chunkedRunning && (
+            <button
+              type="button"
+              onClick={() => {
+                cancelLinksRef.current = true;
+              }}
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-500 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <XCircle className="w-4 h-4" />
+              <span>Cancel</span>
+            </button>
+          )}
+
           <div className="px-3.5 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-center">
             <div className="text-base font-black text-emerald-600 dark:text-emerald-400">
               {activeScanReport.healthyCount}
@@ -164,7 +424,7 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
           </div>
           <div className="px-3.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-center">
             <div className="text-base font-black text-amber-600 dark:text-amber-400">
-              {activeScanReport.flaggedCount}
+              {activeScanReport.flaggedCount + extendedIssues.length}
             </div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
               Flagged
@@ -172,6 +432,38 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Live Bounded OTT Link Check Progress Bar */}
+      {chunkedRunning && chunkedProgress && (
+        <div
+          data-testid="ott-link-check-progress"
+          className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--accent-primary)]/40 space-y-2"
+        >
+          <div className="flex items-center justify-between text-xs font-bold text-[var(--text-primary)]">
+            <span>
+              Bounded OTT Link Audit: Batch {chunkedProgress.checkedBatches} / {chunkedProgress.totalBatches} ({chunkedProgress.checkedLinks} links checked)
+            </span>
+            <span className="font-mono text-[var(--accent-primary)]">
+              {chunkedProgress.totalBatches > 0
+                ? Math.round((chunkedProgress.checkedBatches / chunkedProgress.totalBatches) * 100)
+                : 0}
+              %
+            </span>
+          </div>
+          <div className="w-full h-2 rounded-full bg-[var(--bg-elevated)] overflow-hidden">
+            <div
+              className="h-full bg-[var(--accent-primary)] transition-all duration-300"
+              style={{
+                width: `${
+                  chunkedProgress.totalBatches > 0
+                    ? Math.round((chunkedProgress.checkedBatches / chunkedProgress.totalBatches) * 100)
+                    : 0
+                }%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {scanError && (
         <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-500 flex items-center gap-2">
@@ -181,7 +473,7 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
       )}
 
       {/* Official OTT Link Health Check Results */}
-      {linkCheckReport && (
+      {activeLinkReport && (
         <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
@@ -189,38 +481,38 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
                 <Link2 className="w-4 h-4 text-[var(--accent-primary)]" />
                 SSRF-Protected Official OTT Link Health Report
               </h3>
-              {linkCheckReport.note && (
-                <p className="text-xs text-[var(--text-secondary)] mt-0.5">{linkCheckReport.note}</p>
+              {activeLinkReport.note && (
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">{activeLinkReport.note}</p>
               )}
             </div>
-            {linkCheckReport.summary && (
+            {activeLinkReport.summary && (
               <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
-                  OK: {linkCheckReport.summary.active}
+                  OK: {activeLinkReport.summary.active}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-600 dark:text-sky-400">
-                  Redirected: {linkCheckReport.summary.redirected}
+                  Redirected: {activeLinkReport.summary.redirected}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400">
-                  Blocked/403 or Timeout: {linkCheckReport.summary.unverified + linkCheckReport.summary.regionRestricted}
+                  Blocked/403 or Timeout: {activeLinkReport.summary.unverified + activeLinkReport.summary.regionRestricted}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400">
-                  Confirmed Broken: {linkCheckReport.summary.broken}
+                  Confirmed Broken: {activeLinkReport.summary.broken}
                 </span>
               </div>
             )}
           </div>
 
-          {linkCheckReport.error && (
+          {activeLinkReport.error && (
             <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-600 dark:text-red-400 font-semibold flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
-              {linkCheckReport.error}
+              {activeLinkReport.error}
             </div>
           )}
 
-          {linkCheckReport.results.length > 0 && (
+          {activeLinkReport.results.length > 0 && (
             <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
-              {linkCheckReport.results.map((item, idx) => (
+              {activeLinkReport.results.map((item, idx) => (
                 <div
                   key={`${item.animeId}-${item.platform}-${idx}`}
                   className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
@@ -276,8 +568,10 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
         {SCANNER_CATEGORIES.map((pill) => {
           const count =
             pill.id === 'all'
-              ? activeScanReport.issues.length
-              : activeScanReport.countsByCategory[pill.id] || 0;
+              ? totalCombinedIssues
+              : isExtendedFilter(pill.id)
+                ? extendedCounts[pill.id] || 0
+                : activeScanReport.countsByCategory[pill.id as DataHealthIssueCategory] || 0;
           return (
             <button
               key={pill.id}
@@ -299,7 +593,7 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
       </div>
 
       {/* Flagged Issues List */}
-      {filteredIssues.length === 0 ? (
+      {filteredIssues.length === 0 && filteredExtendedIssues.length === 0 ? (
         <div className="p-12 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-center">
           <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
           <h3 className="text-base font-bold text-[var(--text-primary)]">
@@ -311,6 +605,66 @@ export const AdminDataHealthTab: React.FC<AdminDataHealthTabProps> = ({
         </div>
       ) : (
         <div className="space-y-3">
+          {filteredExtendedIssues.slice(0, 80).map((ext, idx) => {
+            const matchedAnime = ext.animeId ? animeById.get(String(ext.animeId)) : null;
+            return (
+              <div
+                key={`ext-${ext.category}-${ext.entityId}-${idx}`}
+                data-testid={`extended-health-issue-${ext.category}`}
+                className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">
+                      {ext.title}
+                    </h4>
+                    <span className="text-[11px] font-mono text-[var(--text-secondary)]">
+                      #{ext.entityId}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border ${
+                        ext.severity === 'critical'
+                          ? 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30'
+                          : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                      }`}
+                    >
+                      {ext.label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1 break-words">
+                    {ext.detail}
+                  </p>
+                </div>
+
+                {ext.targetTab === 'franchises' && onJumpToFranchises ? (
+                  <button
+                    type="button"
+                    onClick={onJumpToFranchises}
+                    className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold shrink-0 cursor-pointer"
+                  >
+                    Open Franchise Builder
+                  </button>
+                ) : ext.targetTab === 'cast' && onJumpToCast ? (
+                  <button
+                    type="button"
+                    onClick={onJumpToCast}
+                    className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold shrink-0 cursor-pointer"
+                  >
+                    Open Cast Manager
+                  </button>
+                ) : matchedAnime ? (
+                  <button
+                    type="button"
+                    onClick={() => onEditAnime(matchedAnime, 'identity')}
+                    className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Fix in Editor</span>
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
           {filteredIssues.slice(0, 120).map((issue, idx) => {
             const fullAnime = animeById.get(String(issue.animeId)) || {
               id: issue.animeId,

@@ -15,6 +15,7 @@ import {
   Layers,
   Mic2,
   Activity,
+  Trash2,
 } from 'lucide-react';
 import type { AdminActiveTab } from './types';
 
@@ -165,6 +166,15 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
       color: 'text-[var(--text-secondary)]',
       action: () => {
         onSetActiveTab('activity_log');
+        onClose();
+      },
+    },
+    {
+      label: 'Open Recycle Bin (Soft-Deleted Items & Undo)',
+      icon: Trash2,
+      color: 'text-rose-500',
+      action: () => {
+        onSetActiveTab('recycle_bin');
         onClose();
       },
     },

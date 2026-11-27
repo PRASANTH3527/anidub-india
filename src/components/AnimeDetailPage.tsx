@@ -556,21 +556,33 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     }
   }, [watchlistStatusProp]);
 
-  // Silent Phase 3 Demand Intelligence: track OTT impressions once per anime detail view
+  // Silent Phase 3 & 3.5 Demand Intelligence: track anime_detail_view, OTT impressions & non-English translation requests
   useEffect(() => {
     if (!anime?.id) return;
     const animeIdStr = String(anime.id);
-    if (lastTrackedOttImpressionAnimeIdRef.current === animeIdStr) return;
-    const platforms = Array.isArray(anime.platforms)
-      ? anime.platforms.filter((p) => Boolean(p && p.trim().length > 0))
-      : [];
-    if (platforms.length === 0) return;
-    lastTrackedOttImpressionAnimeIdRef.current = animeIdStr;
-    for (const platformName of platforms) {
+    if (lastTrackedOttImpressionAnimeIdRef.current !== animeIdStr) {
+      lastTrackedOttImpressionAnimeIdRef.current = animeIdStr;
       void cloudflareApi.trackDemandEvent({
-        event_type: 'ott_impression',
+        event_type: 'anime_detail_view',
         anime_id: animeIdStr,
-        platform_name: platformName,
+        language_code: uiLocale,
+      });
+      const platforms = Array.isArray(anime.platforms)
+        ? anime.platforms.filter((p) => Boolean(p && p.trim().length > 0))
+        : [];
+      for (const platformName of platforms) {
+        void cloudflareApi.trackDemandEvent({
+          event_type: 'ott_impression',
+          anime_id: animeIdStr,
+          platform_name: platformName,
+          language_code: uiLocale,
+        });
+      }
+    }
+    if (uiLocale && uiLocale !== 'en') {
+      void cloudflareApi.trackDemandEvent({
+        event_type: 'translation_request',
+        anime_id: animeIdStr,
         language_code: uiLocale,
       });
     }

@@ -19,6 +19,7 @@ import {
   type CoreContentBackupTable,
 } from '../../utils/adminPhase3Intelligence';
 import type { CsvDryRunSummary } from '../../utils/adminOpsPro';
+import { generateFailedCsvRowsExport } from '../../utils/adminPhase35Polish';
 
 export interface AdminBackupCenterTabProps {
   onFallbackExportCsv: () => void;
@@ -612,22 +613,73 @@ export const AdminBackupCenterTab: React.FC<AdminBackupCenterTabProps> = ({
               ))}
             </div>
 
-            <div className="flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={onCancelCsvDryRun}
-                className="min-h-[44px] px-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] cursor-pointer"
-              >
-                Cancel Dry-Run
-              </button>
-              <button
-                type="button"
-                disabled={isUploadingCsv || csvDryRunReport.validCount === 0}
-                onClick={onCommitStagedCsv}
-                className="min-h-[44px] px-5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold cursor-pointer disabled:opacity-50"
-              >
-                Commit {csvDryRunReport.validCount} Valid Rows to Pending Queue
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div>
+                {(csvDryRunReport.invalidCount > 0 || csvDryRunReport.duplicateCount > 0) && (
+                  <button
+                    type="button"
+                    data-testid="download-failed-csv-rows-btn"
+                    onClick={() => {
+                      const failedCsv = generateFailedCsvRowsExport(
+                        csvDryRunReport.rows.map((r) => ({
+                          rowNumber: r.rowIndex,
+                          title: r.title,
+                          slug: r.title
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, '-')
+                            .replace(/^-|-$/g, ''),
+                          status: r.status,
+                          errors: r.errors,
+                          raw: {
+                            title: r.title,
+                            type: r.type || '',
+                            year: String(r.year || ''),
+                            languages: r.languages || '',
+                            platform: r.platform || '',
+                          },
+                        }))
+                      );
+                      if (!failedCsv) return;
+                      const blob = new Blob([failedCsv], { type: 'text/csv;charset=utf-8;' });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.setAttribute(
+                        'download',
+                        `anidub_failed_csv_rows_${new Date().toISOString().slice(0, 10)}.csv`
+                      );
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                      onSuccess('Downloaded failed/duplicate CSV rows with error_reason column.');
+                    }}
+                    className="min-h-[44px] px-4 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-xs font-extrabold text-amber-500 inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>
+                      Download Failed Rows (.csv) ({csvDryRunReport.invalidCount + csvDryRunReport.duplicateCount})
+                    </span>
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={onCancelCsvDryRun}
+                  className="min-h-[44px] px-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] cursor-pointer"
+                >
+                  Cancel Dry-Run
+                </button>
+                <button
+                  type="button"
+                  disabled={isUploadingCsv || csvDryRunReport.validCount === 0}
+                  onClick={onCommitStagedCsv}
+                  className="min-h-[44px] px-5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold cursor-pointer disabled:opacity-50"
+                >
+                  Commit {csvDryRunReport.validCount} Valid Rows to Pending Queue
+                </button>
+              </div>
             </div>
           </div>
         )}

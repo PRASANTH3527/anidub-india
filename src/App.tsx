@@ -878,6 +878,13 @@ export default function App() {
     setWatchlist(nextIds);
     writeWatchlistToStorage(nextIds, ownerTag);
 
+    if (!isCurrentlySaved) {
+      void cloudflareApi.trackDemandEvent({
+        event_type: 'watchlist_add',
+        anime_id: String(idNum),
+      });
+    }
+
     if (!isSignedIn) {
       return;
     }

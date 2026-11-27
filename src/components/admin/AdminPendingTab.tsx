@@ -47,13 +47,6 @@ export const AdminPendingTab: React.FC<AdminPendingTabProps> = ({
             >
               <CheckCircle2 className="w-4 h-4" /> Approve All ({pendingItems.length})
             </button>
-            <button
-              type="button"
-              onClick={onClearAllPending}
-              className="min-h-[44px] px-4 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold flex items-center gap-1.5 transition-all"
-            >
-              <Trash2 className="w-4 h-4" /> Clear Queue
-            </button>
           </div>
         </div>
       )}

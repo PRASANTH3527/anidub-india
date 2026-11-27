@@ -19,14 +19,18 @@ import {
   Languages,
   ShieldCheck,
   X,
+  History,
+  RotateCcw,
+  RefreshCw,
 } from 'lucide-react';
-import { cloudflareApi } from '../../services/cloudflareApi';
+import { cloudflareApi, type AnimeRevisionRecord } from '../../services/cloudflareApi';
 import {
   computeMetadataFieldDiffs,
   type ExternalMetadataCandidate,
   type MetadataFieldDiff,
   type AnimeEditorTabId,
 } from '../../utils/adminOpsPro';
+import { computeAnimeRevisionDiff } from '../../utils/adminPhase35Polish';
 import { OFFICIAL_INDIAN_LANGUAGES } from './types';
 
 export interface AdminAnimeEditorViewProps {
@@ -151,13 +155,35 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
   const [selectedCandidate, setSelectedCandidate] = useState<ExternalMetadataCandidate | null>(null);
   const [fieldDiffs, setFieldDiffs] = useState<MetadataFieldDiff[]>([]);
 
+  // Phase 3.5: Optimistic Concurrency Conflict & Revision History
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string>('');
+  const [conflictState, setConflictState] = useState<{
+    message: string;
+    currentUpdatedAt?: string;
+    currentRecord?: any;
+    pendingPublishLive: boolean;
+  } | null>(null);
+  const [isRevisionsOpen, setIsRevisionsOpen] = useState(false);
+  const [loadingRevisions, setLoadingRevisions] = useState(false);
+  const [revisionsList, setRevisionsList] = useState<AnimeRevisionRecord[]>([]);
+  const [restoringRevisionId, setRestoringRevisionId] = useState<number | null>(null);
+  const [expandedRevisionId, setExpandedRevisionId] = useState<number | null>(null);
+  const [hydratedSource, setHydratedSource] = useState<any | null>(initialAnime || null);
+
+  useEffect(() => {
+    setHydratedSource(initialAnime || null);
+  }, [initialAnime]);
+
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
 
-  // Hydrate initialAnime when editing
+  // Hydrate hydratedSource when editing or reloading after conflict/restore
   useEffect(() => {
-    if (!initialAnime) {
+    const src = hydratedSource;
+    if (!src) {
+      setLoadedUpdatedAt('');
+      setConflictState(null);
       setTitle('');
       setAlternativeTitles('');
       setSlug('');
@@ -191,36 +217,38 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
       return;
     }
 
-    setTitle(String(initialAnime.title || '').trim());
-    setAlternativeTitles(String(initialAnime.hindiTitle || initialAnime.alternative_titles || '').trim());
-    setSlug(String(initialAnime.slug || '').trim());
-    setExternalId(String(initialAnime.external_id || initialAnime.imdbID || '').trim());
+    setLoadedUpdatedAt(String(src.updated_at || src.last_verified_at || ''));
+    setConflictState(null);
+    setTitle(String(src.title || '').trim());
+    setAlternativeTitles(String(src.hindiTitle || src.alternative_titles || '').trim());
+    setSlug(String(src.slug || '').trim());
+    setExternalId(String(src.external_id || src.imdbID || '').trim());
     setCoverImage(
       String(
-        initialAnime.cover_image ||
-          initialAnime.posterUrl ||
-          initialAnime.image ||
-          initialAnime.poster ||
+        src.cover_image ||
+          src.posterUrl ||
+          src.image ||
+          src.poster ||
           ''
       ).trim()
     );
-    setBannerImage(String(initialAnime.banner_image || '').trim());
-    setSynopsis(String(initialAnime.synopsis || initialAnime.description || '').trim());
-    setAnimeType(String(initialAnime.type || initialAnime.Type || 'TV Series').trim() || 'TV Series');
+    setBannerImage(String(src.banner_image || '').trim());
+    setSynopsis(String(src.synopsis || src.description || '').trim());
+    setAnimeType(String(src.type || src.Type || 'TV Series').trim() || 'TV Series');
 
-    const rawStatus = String(initialAnime.airing_status || initialAnime.status || '').toLowerCase();
+    const rawStatus = String(src.airing_status || src.status || '').toLowerCase();
     if (rawStatus.includes('upcoming')) setAiringStatus('Upcoming');
     else if (rawStatus.includes('complete') || rawStatus.includes('finished')) setAiringStatus('Completed');
     else setAiringStatus('Airing');
 
     setReleaseYear(
-      initialAnime.year || initialAnime.releaseYear ? String(initialAnime.year || initialAnime.releaseYear) : ''
+      src.year || src.releaseYear ? String(src.year || src.releaseYear) : ''
     );
-    setSeasonName(String(initialAnime.season || initialAnime.current_season || '').trim());
-    setStudio(String(initialAnime.studio || '').trim());
-    setRating(initialAnime.rating !== undefined && initialAnime.rating !== null ? String(initialAnime.rating) : '8.5');
+    setSeasonName(String(src.season || src.current_season || '').trim());
+    setStudio(String(src.studio || '').trim());
+    setRating(src.rating !== undefined && src.rating !== null ? String(src.rating) : '8.5');
 
-    const rawGenres = initialAnime.genres || initialAnime.genre || '';
+    const rawGenres = src.genres || src.genre || '';
     const parsedGenres = Array.isArray(rawGenres)
       ? rawGenres
       : String(rawGenres)
@@ -229,20 +257,20 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
           .filter(Boolean);
     setGenres(parsedGenres);
 
-    const rawEp = initialAnime.episodes_count ?? initialAnime.episodes ?? initialAnime.episode_count;
+    const rawEp = src.episodes_count ?? src.episodes ?? src.episode_count;
     setEpisodesCount(rawEp !== undefined && rawEp !== null && Number(rawEp) > 0 ? String(rawEp) : '');
-    setSeasonEpisodeCount(String(initialAnime.season_episode_count || '').trim());
-    setBroadcastDay(String(initialAnime.broadcast_day || initialAnime.releaseDay || '').trim());
-    setBroadcastTime(String(initialAnime.broadcast_time || initialAnime.airTime || '').trim());
-    setFranchiseId(String(initialAnime.franchise_id || '').trim());
-    setRelationType(String(initialAnime.relation_type || '').trim());
+    setSeasonEpisodeCount(String(src.season_episode_count || '').trim());
+    setBroadcastDay(String(src.broadcast_day || src.releaseDay || '').trim());
+    setBroadcastTime(String(src.broadcast_time || src.airTime || '').trim());
+    setFranchiseId(String(src.franchise_id || '').trim());
+    setRelationType(String(src.relation_type || '').trim());
     setSequenceNumber(
-      initialAnime.sequence_number !== undefined && initialAnime.sequence_number !== null
-        ? String(initialAnime.sequence_number)
+      src.sequence_number !== undefined && src.sequence_number !== null
+        ? String(src.sequence_number)
         : ''
     );
 
-    const rawLangs = initialAnime.languages;
+    const rawLangs = src.languages;
     const parsedLangs = Array.isArray(rawLangs)
       ? rawLangs.map((l) => String(l).trim()).filter(Boolean)
       : typeof rawLangs === 'string' && rawLangs.trim()
@@ -253,7 +281,7 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
         : [];
     setSelectedLanguages(parsedLangs);
 
-    const hasOfficialProof = Boolean(initialAnime.official_source_url || initialAnime.last_verified_at);
+    const hasOfficialProof = Boolean(src.official_source_url || src.last_verified_at);
     if (parsedLangs.length === 0) {
       setDubVerificationStatus('unverified');
     } else if (hasOfficialProof && Number(rawEp) > 0) {
@@ -264,13 +292,13 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
       setDubVerificationStatus('unverified');
     }
 
-    setPrimaryPlatform(String(initialAnime.platform || '').trim());
-    setWatchUrl(String(initialAnime.watch_url || initialAnime.streamUrl || '').trim());
-    setOfficialSourceUrl(String(initialAnime.official_source_url || '').trim());
-    setLastVerifiedAt(String(initialAnime.last_verified_at || '').slice(0, 10));
+    setPrimaryPlatform(String(src.platform || '').trim());
+    setWatchUrl(String(src.watch_url || src.streamUrl || '').trim());
+    setOfficialSourceUrl(String(src.official_source_url || '').trim());
+    setLastVerifiedAt(String(src.last_verified_at || '').slice(0, 10));
 
     const rawPartners =
-      initialAnime.streaming_partners || initialAnime.platforms_data || initialAnime.streamingPartners || [];
+      src.streaming_partners || src.platforms_data || src.streamingPartners || [];
     let parsedPartners: PartnerDraft[] = [];
     if (Array.isArray(rawPartners)) {
       parsedPartners = rawPartners
@@ -298,7 +326,7 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
     }
     setPartners(parsedPartners);
 
-    const rawMixed = initialAnime.mixed_entries || initialAnime.mixedEntries || [];
+    const rawMixed = src.mixed_entries || src.mixedEntries || [];
     let parsedSeasons: SeasonEntryDraft[] = [];
     if (Array.isArray(rawMixed)) {
       parsedSeasons = rawMixed.map((m: any) => ({
@@ -322,7 +350,7 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
     }
     setSeasonEntries(parsedSeasons);
     setIsDirty(false);
-  }, [initialAnime]);
+  }, [hydratedSource]);
 
   // Warn before closing browser tab if dirty
   useEffect(() => {
@@ -508,8 +536,44 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
     setSelectedCandidate(null);
   };
 
-  const handleSave = async (publishLive: boolean) => {
+  const handleOpenRevisions = async () => {
+    if (!isEditing) return;
+    const targetId = initialAnime.id || initialAnime._id;
+    setIsRevisionsOpen(true);
+    setLoadingRevisions(true);
+    try {
+      const res = await cloudflareApi.fetchAdminAnimeRevisions(targetId);
+      setRevisionsList(res.revisions || []);
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Failed to load revision history.');
+      setRevisionsList([]);
+    } finally {
+      setLoadingRevisions(false);
+    }
+  };
+
+  const handleRestoreRevision = async (revisionId: number) => {
+    if (!isEditing) return;
+    const targetId = initialAnime.id || initialAnime._id;
+    setRestoringRevisionId(revisionId);
     setSubmitError(null);
+    try {
+      const res = await cloudflareApi.restoreAdminAnimeRevision(targetId, revisionId);
+      if (res.anime) {
+        setHydratedSource(res.anime);
+      }
+      setIsRevisionsOpen(false);
+      onSaved(res.anime || { ...initialAnime, id: targetId }, false);
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Failed to restore revision.');
+    } finally {
+      setRestoringRevisionId(null);
+    }
+  };
+
+  const handleSave = async (publishLive: boolean, forceOverwrite = false) => {
+    setSubmitError(null);
+    setConflictState(null);
     if (!title.trim()) {
       setSubmitError('Official Anime Title is required before saving.');
       setActiveTab('identity');
@@ -593,6 +657,10 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
         approval_status: publishLive ? 'approved' : 'pending',
       };
 
+      if (isEditing && !forceOverwrite && loadedUpdatedAt) {
+        payload.expected_updated_at = loadedUpdatedAt;
+      }
+
       if (isEditing) {
         const targetId = initialAnime.id || initialAnime._id;
         const res = await cloudflareApi.updateAnime(targetId, payload);
@@ -604,7 +672,18 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
         onSaved({ ...payload, id: res.animeId || (res as any).id }, true);
       }
     } catch (err: any) {
-      setSubmitError(err?.message || 'Failed to save anime entry.');
+      if (err?.status === 409 || err?.conflict) {
+        setConflictState({
+          message:
+            err?.message ||
+            'Another admin updated this anime while you were editing. Reload the latest version or force overwrite.',
+          currentUpdatedAt: err?.currentUpdatedAt,
+          currentRecord: err?.currentRecord,
+          pendingPublishLive: publishLive,
+        });
+      } else {
+        setSubmitError(err?.message || 'Failed to save anime entry.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -649,6 +728,18 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {isEditing && (
+            <button
+              type="button"
+              data-testid="open-anime-revisions-btn"
+              onClick={handleOpenRevisions}
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <History className="w-4 h-4 text-[var(--accent-primary)]" />
+              <span>Revisions</span>
+            </button>
+          )}
+
           <button
             type="button"
             data-testid="open-autofill-metadata-btn"
@@ -684,6 +775,49 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* 409 Optimistic Concurrency Conflict Resolution Banner */}
+      {conflictState && (
+        <div
+          data-testid="editor-optimistic-conflict-banner"
+          className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 space-y-3"
+        >
+          <div className="flex items-start gap-2.5 text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <div className="text-sm font-extrabold text-[var(--text-primary)]">
+                Edit Conflict Detected (HTTP 409)
+              </div>
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                {conflictState.message}
+                {conflictState.currentUpdatedAt
+                  ? ` Server timestamp: ${new Date(conflictState.currentUpdatedAt).toLocaleString()}.`
+                  : ''}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {conflictState.currentRecord && (
+              <button
+                type="button"
+                onClick={() => setHydratedSource(conflictState.currentRecord)}
+                className="min-h-[40px] px-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                <span>Reload Latest Version</span>
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => void handleSave(conflictState.pendingPublishLive, true)}
+              className="min-h-[40px] px-3.5 rounded-xl bg-amber-500 text-black text-xs font-extrabold cursor-pointer"
+            >
+              Force Overwrite Server Record
+            </button>
+          </div>
+        </div>
+      )}
 
       {submitError && (
         <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-xs font-bold text-red-500 flex items-center gap-2">
@@ -1943,6 +2077,143 @@ export const AdminAnimeEditorView: React.FC<AdminAnimeEditorViewProps> = ({
                     </button>
                   </div>
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revision History Slide-Over Drawer */}
+      {isRevisionsOpen && isEditing && (
+        <div
+          data-testid="anime-revisions-drawer"
+          className="fixed inset-0 z-[130] bg-black/75 backdrop-blur-xs flex justify-end"
+          onClick={() => setIsRevisionsOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl h-full bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] flex flex-col shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 sm:p-5 border-b border-[var(--border-subtle)] flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-base font-extrabold text-[var(--text-primary)] flex items-center gap-2">
+                  <History className="w-4 h-4 text-[var(--accent-primary)]" />
+                  <span>Anime Revision History</span>
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] truncate">
+                  {title || `#${initialAnime?.id}`} · Automatic pre-save snapshots with field diff &amp; 1-click restore.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRevisionsOpen(false)}
+                className="min-w-[40px] min-h-[40px] rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+              {loadingRevisions ? (
+                <div className="py-12 text-center text-xs text-[var(--text-secondary)] flex flex-col items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-[var(--accent-primary)]" />
+                  <span>Loading revision snapshots...</span>
+                </div>
+              ) : revisionsList.length === 0 ? (
+                <div className="py-12 text-center text-xs text-[var(--text-secondary)]">
+                  No revisions recorded yet. Future edits automatically save snapshots before overwriting.
+                </div>
+              ) : (
+                revisionsList.map((rev) => {
+                  const isExpanded = expandedRevisionId === rev.id;
+                  const parsedSnap: Record<string, unknown> =
+                    rev.snapshot && typeof rev.snapshot === 'object' ? rev.snapshot : {};
+                  const currentEditorSnapshot: Record<string, unknown> = {
+                    title,
+                    slug,
+                    status: airingStatus,
+                    dub_languages: selectedLanguages,
+                    episodes_count: episodesCount ? Number(episodesCount) : null,
+                    synopsis,
+                    poster_url: coverImage,
+                    banner_url: bannerImage,
+                    rating: rating ? Number(rating) : null,
+                  };
+                  const diffResult = computeAnimeRevisionDiff(parsedSnap, currentEditorSnapshot);
+                  const diffs = diffResult.changes;
+
+                  return (
+                    <div
+                      key={rev.id}
+                      className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] space-y-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-extrabold text-[var(--text-primary)]">
+                            {rev.revision_summary || `Revision #${rev.id}`}
+                          </div>
+                          <div className="text-[11px] text-[var(--text-secondary)] font-mono mt-0.5">
+                            By {rev.edited_by || 'admin'} ·{' '}
+                            {rev.created_at ? new Date(rev.created_at).toLocaleString() : '—'}
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[10px] font-bold text-[var(--text-secondary)] shrink-0">
+                          {diffs.length} diff{diffs.length === 1 ? '' : 's'}
+                        </span>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="space-y-1.5 pt-2 border-t border-[var(--border-subtle)]">
+                          {diffs.length === 0 ? (
+                            <div className="text-[11px] text-[var(--text-secondary)]">
+                              Snapshot matches your current form state.
+                            </div>
+                          ) : (
+                            diffs.map((d) => (
+                              <div
+                                key={d.field}
+                                className="p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[11px] space-y-0.5"
+                              >
+                                <div className="font-bold text-[var(--text-primary)]">
+                                  {d.field.replace(/_/g, ' ')}
+                                </div>
+                                <div className="text-amber-500 break-words line-clamp-2">
+                                  Snapshot: {d.before !== null && d.before !== undefined && String(d.before) !== '' ? (typeof d.before === 'object' ? JSON.stringify(d.before) : String(d.before)) : '(empty)'}
+                                </div>
+                                <div className="text-emerald-500 break-words line-clamp-2">
+                                  Current: {d.after !== null && d.after !== undefined && String(d.after) !== '' ? (typeof d.after === 'object' ? JSON.stringify(d.after) : String(d.after)) : '(empty)'}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedRevisionId(isExpanded ? null : rev.id)}
+                          className="min-h-[36px] px-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[11px] font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                        >
+                          {isExpanded ? 'Hide Field Diff' : 'Compare Field Diff'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={restoringRevisionId === rev.id}
+                          onClick={() => handleRestoreRevision(rev.id)}
+                          className="min-h-[36px] px-3 rounded-lg bg-[var(--accent-soft)] hover:opacity-90 border border-[var(--accent-primary)]/40 text-xs font-bold text-[var(--accent-primary)] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          {restoringRevisionId === rev.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          )}
+                          <span>Restore Revision</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

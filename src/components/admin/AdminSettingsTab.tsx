@@ -161,59 +161,65 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
         </form>
       </div>
 
-      {/* 2. Cloudflare Pages & API Hostname Configuration */}
+      {/* 2. Read-Only Deployment Environment Status (API Routing Locked for Production Safety) */}
       <div className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
-              <Globe className="w-5 h-5 text-amber-500" />
+            <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+              <Globe className="w-5 h-5 text-emerald-500" />
             </div>
             <div>
               <h2 className="text-lg font-extrabold text-[var(--text-primary)]">
-                Cloudflare API Hostname Override
+                Deployment Environment Status
               </h2>
               <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
-                Leave empty for default same-origin <code className="text-[var(--accent-primary)]">/api/*</code> routing on Cloudflare Pages.
+                Runtime API routing is locked to same-origin <code className="text-[var(--accent-primary)]">/api/*</code> Cloudflare Pages Functions to prevent accidental routing misconfiguration.
               </p>
             </div>
           </div>
           <span className="px-3 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold self-start sm:self-center">
-            Same-Origin Ready
+            Same-Origin Locked
           </span>
         </div>
 
-        <form onSubmit={onSaveWorkerUrl} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
-              Custom Worker / Pages Origin URL (Optional)
-            </label>
-            <div className="flex flex-col sm:flex-row gap-2.5">
-              <input
-                type="url"
-                value={customWorkerUrl}
-                onChange={(e) => setCustomWorkerUrl(e.target.value)}
-                placeholder="Leave blank for automatic same-origin (/api/anime)"
-                className="flex-1 min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)]/60 focus:outline-none focus:border-[var(--accent-primary)] font-mono"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="submit"
-                  className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] font-bold text-xs sm:text-sm transition-all flex items-center gap-2 shrink-0"
-                >
-                  {isUrlSaved ? <Check className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
-                  {isUrlSaved ? 'Saved' : 'Apply URL'}
-                </button>
-                <button
-                  type="button"
-                  onClick={onResetWorkerUrl}
-                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all shrink-0"
-                >
-                  Reset
-                </button>
-              </div>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              Active Origin
+            </span>
+            <p className="text-xs sm:text-sm font-mono font-bold text-[var(--text-primary)] truncate">
+              {typeof window !== 'undefined' ? window.location.origin : 'https://anidub.in'}
+            </p>
           </div>
-        </form>
+          <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              API Routing Mode
+            </span>
+            <p className="text-xs sm:text-sm font-mono font-bold text-emerald-500">
+              Same-Origin (/api/*)
+            </p>
+          </div>
+          <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              Admin Auth Guard
+            </span>
+            <p className="text-xs sm:text-sm font-mono font-bold text-[var(--accent-primary)]">
+              Strict Clerk JWT + Role
+            </p>
+          </div>
+        </div>
+        {customWorkerUrl && (
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-500">
+            <span>Legacy local worker URL override detected in browser storage.</span>
+            <button
+              type="button"
+              onClick={onResetWorkerUrl}
+              className="min-h-[36px] px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 font-bold text-amber-400 transition-colors"
+            >
+              Clear Legacy Override
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 3. Safe Non-Destructive Cache & Diagnostics Controls */}

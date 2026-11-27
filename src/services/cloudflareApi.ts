@@ -2542,7 +2542,7 @@ class CloudflareApiService {
   /**
    * P2 #4: Admin Official Link Health Checker
    */
-  public async checkAdminLinks(options?: { limit?: number }): Promise<AdminLinkCheckResponse> {
+  public async checkAdminLinks(options?: { limit?: number; animeIds?: number[] }): Promise<AdminLinkCheckResponse> {
     try {
       const token = await getClerkSessionToken();
       const res = await this.smartFetch('/api/admin/check-links', {
@@ -2551,7 +2551,12 @@ class CloudflareApiService {
           ...this.getHeaders(true),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ limit: options?.limit ?? 20 }),
+        body: JSON.stringify({
+          limit: options?.limit ?? 20,
+          ...(Array.isArray(options?.animeIds) && options.animeIds.length > 0
+            ? { animeIds: options.animeIds }
+            : {}),
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json?.success) {
@@ -3372,6 +3377,7 @@ class CloudflareApiService {
     restoredId: number;
     entity_type: string;
     entity_id: string;
+    message?: string;
   }> {
     const res = await this.smartFetch(`/api/admin/recycle-bin/${binId}/restore`, {
       method: 'POST',
@@ -3569,6 +3575,44 @@ class CloudflareApiService {
     this.clearCatalogIndexCache();
     return json;
   }
+}
+
+export interface AdminAiUsageSnapshot {
+  usageDate: string;
+  usedToday: number;
+  dailyCap: number;
+  remaining: number;
+  allowed: boolean;
+}
+
+export interface AdminAiUsageResponse {
+  success: boolean;
+  usage: AdminAiUsageSnapshot;
+  history?: Array<{
+    usage_date: string;
+    translation_calls: number;
+    daily_cap: number;
+    updated_at: string;
+  }>;
+}
+
+export interface TranslationVersionRecord {
+  id: number;
+  anime_id: number;
+  language_code: string;
+  synopsis_text: string;
+  source_type: string;
+  saved_by: string | null;
+  created_at: string;
+}
+
+export interface AnimeRevisionRecord {
+  id: number;
+  anime_id: number;
+  revision_summary: string | null;
+  snapshot: Record<string, any>;
+  edited_by: string | null;
+  created_at: string;
 }
 
 export const cloudflareApi = new CloudflareApiService();

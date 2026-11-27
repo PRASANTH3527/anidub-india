@@ -140,31 +140,65 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
       const rawLimit = Number(body.limit ?? 20);
       const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 30) : 20;
+      const requestedIds = Array.isArray(body.animeIds)
+        ? body.animeIds
+            .map((v) => Number(v))
+            .filter((n) => Number.isInteger(n) && n > 0)
+            .slice(0, 30)
+        : [];
 
       let rows: Record<string, unknown>[] = [];
       try {
-        const res = await env.DB.prepare(
-          `SELECT id, title, platform, watch_url, official_source_url, platforms_data
-           FROM anime
-           WHERE is_published = 1
-           ORDER BY id DESC
-           LIMIT ?`
-        )
-          .bind(limit)
-          .all();
-        rows = res.results || [];
+        if (requestedIds.length > 0) {
+          const placeholders = requestedIds.map(() => '?').join(', ');
+          const res = await env.DB.prepare(
+            `SELECT id, title, platform, watch_url, official_source_url, platforms_data
+             FROM anime
+             WHERE id IN (${placeholders})
+             ORDER BY id DESC
+             LIMIT ?`
+          )
+            .bind(...requestedIds, limit)
+            .all();
+          rows = res.results || [];
+        } else {
+          const res = await env.DB.prepare(
+            `SELECT id, title, platform, watch_url, official_source_url, platforms_data
+             FROM anime
+             WHERE is_published = 1
+             ORDER BY id DESC
+             LIMIT ?`
+          )
+            .bind(limit)
+            .all();
+          rows = res.results || [];
+        }
       } catch (colErr) {
         if (!isMissingColumnError(colErr)) throw colErr;
-        const fallback = await env.DB.prepare(
-          `SELECT id, title, platform, watch_url, platforms_data
-           FROM anime
-           WHERE is_published = 1
-           ORDER BY id DESC
-           LIMIT ?`
-        )
-          .bind(limit)
-          .all();
-        rows = fallback.results || [];
+        if (requestedIds.length > 0) {
+          const placeholders = requestedIds.map(() => '?').join(', ');
+          const fallback = await env.DB.prepare(
+            `SELECT id, title, platform, watch_url, platforms_data
+             FROM anime
+             WHERE id IN (${placeholders})
+             ORDER BY id DESC
+             LIMIT ?`
+          )
+            .bind(...requestedIds, limit)
+            .all();
+          rows = fallback.results || [];
+        } else {
+          const fallback = await env.DB.prepare(
+            `SELECT id, title, platform, watch_url, platforms_data
+             FROM anime
+             WHERE is_published = 1
+             ORDER BY id DESC
+             LIMIT ?`
+          )
+            .bind(limit)
+            .all();
+          rows = fallback.results || [];
+        }
       }
 
       const targets: Array<{ animeId: number; title: string; platform: string; url: string }> = [];

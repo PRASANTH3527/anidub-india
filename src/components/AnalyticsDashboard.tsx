@@ -35,12 +35,14 @@ export interface AnalyticsDashboardProps {
   onSelectAnimeSlug?: (slug: string) => void;
   onAddMissingAnimeTitle?: (title: string) => void;
   onJumpToDataHealth?: (filterKey?: string) => void;
+  onJumpToDubsMatrix?: (animeId?: string | number) => void;
 }
 
 export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   onSelectAnimeSlug,
   onAddMissingAnimeTitle,
   onJumpToDataHealth,
+  onJumpToDubsMatrix,
 }) => {
   const { t } = useTranslation();
   const [data, setData] = useState<any>(null);
@@ -177,11 +179,12 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
   const totalDeviceVisitors = devicesList.reduce((acc, d) => acc + (Number(d.count) || 0), 0);
 
-  // Phase 3 Content Demand Intelligence arrays
+  // Phase 3 & 3.5 Content Demand Intelligence arrays
   const missingSearches = demandData?.missingSearches || [];
   const regionalLanguageDemand = demandData?.languageDemand || [];
   const ottPerformance = demandData?.ottPerformance || [];
   const completenessGaps = demandData?.completenessGaps || null;
+  const highDemandMissingDubs = demandData?.highDemandMissingDubs || [];
 
   const maxLanguageDemandEvents = Math.max(
     ...regionalLanguageDemand.map((l) => Number(l.eventCount) || 0),
@@ -588,6 +591,93 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                       className="min-h-[36px] px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[11px] font-extrabold text-[var(--accent-primary)] shrink-0 cursor-pointer"
                     >
                       Inspect &rarr;
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Card E (Phase 3.5): High-Demand Missing Dubs Insight */}
+        <div
+          data-testid="analytics-high-demand-missing-dubs-card"
+          className="lg:col-span-12 p-4 sm:p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-extrabold text-[var(--text-primary)] flex items-center gap-2">
+                <Globe className="w-4 h-4 text-amber-500" />
+                <span>High-Demand Missing Dubs (Tamil / Hindi / Telugu)</span>
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Real catalog titles receiving high detail views, watchlist adds, translation requests, or OTT interest while missing major Indian regional dubs.
+              </p>
+            </div>
+            {onJumpToDubsMatrix && (
+              <button
+                type="button"
+                onClick={() => onJumpToDubsMatrix()}
+                className="min-h-[40px] px-3.5 rounded-xl bg-[var(--accent-soft)] hover:opacity-90 border border-[var(--accent-primary)]/40 text-xs font-bold text-[var(--accent-primary)] shrink-0 cursor-pointer"
+              >
+                Open Dubs Matrix &rarr;
+              </button>
+            )}
+          </div>
+
+          {highDemandMissingDubs.length === 0 ? (
+            <div className="py-6 px-4 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-center space-y-1">
+              <div className="text-xs sm:text-sm font-bold text-[var(--text-primary)]">
+                No high-demand missing dub gaps recorded yet
+              </div>
+              <p className="text-xs text-[var(--text-secondary)]">
+                As users view anime details, add to watchlists, or request regional synopsis translations, titles missing Tamil/Hindi/Telugu dubs will rank here automatically.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {highDemandMissingDubs.slice(0, 9).map((item) => (
+                <div
+                  key={item.anime_id}
+                  className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex flex-col justify-between gap-2.5"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs sm:text-sm font-extrabold text-[var(--text-primary)] line-clamp-1">
+                        {item.title}
+                      </div>
+                      <span className="px-2 py-0.5 rounded-md bg-[var(--accent-primary)]/15 text-[var(--accent-primary)] font-mono font-extrabold text-[11px] shrink-0">
+                        {item.total_demand_events} events
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 text-[10px] text-[var(--text-secondary)] font-mono">
+                      <span>{item.detail_views} views</span>
+                      <span>•</span>
+                      <span>{item.watchlist_adds} watchlists</span>
+                      <span>•</span>
+                      <span>{item.ott_clicks} OTT</span>
+                      <span>•</span>
+                      <span>{item.translation_requests} tr</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {item.missing_languages.map((lang: string) => (
+                        <span
+                          key={lang}
+                          className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-bold"
+                        >
+                          Missing {lang}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {onJumpToDubsMatrix && (
+                    <button
+                      type="button"
+                      onClick={() => onJumpToDubsMatrix(item.anime_id)}
+                      className="min-h-[36px] w-full px-3 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[11px] font-extrabold text-[var(--accent-primary)] cursor-pointer"
+                    >
+                      Verify Dub Matrix &rarr;
                     </button>
                   )}
                 </div>

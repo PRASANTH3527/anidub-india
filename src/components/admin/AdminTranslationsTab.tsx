@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Languages,
   Search,
@@ -15,11 +15,18 @@ import {
   Sparkles,
   Lock,
   Unlock,
+  History,
+  RotateCcw,
+  Layers,
+  Gauge,
+  X,
 } from 'lucide-react';
 import {
   cloudflareApi,
   type AnimeTranslationItem,
   type LocaleCoverageItem,
+  type AdminAiUsageSnapshot,
+  type TranslationVersionRecord,
 } from '../../services/cloudflareApi';
 import {
   TARGET_TRANSLATION_LOCALES,
@@ -90,17 +97,55 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
   const [isManualLocked, setIsManualLocked] = useState<boolean>(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
+  // Phase 3.5: Workers AI Daily Cost Guard
+  const [aiUsage, setAiUsage] = useState<AdminAiUsageSnapshot | null>(null);
+  const [editingAiCap, setEditingAiCap] = useState(false);
+  const [aiCapInput, setAiCapInput] = useState('100');
+  const [savingAiCap, setSavingAiCap] = useState(false);
+
+  // Phase 3.5: Selective Bulk Translate Drawer
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [bulkSelectedAnimeIds, setBulkSelectedAnimeIds] = useState<string[]>([]);
+  const [bulkTargetLocales, setBulkTargetLocales] = useState<TargetTranslationLocale[]>(['ta', 'hi']);
+  const [isBulkRunning, setIsBulkRunning] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{
+    completed: number;
+    total: number;
+    succeeded: number;
+    skippedLocked: number;
+    failed: number;
+    currentLabel: string;
+    stoppedReason?: string;
+  } | null>(null);
+  const bulkCancelRef = useRef(false);
+
+  // Phase 3.5: Version History & Rollback Drawer
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [versionsList, setVersionsList] = useState<TranslationVersionRecord[]>([]);
+  const [rollingBackId, setRollingBackId] = useState<number | null>(null);
+
   useEffect(() => {
     if (initialAnimeId) {
       setSelectedAnimeId(String(initialAnimeId));
     }
   }, [initialAnimeId]);
 
+  const loadAiUsage = useCallback(async () => {
+    try {
+      const res = await cloudflareApi.fetchAdminAiUsage();
+      setAiUsage(res.usage);
+      setAiCapInput(String(res.usage?.dailyCap ?? 100));
+    } catch {
+      // Safe fallback
+    }
+  }, []);
+
   const loadTranslations = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const res = await cloudflareApi.fetchAdminTranslations();
+      const [res] = await Promise.all([cloudflareApi.fetchAdminTranslations(), loadAiUsage()]);
       setTableReady(res.tableReady);
       setMigrationNotice(res.notice || null);
       setTranslations(res.translations || []);
@@ -111,7 +156,7 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadAiUsage]);
 
   useEffect(() => {
     loadTranslations();
@@ -304,12 +349,158 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
     }
   };
 
+  const handleSaveAiCap = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsed = Math.max(1, Math.min(2000, Math.round(Number(aiCapInput) || 100)));
+    setSavingAiCap(true);
+    try {
+      const updated = await cloudflareApi.updateAdminAiDailyCap(parsed);
+      setAiUsage(updated.usage);
+      setAiCapInput(String(updated.usage.dailyCap));
+      setEditingAiCap(false);
+      onSuccess?.(`Updated daily Workers AI translation cap to ${updated.usage.dailyCap} runs/day.`);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to update daily AI cap.');
+    } finally {
+      setSavingAiCap(false);
+    }
+  };
+
+  const handleOpenVersionHistory = async () => {
+    if (!activeRow) return;
+    setIsHistoryOpen(true);
+    setLoadingVersions(true);
+    try {
+      const res = await cloudflareApi.fetchAdminTranslationVersions(activeRow.animeIdStr, selectedLocale);
+      setVersionsList(res.versions || []);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to load translation version history.');
+      setVersionsList([]);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  const handleRollbackVersion = async (versionId: number) => {
+    if (!activeRow) return;
+    setRollingBackId(versionId);
+    setErrorMsg(null);
+    try {
+      await cloudflareApi.rollbackAdminTranslationVersion(
+        activeRow.animeIdStr,
+        selectedLocale,
+        versionId
+      );
+      await loadTranslations();
+      const updatedVersions = await cloudflareApi.fetchAdminTranslationVersions(
+        activeRow.animeIdStr,
+        selectedLocale
+      );
+      setVersionsList(updatedVersions.versions || []);
+      onSuccess?.(`Rolled back ${LOCALE_LABELS[selectedLocale].english} translation for "${activeRow.anime.title}".`);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to rollback translation version.');
+    } finally {
+      setRollingBackId(null);
+    }
+  };
+
+  const handleStartSelectiveBulkTranslate = async () => {
+    if (bulkSelectedAnimeIds.length === 0 || bulkTargetLocales.length === 0) return;
+    bulkCancelRef.current = false;
+    setIsBulkRunning(true);
+    const tasks: Array<{ anime: AdminAnimeRecord; locale: TargetTranslationLocale }> = [];
+    for (const idStr of bulkSelectedAnimeIds) {
+      const anime = catalog.find((a) => String(a.id) === idStr);
+      if (!anime) continue;
+      for (const locale of bulkTargetLocales) {
+        tasks.push({ anime, locale });
+      }
+    }
+
+    let completed = 0;
+    let succeeded = 0;
+    let skippedLocked = 0;
+    let failed = 0;
+    let stoppedReason: string | undefined;
+
+    setBulkProgress({
+      completed: 0,
+      total: tasks.length,
+      succeeded: 0,
+      skippedLocked: 0,
+      failed: 0,
+      currentLabel: 'Initializing batch...',
+    });
+
+    for (const task of tasks) {
+      if (bulkCancelRef.current) {
+        stoppedReason = 'Cancelled by admin.';
+        break;
+      }
+      const key = `${String(task.anime.id)}:${task.locale}`;
+      const existing = translationLookup.get(key);
+      const isLocked =
+        Boolean(existing?.is_locked) ||
+        (typeof existing?.updated_by === 'string' && existing.updated_by.startsWith('LOCKED:'));
+
+      setBulkProgress({
+        completed,
+        total: tasks.length,
+        succeeded,
+        skippedLocked,
+        failed,
+        currentLabel: `${task.anime.title} (${LOCALE_LABELS[task.locale].badge})`,
+      });
+
+      if (isLocked) {
+        skippedLocked += 1;
+        completed += 1;
+        continue;
+      }
+
+      try {
+        await cloudflareApi.generateAdminTranslationWithAi({
+          anime_id: String(task.anime.id),
+          locale: task.locale,
+          title: task.anime.title,
+          synopsis: task.anime.synopsis || task.anime.description || '',
+        });
+        succeeded += 1;
+      } catch (err: any) {
+        failed += 1;
+        const msg = String(err?.message || '');
+        if (msg.toLowerCase().includes('cap') || msg.includes('429')) {
+          stoppedReason = 'Daily Workers AI cap reached — batch paused safely.';
+          completed += 1;
+          break;
+        }
+      }
+      completed += 1;
+    }
+
+    setBulkProgress({
+      completed,
+      total: tasks.length,
+      succeeded,
+      skippedLocked,
+      failed,
+      currentLabel: stoppedReason || 'Batch complete!',
+      stoppedReason,
+    });
+    setIsBulkRunning(false);
+    await loadTranslations();
+    onSuccess?.(
+      `Bulk translate finished: ${succeeded} generated, ${skippedLocked} locked skipped, ${failed} failed.`
+    );
+  };
+
   const activeLocaleMeta = LANGUAGE_REGISTRY.find((l) => l.code === selectedLocale);
 
   return (
     <div data-testid="admin-translations-studio" className="space-y-5 min-w-0">
       {/* Header Banner */}
-      <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-xl bg-[var(--accent-soft)] border border-[var(--accent-primary)]/30 flex items-center justify-center shrink-0">
@@ -320,21 +511,95 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
                 Workers AI Translation Studio (`anime_translations`)
               </h2>
               <p className="text-xs text-[var(--text-secondary)]">
-                Side-by-side Original English Synopsis vs Localized Translation across 6 Indian scripts with Workers AI generation and manual edit lock protection.
+                Side-by-side Original English Synopsis vs Localized Translation across 6 Indian scripts with Workers AI cost guard, selective batching, manual lock protection &amp; version rollback.
               </p>
             </div>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={loadTranslations}
-          disabled={loading}
-          className="min-h-[44px] px-4 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)] inline-flex items-center justify-center gap-2 shrink-0 transition-colors cursor-pointer disabled:opacity-60"
-        >
-          <RefreshCw className={`w-4 h-4 text-[var(--accent-primary)] ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh Coverage</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Workers AI Daily Cost Guard Badge */}
+          {aiUsage && (
+            <div
+              data-testid="ai-daily-usage-badge"
+              className={`min-h-[44px] px-3 py-1.5 rounded-xl border text-xs font-bold inline-flex items-center gap-2 ${
+                aiUsage.allowed
+                  ? 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)]'
+                  : 'bg-red-500/15 border-red-500/40 text-red-500'
+              }`}
+            >
+              <Gauge className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+              {editingAiCap ? (
+                <form onSubmit={handleSaveAiCap} className="inline-flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={1}
+                    max={2000}
+                    value={aiCapInput}
+                    onChange={(e) => setAiCapInput(e.target.value)}
+                    className="w-16 px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--accent-primary)] text-xs font-mono text-[var(--text-primary)]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={savingAiCap}
+                    className="px-2 py-0.5 rounded bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-[11px] font-bold cursor-pointer"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingAiCap(false)}
+                    className="text-[11px] text-[var(--text-secondary)] cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <span>
+                    AI Cost Guard: {aiUsage.usedToday} / {aiUsage.dailyCap} today
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditingAiCap(true)}
+                    className="text-[11px] underline text-[var(--accent-primary)] cursor-pointer"
+                  >
+                    Cap
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          <button
+            type="button"
+            data-testid="open-selective-bulk-translate-btn"
+            onClick={() => {
+              setBulkSelectedAnimeIds(
+                enrichedRows
+                  .filter((r) => !r.locked && (r.status === 'missing' || r.outdated))
+                  .slice(0, 15)
+                  .map((r) => r.animeIdStr)
+              );
+              setBulkProgress(null);
+              setIsBulkOpen(true);
+            }}
+            className="min-h-[44px] px-3.5 rounded-xl bg-[var(--accent-soft)] hover:opacity-90 border border-[var(--accent-primary)]/40 text-xs font-bold text-[var(--accent-primary)] inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <Layers className="w-4 h-4" />
+            <span>Selective Bulk Translate</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={loadTranslations}
+            disabled={loading}
+            className="min-h-[44px] px-4 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)] inline-flex items-center justify-center gap-2 shrink-0 transition-colors cursor-pointer disabled:opacity-60"
+          >
+            <RefreshCw className={`w-4 h-4 text-[var(--accent-primary)] ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh Coverage</span>
+          </button>
+        </div>
       </div>
 
       {/* Migration Readiness Notice */}
@@ -550,8 +815,15 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
                   <button
                     type="button"
                     data-testid="regenerate-workers-ai-btn"
-                    disabled={generatingAi || saving || isManualLocked}
+                    disabled={generatingAi || saving || isManualLocked || aiUsage?.allowed === false}
                     onClick={handleRegenerateWithWorkersAi}
+                    title={
+                      aiUsage?.allowed === false
+                        ? 'Daily Workers AI cap reached'
+                        : isManualLocked
+                          ? 'Unlock manual edits first'
+                          : 'Generate translation with Workers AI'
+                    }
                     className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--accent-soft)] hover:opacity-90 border border-[var(--accent-primary)]/40 text-xs font-bold text-[var(--accent-primary)] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     {generatingAi ? (
@@ -559,7 +831,20 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
                     ) : (
                       <Sparkles className="w-3.5 h-3.5" />
                     )}
-                    <span>Regenerate with Workers AI</span>
+                    <span>
+                      {aiUsage?.allowed === false ? 'Daily AI Cap Reached' : 'Regenerate with Workers AI'}
+                    </span>
+                  </button>
+
+                  {/* Version History & Rollback Button */}
+                  <button
+                    type="button"
+                    data-testid="open-translation-versions-btn"
+                    onClick={handleOpenVersionHistory}
+                    className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <History className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                    <span>History</span>
                   </button>
 
                   {/* Lock Manual Edit Button */}
@@ -734,6 +1019,278 @@ export const AdminTranslationsTab: React.FC<AdminTranslationsTabProps> = ({
         destructive
         loading={deleting}
       />
+
+      {/* Selective Bulk Translate Modal */}
+      {isBulkOpen && (
+        <div
+          data-testid="selective-bulk-translate-modal"
+          className="fixed inset-0 z-[130] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+        >
+          <div className="w-full max-w-2xl rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden my-8">
+            <div className="p-4 sm:p-5 border-b border-[var(--border-subtle)] flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-extrabold text-[var(--text-primary)] flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[var(--accent-primary)]" />
+                  <span>Selective Bulk Workers AI Translation</span>
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Locked manual translations are automatically skipped. Respects your daily Workers AI Cost Guard cap.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isBulkRunning}
+                onClick={() => setIsBulkOpen(false)}
+                className="min-w-[40px] min-h-[40px] rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <div className="text-xs font-bold text-[var(--text-primary)] mb-2">
+                  1. Target Languages ({bulkTargetLocales.length} selected)
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {TARGET_TRANSLATION_LOCALES.map((loc) => {
+                    const active = bulkTargetLocales.includes(loc);
+                    return (
+                      <button
+                        key={loc}
+                        type="button"
+                        disabled={isBulkRunning}
+                        onClick={() =>
+                          setBulkTargetLocales((prev) =>
+                            prev.includes(loc) ? prev.filter((x) => x !== loc) : [...prev, loc]
+                          )
+                        }
+                        className={`min-h-[38px] px-3 rounded-xl text-xs font-bold border cursor-pointer ${
+                          active
+                            ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
+                            : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
+                        }`}
+                      >
+                        {LOCALE_LABELS[loc].native} ({LOCALE_LABELS[loc].english})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-[var(--text-primary)]">
+                    2. Select Anime ({bulkSelectedAnimeIds.length} selected)
+                  </span>
+                  <div className="flex items-center gap-2 text-xs">
+                    <button
+                      type="button"
+                      disabled={isBulkRunning}
+                      onClick={() =>
+                        setBulkSelectedAnimeIds(enrichedRows.slice(0, 25).map((r) => r.animeIdStr))
+                      }
+                      className="text-[var(--accent-primary)] font-bold underline cursor-pointer"
+                    >
+                      Select Top 25
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isBulkRunning}
+                      onClick={() => setBulkSelectedAnimeIds([])}
+                      className="text-[var(--text-secondary)] underline cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-52 overflow-y-auto rounded-xl border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)] bg-[var(--bg-elevated)]">
+                  {enrichedRows.slice(0, 50).map((row) => {
+                    const checked = bulkSelectedAnimeIds.includes(row.animeIdStr);
+                    return (
+                      <label
+                        key={row.animeIdStr}
+                        className="flex items-center justify-between gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-[var(--bg-surface)]"
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            disabled={isBulkRunning}
+                            checked={checked}
+                            onChange={() =>
+                              setBulkSelectedAnimeIds((prev) =>
+                                prev.includes(row.animeIdStr)
+                                  ? prev.filter((id) => id !== row.animeIdStr)
+                                  : [...prev, row.animeIdStr]
+                              )
+                            }
+                            className="w-4 h-4 accent-[var(--accent-primary)]"
+                          />
+                          <span className="font-semibold text-[var(--text-primary)] truncate">
+                            {row.anime.title}
+                          </span>
+                        </span>
+                        {row.locked && (
+                          <span className="text-[10px] font-bold text-amber-500 shrink-0">
+                            Locked (Skipped)
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {bulkProgress && (
+                <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-[var(--text-primary)]">
+                    <span className="truncate">{bulkProgress.currentLabel}</span>
+                    <span className="font-mono shrink-0">
+                      {bulkProgress.completed} / {bulkProgress.total}
+                    </span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-[var(--bg-surface)] overflow-hidden">
+                    <div
+                      className="h-full bg-[var(--accent-primary)] transition-all duration-200"
+                      style={{
+                        width: `${
+                          bulkProgress.total > 0
+                            ? Math.round((bulkProgress.completed / bulkProgress.total) * 100)
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-[11px] text-[var(--text-secondary)]">
+                    <span className="text-emerald-500 font-bold">Generated: {bulkProgress.succeeded}</span>
+                    <span className="text-amber-500 font-bold">Locked Skipped: {bulkProgress.skippedLocked}</span>
+                    <span className="text-red-500 font-bold">Failed: {bulkProgress.failed}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border-subtle)]">
+                {isBulkRunning ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      bulkCancelRef.current = true;
+                    }}
+                    className="min-h-[44px] px-4 rounded-xl bg-red-500 text-white text-xs font-extrabold cursor-pointer"
+                  >
+                    Cancel Batch
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setIsBulkOpen(false)}
+                      className="min-h-[44px] px-4 rounded-xl bg-[var(--bg-elevated)] text-xs font-bold text-[var(--text-secondary)] cursor-pointer"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        bulkSelectedAnimeIds.length === 0 ||
+                        bulkTargetLocales.length === 0 ||
+                        aiUsage?.allowed === false
+                      }
+                      onClick={handleStartSelectiveBulkTranslate}
+                      className="min-h-[44px] px-4 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>
+                        Run {bulkSelectedAnimeIds.length * bulkTargetLocales.length} Translations
+                      </span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Version History & 1-Click Rollback Slide-Over Drawer */}
+      {isHistoryOpen && activeRow && (
+        <div
+          data-testid="translation-version-history-drawer"
+          className="fixed inset-0 z-[130] bg-black/70 backdrop-blur-xs flex justify-end"
+          onClick={() => setIsHistoryOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg h-full bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] flex flex-col shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 sm:p-5 border-b border-[var(--border-subtle)] flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-base font-extrabold text-[var(--text-primary)] flex items-center gap-2">
+                  <History className="w-4 h-4 text-[var(--accent-primary)]" />
+                  <span>Translation Version History</span>
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] truncate">
+                  {activeRow.anime.title} · {LOCALE_LABELS[selectedLocale].english} ({LOCALE_LABELS[selectedLocale].native})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHistoryOpen(false)}
+                className="min-w-[40px] min-h-[40px] rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+              {loadingVersions ? (
+                <div className="py-12 text-center text-xs text-[var(--text-secondary)] flex flex-col items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-[var(--accent-primary)]" />
+                  <span>Loading saved translation snapshots...</span>
+                </div>
+              ) : versionsList.length === 0 ? (
+                <div className="py-12 text-center text-xs text-[var(--text-secondary)]">
+                  No previous versions recorded yet. Snapshots are automatically archived before every overwrite or AI regeneration.
+                </div>
+              ) : (
+                versionsList.map((ver) => (
+                  <div
+                    key={ver.id}
+                    className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="font-bold text-[var(--text-primary)]">
+                        {ver.source_type || 'manual'} · {ver.saved_by || 'admin'}
+                      </span>
+                      <span className="font-mono text-[var(--text-secondary)]">
+                        {ver.created_at ? new Date(ver.created_at).toLocaleString() : '—'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap break-words line-clamp-4">
+                      {ver.synopsis_text || '(Empty synopsis)'}
+                    </p>
+                    <div className="pt-1 flex justify-end">
+                      <button
+                        type="button"
+                        disabled={rollingBackId === ver.id}
+                        onClick={() => handleRollbackVersion(ver.id)}
+                        className="min-h-[38px] px-3 rounded-lg bg-[var(--accent-soft)] hover:opacity-90 border border-[var(--accent-primary)]/40 text-xs font-bold text-[var(--accent-primary)] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {rollingBackId === ver.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        )}
+                        <span>1-Click Rollback</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

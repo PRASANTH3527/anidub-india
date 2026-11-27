@@ -31,6 +31,8 @@ import {
   Activity,
   Layers,
   Mic2,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DubInfoModal } from './DubInfoModal';
@@ -69,6 +71,7 @@ import { AdminActivityLogTab } from './admin/AdminActivityLogTab';
 import { AdminFranchiseBuilderTab } from './admin/AdminFranchiseBuilderTab';
 import { AdminCastManagerTab } from './admin/AdminCastManagerTab';
 import { AdminBackupCenterTab } from './admin/AdminBackupCenterTab';
+import { AdminRecycleBinTab } from './admin/AdminRecycleBinTab';
 
 export interface AdminDashboardProps {
   onAnimeCreated?: (updatedAnime?: any, deletedId?: string | number) => void;
@@ -92,14 +95,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     Boolean(isSignedIn && clerkUser && (isAuthorizedClerkAdmin(clerkUser) || serverVerifiedAdmin === true)) &&
     serverVerifiedAdmin !== false;
 
-  // Navigation & Responsive Shell State
+  // Navigation & Responsive Shell State (hydrates from URL query params so editor back-navigation restores exact catalog state)
   const [activeTab, setActiveTab] = useState<AdminActiveTab>(() => {
     if (typeof window !== 'undefined') {
       const p = window.location.pathname;
+      const params = new URLSearchParams(window.location.search);
       if (p === '/admin/analytics') return 'analytics';
       if (p === '/admin/catalog/new' || /^\/admin\/catalog\/[^/]+\/edit\/?$/.test(p)) {
         return 'editor';
       }
+      const tabParam = params.get('tab') as AdminActiveTab | null;
+      if (tabParam) return tabParam;
     }
     return 'overview';
   });
@@ -108,19 +114,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isMobileMoreOpen, setIsMobileMoreOpen] = useState<boolean>(false);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState<boolean>(false);
 
-  // Server-Side Paginated Catalog State
+  // Server-Side Paginated Catalog State (restored from URL query params)
   const [catalogItems, setCatalogItems] = useState<any[]>(catalogList);
-  const [catalogPage, setCatalogPage] = useState<number>(1);
+  const [catalogPage, setCatalogPage] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const p = Number(new URLSearchParams(window.location.search).get('page'));
+      if (Number.isInteger(p) && p > 0) return p;
+    }
+    return 1;
+  });
   const [catalogPageSize] = useState<number>(25);
   const [catalogTotalItems, setCatalogTotalItems] = useState<number>(catalogList.length);
   const [catalogTotalPages, setCatalogTotalPages] = useState<number>(1);
   const [isCatalogLoading, setIsCatalogLoading] = useState<boolean>(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
-  const [filterStatus, setFilterStatus] = useState<string>('All');
-  const [filterLanguage, setFilterLanguage] = useState<string>('All');
-  const [sortBy, setSortBy] = useState<string>('id_desc');
+  const [searchQuery, setSearchQuery] = useState<string>(() =>
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('q') || '' : ''
+  );
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(() =>
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('q') || '' : ''
+  );
+  const [filterStatus, setFilterStatus] = useState<string>(() =>
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('status') || 'All' : 'All'
+  );
+  const [filterLanguage, setFilterLanguage] = useState<string>(() =>
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('lang') || 'All' : 'All'
+  );
+  const [sortBy, setSortBy] = useState<string>(() =>
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('sort') || 'id_desc' : 'id_desc'
+  );
   const catalogAbortRef = useRef<AbortController | null>(null);
 
   // Full Catalog Index for Data Health & Translations
@@ -189,9 +211,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   });
   const [isUrlSaved, setIsUrlSaved] = useState<boolean>(false);
 
-  // Toast Notification Banner State
+  // Toast Notification Banner State (with optional Soft-Delete Undo Recycle Bin ID)
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [toastUndoRecycleId, setToastUndoRecycleId] = useState<number | null>(null);
+  const [isUndoingToast, setIsUndoingToast] = useState<boolean>(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -201,13 +225,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onConfirm: () => void;
   } | null>(null);
 
-  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
-    setToastMessage(msg);
-    setToastType(type);
-    window.setTimeout(() => {
-      setToastMessage((prev) => (prev === msg ? null : prev));
-    }, 4500);
-  }, []);
+  const showToast = useCallback(
+    (msg: string, type: 'success' | 'error' = 'success', recycleBinId?: number | null) => {
+      setToastMessage(msg);
+      setToastType(type);
+      setToastUndoRecycleId(recycleBinId ?? null);
+      window.setTimeout(() => {
+        setToastMessage((prev) => {
+          if (prev === msg) {
+            setToastUndoRecycleId(null);
+            return null;
+          }
+          return prev;
+        });
+      }, recycleBinId ? 8000 : 4500);
+    },
+    []
+  );
 
   const addLog = useCallback((msg: string, type: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR' = 'INFO') => {
     const time = new Date().toLocaleTimeString();
@@ -229,19 +263,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Debounce catalog search query (250ms) and reset page to 1
+  // Debounce catalog search query (250ms) and reset page to 1 when search changes
+  const prevSearchRef = useRef(searchQuery);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedSearch(searchQuery.trim());
-      setCatalogPage(1);
+      if (prevSearchRef.current !== searchQuery) {
+        prevSearchRef.current = searchQuery;
+        setCatalogPage(1);
+      }
     }, 250);
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
 
   // Reset to page 1 when status, language, or sort changes
+  const prevFiltersRef = useRef({ filterStatus, filterLanguage, sortBy });
   useEffect(() => {
-    setCatalogPage(1);
+    const prev = prevFiltersRef.current;
+    if (
+      prev.filterStatus !== filterStatus ||
+      prev.filterLanguage !== filterLanguage ||
+      prev.sortBy !== sortBy
+    ) {
+      prevFiltersRef.current = { filterStatus, filterLanguage, sortBy };
+      setCatalogPage(1);
+    }
   }, [filterStatus, filterLanguage, sortBy]);
+
+  // Persist catalog URL query params while browsing /admin so back-navigation from Editor restores state
+  useEffect(() => {
+    if (typeof window === 'undefined' || activeTab === 'editor') return;
+    const params = new URLSearchParams();
+    if (activeTab && activeTab !== 'overview') params.set('tab', activeTab);
+    if (debouncedSearch) params.set('q', debouncedSearch);
+    if (filterStatus && filterStatus !== 'All') params.set('status', filterStatus);
+    if (filterLanguage && filterLanguage !== 'All') params.set('lang', filterLanguage);
+    if (sortBy && sortBy !== 'id_desc') params.set('sort', sortBy);
+    if (catalogPage > 1) params.set('page', String(catalogPage));
+    const qs = params.toString();
+    const targetUrl = qs ? `/admin?${qs}` : '/admin';
+    if (
+      window.location.pathname === '/admin' &&
+      `${window.location.pathname}${window.location.search}` !== targetUrl
+    ) {
+      window.history.replaceState(null, '', targetUrl);
+    }
+  }, [activeTab, debouncedSearch, filterStatus, filterLanguage, sortBy, catalogPage]);
 
   // 1. Server-Side Paginated D1 Catalog Loader with AbortController cancellation
   const fetchPaginatedAdminCatalog = useCallback(
@@ -706,14 +773,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleReject = async (id: number | string) => {
+  const handleReject = async (
+    id: number | string,
+    options?: { reasonPreset?: string; moderatorNote?: string }
+  ) => {
     try {
-      const res: any = await cloudflareApi.rejectAnime(id);
+      const res: any = await cloudflareApi.rejectAnime(id, options);
       if (!res || res.success === false) {
         throw new Error(res?.error || 'Server rejected deletion');
       }
       setPendingItems((prev) => prev.filter((item) => String(item.id) !== String(id)));
-      showToast('Rejected and removed pending submission from D1.', 'success');
+      showToast(
+        'Rejected submission and archived snapshot to Recycle Bin.',
+        'success',
+        res?.recycleBinId ?? null
+      );
       void fetchD1StatusSummary();
     } catch (err: any) {
       showToast(`Failed to reject submission: ${err?.message || 'Unknown error'}`, 'error');
@@ -825,24 +899,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleDeleteCatalogAnime = (id: number, title: string) => {
     setConfirmDialog({
       isOpen: true,
-      title: 'Delete Catalog Title',
-      message: `Permanently delete "${title}" (#${id}) from Cloudflare D1?`,
-      confirmLabel: 'Delete Permanently',
+      title: 'Move Catalog Title to Recycle Bin',
+      message: `Soft-delete "${title}" (#${id}) from the live catalog? A full snapshot will be saved in Recycle Bin so you can restore it anytime.`,
+      confirmLabel: 'Move to Recycle Bin',
       isDanger: true,
       onConfirm: async () => {
         setConfirmDialog(null);
         try {
-          await cloudflareApi.deleteAnime(id);
+          const res: any = await cloudflareApi.deleteAnime(id);
           setCatalogItems((prev) => prev.filter((a) => Number(a.id) !== Number(id)));
           setCatalogTotalItems((prev) => Math.max(0, prev - 1));
           onAnimeCreated?.(undefined, id);
-          showToast(`Deleted "${title}" from D1.`, 'success');
+          showToast(
+            `Moved "${title}" to Recycle Bin.`,
+            'success',
+            res?.recycleBinId ?? null
+          );
           void fetchD1StatusSummary();
         } catch (err: any) {
           showToast(`Failed to delete "${title}": ${err?.message || 'Error'}`, 'error');
         }
       },
     });
+  };
+
+  const handleUndoRecycleToast = async () => {
+    if (!toastUndoRecycleId || isUndoingToast) return;
+    setIsUndoingToast(true);
+    try {
+      const res = await cloudflareApi.restoreAdminRecycleBinItem(toastUndoRecycleId);
+      setToastUndoRecycleId(null);
+      showToast(res.message || 'Restored item from Recycle Bin!', 'success');
+      await Promise.all([
+        fetchPaginatedAdminCatalog(catalogPage),
+        fetchPendingItems(),
+        fetchD1StatusSummary(),
+      ]);
+      onAnimeCreated?.();
+    } catch (err: any) {
+      showToast(err?.message || 'Undo restore failed.', 'error');
+    } finally {
+      setIsUndoingToast(false);
+    }
   };
 
   const handleToggleSelectCatalog = (id: number) => {
@@ -938,22 +1036,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleBulkMarkVerified = async () => {
+    if (selectedCatalogIds.length === 0) return;
+    setIsBulkProcessing(true);
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      for (const id of selectedCatalogIds) {
+        const target = catalogItems.find((a) => Number(a.id) === id);
+        if (target) {
+          await cloudflareApi.updateAnime(id, { ...target, last_verified_at: today });
+        }
+      }
+      showToast(`Stamped verification date (${today}) on ${selectedCatalogIds.length} titles!`, 'success');
+      setSelectedCatalogIds([]);
+      await fetchPaginatedAdminCatalog(catalogPage);
+      void fetchD1StatusSummary();
+      onAnimeCreated?.();
+    } catch (err: any) {
+      showToast(`Bulk verification failed: ${err?.message}`, 'error');
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
   const handleBulkDeleteSelected = () => {
     if (selectedCatalogIds.length === 0) return;
     setConfirmDialog({
       isOpen: true,
-      title: 'Bulk Delete Catalog Titles',
-      message: `Permanently delete ${selectedCatalogIds.length} selected anime from Cloudflare D1?`,
+      title: 'Move Selected Titles to Recycle Bin',
+      message: `Soft-delete ${selectedCatalogIds.length} selected anime from the live catalog? Full snapshots will be stored in Recycle Bin.`,
       confirmLabel: `Delete ${selectedCatalogIds.length} Titles`,
       isDanger: true,
       onConfirm: async () => {
         setConfirmDialog(null);
         setIsBulkProcessing(true);
         try {
+          let lastRecycleId: number | null = null;
           for (const id of selectedCatalogIds) {
-            await cloudflareApi.deleteAnime(id);
+            const res: any = await cloudflareApi.deleteAnime(id);
+            if (res?.recycleBinId) lastRecycleId = res.recycleBinId;
           }
-          showToast(`Deleted ${selectedCatalogIds.length} titles from D1.`, 'success');
+          showToast(
+            `Moved ${selectedCatalogIds.length} titles to Recycle Bin.`,
+            'success',
+            selectedCatalogIds.length === 1 ? lastRecycleId : null
+          );
           setSelectedCatalogIds([]);
           await fetchPaginatedAdminCatalog(1);
           void fetchD1StatusSummary();
@@ -1586,6 +1713,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       groupLabel: 'System',
       items: [
         { id: 'backup', label: 'Backup & CSV', icon: Download },
+        { id: 'recycle_bin', label: 'Recycle Bin', icon: Trash2 },
         { id: 'activity_log', label: 'Activity Log', icon: Activity },
         { id: 'settings', label: 'Settings', icon: Settings },
       ],
@@ -1745,6 +1873,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {effectiveTab === 'data_health' && 'Catalog Data Health & QA Scanner'}
                 {effectiveTab === 'analytics' && 'Actionable Admin Analytics & Demand Intelligence'}
                 {effectiveTab === 'backup' && 'Full Backup, JSON Validator & CSV Dry-Run Center'}
+                {effectiveTab === 'recycle_bin' && 'Recycle Bin & Safe Recovery'}
                 {effectiveTab === 'activity_log' && 'Admin Activity & Audit Log'}
                 {effectiveTab === 'settings' && 'Workspace Settings'}
               </h1>
@@ -1874,6 +2003,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onBulkUpdateStatus={handleBulkUpdateStatus}
               onBulkAssignLanguage={handleBulkAssignLanguage}
               onBulkToggleVisibility={handleBulkToggleVisibility}
+              onBulkMarkVerified={handleBulkMarkVerified}
               onBulkDeleteSelected={handleBulkDeleteSelected}
               onToggleVisibility={handleToggleVisibility}
               onEditAnime={(anime) => handleOpenModularEditor(anime, 'identity')}
@@ -1926,15 +2056,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {effectiveTab === 'moderation' && (
             <AdminModerationInboxTab
               pendingItems={pendingItems}
+              existingCatalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
               feedbackList={feedbackList}
               updatingFeedbackId={updatingFeedbackId}
               feedbackError={feedbackError}
               onApproveAnime={handleApprove}
               onRejectAnime={handleReject}
               onEditPendingAnime={(anime) => handleOpenModularEditor(anime, 'identity')}
-              onClearPendingQueue={handleClearAllPending}
+              onInspectExistingAnime={(animeId) => {
+                const pool = fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems;
+                const found = pool.find((a) => Number(a.id) === Number(animeId));
+                if (found) {
+                  handleOpenModularEditor(found, 'identity');
+                } else {
+                  setSearchQuery(String(animeId));
+                  handleSelectNavTab('catalog');
+                }
+              }}
               onUpdateFeedbackStatus={handleUpdateFeedbackStatus}
-              onSuccess={(msg) => showToast(msg, 'success')}
+              onSuccess={(msg, recycleBinId) => showToast(msg, 'success', recycleBinId ?? null)}
             />
           )}
 
@@ -1948,6 +2088,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onEditAnime={(anime, targetTab) =>
                 handleOpenModularEditor(anime, targetTab || 'identity')
               }
+              onJumpToFranchises={() => handleSelectNavTab('franchises')}
+              onJumpToCast={() => handleSelectNavTab('cast')}
               linkCheckReport={linkCheckReport}
               isCheckingLinks={isCheckingLinks}
               onRunLinkCheck={handleRunLinkCheck}
@@ -1971,6 +2113,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 }
                 handleSelectNavTab('data_health');
               }}
+              onJumpToDubsMatrix={() => handleSelectNavTab('dubs')}
             />
           )}
 
@@ -1991,6 +2134,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onDownloadSampleCsv={handleDownloadSampleCSV}
               onSuccess={(msg) => showToast(msg, 'success')}
               onError={(msg) => showToast(msg, 'error')}
+            />
+          )}
+
+          {/* SECTION 9B: RECYCLE BIN & SAFE RECOVERY */}
+          {effectiveTab === 'recycle_bin' && (
+            <AdminRecycleBinTab
+              onShowToast={(msg, type) => showToast(msg, type || 'success')}
+              onRestoredItem={() => {
+                void fetchPaginatedAdminCatalog(catalogPage);
+                void fetchPendingItems();
+                void fetchD1StatusSummary();
+                onAnimeCreated?.();
+              }}
             />
           )}
 
@@ -2078,6 +2234,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               'data_health',
               'analytics',
               'backup',
+              'recycle_bin',
               'activity_log',
               'settings',
             ].includes(effectiveTab)
@@ -2123,6 +2280,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   { id: 'data_health', label: 'Data Health', icon: ShieldCheck },
                   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
                   { id: 'backup', label: 'Backup Center', icon: Download },
+                  { id: 'recycle_bin', label: 'Recycle Bin', icon: Trash2 },
                   { id: 'activity_log', label: 'Activity Log', icon: Activity },
                   { id: 'settings', label: 'Settings', icon: Settings },
                 ] as const
@@ -2267,7 +2425,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* 9. TOAST NOTIFICATION BANNER */}
+      {/* 9. TOAST NOTIFICATION BANNER (WITH OPTIONAL SOFT-DELETE UNDO) */}
       {toastMessage && (
         <div
           data-testid="admin-toast-banner"
@@ -2285,6 +2443,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)]">
             {toastMessage}
           </span>
+          {toastUndoRecycleId && (
+            <button
+              type="button"
+              data-testid="admin-toast-undo-btn"
+              disabled={isUndoingToast}
+              onClick={handleUndoRecycleToast}
+              className="min-h-[34px] px-2.5 py-1 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold inline-flex items-center gap-1 shrink-0 cursor-pointer disabled:opacity-50"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>{isUndoingToast ? 'Restoring...' : 'Undo'}</span>
+            </button>
+          )}
         </div>
       )}
     </div>
