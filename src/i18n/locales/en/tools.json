@@ -1,0 +1,27 @@
+{
+  "compare": {
+    "title": "Compare Anime",
+    "subtitle": "Compare regional dub coverage, OTT platforms, and ratings side by side",
+    "selectAnimeA": "Select Anime A",
+    "selectAnimeB": "Select Anime B",
+    "swap": "Swap",
+    "searchPlaceholder": "Search anime to compare..."
+  },
+  "tierList": {
+    "title": "Anime Tier List Maker",
+    "subtitle": "Rank your favorite Indian dubbed anime and export your board",
+    "resetBoard": "Reset Board",
+    "tapToAssign": "Tap a tier to assign selected anime"
+  },
+  "matchmaker": {
+    "title": "For You Matchmaker",
+    "subtitle": "Pick your favorite dub language and mood for tailored recommendations",
+    "findMatches": "Find Matches"
+  },
+  "roulette": {
+    "title": "Random Anime Roulette",
+    "subtitle": "Can't decide what to watch next? Let fate pick a dubbed anime.",
+    "rollCta": "Roll Random Anime",
+    "viewDetails": "View Details"
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "heading": "ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ ಅನಿಮೆ ಹುಡುಕಿ",
+  "random": "ಯಾದೃಚ್ಛಿಕ",
+  "randomAnime": "ಯಾದೃಚ್ಛಿಕ ಅನಿಮೆ",
+  "compare": "ಹೋಲಿಸಿ",
+  "matchmaker": "ಶಿಫಾರಸು",
+  "searchPlaceholder": "ಅನಿಮೆ ಹೆಸರು, ಶಾರ್ಟ್ ನೇಮ್ (ಉದಾ. JJK), ಸ್ಟುಡಿಯೋ ಹುಡುಕಿ...",
+  "filters": "ಫಿಲ್ಟರ್",
+  "mySubscriptionsHeader": "ನನ್ನ OTT ಚಂದಾದಾರಿಕೆಗಳು ಮತ್ತು ವ್ಯಾಪ್ತಿ",
+  "myOttsOff": "ನನ್ನ OTT: ಆಫ್",
+  "myOttsActive": "ನನ್ನ OTT: {{count}} ಸಕ್ರಿಯ",
+  "showingTitles": "{{count}} ಶೀರ್ಷಿಕೆಗಳು ಕಾಣಿಸುತ್ತಿವೆ",
+  "showingTitlesOf": "{{total}} ರಲ್ಲಿ {{shown}} ಶೀರ್ಷಿಕೆಗಳು",
+  "loadingCatalog": "ಕ್ಯಾಟಲಾಗ್ ಲೋಡ್ ಆಗುತ್ತಿದೆ...",
+  "batchIndicator": "ಬ್ಯಾಚ್ {{current}} / {{total}}",
+  "loadMoreAnime": "ಇನ್ನಷ್ಟು ಅನಿಮೆ ಲೋಡ್ ಮಾಡಿ",
+  "manualContinuationHelper": "48 ಶೀರ್ಷಿಕೆಗಳ ನಂತರ ಹಸ್ತಚಾಲಿತ ಮುಂದುವರಿಕೆ",
+  "autoLoadingNextBatch": "ಮುಂದಿನ ಬ್ಯಾಚ್ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಲೋಡ್ ಆಗುತ್ತಿದೆ...",
+  "allCaughtUp": "ನೀವು ಎಲ್ಲವನ್ನೂ ನೋಡಿದ್ದೀರಿ",
+  "backToTop": "ಮೇಲೆ ಹೋಗಿ",
+  "resetAllFilters": "ಎಲ್ಲಾ ಫಿಲ್ಟರ್‌ಗಳನ್ನು ಮರುಹೊಂದಿಸಿ",
+  "noAnimeMatchesTitle": "ಆಯ್ಕೆ ಮಾಡಿದ ಫಿಲ್ಟರ್‌ಗಳಿಗೆ ಯಾವುದೇ ಅನಿಮೆ ಹೊಂದಿಕೆಯಾಗಲಿಲ್ಲ.",
+  "noAnimeMatchesSubtitle": "ಭಾಷೆ, OTT ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಅಥವಾ ಹುಡುಕಾಟ ಪದವನ್ನು ಬದಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+  "filterSheet": {
+    "title": "ಫಿಲ್ಟರ್ ಮತ್ತು ವಿಂಗಡಿಸಿ",
+    "subtitle": "ಭಾರತೀಯ ಪ್ರಾದೇಶಿಕ ಡಬ್‌ಗಳನ್ನು ಸುಲಭವಾಗಿ ಫಿಲ್ಟರ್ ಮಾಡಿ",
+    "quickSort": "ತ್ವರಿತ ವಿಂಗಡಣೆ",
+    "dubLanguages": "ಡಬ್ ಭಾಷೆಗಳು",
+    "ottPlatforms": "OTT ಪ್ಲಾಟ್‌ಫಾರ್ಮ್‌ಗಳು",
+    "genre": "ಪ್ರಕಾರ",
+    "type": "ವಿಧ",
+    "releaseStatus": "ಬಿಡುಗಡೆ ಸ್ಥಿತಿ",
+    "episodeLength": "ಸಂಚಿಕೆ ಉದ್ದ",
+    "dubAvailability": "ಡಬ್ ಲಭ್ಯತೆ",
+    "verifiedOnly": "ಪರಿಶೀಲಿಸಿದ ಲಭ್ಯತೆ ಮಾತ್ರ",
+    "fullyDubbedOnly": "ಪೂರ್ಣವಾಗಿ ಡಬ್ ಆದ ಸೀಸನ್‌ಗಳು ಮಾತ್ರ",
+    "showResults": "ಫಲಿತಾಂಶ ತೋರಿಸಿ",
+    "showResultsCount": "{{count}} ಫಲಿತಾಂಶ ತೋರಿಸಿ",
+    "resetFilters": "ಮರುಹೊಂದಿಸಿ",
+    "allGenres": "ಎಲ್ಲಾ ಪ್ರಕಾರಗಳು",
+    "allTypes": "ಎಲ್ಲಾ ವಿಧಗಳು",
+    "allStatuses": "ಎಲ್ಲಾ ಸ್ಥಿತಿಗಳು",
+    "allLengths": "ಯಾವುದೇ ಉದ್ದ",
+    "sort": {
+      "latest": "ಇತ್ತೀಚೆಗೆ ಸೇರಿಸಿದವು",
+      "rating": "ಅತ್ಯಧಿಕ ರೇಟಿಂಗ್",
+      "popular": "ಅತ್ಯಂತ ಜನಪ್ರಿಯ",
+      "title": "A–Z ಹೆಸರು",
+      "year": "ಹೊಸ ಬಿಡುಗಡೆ"
+    },
+    "lengths": {
+      "short": "ಚಿಕ್ಕದು (1–12 ಸಂ.)",
+      "medium": "ಮಧ್ಯಮ (13–26 ಸಂ.)",
+      "long": "ಉದ್ದವಾದುದು (27+ ಸಂ.)"
+    },
+    "statuses": {
+      "airing": "ಪ್ರಸ್ತುತ ಪ್ರಸಾರವಾಗುತ್ತಿದೆ",
+      "completed": "ಪೂರ್ಣಗೊಂಡಿದೆ",
+      "upcoming": "ಮುಂಬರುವವು"
+    }
+  },
+  "ottSheet": {
+    "title": "ನನ್ನ OTT ಚಂದಾದಾರಿಕೆಗಳು ಮತ್ತು ವ್ಯಾಪ್ತಿ",
+    "subtitle": "ತಕ್ಷಣದ ಡಬ್ ವ್ಯಾಪ್ತಿಗಾಗಿ ನಿಮ್ಮ ಚಂದಾದಾರಿಕೆ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್‌ಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "filterByMyOtts": "ನನ್ನ OTT ಗಳಲ್ಲಿ ಲಭ್ಯವಿರುವ ಅನಿಮೆ ಮಾತ್ರ ತೋರಿಸಿ",
+    "selectedCount": "{{count}} ಪ್ಲಾಟ್‌ಫಾರ್ಮ್‌ಗಳು ಆಯ್ಕೆಯಾಗಿವೆ",
+    "clearSelection": "ಆಯ್ಕೆ ತೆರವುಗೊಳಿಸಿ",
+    "done": "ಮುಗಿದಿದೆ"
+  },
+  "card": {
+    "posterUnavailable": "ಪೋಸ್ಟರ್ ಲಭ್ಯವಿಲ್ಲ",
+    "retryImage": "ಚಿತ್ರ ಮತ್ತೆ ಲೋಡ್ ಮಾಡಿ",
+    "shareAnime": "ಅನಿಮೆ ಹಂಚಿಕೊಳ್ಳಿ",
+    "compareAnime": "ಅನಿಮೆ ಹೋಲಿಸಿ",
+    "saveOffline": "ಮಾಹಿತಿಯನ್ನು ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿ ಉಳಿಸಿ",
+    "savedOffline": "ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿ ಉಳಿಸಲಾಗಿದೆ",
+    "reportIncorrect": "ತಪ್ಪಾದ ಮಾಹಿತಿ ವರದಿ ಮಾಡಿ",
+    "moreActions": "ಹೆಚ್ಚಿನ ಕ್ರಿಯೆಗಳು",
+    "bookmarkAdd": "ಲೈಬ್ರರಿಯಲ್ಲಿ ಉಳಿಸಿ",
+    "bookmarkRemove": "ಲೈಬ್ರರಿಯಿಂದ ತೆಗೆಯಿರಿ",
+    "seasonsCount": "{{count}} ಸೀಸನ್‌ಗಳು",
+    "seasonSingle": "1 ಸೀಸನ್",
+    "episodesCount": "{{count}} ಸಂ."
+  },
+  "latestUpdates": {
+    "title": "ಇತ್ತೀಚಿನ ಡಬ್ ಅಪ್‌ಡೇಟ್‌ಗಳು",
+    "subtitle": "ಸಂಪಾದಕರು ಪರಿಶೀಲಿಸಿದ ಕ್ಯಾಟಲಾಗ್ ಬದಲಾವಣೆಗಳು",
+    "refresh": "ಅಪ್‌ಡೇಟ್‌ಗಳನ್ನು ರಿಫ್ರೆಶ್ ಮಾಡಿ",
+    "empty": "ಇತ್ತೀಚೆಗೆ ಪರಿಶೀಲಿಸಿದ ಯಾವುದೇ ಅಪ್‌ಡೇಟ್‌ಗಳಿಲ್ಲ."
+  }
+}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Shield, FileText, AlertCircle, ArrowLeft, Calendar, Mail } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export interface LegalPageProps {
   type?: 'privacy' | 'terms' | 'dmca' | 'copyright';
@@ -16,6 +17,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
   onBack: onBackProp,
   onNavigateHome,
 }) => {
+  const { t } = useTranslation(['forms', 'common']);
   const onBack = onBackProp || onNavigateHome || (() => {});
   const rawType = typeProp || page || 'privacy';
   const type: 'privacy' | 'terms' | 'dmca' =
@@ -25,9 +27,9 @@ export const LegalPage: React.FC<LegalPageProps> = ({
         ? 'terms'
         : 'privacy';
   const renderPrivacyContent = () => (
-    <div className="space-y-6 text-[#A1A5B5] text-[15px] sm:text-[16px] leading-[1.7]">
+    <div className="space-y-6 text-[var(--text-secondary)] text-[15px] sm:text-[16px] leading-[1.7]">
       <section id="section-1" className="space-y-2">
-        <h2 className="text-[18px] sm:text-[20px] font-bold text-[#F4F3FA]">
+        <h2 className="text-[18px] sm:text-[20px] font-bold text-[var(--text-primary)]">
           1. Information We Collect
         </h2>
         <p>
@@ -39,7 +41,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
       </section>
 
       <section id="section-2" className="space-y-2">
-        <h2 className="text-[18px] sm:text-[20px] font-bold text-[#F4F3FA]">
+        <h2 className="text-[18px] sm:text-[20px] font-bold text-[var(--text-primary)]">
           2. How We Use Your Data
         </h2>
         <p>
@@ -48,7 +50,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
       </section>
 
       <section id="section-3" className="space-y-2">
-        <h2 className="text-[18px] sm:text-[20px] font-bold text-[#F4F3FA]">
+        <h2 className="text-[18px] sm:text-[20px] font-bold text-[var(--text-primary)]">
           3. Third-Party Services &amp; Official OTT Links
         </h2>
         <p>
@@ -59,9 +61,9 @@ export const LegalPage: React.FC<LegalPageProps> = ({
   );
 
   const renderTermsContent = () => (
-    <div className="space-y-6 text-[#A1A5B5] text-[15px] sm:text-[16px] leading-[1.7]">
+    <div className="space-y-6 text-[var(--text-secondary)] text-[15px] sm:text-[16px] leading-[1.7]">
       <section id="section-1" className="space-y-2">
-        <h2 className="text-[18px] sm:text-[20px] font-bold text-[#F4F3FA]">
+        <h2 className="text-[18px] sm:text-[20px] font-bold text-[var(--text-primary)]">
           1. Acceptance of Terms
         </h2>
         <p>
@@ -70,7 +72,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
       </section>
 
       <section id="section-2" className="space-y-2">
-        <h2 className="text-[18px] sm:text-[20px] font-bold text-[#F4F3FA]">
+        <h2 className="text-[18px] sm:text-[20px] font-bold text-[var(--text-primary)]">
           2. No Video Hosting or Piracy
         </h2>
         <p>
@@ -79,7 +81,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
       </section>
 
       <section id="section-3" className="space-y-2">
-        <h2 className="text-[18px] sm:text-[20px] font-bold text-[#F4F3FA]">
+        <h2 className="text-[18px] sm:text-[20px] font-bold text-[var(--text-primary)]">
           3. Community Contributions &amp; Data Honesty
         </h2>
         <p>
@@ -90,9 +92,9 @@ export const LegalPage: React.FC<LegalPageProps> = ({
   );
 
   const renderDmcaContent = () => (
-    <div className="space-y-6 text-[#A1A5B5] text-[15px] sm:text-[16px] leading-[1.7]">
+    <div className="space-y-6 text-[var(--text-secondary)] text-[15px] sm:text-[16px] leading-[1.7]">
       <section id="section-1" className="space-y-2">
-        <h2 className="text-[18px] sm:text-[20px] font-bold text-[#F4F3FA]">
+        <h2 className="text-[18px] sm:text-[20px] font-bold text-[var(--text-primary)]">
           1. Metadata Directory &amp; Rights-Holder Notice
         </h2>
         <p>
@@ -101,7 +103,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
       </section>
 
       <section id="section-2" className="space-y-2">
-        <h2 className="text-[18px] sm:text-[20px] font-bold text-[#F4F3FA]">
+        <h2 className="text-[18px] sm:text-[20px] font-bold text-[var(--text-primary)]">
           2. Submitting a Takedown or Metadata Correction Request
         </h2>
         <p>
@@ -115,7 +117,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
       </section>
 
       <section id="section-3" className="space-y-2">
-        <h2 className="text-[18px] sm:text-[20px] font-bold text-[#F4F3FA]">
+        <h2 className="text-[18px] sm:text-[20px] font-bold text-[var(--text-primary)]">
           3. Expedited Response Commitment
         </h2>
         <p>
@@ -127,7 +129,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
 
   const pageConfig = {
     privacy: {
-      title: 'Privacy Policy',
+      title: t('forms:legal.privacyTitle', 'Privacy Policy'),
       badge: 'Data & Privacy',
       icon: Shield,
       toc: [
@@ -138,7 +140,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
       body: renderPrivacyContent(),
     },
     terms: {
-      title: 'Terms of Service',
+      title: t('forms:legal.termsTitle', 'Terms of Service'),
       badge: 'Platform Rules',
       icon: FileText,
       toc: [
@@ -149,7 +151,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
       body: renderTermsContent(),
     },
     dmca: {
-      title: 'DMCA & Rights-Holder Policy',
+      title: t('forms:legal.dmcaTitle', 'DMCA & Rights-Holder Policy'),
       badge: 'Copyright & Attribution',
       icon: AlertCircle,
       toc: [
@@ -164,33 +166,33 @@ export const LegalPage: React.FC<LegalPageProps> = ({
   const Icon = pageConfig.icon;
 
   return (
-    <article className="max-w-[700px] mx-auto px-4 sm:px-6 pt-3 sm:pt-4 pb-24 text-[#F4F3FA]">
+    <article className="max-w-[700px] mx-auto px-4 sm:px-6 pt-3 sm:pt-4 pb-24 text-[var(--text-primary)]">
       {/* Back Button & Last Updated Badge */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <button
           type="button"
           onClick={onBack}
-          className="min-h-[44px] px-3.5 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] text-[#F4F3FA] border border-[#292B39] inline-flex items-center gap-2 text-[13px] font-semibold transition-colors duration-180"
+          className="min-h-[44px] px-3.5 rounded-[12px] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)] inline-flex items-center gap-2 text-[13px] font-semibold transition-colors duration-180"
         >
-          <ArrowLeft className="w-4 h-4 text-[#B49AF8]" />
-          <span>Back</span>
+          <ArrowLeft className="w-4 h-4 text-[var(--accent-primary)]" />
+          <span>{t('common:back', 'Back')}</span>
         </button>
 
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-[#12141E] border border-[#292B39] text-[12px] text-[#A1A5B5]">
-          <Calendar className="w-3.5 h-3.5 text-[#B49AF8]" />
-          <span>Last updated: <strong className="text-[#F4F3FA]">November 2026</strong></span>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-secondary)]">
+          <Calendar className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+          <span>Last updated: <strong className="text-[var(--text-primary)]">November 2026</strong></span>
         </span>
       </div>
 
       {/* Main Editorial Card */}
-      <div className="rounded-[18px] bg-[#12141E] border border-[#292B39] p-5 sm:p-8 space-y-6">
+      <div className="rounded-[18px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5 sm:p-8 space-y-6">
         {/* Heading starting cleanly 24px below header */}
         <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-[#B49AF8]/15 border border-[#B49AF8]/30 text-[#CBB6FF] text-[11px] font-bold uppercase tracking-wider mb-2">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 text-[var(--accent-hover)] text-[11px] font-bold uppercase tracking-wider mb-2">
             <Icon className="w-3.5 h-3.5" />
             <span>{pageConfig.badge}</span>
           </div>
-          <h1 className="text-[28px] sm:text-[32px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em]">
+          <h1 className="text-[28px] sm:text-[32px] font-bold text-[var(--text-primary)] leading-[1.2] tracking-[-0.02em]">
             {pageConfig.title}
           </h1>
         </div>
@@ -198,9 +200,9 @@ export const LegalPage: React.FC<LegalPageProps> = ({
         {/* Compact Table of Contents Jump Links */}
         <nav
           aria-label="Table of Contents"
-          className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3.5"
+          className="rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-3.5"
         >
-          <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] mb-2">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-2">
             On this page
           </div>
           <div className="flex flex-wrap gap-2">
@@ -208,7 +210,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
               <a
                 key={item.id}
                 href={item.id}
-                className="min-h-[40px] px-3 py-1.5 rounded-[8px] bg-[#12141E] hover:bg-[#292B39] text-[#CBB6FF] border border-[#292B39] text-[12px] font-semibold inline-flex items-center transition-colors"
+                className="min-h-[40px] px-3 py-1.5 rounded-[8px] bg-[var(--bg-surface)] hover:bg-[var(--border-subtle)] text-[var(--accent-hover)] border border-[var(--border-subtle)] text-[12px] font-semibold inline-flex items-center transition-colors"
               >
                 {item.label}
               </a>
@@ -220,18 +222,18 @@ export const LegalPage: React.FC<LegalPageProps> = ({
         {pageConfig.body}
 
         {/* Contact / Takedown Action Section */}
-        <div className="pt-5 border-t border-[#292B39] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="pt-5 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h3 className="text-[15px] font-bold text-[#F4F3FA]">
+            <h3 className="text-[15px] font-bold text-[var(--text-primary)]">
               Questions or Rights-Holder Inquiries?
             </h3>
-            <p className="text-[13px] text-[#A1A5B5]">
+            <p className="text-[13px] text-[var(--text-secondary)]">
               Reach our compliance and catalog verification team directly.
             </p>
           </div>
           <a
             href="mailto:legal@anidub.in?subject=AniDub%20India%20Legal%20Inquiry"
-            className="min-h-[44px] px-4 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold text-[13px] inline-flex items-center justify-center gap-2 shrink-0 transition-colors"
+            className="min-h-[44px] px-4 rounded-[12px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] font-bold text-[13px] inline-flex items-center justify-center gap-2 shrink-0 transition-colors"
           >
             <Mail className="w-4 h-4" />
             <span>Contact Legal Team</span>

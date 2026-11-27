@@ -15,6 +15,7 @@ import {
   UserButton as OfficialUserButton,
   UserProfile as OfficialUserProfile,
 } from '@clerk/clerk-react';
+import { useTheme } from '../context/ThemeContext';
 
 interface ClerkConfigState {
   configured: boolean;
@@ -44,7 +45,7 @@ const ClerkTokenSynchronizer: React.FC = () => {
 };
 
 /**
- * Official ClerkProvider wrapper with hardcoded Clerk test publishableKey.
+ * Default fallback Clerk appearance (Eclipse Dark). Dynamically overridden by ThemeContext.
  */
 export const ECLIPSE_CLERK_APPEARANCE = {
   variables: {
@@ -58,6 +59,14 @@ export const ECLIPSE_CLERK_APPEARANCE = {
   },
 };
 
+function useDynamicClerkAppearance() {
+  try {
+    return useTheme().clerkAppearance;
+  } catch {
+    return ECLIPSE_CLERK_APPEARANCE;
+  }
+}
+
 export const ClerkProvider: React.FC<{
   publishableKey?: string;
   afterSignOutUrl?: string;
@@ -67,12 +76,13 @@ export const ClerkProvider: React.FC<{
   afterSignOutUrl = '/',
   children,
 }) => {
+  const appearance = useDynamicClerkAppearance();
   return (
     <ClerkConfigContext.Provider value={{ configured: true, loading: false }}>
       <OfficialClerkProvider
         publishableKey={publishableKey}
         afterSignOutUrl={afterSignOutUrl}
-        appearance={ECLIPSE_CLERK_APPEARANCE}
+        appearance={appearance}
         clerkJSUrl="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
       >
         <ClerkTokenSynchronizer />
@@ -115,11 +125,37 @@ export const SignedOut: React.FC<{ children: React.ReactNode }> = ({ children })
 };
 
 export const SignIn: React.FC<any> = (props) => {
-  return <OfficialSignIn {...props} />;
+  const dynamicAppearance = useDynamicClerkAppearance();
+  return (
+    <OfficialSignIn
+      {...props}
+      appearance={{
+        ...dynamicAppearance,
+        ...(props.appearance || {}),
+        variables: {
+          ...dynamicAppearance.variables,
+          ...(props.appearance?.variables || {}),
+        },
+      }}
+    />
+  );
 };
 
 export const SignUp: React.FC<any> = (props) => {
-  return <OfficialSignUp {...props} />;
+  const dynamicAppearance = useDynamicClerkAppearance();
+  return (
+    <OfficialSignUp
+      {...props}
+      appearance={{
+        ...dynamicAppearance,
+        ...(props.appearance || {}),
+        variables: {
+          ...dynamicAppearance.variables,
+          ...(props.appearance?.variables || {}),
+        },
+      }}
+    />
+  );
 };
 
 export const SignInButton: React.FC<any> = ({ children, ...props }) => {

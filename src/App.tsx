@@ -45,6 +45,8 @@ import { OfflineIndicator } from './components/PWAInstallButton';
 import { PageViewSkeleton, DetailModalSkeleton } from './components/SkeletonGrid';
 import { Button } from './components/ui/Button';
 import { useToast } from './components/Toast';
+import { ThemeSwitcher } from './components/appearance/ThemeSwitcher';
+import { LanguageSelector } from './components/i18n/LanguageSelector';
 
 const ViewLoadingFallback: React.FC<{ tab?: string }> = ({ tab }) => (
   <PageViewSkeleton tab={tab} />
@@ -524,6 +526,8 @@ export default function App() {
       setActiveTab('feedback');
     } else if (pathname === '/compare') {
       setIsCompareOpen(true);
+    } else if (pathname === '/submit') {
+      setIsDubModalOpen(true);
     } else if (pathname === '/dub-radar' || pathname === '/radar') {
       setActiveTab('explore');
       if (typeof window !== 'undefined') {
@@ -536,9 +540,9 @@ export default function App() {
       }
     } else if (pathname === '/chat') {
       setActiveTab('chat');
-    } else if (pathname === '/tierlist') {
+    } else if (pathname === '/tierlist' || pathname === '/tier-list') {
       setActiveTab('tierlist');
-    } else if (pathname === '/recommendations') {
+    } else if (pathname === '/recommendations' || pathname === '/for-you') {
       setActiveTab('recommendations');
     } else if (pathname === '/profile') {
       setActiveTab('profile');
@@ -597,11 +601,15 @@ export default function App() {
           if (typeof window !== 'undefined') {
             window.history.replaceState(null, '', '/');
           }
+        } else if (pathname === '/compare') {
+          setIsCompareOpen(true);
+        } else if (pathname === '/submit') {
+          setIsDubModalOpen(true);
         } else if (pathname === '/chat') {
           setActiveTab('chat');
-        } else if (pathname === '/tierlist') {
+        } else if (pathname === '/tierlist' || pathname === '/tier-list') {
           setActiveTab('tierlist');
-        } else if (pathname === '/recommendations') {
+        } else if (pathname === '/recommendations' || pathname === '/for-you') {
           setActiveTab('recommendations');
         } else if (pathname === '/profile') {
           setActiveTab('profile');
@@ -1047,7 +1055,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[#0B0A10] dark:bg-[#0B0A10] text-[#F4F3FA] flex flex-col font-sans selection:bg-[#B49AF8] selection:text-[#0B0A10] transition-colors duration-200 box-border">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col font-sans selection:bg-[var(--accent-primary)] selection:text-[var(--accent-on-primary)] transition-colors duration-200 box-border">
       
       {/* GOD-MODE FIRST-PARTY EDGE ANALYTICS & TELEMETRY TRACKER */}
       <Suspense fallback={null}>
@@ -1150,7 +1158,7 @@ export default function App() {
       )}
 
       {/* 3. MAIN CONTENT VIEWS WITH SMOOTH PAGE TRANSITIONS */}
-      <main className="flex-grow w-full max-w-full overflow-x-clip pt-3 sm:pt-5 pb-24 sm:pb-16 transition-colors duration-150 box-border">
+      <main className="flex-grow w-full max-w-full overflow-x-clip pt-3 sm:pt-5 pb-24 lg:pb-16 transition-colors duration-150 box-border">
         <AnimatePresence mode="wait">
           <motion.div
             key={`page_view_${activeTab}_${activeTab === 'explore' ? feedView : ''}`}
@@ -1163,10 +1171,10 @@ export default function App() {
             {/* FOR YOU HEADER METADATA BLOCK (WHEN FORYOU FEED ACTIVE) */}
             {feedView === 'foryou' && (activeTab === 'explore' || activeTab === 'catalog') && (
               <div className="w-full max-w-5xl mx-auto px-4 mb-5">
-                <div className="p-4 rounded-2xl bg-[#12141E] border border-[#292B39] flex items-center justify-between">
+                <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-between">
                   <div>
-                    <h2 className="text-base sm:text-lg font-extrabold text-[#F4F3FA]">Recommended For You</h2>
-                    <p className="text-xs text-[#A1A5B5]">Curated specifically based on your watch history and dub preferences.</p>
+                    <h2 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)]">Recommended For You</h2>
+                    <p className="text-xs text-[var(--text-secondary)]">Curated specifically based on your watch history and dub preferences.</p>
                   </div>
                 </div>
               </div>
@@ -1406,14 +1414,14 @@ export default function App() {
             aria-label="Anime Not Found"
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80"
           >
-            <div className="max-w-md w-full rounded-2xl bg-[#12141E] border border-[#292B39] p-6 sm:p-8 shadow-2xl text-center space-y-4">
+            <div className="max-w-md w-full rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 sm:p-8 shadow-2xl text-center space-y-4">
               <div className="inline-flex items-center justify-center px-3 py-1 rounded-lg bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] text-xs font-bold uppercase tracking-wider">
                 404 • Not Found
               </div>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-[#F4F3FA]">Anime Not Found</h2>
-              <p className="text-xs sm:text-sm text-[#A1A5B5] leading-relaxed">
+              <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--text-primary)]">Anime Not Found</h2>
+              <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed">
                 We couldn&apos;t find a published anime matching{' '}
-                <span className="text-[#F4F3FA] font-semibold">&ldquo;{deepLinkNotFoundSlug}&rdquo;</span> in the AniDub India catalog.
+                <span className="text-[var(--text-primary)] font-semibold">&ldquo;{deepLinkNotFoundSlug}&rdquo;</span> in the AniDub India catalog.
               </p>
               <Button
                 variant="primary"
@@ -1523,12 +1531,12 @@ export default function App() {
       {/* 5. Clerk Admin Authentication Modal */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85">
-          <div className="w-full max-w-md bg-[#12141E] border border-[#292B39] rounded-2xl p-6 shadow-2xl relative">
+          <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 shadow-2xl relative">
             <div className="text-center mb-5 flex flex-col items-center">
               <AniDubLogo variant="stacked" size="sm" className="mb-3" />
-              <h3 className="text-lg font-extrabold text-[#F4F3FA]">Clerk Admin Protection</h3>
-              <p className="text-xs text-[#A1A5B5] mt-1">
-                Strict Clerk Authentication is required to access <code className="text-[#B49AF8]">/admin</code>
+              <h3 className="text-lg font-extrabold text-[var(--text-primary)]">Clerk Admin Protection</h3>
+              <p className="text-xs text-[var(--text-secondary)] mt-1">
+                Strict Clerk Authentication is required to access <code className="text-[var(--accent-primary)]">/admin</code>
               </p>
             </div>
 
@@ -1550,7 +1558,7 @@ export default function App() {
                   <ShieldCheck className="w-5 h-5 text-[#34D399] shrink-0" />
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-[#34D399]">Authorized Clerk Administrator</p>
-                    <p className="text-[11px] text-[#A1A5B5] truncate">{clerkUser?.primaryEmailAddress?.emailAddress}</p>
+                    <p className="text-[11px] text-[var(--text-secondary)] truncate">{clerkUser?.primaryEmailAddress?.emailAddress}</p>
                   </div>
                 </div>
 
@@ -1586,8 +1594,8 @@ export default function App() {
                   <ShieldAlert className="w-5 h-5 text-[#F87171] shrink-0 mt-0.5" />
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-[#F87171]">Admin Verification Status</p>
-                    <p className="text-[11px] text-[#A1A5B5] mt-1">
-                      Signed in as <span className="font-mono text-[#F4F3FA]">{clerkUser?.primaryEmailAddress?.emailAddress}</span>.
+                    <p className="text-[11px] text-[var(--text-secondary)] mt-1">
+                      Signed in as <span className="font-mono text-[var(--text-primary)]">{clerkUser?.primaryEmailAddress?.emailAddress}</span>.
                     </p>
                     {adminAuthError && (
                       <p className="text-[11px] text-[#F87171] mt-2 font-medium break-words">
@@ -1631,6 +1639,12 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* 6. Global Multi-Theme Appearance Sheet / Modal */}
+      <ThemeSwitcher />
+
+      {/* 7. Global Searchable Website Language Selector Sheet / Modal */}
+      <LanguageSelector />
 
     </div>
   );

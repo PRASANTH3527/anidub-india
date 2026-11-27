@@ -26,6 +26,9 @@ import { buildAnimeJsonLd } from '../utils/seo';
 import { useAuth } from '../lib/clerk';
 import { getCloudflareWsUrl } from '../config/cloudflare';
 import { getVerifiedClerkUsername } from '../utils/chatIdentity';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
+import { formatLocaleDate, formatLocaleNumber } from '../i18n/languageRegistry';
 
 export interface FranchiseEntry {
   id: string;
@@ -165,6 +168,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
   isLoading: isLoadingProp = false,
 }) => {
   const { getToken } = useAuth();
+  const { t } = useTranslation(['animeDetails', 'common', 'library']);
+  const { language: uiLocale } = useLanguage();
   const [fetchedRecord, setFetchedRecord] = useState<any | null>(null);
   const [fetchingDetail, setFetchingDetail] = useState<boolean>(false);
   const [internalReportOpen, setInternalReportOpen] = useState<boolean>(false);
@@ -575,12 +580,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     : [];
 
   const lastVerifiedDisplay = anime.lastUpdated
-    ? new Date(anime.lastUpdated).toLocaleDateString('en-IN', {
+    ? formatLocaleDate(anime.lastUpdated, uiLocale, {
         day: 'numeric',
         month: 'short',
         year: 'numeric',
       })
-    : 'Catalog verified';
+    : t('common:verified', 'Verified');
 
   const statusOptions: WatchlistStatus[] = [
     'Watching',
@@ -591,14 +596,32 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
     'Rewatching',
   ];
 
+  const getLocalizedStatusLabel = (status: WatchlistStatus): string => {
+    const keyMap: Record<WatchlistStatus, string> = {
+      Watching: 'library:tabs.watching',
+      Completed: 'library:tabs.completed',
+      'Plan to Watch': 'library:tabs.planToWatch',
+      'On Hold': 'library:tabs.onHold',
+      Dropped: 'library:tabs.dropped',
+      Rewatching: 'library:tabs.rewatching',
+    };
+    return t(keyMap[status] || status, status);
+  };
+
   const tabs: { id: DetailTabId; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'seasons-dubs', label: 'Seasons & Dubs' },
-    { id: 'progress', label: 'Watch Progress' },
-    { id: 'reviews', label: `Reviews (${reviews.length})` },
+    { id: 'overview', label: t('animeDetails:tabs.overview', 'Overview') },
+    { id: 'seasons-dubs', label: t('animeDetails:tabs.seasonsAndDubs', 'Seasons & Dubs') },
+    { id: 'progress', label: t('animeDetails:tabs.watchProgress', 'Watch Progress') },
+    {
+      id: 'reviews',
+      label: t('animeDetails:tabs.reviews', {
+        count: formatLocaleNumber(reviews.length, uiLocale),
+        defaultValue: `Reviews (${reviews.length})`,
+      }),
+    },
   ];
 
-  const synopsisText = anime.synopsis || 'Synopsis not yet verified in catalog.';
+  const synopsisText = anime.synopsis || t('animeDetails:noSynopsis', 'No verified synopsis available yet.');
   const isLongSynopsis = synopsisText.length > 220;
 
   const activeMatrixSeason =
@@ -609,20 +632,20 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
       ref={modalContainerRef}
       className={
         asPage
-          ? 'w-full overflow-x-clip bg-[#0B0A10] text-[#F4F3FA] pb-24'
-          : 'relative w-full max-w-[calc(100vw-1.5rem)] sm:max-w-4xl max-h-[92vh] overflow-x-clip bg-[#0B0A10] rounded-t-[20px] sm:rounded-[20px] border border-[#292B39] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-180'
+          ? 'w-full overflow-x-clip bg-[var(--bg-canvas)] text-[var(--text-primary)] pb-24'
+          : 'relative w-full max-w-[calc(100vw-1.5rem)] sm:max-w-4xl max-h-[92vh] overflow-x-clip bg-[var(--bg-canvas)] rounded-t-[20px] sm:rounded-[20px] border border-[var(--border-subtle)] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-180'
       }
     >
       {/* Top Bar for Page or Modal */}
-      <div className="sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 py-3 bg-[#0B0A10]/95 backdrop-blur-md border-b border-[#292B39]">
+      <div className="sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 py-3 bg-[var(--bg-canvas)]/95 backdrop-blur-md border-b border-[var(--border-subtle)]">
         <button
           type="button"
           onClick={onClose}
           aria-label="Back to catalog"
-          className="min-h-[44px] min-w-[44px] px-3 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] text-[#F4F3FA] border border-[#292B39] flex items-center gap-2 text-[13px] font-semibold transition-colors duration-180 motion-reduce:transition-none"
+          className="min-h-[44px] min-w-[44px] px-3 rounded-[12px] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)] flex items-center gap-2 text-[13px] font-semibold transition-colors duration-180 motion-reduce:transition-none"
         >
-          <ArrowLeft className="w-4 h-4 text-[#B49AF8]" />
-          <span>Back</span>
+          <ArrowLeft className="w-4 h-4 text-[var(--accent-primary)]" />
+          <span>{t('common:back', 'Back')}</span>
         </button>
 
         <div className="flex items-center gap-2">
@@ -631,9 +654,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               type="button"
               onClick={() => onEditAnime(anime)}
               aria-label="Edit Anime Info"
-              className="min-h-[44px] px-3 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] text-[#F4F3FA] border border-[#292B39] flex items-center gap-1.5 text-[12px] font-semibold transition-colors duration-180"
+              className="min-h-[44px] px-3 rounded-[12px] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)] flex items-center gap-1.5 text-[12px] font-semibold transition-colors duration-180"
             >
-              <Edit className="w-4 h-4 text-[#B49AF8]" />
+              <Edit className="w-4 h-4 text-[var(--accent-primary)]" />
               <span className="hidden sm:inline">Edit</span>
             </button>
           )}
@@ -642,7 +665,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               type="button"
               onClick={onClose}
               aria-label="Close detail view"
-              className="min-h-[44px] min-w-[44px] rounded-[12px] bg-[#12141E] hover:bg-[#191C29] text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39] flex items-center justify-center transition-colors duration-180"
+              className="min-h-[44px] min-w-[44px] rounded-[12px] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] flex items-center justify-center transition-colors duration-180"
             >
               <X className="w-5 h-5" />
             </button>
@@ -673,10 +696,10 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           }}
         />
         {/* 1. Streaming-First Hero & Action Hierarchy */}
-        <section className="relative rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-6 mb-5 overflow-hidden">
+        <section className="relative rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-6 mb-5 overflow-hidden">
           <div className="flex flex-col sm:flex-row gap-5 items-start">
             {/* 2:3 Poster */}
-            <div className="w-28 sm:w-40 aspect-[2/3] rounded-[12px] overflow-hidden border border-[#292B39] bg-[#191C29] shrink-0 shadow-lg mx-auto sm:mx-0">
+            <div className="w-28 sm:w-40 aspect-[2/3] rounded-[12px] overflow-hidden border border-[var(--border-subtle)] bg-[var(--bg-elevated)] shrink-0 shadow-lg mx-auto sm:mx-0">
               <OptimizedImage
                 src={anime.poster}
                 alt={anime.title}
@@ -699,28 +722,28 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                       ? 'bg-emerald-500/10 text-[#34D399] border-emerald-500/30'
                       : anime.status === 'Upcoming'
                         ? 'bg-amber-500/10 text-[#F9C876] border-amber-500/30'
-                        : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39]'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
                   }`}
                 >
                   {anime.status || 'Status unverified'}
                 </span>
 
                 {anime.releaseYear && anime.releaseYear > 0 && (
-                  <span className="px-2.5 py-0.5 rounded-[8px] text-[12px] font-medium bg-[#191C29] text-[#A1A5B5] border border-[#292B39] flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-[#B49AF8]" />
+                  <span className="px-2.5 py-0.5 rounded-[8px] text-[12px] font-medium bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
                     {anime.releaseYear}
                   </span>
                 )}
 
-                <span className="px-2.5 py-0.5 rounded-[8px] text-[12px] font-medium bg-[#191C29] text-[#A1A5B5] border border-[#292B39] flex items-center gap-1">
-                  <Tv className="w-3.5 h-3.5 text-[#B49AF8]" />
+                <span className="px-2.5 py-0.5 rounded-[8px] text-[12px] font-medium bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] flex items-center gap-1">
+                  <Tv className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
                   {anime.episodesCount && anime.episodesCount > 0
-                    ? `${anime.episodesCount} Episodes`
-                    : UNVERIFIED_COUNT_LABEL}
+                    ? `${formatLocaleNumber(anime.episodesCount, uiLocale)} ${t('animeDetails:episodes', 'Episodes')}`
+                    : t('common:countNotVerified', UNVERIFIED_COUNT_LABEL)}
                 </span>
 
                 {typeof anime.rating === 'number' && anime.rating > 0 && (
-                  <span className="px-2.5 py-0.5 rounded-[8px] text-[12px] font-bold bg-[#191C29] text-[#F9C876] border border-[#292B39] flex items-center gap-1">
+                  <span className="px-2.5 py-0.5 rounded-[8px] text-[12px] font-bold bg-[var(--bg-elevated)] text-[#F9C876] border border-[var(--border-subtle)] flex items-center gap-1">
                     <Star className="w-3.5 h-3.5 fill-current" />
                     {anime.rating.toFixed(1)}
                   </span>
@@ -728,12 +751,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
               </div>
 
               {/* Crisp Title: 24px mobile / 30px desktop */}
-              <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em] mb-1.5">
+              <h1 className="text-[24px] sm:text-[30px] font-bold text-[var(--text-primary)] leading-[1.2] tracking-[-0.02em] mb-1.5">
                 {anime.title}
               </h1>
 
               {anime.japaneseTitle && (
-                <p className="text-[13px] text-[#A1A5B5] mb-3 truncate">{anime.japaneseTitle}</p>
+                <p className="text-[13px] text-[var(--text-secondary)] mb-3 truncate">{anime.japaneseTitle}</p>
               )}
 
               {/* Regional Dub Language Pills */}
@@ -742,13 +765,13 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   anime.languages.map((lang) => (
                     <span
                       key={lang}
-                      className="px-2.5 py-1 rounded-[8px] text-[11px] font-bold uppercase tracking-wider bg-[#B49AF8]/15 text-[#CBB6FF] border border-[#B49AF8]/35"
+                      className="px-2.5 py-1 rounded-[8px] text-[11px] font-bold uppercase tracking-wider bg-[var(--accent-primary)]/15 text-[var(--accent-hover)] border border-[var(--accent-primary)]/35"
                     >
                       {lang} Dub
                     </span>
                   ))
                 ) : (
-                  <span className="px-2.5 py-1 rounded-[8px] text-[11px] font-medium bg-[#191C29] text-[#A1A5B5] border border-[#292B39]">
+                  <span className="px-2.5 py-1 rounded-[8px] text-[11px] font-medium bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
                     Regional dub languages not verified
                   </span>
                 )}
@@ -772,12 +795,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   type="button"
                   onClick={handlePrimaryWhereToWatchClick}
                   data-testid="hero-where-to-watch-cta"
-                  className="w-full sm:flex-1 min-h-[44px] sm:min-h-[48px] px-5 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold text-[14px] flex items-center justify-center gap-2 transition-all duration-180 motion-reduce:transition-none shadow-sm"
+                  className="w-full sm:flex-1 min-h-[44px] sm:min-h-[48px] px-5 rounded-[12px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] font-bold text-[14px] flex items-center justify-center gap-2 transition-all duration-180 motion-reduce:transition-none shadow-sm"
                 >
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>Where to Watch</span>
+                  <Play className="w-4 h-4 fill-current shrink-0" />
+                  <span className="truncate">{t('animeDetails:whereToWatch', 'Where to Watch')}</span>
                   {verifiedPlatforms.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-[6px] bg-[#0B0A10]/15 text-[#0B0A10] text-[11px] font-extrabold">
+                    <span className="px-2 py-0.5 rounded-[6px] bg-[var(--bg-canvas)]/15 text-[var(--accent-on-primary)] text-[11px] font-extrabold shrink-0">
                       {verifiedPlatforms.length} OTT{verifiedPlatforms.length > 1 ? 's' : ''}
                     </span>
                   )}
@@ -789,41 +812,41 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   <button
                     type="button"
                     onClick={(e) => onToggleWatchlist(anime.id, e)}
-                    aria-label={isInWatchlist ? 'Saved in Library' : 'Save to Library'}
+                    aria-label={isInWatchlist ? t('animeDetails:inLibrary', 'In library') : t('animeDetails:addToLibrary', 'Add to library')}
                     className={`flex-1 sm:flex-initial min-h-[44px] min-w-[44px] px-3.5 rounded-[12px] font-semibold text-[13px] flex items-center justify-center gap-1.5 border transition-all duration-180 motion-reduce:transition-none ${
                       isInWatchlist
-                        ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/40'
-                        : 'bg-[#191C29] text-[#F4F3FA] border-[#292B39] hover:border-[#B49AF8]/40'
+                        ? 'bg-[var(--accent-primary)]/15 text-[var(--accent-hover)] border-[var(--accent-primary)]/40'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/40'
                     }`}
                   >
-                    <Heart className={`w-4 h-4 ${isInWatchlist ? 'fill-current text-[#B49AF8]' : ''}`} />
-                    <span>{isInWatchlist ? 'Saved' : 'Save'}</span>
+                    <Heart className={`w-4 h-4 shrink-0 ${isInWatchlist ? 'fill-current text-[var(--accent-primary)]' : ''}`} />
+                    <span className="truncate">{isInWatchlist ? t('animeDetails:inLibrary', 'Saved') : t('common:save', 'Save')}</span>
                   </button>
 
                   {/* Follow for dub updates */}
                   <button
                     type="button"
                     onClick={toggleFollow}
-                    aria-label={isFollowed ? 'Following dub updates' : 'Follow for dub updates'}
+                    aria-label={isFollowed ? t('animeDetails:following', 'Following') : t('animeDetails:follow', 'Follow')}
                     className={`flex-1 sm:flex-initial min-h-[44px] min-w-[44px] px-3.5 rounded-[12px] font-semibold text-[13px] flex items-center justify-center gap-1.5 border transition-all duration-180 motion-reduce:transition-none ${
                       isFollowed
-                        ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/40'
-                        : 'bg-[#191C29] hover:bg-[#292B39]/60 text-[#F4F3FA] border-[#292B39]'
+                        ? 'bg-[var(--accent-primary)]/15 text-[var(--accent-hover)] border-[var(--accent-primary)]/40'
+                        : 'bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)]/60 text-[var(--text-primary)] border-[var(--border-subtle)]'
                     }`}
                   >
-                    {isFollowed ? <Bell className="w-4 h-4 text-[#B49AF8]" /> : <BellOff className="w-4 h-4 text-[#A1A5B5]" />}
-                    <span>{isFollowed ? 'Following' : 'Follow'}</span>
+                    {isFollowed ? <Bell className="w-4 h-4 text-[var(--accent-primary)] shrink-0" /> : <BellOff className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />}
+                    <span className="truncate">{isFollowed ? t('animeDetails:following', 'Following') : t('animeDetails:follow', 'Follow')}</span>
                   </button>
 
                   {/* Share */}
                   <button
                     type="button"
                     onClick={handleShare}
-                    aria-label="Share anime"
-                    title="Share anime"
-                    className="min-h-[44px] min-w-[44px] px-3 rounded-[12px] bg-[#191C29] hover:bg-[#292B39]/60 text-[#F4F3FA] border border-[#292B39] flex items-center justify-center transition-colors duration-180"
+                    aria-label={t('animeDetails:share', 'Share')}
+                    title={t('animeDetails:share', 'Share')}
+                    className="min-h-[44px] min-w-[44px] px-3 rounded-[12px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)]/60 text-[var(--text-primary)] border border-[var(--border-subtle)] flex items-center justify-center transition-colors duration-180 shrink-0"
                   >
-                    <Share2 className="w-4 h-4 text-[#A1A5B5]" />
+                    <Share2 className="w-4 h-4 text-[var(--text-secondary)]" />
                   </button>
 
                   {/* Report wrong info */}
@@ -836,9 +859,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                         setInternalReportOpen(true);
                       }
                     }}
-                    aria-label="Report wrong info"
-                    title="Report wrong info"
-                    className="min-h-[44px] min-w-[44px] px-3 rounded-[12px] bg-[#191C29] hover:bg-[#292B39]/60 text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39] flex items-center justify-center transition-colors duration-180"
+                    aria-label={t('animeDetails:reportWrongInfo', 'Report wrong info')}
+                    title={t('animeDetails:reportWrongInfo', 'Report wrong info')}
+                    className="min-h-[44px] min-w-[44px] px-3 rounded-[12px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)]/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] flex items-center justify-center transition-colors duration-180 shrink-0"
                   >
                     <Flag className="w-4 h-4 text-[#F87171]" />
                   </button>
@@ -853,27 +876,31 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           ref={whereToWatchRef}
           id="where-to-watch-section"
           data-testid="where-to-watch-card"
-          className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 mb-5"
+          className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5 mb-5"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-[10px] bg-[#B49AF8]/15 border border-[#B49AF8]/30 flex items-center justify-center">
-                <Play className="w-4 h-4 text-[#B49AF8] fill-current" />
+              <div className="w-8 h-8 rounded-[10px] bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 flex items-center justify-center">
+                <Play className="w-4 h-4 text-[var(--accent-primary)] fill-current" />
               </div>
               <div>
-                <h2 className="text-[16px] sm:text-[18px] font-bold text-[#F4F3FA]">Where to Watch (India)</h2>
-                <p className="text-[12px] text-[#A1A5B5]">Official regional OTT streaming links</p>
+                <h2 className="text-[16px] sm:text-[18px] font-bold text-[var(--text-primary)]">
+                  {t('animeDetails:whereToWatchIndia', 'Where to Watch (India)')}
+                </h2>
+                <p className="text-[12px] text-[var(--text-secondary)]">
+                  {t('animeDetails:streamingNote', 'Official legal streaming platforms verified for India.')}
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 text-[12px] text-[#A1A5B5]">
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] bg-[#191C29] border border-[#292B39]">
-                <Globe className="w-3.5 h-3.5 text-[#B49AF8]" />
-                Region: <strong className="text-[#F4F3FA] font-semibold">India</strong>
+            <div className="flex items-center gap-3 text-[12px] text-[var(--text-secondary)]">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
+                <Globe className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                Region: <strong className="text-[var(--text-primary)] font-semibold">India</strong>
               </span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] bg-[#191C29] border border-[#292B39]">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
                 <ShieldCheck className="w-3.5 h-3.5 text-[#34D399]" />
-                Last verified: <strong className="text-[#F4F3FA] font-semibold">{lastVerifiedDisplay}</strong>
+                Last verified: <strong className="text-[var(--text-primary)] font-semibold">{lastVerifiedDisplay}</strong>
               </span>
             </div>
           </div>
@@ -889,20 +916,20 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                     href={ottUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="min-h-[52px] px-4 py-3 rounded-[12px] bg-[#191C29] hover:bg-[#191C29]/80 border border-[#292B39] hover:border-[#B49AF8]/50 flex items-center justify-between gap-3 transition-all duration-180 group"
+                    className="min-h-[52px] px-4 py-3 rounded-[12px] bg-[var(--bg-elevated)] hover:bg-[var(--bg-elevated)]/80 border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 flex items-center justify-between gap-3 transition-all duration-180 group"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-[8px] bg-[#12141E] border border-[#292B39] flex items-center justify-center shrink-0">
-                        <PlatformIcon platform={platform} className="w-4 h-4 text-[#F4F3FA]" />
+                      <div className="w-8 h-8 rounded-[8px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+                        <PlatformIcon platform={platform} className="w-4 h-4 text-[var(--text-primary)]" />
                       </div>
                       <div className="min-w-0">
-                        <div className="text-[14px] font-bold text-[#F4F3FA] truncate">{platform}</div>
-                        <div className="text-[11px] text-[#A1A5B5]">
+                        <div className="text-[14px] font-bold text-[var(--text-primary)] truncate">{platform}</div>
+                        <div className="text-[11px] text-[var(--text-secondary)]">
                           {hasDirectLink ? 'Direct Verified Link' : 'Official Platform Search (India)'}
                         </div>
                       </div>
                     </div>
-                    <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#B49AF8] group-hover:translate-x-0.5 transition-transform">
+                    <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--accent-primary)] group-hover:translate-x-0.5 transition-transform">
                       Watch
                       <ExternalLink className="w-3.5 h-3.5" />
                     </span>
@@ -913,14 +940,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
           ) : (
             <div
               data-testid="ott-not-verified"
-              className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              className="rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
             >
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-[#F9C876] shrink-0" />
                 <div>
-                  <div className="text-[14px] font-bold text-[#F4F3FA]">Not verified</div>
-                  <p className="text-[12px] text-[#A1A5B5]">
-                    Official Indian OTT streaming links have not been verified for this title yet.
+                  <div className="text-[14px] font-bold text-[var(--text-primary)]">{t('common:notVerified', 'Not verified')}</div>
+                  <p className="text-[12px] text-[var(--text-secondary)]">
+                    {t('animeDetails:noVerifiedPlatforms', 'No verified official OTT streaming link is listed for India yet.')}
                   </p>
                 </div>
               </div>
@@ -928,7 +955,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 <button
                   type="button"
                   onClick={() => onReportIssue(anime)}
-                  className="min-h-[44px] px-3.5 rounded-[10px] bg-[#12141E] hover:bg-[#292B39] text-[#B49AF8] border border-[#292B39] text-[12px] font-semibold shrink-0 transition-colors"
+                  className="min-h-[44px] px-3.5 rounded-[10px] bg-[var(--bg-surface)] hover:bg-[var(--border-subtle)] text-[var(--accent-primary)] border border-[var(--border-subtle)] text-[12px] font-semibold shrink-0 transition-colors"
                 >
                   Submit verified OTT link
                 </button>
@@ -941,7 +968,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         <div
           role="tablist"
           aria-label="Anime detail sections"
-          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-[#292B39] mb-5 pb-1"
+          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-[var(--border-subtle)] mb-5 pb-1"
         >
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
@@ -954,8 +981,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 onClick={() => setActiveTab(tab.id)}
                 className={`min-h-[44px] px-4 rounded-t-[12px] text-[13px] sm:text-[14px] font-semibold whitespace-nowrap border-b-2 transition-all duration-180 motion-reduce:transition-none ${
                   isActive
-                    ? 'border-[#B49AF8] text-[#F4F3FA] bg-[#12141E]'
-                    : 'border-transparent text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#12141E]/50'
+                    ? 'border-[var(--accent-primary)] text-[var(--text-primary)] bg-[var(--bg-surface)]'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]/50'
                 }`}
               >
                 {tab.label}
@@ -967,10 +994,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div className="space-y-5" role="tabpanel">
-            <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
-              <h3 className="text-[16px] font-bold text-[#F4F3FA] mb-2">Synopsis</h3>
+            <div className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5">
+              <h3 className="text-[16px] font-bold text-[var(--text-primary)] mb-2">
+                {t('animeDetails:synopsis', 'Synopsis')}
+              </h3>
               <p
-                className={`text-[15px] text-[#A1A5B5] leading-[1.6] ${
+                className={`text-[15px] text-[var(--text-secondary)] leading-[1.6] ${
                   !isSynopsisExpanded && isLongSynopsis ? 'line-clamp-3' : ''
                 }`}
               >
@@ -980,16 +1009,16 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsSynopsisExpanded((prev) => !prev)}
-                  className="mt-2 min-h-[44px] px-3 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[13px] font-semibold text-[#B49AF8] hover:text-[#CBB6FF] inline-flex items-center gap-1.5 transition-colors duration-180"
+                  className="mt-2 min-h-[44px] px-3 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[13px] font-semibold text-[var(--accent-primary)] hover:text-[var(--accent-hover)] inline-flex items-center gap-1.5 transition-colors duration-180"
                 >
                   <span>{isSynopsisExpanded ? 'Show Less' : 'Read More'}</span>
                   {isSynopsisExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5 pt-4 border-t border-[#292B39]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5 pt-4 border-t border-[var(--border-subtle)]">
                 <div>
-                  <div className="text-[12px] font-semibold text-[#A1A5B5] uppercase tracking-wider mb-1.5">
+                  <div className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
                     Genres
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -997,31 +1026,31 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                       anime.genres.map((genre) => (
                         <span
                           key={genre}
-                          className="px-2.5 py-1 rounded-[8px] bg-[#191C29] text-[#F4F3FA] border border-[#292B39] text-[12px] font-medium"
+                          className="px-2.5 py-1 rounded-[8px] bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)] text-[12px] font-medium"
                         >
                           {genre}
                         </span>
                       ))
                     ) : (
-                      <span className="text-[13px] text-[#A1A5B5]">Not verified</span>
+                      <span className="text-[13px] text-[var(--text-secondary)]">Not verified</span>
                     )}
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-[12px] font-semibold text-[#A1A5B5] uppercase tracking-wider mb-1.5">
+                  <div className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
                     Animation Studio
                   </div>
-                  <div className="text-[14px] font-semibold text-[#F4F3FA]">
+                  <div className="text-[14px] font-semibold text-[var(--text-primary)]">
                     {anime.studio && anime.studio.trim() ? anime.studio : 'Studio not verified'}
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-[12px] font-semibold text-[#A1A5B5] uppercase tracking-wider mb-1.5">
+                  <div className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
                     SEASONS &amp; EPISODES
                   </div>
-                  <div className="text-[14px] font-semibold text-[#F4F3FA]">
+                  <div className="text-[14px] font-semibold text-[var(--text-primary)]">
                     {(anime as any).seasonEpisodeCount ||
                       (anime as any).season_episode_count ||
                       dubProgress?.overallBadgeText ||
@@ -1032,7 +1061,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 </div>
 
                 <div>
-                  <div className="text-[12px] font-semibold text-[#A1A5B5] uppercase tracking-wider mb-1.5">
+                  <div className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
                     OFFICIAL SOURCE
                   </div>
                   {(anime as any).officialSourceUrl || (anime as any).official_source_url ? (
@@ -1040,13 +1069,13 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                       href={(anime as any).officialSourceUrl || (anime as any).official_source_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#B49AF8] hover:text-[#CBB6FF] break-all"
+                      className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-[var(--accent-primary)] hover:text-[var(--accent-hover)] break-all"
                     >
                       <span>Verified Official Announcement</span>
                       <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                     </a>
                   ) : (
-                    <div className="text-[14px] font-semibold text-[#F4F3FA]">
+                    <div className="text-[14px] font-semibold text-[var(--text-primary)]">
                       {verifiedPlatforms.length > 0 ? verifiedPlatforms.join(', ') : 'Source not verified'}
                     </div>
                   )}
@@ -1058,14 +1087,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             {franchiseEntries.length > 0 && (
               <div
                 data-testid="franchise-watch-order"
-                className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5"
+                className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[16px] font-bold text-[#F4F3FA] flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-[#B49AF8]" />
-                    <span>Franchise Watch Order</span>
+                  <h3 className="text-[16px] font-bold text-[var(--text-primary)] flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-[var(--accent-primary)]" />
+                    <span>{t('animeDetails:franchiseOrder', 'Franchise Watch Order')}</span>
                   </h3>
-                  <span className="text-[12px] text-[#A1A5B5]">{franchiseEntries.length} verified entries</span>
+                  <span className="text-[12px] text-[var(--text-secondary)]">{franchiseEntries.length} verified entries</span>
                 </div>
 
                 <div className="space-y-2.5">
@@ -1082,28 +1111,28 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                         }}
                         className={`min-h-[52px] p-3 rounded-[12px] border flex items-center justify-between gap-3 transition-colors ${
                           isCurrent
-                            ? 'bg-[#B49AF8]/15 border-[#B49AF8]/40 text-[#F4F3FA]'
-                            : 'bg-[#191C29] border-[#292B39] hover:border-[#B49AF8]/30 cursor-pointer'
+                            ? 'bg-[var(--accent-primary)]/15 border-[var(--accent-primary)]/40 text-[var(--text-primary)]'
+                            : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/30 cursor-pointer'
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <span className="w-7 h-7 rounded-[8px] bg-[#12141E] border border-[#292B39] text-[12px] font-bold text-[#B49AF8] flex items-center justify-center shrink-0">
+                          <span className="w-7 h-7 rounded-[8px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[12px] font-bold text-[var(--accent-primary)] flex items-center justify-center shrink-0">
                             {idx + 1}
                           </span>
                           <div className="min-w-0">
-                            <div className="text-[14px] font-semibold text-[#F4F3FA] truncate">{entry.title}</div>
-                            <div className="text-[11px] text-[#A1A5B5]">
+                            <div className="text-[14px] font-semibold text-[var(--text-primary)] truncate">{entry.title}</div>
+                            <div className="text-[11px] text-[var(--text-secondary)]">
                               {entry.relationType}
                               {entry.releaseYear ? ` • ${entry.releaseYear}` : ''}
                             </div>
                           </div>
                         </div>
                         {isCurrent ? (
-                          <span className="px-2.5 py-1 rounded-[8px] bg-[#B49AF8] text-[#0B0A10] text-[11px] font-bold shrink-0">
+                          <span className="px-2.5 py-1 rounded-[8px] bg-[var(--accent-primary)] text-[var(--accent-on-primary)] text-[11px] font-bold shrink-0">
                             Viewing
                           </span>
                         ) : (
-                          <span className="text-[12px] font-semibold text-[#B49AF8] shrink-0">View</span>
+                          <span className="text-[12px] font-semibold text-[var(--accent-primary)] shrink-0">View</span>
                         )}
                       </div>
                     );
@@ -1117,39 +1146,39 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
         {/* TAB 2: SEASONS & DUBS */}
         {activeTab === 'seasons-dubs' && (
           <div className="space-y-4" role="tabpanel">
-            <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
+            <div className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                 <div>
-                  <h3 className="text-[16px] font-bold text-[#F4F3FA]">Season & Regional Dub Matrix</h3>
-                  <p className="text-[12px] text-[#A1A5B5]">
+                  <h3 className="text-[16px] font-bold text-[var(--text-primary)]">Season & Regional Dub Matrix</h3>
+                  <p className="text-[12px] text-[var(--text-secondary)]">
                     {dubProgress?.overallBadgeText || UNVERIFIED_COUNT_LABEL}
                   </p>
                 </div>
                 {dubProgress?.statusLabel && (
-                  <span className="px-2.5 py-1 rounded-[8px] bg-[#B49AF8]/15 text-[#CBB6FF] border border-[#B49AF8]/30 text-[12px] font-semibold">
+                  <span className="px-2.5 py-1 rounded-[8px] bg-[var(--accent-primary)]/15 text-[var(--accent-hover)] border border-[var(--accent-primary)]/30 text-[12px] font-semibold">
                     {dubProgress.statusLabel}
                   </span>
                 )}
               </div>
 
               {/* Desktop Table: Season x Language x Verified OTT Matrix */}
-              <div className="hidden sm:block overflow-x-auto rounded-[12px] border border-[#292B39]">
+              <div className="hidden sm:block overflow-x-auto rounded-[12px] border border-[var(--border-subtle)]">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-[#191C29] border-b border-[#292B39] text-[12px] font-bold text-[#A1A5B5] uppercase tracking-wider">
+                    <tr className="bg-[var(--bg-elevated)] border-b border-[var(--border-subtle)] text-[12px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
                       <th className="py-3 px-4">Season</th>
                       <th className="py-3 px-4">Episodes</th>
                       <th className="py-3 px-4">Tamil / Hindi / Telugu Dubs</th>
                       <th className="py-3 px-4">Verified OTT</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#292B39] text-[13px]">
+                  <tbody className="divide-y divide-[var(--border-subtle)] text-[13px]">
                     {seasonBreakdowns.map((season) => (
-                      <tr key={season.seasonNumber} className="bg-[#12141E] hover:bg-[#191C29]/50 transition-colors">
-                        <td className="py-3.5 px-4 font-bold text-[#F4F3FA]">
+                      <tr key={season.seasonNumber} className="bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)]/50 transition-colors">
+                        <td className="py-3.5 px-4 font-bold text-[var(--text-primary)]">
                           {season.title || `Season ${season.seasonNumber}`}
                         </td>
-                        <td className="py-3.5 px-4 text-[#A1A5B5]">
+                        <td className="py-3.5 px-4 text-[var(--text-secondary)]">
                           {season.totalEpisodes && season.totalEpisodes > 0
                             ? `${season.totalEpisodes} eps`
                             : `${UNVERIFIED_COUNT_LABEL} (${LEGACY_UNVERIFIED_COUNT_FALLBACK})`}
@@ -1160,9 +1189,9 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                               {season.languages.map((l) => (
                                 <span
                                   key={l.language}
-                                  className="px-2.5 py-1 rounded-[8px] bg-[#191C29] border border-[#292B39] text-[12px] text-[#F4F3FA]"
+                                  className="px-2.5 py-1 rounded-[8px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[12px] text-[var(--text-primary)]"
                                 >
-                                  <strong className="text-[#CBB6FF]">{l.language}:</strong>{' '}
+                                  <strong className="text-[var(--accent-hover)]">{l.language}:</strong>{' '}
                                   {l.totalEpisodes
                                     ? `${l.dubbedEpisodes}/${l.totalEpisodes} eps`
                                     : l.dubbedEpisodes > 0
@@ -1172,7 +1201,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                               ))}
                             </div>
                           ) : (
-                            <span className="text-[#A1A5B5]">{UNVERIFIED_COUNT_LABEL}</span>
+                            <span className="text-[var(--text-secondary)]">{UNVERIFIED_COUNT_LABEL}</span>
                           )}
                         </td>
                         <td className="py-3.5 px-4">
@@ -1181,14 +1210,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                               {verifiedPlatforms.map((platform) => (
                                 <span
                                   key={platform}
-                                  className="px-2 py-0.5 rounded-[6px] bg-[#191C29] border border-[#292B39] text-[11px] font-semibold text-[#F4F3FA]"
+                                  className="px-2 py-0.5 rounded-[6px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--text-primary)]"
                                 >
                                   {platform}
                                 </span>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-[12px] text-[#A1A5B5]">Not verified</span>
+                            <span className="text-[12px] text-[var(--text-secondary)]">Not verified</span>
                           )}
                         </td>
                       </tr>
@@ -1210,8 +1239,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                           onClick={() => setSelectedMatrixSeason(season.seasonNumber)}
                           className={`min-h-[44px] px-3.5 rounded-[10px] text-[13px] font-semibold whitespace-nowrap border transition-colors duration-180 ${
                             active
-                              ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                              : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39]'
+                              ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                              : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
                           }`}
                         >
                           Season {season.seasonNumber}
@@ -1222,12 +1251,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 )}
 
                 {activeMatrixSeason && (
-                  <div className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3.5 space-y-3">
+                  <div className="rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-3.5 space-y-3">
                     <div className="flex items-center justify-between">
-                      <div className="text-[14px] font-bold text-[#F4F3FA]">
+                      <div className="text-[14px] font-bold text-[var(--text-primary)]">
                         {activeMatrixSeason.title || `Season ${activeMatrixSeason.seasonNumber}`}
                       </div>
-                      <span className="text-[12px] font-medium text-[#A1A5B5]">
+                      <span className="text-[12px] font-medium text-[var(--text-secondary)]">
                         {activeMatrixSeason.totalEpisodes && activeMatrixSeason.totalEpisodes > 0
                           ? `${activeMatrixSeason.totalEpisodes} Episodes`
                           : UNVERIFIED_COUNT_LABEL}
@@ -1239,21 +1268,21 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                         {activeMatrixSeason.languages.map((langProgress) => (
                           <div
                             key={langProgress.language}
-                            className="p-2.5 rounded-[10px] bg-[#12141E] border border-[#292B39] flex items-center justify-between gap-2"
+                            className="p-2.5 rounded-[10px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-between gap-2"
                           >
                             <div>
-                              <span className="text-[13px] font-semibold text-[#F4F3FA]">
+                              <span className="text-[13px] font-semibold text-[var(--text-primary)]">
                                 {langProgress.language} Dub
                               </span>
                               {verifiedPlatforms.length > 0 && (
-                                <div className="text-[11px] text-[#A1A5B5]">
+                                <div className="text-[11px] text-[var(--text-secondary)]">
                                   OTT: {verifiedPlatforms.join(', ')}
                                 </div>
                               )}
                             </div>
                             <span
                               className={`text-[12px] font-bold ${
-                                langProgress.isComplete ? 'text-[#34D399]' : 'text-[#B49AF8]'
+                                langProgress.isComplete ? 'text-[#34D399]' : 'text-[var(--accent-primary)]'
                               }`}
                             >
                               {langProgress.totalEpisodes
@@ -1266,7 +1295,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                         ))}
                       </div>
                     ) : (
-                      <p className="text-[12px] text-[#A1A5B5]">
+                      <p className="text-[12px] text-[var(--text-secondary)]">
                         Per-language episode counts have not been verified for this season.
                       </p>
                     )}
@@ -1279,12 +1308,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
 
         {/* TAB 3: WATCH PROGRESS */}
         {activeTab === 'progress' && (
-          <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-5" role="tabpanel">
+          <div className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5 space-y-5" role="tabpanel">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-[16px] font-bold text-[#F4F3FA]">Your Watch Progress</h3>
-                <p className="text-[12px] text-[#A1A5B5]">
-                  Track your status and per-season episode progress
+                <h3 className="text-[16px] font-bold text-[var(--text-primary)]">
+                  {t('animeDetails:progress.title', 'Episode Progress')}
+                </h3>
+                <p className="text-[12px] text-[var(--text-secondary)]">
+                  {t('animeDetails:progress.statusLabel', 'Watchlist Status')}
                 </p>
               </div>
 
@@ -1293,11 +1324,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   aria-label="Watchlist status"
                   value={watchlistStatus}
                   onChange={(e) => onUpdateStatus(anime.id, e.target.value as WatchlistStatus)}
-                  className="min-h-[44px] px-3.5 rounded-[12px] bg-[#191C29] border border-[#292B39] text-[13px] font-semibold text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8]"
+                  className="min-h-[44px] px-3.5 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[13px] font-semibold text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
                 >
                   {statusOptions.map((st) => (
                     <option key={st} value={st}>
-                      {st}
+                      {getLocalizedStatusLabel(st)}
                     </option>
                   ))}
                 </select>
@@ -1307,7 +1338,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             {/* Season Selector Pills (44px touch targets) */}
             {seasonBreakdowns.length > 1 && (
               <div>
-                <div className="text-[12px] font-semibold text-[#A1A5B5] mb-2">Select Season</div>
+                <div className="text-[12px] font-semibold text-[var(--text-secondary)] mb-2">Select Season</div>
                 <div className="flex flex-wrap gap-2">
                   {seasonBreakdowns.map((s) => (
                     <button
@@ -1316,8 +1347,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                       onClick={() => setSelectedProgressSeason(s.seasonNumber)}
                       className={`min-h-[44px] px-3.5 rounded-[10px] text-[13px] font-semibold border transition-colors ${
                         selectedProgressSeason === s.seasonNumber
-                          ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                          : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                          ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                          : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
                       }`}
                     >
                       Season {s.seasonNumber}
@@ -1328,14 +1359,14 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             )}
 
             {/* Episode Counter Bar */}
-            <div className="p-4 rounded-[12px] bg-[#191C29] border border-[#292B39] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="p-4 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <div className="text-[12px] text-[#A1A5B5] font-medium">
+                <div className="text-[12px] text-[var(--text-secondary)] font-medium">
                   Season {selectedProgressSeason} Progress
                 </div>
-                <div className="text-[20px] font-bold text-[#F4F3FA]">
+                <div className="text-[20px] font-bold text-[var(--text-primary)]">
                   {episodesWatched}{' '}
-                  <span className="text-[14px] font-normal text-[#A1A5B5]">
+                  <span className="text-[14px] font-normal text-[var(--text-secondary)]">
                     / {currentSeasonMaxEpisodes !== null ? currentSeasonMaxEpisodes : '?'} Episodes
                   </span>
                 </div>
@@ -1347,7 +1378,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   aria-label="Decrease watched episodes"
                   onClick={() => handleUpdateProgress(episodesWatched - 1)}
                   disabled={episodesWatched <= 0}
-                  className="min-h-[44px] min-w-[44px] rounded-[10px] bg-[#12141E] hover:bg-[#292B39] disabled:opacity-40 text-[#F4F3FA] border border-[#292B39] flex items-center justify-center transition-colors"
+                  className="min-h-[44px] min-w-[44px] rounded-[10px] bg-[var(--bg-surface)] hover:bg-[var(--border-subtle)] disabled:opacity-40 text-[var(--text-primary)] border border-[var(--border-subtle)] flex items-center justify-center transition-colors"
                 >
                   <Minus className="w-4 h-4" />
                 </button>
@@ -1356,7 +1387,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   aria-label="Increase watched episodes"
                   onClick={() => handleUpdateProgress(episodesWatched + 1)}
                   disabled={currentSeasonMaxEpisodes !== null && episodesWatched >= currentSeasonMaxEpisodes}
-                  className="min-h-[44px] min-w-[44px] rounded-[10px] bg-[#B49AF8] hover:bg-[#CBB6FF] disabled:opacity-40 text-[#0B0A10] font-bold flex items-center justify-center transition-colors"
+                  className="min-h-[44px] min-w-[44px] rounded-[10px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] disabled:opacity-40 text-[var(--accent-on-primary)] font-bold flex items-center justify-center transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
@@ -1364,7 +1395,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   <button
                     type="button"
                     onClick={handleMarkSeasonComplete}
-                    className="min-h-[44px] px-3.5 rounded-[10px] bg-[#12141E] hover:bg-[#292B39] text-[#CBB6FF] border border-[#292B39] text-[12px] font-semibold transition-colors"
+                    className="min-h-[44px] px-3.5 rounded-[10px] bg-[var(--bg-surface)] hover:bg-[var(--border-subtle)] text-[var(--accent-hover)] border border-[var(--border-subtle)] text-[12px] font-semibold transition-colors"
                   >
                     Mark season completed
                   </button>
@@ -1380,13 +1411,15 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             {/* Write a Review Form */}
             <form
               onSubmit={(e) => handleAddReview(e)}
-              className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 space-y-4"
+              className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5 space-y-4"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-[16px] font-bold text-[#F4F3FA]">Write a Review</h3>
+                <h3 className="text-[16px] font-bold text-[var(--text-primary)]">
+                  {t('animeDetails:reviews.writeReview', 'Write a review')}
+                </h3>
                 <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-[#A1A5B5]">Your Rating:</span>
-                  <span className="px-2.5 py-1 rounded-[8px] bg-[#B49AF8]/15 text-[#CBB6FF] border border-[#B49AF8]/30 text-[13px] font-bold">
+                  <span className="text-[12px] text-[var(--text-secondary)]">{t('animeDetails:rating', 'Rating')}:</span>
+                  <span className="px-2.5 py-1 rounded-[8px] bg-[var(--accent-primary)]/15 text-[var(--accent-hover)] border border-[var(--accent-primary)]/30 text-[13px] font-bold">
                     {newRating} / 10
                   </span>
                 </div>
@@ -1402,7 +1435,7 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   aria-label="Review score slider from 1 to 10"
                   value={newRating}
                   onChange={(e) => setNewRating(Number(e.target.value))}
-                  className="w-full h-2 bg-[#191C29] rounded-lg appearance-none cursor-pointer accent-[#B49AF8]"
+                  className="w-full h-2 bg-[var(--bg-elevated)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-primary)]"
                 />
                 <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
@@ -1412,8 +1445,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                       onClick={() => setNewRating(num)}
                       className={`min-h-[44px] rounded-[10px] text-[13px] font-bold border transition-colors duration-180 ${
                         newRating === num
-                          ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                          : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                          ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                          : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
                       }`}
                     >
                       {num}
@@ -1426,17 +1459,17 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 rows={3}
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Share your thoughts on the regional dub quality, voice acting, or translation..."
-                className="w-full rounded-[12px] bg-[#191C29] border border-[#292B39] p-3 text-[14px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8]"
+                placeholder={t('animeDetails:reviews.placeholder', 'Share your honest thoughts on the regional dub quality, voice acting, or translation...')}
+                className="w-full rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-3 text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
               />
 
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <label className="min-h-[44px] inline-flex items-center gap-2 text-[13px] text-[#A1A5B5] cursor-pointer select-none">
+                <label className="min-h-[44px] inline-flex items-center gap-2 text-[13px] text-[var(--text-secondary)] cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={newIsSpoiler}
                     onChange={(e) => setNewIsSpoiler(e.target.checked)}
-                    className="w-4 h-4 rounded accent-[#B49AF8]"
+                    className="w-4 h-4 rounded accent-[var(--accent-primary)]"
                   />
                   <span>Contains spoilers</span>
                 </label>
@@ -1448,17 +1481,21 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                       onClick={() => handleAddReview(undefined, lastFailedComment)}
                       className="min-h-[44px] px-3.5 rounded-[12px] bg-red-500/15 text-[#F87171] border border-red-500/30 text-[12px] font-bold"
                     >
-                      Failed — Retry
+                      {t('animeDetails:reviews.failedRetry', 'Failed — Retry')}
                     </button>
                   )}
 
                   <button
                     type="submit"
                     disabled={reviewSyncState === 'posting' || !newComment.trim()}
-                    className="min-h-[44px] px-4 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] disabled:opacity-50 text-[#0B0A10] font-bold text-[13px] inline-flex items-center gap-2 transition-colors"
+                    className="min-h-[44px] px-4 rounded-[12px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-[var(--accent-on-primary)] font-bold text-[13px] inline-flex items-center gap-2 transition-colors"
                   >
                     <Send className="w-4 h-4" />
-                    <span>{reviewSyncState === 'posting' ? 'Posting…' : 'Post Review'}</span>
+                    <span>
+                      {reviewSyncState === 'posting'
+                        ? t('animeDetails:reviews.posting', 'Posting…')
+                        : t('animeDetails:reviews.submit', 'Post Review')}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -1482,15 +1519,15 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
             )}
 
             {/* Spoiler Shield Controls Bar */}
-            <div className="rounded-[12px] bg-[#12141E] border border-[#292B39] px-4 py-2.5 flex items-center justify-between gap-3">
+            <div className="rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-4 py-2.5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-[13px]">
                 {spoilerShieldEnabled ? (
-                  <EyeOff className="w-4 h-4 text-[#B49AF8]" />
+                  <EyeOff className="w-4 h-4 text-[var(--accent-primary)]" />
                 ) : (
-                  <Eye className="w-4 h-4 text-[#A1A5B5]" />
+                  <Eye className="w-4 h-4 text-[var(--text-secondary)]" />
                 )}
-                <span className="font-semibold text-[#F4F3FA]">Spoiler Shield</span>
-                <span className="text-[12px] text-[#A1A5B5] hidden sm:inline">
+                <span className="font-semibold text-[var(--text-primary)]">Spoiler Shield</span>
+                <span className="text-[12px] text-[var(--text-secondary)] hidden sm:inline">
                   {spoilerShieldEnabled ? 'Masks reviews flagged with plot spoilers' : 'Showing all spoilers'}
                 </span>
               </div>
@@ -1502,8 +1539,8 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 data-testid="spoiler-shield-toggle"
                 className={`min-h-[44px] px-3.5 rounded-[10px] text-[12px] font-bold border transition-colors duration-180 ${
                   spoilerShieldEnabled
-                    ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/40'
-                    : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39]'
+                    ? 'bg-[var(--accent-primary)]/15 text-[var(--accent-hover)] border-[var(--accent-primary)]/40'
+                    : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
                 }`}
               >
                 {spoilerShieldEnabled ? 'Spoiler Shield: ON' : 'Spoiler Shield: OFF'}
@@ -1518,12 +1555,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                   return (
                     <div
                       key={rev.id}
-                      className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-4 space-y-2"
+                      className="rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 space-y-2"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-[14px] font-bold text-[#F4F3FA]">{rev.userName}</span>
-                          <span className="px-2 py-0.5 rounded-[6px] bg-[#191C29] text-[#F9C876] text-[11px] font-bold flex items-center gap-1">
+                          <span className="text-[14px] font-bold text-[var(--text-primary)]">{rev.userName}</span>
+                          <span className="px-2 py-0.5 rounded-[6px] bg-[var(--bg-elevated)] text-[#F9C876] text-[11px] font-bold flex items-center gap-1">
                             <Star className="w-3 h-3 fill-current" />
                             {rev.rating}/10
                           </span>
@@ -1533,12 +1570,12 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                             </span>
                           )}
                         </div>
-                        <span className="text-[11px] text-[#A1A5B5]">{rev.date}</span>
+                        <span className="text-[11px] text-[var(--text-secondary)]">{rev.date}</span>
                       </div>
 
                       {isMasked ? (
-                        <div className="p-3 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-between gap-3">
-                          <span className="text-[13px] text-[#A1A5B5]">
+                        <div className="p-3 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+                          <span className="text-[13px] text-[var(--text-secondary)]">
                             This review is hidden by Spoiler Shield.
                           </span>
                           <button
@@ -1546,20 +1583,20 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                             onClick={() =>
                               setRevealedReviewIds((prev) => ({ ...prev, [rev.id]: true }))
                             }
-                            className="min-h-[44px] px-3 rounded-[8px] bg-[#12141E] text-[#B49AF8] border border-[#292B39] text-[12px] font-semibold"
+                            className="min-h-[44px] px-3 rounded-[8px] bg-[var(--bg-surface)] text-[var(--accent-primary)] border border-[var(--border-subtle)] text-[12px] font-semibold"
                           >
                             Reveal Spoiler
                           </button>
                         </div>
                       ) : (
-                        <p className="text-[14px] text-[#F4F3FA] leading-relaxed">{rev.comment}</p>
+                        <p className="text-[14px] text-[var(--text-primary)] leading-relaxed">{rev.comment}</p>
                       )}
 
                       <div className="pt-1">
                         <button
                           type="button"
                           onClick={() => handleLikeReview(rev.id)}
-                          className="min-h-[44px] px-3 rounded-[8px] bg-[#191C29] hover:bg-[#292B39] text-[12px] text-[#A1A5B5] hover:text-[#F4F3FA] inline-flex items-center gap-1.5 transition-colors"
+                          className="min-h-[44px] px-3 rounded-[8px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center gap-1.5 transition-colors"
                         >
                           <ThumbsUp className="w-3.5 h-3.5" />
                           <span>Helpful ({rev.likes})</span>
@@ -1570,8 +1607,11 @@ export const AnimeDetailPage: React.FC<AnimeDetailPageProps> = ({
                 })}
               </div>
             ) : (
-              <div className="rounded-[12px] bg-[#12141E] border border-[#292B39] p-6 text-center text-[13px] text-[#A1A5B5]">
-                No community reviews yet. Be the first to review the regional dub!
+              <div className="rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 text-center text-[13px] text-[var(--text-secondary)]">
+                <p className="font-semibold text-[var(--text-primary)] mb-1">
+                  {t('animeDetails:reviews.emptyTitle', 'No reviews yet')}
+                </p>
+                <p>{t('animeDetails:reviews.emptySubtitle', 'Be the first to share how this Indian dub sounds.')}</p>
               </div>
             )}
           </div>

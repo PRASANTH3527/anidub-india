@@ -599,7 +599,8 @@ export function resolveLanguageSeoResponse(params: {
  */
 export function updateDocumentSeoMeta(meta: SeoMetaPayload): void {
   if (typeof document === 'undefined') return;
-  document.documentElement.lang = meta.htmlLang || 'en';
+  const activeUiLang = document.documentElement.getAttribute('data-ui-lang');
+  document.documentElement.lang = activeUiLang || meta.htmlLang || 'en';
   document.title = meta.title;
 
   const setMeta = (selector: string, attr: string, value: string) => {

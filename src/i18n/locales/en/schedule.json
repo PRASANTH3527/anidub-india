@@ -1,0 +1,29 @@
+{
+  "title": "Release Schedule",
+  "subtitle": "Verified weekly Indian regional dub simulcast schedule",
+  "today": "Today",
+  "allDays": "All Days",
+  "airingCount": "{{count}} airing",
+  "days": {
+    "monday": "Monday",
+    "tuesday": "Tuesday",
+    "wednesday": "Wednesday",
+    "thursday": "Thursday",
+    "friday": "Friday",
+    "saturday": "Saturday",
+    "sunday": "Sunday"
+  },
+  "shortDays": {
+    "monday": "Mon",
+    "tuesday": "Tue",
+    "wednesday": "Wed",
+    "thursday": "Thu",
+    "friday": "Fri",
+    "saturday": "Sat",
+    "sunday": "Sun"
+  },
+  "timeNotVerified": "Time not verified",
+  "unscheduledTitle": "Airing Without Verified Day/Time",
+  "emptyTitle": "No scheduled dub drops for {{day}}",
+  "emptySubtitle": "Check another day or browse currently airing titles in Explore."
+}

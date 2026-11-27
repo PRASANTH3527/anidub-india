@@ -1,0 +1,29 @@
+{
+  "title": "মুক্তির সময়সূচী",
+  "subtitle": "যাচাইকৃত সাপ্তাহিক ভারতীয় আঞ্চলিক ডাব প্রচারের সময়সূচী",
+  "today": "আজ",
+  "allDays": "সব দিন",
+  "airingCount": "{{count}} প্রচারিত",
+  "days": {
+    "monday": "সোমবার",
+    "tuesday": "মঙ্গলবার",
+    "wednesday": "বুধবার",
+    "thursday": "বৃহস্পতিবার",
+    "friday": "শুক্রবার",
+    "saturday": "শনিবার",
+    "sunday": "রবিবার"
+  },
+  "shortDays": {
+    "monday": "সোম",
+    "tuesday": "মঙ্গল",
+    "wednesday": "বুধ",
+    "thursday": "বৃহঃ",
+    "friday": "শুক্র",
+    "saturday": "শনি",
+    "sunday": "রবি"
+  },
+  "timeNotVerified": "সময় যাচাই করা হয়নি",
+  "unscheduledTitle": "যাচাইকৃত দিন/সময় ছাড়া প্রচারিত",
+  "emptyTitle": "{{day}}-এ কোনো ডাব মুক্তি নেই",
+  "emptySubtitle": "অন্য দিন দেখুন অথবা খুঁজুন পাতায় বর্তমানে প্রচারিত অ্যানিমে দেখুন।"
+}

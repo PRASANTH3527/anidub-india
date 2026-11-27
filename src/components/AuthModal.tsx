@@ -147,27 +147,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="Sign in to AniDub India"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0A10]/85 animate-in fade-in duration-180"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--bg-canvas)]/85 animate-in fade-in duration-180"
       onClick={onClose}
     >
       {/* MODAL CONTAINER */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md bg-[#12141E] border border-[#292B39] rounded-[16px] p-5 sm:p-6 shadow-2xl z-10 space-y-5 text-[#F4F3FA] font-sans"
+        className="relative w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[16px] p-5 sm:p-6 shadow-2xl z-10 space-y-5 text-[var(--text-primary)] font-sans"
       >
         {/* HEADER */}
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-2 min-w-0">
             <AniDubLogo variant="horizontal" size="sm" />
             <div>
-              <h2 className="font-heading font-black text-lg text-[#F4F3FA] tracking-tight">
+              <h2 className="font-heading font-black text-lg text-[var(--text-primary)] tracking-tight">
                 {mode === 'signup'
                   ? 'Create AniDub Account'
                   : mode === 'verify'
                     ? 'Verify Email Code'
                     : 'Sign in to AniDub India'}
               </h2>
-              <p className="text-[#A1A5B5] text-xs mt-0.5 leading-relaxed">
+              <p className="text-[var(--text-secondary)] text-xs mt-0.5 leading-relaxed">
                 Sync watchlist, watch progress, and reviews across devices.
               </p>
             </div>
@@ -177,7 +177,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close authentication modal"
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer shrink-0"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -199,7 +199,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           type="button"
           onClick={handleGoogleLogin}
           disabled={isLoading}
-          className="w-full h-[44px] px-4 rounded-[12px] bg-[#F4F3FA] hover:bg-white text-[#0B0A10] font-bold text-xs flex items-center justify-center gap-3 transition-colors duration-180 motion-reduce:transition-none cursor-pointer disabled:opacity-50"
+          className="w-full h-[44px] px-4 rounded-[var(--radius-control)] bg-white hover:bg-slate-50 text-[#0F172A] border border-[var(--border-strong)] font-bold text-xs flex items-center justify-center gap-3 transition-colors duration-180 motion-reduce:transition-none cursor-pointer disabled:opacity-50"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path
@@ -223,63 +223,63 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </button>
 
         {/* DIVIDER */}
-        <div className="flex items-center gap-3 text-xs text-[#A1A5B5]">
-          <div className="h-px bg-[#292B39] flex-grow" />
+        <div className="flex items-center gap-3 text-xs text-[var(--text-secondary)]">
+          <div className="h-px bg-[var(--border-subtle)] flex-grow" />
           <span>or sign in with email</span>
-          <div className="h-px bg-[#292B39] flex-grow" />
+          <div className="h-px bg-[var(--border-subtle)] flex-grow" />
         </div>
 
         {/* CLERK EMAIL / PASSWORD FORM */}
         <form onSubmit={handleEmailSubmit} className="space-y-3.5">
           {mode === 'verify' ? (
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-[#A1A5B5] uppercase tracking-wider block">
+              <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
                 Verification Code
               </label>
               <div className="relative">
-                <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A5B5]" />
+                <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
                 <input
                   type="text"
                   required
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value)}
                   placeholder="Enter 6-digit email code"
-                  className="w-full h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] pl-10 pr-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180"
+                  className="w-full h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] rounded-[12px] pl-10 pr-3.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none transition-colors duration-180"
                 />
               </div>
             </div>
           ) : (
             <>
               <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-[#A1A5B5] uppercase tracking-wider block">
+                <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
                   Email Address
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A5B5]" />
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
                   <input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="name@example.com"
-                    className="w-full h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] pl-10 pr-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180"
+                    className="w-full h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] rounded-[12px] pl-10 pr-3.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none transition-colors duration-180"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-[#A1A5B5] uppercase tracking-wider block">
+                <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
                   Password
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A5B5]" />
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
                   <input
                     type="password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] pl-10 pr-3.5 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180"
+                    className="w-full h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] rounded-[12px] pl-10 pr-3.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none transition-colors duration-180"
                   />
                 </div>
               </div>
@@ -289,7 +289,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full h-[44px] mt-1 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold text-xs transition-colors duration-180 motion-reduce:transition-none cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full h-[44px] mt-1 rounded-[12px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] font-bold text-xs transition-colors duration-180 motion-reduce:transition-none cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
           >
             <span>
               {isLoading
@@ -304,21 +304,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </form>
 
-        <div className="flex items-center justify-between gap-2 text-xs text-[#A1A5B5]">
+        <div className="flex items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
           <button
             type="button"
             onClick={() => {
               setErrorMsg(null);
               setMode(mode === 'signin' ? 'signup' : 'signin');
             }}
-            className="text-[#B49AF8] hover:text-[#CBB6FF] font-semibold cursor-pointer transition-colors duration-180"
+            className="text-[var(--accent-primary)] hover:text-[var(--accent-hover)] font-semibold cursor-pointer transition-colors duration-180"
           >
             {mode === 'signin' ? 'Need an account? Sign up' : 'Already have an account? Sign in'}
           </button>
-          <span className="text-[10px] text-[#A1A5B5]">Powered by Clerk</span>
+          <span className="text-[10px] text-[var(--text-secondary)]">Powered by Clerk</span>
         </div>
 
-        <div className="text-center pt-3 border-t border-[#292B39] text-[11px] text-[#A1A5B5] flex items-center justify-center gap-1.5">
+        <div className="text-center pt-3 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] flex items-center justify-center gap-1.5">
           <ShieldCheck className="w-3.5 h-3.5 text-[#34D399]" />
           <span>Secure OAuth 2.0 &amp; JWT Session Token</span>
         </div>

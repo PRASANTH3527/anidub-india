@@ -1,21 +1,23 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+@import "./styles/tokens.css";
 
 :root {
-  /* AniDub Eclipse — Flagship Dark Palette Tokens */
-  --eclipse-bg: #0B0A10;
-  --eclipse-canvas: #0B0A10;
-  --eclipse-surface: #12141E;
-  --eclipse-elevated: #191C29;
-  --eclipse-border: #292B39;
-  --eclipse-primary: #B49AF8;
-  --eclipse-secondary: #CBB6FF;
-  --eclipse-selected: #CBB6FF;
-  --eclipse-text: #F4F3FA;
-  --eclipse-muted: #A1A5B5;
-  --eclipse-success: #34D399;
-  --eclipse-rating: #F9C876;
-  --eclipse-error: #F87171;
-  --eclipse-danger: #F87171;
+  /* Legacy AniDub Eclipse Variable Aliases — Bound to Multi-Theme Semantic Tokens */
+  --eclipse-bg: var(--bg-canvas);
+  --eclipse-canvas: var(--bg-canvas);
+  --eclipse-surface: var(--bg-surface);
+  --eclipse-elevated: var(--bg-elevated);
+  --eclipse-border: var(--border-subtle);
+  --eclipse-primary: var(--accent-primary);
+  --eclipse-secondary: var(--accent-hover);
+  --eclipse-selected: var(--accent-hover);
+  --eclipse-text: var(--text-primary);
+  --eclipse-muted: var(--text-secondary);
+  --eclipse-success: var(--status-success);
+  --eclipse-rating: var(--status-rating);
+  --eclipse-error: var(--status-danger);
+  --eclipse-danger: var(--status-danger);
 
   /* Centralized Typography Scale Tokens */
   --font-size-page-heading-mobile: 24px;
@@ -31,24 +33,24 @@
   --font-size-nav-label: 11px;
   --font-size-nav-label-lg: 12px;
 
-  /* Legacy alias bindings mapped to Eclipse tokens */
-  --primary-accent: #B49AF8;
-  --primary-glow: rgba(180, 154, 248, 0.25);
-  --primary-badge: #191C29;
-  --primary-light: #CBB6FF;
+  /* Legacy accent bindings */
+  --primary-accent: var(--accent-primary);
+  --primary-glow: var(--accent-soft);
+  --primary-badge: var(--bg-elevated);
+  --primary-light: var(--accent-hover);
 }
 
-@theme {
-  --color-eclipse-bg: #0B0A10;
-  --color-eclipse-canvas: #0B0A10;
-  --color-eclipse-surface: #12141E;
-  --color-eclipse-elevated: #191C29;
-  --color-eclipse-primary: #B49AF8;
-  --color-eclipse-secondary: #CBB6FF;
-  --color-eclipse-selected: #CBB6FF;
-  --color-eclipse-text: #F4F3FA;
-  --color-eclipse-muted: #A1A5B5;
-  --color-eclipse-border: #292B39;
+@theme inline {
+  --color-eclipse-bg: var(--bg-canvas);
+  --color-eclipse-canvas: var(--bg-canvas);
+  --color-eclipse-surface: var(--bg-surface);
+  --color-eclipse-elevated: var(--bg-elevated);
+  --color-eclipse-primary: var(--accent-primary);
+  --color-eclipse-secondary: var(--accent-hover);
+  --color-eclipse-selected: var(--accent-hover);
+  --color-eclipse-text: var(--text-primary);
+  --color-eclipse-muted: var(--text-secondary);
+  --color-eclipse-border: var(--border-subtle);
   --color-eclipse-success: #34D399;
   --color-eclipse-rating: #F9C876;
   --color-eclipse-error: #F87171;
@@ -68,8 +70,9 @@ body,
   width: 100%;
   max-width: 100%;
   overflow-x: clip;
-  background-color: var(--eclipse-bg);
-  color: var(--eclipse-text);
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-ui-script, 'Inter', system-ui, -apple-system, sans-serif);
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -81,12 +84,12 @@ body,
   }
 }
 
-/* Centralized Eclipse Typography Utility Classes */
+/* Centralized Typography Utility Classes */
 .text-eclipse-page-heading {
   font-size: 24px;
   line-height: 1.25;
   font-weight: 800;
-  color: #F4F3FA;
+  color: var(--text-primary);
   letter-spacing: -0.02em;
 }
 
@@ -100,7 +103,7 @@ body,
   font-size: 18px;
   line-height: 1.3;
   font-weight: 700;
-  color: #F4F3FA;
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
@@ -114,13 +117,13 @@ body,
   font-size: 14px;
   line-height: 20px;
   font-weight: 600;
-  color: #F4F3FA;
+  color: var(--text-primary);
 }
 
 .text-eclipse-body {
   font-size: 15px;
   line-height: 1.55;
-  color: #F4F3FA;
+  color: var(--text-primary);
 }
 
 @media (min-width: 768px) {
@@ -132,7 +135,7 @@ body,
 .text-eclipse-meta {
   font-size: 12px;
   line-height: 18px;
-  color: #A1A5B5;
+  color: var(--text-secondary);
 }
 
 @media (min-width: 640px) {
@@ -153,29 +156,29 @@ body,
   }
 }
 
-/* Eclipse Theme Utility Classes */
+/* Theme Utility Classes Mapped Dynamically to Semantic CSS Tokens */
 .bg-eclipse-bg {
-  background-color: #0B0A10;
+  background-color: var(--bg-canvas);
 }
 
 .bg-eclipse-surface {
-  background-color: #12141E;
+  background-color: var(--bg-surface);
 }
 
 .bg-eclipse-elevated {
-  background-color: #191C29;
+  background-color: var(--bg-elevated);
 }
 
 .text-eclipse-text {
-  color: #F4F3FA;
+  color: var(--text-primary);
 }
 
 .text-eclipse-muted {
-  color: #A1A5B5;
+  color: var(--text-secondary);
 }
 
 .border-eclipse-border {
-  border-color: #292B39;
+  border-color: var(--border-subtle);
 }
 
 .duration-180 {
@@ -183,49 +186,49 @@ body,
 }
 
 .btn-primary-theme {
-  background-color: #B49AF8;
-  color: #0B0A10;
+  background-color: var(--accent-primary);
+  color: var(--accent-on-primary);
   font-weight: 700;
 }
 
 .btn-primary-theme:hover {
-  background-color: #CBB6FF;
+  background-color: var(--accent-hover);
 }
 
 .badge-primary-theme {
-  background-color: rgba(180, 154, 248, 0.14);
-  border: 1px solid rgba(180, 154, 248, 0.38);
-  color: #CBB6FF;
+  background-color: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 38%, transparent);
+  color: var(--accent-primary);
 }
 
 .active-tab-theme {
-  background-color: rgba(180, 154, 248, 0.14);
-  border: 1px solid rgba(180, 154, 248, 0.45);
-  color: #B49AF8;
+  background-color: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
+  color: var(--accent-primary);
 }
 
 .text-primary-theme {
-  color: #B49AF8;
+  color: var(--accent-primary);
 }
 
 .text-accent-theme {
-  color: #CBB6FF;
+  color: var(--accent-hover);
 }
 
 .border-primary-theme {
-  border-color: rgba(180, 154, 248, 0.45);
+  border-color: color-mix(in srgb, var(--accent-primary) 45%, transparent);
 }
 
 .border-primary-light\/50 {
-  border-color: rgba(203, 182, 255, 0.5);
+  border-color: color-mix(in srgb, var(--accent-hover) 50%, transparent);
 }
 
 .bg-primary-theme {
-  background-color: #B49AF8;
+  background-color: var(--accent-primary);
 }
 
 .bg-primary-theme\/20 {
-  background-color: rgba(180, 154, 248, 0.15);
+  background-color: var(--accent-soft);
 }
 
 /* Hide scrollbar utility */
@@ -242,15 +245,15 @@ body,
 }
 
 .border-primary-theme\/30 {
-  border-color: rgba(180, 154, 248, 0.3);
+  border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
 }
 
 .border-primary-theme\/50 {
-  border-color: rgba(180, 154, 248, 0.5);
+  border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
 }
 
 .ring-accent-theme\/40 {
-  --tw-ring-color: rgba(180, 154, 248, 0.4);
+  --tw-ring-color: color-mix(in srgb, var(--accent-primary) 40%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -270,7 +273,12 @@ body,
 }
 
 .animate-shimmer {
-  background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.02) 75%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text-primary) 3%, transparent) 25%,
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 3%, transparent) 75%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.8s infinite;
 }

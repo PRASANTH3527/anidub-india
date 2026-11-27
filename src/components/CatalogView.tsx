@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense, laz
 import {
   AlertTriangle,
   ArrowUp,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -37,7 +38,10 @@ import {
 import { SkeletonGrid } from './SkeletonGrid';
 import { proxyUrl } from '../utils/imgbb';
 import type { SupportedLanguage } from '../utils/i18n';
-import { CANONICAL_OTT_FILTER_OPTIONS } from '../utils/ottHub';
+import {
+  CANONICAL_OTT_FILTER_OPTIONS,
+  calculateSubscriptionCoverage,
+} from '../utils/ottHub';
 import {
   addRecentSearch,
   buildShareableFilterQuery,
@@ -50,6 +54,9 @@ import {
 } from '../utils/searchFilterState';
 import { ACCOUNT_CHANGED_EVENT } from '../utils/accountIsolation';
 import { useToast } from './Toast';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
+import { formatLocaleNumber, normalizeRegionalSearchQuery } from '../i18n/languageRegistry';
 
 const RecentlyViewedRow = lazy(() => import('./RecentlyViewedRow').then(m => ({ default: m.RecentlyViewedRow })));
 
@@ -186,8 +193,18 @@ const STATUSES = ['All Status', 'Airing', 'Completed', 'Upcoming'];
 const SORTS = [
   { label: 'Most Upvoted', value: 'popularity' },
   { label: 'Highest Rated', value: 'rating' },
-  { label: 'Newest Release', value: 'newest' },
-  { label: 'Title (A-Z)', value: 'title' },
+  { label: 'Newest', value: 'newest' },
+  { label: 'A–Z', value: 'title' },
+];
+
+const FEATURED_PLATFORMS = [
+  'All Platforms',
+  'Crunchyroll',
+  'Netflix',
+  'JioHotstar',
+  'Anime Times',
+  'Muse India',
+  'Prime Video',
 ];
 
 export const NATIVE_LANGUAGE_SCRIPT: Record<string, string> = {
@@ -227,6 +244,8 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   onClearSubscriptions,
 }) => {
   const toast = useToast();
+  const { t } = useTranslation(['explore', 'common']);
+  const { language: uiLocale } = useLanguage();
 
   // Parse initial shareable URL query params once on mount
   const initialUrlFilters = useMemo(() => {
@@ -290,8 +309,32 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
   const [verifiedOnly, setVerifiedOnly] = useState<boolean>(false);
   const [freeLegalOnly, setFreeLegalOnly] = useState<boolean>(false);
   const [isSmartFilterOpen, setIsSmartFilterOpen] = useState<boolean>(false);
-  const [isMoreLanguagesOpen, setIsMoreLanguagesOpen] = useState<boolean>(false);
   const [isOttHubOpen, setIsOttHubOpen] = useState<boolean>(false);
+  const [genreSearchQuery, setGenreSearchQuery] = useState<string>('');
+  const [isAllGenresExpanded, setIsAllGenresExpanded] = useState<boolean>(false);
+  const [isAllPlatformsExpanded, setIsAllPlatformsExpanded] = useState<boolean>(false);
+
+  // Lock background scroll & support Escape dismiss while Filter or OTT bottom sheet is open
+  useEffect(() => {
+    if (!isSmartFilterOpen && !isOttHubOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsSmartFilterOpen(false);
+        setIsOttHubOpen(false);
+      }
+    };
+    const previousOverflow = typeof document !== 'undefined' ? document.body.style.overflow : '';
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = 'hidden';
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (typeof document !== 'undefined') {
+        document.body.style.overflow = previousOverflow;
+      }
+    };
+  }, [isSmartFilterOpen, isOttHubOpen]);
 
   const [debouncedSearch, setDebouncedSearch] = useState(effectiveSearch || '');
 
@@ -300,10 +343,15 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     [mySubscriptionsEnabled, mySubscriptions]
   );
 
+  const normalizedApiSearch = useMemo(
+    () => normalizeRegionalSearchQuery(debouncedSearch),
+    [debouncedSearch]
+  );
+
   const filterSignature = useMemo(
     () =>
       JSON.stringify({
-        q: debouncedSearch.trim().toLowerCase(),
+        q: normalizedApiSearch.trim().toLowerCase(),
         lang: selectedLanguage,
         genre: selectedGenre,
         platform: selectedPlatform,
@@ -318,7 +366,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         subs: activeSubscriptionPlatforms,
       }),
     [
-      debouncedSearch,
+      normalizedApiSearch,
       selectedLanguage,
       selectedGenre,
       selectedPlatform,
@@ -643,7 +691,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         const response = await cloudflareApi.fetchCatalog({
           page: pageToFetch,
           limit: CATALOG_PAGE_SIZE,
-          search: debouncedSearch,
+          search: normalizedApiSearch,
           language: selectedLanguage,
           genre: selectedGenre,
           platform: selectedPlatform,
@@ -745,7 +793,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     },
     [
       CATALOG_PAGE_SIZE,
-      debouncedSearch,
+      normalizedApiSearch,
       selectedLanguage,
       selectedGenre,
       selectedPlatform,
@@ -887,11 +935,13 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     setSelectedPlatform('All Platforms');
     setSelectedType('All Types');
     setSelectedStatus('All Status');
+    setSelectedSort('popularity');
     setEpisodeLength('any');
     setMinRating(0);
     setFullyDubbedOnly(false);
     setVerifiedOnly(false);
     setFreeLegalOnly(false);
+    setGenreSearchQuery('');
     handleSearchChange('');
     onToggleMySubscriptionsEnabled?.(false);
     setBatchesInCycle(0);
@@ -953,35 +1003,58 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     return computeDynamicLanguageFilters(catalogList && catalogList.length > 0 ? catalogList : rawAnimeList);
   }, [catalogSummary, catalogList, rawAnimeList]);
 
-  // Core primary language pills: All, Tamil, Hindi, Telugu; remaining languages grouped under More
-  const { primaryLanguagePills, extraLanguagePills } = useMemo(() => {
-    const primaryOrder = ['all', 'tamil', 'hindi', 'telugu'];
+  // Single-row ordered language rail: All, Tamil, Hindi, Telugu, Malayalam, Kannada, Bengali (+ any additional backend languages)
+  const languageRailPills = useMemo(() => {
+    const coreOrder = ['all', 'tamil', 'hindi', 'telugu', 'malayalam', 'kannada', 'bengali'];
     const byKey = new Map(
       dynamicLanguageFilters.map((item) => [item.value.toLowerCase(), item])
     );
 
-    const primary = [
-      byKey.get('all') || { label: 'All', value: 'All', count: 0 },
-      byKey.get('tamil') || { label: 'Tamil', value: 'Tamil', count: 0 },
-      byKey.get('hindi') || { label: 'Hindi', value: 'Hindi', count: 0 },
-      byKey.get('telugu') || { label: 'Telugu', value: 'Telugu', count: 0 },
-    ];
+    const coreDefaults: Record<string, { label: string; value: string; count: number }> = {
+      all: { label: 'All', value: 'All', count: 0 },
+      tamil: { label: 'Tamil', value: 'Tamil', count: 0 },
+      hindi: { label: 'Hindi', value: 'Hindi', count: 0 },
+      telugu: { label: 'Telugu', value: 'Telugu', count: 0 },
+      malayalam: { label: 'Malayalam', value: 'Malayalam', count: 0 },
+      kannada: { label: 'Kannada', value: 'Kannada', count: 0 },
+      bengali: { label: 'Bengali', value: 'Bengali', count: 0 },
+    };
 
-    const extra = dynamicLanguageFilters.filter(
-      (item) => !primaryOrder.includes(item.value.toLowerCase())
+    const orderedCore = coreOrder.map((key) => byKey.get(key) || coreDefaults[key]);
+    const remaining = dynamicLanguageFilters.filter(
+      (item) => !coreOrder.includes(item.value.toLowerCase())
     );
 
-    return { primaryLanguagePills: primary, extraLanguagePills: extra };
+    return [...orderedCore, ...remaining];
   }, [dynamicLanguageFilters]);
-
-  const isExtraLanguageActive = useMemo(() => {
-    const current = selectedLanguage.toLowerCase();
-    return !['all', 'tamil', 'hindi', 'telugu'].includes(current);
-  }, [selectedLanguage]);
 
   const statsSourceList = useMemo(() => {
     return (catalogList && catalogList.length > 0) ? catalogList : rawAnimeList;
   }, [catalogList, rawAnimeList]);
+
+  const ottCatalogIndex = useMemo(() => {
+    return fullCatalogIndex && fullCatalogIndex.length > 0 ? fullCatalogIndex : statsSourceList;
+  }, [fullCatalogIndex, statsSourceList]);
+
+  const ottSummaryCoverage = useMemo(() => {
+    const coverageLang = selectedLanguage && selectedLanguage !== 'All' ? selectedLanguage : 'All';
+    return calculateSubscriptionCoverage(ottCatalogIndex, mySubscriptions, coverageLang);
+  }, [ottCatalogIndex, mySubscriptions, selectedLanguage]);
+
+  const filteredGenreOptions = useMemo(() => {
+    const q = genreSearchQuery.trim().toLowerCase();
+    if (!q) return GENRES;
+    return GENRES.filter((g) => g === 'All Genres' || g.toLowerCase().includes(q));
+  }, [genreSearchQuery]);
+
+  const visiblePlatformOptions = useMemo(() => {
+    const secondary = PLATFORMS.filter((p) => !FEATURED_PLATFORMS.includes(p));
+    const hasSecondarySelected = secondary.includes(selectedPlatform);
+    if (isAllPlatformsExpanded || hasSecondarySelected) {
+      return [...FEATURED_PLATFORMS, ...secondary];
+    }
+    return FEATURED_PLATFORMS;
+  }, [isAllPlatformsExpanded, selectedPlatform]);
 
   const totalCatalogCount = Math.max(paginationMeta.totalItems, displayedAnime.length);
 
@@ -1011,18 +1084,22 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
     freeLegalOnly,
   ]);
 
+  const totalResettableFilterCount = useMemo(() => {
+    return activeAdvancedFilterCount + (selectedLanguage !== 'All' ? 1 : 0);
+  }, [activeAdvancedFilterCount, selectedLanguage]);
+
   return (
     <div
       aria-label="Indian Dubbed Anime Discovery Catalog"
-      className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 overflow-x-clip font-sans text-[#F4F3FA] pb-8 box-border"
+      className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 overflow-x-clip font-sans text-[var(--text-primary)] pb-8 box-border"
     >
       {/* 1. COMPACT, DISCOVERY-FIRST TOP SECTION (Visible above the fold on 390x844) */}
       <div className="pt-2 sm:pt-4 space-y-2">
         {/* Heading + Discovery Tools Row */}
         <div className="flex items-center justify-between gap-2">
-          <h1 className="text-base sm:text-2xl font-extrabold text-[#F4F3FA] tracking-tight flex items-center gap-1.5 sm:gap-2 min-w-0">
-            <ExploreIcon active className="w-5 h-5 sm:w-6 sm:h-6 text-[#B49AF8] shrink-0" />
-            <span className="truncate">Find anime in your language</span>
+          <h1 className="text-base sm:text-2xl font-extrabold text-[var(--text-primary)] tracking-tight flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <ExploreIcon active className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--accent-primary)] shrink-0" />
+            <span className="line-clamp-2 leading-snug">{t('explore:heading', 'Find anime in your language')}</span>
           </h1>
 
           {/* Mobile Primary Action: Single Random button (44px height) so heading never truncates on 390px */}
@@ -1030,11 +1107,11 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             <button
               type="button"
               onClick={onOpenRoulette}
-              aria-label="Random Anime"
-              className="h-[44px] min-h-[44px] px-3.5 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] text-xs font-bold inline-flex items-center gap-1.5 transition-colors duration-180 motion-reduce:transition-none cursor-pointer shrink-0"
+              aria-label={t('explore:randomAnime', 'Random Anime')}
+              className="h-[44px] min-h-[44px] max-w-[140px] px-3.5 rounded-[12px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] text-xs font-bold inline-flex items-center gap-1.5 transition-colors duration-180 motion-reduce:transition-none cursor-pointer shrink-0"
             >
-              <Dices className="w-4 h-4" />
-              <span>Random</span>
+              <Dices className="w-4 h-4 shrink-0" />
+              <span className="truncate">{t('explore:random', 'Random')}</span>
             </button>
           </div>
 
@@ -1046,9 +1123,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 size="sm"
                 onClick={onOpenCompare}
                 aria-label="Compare Anime"
-                leftIcon={<Scale className="w-3.5 h-3.5 text-[#CBB6FF]" />}
+                leftIcon={<Scale className="w-3.5 h-3.5 text-[var(--accent-hover)]" />}
               >
-                <span>Compare</span>
+                <span>{t('explore:compare', 'Compare')}</span>
               </Button>
             )}
             {onOpenRecommendations && (
@@ -1057,9 +1134,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 size="sm"
                 onClick={onOpenRecommendations}
                 aria-label="Find Your Next Anime"
-                leftIcon={<Sparkles className="w-3.5 h-3.5 text-[#CBB6FF]" />}
+                leftIcon={<Sparkles className="w-3.5 h-3.5 text-[var(--accent-hover)]" />}
               >
-                <span>Matchmaker</span>
+                <span>{t('explore:matchmaker', 'Matchmaker')}</span>
               </Button>
             )}
             <Button
@@ -1068,7 +1145,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
               onClick={onOpenRoulette}
               leftIcon={<Dices className="w-3.5 h-3.5" />}
             >
-              <span>Random Anime</span>
+              <span>{t('explore:randomAnime', 'Random Anime')}</span>
             </Button>
           </div>
         </div>
@@ -1076,20 +1153,20 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
         {/* 2. PROMINENT SEARCH BAR (44px height, 12px radius, 44x44px clear button when typing) */}
         <div className="space-y-1.5">
           <div className="relative flex items-center">
-            <Search className="w-4 h-4 text-[#B49AF8] absolute left-3.5 pointer-events-none shrink-0" />
+            <Search className="w-4 h-4 text-[var(--accent-primary)] absolute left-3.5 pointer-events-none shrink-0" />
             <input
               type="text"
               value={effectiveSearch}
               onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search English or Japanese title, alias (e.g. JJK), studio..."
-              className="w-full h-[44px] min-h-[44px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 focus:border-[#B49AF8] rounded-[12px] pl-10 pr-12 text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180 motion-reduce:transition-none"
+              placeholder={t('explore:searchPlaceholder', 'Search English or Japanese title, alias (e.g. JJK), studio...')}
+              className="w-full h-[44px] min-h-[44px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 focus:border-[var(--accent-primary)] rounded-[12px] pl-10 pr-12 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none transition-colors duration-180 motion-reduce:transition-none"
             />
             {effectiveSearch && (
               <button
                 type="button"
                 onClick={() => handleSearchChange('')}
-                aria-label="Clear search query"
-                className="absolute right-0.5 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-[#A1A5B5] hover:text-[#F4F3FA] rounded-[12px] hover:bg-[#191C29] transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
+                aria-label={t('common:clear', 'Clear search query')}
+                className="absolute right-0.5 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-[12px] hover:bg-[var(--bg-elevated)] transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1098,19 +1175,19 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
 
           {recentSearches.length > 0 && (
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs py-0.5">
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#A1A5B5] shrink-0">
-                <Clock className="w-3 h-3 text-[#B49AF8]" />
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--text-secondary)] shrink-0">
+                <Clock className="w-3 h-3 text-[var(--accent-primary)]" />
                 Recent:
               </span>
               {recentSearches.slice(0, 5).map((term) => (
                 <div
                   key={`recent_explore_${term}`}
-                  className="inline-flex items-center min-h-[40px] rounded-[12px] bg-[#12141E] border border-[#292B39] text-[#F4F3FA] shrink-0 overflow-hidden"
+                  className="inline-flex items-center min-h-[40px] rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] shrink-0 overflow-hidden"
                 >
                   <button
                     type="button"
                     onClick={() => handleSearchChange(term)}
-                    className="min-h-[40px] px-3 py-1 hover:bg-[#191C29] text-xs font-medium transition-colors duration-180 cursor-pointer"
+                    className="min-h-[40px] px-3 py-1 hover:bg-[var(--bg-elevated)] text-xs font-medium transition-colors duration-180 cursor-pointer"
                   >
                     {term}
                   </button>
@@ -1118,7 +1195,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                     type="button"
                     aria-label={`Remove recent search ${term}`}
                     onClick={() => setRecentSearches(removeRecentSearch(term, userId))}
-                    className="w-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-[#A1A5B5] hover:text-[#F87171] hover:bg-[#191C29] transition-colors duration-180 cursor-pointer"
+                    className="w-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-[var(--text-secondary)] hover:text-[#F87171] hover:bg-[var(--bg-elevated)] transition-colors duration-180 cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -1127,85 +1204,81 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
               <button
                 type="button"
                 onClick={() => setRecentSearches(clearRecentSearches(userId))}
-                className="min-h-[40px] px-2.5 rounded-[12px] text-xs text-[#A1A5B5] hover:text-[#F87171] font-semibold ml-0.5 shrink-0 cursor-pointer"
+                className="min-h-[40px] px-2.5 rounded-[12px] text-xs text-[var(--text-secondary)] hover:text-[#F87171] font-semibold ml-0.5 shrink-0 cursor-pointer"
               >
-                Clear
+                {t('common:clear', 'Clear')}
               </button>
             </div>
           )}
         </div>
 
-        {/* 2b. LANGUAGE FILTER PILLS (All, Tamil, Hindi, Telugu, More at 44px height) + PINNED FILTERS BUTTON (44px) */}
+        {/* 2b. SLEEK SINGLE-ROW HORIZONTAL LANGUAGE PILL RAIL + PINNED FILTERS BUTTON */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 min-w-0">
-            {primaryLanguagePills.map((langItem) => {
-              const active =
-                selectedLanguage.toLowerCase() === langItem.value.toLowerCase() ||
-                (selectedLanguage === 'All' && langItem.value === 'All');
-              const nativeScript = NATIVE_LANGUAGE_SCRIPT[langItem.value.toLowerCase()];
-              return (
-                <button
-                  key={langItem.value}
-                  type="button"
-                  onClick={() => setSelectedLanguage(langItem.value)}
-                  aria-pressed={active}
-                  className={`h-[44px] min-h-[44px] px-3 sm:px-3.5 py-2 rounded-[12px] text-xs font-semibold shrink-0 inline-flex items-center gap-1.5 border transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
-                    active
-                      ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
-                      : 'bg-[#12141E] border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA]'
-                  }`}
-                >
-                  <span>{langItem.label}</span>
-                  {nativeScript && (
-                    <span
-                      className={`hidden sm:inline text-[11px] font-medium ${
-                        active ? 'text-[#0B0A10]/85' : 'text-[#CBB6FF]'
-                      }`}
-                    >
-                      {nativeScript}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-
-            {/* More Languages Pill */}
-            <button
-              type="button"
-              onClick={() => setIsMoreLanguagesOpen((prev) => !prev)}
-              aria-expanded={isMoreLanguagesOpen}
-              aria-pressed={isExtraLanguageActive}
-              className={`h-[44px] min-h-[44px] px-3 sm:px-3.5 py-2 rounded-[12px] text-xs font-semibold shrink-0 inline-flex items-center gap-1 border transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
-                isExtraLanguageActive
-                  ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
-                  : isMoreLanguagesOpen
-                    ? 'bg-[#191C29] border-[#B49AF8] text-[#F4F3FA]'
-                    : 'bg-[#12141E] border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5] hover:text-[#F4F3FA]'
-              }`}
+          <div className="relative flex-1 min-w-0">
+            <div
+              data-testid="explore-language-rail"
+              className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pr-8 py-0.5"
             >
-              <span>{isExtraLanguageActive ? selectedLanguage : 'More'}</span>
-              {isMoreLanguagesOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
+              {languageRailPills.map((langItem) => {
+                const active =
+                  selectedLanguage.toLowerCase() === langItem.value.toLowerCase() ||
+                  (selectedLanguage === 'All' && langItem.value === 'All');
+                const nativeScript = NATIVE_LANGUAGE_SCRIPT[langItem.value.toLowerCase()];
+                const pillLabel =
+                  langItem.value === 'All'
+                    ? t('common:all', 'All')
+                    : t(`common:languages.${langItem.value.toLowerCase()}`, langItem.label);
+                return (
+                  <button
+                    key={langItem.value}
+                    type="button"
+                    onClick={() => setSelectedLanguage(langItem.value)}
+                    aria-pressed={active}
+                    className={`h-[40px] min-h-[40px] min-w-[56px] px-4 rounded-full text-xs font-semibold shrink-0 inline-flex items-center justify-center gap-1.5 border transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
+                      active
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-hover)] font-bold'
+                        : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 hover:bg-[var(--bg-elevated)] text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <span>{pillLabel}</span>
+                    {nativeScript && nativeScript !== pillLabel && (
+                      <span
+                        className={`hidden sm:inline text-[11px] font-medium ${
+                          active ? 'text-[var(--accent-on-primary)]/85' : 'text-[var(--accent-hover)]'
+                        }`}
+                      >
+                        {nativeScript}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Subtle right-edge fade cue */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[var(--bg-canvas)] via-[var(--bg-canvas)]/80 to-transparent"
+            />
           </div>
 
-          {/* Pinned 44px Filters Button (never clipped on 360px/390px mobile) */}
+          {/* Pinned 44px Elevated Filters Button (never pushed down or clipped on 360px/390px) */}
           <button
             type="button"
             onClick={() => setIsSmartFilterOpen((prev) => !prev)}
             aria-expanded={isSmartFilterOpen}
             aria-label="Toggle Smart Filters"
-            className={`h-[44px] min-h-[44px] px-3 sm:px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-all duration-180 motion-reduce:transition-none cursor-pointer inline-flex items-center gap-1.5 shrink-0 ${
+            className={`h-[44px] min-h-[44px] max-w-[140px] px-3.5 rounded-full text-xs font-semibold border transition-all duration-180 motion-reduce:transition-none cursor-pointer inline-flex items-center gap-1.5 shrink-0 ${
               isSmartFilterOpen || activeAdvancedFilterCount > 0
-                ? 'bg-[#191C29] border-[#B49AF8] text-[#F4F3FA]'
-                : 'bg-[#12141E] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/50'
+                ? 'bg-[var(--bg-elevated)] border-[var(--accent-primary)] text-[var(--text-primary)]'
+                : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50'
             }`}
           >
-            <SlidersHorizontal className="w-4 h-4 text-[#B49AF8]" />
-            <span>Filters</span>
+            <SlidersHorizontal className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+            <span className="truncate">{t('explore:filters', 'Filters')}</span>
             {activeAdvancedFilterCount > 0 && (
               <span
                 data-testid="active-filter-count-badge"
-                className="px-1.5 py-0.5 rounded-md bg-[#B49AF8] text-[#0B0A10] text-[10px] font-extrabold tabular-nums"
+                className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[var(--accent-primary)] text-[var(--accent-on-primary)] text-[10px] font-extrabold tabular-nums inline-flex items-center justify-center shrink-0"
               >
                 {activeAdvancedFilterCount}
               </span>
@@ -1213,131 +1286,79 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           </button>
         </div>
 
-        {/* Extra Regional Languages Tray (When "More" is clicked) */}
-        {isMoreLanguagesOpen && (
-          <div className="flex flex-wrap items-center gap-1.5 p-2.5 rounded-[12px] bg-[#12141E] border border-[#292B39]">
-            {(extraLanguagePills.length > 0
-              ? extraLanguagePills
-              : [
-                  { label: 'Malayalam', value: 'Malayalam', count: 0 },
-                  { label: 'Kannada', value: 'Kannada', count: 0 },
-                  { label: 'Bengali', value: 'Bengali', count: 0 },
-                  { label: 'Marathi', value: 'Marathi', count: 0 },
-                  { label: 'English', value: 'English', count: 0 },
-                  { label: 'Japanese', value: 'Japanese', count: 0 },
-                ]
-            ).map((langItem) => {
-              const active = selectedLanguage.toLowerCase() === langItem.value.toLowerCase();
-              const nativeScript = NATIVE_LANGUAGE_SCRIPT[langItem.value.toLowerCase()];
-              return (
-                <button
-                  key={`more_lang_${langItem.value}`}
-                  type="button"
-                  onClick={() => {
-                    setSelectedLanguage(langItem.value);
-                    setIsMoreLanguagesOpen(false);
-                  }}
-                  aria-pressed={active}
-                  className={`min-h-[42px] px-3.5 py-1.5 rounded-[12px] text-xs font-semibold inline-flex items-center gap-1.5 border transition-all duration-180 cursor-pointer ${
-                    active
-                      ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
-                      : 'bg-[#191C29] border-[#292B39] hover:border-[#B49AF8]/50 text-[#F4F3FA]'
-                  }`}
-                >
-                  <span>{langItem.label}</span>
-                  {nativeScript && (
-                    <span className={`text-[11px] ${active ? 'text-[#0B0A10]/85' : 'text-[#CBB6FF]'}`}>
-                      {nativeScript}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+        {/* 4. COMPACT SINGLE-LINE 44px OTT SUBSCRIPTIONS TRIGGER STRIP (Opens Dedicated Bottom Sheet) */}
+        <button
+          type="button"
+          onClick={() => setIsOttHubOpen(true)}
+          aria-expanded={isOttHubOpen}
+          aria-label="Toggle OTT Coverage Hub"
+          data-testid="ott-coverage-trigger"
+          className="w-full h-[44px] min-h-[44px] px-3.5 rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 hover:bg-[var(--bg-elevated)] flex items-center justify-between gap-2 text-xs text-left transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Tv className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+            <span className="font-semibold text-[var(--text-primary)] truncate">
+              {t('explore:mySubscriptionsHeader', 'My Subscriptions & OTT Coverage')}
+            </span>
           </div>
-        )}
-
-        {/* 4. COLLAPSIBLE SINGLE-LINE OTT COVERAGE / SUBSCRIPTIONS STRIP (Slim 44px height) */}
-        <div className="rounded-[12px] bg-[#12141E] border border-[#292B39] overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setIsOttHubOpen((prev) => !prev)}
-            aria-expanded={isOttHubOpen}
-            aria-label="Toggle OTT Coverage Hub"
-            className="w-full h-[44px] min-h-[44px] px-3.5 py-2 flex items-center justify-between gap-2 text-xs text-left hover:bg-[#191C29] transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <Tv className="w-4 h-4 text-[#B49AF8] shrink-0" />
-              <span className="font-semibold text-[#F4F3FA] truncate">
-                My Subscriptions &amp; OTT Coverage
+          <div className="flex items-center gap-1.5 shrink-0">
+            {mySubscriptionsEnabled && mySubscriptions.length > 0 ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#34D399] tabular-nums">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
+                <span className="sm:hidden">
+                  {mySubscriptions.length} {mySubscriptions.length === 1 ? 'OTT' : 'OTTs'} ·{' '}
+                  {ottSummaryCoverage.percentage}%
+                </span>
+                <span className="hidden sm:inline">
+                  {mySubscriptions.length} {mySubscriptions.length === 1 ? 'OTT' : 'OTTs'} active ·{' '}
+                  {ottSummaryCoverage.percentage}% coverage
+                </span>
               </span>
-              {mySubscriptionsEnabled && mySubscriptions.length > 0 ? (
-                <span className="px-1.5 py-0.5 rounded bg-[#34D399]/15 border border-[#34D399]/35 text-[10px] font-bold text-[#34D399] shrink-0">
-                  {mySubscriptions.length} Active
-                </span>
-              ) : (
-                <span className="hidden sm:inline text-[11px] text-[#A1A5B5] truncate">
-                  Filter by Crunchyroll, Netflix, JioHotstar &amp; free legal streams
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1 text-xs font-semibold text-[#B49AF8] shrink-0">
-              <span>{isOttHubOpen ? 'Hide' : 'Expand'}</span>
-              {isOttHubOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </div>
-          </button>
+            ) : mySubscriptions.length > 0 ? (
+              <span className="text-[11px] font-medium text-[var(--text-secondary)] tabular-nums">
+                My OTTs: Off · {mySubscriptions.length} saved
+              </span>
+            ) : (
+              <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                {t('explore:myOttsOff', 'My OTTs: Off')}
+              </span>
+            )}
+            <ChevronRight className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
+          </div>
+        </button>
 
-          {isOttHubOpen && (
-            <div className="p-3 border-t border-[#292B39] bg-[#0B0A10]/40">
-              <OttHubSection
-                catalogIndex={fullCatalogIndex && fullCatalogIndex.length > 0 ? fullCatalogIndex : statsSourceList}
-                selectedPlatform={selectedPlatform}
-                activeLanguage={selectedLanguage}
-                onSelectPlatform={(platformName) => {
-                  setSelectedPlatform(platformName);
-                  if (platformName !== 'All Platforms') {
-                    gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }
-                }}
-                mySubscriptions={mySubscriptions}
-                mySubscriptionsEnabled={mySubscriptionsEnabled}
-                onToggleSubscriptionPlatform={(id) => onToggleSubscriptionPlatform?.(id)}
-                onToggleMySubscriptionsEnabled={(enabled) => onToggleMySubscriptionsEnabled?.(enabled)}
-                onClearSubscriptions={() => onClearSubscriptions?.()}
-                onSelectAnime={(a) => handleSelectAnimeWithScrollSave(a as any)}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* 3. UNIFIED FILTER & SORT BOTTOM SHEET (MOBILE) / PANEL (DESKTOP) */}
+        {/* 3. FLAGSHIP "FILTER & SORT ANIME" BOTTOM SHEET (Eclipse Dark, Zero Native select dropdown) */}
         {isSmartFilterOpen && (
-          <div className="fixed inset-0 z-[75] sm:static sm:z-auto flex items-end sm:block">
-            {/* Mobile Backdrop */}
+          <div className="fixed inset-0 z-[75] flex items-end sm:items-center sm:justify-center sm:p-4">
+            {/* Dimmed Backdrop */}
             <div
               onClick={() => setIsSmartFilterOpen(false)}
-              className="fixed inset-0 bg-[#0B0A10]/80 backdrop-blur-xs sm:hidden"
+              className="fixed inset-0 bg-[var(--bg-canvas)]/80 backdrop-blur-xs transition-opacity duration-180 motion-reduce:transition-none"
               aria-hidden="true"
             />
 
             <div
               role="dialog"
               aria-modal="true"
-              aria-label="Catalog Filters"
+              aria-label="Filter & Sort Anime"
               data-testid="smart-filter-drawer"
-              className="relative z-10 w-full max-h-[86vh] overflow-y-auto rounded-t-3xl sm:rounded-[12px] bg-[#12141E] border-t sm:border border-[#292B39] p-4 sm:p-5 space-y-4 shadow-2xl"
-              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}
+              className="relative z-10 w-full sm:max-w-2xl max-h-[88vh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-[var(--bg-surface)] border-t sm:border border-[var(--border-subtle)] shadow-2xl overflow-hidden transition-transform duration-180 motion-reduce:transition-none"
             >
-              {/* Mobile Drag Handle */}
-              <div className="sm:hidden w-10 h-1.5 rounded-full bg-[#292B39] mx-auto -mt-1 mb-1" />
+              {/* Mobile Drag Handle Pill */}
+              <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[var(--bg-surface)] shrink-0">
+                <div className="w-10 h-1 rounded-full bg-[var(--border-subtle)]" />
+              </div>
 
-              {/* Header */}
-              <div className="flex items-center justify-between pb-2.5 border-b border-[#292B39]">
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="w-4 h-4 text-[#B49AF8]" />
-                  <h2 className="text-sm sm:text-base font-bold text-[#F4F3FA]">Filter &amp; Sort Anime</h2>
-                  {activeAdvancedFilterCount > 0 && (
-                    <span className="px-2 py-0.5 rounded-md bg-[#B49AF8]/15 border border-[#B49AF8]/35 text-[#B49AF8] text-[11px] font-bold">
-                      {activeAdvancedFilterCount} active
+              {/* Sticky Top Header */}
+              <div className="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                <div className="flex items-center gap-2 min-w-0">
+                  <SlidersHorizontal className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+                  <h2 className="text-base font-bold text-[var(--text-primary)] tracking-tight truncate">
+                    {t('explore:filterSheet.title', 'Filter & Sort Anime')}
+                  </h2>
+                  {totalResettableFilterCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/35 text-[var(--accent-hover)] text-[11px] font-bold tabular-nums shrink-0">
+                      {totalResettableFilterCount}
                     </span>
                   )}
                 </div>
@@ -1345,230 +1366,508 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                   type="button"
                   onClick={() => setIsSmartFilterOpen(false)}
                   aria-label="Close filters"
-                  className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 cursor-pointer shrink-0"
+                  className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50 flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Consolidated Languages Section inside Unified Filter Sheet */}
-              <div className="space-y-2">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
-                  Dub Languages
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    ...primaryLanguagePills,
-                    ...(extraLanguagePills.length > 0
-                      ? extraLanguagePills
-                      : [
-                          { label: 'Malayalam', value: 'Malayalam', count: 0 },
-                          { label: 'Kannada', value: 'Kannada', count: 0 },
-                          { label: 'Bengali', value: 'Bengali', count: 0 },
-                          { label: 'Marathi', value: 'Marathi', count: 0 },
-                        ]),
-                  ].map((langItem) => {
-                    const active =
-                      selectedLanguage.toLowerCase() === langItem.value.toLowerCase() ||
-                      (selectedLanguage === 'All' && langItem.value === 'All');
-                    return (
-                      <button
-                        key={`sheet_lang_${langItem.value}`}
-                        type="button"
-                        onClick={() => setSelectedLanguage(langItem.value)}
-                        aria-pressed={active}
-                        className={`min-h-[42px] px-3 py-1.5 rounded-[12px] text-xs font-semibold border transition-colors duration-180 cursor-pointer ${
-                          active
-                            ? 'bg-[#B49AF8] text-[#0B0A10] border-[#CBB6FF] font-bold'
-                            : 'bg-[#191C29] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/50'
-                        }`}
-                      >
-                        {langItem.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Primary Selectors: OTT Platforms, Genre, Format Type, Release Status, Sort By */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 pt-2 border-t border-[#292B39]">
-                {[
-                  { label: 'STREAMING PLATFORM', aria: 'Filter by platform', val: selectedPlatform, set: setSelectedPlatform, opts: PLATFORMS },
-                  { label: 'GENRE', aria: 'Filter by genre', val: selectedGenre, set: setSelectedGenre, opts: GENRES },
-                  { label: 'TYPE', aria: 'Filter by type', val: selectedType, set: setSelectedType, opts: TYPES },
-                  { label: 'RELEASE STATUS', aria: 'Filter by status', val: selectedStatus, set: setSelectedStatus, opts: STATUSES },
-                ].map((item) => (
-                  <div
-                    key={`catalog_filter_${item.label}`}
-                    className="flex flex-col justify-center min-h-[48px] gap-1 bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 rounded-[12px] px-3 py-2 transition-colors duration-180"
-                  >
-                    <span className="text-[10px] text-[#A1A5B5] font-bold uppercase tracking-wider">
-                      {item.label}
-                    </span>
-                    <div className="relative flex items-center">
-                      <select
-                        value={item.val}
-                        onChange={(e) => item.set(e.target.value)}
-                        aria-label={item.aria}
-                        className="bg-transparent text-[#F4F3FA] text-xs font-semibold outline-none cursor-pointer appearance-none w-full pr-5 truncate"
-                      >
-                        {item.opts.map((o) => (
-                          <option key={o} value={o} className="bg-[#12141E] text-[#F4F3FA]">
-                            {o}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-0 w-3.5 h-3.5 text-[#A1A5B5] pointer-events-none" />
-                    </div>
+              {/* Scrollable Filter Body (Comfortable pb-10 clearance above pinned footer) */}
+              <div className="flex-1 overflow-y-auto px-4 sm:px-5 pt-4 pb-10 space-y-6">
+                {/* 1. QUICK SORT (1-Tap Segmented Chip Grid — NO select dropdown) */}
+                <section className="space-y-2.5">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    {t('explore:filterSheet.quickSort', 'Quick Sort')}
                   </div>
-                ))}
-
-                {/* Sort Dropdown */}
-                <div className="flex flex-col justify-center min-h-[48px] gap-1 bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/50 rounded-[12px] px-3 py-2 transition-colors duration-180">
-                  <span className="text-[10px] text-[#A1A5B5] font-bold uppercase tracking-wider">
-                    SORT BY
-                  </span>
-                  <div className="relative flex items-center">
-                    <select
-                      value={selectedSort}
-                      onChange={(e) => setSelectedSort(e.target.value)}
-                      aria-label="Sort catalog"
-                      className="bg-transparent text-[#F4F3FA] text-xs font-semibold outline-none cursor-pointer appearance-none w-full pr-5 truncate"
-                    >
-                      {SORTS.map((s) => (
-                        <option key={s.value} value={s.value} className="bg-[#12141E] text-[#F4F3FA]">
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-0 w-3.5 h-3.5 text-[#A1A5B5] pointer-events-none" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Dub Availability Toggles */}
-              <div className="space-y-2 pt-2 border-t border-[#292B39]">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
-                  Dub Availability &amp; Verification
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setVerifiedOnly((prev) => !prev)}
-                    aria-pressed={verifiedOnly}
-                    className={`min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-all duration-180 cursor-pointer inline-flex items-center gap-2 ${
-                      verifiedOnly
-                        ? 'bg-[#B49AF8] border-[#CBB6FF] text-[#0B0A10] font-bold'
-                        : 'bg-[#191C29] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/50'
-                    }`}
-                  >
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>Verified availability only</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFullyDubbedOnly((prev) => !prev)}
-                    aria-pressed={fullyDubbedOnly}
-                    className={`min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-all duration-180 cursor-pointer inline-flex items-center gap-2 ${
-                      fullyDubbedOnly
-                        ? 'bg-[#B49AF8] border-[#CBB6FF] text-[#0B0A10] font-bold'
-                        : 'bg-[#191C29] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/50'
-                    }`}
-                  >
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>Fully dubbed seasons only</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFreeLegalOnly((prev) => !prev)}
-                    aria-pressed={freeLegalOnly}
-                    className={`min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-all duration-180 cursor-pointer inline-flex items-center gap-2 ${
-                      freeLegalOnly
-                        ? 'bg-[#B49AF8] border-[#CBB6FF] text-[#0B0A10] font-bold'
-                        : 'bg-[#191C29] border-[#292B39] text-[#F4F3FA] hover:border-[#B49AF8]/50'
-                    }`}
-                  >
-                    <Tv className="w-4 h-4 shrink-0" />
-                    <span>Free Legal Streaming Only</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Episode Length + Minimum Rating */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-[#292B39]">
-                <div className="space-y-2">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
-                    Episode Length
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {EPISODE_LENGTH_OPTIONS.map((opt) => {
-                      const active = episodeLength === opt.id;
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {SORTS.map((sortOpt) => {
+                      const active = selectedSort === sortOpt.value;
+                      const sortKeyMap: Record<string, string> = {
+                        popularity: 'explore:filterSheet.sort.popular',
+                        rating: 'explore:filterSheet.sort.rating',
+                        newest: 'explore:filterSheet.sort.year',
+                        title: 'explore:filterSheet.sort.title',
+                      };
                       return (
                         <button
-                          key={opt.id}
+                          key={`sort_chip_${sortOpt.value}`}
                           type="button"
-                          onClick={() => setEpisodeLength(opt.id)}
+                          onClick={() => setSelectedSort(sortOpt.value)}
                           aria-pressed={active}
-                          className={`min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-semibold border transition-colors duration-180 cursor-pointer ${
+                          className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold border transition-all duration-180 motion-reduce:transition-none cursor-pointer inline-flex items-center justify-center text-center ${
                             active
-                              ? 'bg-[#B49AF8] border-[#CBB6FF] text-[#0B0A10] font-bold'
-                              : 'bg-[#191C29] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
+                              ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-hover)] font-bold'
+                              : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50'
                           }`}
                         >
-                          {opt.label}
+                          {t(sortKeyMap[sortOpt.value] || sortOpt.label, sortOpt.label)}
                         </button>
                       );
                     })}
                   </div>
-                </div>
+                </section>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label
-                      htmlFor="smart-filter-min-rating"
-                      className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5] flex items-center gap-1.5"
-                    >
-                      <Star className="w-3.5 h-3.5 text-[#F9C876] fill-[#F9C876]" />
-                      <span>Minimum Catalog Score</span>
-                    </label>
-                    <span className="text-xs font-bold text-[#F9C876] bg-[#191C29] border border-[#292B39] px-2 py-0.5 rounded-lg">
-                      {minRating > 0 ? `${minRating.toFixed(1)} / 10` : 'Any Rating'}
-                    </span>
+                {/* 2. DUB LANGUAGES (Balanced Grid Pills) */}
+                <section className="space-y-2.5 pt-4 border-t border-[var(--border-subtle)]">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    {t('explore:filterSheet.dubLanguages', 'Dub Languages')}
                   </div>
-                  <input
-                    id="smart-filter-min-rating"
-                    type="range"
-                    min={0}
-                    max={10}
-                    step={0.5}
-                    value={minRating}
-                    onChange={(e) => setMinRating(parseFloat(e.target.value))}
-                    className="w-full accent-[#B49AF8] cursor-pointer h-2 bg-[#191C29] rounded-lg"
-                  />
-                </div>
+                  <div className="flex flex-wrap gap-2">
+                    {languageRailPills.map((langItem) => {
+                      const active =
+                        selectedLanguage.toLowerCase() === langItem.value.toLowerCase() ||
+                        (selectedLanguage === 'All' && langItem.value === 'All');
+                      const sheetLangLabel =
+                        langItem.value === 'All'
+                          ? t('common:all', 'All')
+                          : t(`common:languages.${langItem.value.toLowerCase()}`, langItem.label);
+                      return (
+                        <button
+                          key={`sheet_lang_${langItem.value}`}
+                          type="button"
+                          onClick={() => setSelectedLanguage(langItem.value)}
+                          aria-pressed={active}
+                          className={`min-h-[42px] min-w-[74px] px-4 py-2 rounded-full text-xs font-semibold border transition-all duration-180 motion-reduce:transition-none cursor-pointer inline-flex items-center justify-center ${
+                            active
+                              ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-hover)] font-bold'
+                              : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50'
+                          }`}
+                        >
+                          {sheetLangLabel}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* 3. STREAMING PLATFORM (Interactive Brand Chips — NO select dropdown) */}
+                <section className="space-y-2.5 pt-4 border-t border-[var(--border-subtle)]">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                      {t('explore:filterSheet.ottPlatforms', 'OTT Platforms')}
+                    </span>
+                    {PLATFORMS.length > FEATURED_PLATFORMS.length && (
+                      <button
+                        type="button"
+                        onClick={() => setIsAllPlatformsExpanded((prev) => !prev)}
+                        className="text-xs font-semibold text-[var(--accent-primary)] hover:text-[var(--accent-hover)] inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>
+                          {isAllPlatformsExpanded
+                            ? 'Show fewer'
+                            : `All platforms (${PLATFORMS.length - 1})`}
+                        </span>
+                        {isAllPlatformsExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {visiblePlatformOptions.map((platformOpt) => {
+                      const active = selectedPlatform === platformOpt;
+                      const displayLabel = platformOpt === 'All Platforms' ? 'All' : platformOpt;
+                      return (
+                        <button
+                          key={`platform_chip_${platformOpt}`}
+                          type="button"
+                          onClick={() => setSelectedPlatform(platformOpt)}
+                          aria-pressed={active}
+                          className={`min-h-[40px] min-w-[60px] px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all duration-180 motion-reduce:transition-none cursor-pointer inline-flex items-center justify-center gap-1.5 ${
+                            active
+                              ? 'bg-[var(--accent-primary)]/15 border-[var(--accent-primary)] text-[var(--text-primary)] font-bold'
+                              : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50'
+                          }`}
+                        >
+                          {active && <Check className="w-3.5 h-3.5 text-[var(--accent-primary)] shrink-0" />}
+                          <span>{displayLabel}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* 4. TYPE & RELEASE STATUS (Compact 2-Row Segmented Pills — NO select dropdown) */}
+                <section className="space-y-4 pt-4 border-t border-[var(--border-subtle)]">
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                      {t('explore:filterSheet.type', 'Type')}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {TYPES.map((typeOpt) => {
+                        const active = selectedType === typeOpt;
+                        const label = typeOpt === 'All Types' ? t('common:all', 'All') : typeOpt;
+                        return (
+                          <button
+                            key={`type_pill_${typeOpt}`}
+                            type="button"
+                            onClick={() => setSelectedType(typeOpt)}
+                            aria-pressed={active}
+                            className={`min-h-[40px] min-w-[60px] px-3.5 py-1.5 rounded-full text-xs font-semibold border shrink-0 transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
+                              active
+                                ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-hover)] font-bold'
+                                : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                      {t('explore:filterSheet.releaseStatus', 'Release Status')}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {STATUSES.map((statusOpt) => {
+                        const active = selectedStatus === statusOpt;
+                        const statusKeyMap: Record<string, string> = {
+                          Airing: 'explore:filterSheet.statuses.airing',
+                          Completed: 'explore:filterSheet.statuses.completed',
+                          Upcoming: 'explore:filterSheet.statuses.upcoming',
+                        };
+                        const label =
+                          statusOpt === 'All Status'
+                            ? t('common:all', 'All')
+                            : t(statusKeyMap[statusOpt] || statusOpt, statusOpt);
+                        return (
+                          <button
+                            key={`status_pill_${statusOpt}`}
+                            type="button"
+                            onClick={() => setSelectedStatus(statusOpt)}
+                            aria-pressed={active}
+                            className={`min-h-[40px] min-w-[60px] px-3.5 py-1.5 rounded-full text-xs font-semibold border shrink-0 transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
+                              active
+                                ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-hover)] font-bold'
+                                : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+
+                {/* 5. GENRE (Interactive Chip Selector + Inline Quick Filter — NO select dropdown) */}
+                <section className="space-y-2.5 pt-4 border-t border-[var(--border-subtle)]">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                      {t('explore:filterSheet.genre', 'Genre')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAllGenresExpanded((prev) => !prev)}
+                      className="text-xs font-semibold text-[var(--accent-primary)] hover:text-[var(--accent-hover)] inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>{isAllGenresExpanded ? 'Compact row' : 'Expand all'}</span>
+                      {isAllGenresExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Optional Inline Genre Search */}
+                  <div className="relative flex items-center">
+                    <Search className="w-3.5 h-3.5 text-[var(--text-secondary)] absolute left-3 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={genreSearchQuery}
+                      onChange={(e) => setGenreSearchQuery(e.target.value)}
+                      placeholder="Filter genres (e.g. Action, Isekai, Romance)..."
+                      aria-label="Filter genres"
+                      className="w-full h-[40px] min-h-[40px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] rounded-xl pl-9 pr-10 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none transition-colors duration-180"
+                    />
+                    {genreSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setGenreSearchQuery('')}
+                        aria-label="Clear genre filter"
+                        className="absolute right-0.5 w-10 h-10 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div
+                    className={
+                      isAllGenresExpanded || genreSearchQuery.trim().length > 0
+                        ? 'flex flex-wrap gap-1.5'
+                        : 'flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5'
+                    }
+                  >
+                    {filteredGenreOptions.map((genreOpt) => {
+                      const active = selectedGenre === genreOpt;
+                      const label = genreOpt === 'All Genres' ? 'All' : genreOpt;
+                      return (
+                        <button
+                          key={`genre_chip_${genreOpt}`}
+                          type="button"
+                          onClick={() => setSelectedGenre(genreOpt)}
+                          aria-pressed={active}
+                          className={`min-h-[38px] min-w-[56px] px-3.5 py-1.5 rounded-full text-xs font-semibold border shrink-0 transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
+                            active
+                              ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-hover)] font-bold'
+                              : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                    {filteredGenreOptions.length === 1 && genreSearchQuery.trim() && (
+                      <span className="text-xs text-[var(--text-secondary)] py-2 px-1">
+                        No matching genres for &ldquo;{genreSearchQuery.trim()}&rdquo;
+                      </span>
+                    )}
+                  </div>
+                </section>
+
+                {/* 6. DUB AVAILABILITY & VERIFICATION (Grouped Eclipse Card with iOS-Style Switches) */}
+                <section className="space-y-2.5 pt-4 border-t border-[var(--border-subtle)]">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    {t('explore:filterSheet.dubAvailability', 'Dub Availability')}
+                  </div>
+                  <div className="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)] overflow-hidden">
+                    {[
+                      {
+                        key: 'verifiedOnly',
+                        label: t('explore:filterSheet.verifiedOnly', 'Verified availability only'),
+                        description: 'Confirmed Indian regional audio & streaming metadata',
+                        checked: verifiedOnly,
+                        toggle: () => setVerifiedOnly((prev) => !prev),
+                      },
+                      {
+                        key: 'fullyDubbedOnly',
+                        label: t('explore:filterSheet.fullyDubbedOnly', 'Fully dubbed seasons only'),
+                        description: 'Exclude incomplete or partial-episode dub runs',
+                        checked: fullyDubbedOnly,
+                        toggle: () => setFullyDubbedOnly((prev) => !prev),
+                      },
+                      {
+                        key: 'freeLegalOnly',
+                        label: 'Free legal streaming only',
+                        description: 'Muse India, Ani-One & official YouTube channels',
+                        checked: freeLegalOnly,
+                        toggle: () => setFreeLegalOnly((prev) => !prev),
+                      },
+                    ].map((row) => (
+                      <button
+                        key={row.key}
+                        type="button"
+                        role="switch"
+                        aria-checked={row.checked}
+                        onClick={row.toggle}
+                        className="w-full min-h-[56px] px-4 py-3 flex items-center justify-between gap-3 text-left hover:bg-[var(--bg-surface)]/35 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-[var(--text-primary)]">
+                            {row.label}
+                          </div>
+                          <div className="text-xs text-[var(--text-secondary)] mt-0.5">
+                            {row.description}
+                          </div>
+                        </div>
+                        <span
+                          aria-hidden="true"
+                          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-180 motion-reduce:transition-none ${
+                            row.checked
+                              ? 'bg-[var(--accent-primary)] border-[var(--accent-hover)]'
+                              : 'bg-[var(--bg-surface)] border-[var(--border-subtle)]'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 rounded-full shadow-sm transition-transform duration-180 motion-reduce:transition-none ${
+                              row.checked
+                                ? 'translate-x-5 bg-[var(--accent-on-primary)]'
+                                : 'translate-x-1 bg-[var(--text-secondary)]'
+                            }`}
+                          />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                {/* 7. EPISODE LENGTH & MINIMUM CATALOG SCORE */}
+                <section className="space-y-4 pt-4 border-t border-[var(--border-subtle)]">
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                      Episode Length
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {EPISODE_LENGTH_OPTIONS.map((opt) => {
+                        const active = episodeLength === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setEpisodeLength(opt.id)}
+                            aria-pressed={active}
+                            className={`min-h-[40px] px-3.5 py-2 rounded-full text-xs font-semibold border transition-all duration-180 motion-reduce:transition-none cursor-pointer ${
+                              active
+                                ? 'bg-[var(--accent-primary)] border-[var(--accent-hover)] text-[var(--accent-on-primary)] font-bold'
+                                : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <label
+                        htmlFor="smart-filter-min-rating"
+                        className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5"
+                      >
+                        <Star className="w-4 h-4 text-[#F9C876] fill-[#F9C876]" />
+                        <span>Minimum Catalog Score</span>
+                      </label>
+                      <span className="text-xs font-bold text-[#F9C876] bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-2.5 py-0.5 rounded-full tabular-nums">
+                        {minRating > 0 ? `${minRating.toFixed(1)} / 10` : 'Any Score'}
+                      </span>
+                    </div>
+                    <input
+                      id="smart-filter-min-rating"
+                      type="range"
+                      min={0}
+                      max={10}
+                      step={0.5}
+                      value={minRating}
+                      onChange={(e) => setMinRating(parseFloat(e.target.value))}
+                      className="w-full accent-[var(--accent-primary)] cursor-pointer h-2 bg-[var(--bg-surface)] rounded-lg"
+                    />
+                  </div>
+                </section>
               </div>
 
-              {/* Sticky Filter Drawer Footer: Reset & Show results (#B49AF8) CTA */}
-              <div className="sticky bottom-0 bg-[#12141E] flex items-center justify-between gap-3 pt-3 border-t border-[#292B39]">
-                <Button
+              {/* Sticky Bottom Action Bar: Ghost Reset + Prominent #B49AF8 Show results (N) */}
+              <div
+                className="shrink-0 bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] px-4 sm:px-5 py-3 flex items-center gap-3"
+                style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' }}
+              >
+                <button
                   type="button"
-                  variant="secondary"
-                  size="md"
                   onClick={handleClearAllFilters}
+                  className="min-h-[46px] px-4 rounded-xl text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] border border-transparent hover:border-[var(--border-subtle)] transition-colors duration-180 motion-reduce:transition-none cursor-pointer inline-flex items-center justify-center gap-1.5 shrink-0"
                 >
-                  Reset
-                </Button>
-                <Button
+                  <span>{t('explore:filterSheet.resetFilters', 'Reset')}</span>
+                  {totalResettableFilterCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[11px] font-bold text-[var(--accent-hover)] tabular-nums">
+                      {totalResettableFilterCount}
+                    </span>
+                  )}
+                </button>
+                <button
                   type="button"
-                  variant="primary"
-                  size="md"
                   aria-label="Apply Filters"
                   onClick={() => setIsSmartFilterOpen(false)}
+                  className="min-h-[46px] flex-1 px-5 rounded-xl bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] text-sm font-bold transition-colors duration-180 motion-reduce:transition-none cursor-pointer inline-flex items-center justify-center tabular-nums"
                 >
-                  Show results ({totalCatalogCount})
-                </Button>
+                  {t('explore:filterSheet.showResultsCount', {
+                    count: formatLocaleNumber(totalCatalogCount, uiLocale),
+                    defaultValue: `Show results (${totalCatalogCount})`,
+                  })}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4b. DEDICATED "MY SUBSCRIPTIONS & OTT COVERAGE" BOTTOM SHEET */}
+        {isOttHubOpen && (
+          <div className="fixed inset-0 z-[75] flex items-end sm:items-center sm:justify-center sm:p-4">
+            {/* Dimmed Backdrop */}
+            <div
+              onClick={() => setIsOttHubOpen(false)}
+              className="fixed inset-0 bg-[var(--bg-canvas)]/80 backdrop-blur-xs transition-opacity duration-180 motion-reduce:transition-none"
+              aria-hidden="true"
+            />
+
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="My Subscriptions & OTT Coverage"
+              data-testid="ott-subscriptions-sheet"
+              className="relative z-10 w-full sm:max-w-2xl max-h-[88vh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-[var(--bg-surface)] border-t sm:border border-[var(--border-subtle)] shadow-2xl overflow-hidden transition-transform duration-180 motion-reduce:transition-none"
+            >
+              {/* Mobile Drag Handle Pill */}
+              <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[var(--bg-surface)] shrink-0">
+                <div className="w-10 h-1 rounded-full bg-[var(--border-subtle)]" />
+              </div>
+
+              {/* Sticky Top Header */}
+              <div className="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Tv className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+                  <h2 className="text-base font-bold text-[var(--text-primary)] tracking-tight truncate">
+                    {t('explore:ottSheet.title', 'My Subscriptions & OTT Coverage')}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOttHubOpen(false)}
+                  aria-label="Close OTT subscriptions sheet"
+                  className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50 flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Scrollable Sheet Body */}
+              <div className="flex-1 overflow-y-auto px-4 sm:px-5 pt-4 pb-8">
+                <OttHubSection
+                  mode="sheet"
+                  catalogIndex={ottCatalogIndex}
+                  selectedPlatform={selectedPlatform}
+                  activeLanguage={selectedLanguage}
+                  onCloseSheet={() => setIsOttHubOpen(false)}
+                  onSelectPlatform={(platformName) => {
+                    setSelectedPlatform(platformName);
+                    if (platformName !== 'All Platforms') {
+                      gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }}
+                  mySubscriptions={mySubscriptions}
+                  mySubscriptionsEnabled={mySubscriptionsEnabled}
+                  onToggleSubscriptionPlatform={(id) => onToggleSubscriptionPlatform?.(id)}
+                  onToggleMySubscriptionsEnabled={(enabled) => onToggleMySubscriptionsEnabled?.(enabled)}
+                  onClearSubscriptions={() => onClearSubscriptions?.()}
+                  onSelectAnime={(a) => handleSelectAnimeWithScrollSave(a as any)}
+                />
+              </div>
+
+              {/* Sticky Bottom Action Bar */}
+              <div
+                className="shrink-0 bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] px-4 sm:px-5 py-3 flex items-center gap-3"
+                style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onClearSubscriptions?.()}
+                  disabled={mySubscriptions.length === 0}
+                  className="min-h-[46px] px-4 rounded-xl text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-180 motion-reduce:transition-none cursor-pointer shrink-0"
+                >
+                  {t('common:clear', 'Clear')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsOttHubOpen(false)}
+                  className="min-h-[46px] flex-1 px-5 rounded-xl bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] text-sm font-bold transition-colors duration-180 motion-reduce:transition-none cursor-pointer inline-flex items-center justify-center"
+                >
+                  {t('explore:ottSheet.done', 'Done')}
+                </button>
               </div>
             </div>
           </div>
@@ -1580,7 +1879,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             data-testid="active-filter-chips"
             className="flex flex-wrap items-center gap-1.5 pt-0.5"
           >
-            <span className="text-xs font-bold text-[#A1A5B5] mr-1">
+            <span className="text-xs font-bold text-[var(--text-secondary)] mr-1">
               {totalCatalogCount} {totalCatalogCount === 1 ? 'match' : 'matches'}:
             </span>
             {activeFilterChips.map((chip) => (
@@ -1589,7 +1888,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 type="button"
                 onClick={() => handleRemoveChip(chip)}
                 aria-label={`Remove filter ${chip.label}`}
-                className="min-h-[40px] sm:min-h-[44px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#191C29] border border-[#B49AF8]/40 text-xs font-semibold text-[#CBB6FF] hover:border-[#B49AF8] hover:text-[#F4F3FA] transition-colors duration-180 cursor-pointer"
+                className="min-h-[40px] sm:min-h-[44px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--accent-primary)]/40 text-xs font-semibold text-[var(--accent-hover)] hover:border-[var(--accent-primary)] hover:text-[var(--text-primary)] transition-colors duration-180 cursor-pointer"
               >
                 <span>{chip.label}</span>
                 <X className="w-3.5 h-3.5" />
@@ -1598,9 +1897,9 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             <button
               type="button"
               onClick={handleShareFilterUrl}
-              className="min-h-[40px] sm:min-h-[44px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#12141E] border border-[#292B39] text-xs font-semibold text-[#F4F3FA] hover:bg-[#191C29] transition-colors duration-180 cursor-pointer"
+              className="min-h-[40px] sm:min-h-[44px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors duration-180 cursor-pointer"
             >
-              <Share2 className="w-3.5 h-3.5 text-[#B49AF8]" />
+              <Share2 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
               <span>Share Link</span>
             </button>
             <button
@@ -1617,11 +1916,11 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       {/* FOR YOU METADATA BANNER */}
       {feedView === 'foryou' && (
         <div className="mt-2.5 mb-1">
-          <div className="bg-[#12141E] border border-[#292B39] rounded-[12px] p-3 flex items-center gap-3">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[12px] p-3 flex items-center gap-3">
             <Sparkles className="w-4 h-4 text-[#F9C876] shrink-0" />
             <div>
-              <div className="text-xs font-bold text-[#F4F3FA]">Curated For You • Indian Regional Dubs</div>
-              <div className="text-[11px] text-[#A1A5B5] mt-0.5">
+              <div className="text-xs font-bold text-[var(--text-primary)]">Curated For You • Indian Regional Dubs</div>
+              <div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
                 Tailored to your preferred Tamil, Telugu, Hindi &amp; Malayalam anime dubs.
               </div>
             </div>
@@ -1632,30 +1931,40 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
       {/* 2. POSTER-FIRST ANIME CATALOG GRID (Hybrid Infinite Scroll) */}
       <div ref={gridTopRef} className="pt-3 sm:pt-5">
         {/* Compact Grid Status Row */}
-        <div className="flex items-center justify-between mb-2.5">
-          <div className="flex items-center space-x-1.5 text-xs">
-            <span className="text-[#A1A5B5]">
+        <div className="flex items-center justify-between gap-2 mb-2.5">
+          <div className="flex items-center space-x-1.5 text-xs min-w-0">
+            <span className="text-[var(--text-secondary)] truncate">
               {catalogStatus === 'error' || catalogStatus === 'offline' ? (
                 <span className="text-[#F87171] font-semibold">
                   {catalogStatus === 'offline' ? 'Offline — unable to reach catalog' : 'Unable to load catalog'}
                 </span>
               ) : displayedAnime.length > 0 ? (
-                <>
-                  Showing <strong className="text-[#F4F3FA] font-bold tabular-nums">{displayedAnime.length}</strong> of{' '}
-                  <strong className="text-[#F4F3FA] font-bold tabular-nums">{totalCatalogCount}</strong> Titles
-                </>
+                <span className="tabular-nums font-medium">
+                  {t('explore:showingTitlesOf', {
+                    shown: formatLocaleNumber(displayedAnime.length, uiLocale),
+                    total: formatLocaleNumber(totalCatalogCount, uiLocale),
+                    defaultValue: `Showing ${displayedAnime.length} of ${totalCatalogCount} Titles`,
+                  })}
+                </span>
               ) : loading ? (
-                <span>Loading catalog...</span>
+                <span>{t('explore:loadingCatalog', 'Loading catalog...')}</span>
               ) : (
-                <>
-                  Showing <strong className="text-[#F4F3FA] font-bold tabular-nums">0</strong> Titles
-                </>
+                <span className="tabular-nums">
+                  {t('explore:showingTitles', {
+                    count: formatLocaleNumber(0, uiLocale),
+                    defaultValue: 'Showing 0 Titles',
+                  })}
+                </span>
               )}
             </span>
           </div>
           {catalogStatus !== 'error' && catalogStatus !== 'offline' && (
-            <span className="text-xs text-[#A1A5B5] tabular-nums">
-              Batch {paginationMeta.currentPage} of {Math.max(1, paginationMeta.totalPages)}
+            <span className="text-xs text-[var(--text-secondary)] tabular-nums shrink-0">
+              {t('explore:batchIndicator', {
+                current: formatLocaleNumber(paginationMeta.currentPage, uiLocale),
+                total: formatLocaleNumber(Math.max(1, paginationMeta.totalPages), uiLocale),
+                defaultValue: `Batch ${paginationMeta.currentPage} of ${Math.max(1, paginationMeta.totalPages)}`,
+              })}
             </span>
           )}
         </div>
@@ -1668,7 +1977,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           <div
             role="alert"
             data-testid="catalog-error-banner"
-            className="p-6 sm:p-8 rounded-[12px] bg-[#12141E] border border-[#F87171]/40 text-center space-y-3 max-w-xl mx-auto my-4"
+            className="p-6 sm:p-8 rounded-[12px] bg-[var(--bg-surface)] border border-[#F87171]/40 text-center space-y-3 max-w-xl mx-auto my-4"
           >
             <div className="w-12 h-12 rounded-[12px] bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] flex items-center justify-center mx-auto">
               {catalogStatus === 'offline' ? (
@@ -1677,10 +1986,10 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 <AlertTriangle className="w-6 h-6" />
               )}
             </div>
-            <h3 className="text-base font-bold text-[#F4F3FA]">
+            <h3 className="text-base font-bold text-[var(--text-primary)]">
               {catalogStatus === 'offline' ? 'You are currently offline' : 'Failed to load anime catalog'}
             </h3>
-            <p className="text-xs text-[#A1A5B5] max-w-md mx-auto leading-relaxed">
+            <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto leading-relaxed">
               {catalogError || 'The catalog service could not be reached. Please check your connection and retry.'}
             </p>
             <div className="pt-1">
@@ -1690,21 +1999,25 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 onClick={() => fetchCatalogBatch(1, 'reset')}
                 leftIcon={<RefreshCw className="w-4 h-4" />}
               >
-                Retry
+                {t('common:retry', 'Retry')}
               </Button>
             </div>
           </div>
         ) : displayedAnime.length === 0 ? (
-          <div className="text-center py-12 bg-[#12141E] rounded-[12px] border border-[#292B39] space-y-3">
-            <p className="text-[#F4F3FA] text-sm font-semibold">No anime matches your selected filters.</p>
-            <p className="text-[#A1A5B5] text-xs">Try clearing a language, platform, or search filter.</p>
+          <div className="text-center py-12 bg-[var(--bg-surface)] rounded-[12px] border border-[var(--border-subtle)] space-y-3 px-4">
+            <p className="text-[var(--text-primary)] text-sm font-semibold">
+              {t('explore:noAnimeMatchesTitle', 'No anime matches your selected filters.')}
+            </p>
+            <p className="text-[var(--text-secondary)] text-xs">
+              {t('explore:noAnimeMatchesSubtitle', 'Try clearing a language, platform, or search filter.')}
+            </p>
             <div className="pt-1">
               <Button
                 variant="primary"
                 size="md"
                 onClick={handleClearAllFilters}
               >
-                Reset All Filters
+                {t('explore:resetAllFilters', 'Reset All Filters')}
               </Button>
             </div>
           </div>
@@ -1738,16 +2051,16 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                   <div
                     key={`infinite_skeleton_${sIdx}`}
                     data-testid="infinite-scroll-skeleton-card"
-                    className="flex flex-col rounded-[12px] bg-[#12141E] border border-[#292B39] overflow-hidden"
+                    className="flex flex-col rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] overflow-hidden"
                     aria-hidden="true"
                   >
-                    <div className="aspect-[2/3] w-full bg-[#191C29] animate-pulse motion-reduce:animate-none" />
+                    <div className="aspect-[2/3] w-full bg-[var(--bg-elevated)] animate-pulse motion-reduce:animate-none" />
                     <div className="p-2.5 sm:p-3 space-y-2">
-                      <div className="h-4 w-5/6 rounded-md bg-[#191C29] animate-pulse motion-reduce:animate-none" />
-                      <div className="h-3.5 w-3/5 rounded-md bg-[#191C29] animate-pulse motion-reduce:animate-none" />
-                      <div className="pt-1.5 border-t border-[#292B39]/70 flex items-center justify-between">
-                        <div className="h-3 w-16 rounded bg-[#191C29] animate-pulse motion-reduce:animate-none" />
-                        <div className="h-3 w-12 rounded bg-[#191C29] animate-pulse motion-reduce:animate-none" />
+                      <div className="h-4 w-5/6 rounded-md bg-[var(--bg-elevated)] animate-pulse motion-reduce:animate-none" />
+                      <div className="h-3.5 w-3/5 rounded-md bg-[var(--bg-elevated)] animate-pulse motion-reduce:animate-none" />
+                      <div className="pt-1.5 border-t border-[var(--border-subtle)]/70 flex items-center justify-between">
+                        <div className="h-3 w-16 rounded bg-[var(--bg-elevated)] animate-pulse motion-reduce:animate-none" />
+                        <div className="h-3 w-12 rounded bg-[var(--bg-elevated)] animate-pulse motion-reduce:animate-none" />
                       </div>
                     </div>
                   </div>
@@ -1755,17 +2068,17 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
             </div>
 
             {/* Hybrid Infinite Scroll Footer States */}
-            <div className="mt-8 pt-6 border-t border-[#292B39] flex flex-col items-center justify-center gap-3">
+            <div className="mt-8 pt-6 border-t border-[var(--border-subtle)] flex flex-col items-center justify-center gap-3">
               {/* 1. Loading Next Batch Indicator */}
               {isFetchingNextPage && (
                 <div
                   data-testid="infinite-scroll-loading"
                   role="status"
                   aria-live="polite"
-                  className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-[12px] bg-[#12141E] border border-[#292B39] text-xs font-semibold text-[#A1A5B5]"
+                  className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-secondary)]"
                 >
-                  <Loader2 className="w-4 h-4 animate-spin text-[#B49AF8] shrink-0" />
-                  <span>Automatically loading next batch...</span>
+                  <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-primary)] shrink-0" />
+                  <span>{t('explore:autoLoadingNextBatch', 'Automatically loading next batch...')}</span>
                 </div>
               )}
 
@@ -1774,19 +2087,19 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                 <div
                   role="alert"
                   data-testid="infinite-scroll-error"
-                  className="w-full max-w-xl px-4 py-3 rounded-[12px] bg-[#12141E] border border-[#F87171]/40 flex flex-col sm:flex-row items-center justify-between gap-3"
+                  className="w-full max-w-xl px-4 py-3 rounded-[12px] bg-[var(--bg-surface)] border border-[#F87171]/40 flex flex-col sm:flex-row items-center justify-between gap-3"
                 >
-                  <div className="flex items-center gap-2.5 text-xs text-[#F4F3FA] text-center sm:text-left">
+                  <div className="flex items-center gap-2.5 text-xs text-[var(--text-primary)] text-center sm:text-left">
                     <AlertTriangle className="w-4 h-4 text-[#F87171] shrink-0" />
                     <span>{appendError}</span>
                   </div>
                   <button
                     type="button"
                     onClick={handleRetryNextBatch}
-                    className="h-[44px] min-h-[44px] px-4 rounded-[12px] bg-[#191C29] border border-[#F87171]/50 hover:border-[#F87171] text-xs font-bold text-[#F4F3FA] inline-flex items-center gap-1.5 transition-colors duration-180 cursor-pointer shrink-0"
+                    className="h-[44px] min-h-[44px] px-4 rounded-[12px] bg-[var(--bg-elevated)] border border-[#F87171]/50 hover:border-[#F87171] text-xs font-bold text-[var(--text-primary)] inline-flex items-center gap-1.5 transition-colors duration-180 cursor-pointer shrink-0"
                   >
                     <RefreshCw className="w-3.5 h-3.5 text-[#F87171]" />
-                    <span>Retry</span>
+                    <span>{t('common:retry', 'Retry')}</span>
                   </button>
                 </div>
               )}
@@ -1800,12 +2113,12 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
                   <button
                     type="button"
                     onClick={handleLoadMoreManual}
-                    className="h-[44px] min-h-[44px] px-6 py-2.5 rounded-[12px] bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8] text-sm font-bold text-[#F4F3FA] inline-flex items-center justify-center gap-2 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
+                    className="h-[44px] min-h-[44px] px-6 py-2.5 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)] text-sm font-bold text-[var(--text-primary)] inline-flex items-center justify-center gap-2 transition-colors duration-180 motion-reduce:transition-none cursor-pointer"
                   >
-                    <span>Load more anime</span>
+                    <span>{t('explore:loadMoreAnime', 'Load more anime')}</span>
                   </button>
-                  <span className="text-xs text-[#A1A5B5]">
-                    Manual continuation after 48 titles
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    {t('explore:manualContinuationHelper', 'Manual continuation after 48 titles')}
                   </span>
                 </div>
               )}
@@ -1814,10 +2127,10 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
               {!isFetchingNextPage && !appendError && !paginationMeta.hasNextPage && displayedAnime.length > 0 && (
                 <div
                   data-testid="infinite-scroll-end"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-[12px] bg-[#12141E] border border-[#292B39] text-xs font-semibold text-[#A1A5B5]"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-secondary)]"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-[#B49AF8] shrink-0" />
-                  <span>You&apos;re all caught up</span>
+                  <CheckCircle2 className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+                  <span>{t('explore:allCaughtUp', "You're all caught up")}</span>
                 </div>
               )}
 
@@ -1890,7 +2203,7 @@ const CatalogViewComponent: React.FC<CatalogViewProps> = ({
           onClick={handleScrollToTop}
           aria-label="Back to top"
           data-testid="explore-back-to-top"
-          className="fixed bottom-20 md:bottom-6 right-4 z-40 w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8] text-[#B49AF8] shadow-xl flex items-center justify-center transition-all duration-180 motion-reduce:transition-none cursor-pointer"
+          className="fixed bottom-20 md:bottom-6 right-4 z-40 w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)] text-[var(--accent-primary)] shadow-xl flex items-center justify-center transition-all duration-180 motion-reduce:transition-none cursor-pointer"
         >
           <ArrowUp className="w-5 h-5" />
         </button>

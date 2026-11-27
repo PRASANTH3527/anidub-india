@@ -40,7 +40,7 @@ export const ExploreIcon: React.FC<{ active?: boolean; className?: string; size?
       cx="12"
       cy="12"
       r="9"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.18 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -55,7 +55,7 @@ export const ExploreIcon: React.FC<{ active?: boolean; className?: string; size?
     />
     <polygon
       points="15.8,8.2 13.7,13.7 8.2,15.8 10.3,10.3"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.42 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -86,7 +86,7 @@ export const ScheduleIcon: React.FC<{ active?: boolean; className?: string; size
       width="17"
       height="15.5"
       rx="3"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.16 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -96,7 +96,7 @@ export const ScheduleIcon: React.FC<{ active?: boolean; className?: string; size
     {active && (
       <path
         d="M3.5 8C3.5 6.34315 4.84315 5 6.5 5H17.5C19.1569 5 20.5 6.34315 20.5 8V9.2H3.5V8Z"
-        fill="#B49AF8"
+        fill="var(--accent-primary)"
         fillOpacity="0.28"
       />
     )}
@@ -138,7 +138,7 @@ export const LibraryIcon: React.FC<{ active?: boolean; className?: string; size?
       width="4.2"
       height="15"
       rx="1.2"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.24 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -151,7 +151,7 @@ export const LibraryIcon: React.FC<{ active?: boolean; className?: string; size?
       width="4.2"
       height="15"
       rx="1.2"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.36 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -160,7 +160,7 @@ export const LibraryIcon: React.FC<{ active?: boolean; className?: string; size?
     />
     <path
       d="M15.3 5.2L19.2 4.3C19.85 4.15 20.5 4.56 20.65 5.21L21.95 18.1C22.1 18.75 21.69 19.4 21.04 19.55L17.14 20.45C16.49 20.6 15.84 20.19 15.69 19.54L14.39 6.65C14.24 6 14.65 5.35 15.3 5.2Z"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.2 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -192,7 +192,7 @@ export const ProfileIcon: React.FC<{ active?: boolean; className?: string; size?
   >
     <path
       d="M12 3L19 6V11.6C19 16.15 16.02 19.98 12 21.2C7.98 19.98 5 16.15 5 11.6V6L12 3Z"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.2 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -238,7 +238,7 @@ export const ForYouIcon: React.FC<{ active?: boolean; className?: string; size?:
   >
     <path
       d="M12 3L14.2 8.8L20 11L14.2 13.2L12 19L9.8 13.2L4 11L9.8 8.8L12 3Z"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.28 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -281,7 +281,7 @@ export const CompareIcon: React.FC<{ active?: boolean; className?: string; size?
     />
     <path
       d="M5.5 7L3 13.5H8L5.5 7Z"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.28 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -290,7 +290,7 @@ export const CompareIcon: React.FC<{ active?: boolean; className?: string; size?
     />
     <path
       d="M18.5 7L16 13.5H21L18.5 7Z"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.28 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -299,7 +299,7 @@ export const CompareIcon: React.FC<{ active?: boolean; className?: string; size?
     />
     <path
       d="M3 13.5C3 15 4.1 16 5.5 16C6.9 16 8 15 8 13.5M16 13.5C16 15 17.1 16 18.5 16C19.9 16 21 15 21 13.5"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.22 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -328,7 +328,7 @@ export const TierListIcon: React.FC<{ active?: boolean; className?: string; size
   >
     <path
       d="M7 4H17V9C17 11.7614 14.7614 14 12 14C9.23858 14 7 11.7614 7 9V4Z"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.26 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -355,7 +355,7 @@ export const TierListIcon: React.FC<{ active?: boolean; className?: string; size
       width="6"
       height="3"
       rx="1"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.35 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -384,7 +384,7 @@ export const ChatIcon: React.FC<{ active?: boolean; className?: string; size?: n
   >
     <path
       d="M5 5.5H19C20.1046 5.5 21 6.39543 21 7.5V14.5C21 15.6046 20.1046 16.5 19 16.5H9.5L4.5 20V16.5C3.67157 16.5 3 15.8284 3 15V7.5C3 6.39543 3.89543 5.5 5 5.5Z"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.24 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -424,7 +424,7 @@ export const SubmitIcon: React.FC<{ active?: boolean; className?: string; size?:
       width="17"
       height="17"
       rx="4.5"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.24 : 0}
       stroke="currentColor"
       strokeWidth="1.8"
@@ -462,7 +462,7 @@ export const SearchNavIcon: React.FC<{ active?: boolean; className?: string; siz
       cx="11"
       cy="11"
       r="6.5"
-      fill={active ? '#B49AF8' : 'none'}
+      fill={active ? 'var(--accent-primary)' : 'none'}
       fillOpacity={active ? 0.22 : 0}
       stroke="currentColor"
       strokeWidth="1.8"

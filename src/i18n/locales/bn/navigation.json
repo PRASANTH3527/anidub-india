@@ -1,0 +1,27 @@
+{
+  "explore": "খুঁজুন",
+  "schedule": "সময়সূচী",
+  "chat": "চ্যাট",
+  "library": "লাইব্রেরি",
+  "profile": "প্রোফাইল",
+  "tools": "টুলস",
+  "searchAnime": "অ্যানিমে খুঁজুন",
+  "openToolsMenu": "টুলস মেনু খুলুন",
+  "appearanceAndThemes": "রূপ ও থিম",
+  "toolsSheetTitle": "টুলস ও অন্যান্য",
+  "toolsSheetSubtitle": "দ্রুত অনুসন্ধান টুলস এবং কমিউনিটি সুবিধা",
+  "websiteLanguage": "ভাষা",
+  "websiteLanguageSubtitle": "ওয়েবসাইটের প্রদর্শন ভাষা পরিবর্তন করুন",
+  "adminDashboard": "অ্যাডমিন ড্যাশবোর্ড",
+  "adminDashboardSubtitle": "জমা দেওয়া তথ্য ও ক্যাটালগ পরিচালনা করুন",
+  "secondary": {
+    "forYou": "আপনার জন্য",
+    "forYouSubtitle": "আপনার পছন্দ অনুযায়ী অ্যানিমে সুপারিশ",
+    "compare": "তুলনা করুন",
+    "compareSubtitle": "দুটি অ্যানিমে পাশাপাশি তুলনা করুন",
+    "tierList": "টিয়ার লিস্ট",
+    "tierListSubtitle": "পছন্দের ডাবড অ্যানিমে র‍্যাঙ্ক করুন",
+    "submitAnime": "অ্যানিমে যোগ করুন",
+    "submitAnimeSubtitle": "বাদ পড়া ডাবড অ্যানিমে প্রস্তাব করুন"
+  }
+}

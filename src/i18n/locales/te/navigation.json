@@ -1,0 +1,27 @@
+{
+  "explore": "అన్వేషించు",
+  "schedule": "షెడ్యూల్",
+  "chat": "చాట్",
+  "library": "లైబ్రరీ",
+  "profile": "ప్రొఫైల్",
+  "tools": "టూల్స్",
+  "searchAnime": "అనిమే వెతుకు",
+  "openToolsMenu": "టూల్స్ మెనూ తెరువు",
+  "appearanceAndThemes": "రూపం & థీమ్స్",
+  "toolsSheetTitle": "టూల్స్ & అదనపువి",
+  "toolsSheetSubtitle": "త్వరిత అన్వేషణ సాధనాలు మరియు కమ్యూనిటీ చర్యలు",
+  "websiteLanguage": "భాష",
+  "websiteLanguageSubtitle": "వెబ్‌సైట్ ప్రదర్శన భాషను మార్చండి",
+  "adminDashboard": "అడ్మిన్ డ్యాష్‌బోర్డ్",
+  "adminDashboardSubtitle": "సమర్పణలు మరియు కేటలాగ్ డేటాను నిర్వహించండి",
+  "secondary": {
+    "forYou": "మీ కోసం",
+    "forYouSubtitle": "మీ అభిరుచికి తగిన అనిమే సూచనలు",
+    "compare": "పోల్చండి",
+    "compareSubtitle": "రెండు అనిమేలను పక్కపక్కన పోల్చండి",
+    "tierList": "టియర్ లిస్ట్",
+    "tierListSubtitle": "ఇష్టమైన డబ్డ్ అనిమేలను ర్యాంక్ చేయండి",
+    "submitAnime": "అనిమే జోడించు",
+    "submitAnimeSubtitle": "లేని డబ్డ్ టైటిల్‌ను సూచించండి"
+  }
+}

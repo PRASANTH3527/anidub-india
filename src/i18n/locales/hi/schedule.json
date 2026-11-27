@@ -1,0 +1,29 @@
+{
+  "title": "रिलीज़ शेड्यूल",
+  "subtitle": "सत्यापित साप्ताहिक भारतीय क्षेत्रीय डब प्रसारण समय-सारणी",
+  "today": "आज",
+  "allDays": "सभी दिन",
+  "airingCount": "{{count}} प्रसारित",
+  "days": {
+    "monday": "सोमवार",
+    "tuesday": "मंगलवार",
+    "wednesday": "बुधवार",
+    "thursday": "गुरुवार",
+    "friday": "शुक्रवार",
+    "saturday": "शनिवार",
+    "sunday": "रविवार"
+  },
+  "shortDays": {
+    "monday": "सोम",
+    "tuesday": "मंगल",
+    "wednesday": "बुध",
+    "thursday": "गुरु",
+    "friday": "शुक्र",
+    "saturday": "शनि",
+    "sunday": "रवि"
+  },
+  "timeNotVerified": "समय सत्यापित नहीं",
+  "unscheduledTitle": "बिना सत्यापित दिन/समय के प्रसारित",
+  "emptyTitle": "{{day}} के लिए कोई डब शेड्यूल नहीं",
+  "emptySubtitle": "कोई अन्य दिन देखें या खोजें पेज पर वर्तमान एनीमे ब्राउज़ करें।"
+}

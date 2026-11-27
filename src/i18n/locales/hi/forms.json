@@ -1,0 +1,30 @@
+{
+  "submitDub": {
+    "title": "डब जानकारी सबमिट करें",
+    "subtitle": "सत्यापित क्षेत्रीय डब विवरण देकर AniDub India को सटीक बनाए रखें",
+    "animeTitleLabel": "एनीमे का नाम",
+    "languagesLabel": "डब भाषाएं",
+    "platformLabel": "आधिकारिक OTT प्लेटफ़ॉर्म",
+    "notesLabel": "सत्यापन नोट्स / स्रोत लिंक",
+    "submitCta": "समीक्षा के लिए भेजें",
+    "submitting": "सबमिट हो रहा है..."
+  },
+  "report": {
+    "title": "गलत जानकारी रिपोर्ट करें",
+    "subtitle": "पुराने OTT लिंक, छूटी भाषाएं या गलत एपिसोड गिनती की सूचना दें",
+    "reasonLabel": "क्या सुधारना है?",
+    "detailsPlaceholder": "सही जानकारी या सत्यापित स्रोत लिखें...",
+    "submitCta": "रिपोर्ट भेजें"
+  },
+  "feedback": {
+    "title": "फ़ीडबैक भेजें",
+    "subtitle": "विचार साझा करें, बग रिपोर्ट करें या नई भाषा का अनुरोध करें",
+    "messagePlaceholder": "बताएं हम AniDub India को और बेहतर कैसे बना सकते हैं...",
+    "submitCta": "फ़ीडबैक भेजें"
+  },
+  "legal": {
+    "privacyTitle": "गोपनीयता नीति",
+    "termsTitle": "सेवा की शर्तें",
+    "dmcaTitle": "DMCA और अधिकार-धारक नीति"
+  }
+}

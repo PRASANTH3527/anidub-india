@@ -1,0 +1,30 @@
+{
+  "submitDub": {
+    "title": "Submit Dub Info",
+    "subtitle": "Help keep AniDub India accurate with verified regional dub details",
+    "animeTitleLabel": "Anime Title",
+    "languagesLabel": "Dub Languages",
+    "platformLabel": "Official OTT Platform",
+    "notesLabel": "Verification Notes / Source Link",
+    "submitCta": "Submit for Review",
+    "submitting": "Submitting..."
+  },
+  "report": {
+    "title": "Report Incorrect Information",
+    "subtitle": "Flag outdated OTT links, missing languages, or wrong episode counts",
+    "reasonLabel": "What needs fixing?",
+    "detailsPlaceholder": "Describe the correction or verified source...",
+    "submitCta": "Send Report"
+  },
+  "feedback": {
+    "title": "Send Feedback",
+    "subtitle": "Share ideas, report UI bugs, or request new languages",
+    "messagePlaceholder": "Tell us how we can make AniDub India better...",
+    "submitCta": "Submit Feedback"
+  },
+  "legal": {
+    "privacyTitle": "Privacy Policy",
+    "termsTitle": "Terms of Service",
+    "dmcaTitle": "DMCA & Rights-Holder Policy"
+  }
+}

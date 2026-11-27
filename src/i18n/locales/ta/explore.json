@@ -1,0 +1,91 @@
+{
+  "heading": "உங்கள் மொழியில் அனிமே கண்டறியுங்கள்",
+  "random": "தற்செயல்",
+  "randomAnime": "தற்செயல் அனிமே",
+  "compare": "ஒப்பிடு",
+  "matchmaker": "பரிந்துரை",
+  "searchPlaceholder": "அனிமே பெயர், சுருக்கப்பெயர் (எ.கா. JJK), ஸ்டுடியோ தேடு...",
+  "filters": "வடிகட்டி",
+  "mySubscriptionsHeader": "என் OTT சந்தாக்கள் & கவரேஜ்",
+  "myOttsOff": "என் OTT: நிறுத்தம்",
+  "myOttsActive": "என் OTT: {{count}} செயலில்",
+  "showingTitles": "{{count}} அனிமேக்கள் காட்டப்படுகின்றன",
+  "showingTitlesOf": "{{total}} இல் {{shown}} அனிமேக்கள்",
+  "loadingCatalog": "பட்டியல் ஏற்றுகிறது...",
+  "batchIndicator": "தொகுதி {{current}} / {{total}}",
+  "loadMoreAnime": "மேலும் அனிமே காட்டு",
+  "manualContinuationHelper": "48 தலைப்புகளுக்குப் பிறகு கைமுறைத் தொடர்ச்சி",
+  "autoLoadingNextBatch": "அடுத்த தொகுதி தானாக ஏற்றுகிறது...",
+  "allCaughtUp": "அனைத்தும் பார்க்கப்பட்டது",
+  "backToTop": "மேலே செல்",
+  "resetAllFilters": "அனைத்து வடிகட்டிகளையும் மீட்டமை",
+  "noAnimeMatchesTitle": "தேர்ந்தெடுத்த வடிகட்டிகளுக்கு பொருந்தும் அனிமே இல்லை.",
+  "noAnimeMatchesSubtitle": "மொழி, OTT தளம் அல்லது தேடல் சொல்லை மாற்றி முயற்சிக்கவும்.",
+  "filterSheet": {
+    "title": "வடிகட்டி & வரிசைப்படுத்து",
+    "subtitle": "இந்திய பிராந்திய டப் அனிமேக்களை எளிதாக வடிகட்டுங்கள்",
+    "quickSort": "விரைவு வரிசை",
+    "dubLanguages": "டப் மொழிகள்",
+    "ottPlatforms": "OTT தளங்கள்",
+    "genre": "வகை",
+    "type": "வடிவம்",
+    "releaseStatus": "வெளியீட்டு நிலை",
+    "episodeLength": "அத்தியாய நீளம்",
+    "dubAvailability": "டப் கிடைக்கும் நிலை",
+    "verifiedOnly": "சரிபார்க்கப்பட்டவை மட்டும்",
+    "fullyDubbedOnly": "முழுமையாக டப் செய்யப்பட்ட சீசன்கள் மட்டும்",
+    "showResults": "முடிவுகளைக் காட்டு",
+    "showResultsCount": "{{count}} முடிவுகளைக் காட்டு",
+    "resetFilters": "மீட்டமை",
+    "allGenres": "அனைத்து வகைகள்",
+    "allTypes": "அனைத்து வடிவங்கள்",
+    "allStatuses": "அனைத்து நிலைகள்",
+    "allLengths": "எந்த நீளமும்",
+    "sort": {
+      "latest": "புதிதாகச் சேர்த்தவை",
+      "rating": "அதிக மதிப்பீடு",
+      "popular": "மிகப் பிரபலமானவை",
+      "title": "A–Z பெயர்",
+      "year": "புதிய வெளியீடு"
+    },
+    "lengths": {
+      "short": "குறுகியது (1–12 அத்.)",
+      "medium": "நடுத்தரம் (13–26 அத்.)",
+      "long": "நீளமானது (27+ அத்.)"
+    },
+    "statuses": {
+      "airing": "இப்போது ஒளிபரப்பாகிறது",
+      "completed": "முடிந்தது",
+      "upcoming": "வரவிருக்கிறது"
+    }
+  },
+  "ottSheet": {
+    "title": "என் OTT சந்தாக்கள் & கவரேஜ்",
+    "subtitle": "உங்கள் சந்தா தளங்களைத் தேர்ந்தெடுத்து டப் அனிமேக்களைக் காண்க",
+    "filterByMyOtts": "என் OTT தளங்களில் உள்ள அனிமே மட்டும் காட்டு",
+    "selectedCount": "{{count}} தளங்கள் தேர்ந்தெடுக்கப்பட்டன",
+    "clearSelection": "தேர்வை அழி",
+    "done": "முடிந்தது"
+  },
+  "card": {
+    "posterUnavailable": "போஸ்டர் கிடைக்கவில்லை",
+    "retryImage": "படத்தை மீண்டும் ஏற்று",
+    "shareAnime": "அனிமேவைப் பகிர்",
+    "compareAnime": "அனிமேவை ஒப்பிடு",
+    "saveOffline": "விவரங்களை ஆஃப்லைனில் சேமி",
+    "savedOffline": "ஆஃப்லைனில் சேமிக்கப்பட்டது",
+    "reportIncorrect": "தவறான தகவலைப் புகார் செய்",
+    "moreActions": "மேலும் செயல்கள்",
+    "bookmarkAdd": "நூலகத்தில் சேமி",
+    "bookmarkRemove": "நூலகத்திலிருந்து நீக்கு",
+    "seasonsCount": "{{count}} சீசன்கள்",
+    "seasonSingle": "1 சீசன்",
+    "episodesCount": "{{count}} அத்."
+  },
+  "latestUpdates": {
+    "title": "சமீபத்திய டப் புதுப்பிப்புகள்",
+    "subtitle": "ஆசிரியர்களால் சரிபார்க்கப்பட்ட பட்டியல் மாற்றங்கள்",
+    "refresh": "புதுப்பிப்புகளைப் புதுப்பி",
+    "empty": "சமீபத்திய சரிபார்க்கப்பட்ட புதுப்பிப்புகள் இல்லை."
+  }
+}

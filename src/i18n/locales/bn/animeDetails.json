@@ -1,0 +1,46 @@
+{
+  "whereToWatch": "কোথায় দেখবেন",
+  "whereToWatchIndia": "কোথায় দেখবেন (ভারত)",
+  "addToLibrary": "লাইব্রেরিতে যোগ করুন",
+  "inLibrary": "লাইব্রেরিতে আছে",
+  "follow": "ফলো করুন",
+  "following": "ফলো করা হয়েছে",
+  "share": "শেয়ার",
+  "reportWrongInfo": "ভুল তথ্য রিপোর্ট",
+  "episodes": "পর্ব",
+  "seasons": "সিজন",
+  "dubLanguages": "ডাব ভাষা",
+  "audioLanguages": "অডিও ভাষা",
+  "studio": "স্টুডিও",
+  "releaseYear": "মুক্তির বছর",
+  "status": "অবস্থা",
+  "rating": "রেটিং",
+  "tabs": {
+    "overview": "সংক্ষিপ্ত বিবরণ",
+    "seasonsAndDubs": "সিজন ও ডাব",
+    "watchProgress": "দেখার অগ্রগতি",
+    "reviews": "রিভিউ ({{count}})"
+  },
+  "synopsis": "কাহিনী সংক্ষেপ",
+  "noSynopsis": "এখনও কোনো যাচাইকৃত কাহিনী সংক্ষেপ নেই।",
+  "franchiseOrder": "সিরিজ দেখার ক্রম",
+  "streamingNote": "ভারতের জন্য যাচাইকৃত অফিসিয়াল স্ট্রিমিং প্ল্যাটফর্ম।",
+  "noVerifiedPlatforms": "ভারতের জন্য এখনও কোনো যাচাইকৃত অফিসিয়াল OTT লিংক তালিকাভুক্ত নেই।",
+  "watchNow": "{{platform}}-এ দেখুন",
+  "reviews": {
+    "writeReview": "রিভিউ লিখুন",
+    "placeholder": "আঞ্চলিক ডাবের মান, ভয়েস অ্যাক্টিং বা অনুবাদ নিয়ে আপনার মতামত জানান...",
+    "submit": "রিভিউ পোস্ট করুন",
+    "posting": "পোস্ট হচ্ছে…",
+    "failedRetry": "ব্যর্থ — আবার চেষ্টা করুন",
+    "signInToReview": "যাচাইকৃত রিভিউ পোস্ট করতে সাইন ইন করুন।",
+    "emptyTitle": "এখনও কোনো রিভিউ নেই",
+    "emptySubtitle": "এই ভারতীয় ডাব নিয়ে প্রথম মতামত জানান।"
+  },
+  "progress": {
+    "title": "পর্বের অগ্রগতি",
+    "watchedOf": "{{watched}} / {{total}} পর্ব দেখা হয়েছে",
+    "increment": "+1 পর্ব",
+    "statusLabel": "ওয়াচলিস্ট অবস্থা"
+  }
+}

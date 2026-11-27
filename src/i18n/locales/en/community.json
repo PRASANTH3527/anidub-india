@@ -1,0 +1,20 @@
+{
+  "title": "Community Chat",
+  "subtitle": "Live discussion with Indian anime dub fans",
+  "rooms": {
+    "general": "General",
+    "tamil": "Tamil Dubs",
+    "hindi": "Hindi Dubs",
+    "telugu": "Telugu Dubs",
+    "requests": "Dub Requests"
+  },
+  "composerPlaceholder": "Write a message...",
+  "send": "Send",
+  "sending": "Sending…",
+  "failedToSend": "Failed to send",
+  "retry": "Retry",
+  "reply": "Reply",
+  "replyingTo": "Replying to {{user}}",
+  "signInPrompt": "Sign in to join the live chat",
+  "onlineCount": "{{count}} online"
+}

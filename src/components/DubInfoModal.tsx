@@ -34,6 +34,7 @@ import {
   deriveSeasonEpisodeCountSummary,
   deriveOfficialSourceUrlFromPartners,
 } from '../utils/dataNormalization';
+import { useTranslation } from 'react-i18next';
 
 interface DubInfoModalProps {
   isOpen: boolean;
@@ -74,6 +75,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   onSubmit,
 }) => {
   const { isSignedIn, user: clerkUser } = useUser();
+  const { t } = useTranslation(['forms', 'common']);
 
   const initDataAny = initialData as any;
 
@@ -750,7 +752,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         exit={{ opacity: 0 }}
         transition={{ duration: 0.16, ease: "easeOut" }}
         onClick={handleRequestClose}
-        className="fixed inset-0 bg-[#0B0A10]/85"
+        className="fixed inset-0 bg-[var(--bg-canvas)]/85"
       />
 
       <motion.div 
@@ -758,18 +760,18 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
         exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
         transition={{ duration: 0.16, ease: "easeOut" }}
-        className="relative w-full max-w-xl bg-[#12141E] border border-[#292B39] rounded-2xl shadow-2xl overflow-hidden z-10 my-auto text-[#F4F3FA] max-h-[90vh] flex flex-col font-sans"
+        className="relative w-full max-w-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden z-10 my-auto text-[var(--text-primary)] max-h-[90vh] flex flex-col font-sans"
       >
         
         {/* HEADER */}
-        <div className="p-4 sm:p-5 border-b border-[#292B39] flex items-center justify-between bg-[#191C29] shrink-0">
+        <div className="p-4 sm:p-5 border-b border-[var(--border-subtle)] flex items-center justify-between bg-[var(--bg-elevated)] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#B49AF8]/15 border border-[#B49AF8]/30 flex items-center justify-center text-[#B49AF8] shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 flex items-center justify-center text-[var(--accent-primary)] shrink-0">
               <Film className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-heading font-black text-base sm:text-lg text-[#F4F3FA] leading-tight">
-                {mode === 'edit' ? 'Edit Anime Info' : 'Submit Dub Info'}
+              <h3 className="font-heading font-black text-base sm:text-lg text-[var(--text-primary)] leading-tight">
+                {mode === 'edit' ? 'Edit Anime Info' : t('forms:submitDub.title', 'Submit Dub Info')}
               </h3>
               {mode !== 'edit' && (
                 <p className="text-[11px] text-[#F9C876] font-semibold flex items-center gap-1 mt-0.5">
@@ -784,7 +786,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
             type="button"
             onClick={handleRequestClose}
             aria-label="Close modal"
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#12141E] border border-[#292B39] flex items-center justify-center transition-colors duration-150 cursor-pointer"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-center transition-colors duration-150 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -794,7 +796,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         {!isSuccess && (
           <div
             data-testid="dub-submit-guided-steps"
-            className="px-4 py-2.5 bg-[#12141E] border-b border-[#292B39] grid grid-cols-3 gap-1.5 shrink-0"
+            className="px-4 py-2.5 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] grid grid-cols-3 gap-1.5 shrink-0"
           >
             {[
               { step: 1 as const, label: '1. Identify anime' },
@@ -809,8 +811,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   onClick={() => setActiveGuidedStep(item.step)}
                   className={`min-h-[44px] px-2.5 py-1.5 rounded-[10px] text-[11px] sm:text-[12px] font-bold border transition-colors ${
                     isActive
-                      ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/50'
-                      : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                      ? 'bg-[var(--accent-primary)]/15 text-[var(--accent-hover)] border-[var(--accent-primary)]/50'
+                      : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
                   }`}
                 >
                   {item.label}
@@ -825,16 +827,16 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
           <div
             role="alert"
             data-testid="unsaved-changes-confirm"
-            className="px-4 py-3 bg-[#191C29] border-b border-[#F9C876]/40 flex flex-wrap items-center justify-between gap-3 shrink-0"
+            className="px-4 py-3 bg-[var(--bg-elevated)] border-b border-[#F9C876]/40 flex flex-wrap items-center justify-between gap-3 shrink-0"
           >
-            <span className="text-xs font-semibold text-[#F4F3FA]">
+            <span className="text-xs font-semibold text-[var(--text-primary)]">
               Discard unsaved dub submission changes?
             </span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setShowUnsavedConfirm(false)}
-                className="min-h-[44px] px-3 rounded-[10px] bg-[#12141E] text-[#F4F3FA] border border-[#292B39] text-xs font-semibold"
+                className="min-h-[44px] px-3 rounded-[10px] bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] text-xs font-semibold"
               >
                 Keep editing
               </button>
@@ -860,10 +862,10 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                 <div className="w-14 h-14 rounded-2xl bg-[#34D399]/15 border border-[#34D399]/35 flex items-center justify-center mx-auto text-[#34D399]">
                   <CheckCircle2 className="w-7 h-7" />
                 </div>
-                <h4 className="font-heading font-black text-xl text-[#F4F3FA]">
+                <h4 className="font-heading font-black text-xl text-[var(--text-primary)]">
                   {mode === 'edit' ? 'Changes Saved Successfully!' : 'Saved with Status: "Pending"!'}
                 </h4>
-                <p className="text-xs text-[#A1A5B5] max-w-md mx-auto leading-relaxed">
+                <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto leading-relaxed">
                   {mode === 'edit'
                     ? 'Your edits have been successfully saved and updated directly in the live catalog.'
                     : 'Your submission is currently locked under Strict Moderation. It has been sent to the Admin Dashboard and will remain hidden from the website until approved.'}
@@ -884,7 +886,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       type="button"
                       onClick={() => setFormError(null)}
                       aria-label="Dismiss form error"
-                      className="text-[#F87171] hover:text-[#F4F3FA] p-0.5 cursor-pointer shrink-0"
+                      className="text-[#F87171] hover:text-[var(--text-primary)] p-0.5 cursor-pointer shrink-0"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -893,8 +895,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                 {/* Title Field */}
                 <div>
-                  <label className="block font-bold text-[#F4F3FA] mb-1.5 flex items-center justify-between">
-                    <span>Anime Title <span className="text-[#B49AF8]">*</span></span>
+                  <label className="block font-bold text-[var(--text-primary)] mb-1.5 flex items-center justify-between">
+                    <span>{t('forms:submitDub.animeTitleLabel', 'Anime Title')} <span className="text-[var(--accent-primary)]">*</span></span>
                   </label>
                   <div className="relative">
                     <input
@@ -906,49 +908,49 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                         if (formError) setFormError(null);
                       }}
                       placeholder="e.g. Solo Leveling, Demon Slayer, Jujutsu Kaisen..."
-                      className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] py-2.5 pl-3.5 pr-9 text-xs sm:text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180"
+                      className="w-full min-h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] rounded-[12px] py-2.5 pl-3.5 pr-9 text-xs sm:text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none transition-colors duration-180"
                     />
-                    <Search className="w-4 h-4 text-[#A1A5B5] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Search className="w-4 h-4 text-[var(--text-secondary)] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 </div>
 
                 {/* Synopsis Field */}
                 <div>
-                  <label className="block font-bold text-[#F4F3FA] mb-1.5 flex items-center justify-between">
+                  <label className="block font-bold text-[var(--text-primary)] mb-1.5 flex items-center justify-between">
                     <span>Synopsis</span>
-                    <span className="text-[10px] text-[#A1A5B5] font-normal">Plot summary &amp; overview</span>
+                    <span className="text-[10px] text-[var(--text-secondary)] font-normal">Plot summary &amp; overview</span>
                   </label>
                   <textarea
                     rows={4}
                     value={synopsis}
                     onChange={(e) => setSynopsis(e.target.value)}
                     placeholder="Type or paste a descriptive summary of the anime..."
-                    className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] py-2.5 px-3.5 text-xs sm:text-sm text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-180 resize-y leading-relaxed font-sans"
+                    className="w-full bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] rounded-[12px] py-2.5 px-3.5 text-xs sm:text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none transition-colors duration-180 resize-y leading-relaxed font-sans"
                   />
                 </div>
 
                 {/* Poster Upload Area */}
                 <div>
-                  <label className="block font-bold text-[#F4F3FA] mb-1 flex items-center justify-between">
+                  <label className="block font-bold text-[var(--text-primary)] mb-1 flex items-center justify-between">
                     <span>Anime Poster (Upload File or Enter URL)</span>
                   </label>
                   <div className="space-y-2">
                     <div className="flex gap-3 items-center">
                       <div 
                         onClick={() => !isUploading && fileInputRef.current?.click()}
-                        className="flex-1 h-16 border border-dashed border-[#292B39] hover:border-[#B49AF8] rounded-xl bg-[#191C29] flex flex-col items-center justify-center cursor-pointer transition-colors duration-150 group"
+                        className="flex-1 h-16 border border-dashed border-[var(--border-subtle)] hover:border-[var(--accent-primary)] rounded-xl bg-[var(--bg-elevated)] flex flex-col items-center justify-center cursor-pointer transition-colors duration-150 group"
                       >
                         {isUploading ? (
                           <>
-                            <Loader2 className="w-4 h-4 text-[#B49AF8] animate-spin mb-0.5" />
-                            <span className="text-[10px] text-[#F4F3FA] font-bold uppercase tracking-wider">
+                            <Loader2 className="w-4 h-4 text-[var(--accent-primary)] animate-spin mb-0.5" />
+                            <span className="text-[10px] text-[var(--text-primary)] font-bold uppercase tracking-wider">
                               Uploading...
                             </span>
                           </>
                         ) : (
                           <>
-                            <Upload className="w-4 h-4 text-[#A1A5B5] group-hover:text-[#B49AF8] mb-0.5" />
-                            <span className="text-[10px] text-[#A1A5B5] font-bold uppercase tracking-wider group-hover:text-[#F4F3FA]">
+                            <Upload className="w-4 h-4 text-[var(--text-secondary)] group-hover:text-[var(--accent-primary)] mb-0.5" />
+                            <span className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider group-hover:text-[var(--text-primary)]">
                               {poster ? 'Change Uploaded Photo' : 'Upload Image File'}
                             </span>
                           </>
@@ -966,7 +968,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                           <img
                             src={poster || formData.poster || undefined}
                             alt="Preview"
-                            className="w-12 h-16 object-cover rounded-xl border border-[#B49AF8]/50"
+                            className="w-12 h-16 object-cover rounded-xl border border-[var(--accent-primary)]/50"
                           />
                           <button 
                             type="button"
@@ -981,7 +983,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               }));
                               if (fileInputRef.current) fileInputRef.current.value = '';
                             }}
-                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#B49AF8] rounded-full flex items-center justify-center text-[#0B0A10] border border-[#0B0A10] hover:bg-[#CBB6FF] transition-colors"
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[var(--accent-primary)] rounded-full flex items-center justify-center text-[var(--accent-on-primary)] border border-[var(--bg-canvas)] hover:bg-[var(--accent-hover)] transition-colors"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -1002,19 +1004,19 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                         }));
                       }}
                       placeholder="Or paste poster image URL (https://...)"
-                      className="w-full bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-xl py-2 px-3 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none transition-colors duration-150"
+                      className="w-full bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] rounded-xl py-2 px-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none transition-colors duration-150"
                     />
                   </div>
                 </div>
 
                 {/* Streaming Partners */}
                 <div className="space-y-2">
-                  <label className="block font-bold text-[#F4F3FA] mb-1 flex items-center justify-between">
+                  <label className="block font-bold text-[var(--text-primary)] mb-1 flex items-center justify-between">
                     <span>Streaming Partners &amp; Per-Platform Dubs</span>
                     <button 
                       type="button" 
                       onClick={addStreamingPartner}
-                      className="text-[11px] text-[#B49AF8] font-bold hover:text-[#CBB6FF] flex items-center gap-1 cursor-pointer"
+                      className="text-[11px] text-[var(--accent-primary)] font-bold hover:text-[var(--accent-hover)] flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
                       Add Platform
@@ -1030,13 +1032,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       const activePlatformLabel = partner.name?.trim() || selectOptions[0] || 'Platform';
 
                       return (
-                        <div key={`stream_partner_${idx}`} className="bg-[#191C29] border border-[#292B39] rounded-xl p-3 space-y-2.5">
+                        <div key={`stream_partner_${idx}`} className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-3 space-y-2.5">
                           <div className="flex gap-2 items-start">
                             <div className="w-1/3">
                               <select
                                 value={partner.name}
                                 onChange={(e) => updateStreamingPartner(idx, 'name', e.target.value)}
-                                className="w-full bg-[#12141E] border border-[#292B39] rounded-xl px-2.5 py-2 text-[11px] text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer"
+                                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-2.5 py-2 text-[11px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer"
                               >
                                 {selectOptions.map((platOption) => (
                                   <option key={platOption} value={platOption}>{platOption}</option>
@@ -1049,14 +1051,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                                 value={partner.url}
                                 onChange={(e) => updateStreamingPartner(idx, 'url', e.target.value)}
                                 placeholder="Link (e.g. https://www.crunchyroll.com/...)"
-                                className="w-full bg-[#12141E] border border-[#292B39] rounded-xl px-3 py-2 text-[11px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8]"
+                                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[11px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
                               />
                             </div>
                             {streamingPartners.length > 1 && (
                               <button
                                 type="button"
                                 onClick={() => removeStreamingPartner(idx)}
-                                className="p-2.5 rounded-xl bg-[#12141E] border border-[#292B39] text-[#A1A5B5] hover:text-[#F87171] hover:border-[#F87171]/40 transition-colors cursor-pointer"
+                                className="p-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[#F87171] hover:border-[#F87171]/40 transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1065,12 +1067,12 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                           {/* Per-Platform Language Selection Checkboxes */}
                           {streamingPartners.length > 1 && (
-                            <div className="pt-2 border-t border-[#292B39] space-y-1.5">
+                            <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1.5">
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-[10px] font-bold text-[#A1A5B5] uppercase tracking-wider">
+                                <span className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
                                   Languages on {activePlatformLabel}
                                 </span>
-                                <span className="text-[10px] text-[#B49AF8] font-semibold truncate max-w-[55%]">
+                                <span className="text-[10px] text-[var(--accent-primary)] font-semibold truncate max-w-[55%]">
                                   {partner.languages && partner.languages.length > 0
                                     ? partner.languages.join(', ')
                                     : 'Select dubs'}
@@ -1084,8 +1086,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                                       key={`partner_${idx}_lang_${lang}`}
                                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors duration-150 cursor-pointer select-none ${
                                         isChecked
-                                          ? 'bg-[#B49AF8] text-[#0B0A10] font-bold border border-[#B49AF8]'
-                                          : 'bg-[#12141E] text-[#A1A5B5] border border-[#292B39] hover:text-[#F4F3FA]'
+                                          ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] font-bold border border-[var(--accent-primary)]'
+                                          : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
                                       }`}
                                     >
                                       <input
@@ -1098,8 +1100,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                                         aria-hidden="true"
                                         className={`w-3 h-3 rounded flex items-center justify-center text-[9px] font-black border ${
                                           isChecked
-                                            ? 'bg-[#0B0A10] text-[#B49AF8] border-[#0B0A10]'
-                                            : 'border-[#292B39] bg-[#0B0A10] text-transparent'
+                                            ? 'bg-[var(--bg-canvas)] text-[var(--accent-primary)] border-[var(--bg-canvas)]'
+                                            : 'border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-transparent'
                                         }`}
                                       >
                                         ✓
@@ -1123,7 +1125,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   return (
                     <div className={`grid grid-cols-1 ${showScheduleFields ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2'} gap-3`}>
                       <div>
-                        <label className="block font-bold text-[#F4F3FA] mb-1">Type</label>
+                        <label className="block font-bold text-[var(--text-primary)] mb-1">Type</label>
                         <select 
                           value={formData.type || type || 'TV Series'} 
                           onChange={(e) => {
@@ -1139,7 +1141,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               setFormData((prev: any) => ({ ...prev, status: 'Completed', airing_status: 'Completed' }));
                             }
                           }}
-                          className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] rounded-[12px] px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs transition-colors duration-180"
+                          className="w-full min-h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[12px] px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer text-xs transition-colors duration-180"
                         >
                           <option value="TV Series">TV Series</option>
                           <option value="Movie">Movie</option>
@@ -1148,7 +1150,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       </div>
 
                       <div>
-                        <label className="block font-bold text-[#F4F3FA] mb-1">Status</label>
+                        <label className="block font-bold text-[var(--text-primary)] mb-1">Status</label>
                         <select
                           aria-label="Anime Status"
                           value={statusState}
@@ -1163,7 +1165,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                             }
                             setFormData((prev: any) => ({ ...prev, status: newStatus, airing_status: newStatus }));
                           }}
-                          className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] rounded-[12px] px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs transition-colors duration-180"
+                          className="w-full min-h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[12px] px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer text-xs transition-colors duration-180"
                         >
                           <option value="Airing">Airing</option>
                           <option value="Completed">Completed</option>
@@ -1174,12 +1176,12 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                       {showScheduleFields && (
                         <div>
-                          <label className="block font-bold text-[#F4F3FA] mb-1">Broadcast Day</label>
+                          <label className="block font-bold text-[var(--text-primary)] mb-1">Broadcast Day</label>
                           <select
                             value={releaseDay}
                             onChange={(e) => setReleaseDay(e.target.value)}
                             aria-label="Broadcast Day"
-                            className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] rounded-[12px] px-3 py-2 text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8] cursor-pointer text-xs transition-colors duration-180"
+                            className="w-full min-h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[12px] px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer text-xs transition-colors duration-180"
                           >
                             <option value="">TBA / Unscheduled</option>
                             {ALL_DAYS.map((day) => (
@@ -1191,7 +1193,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                       {showScheduleFields && (
                         <div>
-                          <label className="block font-bold text-[#F4F3FA] mb-1">Broadcast Time (IST)</label>
+                          <label className="block font-bold text-[var(--text-primary)] mb-1">Broadcast Time (IST)</label>
                           <input
                             type="text"
                             value={broadcastTime}
@@ -1199,7 +1201,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                             placeholder="e.g. 08:30 PM IST"
                             aria-label="Broadcast Time"
                             maxLength={40}
-                            className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] rounded-[12px] px-3 py-2 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none focus:border-[#B49AF8] transition-colors duration-180"
+                            className="w-full min-h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[12px] px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent-primary)] transition-colors duration-180"
                           />
                         </div>
                       )}
@@ -1209,7 +1211,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                 {/* Currently Airing Box */}
                 {(statusState === 'Airing' || statusState === 'Ongoing') && (
-                  <div className="bg-[#191C29] border border-[#F9C876]/35 rounded-xl p-4 space-y-3">
+                  <div className="bg-[var(--bg-elevated)] border border-[#F9C876]/35 rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-[#F9C876] text-xs font-bold uppercase tracking-wider">
                         <Sparkles className="w-4 h-4 text-[#F9C876]" />
@@ -1219,23 +1221,23 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[11px] font-bold text-[#F4F3FA] mb-1">Current Season</label>
+                        <label className="block text-[11px] font-bold text-[var(--text-primary)] mb-1">Current Season</label>
                         <input
                           type="text"
                           value={currentSeason}
                           onChange={(e) => setCurrentSeason(e.target.value)}
                           placeholder="e.g. Season 2"
-                          className="w-full bg-[#12141E] border border-[#292B39] focus:border-[#F9C876] rounded-xl px-3 py-2 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none"
+                          className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] focus:border-[#F9C876] rounded-xl px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-bold text-[#F4F3FA] mb-1">Live Episode</label>
+                        <label className="block text-[11px] font-bold text-[var(--text-primary)] mb-1">Live Episode</label>
                         <input
                           type="number"
                           value={currentlyAiringEpisode}
                           onChange={(e) => setCurrentlyAiringEpisode(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                           placeholder="e.g. 5"
-                          className="w-full bg-[#12141E] border border-[#292B39] focus:border-[#F9C876] rounded-xl px-3 py-2 text-xs text-[#F4F3FA] placeholder-[#A1A5B5] outline-none"
+                          className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] focus:border-[#F9C876] rounded-xl px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none"
                         />
                       </div>
                     </div>
@@ -1244,15 +1246,15 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                 {/* Mixed Entries Section */}
                 <div className="space-y-3">
-                  <label className="block font-bold text-[#F4F3FA] mb-1 flex items-center justify-between">
+                  <label className="block font-bold text-[var(--text-primary)] mb-1 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <Tv className="w-3.5 h-3.5 text-[#B49AF8]" />
+                      <Tv className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
                       <span>Mixed Entries (Seasons, OVAs, Movies)</span>
                     </div>
                     <button 
                       type="button" 
                       onClick={addEntry}
-                      className="text-[11px] text-[#B49AF8] font-bold hover:text-[#CBB6FF] flex items-center gap-1 cursor-pointer"
+                      className="text-[11px] text-[var(--accent-primary)] font-bold hover:text-[var(--accent-hover)] flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
                       Add Entry
@@ -1261,13 +1263,13 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                   <div className="space-y-2.5">
                     {seasonDetails.map((entry, idx) => (
-                      <div key={`season_entry_${idx}`} className="bg-[#191C29] border border-[#292B39] rounded-xl p-3 space-y-2.5">
+                      <div key={`season_entry_${idx}`} className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-3 space-y-2.5">
                         <div className="grid grid-cols-12 gap-2">
                           <div className="col-span-4">
                             <select
                               value={entry.type}
                               onChange={(e) => updateEntryField(idx, 'type', e.target.value)}
-                              className="w-full bg-[#12141E] border border-[#292B39] rounded-xl px-2 py-1.5 text-[11px] text-[#F4F3FA] outline-none cursor-pointer"
+                              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-2 py-1.5 text-[11px] text-[var(--text-primary)] outline-none cursor-pointer"
                             >
                               <option value="Season">Season</option>
                               <option value="Movie">Movie</option>
@@ -1282,7 +1284,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               value={entry.label}
                               onChange={(e) => updateEntryField(idx, 'label', e.target.value)}
                               placeholder="Label"
-                              className="w-full bg-[#12141E] border border-[#292B39] rounded-xl px-2 py-1.5 text-[11px] text-[#F4F3FA] outline-none"
+                              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-2 py-1.5 text-[11px] text-[var(--text-primary)] outline-none"
                             />
                           </div>
                           <div className="col-span-3">
@@ -1291,7 +1293,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               value={entry.episodeCount}
                               onChange={(e) => updateEntryField(idx, 'episodeCount', e.target.value)}
                               placeholder="Eps"
-                              className="w-full bg-[#12141E] border border-[#292B39] rounded-xl px-2 py-1.5 text-[11px] text-[#F4F3FA] outline-none"
+                              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-2 py-1.5 text-[11px] text-[var(--text-primary)] outline-none"
                             />
                           </div>
                           <div className="col-span-2 flex justify-center items-center">
@@ -1299,7 +1301,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => removeEntry(idx)}
-                                className="p-1.5 rounded-xl text-[#A1A5B5] hover:text-[#F87171] hover:bg-[#12141E] transition-colors cursor-pointer"
+                                className="p-1.5 rounded-xl text-[var(--text-secondary)] hover:text-[#F87171] hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1309,7 +1311,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                         {/* Language Pill Toggles */}
                         <div>
-                          <span className="text-[10px] font-bold text-[#A1A5B5] uppercase tracking-wider block mb-1">Available Languages:</span>
+                          <span className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block mb-1">Available Languages:</span>
                           <div className="flex flex-wrap gap-1.5">
                             {ALL_LANGS.map(sl => {
                               const isSel = entry.languages.includes(sl);
@@ -1320,8 +1322,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                                   onClick={() => toggleLangForEntry(idx, sl)}
                                   className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors duration-150 cursor-pointer ${
                                     isSel
-                                      ? 'bg-[#B49AF8] text-[#0B0A10] font-bold border border-[#B49AF8]'
-                                      : 'bg-[#12141E] text-[#A1A5B5] border border-[#292B39]'
+                                      ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] font-bold border border-[var(--accent-primary)]'
+                                      : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
                                   }`}
                                 >
                                   {sl}
@@ -1337,14 +1339,14 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
                 {/* Genres */}
                 <div>
-                  <label className="block font-bold text-[#F4F3FA] mb-1.5 flex items-center justify-between">
+                  <label className="block font-bold text-[var(--text-primary)] mb-1.5 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
                       <span>Genres</span>
-                      <span className="text-[10px] text-[#A1A5B5] font-normal">(Select all that apply)</span>
+                      <span className="text-[10px] text-[var(--text-secondary)] font-normal">(Select all that apply)</span>
                     </span>
-                    <span className="text-[10px] text-[#B49AF8] font-bold">{genres.length} selected</span>
+                    <span className="text-[10px] text-[var(--accent-primary)] font-bold">{genres.length} selected</span>
                   </label>
-                  <div className="flex flex-wrap gap-2 p-3.5 rounded-xl bg-[#191C29] border border-[#292B39] max-h-48 overflow-y-auto no-scrollbar">
+                  <div className="flex flex-wrap gap-2 p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] max-h-48 overflow-y-auto no-scrollbar">
                     {AVAILABLE_GENRES.map((g) => {
                       const isSelected = genres.includes(g);
                       return (
@@ -1354,11 +1356,11 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                           onClick={() => toggleGenre(g)}
                           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors duration-150 cursor-pointer flex items-center gap-1.5 ${
                             isSelected
-                              ? 'bg-[#B49AF8] text-[#0B0A10] border border-[#B49AF8]'
-                              : 'bg-[#12141E] text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39]'
+                              ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border border-[var(--accent-primary)]'
+                              : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)]'
                           }`}
                         >
-                          {isSelected && <span className="text-[#0B0A10] text-xs font-black">✓</span>}
+                          {isSelected && <span className="text-[var(--accent-on-primary)] text-xs font-black">✓</span>}
                           <span>{g}</span>
                         </button>
                       );
@@ -1369,27 +1371,27 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                 {/* Studio, Year, Rating */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block font-bold text-[#A1A5B5] mb-1">Studio</label>
+                    <label className="block font-bold text-[var(--text-secondary)] mb-1">Studio</label>
                     <input
                       type="text"
                       value={studio}
                       onChange={(e) => setStudio(e.target.value)}
                       placeholder="e.g. Ufotable"
-                      className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] px-3 py-2 text-[#F4F3FA] text-xs outline-none transition-colors duration-180"
+                      className="w-full min-h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] rounded-[12px] px-3 py-2 text-[var(--text-primary)] text-xs outline-none transition-colors duration-180"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-[#A1A5B5] mb-1">Year</label>
+                    <label className="block font-bold text-[var(--text-secondary)] mb-1">Year</label>
                     <input
                       type="number"
                       value={releaseYear}
                       onChange={(e) => setReleaseYear(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                       placeholder="2025"
-                      className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] px-3 py-2 text-[#F4F3FA] text-xs outline-none transition-colors duration-180"
+                      className="w-full min-h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] rounded-[12px] px-3 py-2 text-[var(--text-primary)] text-xs outline-none transition-colors duration-180"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-[#A1A5B5] mb-1">Rating</label>
+                    <label className="block font-bold text-[var(--text-secondary)] mb-1">Rating</label>
                     <input
                       type="number"
                       step="0.1"
@@ -1398,18 +1400,18 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                       value={rating}
                       onChange={(e) => setRating(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       placeholder="8.5"
-                      className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] focus:border-[#B49AF8] rounded-[12px] px-3 py-2 text-[#F4F3FA] text-xs outline-none transition-colors duration-180"
+                      className="w-full min-h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] focus:border-[var(--accent-primary)] rounded-[12px] px-3 py-2 text-[var(--text-primary)] text-xs outline-none transition-colors duration-180"
                     />
                   </div>
                 </div>
 
                 {/* Strict Moderation Gate Card */}
-                <div className="rounded-xl p-4 bg-[#191C29] border border-[#F9C876]/35 space-y-1.5">
+                <div className="rounded-xl p-4 bg-[var(--bg-elevated)] border border-[#F9C876]/35 space-y-1.5">
                   <div className="flex items-center gap-2 text-[#F9C876] text-xs font-bold">
                     <ShieldAlert className="w-4 h-4 shrink-0" />
                     <span>Strict Moderation Gate</span>
                   </div>
-                  <p className="text-[11px] text-[#A1A5B5] leading-relaxed">
+                  <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
                     This submission will be saved with <span className="text-[#F9C876] font-bold">approval status: "pending"</span>. It will <span className="text-[#F87171] font-bold">NEVER</span> appear on the public website until approved by the admin.
                   </p>
                 </div>
@@ -1421,22 +1423,22 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
 
         {/* STICKY FOOTER BUTTON */}
         {!isSuccess && (
-          <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 bg-[#191C29] border-t border-[#292B39] z-50">
+          <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 bg-[var(--bg-elevated)] border-t border-[var(--border-subtle)] z-50">
             <button
               type="submit"
               form="dub-info-form"
               disabled={isSubmitting || !title.trim()}
-              className="w-full min-h-[48px] px-5 py-3 rounded-xl bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-black text-sm flex items-center justify-center gap-2.5 cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full min-h-[48px] px-5 py-3 rounded-xl bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] font-black text-sm flex items-center justify-center gap-2.5 cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
-                <div className="flex items-center gap-2 text-[#0B0A10]">
+                <div className="flex items-center gap-2 text-[var(--accent-on-primary)]">
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>{mode === 'edit' ? 'Saving changes...' : 'Submitting...'}</span>
+                  <span>{mode === 'edit' ? 'Saving changes...' : t('forms:submitDub.submitting', 'Submitting...')}</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2.5">
                   <Send className="w-4 h-4" />
-                  <span>{mode === 'edit' ? 'Save Anime Changes' : 'Submit Dub for Admin Approval'}</span>
+                  <span>{mode === 'edit' ? 'Save Anime Changes' : t('forms:submitDub.submitCta', 'Submit Dub for Admin Approval')}</span>
                 </div>
               )}
             </button>

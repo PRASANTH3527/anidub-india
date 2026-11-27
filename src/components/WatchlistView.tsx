@@ -13,6 +13,7 @@ import { OptimizedImage } from './OptimizedImage';
 import { ConfirmDialog, LibraryPageSkeleton } from './ui/EclipseState';
 import { normalizeDubSeasonBreakdowns } from '../utils/dubProgress';
 import { cloudflareApi } from '../services/cloudflareApi';
+import { useTranslation } from 'react-i18next';
 
 export interface WatchlistViewProps {
   watchlist: any[];
@@ -73,6 +74,20 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 }) => {
   const onExplore = onExploreProp || onNavigateToCatalog || (() => {});
   const user = userProp ?? (isSignedIn ? { id: userId || 'user', name: 'Member', email: '' } : null);
+  const { t } = useTranslation(['library', 'common']);
+
+  const getTabLabel = (status: 'All' | WatchlistStatus): string => {
+    const keyMap: Record<'All' | WatchlistStatus, string> = {
+      All: 'library:tabs.all',
+      Watching: 'library:tabs.watching',
+      Completed: 'library:tabs.completed',
+      'Plan to Watch': 'library:tabs.planToWatch',
+      'On Hold': 'library:tabs.onHold',
+      Dropped: 'library:tabs.dropped',
+      Rewatching: 'library:tabs.rewatching',
+    };
+    return t(keyMap[status] || status, status);
+  };
 
   const [selectedTab, setSelectedTab] = useState<'All' | WatchlistStatus>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -301,34 +316,34 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   // When watchlist.length === 0, HIDE Search, Sort, CSV Export bars and status tabs.
   if (enrichedItems.length === 0) {
     return (
-      <section className="max-w-[1280px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[#F4F3FA]">
+      <section className="max-w-[1280px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[var(--text-primary)]">
         {/* Header */}
         <div className="mb-4">
-          <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em]">
-            My Library
+          <h1 className="text-[24px] sm:text-[30px] font-bold text-[var(--text-primary)] leading-[1.2] tracking-[-0.02em]">
+            {t('library:title', 'My Library')}
           </h1>
-          <p className="text-[13px] text-[#A1A5B5] mt-0.5">0 saved anime</p>
+          <p className="text-[13px] text-[var(--text-secondary)] mt-0.5">{t('library:subtitle', '0 saved anime')}</p>
         </div>
 
         {/* Slim Guest Sign-In Prompt */}
         {!user && (
           <div
             data-testid="library-guest-sync-prompt"
-            className="mb-6 rounded-[14px] bg-[#12141E] border border-[#292B39] px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            className="mb-6 rounded-[14px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
           >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-center shrink-0">
-                <Cloud className="w-4 h-4 text-[#B49AF8]" />
+              <div className="w-9 h-9 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+                <Cloud className="w-4 h-4 text-[var(--accent-primary)]" />
               </div>
-              <p className="text-[13px] sm:text-[14px] text-[#F4F3FA] font-medium">
-                Keep your library safe — <span className="text-[#A1A5B5]">Sign in to sync across devices</span>
+              <p className="text-[13px] sm:text-[14px] text-[var(--text-primary)] font-medium">
+                Keep your library safe — <span className="text-[var(--text-secondary)]">Sign in to sync across devices</span>
               </p>
             </div>
             {onOpenAuth && (
               <button
                 type="button"
                 onClick={onOpenAuth}
-                className="min-h-[44px] px-4 rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#CBB6FF] border border-[#B49AF8]/30 text-[13px] font-semibold shrink-0 transition-colors duration-180"
+                className="min-h-[44px] px-4 rounded-[10px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[var(--accent-hover)] border border-[var(--accent-primary)]/30 text-[13px] font-semibold shrink-0 transition-colors duration-180"
               >
                 Sign in
               </button>
@@ -339,24 +354,24 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
         {/* Clean Centered Empty State with ONE #B49AF8 "Explore anime" CTA */}
         <div
           data-testid="library-empty-state"
-          className="rounded-[18px] bg-[#12141E] border border-[#292B39] px-6 py-14 text-center max-w-lg mx-auto my-6"
+          className="rounded-[18px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-6 py-14 text-center max-w-lg mx-auto my-6"
         >
-          <div className="w-14 h-14 rounded-2xl bg-[#191C29] border border-[#292B39] flex items-center justify-center mx-auto mb-4">
-            <Bookmark className="w-6 h-6 text-[#B49AF8]" />
+          <div className="w-14 h-14 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center mx-auto mb-4">
+            <Bookmark className="w-6 h-6 text-[var(--accent-primary)]" />
           </div>
-          <h2 className="text-[18px] sm:text-[22px] font-bold text-[#F4F3FA] mb-2">
-            Your anime journey starts here
+          <h2 className="text-[18px] sm:text-[22px] font-bold text-[var(--text-primary)] mb-2">
+            {t('library:emptyTitle', 'Your library is empty')}
           </h2>
-          <p className="text-[14px] text-[#A1A5B5] max-w-sm mx-auto mb-6 leading-relaxed">
-            Bookmark Tamil, Hindi, and Telugu dubbed anime to track episodes and build your regional watchlist.
+          <p className="text-[14px] text-[var(--text-secondary)] max-w-sm mx-auto mb-6 leading-relaxed">
+            {t('library:emptySubtitle', 'Bookmark anime from Explore to track seasons and regional dubs here.')}
           </p>
           <button
             type="button"
             onClick={onExplore}
-            className="min-h-[44px] px-6 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold text-[14px] inline-flex items-center justify-center gap-2 transition-colors duration-180 shadow-sm"
+            className="min-h-[44px] px-6 rounded-[12px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] font-bold text-[14px] inline-flex items-center justify-center gap-2 transition-colors duration-180 shadow-sm"
           >
             <Sparkles className="w-4 h-4" />
-            <span>Explore anime</span>
+            <span>{t('library:browseExplore', 'Explore anime')}</span>
           </button>
         </div>
       </section>
@@ -364,14 +379,14 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   }
 
   return (
-    <section className="max-w-[1280px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[#F4F3FA]">
+    <section className="max-w-[1280px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[var(--text-primary)]">
       {/* Header & Utility Actions */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em]">
-            My Library
+          <h1 className="text-[24px] sm:text-[30px] font-bold text-[var(--text-primary)] leading-[1.2] tracking-[-0.02em]">
+            {t('library:title', 'My Library')}
           </h1>
-          <p className="text-[13px] text-[#A1A5B5] mt-0.5">
+          <p className="text-[13px] text-[var(--text-secondary)] mt-0.5">
             {enrichedItems.length} saved anime
           </p>
         </div>
@@ -380,27 +395,27 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           type="button"
           onClick={handleExportCsv}
           aria-label="Export Watchlist (CSV)"
-          className="min-h-[44px] px-3.5 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] text-[#F4F3FA] border border-[#292B39] text-[12px] font-semibold inline-flex items-center gap-2 transition-colors duration-180"
+          className="min-h-[44px] px-3.5 rounded-[12px] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)] text-[12px] font-semibold inline-flex items-center gap-2 transition-colors duration-180"
         >
-          <Download className="w-4 h-4 text-[#B49AF8]" />
-          <span>Export Watchlist (CSV)</span>
+          <Download className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+          <span>{t('library:exportCsv', 'Export Watchlist (CSV)')}</span>
         </button>
       </div>
 
       {/* Slim Guest Sign-In Sync Banner when signed out */}
       {!user && (
-        <div className="mb-4 rounded-[14px] bg-[#12141E] border border-[#292B39] px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="mb-4 rounded-[14px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 text-[13px]">
-            <Cloud className="w-4 h-4 text-[#B49AF8] shrink-0" />
-            <span className="text-[#F4F3FA] font-medium">
-              Keep your library safe — <span className="text-[#A1A5B5]">Sign in to sync across devices</span>
+            <Cloud className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+            <span className="text-[var(--text-primary)] font-medium">
+              Keep your library safe — <span className="text-[var(--text-secondary)]">Sign in to sync across devices</span>
             </span>
           </div>
           {onOpenAuth && (
             <button
               type="button"
               onClick={onOpenAuth}
-              className="min-h-[44px] px-3.5 rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#CBB6FF] border border-[#292B39] text-[12px] font-semibold shrink-0"
+              className="min-h-[44px] px-3.5 rounded-[10px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[var(--accent-hover)] border border-[var(--border-subtle)] text-[12px] font-semibold shrink-0"
             >
               Sign in
             </button>
@@ -413,15 +428,15 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
         <div
           role="status"
           data-testid="library-undo-toast"
-          className="mb-4 rounded-[12px] bg-[#191C29] border border-[#B49AF8]/40 px-4 py-2.5 flex items-center justify-between gap-3 animate-in fade-in duration-180"
+          className="mb-4 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--accent-primary)]/40 px-4 py-2.5 flex items-center justify-between gap-3 animate-in fade-in duration-180"
         >
-          <span className="text-[13px] text-[#F4F3FA]">
+          <span className="text-[13px] text-[var(--text-primary)]">
             Updated <strong>{undoBanner.animeTitle}</strong> to Episode {undoBanner.newTotal}
           </span>
           <button
             type="button"
             onClick={handleUndoProgress}
-            className="min-h-[44px] px-3.5 rounded-[10px] bg-[#B49AF8] text-[#0B0A10] text-[12px] font-bold inline-flex items-center gap-1.5"
+            className="min-h-[44px] px-3.5 rounded-[10px] bg-[var(--accent-primary)] text-[var(--accent-on-primary)] text-[12px] font-bold inline-flex items-center gap-1.5"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Undo</span>
@@ -447,15 +462,15 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               onClick={() => setSelectedTab(status)}
               className={`min-h-[44px] px-3.5 rounded-[12px] text-[13px] font-semibold whitespace-nowrap border inline-flex items-center gap-2 transition-all duration-180 motion-reduce:transition-none ${
                 isActive
-                  ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                  : 'bg-[#12141E] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA] hover:bg-[#191C29]'
+                  ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                  : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
               }`}
             >
-              <span>{status}</span>
+              <span>{getTabLabel(status)}</span>
               {count > 0 && (
                 <span
                   className={`px-1.5 py-0.5 rounded-[6px] text-[11px] font-bold ${
-                    isActive ? 'bg-[#0B0A10]/15 text-[#0B0A10]' : 'bg-[#191C29] text-[#CBB6FF]'
+                    isActive ? 'bg-[var(--bg-canvas)]/15 text-[var(--accent-on-primary)]' : 'bg-[var(--bg-elevated)] text-[var(--accent-hover)]'
                   }`}
                 >
                   {count}
@@ -469,24 +484,24 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       {/* Compact Search & Sort Bar (44px controls) */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-5">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-[#A1A5B5] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-4 h-4 text-[var(--text-secondary)] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search saved anime..."
+            placeholder={t('library:searchPlaceholder', 'Filter your saved anime...')}
             aria-label="Search saved anime"
-            className="w-full min-h-[44px] pl-10 pr-4 rounded-[12px] bg-[#12141E] border border-[#292B39] text-[14px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8]"
+            className="w-full min-h-[44px] pl-10 pr-4 rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
           />
         </div>
 
         <div className="flex items-center gap-2">
-          <ArrowUpDown className="w-4 h-4 text-[#B49AF8] shrink-0" />
+          <ArrowUpDown className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
           <select
             aria-label="Sort library"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="min-h-[44px] px-3.5 rounded-[12px] bg-[#12141E] border border-[#292B39] text-[13px] font-semibold text-[#F4F3FA] focus:outline-none focus:border-[#B49AF8]"
+            className="min-h-[44px] px-3.5 rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[13px] font-semibold text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)]"
           >
             <option value="updated">Recently Added</option>
             <option value="title">Title (A–Z)</option>
@@ -513,12 +528,12 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               <div
                 key={anime.id}
                 data-testid="library-anime-card"
-                className="relative rounded-[14px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/40 p-3.5 flex items-center gap-3.5 transition-all duration-180"
+                className="relative rounded-[14px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/40 p-3.5 flex items-center gap-3.5 transition-all duration-180"
               >
                 {/* 2:3 Poster */}
                 <div
                   onClick={() => onSelectAnime(anime)}
-                  className="w-20 sm:w-24 aspect-[2/3] rounded-[10px] overflow-hidden bg-[#191C29] border border-[#292B39] shrink-0 cursor-pointer"
+                  className="w-20 sm:w-24 aspect-[2/3] rounded-[10px] overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border-subtle)] shrink-0 cursor-pointer"
                 >
                   <OptimizedImage
                     src={anime.poster}
@@ -532,17 +547,17 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 <div className="flex-1 min-w-0 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] bg-[#191C29] text-[#CBB6FF] border border-[#292B39] text-[10px] font-bold uppercase tracking-wider mb-1">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] bg-[var(--bg-elevated)] text-[var(--accent-hover)] border border-[var(--border-subtle)] text-[10px] font-bold uppercase tracking-wider mb-1">
                         {status === 'Completed' ? (
                           <CheckCircle2 className="w-3 h-3 text-[#34D399]" />
                         ) : (
-                          <Clock className="w-3 h-3 text-[#B49AF8]" />
+                          <Clock className="w-3 h-3 text-[var(--accent-primary)]" />
                         )}
                         {status}
                       </span>
                       <h3
                         onClick={() => onSelectAnime(anime)}
-                        className="text-[14px] font-semibold text-[#F4F3FA] hover:text-[#CBB6FF] leading-[20px] line-clamp-2 cursor-pointer"
+                        className="text-[14px] font-semibold text-[var(--text-primary)] hover:text-[var(--accent-hover)] leading-[20px] line-clamp-2 cursor-pointer"
                       >
                         {anime.title}
                       </h3>
@@ -556,13 +571,13 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                         onClick={() =>
                           setActiveOverflowId((prev) => (prev === anime.id ? null : anime.id))
                         }
-                        className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39] flex items-center justify-center transition-colors"
+                        className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] flex items-center justify-center transition-colors"
                       >
                         <MoreHorizontal className="w-4 h-4" />
                       </button>
 
                       {activeOverflowId === anime.id && (
-                        <div className="absolute right-0 top-12 z-20 w-48 rounded-[12px] bg-[#191C29] border border-[#292B39] shadow-xl p-1.5 space-y-1">
+                        <div className="absolute right-0 top-12 z-20 w-48 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] shadow-xl p-1.5 space-y-1">
                           <select
                             aria-label={`Change status for ${anime.title}`}
                             value={status}
@@ -570,7 +585,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                               handleUpdateStatus(anime.id, e.target.value as WatchlistStatus);
                               setActiveOverflowId(null);
                             }}
-                            className="w-full min-h-[44px] px-2.5 rounded-[8px] bg-[#12141E] border border-[#292B39] text-[12px] font-semibold text-[#F4F3FA]"
+                            className="w-full min-h-[44px] px-2.5 rounded-[8px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[12px] font-semibold text-[var(--text-primary)]"
                           >
                             {STATUS_TABS.slice(1).map((st) => (
                               <option key={st} value={st}>
@@ -597,14 +612,14 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   {/* Episode Progress Bar */}
                   <div className="space-y-1">
                     <div className="flex items-center justify-between text-[12px]">
-                      <span className="text-[#A1A5B5]">Progress</span>
-                      <span className="font-bold text-[#F4F3FA]">
+                      <span className="text-[var(--text-secondary)]">Progress</span>
+                      <span className="font-bold text-[var(--text-primary)]">
                         {watched} / {totalVerifiedEpisodes ?? '?'} eps
                       </span>
                     </div>
-                    <div className="w-full h-1.5 rounded-full bg-[#191C29] overflow-hidden">
+                    <div className="w-full h-1.5 rounded-full bg-[var(--bg-elevated)] overflow-hidden">
                       <div
-                        className="h-full bg-[#B49AF8] rounded-full transition-all duration-180"
+                        className="h-full bg-[var(--accent-primary)] rounded-full transition-all duration-180"
                         style={{ width: `${progressPercent}%` }}
                       />
                     </div>
@@ -615,9 +630,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onSelectAnime(anime)}
-                      className="min-h-[44px] px-3 rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#F4F3FA] border border-[#292B39] text-[12px] font-semibold inline-flex items-center gap-1.5"
+                      className="min-h-[44px] px-3 rounded-[10px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[var(--text-primary)] border border-[var(--border-subtle)] text-[12px] font-semibold inline-flex items-center gap-1.5"
                     >
-                      <Play className="w-3.5 h-3.5 text-[#B49AF8]" />
+                      <Play className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
                       <span>Details</span>
                     </button>
 
@@ -628,10 +643,10 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                       onClick={() =>
                         handleIncrementEpisode(anime, watched, totalVerifiedEpisodes)
                       }
-                      className="min-h-[44px] min-w-[44px] px-3.5 rounded-[10px] bg-[#B49AF8] hover:bg-[#CBB6FF] disabled:opacity-40 text-[#0B0A10] font-bold text-[12px] inline-flex items-center justify-center gap-1 transition-colors"
+                      className="min-h-[44px] min-w-[44px] px-3.5 rounded-[10px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] disabled:opacity-40 text-[var(--accent-on-primary)] font-bold text-[12px] inline-flex items-center justify-center gap-1 transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>1 Ep</span>
+                      <span>{t('library:plusOneEpisode', '+1 Ep')}</span>
                     </button>
                   </div>
                 </div>
@@ -640,8 +655,8 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           })}
         </div>
       ) : (
-        <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-8 text-center">
-          <p className="text-[14px] text-[#A1A5B5]">
+        <div className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-8 text-center">
+          <p className="text-[14px] text-[var(--text-secondary)]">
             No saved anime match your current filter.
           </p>
         </div>
@@ -650,13 +665,16 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       {/* Confirm Removal Dialog */}
       <ConfirmDialog
         open={Boolean(confirmRemoveAnime)}
-        title="Remove from Library?"
+        title={t('library:removeTitle', 'Remove from Library?')}
         description={
           confirmRemoveAnime
-            ? `Remove "${confirmRemoveAnime.title}" from your library? Your episode progress can be re-added anytime.`
+            ? t('library:removeConfirm', {
+                title: confirmRemoveAnime.title,
+                defaultValue: `Remove "${confirmRemoveAnime.title}" from your library? Your episode progress can be re-added anytime.`,
+              })
             : ''
         }
-        confirmLabel="Remove"
+        confirmLabel={t('library:removeAction', 'Remove')}
         isDestructive={true}
         onCancel={() => setConfirmRemoveAnime(null)}
         onConfirm={() => {

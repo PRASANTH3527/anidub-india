@@ -1,0 +1,27 @@
+{
+  "explore": "ஆராய்",
+  "schedule": "அட்டவணை",
+  "chat": "அரட்டை",
+  "library": "நூலகம்",
+  "profile": "சுயவிவரம்",
+  "tools": "கருவிகள்",
+  "searchAnime": "அனிமே தேடு",
+  "openToolsMenu": "கருவிகள் மெனுவைத் திற",
+  "appearanceAndThemes": "தோற்றம் & தீம்கள்",
+  "toolsSheetTitle": "கருவிகள் & கூடுதல்",
+  "toolsSheetSubtitle": "விரைவான தேடல் கருவிகள் மற்றும் சமூக அம்சங்கள்",
+  "websiteLanguage": "மொழி",
+  "websiteLanguageSubtitle": "இணையதள மொழியை மாற்றுக",
+  "adminDashboard": "நிர்வாகப் பலகை",
+  "adminDashboardSubtitle": "சமர்ப்பிப்புகள் மற்றும் பட்டியல் விவரங்களை நிர்வகி",
+  "secondary": {
+    "forYou": "உங்களுக்காக",
+    "forYouSubtitle": "உங்களுக்கு ஏற்ற அனிமே பரிந்துரைகள்",
+    "compare": "ஒப்பிடு",
+    "compareSubtitle": "இரண்டு அனிமேக்களை அருகருகே ஒப்பிடு",
+    "tierList": "தரப் பட்டியல்",
+    "tierListSubtitle": "பிடித்த டப் அனிமேக்களை வரிசைப்படுத்து",
+    "submitAnime": "அனிமே சேர்",
+    "submitAnimeSubtitle": "விடுபட்ட டப் அனிமேவைப் பரிந்துரைக்கவும்"
+  }
+}

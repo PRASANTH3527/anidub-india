@@ -1,0 +1,46 @@
+{
+  "whereToWatch": "Where to Watch",
+  "whereToWatchIndia": "Where to Watch (India)",
+  "addToLibrary": "Add to library",
+  "inLibrary": "In library",
+  "follow": "Follow",
+  "following": "Following",
+  "share": "Share",
+  "reportWrongInfo": "Report wrong info",
+  "episodes": "Episodes",
+  "seasons": "Seasons",
+  "dubLanguages": "Dub languages",
+  "audioLanguages": "Audio Languages",
+  "studio": "Studio",
+  "releaseYear": "Release Year",
+  "status": "Status",
+  "rating": "Rating",
+  "tabs": {
+    "overview": "Overview",
+    "seasonsAndDubs": "Seasons & Dubs",
+    "watchProgress": "Watch Progress",
+    "reviews": "Reviews ({{count}})"
+  },
+  "synopsis": "Synopsis",
+  "noSynopsis": "No verified synopsis available yet.",
+  "franchiseOrder": "Franchise Watch Order",
+  "streamingNote": "Official legal streaming platforms verified for India.",
+  "noVerifiedPlatforms": "No verified official OTT streaming link is listed for India yet.",
+  "watchNow": "Watch on {{platform}}",
+  "reviews": {
+    "writeReview": "Write a review",
+    "placeholder": "Share your honest thoughts on the regional dub quality, voice acting, or translation...",
+    "submit": "Post Review",
+    "posting": "Posting…",
+    "failedRetry": "Failed — Retry",
+    "signInToReview": "Sign in to post a verified review.",
+    "emptyTitle": "No reviews yet",
+    "emptySubtitle": "Be the first to share how this Indian dub sounds."
+  },
+  "progress": {
+    "title": "Episode Progress",
+    "watchedOf": "{{watched}} / {{total}} episodes watched",
+    "increment": "+1 Episode",
+    "statusLabel": "Watchlist Status"
+  }
+}

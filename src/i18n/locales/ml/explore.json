@@ -1,0 +1,91 @@
+{
+  "heading": "നിങ്ങളുടെ ഭാഷയിൽ അനിമെ കണ്ടെത്തൂ",
+  "random": "റാൻഡം",
+  "randomAnime": "റാൻഡം അനിമെ",
+  "compare": "താരതമ്യം",
+  "matchmaker": "നിർദ്ദേശങ്ങൾ",
+  "searchPlaceholder": "അനിമെ പേര്, ചുരുക്കപ്പേര് (ഉദാ. JJK), സ്റ്റുഡിയോ തിരയുക...",
+  "filters": "ഫിൽട്ടർ",
+  "mySubscriptionsHeader": "എന്റെ OTT സബ്സ്ക്രിപ്ഷനുകളും കവറേജും",
+  "myOttsOff": "എന്റെ OTT: ഓഫ്",
+  "myOttsActive": "എന്റെ OTT: {{count}} സജീവം",
+  "showingTitles": "{{count}} ടൈറ്റിലുകൾ കാണിക്കുന്നു",
+  "showingTitlesOf": "{{total}} ൽ {{shown}} ടൈറ്റിലുകൾ",
+  "loadingCatalog": "കാറ്റലോഗ് ലോഡ് ചെയ്യുന്നു...",
+  "batchIndicator": "ബാച്ച് {{current}} / {{total}}",
+  "loadMoreAnime": "കൂടുതൽ അനിമെ ലോഡ് ചെയ്യുക",
+  "manualContinuationHelper": "48 ടൈറ്റിലുകൾക്ക് ശേഷം മാനുവൽ ലോഡിംഗ്",
+  "autoLoadingNextBatch": "അടുത്ത ബാച്ച് സ്വയമേവ ലോഡ് ചെയ്യുന്നു...",
+  "allCaughtUp": "എല്ലാം കണ്ടുതീർന്നു",
+  "backToTop": "മുകളിലേക്ക്",
+  "resetAllFilters": "എല്ലാ ഫിൽട്ടറുകളും റീസെറ്റ് ചെയ്യുക",
+  "noAnimeMatchesTitle": "തിരഞ്ഞെടുത്ത ഫിൽട്ടറുകൾക്ക് അനുയോജ്യമായ അനിമെ ഇല്ല.",
+  "noAnimeMatchesSubtitle": "ഭാഷ, OTT പ്ലാറ്റ്ഫോം അല്ലെങ്കിൽ തിരയൽ പദം മാറ്റി വീണ്ടും ശ്രമിക്കുക.",
+  "filterSheet": {
+    "title": "ഫിൽട്ടറും ക്രമീകരണവും",
+    "subtitle": "ഇന്ത്യൻ പ്രാദേശിക ഡബുകൾ എളുപ്പത്തിൽ തിരഞ്ഞെടുക്കുക",
+    "quickSort": "വേഗത്തിലുള്ള ക്രമം",
+    "dubLanguages": "ഡബ് ഭാഷകൾ",
+    "ottPlatforms": "OTT പ്ലാറ്റ്ഫോമുകൾ",
+    "genre": "വിഭാഗം",
+    "type": "തരം",
+    "releaseStatus": "റിലീസ് നില",
+    "episodeLength": "എപ്പിസോഡ് ദൈർഘ്യം",
+    "dubAvailability": "ഡബ് ലഭ്യത",
+    "verifiedOnly": "സ്ഥിരീകരിച്ചവ മാത്രം",
+    "fullyDubbedOnly": "പൂർണ്ണമായി ഡബ് ചെയ്ത സീസണുകൾ മാത്രം",
+    "showResults": "ഫലങ്ങൾ കാണിക്കുക",
+    "showResultsCount": "{{count}} ഫലങ്ങൾ കാണിക്കുക",
+    "resetFilters": "റീസെറ്റ്",
+    "allGenres": "എല്ലാ വിഭാഗങ്ങളും",
+    "allTypes": "എല്ലാ തരങ്ങളും",
+    "allStatuses": "എല്ലാ നിലകളും",
+    "allLengths": "ഏത് ദൈർഘ്യവും",
+    "sort": {
+      "latest": "പുതുതായി ചേർത്തവ",
+      "rating": "ഉയർന്ന റേറ്റിംഗ്",
+      "popular": "ഏറ്റവും ജനപ്രിയം",
+      "title": "A–Z പേര്",
+      "year": "പുതിയ റിലീസ്"
+    },
+    "lengths": {
+      "short": "ചെറുത് (1–12 എപ്പി.)",
+      "medium": "ഇടത്തരം (13–26 എപ്പി.)",
+      "long": "ദൈർഘ്യമേറിയത് (27+ എപ്പി.)"
+    },
+    "statuses": {
+      "airing": "ഇപ്പോൾ സംപ്രേഷണം",
+      "completed": "പൂർത്തിയായി",
+      "upcoming": "വരാനിരിക്കുന്നവ"
+    }
+  },
+  "ottSheet": {
+    "title": "എന്റെ OTT സബ്സ്ക്രിപ്ഷനുകളും കവറേജും",
+    "subtitle": "ഉടനടി ഡബ് കവറേജിനായി നിങ്ങളുടെ സബ്സ്ക്രിപ്ഷൻ പ്ലാറ്റ്ഫോമുകൾ തിരഞ്ഞെടുക്കുക",
+    "filterByMyOtts": "എന്റെ OTT-കളിൽ ഉള്ള അനിമെ മാത്രം കാണിക്കുക",
+    "selectedCount": "{{count}} പ്ലാറ്റ്ഫോമുകൾ തിരഞ്ഞെടുത്തു",
+    "clearSelection": "തിരഞ്ഞെടുപ്പ് മായ്ക്കുക",
+    "done": "പൂർത്തിയായി"
+  },
+  "card": {
+    "posterUnavailable": "പോസ്റ്റർ ലഭ്യമല്ല",
+    "retryImage": "ചിത്രം വീണ്ടും ലോഡ് ചെയ്യുക",
+    "shareAnime": "അനിമെ പങ്കിടുക",
+    "compareAnime": "അനിമെ താരതമ്യം ചെയ്യുക",
+    "saveOffline": "വിവരങ്ങൾ ഓഫ്‌ലൈനിൽ സേവ് ചെയ്യുക",
+    "savedOffline": "ഓഫ്‌ലൈനിൽ സേവ് ചെയ്തു",
+    "reportIncorrect": "തെറ്റായ വിവരം റിപ്പോർട്ട് ചെയ്യുക",
+    "moreActions": "കൂടുതൽ പ്രവർത്തനങ്ങൾ",
+    "bookmarkAdd": "ലൈബ്രറിയിൽ സേവ് ചെയ്യുക",
+    "bookmarkRemove": "ലൈബ്രറിയിൽ നിന്ന് നീക്കുക",
+    "seasonsCount": "{{count}} സീസണുകൾ",
+    "seasonSingle": "1 സീസൺ",
+    "episodesCount": "{{count}} എപ്പി."
+  },
+  "latestUpdates": {
+    "title": "പുതിയ ഡബ് അപ്ഡേറ്റുകൾ",
+    "subtitle": "എഡിറ്റർമാർ സ്ഥിരീകരിച്ച കാറ്റലോഗ് മാറ്റങ്ങൾ",
+    "refresh": "അപ്ഡേറ്റുകൾ പുതുക്കുക",
+    "empty": "സമീപകാല സ്ഥിരീകരിച്ച അപ്ഡേറ്റുകൾ ഒന്നുമില്ല."
+  }
+}

@@ -106,26 +106,26 @@ export const PersonalAnimeStats: React.FC<PersonalAnimeStatsProps> = ({
     <section
       data-testid="personal-anime-stats"
       aria-label="My Anime Journey"
-      className="rounded-2xl bg-[#12141E] border border-[#292B39] p-5 sm:p-7 space-y-6 shadow-xl"
+      className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5 sm:p-7 space-y-6 shadow-xl"
     >
       {/* HEADER */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#292B39] pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
+          <div className="w-10 h-10 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)]">
             <BarChart3 className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-heading font-black text-[#F4F3FA] uppercase tracking-tight">
+            <h2 className="text-base sm:text-lg font-heading font-black text-[var(--text-primary)] uppercase tracking-tight">
               My Anime Journey
             </h2>
-            <p className="text-xs text-[#A1A5B5]">
+            <p className="text-xs text-[var(--text-secondary)]">
               Calculated strictly from your logged Watchlist &amp; Episode Progress
             </p>
           </div>
         </div>
 
         {stats.hasLoggedActivity && (
-          <span className="px-3 py-1 rounded-full bg-[#191C29] border border-[#292B39] text-[11px] font-bold text-[#A1A5B5] tabular-nums">
+          <span className="px-3 py-1 rounded-full bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[11px] font-bold text-[var(--text-secondary)] tabular-nums">
             {stats.totalTrackedTitles} Tracked {stats.totalTrackedTitles === 1 ? 'Title' : 'Titles'}
           </span>
         )}
@@ -133,15 +133,15 @@ export const PersonalAnimeStats: React.FC<PersonalAnimeStatsProps> = ({
 
       {!stats.hasLoggedActivity ? (
         /* HONEST EMPTY STATE */
-        <div className="rounded-2xl bg-[#191C29]/60 border border-dashed border-[#292B39] p-8 text-center space-y-4">
-          <div className="w-12 h-12 mx-auto rounded-2xl bg-[#12141E] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
+        <div className="rounded-2xl bg-[var(--bg-elevated)]/60 border border-dashed border-[var(--border-subtle)] p-8 text-center space-y-4">
+          <div className="w-12 h-12 mx-auto rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)]">
             <Sparkles className="w-6 h-6" />
           </div>
           <div className="space-y-1.5 max-w-md mx-auto">
-            <h3 className="text-sm sm:text-base font-black text-[#F4F3FA]">
+            <h3 className="text-sm sm:text-base font-black text-[var(--text-primary)]">
               Start tracking your Indian-dubbed anime journey
             </h3>
-            <p className="text-xs text-[#A1A5B5] leading-relaxed">
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
               Add anime to your Watchlist or log episodes watched on any title page to unlock your personal stats, top genres, and preferred dub language breakdown.
             </p>
           </div>
@@ -161,42 +161,42 @@ export const PersonalAnimeStats: React.FC<PersonalAnimeStatsProps> = ({
         <div className="space-y-6">
           {/* 4 SUMMARY CARDS */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="rounded-xl bg-[#191C29] border border-[#292B39] p-4 space-y-1.5">
+            <div className="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-4 space-y-1.5">
               <div className="flex items-center justify-between text-[#34D399]">
                 <span className="text-[10px] font-black uppercase tracking-wider">Anime Completed</span>
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
               </div>
-              <p className="text-2xl sm:text-3xl font-heading font-black text-[#F4F3FA] tabular-nums">
+              <p className="text-2xl sm:text-3xl font-heading font-black text-[var(--text-primary)] tabular-nums">
                 {stats.completedCount}
               </p>
             </div>
 
-            <div className="rounded-xl bg-[#191C29] border border-[#292B39] p-4 space-y-1.5">
-              <div className="flex items-center justify-between text-[#B49AF8]">
+            <div className="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-4 space-y-1.5">
+              <div className="flex items-center justify-between text-[var(--accent-primary)]">
                 <span className="text-[10px] font-black uppercase tracking-wider">Episodes Watched</span>
                 <PlayCircle className="w-4 h-4 shrink-0" />
               </div>
-              <p className="text-2xl sm:text-3xl font-heading font-black text-[#F4F3FA] tabular-nums">
+              <p className="text-2xl sm:text-3xl font-heading font-black text-[var(--text-primary)] tabular-nums">
                 {stats.episodesWatched}
               </p>
             </div>
 
-            <div className="rounded-xl bg-[#191C29] border border-[#292B39] p-4 space-y-1.5">
+            <div className="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-4 space-y-1.5">
               <div className="flex items-center justify-between text-[#F9C876]">
                 <span className="text-[10px] font-black uppercase tracking-wider">Watching</span>
                 <Clock className="w-4 h-4 shrink-0" />
               </div>
-              <p className="text-2xl sm:text-3xl font-heading font-black text-[#F4F3FA] tabular-nums">
+              <p className="text-2xl sm:text-3xl font-heading font-black text-[var(--text-primary)] tabular-nums">
                 {stats.watchingCount}
               </p>
             </div>
 
-            <div className="rounded-xl bg-[#191C29] border border-[#292B39] p-4 space-y-1.5">
-              <div className="flex items-center justify-between text-[#CBB6FF]">
+            <div className="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-4 space-y-1.5">
+              <div className="flex items-center justify-between text-[var(--accent-hover)]">
                 <span className="text-[10px] font-black uppercase tracking-wider">Plan to Watch</span>
                 <Bookmark className="w-4 h-4 shrink-0" />
               </div>
-              <p className="text-2xl sm:text-3xl font-heading font-black text-[#F4F3FA] tabular-nums">
+              <p className="text-2xl sm:text-3xl font-heading font-black text-[var(--text-primary)] tabular-nums">
                 {stats.planToWatchCount}
               </p>
             </div>
@@ -205,17 +205,17 @@ export const PersonalAnimeStats: React.FC<PersonalAnimeStatsProps> = ({
           {/* CHARTS GRID */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* FAVORITE GENRES BAR CHART */}
-            <div className="rounded-xl bg-[#191C29] border border-[#292B39] p-4 sm:p-5 space-y-3.5">
+            <div className="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-4 sm:p-5 space-y-3.5">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-black uppercase tracking-wider text-[#F4F3FA] flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-[#B49AF8]" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-[var(--text-primary)] flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-[var(--accent-primary)]" />
                   <span>Favorite Genres</span>
                 </h3>
-                <span className="text-[10px] text-[#A1A5B5]">From your watchlist</span>
+                <span className="text-[10px] text-[var(--text-secondary)]">From your watchlist</span>
               </div>
 
               {stats.favoriteGenres.length === 0 ? (
-                <p className="text-xs text-[#A1A5B5] py-4">
+                <p className="text-xs text-[var(--text-secondary)] py-4">
                   Genre data will appear once your saved titles finish syncing.
                 </p>
               ) : (
@@ -223,14 +223,14 @@ export const PersonalAnimeStats: React.FC<PersonalAnimeStatsProps> = ({
                   {stats.favoriteGenres.map((item) => (
                     <div key={item.genre} role="listitem" className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-[#F4F3FA] truncate">{item.genre}</span>
-                        <span className="text-[#A1A5B5] font-semibold tabular-nums">
+                        <span className="font-bold text-[var(--text-primary)] truncate">{item.genre}</span>
+                        <span className="text-[var(--text-secondary)] font-semibold tabular-nums">
                           {item.count} {item.count === 1 ? 'title' : 'titles'}
                         </span>
                       </div>
-                      <div className="w-full h-2 rounded-full bg-[#12141E] overflow-hidden">
+                      <div className="w-full h-2 rounded-full bg-[var(--bg-surface)] overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-[#B49AF8] transition-all duration-300"
+                          className="h-full rounded-full bg-[var(--accent-primary)] transition-all duration-300"
                           style={{ width: `${Math.max(8, item.percent)}%` }}
                         />
                       </div>
@@ -241,18 +241,18 @@ export const PersonalAnimeStats: React.FC<PersonalAnimeStatsProps> = ({
             </div>
 
             {/* PREFERRED DUB LANGUAGES SEGMENTED BAR */}
-            <div className="rounded-xl bg-[#191C29] border border-[#292B39] p-4 sm:p-5 space-y-4 flex flex-col justify-between">
+            <div className="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-4 sm:p-5 space-y-4 flex flex-col justify-between">
               <div className="space-y-3.5">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-[#F4F3FA] flex items-center gap-2">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-[var(--text-primary)] flex items-center gap-2">
                     <Languages className="w-4 h-4 text-[#F9C876]" />
                     <span>Preferred Dub Languages</span>
                   </h3>
-                  <span className="text-[10px] text-[#A1A5B5]">Indian audio mix</span>
+                  <span className="text-[10px] text-[var(--text-secondary)]">Indian audio mix</span>
                 </div>
 
                 {stats.preferredLanguages.length === 0 ? (
-                  <p className="text-xs text-[#A1A5B5] py-4">
+                  <p className="text-xs text-[var(--text-secondary)] py-4">
                     Add Indian-dubbed anime to your watchlist to see your regional language split.
                   </p>
                 ) : (
@@ -263,7 +263,7 @@ export const PersonalAnimeStats: React.FC<PersonalAnimeStatsProps> = ({
                       aria-label={stats.preferredLanguages
                         .map((l) => `${l.language} ${l.percent}%`)
                         .join(', ')}
-                      className="w-full h-4 rounded-full bg-[#12141E] overflow-hidden flex gap-0.5 p-0.5 border border-[#292B39]"
+                      className="w-full h-4 rounded-full bg-[var(--bg-surface)] overflow-hidden flex gap-0.5 p-0.5 border border-[var(--border-subtle)]"
                     >
                       {stats.preferredLanguages.map((lang) => (
                         <div
@@ -276,7 +276,7 @@ export const PersonalAnimeStats: React.FC<PersonalAnimeStatsProps> = ({
                     </div>
 
                     {/* Readable Inline Summary Line (e.g., Tamil 65% • Hindi 25% • Telugu 10%) */}
-                    <p className="text-xs font-bold text-[#F4F3FA] leading-relaxed">
+                    <p className="text-xs font-bold text-[var(--text-primary)] leading-relaxed">
                       {stats.preferredLanguages
                         .map((l) => `${l.language} ${l.percent}%`)
                         .join(' • ')}
@@ -287,9 +287,9 @@ export const PersonalAnimeStats: React.FC<PersonalAnimeStatsProps> = ({
                       {stats.preferredLanguages.map((lang) => (
                         <div
                           key={`leg_${lang.language}`}
-                          className="rounded-xl bg-[#12141E] border border-[#292B39] px-2.5 py-2 flex items-center justify-between gap-2"
+                          className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-2.5 py-2 flex items-center justify-between gap-2"
                         >
-                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#F4F3FA] truncate">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--text-primary)] truncate">
                             <span className={`w-2 h-2 rounded-full shrink-0 ${lang.dotColorClass}`} />
                             <span className="truncate">{lang.language}</span>
                           </span>
@@ -303,7 +303,7 @@ export const PersonalAnimeStats: React.FC<PersonalAnimeStatsProps> = ({
                 )}
               </div>
 
-              <p className="text-[11px] text-[#A1A5B5] pt-2 border-t border-[#292B39]">
+              <p className="text-[11px] text-[var(--text-secondary)] pt-2 border-t border-[var(--border-subtle)]">
                 Tip: Log episode numbers on any anime detail page to keep your progress synced{isSignedIn ? ' to your cloud account' : ' on this device'}.
               </p>
             </div>

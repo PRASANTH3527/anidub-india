@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { AlertTriangle, Inbox, RefreshCw, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from './Button';
 
 export interface EmptyStateProps {
@@ -27,14 +28,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 }) => (
   <div
     data-testid="eclipse-empty-state"
-    className={`rounded-[12px] bg-[#12141E] border border-[#292B39] p-6 sm:p-10 text-center space-y-3 ${className}`.trim()}
+    className={`rounded-[12px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 sm:p-10 text-center space-y-3 ${className}`.trim()}
   >
-    <div className="w-12 h-12 rounded-[12px] bg-[#191C29] border border-[#292B39] text-[#B49AF8] flex items-center justify-center mx-auto">
+    <div className="w-12 h-12 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--accent-primary)] flex items-center justify-center mx-auto">
       {icon || <Inbox className="w-5 h-5" />}
     </div>
-    <h3 className="text-base sm:text-lg font-bold text-[#F4F3FA]">{title}</h3>
+    <h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)]">{title}</h3>
     {description && (
-      <p className="text-xs sm:text-sm text-[#A1A5B5] max-w-md mx-auto leading-relaxed">
+      <p className="text-xs sm:text-sm text-[var(--text-secondary)] max-w-md mx-auto leading-relaxed">
         {description}
       </p>
     )}
@@ -65,38 +66,43 @@ export interface ErrorStateProps {
 }
 
 export const ErrorState: React.FC<ErrorStateProps> = ({
-  title = 'Unable to complete request',
+  title,
   message,
-  retryLabel = 'Retry',
+  retryLabel,
   onRetry,
   className = '',
-}) => (
-  <div
-    role="alert"
-    data-testid="eclipse-error-state"
-    className={`rounded-[12px] bg-[#12141E] border border-[#F87171]/40 p-6 sm:p-8 text-center space-y-3 ${className}`.trim()}
-  >
-    <div className="w-12 h-12 rounded-[12px] bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] flex items-center justify-center mx-auto">
-      <AlertTriangle className="w-5 h-5" />
-    </div>
-    <h3 className="text-base font-bold text-[#F4F3FA]">{title}</h3>
-    <p className="text-xs sm:text-sm text-[#A1A5B5] max-w-md mx-auto leading-relaxed">
-      {message}
-    </p>
-    {onRetry && (
-      <div className="pt-1">
-        <Button
-          variant="danger"
-          size="md"
-          onClick={onRetry}
-          leftIcon={<RefreshCw className="w-4 h-4" />}
-        >
-          {retryLabel}
-        </Button>
+}) => {
+  const { t } = useTranslation(['states', 'common']);
+  const resolvedTitle = title || t('states:errorDefaultTitle', 'Something went wrong');
+  const resolvedRetry = retryLabel || t('common:retry', 'Retry');
+  return (
+    <div
+      role="alert"
+      data-testid="eclipse-error-state"
+      className={`rounded-[12px] bg-[var(--bg-surface)] border border-[#F87171]/40 p-6 sm:p-8 text-center space-y-3 ${className}`.trim()}
+    >
+      <div className="w-12 h-12 rounded-[12px] bg-[#F87171]/15 border border-[#F87171]/30 text-[#F87171] flex items-center justify-center mx-auto">
+        <AlertTriangle className="w-5 h-5" />
       </div>
-    )}
-  </div>
-);
+      <h3 className="text-base font-bold text-[var(--text-primary)]">{resolvedTitle}</h3>
+      <p className="text-xs sm:text-sm text-[var(--text-secondary)] max-w-md mx-auto leading-relaxed">
+        {message}
+      </p>
+      {onRetry && (
+        <div className="pt-1">
+          <Button
+            variant="danger"
+            size="md"
+            onClick={onRetry}
+            leftIcon={<RefreshCw className="w-4 h-4" />}
+          >
+            {resolvedRetry}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export interface ModalProps {
   isOpen: boolean;
@@ -147,38 +153,38 @@ export const Modal: React.FC<ModalProps> = ({
       onClick={onClose}
     >
       <div
-        className={`w-full ${maxWidthClass} rounded-t-3xl sm:rounded-[12px] bg-[#12141E] border-t sm:border border-[#292B39] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-transform duration-180 motion-reduce:transition-none`}
+        className={`w-full ${maxWidthClass} rounded-t-3xl sm:rounded-[12px] bg-[var(--bg-surface)] border-t sm:border border-[var(--border-subtle)] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-transform duration-180 motion-reduce:transition-none`}
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile bottom sheet drag handle */}
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#12141E]">
-          <div className="w-10 h-1.5 rounded-full bg-[#292B39]" />
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[var(--bg-surface)]">
+          <div className="w-10 h-1.5 rounded-full bg-[var(--border-subtle)]" />
         </div>
 
-        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5 border-b border-[#292B39] bg-[#12141E]">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
           <div className="min-w-0">
-            <h2 className="text-sm sm:text-base font-bold text-[#F4F3FA] truncate">{title}</h2>
+            <h2 className="text-sm sm:text-base font-bold text-[var(--text-primary)] truncate">{title}</h2>
             {subtitle && (
-              <p className="text-xs text-[#A1A5B5] truncate mt-0.5">{subtitle}</p>
+              <p className="text-xs text-[var(--text-secondary)] truncate mt-0.5">{subtitle}</p>
             )}
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close dialog"
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer shrink-0"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 text-[#F4F3FA]">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 text-[var(--text-primary)]">
           {children}
         </div>
 
         {footer && (
-          <div className="px-4 sm:px-6 py-3.5 border-t border-[#292B39] bg-[#191C29]/60 flex items-center justify-end gap-2.5">
+          <div className="px-4 sm:px-6 py-3.5 border-t border-[var(--border-subtle)] bg-[var(--bg-elevated)]/60 flex items-center justify-end gap-2.5">
             {footer}
           </div>
         )}
@@ -212,15 +218,18 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onConfirm,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   destructive = false,
   isDestructive = false,
   loading = false,
 }) => {
+  const { t } = useTranslation(['common']);
   const resolvedOpen = Boolean(isOpen ?? open);
   const resolvedClose = onClose || onCancel || (() => {});
   const resolvedDestructive = Boolean(destructive || isDestructive);
+  const resolvedConfirm = confirmLabel || t('common:confirm', 'Confirm');
+  const resolvedCancel = cancelLabel || t('common:cancel', 'Cancel');
 
   return (
     <Modal
@@ -231,7 +240,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       footer={
         <>
           <Button variant="secondary" size="md" onClick={resolvedClose} disabled={loading}>
-            {cancelLabel}
+            {resolvedCancel}
           </Button>
           <Button
             variant={resolvedDestructive ? 'danger' : 'primary'}
@@ -239,12 +248,12 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             onClick={onConfirm}
             disabled={loading}
           >
-            {loading ? 'Processing...' : confirmLabel}
+            {loading ? t('common:loading', 'Loading...') : resolvedConfirm}
           </Button>
         </>
       }
     >
-      <p className="text-xs sm:text-sm text-[#A1A5B5] leading-relaxed">{description}</p>
+      <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed">{description}</p>
     </Modal>
   );
 };

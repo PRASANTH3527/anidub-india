@@ -1,0 +1,91 @@
+{
+  "heading": "আপনার ভাষায় অ্যানিমে খুঁজুন",
+  "random": "র‍্যান্ডম",
+  "randomAnime": "র‍্যান্ডম অ্যানিমে",
+  "compare": "তুলনা",
+  "matchmaker": "ম্যাচমেকার",
+  "searchPlaceholder": "অ্যানিমে নাম, সংক্ষিপ্ত নাম (যেমন JJK), স্টুডিও খুঁজুন...",
+  "filters": "ফিল্টার",
+  "mySubscriptionsHeader": "আমার OTT সাবস্ক্রিপশন ও কভারেজ",
+  "myOttsOff": "আমার OTT: বন্ধ",
+  "myOttsActive": "আমার OTT: {{count}} সক্রিয়",
+  "showingTitles": "{{count}}টি টাইটেল দেখানো হচ্ছে",
+  "showingTitlesOf": "{{total}}-এর মধ্যে {{shown}}টি টাইটেল",
+  "loadingCatalog": "ক্যাটালগ লোড হচ্ছে...",
+  "batchIndicator": "ব্যাচ {{current}} / {{total}}",
+  "loadMoreAnime": "আরও অ্যানিমে লোড করুন",
+  "manualContinuationHelper": "৪৮টি টাইটেলের পর ম্যানুয়াল লোডিং",
+  "autoLoadingNextBatch": "পরবর্তী ব্যাচ স্বয়ংক্রিয়ভাবে লোড হচ্ছে...",
+  "allCaughtUp": "সবকিছু দেখা হয়ে গেছে",
+  "backToTop": "উপরে যান",
+  "resetAllFilters": "সব ফিল্টার রিসেট করুন",
+  "noAnimeMatchesTitle": "নির্বাচিত ফিল্টারের সাথে কোনো অ্যানিমে মেলেনি।",
+  "noAnimeMatchesSubtitle": "ভাষা, OTT প্ল্যাটফর্ম বা খোঁজার শব্দ পরিবর্তন করে চেষ্টা করুন।",
+  "filterSheet": {
+    "title": "ফিল্টার ও সাজান",
+    "subtitle": "ভারতীয় আঞ্চলিক ডাব সহজেই বাছাই করুন",
+    "quickSort": "দ্রুত সাজান",
+    "dubLanguages": "ডাব ভাষা",
+    "ottPlatforms": "OTT প্ল্যাটফর্ম",
+    "genre": "ধরন",
+    "type": "প্রকার",
+    "releaseStatus": "মুক্তির অবস্থা",
+    "episodeLength": "পর্বের দৈর্ঘ্য",
+    "dubAvailability": "ডাব উপলব্ধতা",
+    "verifiedOnly": "শুধুমাত্র যাচাইকৃত উপলব্ধতা",
+    "fullyDubbedOnly": "শুধুমাত্র সম্পূর্ণ ডাবড সিজন",
+    "showResults": "ফলাফল দেখুন",
+    "showResultsCount": "{{count}}টি ফলাফল দেখুন",
+    "resetFilters": "রিসেট",
+    "allGenres": "সব ধরন",
+    "allTypes": "সব প্রকার",
+    "allStatuses": "সব অবস্থা",
+    "allLengths": "যেকোনো দৈর্ঘ্য",
+    "sort": {
+      "latest": "সাম্প্রতিক যোগ করা",
+      "rating": "সর্বোচ্চ রেটিং",
+      "popular": "সবচেয়ে জনপ্রিয়",
+      "title": "A–Z নাম",
+      "year": "নতুন মুক্তি"
+    },
+    "lengths": {
+      "short": "ছোট (১–১২ পর্ব)",
+      "medium": "মাঝারি (১৩–২৬ পর্ব)",
+      "long": "বড় (২৭+ পর্ব)"
+    },
+    "statuses": {
+      "airing": "বর্তমানে প্রচারিত",
+      "completed": "সম্পন্ন",
+      "upcoming": "আসন্ন"
+    }
+  },
+  "ottSheet": {
+    "title": "আমার OTT সাবস্ক্রিপশন ও কভারেজ",
+    "subtitle": "তাৎক্ষণিক ডাব কভারেজের জন্য আপনার সাবস্ক্রিপশন প্ল্যাটফর্ম বেছে নিন",
+    "filterByMyOtts": "শুধুমাত্র আমার OTT-তে থাকা অ্যানিমে দেখান",
+    "selectedCount": "{{count}}টি প্ল্যাটফর্ম নির্বাচিত",
+    "clearSelection": "নির্বাচন মুছুন",
+    "done": "সম্পন্ন"
+  },
+  "card": {
+    "posterUnavailable": "পোস্টার উপলব্ধ নয়",
+    "retryImage": "ছবি আবার লোড করুন",
+    "shareAnime": "অ্যানিমে শেয়ার করুন",
+    "compareAnime": "অ্যানিমে তুলনা করুন",
+    "saveOffline": "তথ্য অফলাইনে সংরক্ষণ করুন",
+    "savedOffline": "অফলাইনে সংরক্ষিত",
+    "reportIncorrect": "ভুল তথ্য রিপোর্ট করুন",
+    "moreActions": "আরও বিকল্প",
+    "bookmarkAdd": "লাইব্রেরিতে সংরক্ষণ করুন",
+    "bookmarkRemove": "লাইব্রেরি থেকে সরান",
+    "seasonsCount": "{{count}} সিজন",
+    "seasonSingle": "১ সিজন",
+    "episodesCount": "{{count}} পর্ব"
+  },
+  "latestUpdates": {
+    "title": "সর্বশেষ ডাব আপডেট",
+    "subtitle": "সম্পাদকদের দ্বারা যাচাইকৃত ক্যাটালগ পরিবর্তন",
+    "refresh": "আপডেট রিফ্রেশ করুন",
+    "empty": "সম্প্রতি কোনো যাচাইকৃত আপডেট নেই।"
+  }
+}

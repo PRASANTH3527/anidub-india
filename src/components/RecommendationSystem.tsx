@@ -9,6 +9,7 @@ import {
 import { PlatformIcon } from './PlatformIcons';
 import { OptimizedImage } from './OptimizedImage';
 import { EmptyState } from './ui/EclipseState';
+import { useTranslation } from 'react-i18next';
 
 export interface RecommendationSystemProps {
   animeList?: any[];
@@ -38,6 +39,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
   onSelectAnime,
   onToggleWatchlist,
 }) => {
+  const { t } = useTranslation(['tools', 'common']);
   const animeList = useMemo(
     () => normalizeAnimeList(animeListProp || catalogList || []),
     [animeListProp, catalogList]
@@ -116,35 +118,35 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
   };
 
   return (
-    <section className="max-w-[1280px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[#F4F3FA]">
+    <section className="max-w-[1280px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[var(--text-primary)]">
       {/* Compact Header (24px mobile / 30px desktop) */}
       <div className="mb-5">
-        <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#B49AF8] mb-1">
+        <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--accent-primary)] mb-1">
           <Sparkles className="w-3.5 h-3.5" />
           <span>Personalized Discovery</span>
         </div>
-        <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em]">
-          For You
+        <h1 className="text-[24px] sm:text-[30px] font-bold text-[var(--text-primary)] leading-[1.2] tracking-[-0.02em]">
+          {t('tools:matchmaker.title', 'For You')}
         </h1>
-        <p className="text-[13px] sm:text-[14px] text-[#A1A5B5] mt-1">
-          Curated regional dub picks tailored to your language, genre mood, and episode length
+        <p className="text-[13px] sm:text-[14px] text-[var(--text-secondary)] mt-1">
+          {t('tools:matchmaker.subtitle', 'Curated regional dub picks tailored to your language, genre mood, and episode length')}
         </p>
       </div>
 
       {/* Unified Preference Filter Card (#12141E surface, 44px pills) */}
-      <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5 mb-6 space-y-4">
+      <div className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5 mb-6 space-y-4">
         {/* Dub Language Pills */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-[#B49AF8]" />
+            <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
               <span>Dub Language</span>
             </span>
             {(selectedLanguage !== 'All' || selectedGenre !== 'All' || selectedLength !== 'any') && (
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="min-h-[44px] px-3 rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#CBB6FF] text-[12px] font-semibold inline-flex items-center gap-1.5"
+                className="min-h-[44px] px-3 rounded-[10px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[var(--accent-hover)] text-[12px] font-semibold inline-flex items-center gap-1.5"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Reset preferences</span>
@@ -161,11 +163,13 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                   onClick={() => setSelectedLanguage(lang)}
                   className={`min-h-[44px] px-4 rounded-[12px] text-[13px] font-semibold whitespace-nowrap border transition-all duration-180 motion-reduce:transition-none ${
                     active
-                      ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                      : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                      ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                      : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  {lang === 'All' ? 'All Languages' : `${lang} Dub`}
+                  {lang === 'All'
+                    ? t('common:all', 'All')
+                    : t(`common:languages.${lang.toLowerCase()}`, lang)}
                 </button>
               );
             })}
@@ -173,9 +177,9 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
         </div>
 
         {/* Genre / Mood & Watch Length Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-3 border-t border-[#292B39]">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-3 border-t border-[var(--border-subtle)]">
           <div>
-            <span className="text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] block mb-2">
+            <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block mb-2">
               Genre &amp; Mood
             </span>
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
@@ -188,8 +192,8 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     onClick={() => setSelectedGenre(genre)}
                     className={`min-h-[44px] px-3.5 rounded-[12px] text-[13px] font-semibold whitespace-nowrap border transition-all duration-180 ${
                       active
-                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                        : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
                     }`}
                   >
                     {genre}
@@ -200,8 +204,8 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
           </div>
 
           <div>
-            <span className="text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] flex items-center gap-1.5 mb-2">
-              <Clock className="w-3.5 h-3.5 text-[#B49AF8]" />
+            <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5 mb-2">
+              <Clock className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
               <span>Watch Length</span>
             </span>
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
@@ -214,8 +218,8 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     onClick={() => setSelectedLength(len.id)}
                     className={`min-h-[44px] px-3.5 rounded-[12px] text-[13px] font-semibold whitespace-nowrap border transition-all duration-180 ${
                       active
-                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                        : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
                     }`}
                   >
                     {len.label}
@@ -248,10 +252,10 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     onSelectAnime(anime);
                   }
                 }}
-                className="group rounded-[14px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/50 overflow-hidden flex flex-col transition-all duration-180 cursor-pointer"
+                className="group rounded-[14px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 overflow-hidden flex flex-col transition-all duration-180 cursor-pointer"
               >
                 {/* 2:3 Poster Slot */}
-                <div className="relative aspect-[2/3] w-full bg-[#191C29] overflow-hidden">
+                <div className="relative aspect-[2/3] w-full bg-[var(--bg-elevated)] overflow-hidden">
                   <OptimizedImage
                     src={anime.poster}
                     alt={anime.title}
@@ -264,7 +268,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
 
                   {/* Rating Chip */}
                   {typeof anime.rating === 'number' && anime.rating > 0 && (
-                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-[8px] bg-[#0B0A10]/85 backdrop-blur-md border border-[#292B39] flex items-center gap-1 text-[11px] font-bold text-[#F9C876]">
+                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-[8px] bg-[var(--bg-canvas)]/85 backdrop-blur-md border border-[var(--border-subtle)] flex items-center gap-1 text-[11px] font-bold text-[#F9C876]">
                       <Star className="w-3 h-3 fill-current" />
                       <span>{anime.rating.toFixed(1)}</span>
                     </div>
@@ -280,8 +284,8 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     }}
                     className={`absolute top-1.5 right-1.5 w-11 h-11 min-w-[44px] min-h-[44px] rounded-[10px] backdrop-blur-md border flex items-center justify-center transition-colors ${
                       isSaved
-                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                        : 'bg-[#0B0A10]/80 text-[#F4F3FA] border-[#292B39] hover:border-[#B49AF8]'
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                        : 'bg-[var(--bg-canvas)]/80 text-[var(--text-primary)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]'
                     }`}
                   >
                     <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
@@ -291,14 +295,14 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                 {/* Card Body */}
                 <div className="p-3 flex-1 flex flex-col justify-between gap-2">
                   <div>
-                    <h3 className="text-[14px] font-semibold text-[#F4F3FA] group-hover:text-[#CBB6FF] leading-[20px] line-clamp-2 min-h-[40px]">
+                    <h3 className="text-[14px] font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent-hover)] leading-[20px] line-clamp-2 min-h-[40px]">
                       {anime.title}
                     </h3>
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {(anime.languages || []).slice(0, 3).map((lang) => (
                         <span
                           key={lang}
-                          className="px-1.5 py-0.5 rounded-[5px] bg-[#191C29] text-[#CBB6FF] border border-[#292B39] text-[10px] font-bold uppercase"
+                          className="px-1.5 py-0.5 rounded-[5px] bg-[var(--bg-elevated)] text-[var(--accent-hover)] border border-[var(--border-subtle)] text-[10px] font-bold uppercase"
                         >
                           {lang.slice(0, 3)}
                         </span>
@@ -306,16 +310,16 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-[#292B39] flex items-center justify-between text-[11px] text-[#A1A5B5]">
+                  <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-secondary)]">
                     {verifiedPlatforms.length > 0 ? (
-                      <span className="inline-flex items-center gap-1 font-medium text-[#F4F3FA] truncate">
-                        <PlatformIcon platform={verifiedPlatforms[0]} className="w-3 h-3 text-[#B49AF8]" />
+                      <span className="inline-flex items-center gap-1 font-medium text-[var(--text-primary)] truncate">
+                        <PlatformIcon platform={verifiedPlatforms[0]} className="w-3 h-3 text-[var(--accent-primary)]" />
                         <span className="truncate">{verifiedPlatforms[0]}</span>
                       </span>
                     ) : (
                       <span>OTT unverified</span>
                     )}
-                    <Play className="w-3.5 h-3.5 text-[#B49AF8] shrink-0" />
+                    <Play className="w-3.5 h-3.5 text-[var(--accent-primary)] shrink-0" />
                   </div>
                 </div>
               </div>
@@ -326,7 +330,7 @@ export const RecommendationSystem: React.FC<RecommendationSystemProps> = ({
         <EmptyState
           title="No matching recommendations"
           description="Try selecting 'All Languages' or widening your watch length filter to discover more dubbed titles."
-          actionLabel="Reset filters"
+          actionLabel={t('common:reset', 'Reset filters')}
           onAction={handleResetFilters}
         />
       )}

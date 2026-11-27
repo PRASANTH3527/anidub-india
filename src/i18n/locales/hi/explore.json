@@ -1,0 +1,91 @@
+{
+  "heading": "अपनी भाषा में एनीमे खोजें",
+  "random": "रैंडम",
+  "randomAnime": "रैंडम एनीमे",
+  "compare": "तुलना",
+  "matchmaker": "मैचमेकर",
+  "searchPlaceholder": "एनीमे नाम, उपनाम (जैसे JJK), या स्टूडियो खोजें...",
+  "filters": "फ़िल्टर",
+  "mySubscriptionsHeader": "मेरे OTT सब्सक्रिप्शन और कवरेज",
+  "myOttsOff": "मेरे OTT: बंद",
+  "myOttsActive": "मेरे OTT: {{count}} सक्रिय",
+  "showingTitles": "{{count}} टाइटल दिख रहे हैं",
+  "showingTitlesOf": "{{total}} में से {{shown}} टाइटल",
+  "loadingCatalog": "कैटलॉग लोड हो रहा है...",
+  "batchIndicator": "बैच {{current}} / {{total}}",
+  "loadMoreAnime": "और एनीमे लोड करें",
+  "manualContinuationHelper": "48 टाइटल के बाद मैन्युअल लोडिंग",
+  "autoLoadingNextBatch": "अगला बैच अपने आप लोड हो रहा है...",
+  "allCaughtUp": "आपने सभी टाइटल देख लिए",
+  "backToTop": "ऊपर जाएं",
+  "resetAllFilters": "सभी फ़िल्टर रीसेट करें",
+  "noAnimeMatchesTitle": "चुने गए फ़िल्टर से कोई एनीमे नहीं मिला।",
+  "noAnimeMatchesSubtitle": "भाषा, OTT प्लेटफ़ॉर्म या खोज शब्द बदलकर फिर प्रयास करें।",
+  "filterSheet": {
+    "title": "फ़िल्टर और क्रमबद्ध करें",
+    "subtitle": "भारतीय क्षेत्रीय डब्स को आसानी से छांटें",
+    "quickSort": "त्वरित क्रम",
+    "dubLanguages": "डब भाषाएं",
+    "ottPlatforms": "OTT प्लेटफ़ॉर्म",
+    "genre": "शैली",
+    "type": "प्रकार",
+    "releaseStatus": "रिलीज़ स्थिति",
+    "episodeLength": "एपिसोड लंबाई",
+    "dubAvailability": "डब उपलब्धता",
+    "verifiedOnly": "केवल सत्यापित उपलब्धता",
+    "fullyDubbedOnly": "केवल पूर्ण डब्ड सीज़न",
+    "showResults": "परिणाम देखें",
+    "showResultsCount": "{{count}} परिणाम देखें",
+    "resetFilters": "रीसेट",
+    "allGenres": "सभी शैलियां",
+    "allTypes": "सभी प्रकार",
+    "allStatuses": "सभी स्थितियां",
+    "allLengths": "कोई भी लंबाई",
+    "sort": {
+      "latest": "नवीनतम जोड़े गए",
+      "rating": "शीर्ष रेटिंग",
+      "popular": "सबसे लोकप्रिय",
+      "title": "A–Z नाम",
+      "year": "नया रिलीज़"
+    },
+    "lengths": {
+      "short": "छोटा (1–12 एप.)",
+      "medium": "मध्यम (13–26 एप.)",
+      "long": "लंबा (27+ एप.)"
+    },
+    "statuses": {
+      "airing": "अभी प्रसारित",
+      "completed": "पूर्ण",
+      "upcoming": "आने वाले"
+    }
+  },
+  "ottSheet": {
+    "title": "मेरे OTT सब्सक्रिप्शन और कवरेज",
+    "subtitle": "तुरंत डब कवरेज देखने के लिए अपने प्लेटफ़ॉर्म चुनें",
+    "filterByMyOtts": "केवल मेरे OTT पर उपलब्ध एनीमे दिखाएं",
+    "selectedCount": "{{count}} प्लेटफ़ॉर्म चुने गए",
+    "clearSelection": "चयन साफ़ करें",
+    "done": "हो गया"
+  },
+  "card": {
+    "posterUnavailable": "पोस्टर उपलब्ध नहीं",
+    "retryImage": "इमेज फिर लोड करें",
+    "shareAnime": "एनीमे शेयर करें",
+    "compareAnime": "एनीमे की तुलना करें",
+    "saveOffline": "जानकारी ऑफ़लाइन सेव करें",
+    "savedOffline": "ऑफ़लाइन सेव किया गया",
+    "reportIncorrect": "गलत जानकारी की रिपोर्ट करें",
+    "moreActions": "अन्य विकल्प",
+    "bookmarkAdd": "लाइब्रेरी में सेव करें",
+    "bookmarkRemove": "लाइब्रेरी से हटाएं",
+    "seasonsCount": "{{count}} सीज़न",
+    "seasonSingle": "1 सीज़न",
+    "episodesCount": "{{count}} एप."
+  },
+  "latestUpdates": {
+    "title": "नवीनतम डब अपडेट्स",
+    "subtitle": "संपादकों द्वारा सत्यापित कैटलॉग बदलाव",
+    "refresh": "अपडेट्स रीफ़्रेश करें",
+    "empty": "अभी कोई हालिया सत्यापित अपडेट नहीं है।"
+  }
+}

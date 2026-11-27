@@ -1,0 +1,27 @@
+{
+  "explore": "Explore",
+  "schedule": "Schedule",
+  "chat": "Chat",
+  "library": "Library",
+  "profile": "Profile",
+  "tools": "Tools",
+  "searchAnime": "Search Anime",
+  "openToolsMenu": "Open Tools Menu",
+  "appearanceAndThemes": "Appearance & Themes",
+  "toolsSheetTitle": "Tools & Extras",
+  "toolsSheetSubtitle": "Quick discovery utilities and community actions",
+  "websiteLanguage": "Language",
+  "websiteLanguageSubtitle": "Change website display language",
+  "adminDashboard": "Admin Dashboard",
+  "adminDashboardSubtitle": "Moderate submissions and catalog metadata",
+  "secondary": {
+    "forYou": "For You",
+    "forYouSubtitle": "Personalized anime matchmaker",
+    "compare": "Compare",
+    "compareSubtitle": "Compare two anime side by side",
+    "tierList": "Tier List",
+    "tierListSubtitle": "Rank your favorite dubbed anime",
+    "submitAnime": "Submit Anime",
+    "submitAnimeSubtitle": "Add a missing dubbed title"
+  }
+}

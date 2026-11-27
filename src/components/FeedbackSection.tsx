@@ -3,6 +3,7 @@ import {
   MessageSquare, Send, CheckCircle2, Heart, Bug, Sparkles, Database, Eye, HelpCircle
 } from 'lucide-react';
 import { cloudflareApi } from '../services/cloudflareApi';
+import { useTranslation } from 'react-i18next';
 
 export interface FeedbackSectionProps {
   onShowToast?: (message: string, type?: 'success' | 'info' | 'error') => void;
@@ -39,6 +40,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   onOpenCopyright,
   mode = 'footer',
 }) => {
+  const { t } = useTranslation(['common', 'forms']);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [category, setCategory] = useState<string>('Report a bug');
@@ -92,15 +94,15 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
 
   if (mode === 'footer') {
     return (
-      <footer className="relative mt-16 border-t border-[#292B39] bg-[#0B0A10] pb-24 md:pb-8 overflow-hidden">
+      <footer className="relative mt-16 border-t border-[var(--border-subtle)] bg-[var(--bg-canvas)] pb-24 md:pb-8 overflow-hidden">
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-5">
           {/* Compact Regional Dubbed Anime SEO Directory Links */}
           <nav
-            aria-label="Regional Dubbed Anime Languages"
-            className="flex flex-wrap items-center justify-center md:justify-between gap-2 pb-4 border-b border-[#292B39]/70"
+            aria-label={t('common:footer.regionalHeading', 'Regional Dubbed Anime Languages')}
+            className="flex flex-wrap items-center justify-center md:justify-between gap-2 pb-4 border-b border-[var(--border-subtle)]/70"
           >
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#A1A5B5]">
-              Regional Dubbed Anime Languages
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              {t('common:footer.regionalHeading', 'Regional Dubbed Anime Languages')}
             </span>
             <div className="flex flex-wrap items-center justify-center gap-1.5">
               {REGIONAL_FOOTER_LANGUAGES.map((lang) => (
@@ -113,53 +115,62 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                       onNavigateLanguage(lang.name);
                     }
                   }}
-                  className="min-h-[40px] px-3 py-1.5 rounded-[8px] bg-[#12141E] hover:bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8]/40 text-[12px] font-semibold text-[#A1A5B5] hover:text-[#F4F3FA] inline-flex items-center transition-colors"
+                  className="min-h-[40px] px-3 py-1.5 rounded-[8px] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/40 text-[12px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center transition-colors"
                 >
-                  {lang.name} Dubbed Anime
+                  {t('common:footer.dubbedAnimeSuffix', {
+                    language: t(`common:languages.${lang.slug}`, lang.name),
+                    defaultValue: `${lang.name} Dubbed Anime`,
+                  })}
                 </a>
               ))}
             </div>
           </nav>
 
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-[12px] text-[#A1A5B5]">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-[12px] text-[var(--text-secondary)]">
             <div className="flex items-center gap-2">
-              <img
-                src="/logo.png?v=2"
-                alt="AniDub India"
-                loading="lazy"
-                className="h-7 w-auto object-contain"
-              />
-              <span>© {new Date().getFullYear()} All rights reserved.</span>
+              <span className="anidub-logo-wrap shrink-0">
+                <img
+                  src="/logo.png?v=2"
+                  alt="AniDub India"
+                  loading="lazy"
+                  className="h-7 w-auto object-contain"
+                />
+              </span>
+              <span>
+                {t('common:footer.rights', {
+                  year: new Date().getFullYear(),
+                  defaultValue: `© ${new Date().getFullYear()} All rights reserved.`,
+                })}
+              </span>
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-4">
               <button
                 type="button"
                 onClick={() => (onOpenLegal ? onOpenLegal('privacy') : onOpenPrivacy?.())}
-                className="min-h-[44px] px-2 hover:text-[#F4F3FA] transition-colors cursor-pointer"
+                className="min-h-[44px] px-2 hover:text-[var(--text-primary)] transition-colors cursor-pointer"
               >
-                Privacy Policy
+                {t('common:footer.privacy', 'Privacy Policy')}
               </button>
               <button
                 type="button"
                 onClick={() => (onOpenLegal ? onOpenLegal('terms') : onOpenCopyright?.())}
-                className="min-h-[44px] px-2 hover:text-[#F4F3FA] transition-colors cursor-pointer"
+                className="min-h-[44px] px-2 hover:text-[var(--text-primary)] transition-colors cursor-pointer"
               >
-                Terms of Service
+                {t('common:footer.terms', 'Terms of Service')}
               </button>
               <button
                 type="button"
                 onClick={() => (onOpenLegal ? onOpenLegal('dmca') : onOpenCopyright?.())}
-                className="min-h-[44px] px-2 hover:text-[#F4F3FA] transition-colors cursor-pointer"
+                className="min-h-[44px] px-2 hover:text-[var(--text-primary)] transition-colors cursor-pointer"
               >
-                DMCA / Rights-Holder
+                {t('common:footer.dmca', 'DMCA / Rights-Holder')}
               </button>
             </div>
 
-            <div className="flex items-center gap-1 text-center">
-              <span>Rights-holder metadata directory built with</span>
-              <Heart className="w-3.5 h-3.5 text-[#B49AF8] fill-current inline" />
-              <span>for Indian anime fans</span>
+            <div className="flex items-center gap-1.5 text-center">
+              <Heart className="w-3.5 h-3.5 text-[var(--accent-primary)] fill-current shrink-0" />
+              <span>{t('common:footer.madeForFans', 'Rights-holder metadata directory built for Indian anime fans')}</span>
             </div>
           </div>
         </div>
@@ -168,18 +179,18 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
   }
 
   return (
-    <section className="max-w-3xl mx-auto px-4 sm:px-6 pt-5 pb-24 text-[#F4F3FA]">
-      <div className="rounded-[18px] bg-[#12141E] border border-[#292B39] p-5 sm:p-7">
+    <section className="max-w-3xl mx-auto px-4 sm:px-6 pt-5 pb-24 text-[var(--text-primary)]">
+      <div className="rounded-[18px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5 sm:p-7">
         <div className="mb-6">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-[#B49AF8]/15 border border-[#B49AF8]/30 text-[#CBB6FF] text-[11px] font-bold uppercase tracking-wider mb-2">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 text-[var(--accent-hover)] text-[11px] font-bold uppercase tracking-wider mb-2">
             <MessageSquare className="w-3.5 h-3.5" />
             <span>Help &amp; Feedback</span>
           </div>
-          <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em]">
-            Help Us Improve AniDub India
+          <h1 className="text-[24px] sm:text-[30px] font-bold text-[var(--text-primary)] leading-[1.2] tracking-[-0.02em]">
+            {t('forms:feedback.title', 'Send Feedback')}
           </h1>
-          <p className="text-[14px] text-[#A1A5B5] mt-1">
-            Select a category below to report a bug, request a feature, or flag regional dub metadata.
+          <p className="text-[14px] text-[var(--text-secondary)] mt-1">
+            {t('forms:feedback.subtitle', 'Share ideas, report UI bugs, or request new languages')}
           </p>
         </div>
 
@@ -188,8 +199,8 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
             <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3 text-[#34D399]">
               <CheckCircle2 className="w-6 h-6" />
             </div>
-            <h2 className="text-[18px] font-bold text-[#F4F3FA] mb-1">Feedback Received!</h2>
-            <p className="text-[13px] text-[#A1A5B5]">
+            <h2 className="text-[18px] font-bold text-[var(--text-primary)] mb-1">Feedback Received!</h2>
+            <p className="text-[13px] text-[var(--text-secondary)]">
               Thank you for helping us keep regional dub discovery accurate and fast.
             </p>
           </div>
@@ -197,7 +208,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Selectable 44px+ Feedback Category Cards */}
             <div>
-              <label className="block text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] mb-2">
+              <label className="block text-[12px] font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-2">
                 Feedback Category
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
@@ -211,8 +222,8 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                       onClick={() => setCategory(cat.label)}
                       className={`min-h-[44px] px-3.5 py-2.5 rounded-[12px] border text-left flex items-center gap-2.5 text-[13px] font-semibold transition-all duration-180 ${
                         isSelected
-                          ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                          : 'bg-[#191C29] text-[#F4F3FA] border-[#292B39] hover:border-[#B49AF8]/40'
+                          ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                          : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/40'
                       }`}
                     >
                       <Icon className="w-4 h-4 shrink-0" />
@@ -225,7 +236,7 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] mb-1.5">
+                <label className="block text-[12px] font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
                   Name (Optional)
                 </label>
                 <input
@@ -233,11 +244,11 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Your name"
-                  className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] rounded-[12px] px-3.5 text-[14px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8]"
+                  className="w-full min-h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[12px] px-3.5 text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
                 />
               </div>
               <div>
-                <label className="block text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] mb-1.5">
+                <label className="block text-[12px] font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
                   Email (Optional)
                 </label>
                 <input
@@ -245,34 +256,34 @@ export const FeedbackSection: React.FC<FeedbackSectionProps> = ({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="your@email.com"
-                  className="w-full min-h-[44px] bg-[#191C29] border border-[#292B39] rounded-[12px] px-3.5 text-[14px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8]"
+                  className="w-full min-h-[44px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[12px] px-3.5 text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5] mb-1.5">
-                Details <span className="text-[#B49AF8]">*</span>
+              <label className="block text-[12px] font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
+                Details <span className="text-[var(--accent-primary)]">*</span>
               </label>
               <textarea
                 required
                 rows={4}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder={`Describe your "${category}" feedback...`}
-                className="w-full bg-[#191C29] border border-[#292B39] rounded-[12px] p-3.5 text-[14px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8] resize-none"
+                placeholder={t('forms:feedback.messagePlaceholder', `Describe your "${category}" feedback...`)}
+                className="w-full bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[12px] p-3.5 text-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] resize-none"
               />
-              <p className="text-[11px] text-[#A1A5B5] mt-1.5">
+              <p className="text-[11px] text-[var(--text-secondary)] mt-1.5">
                 Current page route and browser viewport context are automatically attached to help diagnose issues faster.
               </p>
             </div>
 
             <button
               type="submit"
-              className="w-full sm:w-auto min-h-[44px] px-6 bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold rounded-[12px] transition-colors flex items-center justify-center gap-2 text-[14px]"
+              className="w-full sm:w-auto min-h-[44px] px-6 bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] font-bold rounded-[12px] transition-colors flex items-center justify-center gap-2 text-[14px]"
             >
               <Send className="w-4 h-4" />
-              <span>Submit Feedback</span>
+              <span>{t('forms:feedback.submitCta', 'Submit Feedback')}</span>
             </button>
           </form>
         )}

@@ -8,8 +8,8 @@ function read(relPath: string): string {
   return fs.readFileSync(path.join(process.cwd(), relPath), 'utf8');
 }
 
-test('Eclipse 1: index.css centralizes all exact AniDub Eclipse dark design tokens and typography scale', () => {
-  const css = read('src/index.css');
+test('Eclipse 1: tokens.css & index.css centralize all exact AniDub Eclipse dark design tokens and typography scale', () => {
+  const css = read('src/index.css') + '\n' + read('src/styles/tokens.css');
   const requiredTokens = [
     '#0B0A10', // Canvas / Background
     '#12141E', // Surface
@@ -35,7 +35,7 @@ test('Eclipse 1: index.css centralizes all exact AniDub Eclipse dark design toke
   ];
 
   for (const token of requiredTokens) {
-    assert.ok(css.includes(token), `index.css must define Eclipse token ${token}`);
+    assert.ok(css.includes(token), `tokens.css/index.css must define Eclipse token ${token}`);
   }
   assert.ok(css.includes('prefers-reduced-motion'), 'index.css must respect prefers-reduced-motion');
 });
@@ -60,27 +60,32 @@ test('Eclipse 2: IconRegistry.tsx defines 24x24 signature SVG icons with 1.8px r
   ]) {
     assert.ok(registry.includes(iconExport), `IconRegistry must export ${iconExport}`);
   }
-  assert.ok(registry.includes("fill={active ? '#B49AF8' : 'none'}"), 'Active variant must include duotone fill');
+  assert.ok(registry.includes("fill={active ? 'var(--accent-primary)' : 'none'}"), 'Active variant must include duotone accent fill');
 });
 
-test('Eclipse 3: Reusable Button/IconButton system, Direct 5-Icon Feature Bar, removed Three-Dot More menu, and 4-tab mobile navigation', () => {
+test('Eclipse 3: Reusable Button/IconButton system, single-row flagship header, 5-tab mobile bottom nav, and Tools Bottom Sheet / Popover menu', () => {
   const buttonCode = read('src/components/ui/Button.tsx');
   assert.ok(buttonCode.includes('min-h-[44px]'), 'Button must support 44px height');
   assert.ok(buttonCode.includes('min-h-[48px]'), 'Button must support 48px height');
   assert.ok(buttonCode.includes('sm:min-h-[40px]'), 'Button must support 40px compact desktop height with 44px mobile touch target');
-  assert.ok(buttonCode.includes('bg-[#B49AF8]'), 'Primary button must use #B49AF8 solid soft violet');
+  assert.ok(buttonCode.includes('bg-[var(--accent-primary)]'), 'Primary button must use semantic accent primary token');
   assert.ok(buttonCode.includes('export const IconButton'), 'Button.tsx must export IconButton primitive');
 
   const navbarCode = read('src/components/Navbar.tsx');
-  assert.ok(navbarCode.includes('AniDubLogo'), 'Navbar must keep the existing orange ANIDUB INDIA logo');
+  assert.ok(navbarCode.includes('AniDubLogo'), 'Navbar must keep the AniDub India logo');
+  assert.ok(navbarCode.includes('h-[56px] lg:h-[64px]'), 'Top header must be 56px mobile and 64px desktop');
+  assert.equal(navbarCode.includes('data-testid="direct-feature-bar"'), false, 'Second sub-header row must be completely removed');
   assert.ok(navbarCode.includes('data-testid="navbar-search-shortcut"'), 'Navbar must render a 44x44px Search shortcut icon on the right');
-  assert.ok(navbarCode.includes('data-testid="direct-feature-bar"'), 'Navbar must render the Direct 5-Icon Feature Bar beneath the brand header');
-  for (const label of ['For You', 'Compare', 'Tier List', 'Chat', 'Submit']) {
-    assert.ok(navbarCode.includes(`label: '${label}'`), `Direct 5-Icon Feature Bar must include "${label}"`);
+  assert.ok(navbarCode.includes('data-testid="navbar-tools-trigger"'), 'Navbar must render a 44x44px Tools trigger button on the right');
+  assert.ok(navbarCode.includes('LayoutGrid'), 'Tools trigger must use clean 4-squares LayoutGrid icon');
+  assert.ok(navbarCode.includes('grid-cols-5'), 'Mobile bottom navigation bar must display 5 evenly spaced tabs');
+  assert.ok(navbarCode.includes('data-testid="tools-mobile-bottom-sheet"'), 'Mobile Tools trigger must open a Bottom Sheet');
+  assert.ok(navbarCode.includes('data-testid="tools-desktop-popover"'), 'Desktop Tools trigger must open an anchored Popover Dropdown');
+  for (const label of ['For You', 'Compare', 'Tier List', 'Submit Anime']) {
+    assert.ok(navbarCode.includes(`'${label}'`), `Tools menu must include "${label}"`);
   }
-  assert.equal(navbarCode.includes('MoreHorizontal'), false, 'Three-Dot ("More") menu button must be completely removed from Navbar');
-  assert.equal(navbarCode.includes('mobile-more-bottom-sheet'), false, 'Three-Dot ("More") sheet must be completely removed from Navbar');
-  assert.ok(navbarCode.includes('SignatureNavIcon'), 'Navbar must render SignatureNavIcon for primary tabs and feature bar');
+  assert.equal(navbarCode.includes('MoreHorizontal'), false, 'Three-Dot ("More") menu button must not be reintroduced');
+  assert.ok(navbarCode.includes('SignatureNavIcon'), 'Navbar must render SignatureNavIcon for primary tabs and tools');
   assert.ok(navbarCode.includes('isAuthorizedAdminUser'), 'Navbar must gate Admin Dashboard link behind isAuthorizedAdminUser');
   assert.equal(navbarCode.includes("id: 'home'"), false, 'Removed Home tab must not be reintroduced');
 });
@@ -96,13 +101,13 @@ test('Eclipse 4: Compact Explore layout with native script language pills and po
   assert.equal(catalogCode.includes('🔥 Most Upvoted'), false, 'CatalogView sort options must not use random emoji icons');
 
   const cardCode = read('src/components/AnimeCard.tsx');
-  assert.ok(cardCode.includes('bg-[#12141E]'), 'AnimeCard must use Eclipse surface #12141E');
-  assert.ok(cardCode.includes('border-[#292B39]'), 'AnimeCard must use Eclipse border #292B39');
+  assert.ok(cardCode.includes('bg-[var(--bg-surface)]'), 'AnimeCard must use semantic surface token');
+  assert.ok(cardCode.includes('border-[var(--border-subtle)]'), 'AnimeCard must use semantic border token');
   assert.ok(cardCode.includes('line-clamp-2'), 'AnimeCard must enforce 2-line title clamp');
   assert.ok(cardCode.includes('w-11 h-11'), 'AnimeCard bookmark button must have a 44x44px touch target');
 });
 
-test('Eclipse 5: Reusable EmptyState, ErrorState, Modal/BottomSheet (with scroll lock), ConfirmDialog, and DynamicIsland Toast above bottom nav use Eclipse tokens', () => {
+test('Eclipse 5: Reusable EmptyState, ErrorState, Modal/BottomSheet (with scroll lock), ConfirmDialog, and DynamicIsland Toast above bottom nav use semantic theme tokens', () => {
   const eclipseStateCode = read('src/components/ui/EclipseState.tsx');
   assert.ok(eclipseStateCode.includes('export const EmptyState'), 'EclipseState must export EmptyState');
   assert.ok(eclipseStateCode.includes('export const ErrorState'), 'EclipseState must export ErrorState');
@@ -110,12 +115,12 @@ test('Eclipse 5: Reusable EmptyState, ErrorState, Modal/BottomSheet (with scroll
   assert.ok(eclipseStateCode.includes('export const BottomSheet'), 'EclipseState must export BottomSheet');
   assert.ok(eclipseStateCode.includes('export const ConfirmDialog'), 'EclipseState must export ConfirmDialog');
   assert.ok(eclipseStateCode.includes("document.body.style.overflow = 'hidden'"), 'Modal/BottomSheet must enforce background scroll lock');
-  assert.ok(eclipseStateCode.includes('bg-[#12141E]'), 'EclipseState components must use #12141E surface');
-  assert.ok(eclipseStateCode.includes('border-[#292B39]'), 'EclipseState components must use #292B39 border');
+  assert.ok(eclipseStateCode.includes('bg-[var(--bg-surface)]'), 'EclipseState components must use semantic surface token');
+  assert.ok(eclipseStateCode.includes('border-[var(--border-subtle)]'), 'EclipseState components must use semantic border token');
 
   const toastCode = read('src/components/DynamicIsland.tsx');
-  assert.ok(toastCode.includes('bg-[#12141E]'), 'DynamicIsland toast must use #12141E surface');
-  assert.ok(toastCode.includes('border-[#292B39]'), 'DynamicIsland toast must use #292B39 border');
+  assert.ok(toastCode.includes('bg-[var(--bg-surface)]'), 'DynamicIsland toast must use semantic surface token');
+  assert.ok(toastCode.includes('border-[var(--border-subtle)]'), 'DynamicIsland toast must use semantic border token');
   assert.ok(
     toastCode.includes('bottom-[calc(env(safe-area-inset-bottom,0px)+4.25rem)]'),
     'Toast must appear cleanly above the 56px mobile bottom navigation bar'
@@ -139,8 +144,8 @@ test('Eclipse 6: Page-specific Loading Skeletons replace generic spinners in App
   for (const name of requiredSkeletons) {
     assert.ok(skeletonCode.includes(name), `SkeletonGrid.tsx must export ${name}`);
   }
-  assert.ok(skeletonCode.includes('bg-[#12141E]'), 'Skeletons must use #12141E surface');
-  assert.ok(skeletonCode.includes('bg-[#191C29]'), 'Skeletons must use #191C29 elevated pulse');
+  assert.ok(skeletonCode.includes('bg-[var(--bg-surface)]'), 'Skeletons must use semantic surface token');
+  assert.ok(skeletonCode.includes('bg-[var(--bg-elevated)]'), 'Skeletons must use semantic elevated pulse');
 
   const appCode = read('src/App.tsx');
   assert.ok(appCode.includes('PageViewSkeleton'), 'App.tsx must use PageViewSkeleton for view loading fallback');
@@ -148,7 +153,7 @@ test('Eclipse 6: Page-specific Loading Skeletons replace generic spinners in App
   assert.ok(appCode.includes('duration: 0.16'), 'App.tsx must use subtle 160ms transitions');
 });
 
-test('Eclipse 7: All remaining pages adopt Eclipse Dark tokens (#12141E, #191C29, #292B39, #B49AF8) and standardized hierarchy', () => {
+test('Eclipse 7: All remaining pages adopt semantic theme tokens (--bg-surface, --bg-elevated, --border-subtle, --accent-primary) and standardized hierarchy', () => {
   const pagesToVerify = [
     'src/components/AnimeDetailPage.tsx',
     'src/components/WatchlistView.tsx',
@@ -173,33 +178,41 @@ test('Eclipse 7: All remaining pages adopt Eclipse Dark tokens (#12141E, #191C29
 
   for (const relPath of pagesToVerify) {
     const code = read(relPath);
-    assert.ok(code.includes('#12141E') || code.includes('#191C29'), `${relPath} must use Eclipse surface/elevated tokens`);
-    assert.ok(code.includes('#292B39'), `${relPath} must use Eclipse border token #292B39`);
-    assert.ok(code.includes('#B49AF8'), `${relPath} must use Eclipse primary accent #B49AF8`);
+    assert.ok(code.includes('--bg-surface') || code.includes('--bg-elevated'), `${relPath} must use semantic surface/elevated tokens`);
+    assert.ok(code.includes('--border-subtle'), `${relPath} must use semantic border token`);
+    assert.ok(code.includes('--accent-primary'), `${relPath} must use semantic primary accent token`);
   }
 
   const detailCode = read('src/components/AnimeDetailPage.tsx');
   assert.ok(detailCode.includes('Where to Watch (India)'), 'AnimeDetailPage must keep prominent Where to Watch card');
-  assert.ok(detailCode.includes("label: 'Overview'"), 'AnimeDetailPage must render Overview tab');
-  assert.ok(detailCode.includes("label: 'Seasons & Dubs'"), 'AnimeDetailPage must render Seasons & Dubs tab');
-  assert.ok(detailCode.includes("label: 'Watch Progress'"), 'AnimeDetailPage must render Watch Progress tab');
+  assert.ok(detailCode.includes("'Overview'"), 'AnimeDetailPage must render Overview tab');
+  assert.ok(detailCode.includes("'Seasons & Dubs'"), 'AnimeDetailPage must render Seasons & Dubs tab');
+  assert.ok(detailCode.includes("'Watch Progress'"), 'AnimeDetailPage must render Watch Progress tab');
   assert.ok(detailCode.includes('Reviews ('), 'AnimeDetailPage must render Reviews tab');
 });
 
-test('Eclipse 8: Phase 3 Explore Page layout has 44px controls, All/Tamil/Hindi/Telugu/More pills, Unified Filter Bottom Sheet with Show results & Reset, and 44px collapsible OTT strip', () => {
+test('Eclipse 8: Explore Page features sleek scrollable language rail, zero-select Filter & Sort Bottom Sheet with iOS toggles, and dedicated OTT Subscriptions Bottom Sheet', () => {
   const catalogCode = read('src/components/CatalogView.tsx');
   assert.ok(catalogCode.includes('h-[44px]') && catalogCode.includes('rounded-[12px]'), 'Search input must have 44px height and 12px border radius');
   assert.ok(catalogCode.includes('duration-180'), 'Language pills and filters must use 180ms transitions');
-  assert.ok(catalogCode.includes("'all', 'tamil', 'hindi', 'telugu'"), 'Primary language pills must include All, Tamil, Hindi, Telugu');
-  assert.ok(catalogCode.includes('More'), 'Language pills row must include More button for regional languages');
+  assert.ok(catalogCode.includes("'all', 'tamil', 'hindi', 'telugu', 'malayalam', 'kannada', 'bengali'"), 'Language rail must include All, Tamil, Hindi, Telugu, Malayalam, Kannada, Bengali in order');
+  assert.ok(catalogCode.includes('data-testid="explore-language-rail"'), 'Explore page must render single-row horizontal scrollable language rail');
   assert.ok(catalogCode.includes('data-testid="active-filter-count-badge"'), 'Filters button must show active filter count badge');
-  assert.ok(catalogCode.includes('data-testid="smart-filter-drawer"'), 'Filters must open the filter bottom sheet / panel');
+  assert.ok(catalogCode.includes('data-testid="smart-filter-drawer"'), 'Filters must open the filter bottom sheet');
+  assert.equal(catalogCode.includes('<select'), false, 'Filter & Sort Anime sheet must not use clunky native <select> dropdowns');
+  assert.ok(catalogCode.includes('Quick Sort'), 'Filter sheet must feature 1-tap Quick Sort chips');
   assert.ok(catalogCode.includes('Dub Languages'), 'Unified Filter sheet must consolidate Dub Languages');
+  assert.ok(catalogCode.includes('role="switch"'), 'Filter sheet must use iOS-style toggle switches for Dub Availability');
   assert.ok(catalogCode.includes('Verified availability only'), 'Filter sheet must include Verified availability only toggle');
   assert.ok(catalogCode.includes('Fully dubbed seasons only'), 'Filter sheet must include Fully dubbed seasons only toggle');
   assert.ok(catalogCode.includes('Show results'), 'Filter sheet must include sticky Show results CTA');
   assert.ok(catalogCode.includes('Reset'), 'Filter sheet must include Reset button');
-  assert.ok(catalogCode.includes('My Subscriptions &amp; OTT Coverage'), 'Explore page must include collapsible OTT coverage strip');
+  assert.ok(
+    catalogCode.includes('My Subscriptions &amp; OTT Coverage') ||
+      catalogCode.includes('My Subscriptions & OTT Coverage'),
+    'Explore page must include compact OTT coverage trigger strip'
+  );
+  assert.ok(catalogCode.includes('data-testid="ott-subscriptions-sheet"'), 'Explore page must open dedicated OTT Subscriptions Bottom Sheet');
   assert.ok(catalogCode.includes('gap-3 sm:gap-4 lg:gap-5'), 'Catalog grid must use 12px mobile and 16-20px desktop gaps');
 });
 
@@ -210,20 +223,20 @@ test('Eclipse 9: Phase 3 AnimeCard uses 2:3 poster, 14px title with 40px min-hei
 
   const cardCode = read('src/components/AnimeCard.tsx');
   assert.ok(cardCode.includes('aspect-[2/3]'), 'AnimeCard poster must use strict 2:3 aspect ratio');
-  assert.ok(cardCode.includes('rounded-[12px]'), 'AnimeCard must use 12px rounded corners');
-  assert.ok(cardCode.includes('bg-[#12141E]') && cardCode.includes('border-[#292B39]'), 'AnimeCard must use #12141E surface and 1px #292B39 border');
+  assert.ok(cardCode.includes('rounded-[var(--radius-card)]'), 'AnimeCard must use semantic card border radius');
+  assert.ok(cardCode.includes('bg-[var(--bg-surface)]') && cardCode.includes('border-[var(--border-subtle)]'), 'AnimeCard must use semantic surface and border tokens');
   assert.ok(cardCode.includes('text-[14px]') && cardCode.includes('leading-[20px]') && cardCode.includes('min-h-[40px]'), 'AnimeCard title must be 14px with 20px line-height and 40px min-height');
-  assert.ok(cardCode.includes('Poster unavailable') && cardCode.includes('Retry image'), 'AnimeCard must provide #191C29 Poster unavailable fallback with Retry image action');
+  assert.ok(cardCode.includes('Poster unavailable') && cardCode.includes('Retry image'), 'AnimeCard must provide Poster unavailable fallback with Retry image action');
   assert.ok(cardCode.includes('w-11 h-11 min-w-[44px] min-h-[44px]'), 'Bookmark and Overflow buttons must have 44x44px touch target');
   assert.ok(cardCode.includes('duration-180'), 'AnimeCard interactions must use 180ms transitions');
-  assert.ok(cardCode.includes("fill={isBookmarked ? '#B49AF8' : 'none'}"), 'Bookmark icon must transition to duotone #B49AF8 fill when saved');
-  assert.ok(cardCode.includes('line-clamp-2') && cardCode.includes('text-[#F4F3FA]'), 'Title must be #F4F3FA clamped to 2 lines');
+  assert.ok(cardCode.includes("fill={isBookmarked ? 'var(--accent-primary)' : 'none'}"), 'Bookmark icon must transition to duotone accent fill when saved');
+  assert.ok(cardCode.includes('line-clamp-2') && cardCode.includes('text-[var(--text-primary)]'), 'Title must use primary text token clamped to 2 lines');
   assert.ok(cardCode.includes("'Not verified'"), 'Missing platform must display Not verified instead of defaulting to Crunchyroll');
   assert.ok(cardCode.includes('data-testid="anime-card-overflow-sheet"'), 'AnimeCard must render Mobile Bottom Sheet for overflow menu');
-  assert.ok(cardCode.includes('<span>Share anime</span>'), 'Overflow menu must include Share anime');
-  assert.ok(cardCode.includes('<span>Compare anime</span>'), 'Overflow menu must include Compare anime');
+  assert.ok(cardCode.includes('Share anime'), 'Overflow menu must include Share anime');
+  assert.ok(cardCode.includes('Compare anime'), 'Overflow menu must include Compare anime');
   assert.ok(cardCode.includes('Save information offline'), 'Overflow menu must include Save information offline');
-  assert.ok(cardCode.includes('<span>Report incorrect information</span>'), 'Overflow menu must include Report incorrect information');
+  assert.ok(cardCode.includes('Report incorrect information'), 'Overflow menu must include Report incorrect information');
 });
 
 test('Eclipse 10: Step 4 AnimeDetailPage features Where to Watch card, 4 real Eclipse tabs, Follow toggle, and explicit review delivery states', () => {
@@ -289,7 +302,7 @@ test('Eclipse 15: Step 9 Chat, Auth, Forms, Legal, and AdminDashboard adopt Ecli
   assert.ok(liveChat.includes('Failed to send') && liveChat.includes('Sending…'), 'LiveChat must show explicit delivery states with Retry');
 
   const authModal = read('src/components/AuthModal.tsx');
-  assert.ok(authModal.includes('bg-[#12141E]') && authModal.includes('border-[#292B39]') && authModal.includes('bg-[#B49AF8]'), 'AuthModal must use Eclipse Dark tokens');
+  assert.ok(authModal.includes('bg-[var(--bg-surface)]') && authModal.includes('border-[var(--border-subtle)]') && authModal.includes('bg-[var(--accent-primary)]'), 'AuthModal must use semantic theme tokens');
 
   const dubModal = read('src/components/DubInfoModal.tsx');
   assert.ok(dubModal.includes('role="alert"') && dubModal.includes('min-h-[44px]'), 'DubInfoModal must show inline errors and 44px inputs');

@@ -1,0 +1,27 @@
+{
+  "explore": "खोजें",
+  "schedule": "शेड्यूल",
+  "chat": "चैट",
+  "library": "लाइब्रेरी",
+  "profile": "प्रोफ़ाइल",
+  "tools": "टूल्स",
+  "searchAnime": "एनीमे खोजें",
+  "openToolsMenu": "टूल्स मेनू खोलें",
+  "appearanceAndThemes": "दिखावट और थीम्स",
+  "toolsSheetTitle": "टूल्स और विकल्प",
+  "toolsSheetSubtitle": "त्वरित खोज उपयोगिताएं और समुदाय सुविधाएं",
+  "websiteLanguage": "भाषा",
+  "websiteLanguageSubtitle": "वेबसाइट की प्रदर्शन भाषा बदलें",
+  "adminDashboard": "एडमिन डैशबोर्ड",
+  "adminDashboardSubtitle": "सबमिशन और कैटलॉग डेटा प्रबंधित करें",
+  "secondary": {
+    "forYou": "आपके लिए",
+    "forYouSubtitle": "आपकी पसंद के अनुसार एनीमे सुझाव",
+    "compare": "तुलना करें",
+    "compareSubtitle": "दो एनीमे की आमने-सामने तुलना करें",
+    "tierList": "टियर लिस्ट",
+    "tierListSubtitle": "पसंदीदा डब्ड एनीमे को रैंक दें",
+    "submitAnime": "एनीमे जोड़ें",
+    "submitAnimeSubtitle": "छूटा हुआ डब्ड टाइटल सुझाएं"
+  }
+}

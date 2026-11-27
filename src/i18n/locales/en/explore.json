@@ -1,0 +1,91 @@
+{
+  "heading": "Find anime in your language",
+  "random": "Random",
+  "randomAnime": "Random Anime",
+  "compare": "Compare",
+  "matchmaker": "Matchmaker",
+  "searchPlaceholder": "Search English or Japanese title, alias (e.g. JJK), studio...",
+  "filters": "Filters",
+  "mySubscriptionsHeader": "My Subscriptions & OTT Coverage",
+  "myOttsOff": "My OTTs: Off",
+  "myOttsActive": "My OTTs: {{count}} active",
+  "showingTitles": "Showing {{count}} Titles",
+  "showingTitlesOf": "Showing {{shown}} of {{total}} Titles",
+  "loadingCatalog": "Loading catalog...",
+  "batchIndicator": "Batch {{current}} of {{total}}",
+  "loadMoreAnime": "Load more anime",
+  "manualContinuationHelper": "Manual continuation after 48 titles",
+  "autoLoadingNextBatch": "Automatically loading next batch...",
+  "allCaughtUp": "You're all caught up",
+  "backToTop": "Back to top",
+  "resetAllFilters": "Reset All Filters",
+  "noAnimeMatchesTitle": "No anime matches your selected filters.",
+  "noAnimeMatchesSubtitle": "Try clearing a language, platform, or search filter.",
+  "filterSheet": {
+    "title": "Filter & Sort Anime",
+    "subtitle": "Narrow down Indian regional dubs cleanly",
+    "quickSort": "Quick Sort",
+    "dubLanguages": "Dub Languages",
+    "ottPlatforms": "OTT Platforms",
+    "genre": "Genre",
+    "type": "Type",
+    "releaseStatus": "Release Status",
+    "episodeLength": "Episode Length",
+    "dubAvailability": "Dub Availability",
+    "verifiedOnly": "Verified availability only",
+    "fullyDubbedOnly": "Fully dubbed seasons only",
+    "showResults": "Show results",
+    "showResultsCount": "Show {{count}} results",
+    "resetFilters": "Reset",
+    "allGenres": "All Genres",
+    "allTypes": "All Types",
+    "allStatuses": "All Statuses",
+    "allLengths": "Any Length",
+    "sort": {
+      "latest": "Latest Added",
+      "rating": "Top Rated",
+      "popular": "Most Popular",
+      "title": "A–Z Title",
+      "year": "Newest Release"
+    },
+    "lengths": {
+      "short": "Short (1–12 eps)",
+      "medium": "Medium (13–26 eps)",
+      "long": "Long (27+ eps)"
+    },
+    "statuses": {
+      "airing": "Currently Airing",
+      "completed": "Completed",
+      "upcoming": "Upcoming"
+    }
+  },
+  "ottSheet": {
+    "title": "My Subscriptions & OTT Coverage",
+    "subtitle": "Select platforms you subscribe to for instant dub coverage",
+    "filterByMyOtts": "Only show anime on my OTTs",
+    "selectedCount": "{{count}} platforms selected",
+    "clearSelection": "Clear selection",
+    "done": "Done"
+  },
+  "card": {
+    "posterUnavailable": "Poster unavailable",
+    "retryImage": "Retry image",
+    "shareAnime": "Share anime",
+    "compareAnime": "Compare anime",
+    "saveOffline": "Save information offline",
+    "savedOffline": "Saved offline",
+    "reportIncorrect": "Report incorrect information",
+    "moreActions": "More actions",
+    "bookmarkAdd": "Save to library",
+    "bookmarkRemove": "Remove from library",
+    "seasonsCount": "{{count}} Seasons",
+    "seasonSingle": "1 Season",
+    "episodesCount": "{{count}} eps"
+  },
+  "latestUpdates": {
+    "title": "Latest Dub Updates",
+    "subtitle": "Verified catalog changes logged by editors",
+    "refresh": "Refresh latest dub updates",
+    "empty": "No recent verified updates logged yet."
+  }
+}

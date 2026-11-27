@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   User, Bookmark, CheckCircle, Play, LogOut, Shield, Sparkles, Lock,
-  MessageSquare, FileText, Globe, Bell, Cloud, ChevronRight, Check, Camera, X
+  MessageSquare, FileText, Globe, Languages, Bell, Cloud, ChevronRight, Check, Camera, X, Palette
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import {
   Anime,
   WatchlistItem,
@@ -12,6 +13,8 @@ import {
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 import { useUser, useClerk } from '../lib/clerk';
 import { ProfilePageSkeleton } from './ui/EclipseState';
+import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export interface ProfileViewProps {
   user?: {
@@ -114,6 +117,9 @@ export function ProfileView({
 }: ProfileViewProps) {
   const { isSignedIn, user: clerkUser } = useUser();
   const { signOut: clerkSignOut, openSignIn: clerkOpenSignIn } = useClerk();
+  const { t } = useTranslation(['profile', 'common']);
+  const { displayName: activeThemeName, activeSwatches, openAppearance } = useTheme();
+  const { languageMeta, preference: uiLangPref, openLanguageSelector } = useLanguage();
 
   const user = React.useMemo(() => {
     if (userProp !== undefined) return userProp;
@@ -292,13 +298,13 @@ export function ProfileView({
   }
 
   return (
-    <section className="max-w-[960px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[#F4F3FA] space-y-6">
+    <section className="max-w-[960px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[var(--text-primary)] space-y-6">
       <div>
-        <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em]">
-          Profile &amp; Settings
+        <h1 className="text-[24px] sm:text-[30px] font-bold text-[var(--text-primary)] leading-[1.2] tracking-[-0.02em]">
+          {t('profile:title', 'Profile & Settings')}
         </h1>
-        <p className="text-[13px] text-[#A1A5B5] mt-0.5">
-          Manage your regional dub preferences, cloud sync, and account
+        <p className="text-[13px] text-[var(--text-secondary)] mt-0.5">
+          {t('profile:subtitle', 'Manage your regional dub preferences, cloud sync, and account')}
         </p>
       </div>
 
@@ -306,7 +312,7 @@ export function ProfileView({
       {user ? (
         <div
           data-testid="profile-signed-in-card"
-          className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-5 space-y-5"
+          className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5 space-y-5"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
@@ -314,7 +320,7 @@ export function ProfileView({
                 type="button"
                 onClick={() => setShowAvatarPicker(true)}
                 aria-label="Choose anime avatar"
-                className="relative group w-16 h-16 rounded-2xl overflow-hidden bg-[#191C29] border border-[#292B39] hover:border-[#B49AF8] flex items-center justify-center shrink-0 transition-colors cursor-pointer"
+                className="relative group w-16 h-16 rounded-2xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)] flex items-center justify-center shrink-0 transition-colors cursor-pointer"
               >
                 {activeAvatarUrl ? (
                   <img
@@ -323,22 +329,22 @@ export function ProfileView({
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <span className="text-[22px] font-bold text-[#B49AF8]">
+                  <span className="text-[22px] font-bold text-[var(--accent-primary)]">
                     {user.name.charAt(0).toUpperCase()}
                   </span>
                 )}
-                <span className="absolute inset-x-0 bottom-0 bg-[#0B0A10]/80 py-0.5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera className="w-3.5 h-3.5 text-[#CBB6FF]" />
+                <span className="absolute inset-x-0 bottom-0 bg-[var(--bg-canvas)]/80 py-0.5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Camera className="w-3.5 h-3.5 text-[var(--accent-hover)]" />
                 </span>
               </button>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-[18px] sm:text-[20px] font-bold text-[#F4F3FA]">{user.name}</h2>
-                  <span className="px-2 py-0.5 rounded-[6px] bg-[#B49AF8]/15 text-[#CBB6FF] border border-[#B49AF8]/30 text-[11px] font-bold">
+                  <h2 className="text-[18px] sm:text-[20px] font-bold text-[var(--text-primary)]">{user.name}</h2>
+                  <span className="px-2 py-0.5 rounded-[6px] bg-[var(--accent-primary)]/15 text-[var(--accent-hover)] border border-[var(--accent-primary)]/30 text-[11px] font-bold">
                     {isAdminVerified ? 'Admin' : 'Verified Member'}
                   </span>
                 </div>
-                <p className="text-[13px] text-[#A1A5B5]">{user.email}</p>
+                <p className="text-[13px] text-[var(--text-secondary)]">{user.email}</p>
               </div>
             </div>
 
@@ -346,7 +352,7 @@ export function ProfileView({
               <button
                 type="button"
                 onClick={onOpenAdmin}
-                className="min-h-[44px] px-4 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold text-[13px] inline-flex items-center gap-2 transition-colors duration-180"
+                className="min-h-[44px] px-4 rounded-[12px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] font-bold text-[13px] inline-flex items-center gap-2 transition-colors duration-180"
               >
                 <Shield className="w-4 h-4" />
                 <span>Admin Dashboard</span>
@@ -355,51 +361,51 @@ export function ProfileView({
           </div>
 
           {/* Compact 3-Column Stats (Saved, Completed, Episodes) */}
-          <div className="grid grid-cols-3 gap-3 pt-2 border-t border-[#292B39]">
-            <div className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3 text-center">
-              <div className="flex items-center justify-center gap-1 text-[#B49AF8] text-[11px] font-bold uppercase tracking-wider mb-1">
+          <div className="grid grid-cols-3 gap-3 pt-2 border-t border-[var(--border-subtle)]">
+            <div className="rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-3 text-center">
+              <div className="flex items-center justify-center gap-1 text-[var(--accent-primary)] text-[11px] font-bold uppercase tracking-wider mb-1">
                 <Bookmark className="w-3.5 h-3.5" />
                 <span>Saved</span>
               </div>
-              <div className="text-[20px] font-bold text-[#F4F3FA]">{savedCount}</div>
+              <div className="text-[20px] font-bold text-[var(--text-primary)]">{savedCount}</div>
             </div>
 
-            <div className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3 text-center">
+            <div className="rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-3 text-center">
               <div className="flex items-center justify-center gap-1 text-[#34D399] text-[11px] font-bold uppercase tracking-wider mb-1">
                 <CheckCircle className="w-3.5 h-3.5" />
                 <span>Completed</span>
               </div>
-              <div className="text-[20px] font-bold text-[#F4F3FA]">{completedCount}</div>
+              <div className="text-[20px] font-bold text-[var(--text-primary)]">{completedCount}</div>
             </div>
 
-            <div className="rounded-[12px] bg-[#191C29] border border-[#292B39] p-3 text-center">
+            <div className="rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] p-3 text-center">
               <div className="flex items-center justify-center gap-1 text-[#F9C876] text-[11px] font-bold uppercase tracking-wider mb-1">
                 <Play className="w-3.5 h-3.5" />
                 <span>Episodes</span>
               </div>
-              <div className="text-[20px] font-bold text-[#F4F3FA]">{episodesWatchedTotal}</div>
+              <div className="text-[20px] font-bold text-[var(--text-primary)]">{episodesWatchedTotal}</div>
             </div>
           </div>
 
           {/* Refined #B49AF8 Anime DNA Bars */}
           {animeDnaBars.length > 0 && (
-            <div className="pt-3 border-t border-[#292B39] space-y-2.5">
+            <div className="pt-3 border-t border-[var(--border-subtle)] space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-[12px] font-bold uppercase tracking-wider text-[#A1A5B5]">
+                <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
                   Your Anime DNA
                 </span>
-                <span className="text-[11px] text-[#CBB6FF]">Top Genres</span>
+                <span className="text-[11px] text-[var(--accent-hover)]">Top Genres</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {animeDnaBars.map((bar) => (
                   <div key={bar.genre} className="space-y-1">
                     <div className="flex items-center justify-between text-[12px]">
-                      <span className="font-semibold text-[#F4F3FA]">{bar.genre}</span>
-                      <span className="text-[#A1A5B5]">{bar.count} titles</span>
+                      <span className="font-semibold text-[var(--text-primary)]">{bar.genre}</span>
+                      <span className="text-[var(--text-secondary)]">{bar.count} titles</span>
                     </div>
-                    <div className="w-full h-1.5 rounded-full bg-[#191C29] overflow-hidden">
+                    <div className="w-full h-1.5 rounded-full bg-[var(--bg-elevated)] overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-[#B49AF8]"
+                        className="h-full rounded-full bg-[var(--accent-primary)]"
                         style={{ width: `${bar.percent}%` }}
                       />
                     </div>
@@ -413,18 +419,21 @@ export function ProfileView({
         /* Signed-Out Guest Card */
         <div
           data-testid="profile-signed-out-card"
-          className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-5"
+          className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-5"
         >
           <div className="flex items-start sm:items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-[#191C29] border border-[#292B39] flex items-center justify-center shrink-0">
-              <User className="w-6 h-6 text-[#B49AF8]" />
+            <div className="w-14 h-14 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+              <User className="w-6 h-6 text-[var(--accent-primary)]" />
             </div>
             <div>
-              <h2 className="text-[18px] font-bold text-[#F4F3FA] mb-1">
-                Sign in to AniDub India
+              <h2 className="text-[18px] font-bold text-[var(--text-primary)] mb-1">
+                {t('profile:signInTitle', 'Sign in to AniDub India')}
               </h2>
-              <p className="text-[13px] sm:text-[14px] text-[#A1A5B5] max-w-md leading-relaxed">
-                Sync your regional dub watchlist across devices, track per-season episode progress, and post verified reviews.
+              <p className="text-[13px] sm:text-[14px] text-[var(--text-secondary)] max-w-md leading-relaxed">
+                {t(
+                  'profile:signInSubtitle',
+                  'Sync your regional dub watchlist across devices, track per-season episode progress, and post verified reviews.'
+                )}
               </p>
             </div>
           </div>
@@ -432,10 +441,10 @@ export function ProfileView({
           <button
             type="button"
             onClick={onOpenAuth}
-            className="min-h-[44px] px-5 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold text-[14px] inline-flex items-center justify-center gap-2 shrink-0 transition-colors duration-180"
+            className="min-h-[44px] px-5 rounded-[12px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] font-bold text-[14px] inline-flex items-center justify-center gap-2 shrink-0 transition-colors duration-180 cursor-pointer"
           >
-            <Sparkles className="w-4 h-4" />
-            <span>Sign In / Create Account</span>
+            <Sparkles className="w-4 h-4 shrink-0" />
+            <span>{t('profile:signInCta', 'Sign In / Create Account')}</span>
           </button>
         </div>
       )}
@@ -443,37 +452,112 @@ export function ProfileView({
       {/* 2. Unified Grouped Settings List (44px+ touch rows) */}
       <div
         data-testid="profile-settings-support"
-        className="rounded-[16px] bg-[#12141E] border border-[#292B39] divide-y divide-[#292B39] overflow-hidden"
+        className="rounded-[var(--radius-card)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)] overflow-hidden"
       >
-        {/* Row 1: Preferred Language */}
+        {/* Row 0: Appearance & Themes */}
+        <div className="p-3 sm:p-4" data-testid="profile-appearance-card">
+          <button
+            type="button"
+            onClick={() => openAppearance('presets')}
+            aria-label={`${t('profile:appearanceTitle', 'Appearance & Themes')} — ${activeThemeName}`}
+            className="w-full min-h-[44px] flex items-center justify-between gap-3 text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+                <Palette className="w-4 h-4 text-[var(--accent-primary)]" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold text-[var(--text-primary)]">
+                  {t('profile:appearanceTitle', 'Appearance & Themes')}
+                </div>
+                <div className="text-[12px] text-[var(--text-secondary)] truncate">
+                  {t('profile:appearanceSubtitle', '12 themes, light/dark modes, and Custom Theme Studio')}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1" aria-hidden="true">
+                {activeSwatches.map((hex, idx) => (
+                  <span
+                    key={`profile_theme_dot_${idx}`}
+                    className="w-3.5 h-3.5 rounded-full border border-black/20"
+                    style={{ backgroundColor: hex }}
+                  />
+                ))}
+              </div>
+              <span className="hidden xs:inline sm:inline px-2.5 py-1 rounded-[8px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[12px] font-bold text-[var(--accent-primary)] max-w-[130px] truncate">
+                {activeThemeName}
+              </span>
+              <ChevronRight className="w-4 h-4 text-[var(--text-secondary)]" />
+            </div>
+          </button>
+        </div>
+
+        {/* Row 0.5: Website Language & Region (Separate from Dub Filter) */}
+        <div className="p-3 sm:p-4" data-testid="profile-language-card">
+          <button
+            type="button"
+            onClick={openLanguageSelector}
+            aria-label={`${t('profile:websiteLanguageTitle', 'Language & Region')} — ${languageMeta.nativeName}`}
+            className="w-full min-h-[44px] flex items-center justify-between gap-3 text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+                <Languages className="w-4 h-4 text-[var(--accent-primary)]" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold text-[var(--text-primary)]">
+                  {t('profile:websiteLanguageTitle', 'Language & Region')}
+                </div>
+                <div className="text-[12px] text-[var(--text-secondary)] truncate">
+                  {t('profile:websiteLanguageSubtitle', 'Website interface language (independent of dub filters)')}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="px-2.5 py-1 rounded-[8px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[12px] font-bold text-[var(--accent-primary)] max-w-[140px] truncate">
+                {languageMeta.nativeName}
+                {uiLangPref === 'auto' ? ' · Auto' : ''}
+              </span>
+              <ChevronRight className="w-4 h-4 text-[var(--text-secondary)]" />
+            </div>
+          </button>
+        </div>
+
+        {/* Row 1: Preferred Dub Language (Independent from Website UI Language) */}
         <div className="p-3 sm:p-4">
           <button
             type="button"
             onClick={() => setShowLangPicker((prev) => !prev)}
             aria-expanded={showLangPicker}
-            className="w-full min-h-[44px] flex items-center justify-between gap-3 text-left"
+            className="w-full min-h-[44px] flex items-center justify-between gap-3 text-left cursor-pointer"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-center shrink-0">
-                <Globe className="w-4 h-4 text-[#B49AF8]" />
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+                <Globe className="w-4 h-4 text-[var(--accent-primary)]" />
               </div>
-              <div>
-                <div className="text-[14px] font-semibold text-[#F4F3FA]">Preferred language</div>
-                <div className="text-[12px] text-[#A1A5B5]">
-                  Prioritize {preferredLang} dubs in discovery and notifications
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold text-[var(--text-primary)]">
+                  {t('profile:preferredDubTitle', 'Preferred dub language')}
+                </div>
+                <div className="text-[12px] text-[var(--text-secondary)] truncate">
+                  {t('profile:preferredDubSubtitle', {
+                    language: preferredLang,
+                    defaultValue: `Prioritize ${preferredLang} dubs in discovery and notifications`,
+                  })}
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded-[8px] bg-[#191C29] border border-[#292B39] text-[12px] font-bold text-[#CBB6FF]">
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="px-2.5 py-1 rounded-[8px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[12px] font-bold text-[var(--accent-hover)]">
                 {preferredLang}
               </span>
-              <ChevronRight className="w-4 h-4 text-[#A1A5B5]" />
+              <ChevronRight className="w-4 h-4 text-[var(--text-secondary)]" />
             </div>
           </button>
 
           {showLangPicker && (
-            <div className="mt-3 pt-3 border-t border-[#292B39] grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="mt-3 pt-3 border-t border-[var(--border-subtle)] grid grid-cols-2 sm:grid-cols-3 gap-2">
               {REGIONAL_LANGUAGES.map((lang) => {
                 const isSelected = preferredLang === lang;
                 return (
@@ -481,10 +565,10 @@ export function ProfileView({
                     key={lang}
                     type="button"
                     onClick={() => handleSelectLanguage(lang)}
-                    className={`min-h-[44px] px-3 rounded-[10px] text-[13px] font-semibold border flex items-center justify-between transition-colors ${
+                    className={`min-h-[44px] px-3 rounded-[10px] text-[13px] font-semibold border flex items-center justify-between transition-colors cursor-pointer ${
                       isSelected
-                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                        : 'bg-[#191C29] text-[#F4F3FA] border-[#292B39] hover:border-[#B49AF8]/40'
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/40'
                     }`}
                   >
                     <span>{lang}</span>
@@ -498,16 +582,19 @@ export function ProfileView({
 
         {/* Row 2: Notifications & Notification Preferences */}
         <div className="p-3 sm:p-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-center shrink-0">
-              <Bell className="w-4 h-4 text-[#B49AF8]" />
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+              <Bell className="w-4 h-4 text-[var(--accent-primary)]" />
             </div>
-            <div>
-              <div className="text-[14px] font-semibold text-[#F4F3FA]">
-                Notifications &amp; Notification Preferences
+            <div className="min-w-0">
+              <div className="text-[14px] font-semibold text-[var(--text-primary)]">
+                {t('profile:notificationsTitle', 'Notifications & Notification Preferences')}
               </div>
-              <div className="text-[12px] text-[#A1A5B5]">
-                Weekly Simulcast Drops &amp; Notification Sound Chime for followed regional dubs
+              <div className="text-[12px] text-[var(--text-secondary)]">
+                {t(
+                  'profile:notificationsSubtitle',
+                  'Weekly Simulcast Drops & Notification Sound Chime for followed regional dubs'
+                )}
               </div>
             </div>
           </div>
@@ -516,74 +603,82 @@ export function ProfileView({
             role="switch"
             aria-checked={notificationsEnabled}
             onClick={handleToggleNotifications}
-            className={`min-h-[44px] px-4 rounded-[10px] text-[12px] font-bold border transition-colors ${
+            className={`min-h-[44px] px-4 rounded-[10px] text-[12px] font-bold border transition-colors shrink-0 cursor-pointer ${
               notificationsEnabled
-                ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/40'
-                : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39]'
+                ? 'bg-[var(--accent-primary)]/15 text-[var(--accent-hover)] border-[var(--accent-primary)]/40'
+                : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
             }`}
           >
-            {notificationsEnabled ? 'Enabled' : 'Muted'}
+            {notificationsEnabled
+              ? t('common:enabled', 'Enabled')
+              : t('common:disabled', 'Disabled')}
           </button>
         </div>
 
         {/* Row 3: Sync & Backup */}
         <div className="p-3 sm:p-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-center shrink-0">
-              <Cloud className="w-4 h-4 text-[#B49AF8]" />
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+              <Cloud className="w-4 h-4 text-[var(--accent-primary)]" />
             </div>
-            <div>
-              <div className="text-[14px] font-semibold text-[#F4F3FA]">Sync &amp; backup</div>
-              <div className="text-[12px] text-[#A1A5B5]">
-                {user ? 'Cloud sync active via Cloudflare D1' : 'Local browser storage (Sign in to enable cloud backup)'}
+            <div className="min-w-0">
+              <div className="text-[14px] font-semibold text-[var(--text-primary)]">
+                {t('profile:syncTitle', 'Sync & backup')}
+              </div>
+              <div className="text-[12px] text-[var(--text-secondary)]">
+                {user
+                  ? t('profile:syncSubtitleCloud', 'Synced securely with your account across devices')
+                  : t('profile:syncSubtitleLocal', 'Local browser storage (Sign in to enable cloud backup)')}
               </div>
             </div>
           </div>
           {user ? (
-            <span className="px-2.5 py-1 rounded-[8px] bg-emerald-500/10 text-[#34D399] border border-emerald-500/30 text-[12px] font-semibold">
-              Synced
+            <span className="px-2.5 py-1 rounded-[8px] bg-emerald-500/10 text-[#34D399] border border-emerald-500/30 text-[12px] font-semibold shrink-0">
+              {t('common:verified', 'Verified')}
             </span>
           ) : (
             <button
               type="button"
               onClick={onOpenAuth}
-              className="min-h-[44px] px-3.5 rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#CBB6FF] border border-[#292B39] text-[12px] font-semibold"
+              className="min-h-[44px] px-3.5 rounded-[10px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[var(--accent-hover)] border border-[var(--border-subtle)] text-[12px] font-semibold shrink-0 cursor-pointer"
             >
-              Enable Sync
+              {t('profile:enableSync', 'Enable Sync')}
             </button>
           )}
         </div>
 
         {/* Row 4: Help & Feedback (Single Dedicated Home) */}
         <div className="p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-center shrink-0">
-              <MessageSquare className="w-4 h-4 text-[#B49AF8]" />
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+              <MessageSquare className="w-4 h-4 text-[var(--accent-primary)]" />
             </div>
-            <div>
-              <div className="text-[14px] font-semibold text-[#F4F3FA]">Help &amp; feedback</div>
-              <div className="text-[12px] text-[#A1A5B5]">
-                Report a bug, suggest a feature, or submit verified regional dub info
+            <div className="min-w-0">
+              <div className="text-[14px] font-semibold text-[var(--text-primary)]">
+                {t('profile:helpTitle', 'Help & feedback')}
+              </div>
+              <div className="text-[12px] text-[var(--text-secondary)]">
+                {t('profile:helpSubtitle', 'Report a bug, suggest a feature, or submit verified regional dub info')}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {onOpenSubmitDub && (
               <button
                 type="button"
                 onClick={onOpenSubmitDub}
-                className="min-h-[44px] px-3.5 rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#F4F3FA] border border-[#292B39] text-[12px] font-semibold"
+                className="min-h-[44px] px-3.5 rounded-[10px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[var(--text-primary)] border border-[var(--border-subtle)] text-[12px] font-semibold cursor-pointer"
               >
-                Submit Dub Info
+                {t('profile:submitDubInfo', 'Submit Dub Info')}
               </button>
             )}
             {onOpenFeedback && (
               <button
                 type="button"
                 onClick={onOpenFeedback}
-                className="min-h-[44px] px-3.5 rounded-[10px] bg-[#B49AF8]/15 hover:bg-[#B49AF8]/25 text-[#CBB6FF] border border-[#B49AF8]/40 text-[12px] font-semibold"
+                className="min-h-[44px] px-3.5 rounded-[10px] bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 text-[var(--accent-hover)] border border-[var(--accent-primary)]/40 text-[12px] font-semibold cursor-pointer"
               >
-                Send Feedback
+                {t('profile:sendFeedback', 'Send Feedback')}
               </button>
             )}
           </div>
@@ -591,40 +686,42 @@ export function ProfileView({
 
         {/* Row 5: Privacy & Security */}
         <div className="p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-center shrink-0">
-              <Lock className="w-4 h-4 text-[#B49AF8]" />
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+              <Lock className="w-4 h-4 text-[var(--accent-primary)]" />
             </div>
-            <div>
-              <div className="text-[14px] font-semibold text-[#F4F3FA]">Privacy &amp; security</div>
-              <div className="text-[12px] text-[#A1A5B5]">
-                Privacy Policy, Terms of Service, and DMCA / Rights-Holder takedowns
+            <div className="min-w-0">
+              <div className="text-[14px] font-semibold text-[var(--text-primary)]">
+                {t('profile:privacyTitle', 'Privacy & security')}
+              </div>
+              <div className="text-[12px] text-[var(--text-secondary)]">
+                {t('profile:privacySubtitle', 'Privacy Policy, Terms of Service, and DMCA / Rights-Holder takedowns')}
               </div>
             </div>
           </div>
           {onOpenLegal && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => onOpenLegal('privacy')}
-                className="min-h-[44px] px-3 rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39] text-[12px] font-semibold inline-flex items-center gap-1"
+                className="min-h-[44px] px-3 rounded-[10px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] text-[12px] font-semibold inline-flex items-center gap-1 cursor-pointer"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>Privacy</span>
+                <span>{t('profile:privacy', 'Privacy')}</span>
               </button>
               <button
                 type="button"
                 onClick={() => onOpenLegal('terms')}
-                className="min-h-[44px] px-3 rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39] text-[12px] font-semibold"
+                className="min-h-[44px] px-3 rounded-[10px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] text-[12px] font-semibold cursor-pointer"
               >
-                Terms
+                {t('profile:terms', 'Terms')}
               </button>
               <button
                 type="button"
                 onClick={() => onOpenLegal('dmca')}
-                className="min-h-[44px] px-3 rounded-[10px] bg-[#191C29] hover:bg-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] border border-[#292B39] text-[12px] font-semibold"
+                className="min-h-[44px] px-3 rounded-[10px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] text-[12px] font-semibold cursor-pointer"
               >
-                DMCA
+                {t('profile:dmca', 'DMCA')}
               </button>
             </div>
           )}
@@ -638,8 +735,8 @@ export function ProfileView({
                 <LogOut className="w-4 h-4 text-[#F87171]" />
               </div>
               <div>
-                <div className="text-[14px] font-semibold text-[#F4F3FA]">Sign out</div>
-                <div className="text-[12px] text-[#A1A5B5]">
+                <div className="text-[14px] font-semibold text-[var(--text-primary)]">Sign out</div>
+                <div className="text-[12px] text-[var(--text-secondary)]">
                   Sign out of your account on this device
                 </div>
               </div>
@@ -663,11 +760,11 @@ export function ProfileView({
           aria-label="Choose Anime Character Avatar"
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm"
         >
-          <div className="w-full sm:max-w-xl max-h-[85vh] rounded-t-[20px] sm:rounded-[20px] bg-[#12141E] border border-[#292B39] flex flex-col overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#292B39] flex items-center justify-between">
+          <div className="w-full sm:max-w-xl max-h-[85vh] rounded-t-[20px] sm:rounded-[20px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
               <div>
-                <h3 className="text-[16px] font-bold text-[#F4F3FA]">Choose Anime Avatar</h3>
-                <p className="text-[12px] text-[#A1A5B5]">
+                <h3 className="text-[16px] font-bold text-[var(--text-primary)]">Choose Anime Avatar</h3>
+                <p className="text-[12px] text-[var(--text-secondary)]">
                   Pick from {RICH_ANIME_AVATARS.length} iconic anime characters
                 </p>
               </div>
@@ -675,13 +772,13 @@ export function ProfileView({
                 type="button"
                 onClick={() => setShowAvatarPicker(false)}
                 aria-label="Close avatar picker"
-                className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center"
+                className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="px-5 py-3 border-b border-[#292B39] flex items-center gap-2 overflow-x-auto no-scrollbar">
+            <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center gap-2 overflow-x-auto no-scrollbar">
               {AVATAR_CATEGORIES.map((cat) => (
                 <button
                   key={cat}
@@ -689,8 +786,8 @@ export function ProfileView({
                   onClick={() => setAvatarCategory(cat)}
                   className={`min-h-[40px] px-3.5 rounded-[10px] text-[12px] font-semibold whitespace-nowrap border transition-colors ${
                     avatarCategory === cat
-                      ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                      : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                      ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                      : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
                   }`}
                 >
                   {cat}
@@ -708,11 +805,11 @@ export function ProfileView({
                     onClick={() => handleSelectAvatar(avatar)}
                     className={`p-2 rounded-[12px] border text-center transition-colors ${
                       isSelected
-                        ? 'bg-[#B49AF8]/15 border-[#B49AF8] text-[#F4F3FA]'
-                        : 'bg-[#191C29] border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5]'
+                        ? 'bg-[var(--accent-primary)]/15 border-[var(--accent-primary)] text-[var(--text-primary)]'
+                        : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 text-[var(--text-secondary)]'
                     }`}
                   >
-                    <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden bg-[#12141E] border border-[#292B39] mb-1.5">
+                    <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden bg-[var(--bg-surface)] border border-[var(--border-subtle)] mb-1.5">
                       <img
                         src={avatar.url}
                         alt={avatar.name}
@@ -720,7 +817,7 @@ export function ProfileView({
                         className="w-full h-full object-cover"
                       />
                     </div>
-                    <div className="text-[11px] font-semibold text-[#F4F3FA] truncate">
+                    <div className="text-[11px] font-semibold text-[var(--text-primary)] truncate">
                       {avatar.name}
                     </div>
                   </button>

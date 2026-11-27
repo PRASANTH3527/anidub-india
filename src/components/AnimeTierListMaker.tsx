@@ -5,6 +5,7 @@ import {
 import { Anime, normalizeAnimeList } from '../types';
 import { OptimizedImage } from './OptimizedImage';
 import { ConfirmDialog } from './ui/EclipseState';
+import { useTranslation } from 'react-i18next';
 
 export interface AnimeTierListMakerProps {
   animeList?: any[];
@@ -18,7 +19,7 @@ type TierKey = 'S' | 'A' | 'B' | 'C' | 'D';
 type TiersMap = Record<TierKey, string[]>;
 
 const TIER_DEFINITIONS: { id: TierKey; label: string; badgeClass: string }[] = [
-  { id: 'S', label: 'S', badgeClass: 'bg-[#B49AF8] text-[#0B0A10]' },
+  { id: 'S', label: 'S', badgeClass: 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)]' },
   { id: 'A', label: 'A', badgeClass: 'bg-emerald-400 text-[#0B0A10]' },
   { id: 'B', label: 'B', badgeClass: 'bg-sky-400 text-[#0B0A10]' },
   { id: 'C', label: 'C', badgeClass: 'bg-[#F9C876] text-[#0B0A10]' },
@@ -34,6 +35,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
   onSelectAnime,
   onShowToast,
 }) => {
+  const { t } = useTranslation(['tools', 'common']);
   const animeList = useMemo(
     () => normalizeAnimeList(animeListProp || catalogList || []),
     [animeListProp, catalogList]
@@ -151,19 +153,19 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
   const selectedAnime = selectedAnimeId ? animeById.get(selectedAnimeId) || null : null;
 
   return (
-    <section className="max-w-[1280px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[#F4F3FA]">
+    <section className="max-w-[1280px] mx-auto px-4 sm:px-6 pt-5 pb-24 text-[var(--text-primary)]">
       {/* Header & Action Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
-          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#B49AF8] mb-1">
+          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--accent-primary)] mb-1">
             <Trophy className="w-3.5 h-3.5" />
             <span>Interactive Ranking</span>
           </div>
-          <h1 className="text-[24px] sm:text-[30px] font-bold text-[#F4F3FA] leading-[1.2] tracking-[-0.02em]">
-            Regional Dub Tier List
+          <h1 className="text-[24px] sm:text-[30px] font-bold text-[var(--text-primary)] leading-[1.2] tracking-[-0.02em]">
+            {t('tools:tierList.title', 'Regional Dub Tier List')}
           </h1>
-          <p className="text-[13px] text-[#A1A5B5] mt-0.5">
-            Tap any poster to assign S–D tier on mobile, or drag and drop on desktop
+          <p className="text-[13px] text-[var(--text-secondary)] mt-0.5">
+            {t('tools:tierList.subtitle', 'Rank your favorite Indian dubbed anime and export your board')}
           </p>
         </div>
 
@@ -173,9 +175,9 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
             onClick={handleUndo}
             disabled={historyStack.length === 0}
             aria-label="Undo last tier assignment"
-            className="min-h-[44px] px-3.5 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] disabled:opacity-40 text-[#F4F3FA] border border-[#292B39] text-[12px] font-semibold inline-flex items-center gap-1.5 transition-colors"
+            className="min-h-[44px] px-3.5 rounded-[12px] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] disabled:opacity-40 text-[var(--text-primary)] border border-[var(--border-subtle)] text-[12px] font-semibold inline-flex items-center gap-1.5 transition-colors"
           >
-            <Undo2 className="w-4 h-4 text-[#B49AF8]" />
+            <Undo2 className="w-4 h-4 text-[var(--accent-primary)]" />
             <span>Undo</span>
           </button>
 
@@ -183,16 +185,16 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
             type="button"
             onClick={() => setShowConfirmReset(true)}
             disabled={rankedIdsSet.size === 0}
-            className="min-h-[44px] px-3.5 rounded-[12px] bg-[#12141E] hover:bg-[#191C29] disabled:opacity-40 text-[#F87171] border border-[#292B39] text-[12px] font-semibold inline-flex items-center gap-1.5 transition-colors"
+            className="min-h-[44px] px-3.5 rounded-[12px] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] disabled:opacity-40 text-[#F87171] border border-[var(--border-subtle)] text-[12px] font-semibold inline-flex items-center gap-1.5 transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
-            <span>Reset</span>
+            <span>{t('tools:tierList.resetBoard', 'Reset')}</span>
           </button>
 
           <button
             type="button"
             onClick={handleShareOrExport}
-            className="min-h-[44px] px-4 rounded-[12px] bg-[#B49AF8] hover:bg-[#CBB6FF] text-[#0B0A10] font-bold text-[13px] inline-flex items-center gap-2 transition-colors shadow-sm"
+            className="min-h-[44px] px-4 rounded-[12px] bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] font-bold text-[13px] inline-flex items-center gap-2 transition-colors shadow-sm"
           >
             {copiedShare ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
             <span>{copiedShare ? 'Copied!' : 'Export / Share'}</span>
@@ -205,14 +207,14 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
         data-testid="tier-tap-assign-bar"
         className={`mb-5 rounded-[14px] border p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all duration-180 ${
           selectedAnime
-            ? 'bg-[#191C29] border-[#B49AF8]'
-            : 'bg-[#12141E] border-[#292B39]'
+            ? 'bg-[var(--bg-elevated)] border-[var(--accent-primary)]'
+            : 'bg-[var(--bg-surface)] border-[var(--border-subtle)]'
         }`}
       >
         <div className="flex items-center gap-3 min-w-0">
           {selectedAnime ? (
             <>
-              <div className="w-10 aspect-[2/3] rounded-[6px] overflow-hidden bg-[#12141E] border border-[#292B39] shrink-0">
+              <div className="w-10 aspect-[2/3] rounded-[6px] overflow-hidden bg-[var(--bg-surface)] border border-[var(--border-subtle)] shrink-0">
                 <OptimizedImage
                   src={selectedAnime.poster}
                   alt={selectedAnime.title}
@@ -221,17 +223,17 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                 />
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-[#B49AF8]">
-                  Tap a tier to assign
+                <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--accent-primary)]">
+                  {t('tools:tierList.tapToAssign', 'Tap a tier to assign')}
                 </div>
-                <div className="text-[14px] font-bold text-[#F4F3FA] truncate">
+                <div className="text-[14px] font-bold text-[var(--text-primary)] truncate">
                   {selectedAnime.title}
                 </div>
               </div>
             </>
           ) : (
-            <div className="text-[13px] text-[#A1A5B5]">
-              Select any anime poster below to quickly rank it into <strong className="text-[#F4F3FA]">S, A, B, C, or D</strong> tier.
+            <div className="text-[13px] text-[var(--text-secondary)]">
+              Select any anime poster below to quickly rank it into <strong className="text-[var(--text-primary)]">S, A, B, C, or D</strong> tier.
             </div>
           )}
         </div>
@@ -252,7 +254,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
             <button
               type="button"
               onClick={() => assignToTier(selectedAnimeId, 'UNRANKED')}
-              className="min-h-[44px] px-3 rounded-[10px] bg-[#12141E] text-[#F87171] border border-[#292B39] text-[12px] font-semibold"
+              className="min-h-[44px] px-3 rounded-[10px] bg-[var(--bg-surface)] text-[#F87171] border border-[var(--border-subtle)] text-[12px] font-semibold"
             >
               Unrank
             </button>
@@ -262,7 +264,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
               type="button"
               onClick={() => setSelectedAnimeId(null)}
               aria-label="Clear selection"
-              className="min-h-[44px] min-w-[44px] rounded-[10px] bg-[#12141E] text-[#A1A5B5] border border-[#292B39] flex items-center justify-center"
+              className="min-h-[44px] min-w-[44px] rounded-[10px] bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)] flex items-center justify-center"
             >
               <X className="w-4 h-4" />
             </button>
@@ -271,7 +273,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
       </div>
 
       {/* S - D Tier Rows */}
-      <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] divide-y divide-[#292B39] overflow-hidden mb-6">
+      <div className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)] overflow-hidden mb-6">
         {TIER_DEFINITIONS.map((tier) => {
           const tierItems = tiers[tier.id]
             .map((id) => animeById.get(id))
@@ -295,7 +297,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                 {tier.label}
               </div>
 
-              <div className="flex-1 p-2.5 sm:p-3 flex flex-wrap items-center gap-2.5 bg-[#12141E]">
+              <div className="flex-1 p-2.5 sm:p-3 flex flex-wrap items-center gap-2.5 bg-[var(--bg-surface)]">
                 {tierItems.length > 0 ? (
                   tierItems.map((anime) => {
                     const isSelected = selectedAnimeId === anime.id;
@@ -310,10 +312,10 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                         }
                         onDoubleClick={() => onSelectAnime(anime)}
                         title={anime.title}
-                        className={`relative w-16 sm:w-20 aspect-[2/3] rounded-[10px] overflow-hidden bg-[#191C29] border-2 transition-all ${
+                        className={`relative w-16 sm:w-20 aspect-[2/3] rounded-[10px] overflow-hidden bg-[var(--bg-elevated)] border-2 transition-all ${
                           isSelected
-                            ? 'border-[#B49AF8] ring-2 ring-[#B49AF8]/40 scale-[1.03]'
-                            : 'border-[#292B39] hover:border-[#B49AF8]/50'
+                            ? 'border-[var(--accent-primary)] ring-2 ring-[var(--accent-primary)]/40 scale-[1.03]'
+                            : 'border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50'
                         }`}
                       >
                         <OptimizedImage
@@ -322,14 +324,14 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                           className="w-full h-full object-cover"
                           aspectRatio="portrait"
                         />
-                        <div className="absolute inset-x-0 bottom-0 bg-[#0B0A10]/85 px-1 py-0.5 text-[10px] font-semibold text-[#F4F3FA] truncate">
+                        <div className="absolute inset-x-0 bottom-0 bg-[var(--bg-canvas)]/85 px-1 py-0.5 text-[10px] font-semibold text-[var(--text-primary)] truncate">
                           {anime.title}
                         </div>
                       </button>
                     );
                   })
                 ) : (
-                  <span className="text-[12px] text-[#A1A5B5] pl-2">
+                  <span className="text-[12px] text-[var(--text-secondary)] pl-2">
                     Drop or tap-assign {tier.label}-tier anime here
                   </span>
                 )}
@@ -340,13 +342,13 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
       </div>
 
       {/* Unranked Pool with Search, Language Filter Pills & Pagination */}
-      <div className="rounded-[16px] bg-[#12141E] border border-[#292B39] p-4 sm:p-5">
+      <div className="rounded-[16px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
           <div>
-            <h2 className="text-[16px] sm:text-[18px] font-bold text-[#F4F3FA]">
+            <h2 className="text-[16px] sm:text-[18px] font-bold text-[var(--text-primary)]">
               Unranked Anime Pool ({filteredUnrankedPool.length})
             </h2>
-            <p className="text-[12px] text-[#A1A5B5]">
+            <p className="text-[12px] text-[var(--text-secondary)]">
               Tap a poster to highlight it, then tap S / A / B / C / D above
             </p>
           </div>
@@ -366,11 +368,13 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                     }}
                     className={`min-h-[44px] px-3.5 rounded-[10px] text-[12px] font-semibold whitespace-nowrap border transition-colors ${
                       active
-                        ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8]'
-                        : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA]'
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)]'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
                     }`}
                   >
-                    {lang}
+                    {lang === 'All'
+                      ? t('common:all', 'All')
+                      : t(`common:languages.${lang.toLowerCase()}`, lang)}
                   </button>
                 );
               })}
@@ -378,7 +382,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
 
             {/* Search Input (44px) */}
             <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-[#A1A5B5] absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-[var(--text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
@@ -387,7 +391,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                   setPoolVisibleCount(24);
                 }}
                 placeholder="Search unranked pool..."
-                className="w-full min-h-[44px] pl-9 pr-4 rounded-[10px] bg-[#191C29] border border-[#292B39] text-[13px] text-[#F4F3FA] placeholder-[#A1A5B5] focus:outline-none focus:border-[#B49AF8]"
+                className="w-full min-h-[44px] pl-9 pr-4 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
               />
             </div>
           </div>
@@ -406,10 +410,10 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                 onClick={() =>
                   setSelectedAnimeId((prev) => (prev === anime.id ? null : anime.id))
                 }
-                className={`group relative aspect-[2/3] rounded-[10px] overflow-hidden bg-[#191C29] border-2 text-left transition-all duration-180 ${
+                className={`group relative aspect-[2/3] rounded-[10px] overflow-hidden bg-[var(--bg-elevated)] border-2 text-left transition-all duration-180 ${
                   isSelected
-                    ? 'border-[#B49AF8] ring-2 ring-[#B49AF8]/40 scale-[1.02]'
-                    : 'border-[#292B39] hover:border-[#B49AF8]/50'
+                    ? 'border-[var(--accent-primary)] ring-2 ring-[var(--accent-primary)]/40 scale-[1.02]'
+                    : 'border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50'
                 }`}
               >
                 <OptimizedImage
@@ -421,8 +425,8 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
                   className="w-full h-full object-cover"
                   aspectRatio="portrait"
                 />
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0B0A10] via-[#0B0A10]/90 to-transparent p-2 pt-5">
-                  <div className="text-[11px] font-semibold text-[#F4F3FA] line-clamp-2 leading-tight">
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[var(--bg-canvas)] via-[var(--bg-canvas)]/90 to-transparent p-2 pt-5">
+                  <div className="text-[11px] font-semibold text-[var(--text-primary)] line-clamp-2 leading-tight">
                     {anime.title}
                   </div>
                 </div>
@@ -436,7 +440,7 @@ export const AnimeTierListMaker: React.FC<AnimeTierListMakerProps> = ({
             <button
               type="button"
               onClick={() => setPoolVisibleCount((prev) => prev + 24)}
-              className="min-h-[44px] px-5 rounded-[12px] bg-[#191C29] hover:bg-[#292B39] text-[#CBB6FF] border border-[#292B39] text-[13px] font-semibold inline-flex items-center gap-2 transition-colors"
+              className="min-h-[44px] px-5 rounded-[12px] bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] text-[var(--accent-hover)] border border-[var(--border-subtle)] text-[13px] font-semibold inline-flex items-center gap-2 transition-colors"
             >
               <Plus className="w-4 h-4" />
               <span>

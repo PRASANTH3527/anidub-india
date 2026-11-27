@@ -24,6 +24,7 @@ import {
 } from '../utils/offlineStorage';
 import { normalizeCanonicalOttList } from '../utils/ottHub';
 import { normalizeLanguageName, isExcludedLanguage } from '../utils/languages';
+import { useTranslation } from 'react-i18next';
 
 export const TRENDING_VOTE_THRESHOLD = 100;
 
@@ -140,6 +141,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 }) => {
   const isPriorityCard = Boolean(priority || (typeof index === 'number' && index < 4));
   const toast = useToast();
+  const { t } = useTranslation(['explore', 'common']);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [offlineSaved, setOfflineSaved] = useState<boolean>(false);
@@ -214,7 +216,10 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 
   // Never default to Crunchyroll when platform is missing; normalize legacy OTT names canonically
   const platforms = normalizeCanonicalOttList(anime);
-  const primaryPlatformLabel = platforms.length > 0 ? platforms[0] : 'Not verified';
+  const isPlatformVerified = platforms.length > 0;
+  const primaryPlatformLabel = isPlatformVerified
+    ? platforms[0]
+    : t('common:notVerified', 'Not verified');
   const extraPlatformCount = platforms.length > 1 ? platforms.length - 1 : 0;
 
   const orderedLanguages = extractOrderedLanguages(anime.languages);
@@ -222,8 +227,10 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
   const extraLangCount = orderedLanguages.length > 3 ? orderedLanguages.length - 3 : 0;
   const orderedLanguageText =
     visibleLanguageNames.length > 0
-      ? visibleLanguageNames.join(' · ')
-      : 'Unverified dub';
+      ? visibleLanguageNames
+          .map((lang) => t(`common:languages.${lang.toLowerCase()}`, lang))
+          .join(' · ')
+      : t('common:notVerified', 'Not verified');
 
   const numericRating = Number(anime.rating);
   const hasRating = Number.isFinite(numericRating) && numericRating > 0;
@@ -305,17 +312,17 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
               aria-hidden="true"
             />
             <div
-              className="relative z-10 w-full rounded-t-3xl bg-[#12141E] border-t border-[#292B39] px-4 pt-2.5 pb-6 space-y-3 shadow-2xl"
+              className="relative z-10 w-full rounded-t-3xl bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] px-4 pt-2.5 pb-6 space-y-3 shadow-2xl"
               style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.25rem)' }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="w-10 h-1.5 rounded-full bg-[#292B39] mx-auto" />
-              <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-[#292B39]">
+              <div className="w-10 h-1.5 rounded-full bg-[var(--border-subtle)] mx-auto" />
+              <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-[var(--border-subtle)]">
                 <div className="min-w-0">
-                  <h4 className="text-[14px] font-semibold text-[#F4F3FA] truncate">
+                  <h4 className="text-[14px] font-semibold text-[var(--text-primary)] truncate">
                     {anime.title}
                   </h4>
-                  <p className="text-xs text-[#A1A5B5] truncate">
+                  <p className="text-xs text-[var(--text-secondary)] truncate">
                     {orderedLanguageText} · {primaryPlatformLabel}
                   </p>
                 </div>
@@ -323,7 +330,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                   type="button"
                   onClick={() => setMenuOpen(false)}
                   aria-label="Close actions menu"
-                  className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[#191C29] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-180 cursor-pointer shrink-0"
+                  className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors duration-180 cursor-pointer shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -333,33 +340,37 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                 <button
                   type="button"
                   onClick={handleShare}
-                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-[12px] bg-[#191C29] border border-[#292B39] text-left text-xs font-semibold text-[#F4F3FA] hover:border-[#B49AF8]/50 flex items-center gap-3 transition-colors duration-180 cursor-pointer"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-left text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50 flex items-center gap-3 transition-colors duration-180 cursor-pointer"
                 >
-                  <Share2 className="w-4 h-4 text-[#B49AF8] shrink-0" />
-                  <span>Share anime</span>
+                  <Share2 className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+                  <span>{t('explore:card.shareAnime', 'Share anime')}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleCompare}
-                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-[12px] bg-[#191C29] border border-[#292B39] text-left text-xs font-semibold text-[#F4F3FA] hover:border-[#B49AF8]/50 flex items-center gap-3 transition-colors duration-180 cursor-pointer"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-left text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50 flex items-center gap-3 transition-colors duration-180 cursor-pointer"
                 >
-                  <ArrowLeftRight className="w-4 h-4 text-[#CBB6FF] shrink-0" />
-                  <span>Compare anime</span>
+                  <ArrowLeftRight className="w-4 h-4 text-[var(--accent-hover)] shrink-0" />
+                  <span>{t('explore:card.compareAnime', 'Compare anime')}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleToggleOffline}
                   aria-label="Save Info Offline"
-                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-[12px] bg-[#191C29] border border-[#292B39] text-left text-xs font-semibold text-[#F4F3FA] hover:border-[#B49AF8]/50 flex items-center gap-3 transition-colors duration-180 cursor-pointer"
+                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-left text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--accent-primary)]/50 flex items-center gap-3 transition-colors duration-180 cursor-pointer"
                 >
                   {offlineSaved ? (
                     <CheckCircle2 className="w-4 h-4 text-[#34D399] shrink-0" />
                   ) : (
-                    <DownloadCloud className="w-4 h-4 text-[#A1A5B5] shrink-0" />
+                    <DownloadCloud className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
                   )}
-                  <span>{offlineSaved ? 'Saved offline' : 'Save information offline'}</span>
+                  <span>
+                    {offlineSaved
+                      ? t('explore:card.savedOffline', 'Saved offline')
+                      : t('explore:card.saveOffline', 'Save information offline')}
+                  </span>
                 </button>
 
                 <button
@@ -368,7 +379,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                   className="w-full min-h-[44px] px-3.5 py-2.5 rounded-[12px] bg-[#F87171]/10 border border-[#F87171]/35 text-left text-xs font-semibold text-[#F87171] hover:bg-[#F87171]/20 flex items-center gap-3 transition-colors duration-180 cursor-pointer"
                 >
                   <Flag className="w-4 h-4 text-[#F87171] shrink-0" />
-                  <span>Report incorrect information</span>
+                  <span>{t('explore:card.reportIncorrect', 'Report incorrect information')}</span>
                 </button>
               </div>
             </div>
@@ -387,18 +398,18 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
       >
         <article
           data-testid="anime-card"
-          className="group relative h-full flex flex-col rounded-[12px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8]/60 sm:hover:scale-[1.02] active:scale-[0.99] overflow-hidden transition-all duration-180 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:active:scale-100"
+          className="group relative h-full flex flex-col rounded-[var(--radius-card)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/60 sm:hover:scale-[1.02] active:scale-[0.99] overflow-hidden transition-all duration-180 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:active:scale-100"
         >
           {/* Cinematic Poster-First 2:3 Artwork Container */}
           <div
             data-testid="anime-card-poster"
-            className="relative aspect-[2/3] w-full bg-[#191C29] overflow-hidden shrink-0"
+            className="relative aspect-[2/3] w-full bg-[var(--bg-elevated)] overflow-hidden shrink-0"
           >
-            {/* Subtle dark skeleton placeholder until artwork resolves */}
+            {/* Subtle skeleton placeholder until artwork resolves */}
             {!imageLoaded && !imageFailed && (
               <div
                 aria-hidden="true"
-                className="absolute inset-0 bg-[#191C29] animate-pulse motion-reduce:animate-none pointer-events-none"
+                className="absolute inset-0 bg-[var(--bg-elevated)] animate-pulse motion-reduce:animate-none pointer-events-none"
               />
             )}
 
@@ -406,20 +417,22 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
               <div
                 data-testid="anime-card-poster-fallback"
                 onClick={() => onSelect(anime)}
-                className="absolute inset-0 bg-[#191C29] p-3 flex flex-col items-center justify-center text-center gap-2 cursor-pointer"
+                className="absolute inset-0 bg-[var(--bg-elevated)] p-3 flex flex-col items-center justify-center text-center gap-2 cursor-pointer"
               >
-                <div className="w-10 h-10 rounded-[12px] bg-[#12141E] border border-[#292B39] text-[#A1A5B5] flex items-center justify-center">
+                <div className="w-10 h-10 rounded-[var(--radius-control)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] flex items-center justify-center">
                   <ImageOff className="w-5 h-5" />
                 </div>
-                <span className="text-xs font-semibold text-[#A1A5B5]">Poster unavailable</span>
+                <span className="text-xs font-semibold text-[var(--text-secondary)]">
+                  {t('explore:card.posterUnavailable', 'Poster unavailable')}
+                </span>
                 {hasValidPosterUrl && (
                   <button
                     type="button"
                     onClick={handleRetryImage}
-                    className="min-h-[36px] px-3 py-1 rounded-[10px] bg-[#12141E] border border-[#292B39] hover:border-[#B49AF8] text-[11px] font-semibold text-[#F4F3FA] inline-flex items-center gap-1.5 transition-colors duration-180 cursor-pointer"
+                    className="min-h-[36px] px-3 py-1 rounded-[10px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)] text-[11px] font-semibold text-[var(--text-primary)] inline-flex items-center gap-1.5 transition-colors duration-180 cursor-pointer"
                   >
-                    <RefreshCw className="w-3 h-3 text-[#B49AF8]" />
-                    <span>Retry image</span>
+                    <RefreshCw className="w-3 h-3 text-[var(--accent-primary)]" />
+                    <span>{t('explore:card.retryImage', 'Retry image')}</span>
                   </button>
                 )}
               </div>
@@ -444,12 +457,12 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
               </div>
             )}
 
-            {/* At most ONE subtle top-left rating pill (only if a verified rating exists) */}
+            {/* At most ONE subtle top-left rating pill (dark scrim stays crisp on poster art in light & dark themes) */}
             {hasRating && (
               <div className="absolute top-2 left-2 pointer-events-none">
                 <span
                   data-testid="anime-card-rating"
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[8px] bg-[#0B0A10]/90 border border-[#292B39] text-[12px] font-bold text-[#F9C876] tabular-nums"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[8px] bg-[#0B0A10]/85 border border-white/15 text-[12px] font-bold text-[#F9C876] tabular-nums"
                 >
                   <Star className="w-3 h-3 fill-[#F9C876] text-[#F9C876]" />
                   {numericRating.toFixed(1)}
@@ -457,7 +470,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
               </div>
             )}
 
-            {/* Top-Right: Single Primary Bookmark/Save Button (44x44px touch target, 180ms duotone lavender fill) */}
+            {/* Top-Right: Single Primary Bookmark/Save Button (44x44px touch target) */}
             {onToggleBookmark && (
               <div className="absolute top-1 right-1 z-10">
                 <button
@@ -473,13 +486,13 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                       : `Save ${anime.title} to Library`
                   }
                   aria-pressed={isBookmarked}
-                  className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B49AF8]/70 rounded-[12px]"
+                  className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]/70 rounded-[var(--radius-control)]"
                 >
                   <span
                     className={`w-9 h-9 rounded-[10px] border flex items-center justify-center transition-all duration-180 motion-reduce:transition-none ${
                       isBookmarked
-                        ? 'bg-[#191C29]/95 border-[#B49AF8] text-[#B49AF8]'
-                        : 'bg-[#0B0A10]/85 border-[#292B39] text-[#F4F3FA] hover:bg-[#191C29] hover:border-[#B49AF8]/50'
+                        ? 'bg-[#0B0A10]/90 border-[var(--accent-primary)] text-[var(--accent-primary)]'
+                        : 'bg-[#0B0A10]/80 border-white/15 text-white hover:bg-[#0B0A10]/95 hover:border-[var(--accent-primary)]/70'
                     }`}
                   >
                     <svg
@@ -490,9 +503,9 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                     >
                       <path
                         d="M6 4.75C6 3.7835 6.7835 3 7.75 3H16.25C17.2165 3 18 3.7835 18 4.75V20.25L12 16.5L6 20.25V4.75Z"
-                        fill={isBookmarked ? '#B49AF8' : 'none'}
+                        fill={isBookmarked ? 'var(--accent-primary)' : 'none'}
                         fillOpacity={isBookmarked ? 0.3 : 0}
-                        stroke={isBookmarked ? '#B49AF8' : 'currentColor'}
+                        stroke={isBookmarked ? 'var(--accent-primary)' : 'currentColor'}
                         strokeWidth="1.8"
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -505,19 +518,19 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
           </div>
 
           {/* Clean, Honest Metadata Footer (12px padding) */}
-          <div className="p-3 flex flex-col flex-1 justify-between gap-2 bg-[#12141E]">
+          <div className="p-3 flex flex-col flex-1 justify-between gap-2 bg-[var(--bg-surface)]">
             {/* Primary Card Selection Trigger (Non-nested button for keyboard & screen-reader accessibility) */}
             <button
               type="button"
               data-testid="anime-card-select"
               onClick={() => onSelect(anime)}
               aria-label={`Open details for ${anime.title}`}
-              className="w-full text-left space-y-1.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B49AF8]/70 rounded-[8px]"
+              className="w-full text-left space-y-1.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]/70 rounded-[8px]"
             >
               {/* Title: 14px, font-weight 600, 20px line-height, #F4F3FA, clamped to 2 lines with fixed 40px min-height */}
               <h3
                 data-testid="anime-card-title"
-                className="text-[14px] font-semibold text-[#F4F3FA] leading-[20px] line-clamp-2 min-h-[40px] group-hover:text-[#CBB6FF] transition-colors duration-180 motion-reduce:transition-none"
+                className="text-[14px] font-semibold text-[var(--text-primary)] leading-[20px] line-clamp-2 min-h-[40px] group-hover:text-[var(--accent-hover)] transition-colors duration-180 motion-reduce:transition-none"
               >
                 {anime.title}
               </h3>
@@ -527,7 +540,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                 data-testid="anime-card-languages"
                 className="flex items-center flex-wrap gap-1 min-h-[22px]"
               >
-                <span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-[#191C29] border border-[#292B39] text-[11px] sm:text-[12px] font-medium text-[#A1A5B5] leading-tight truncate max-w-full">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[11px] sm:text-[12px] font-medium text-[var(--text-secondary)] leading-tight truncate max-w-full">
                   {orderedLanguageText}
                   {extraLangCount > 0 ? ` +${extraLangCount}` : ''}
                 </span>
@@ -535,7 +548,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
             </button>
 
             {/* Footer Bar: Compact 12px Star Rating + Verified OTT Platform + 44x44px Overflow (...) Menu */}
-            <div className="pt-1.5 border-t border-[#292B39] flex items-center justify-between gap-1.5 text-[12px] min-h-[38px]">
+            <div className="pt-1.5 border-t border-[var(--border-subtle)] flex items-center justify-between gap-1.5 text-[12px] min-h-[38px]">
               <button
                 type="button"
                 onClick={() => onSelect(anime)}
@@ -547,22 +560,22 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                   <span className="inline-flex items-center gap-0.5 text-[12px] font-bold text-[#F9C876] tabular-nums shrink-0">
                     <Star className="w-3 h-3 fill-[#F9C876] text-[#F9C876]" />
                     <span>{numericRating.toFixed(1)}</span>
-                    <span className="text-[#292B39] mx-0.5">·</span>
+                    <span className="text-[var(--border-subtle)] mx-0.5">·</span>
                   </span>
                 )}
                 <span
                   data-testid="anime-card-platform"
                   className={`text-[11px] sm:text-[12px] font-medium truncate ${
-                    primaryPlatformLabel === 'Not verified'
-                      ? 'text-[#A1A5B5]/75 italic'
-                      : 'text-[#A1A5B5]'
+                    !isPlatformVerified
+                      ? 'text-[var(--text-secondary)]/75 italic'
+                      : 'text-[var(--text-secondary)]'
                   }`}
                 >
                   {primaryPlatformLabel}
                   {extraPlatformCount > 0 ? ` +${extraPlatformCount}` : ''}
                 </span>
                 {isMovie && (
-                  <span className="text-[11px] text-[#A1A5B5]/80 font-semibold shrink-0">
+                  <span className="text-[11px] text-[var(--text-secondary)]/80 font-semibold shrink-0">
                     · {displayTypeLabel}
                   </span>
                 )}
@@ -580,7 +593,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                   aria-label={`More actions for ${anime.title}`}
                   aria-expanded={menuOpen}
                   aria-haspopup="menu"
-                  className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#191C29] flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B49AF8]/70"
+                  className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] flex items-center justify-center transition-colors duration-180 motion-reduce:transition-none cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]/70"
                 >
                   <MoreHorizontal className="w-4 h-4" />
                 </button>
@@ -591,39 +604,43 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                     role="menu"
                     data-testid="anime-card-overflow-menu"
                     onClick={(e) => e.stopPropagation()}
-                    className="hidden sm:block absolute right-0 bottom-full mb-1.5 w-56 rounded-[12px] bg-[#191C29] border border-[#292B39] shadow-2xl p-1.5 z-30 space-y-0.5"
+                    className="hidden sm:block absolute right-0 bottom-full mb-1.5 w-56 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] shadow-2xl p-1.5 z-30 space-y-0.5"
                   >
                     <button
                       type="button"
                       role="menuitem"
                       onClick={handleShare}
-                      className="w-full min-h-[44px] px-3 py-2 rounded-[10px] text-left text-xs font-semibold text-[#F4F3FA] hover:bg-[#12141E] flex items-center gap-2.5 transition-colors duration-180 cursor-pointer"
+                      className="w-full min-h-[44px] px-3 py-2 rounded-[10px] text-left text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface)] flex items-center gap-2.5 transition-colors duration-180 cursor-pointer"
                     >
-                      <Share2 className="w-4 h-4 text-[#B49AF8] shrink-0" />
-                      <span>Share anime</span>
+                      <Share2 className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+                      <span>{t('explore:card.shareAnime', 'Share anime')}</span>
                     </button>
                     <button
                       type="button"
                       role="menuitem"
                       onClick={handleCompare}
-                      className="w-full min-h-[44px] px-3 py-2 rounded-[10px] text-left text-xs font-semibold text-[#F4F3FA] hover:bg-[#12141E] flex items-center gap-2.5 transition-colors duration-180 cursor-pointer"
+                      className="w-full min-h-[44px] px-3 py-2 rounded-[10px] text-left text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface)] flex items-center gap-2.5 transition-colors duration-180 cursor-pointer"
                     >
-                      <ArrowLeftRight className="w-4 h-4 text-[#CBB6FF] shrink-0" />
-                      <span>Compare anime</span>
+                      <ArrowLeftRight className="w-4 h-4 text-[var(--accent-hover)] shrink-0" />
+                      <span>{t('explore:card.compareAnime', 'Compare anime')}</span>
                     </button>
                     <button
                       type="button"
                       role="menuitem"
                       aria-label="Save Info Offline"
                       onClick={handleToggleOffline}
-                      className="w-full min-h-[44px] px-3 py-2 rounded-[10px] text-left text-xs font-semibold text-[#F4F3FA] hover:bg-[#12141E] flex items-center gap-2.5 transition-colors duration-180 cursor-pointer"
+                      className="w-full min-h-[44px] px-3 py-2 rounded-[10px] text-left text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface)] flex items-center gap-2.5 transition-colors duration-180 cursor-pointer"
                     >
                       {offlineSaved ? (
                         <CheckCircle2 className="w-4 h-4 text-[#34D399] shrink-0" />
                       ) : (
-                        <DownloadCloud className="w-4 h-4 text-[#A1A5B5] shrink-0" />
+                        <DownloadCloud className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
                       )}
-                      <span>{offlineSaved ? 'Saved offline' : 'Save information offline'}</span>
+                      <span>
+                        {offlineSaved
+                          ? t('explore:card.savedOffline', 'Saved offline')
+                          : t('explore:card.saveOffline', 'Save information offline')}
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -632,7 +649,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                       className="w-full min-h-[44px] px-3 py-2 rounded-[10px] text-left text-xs font-semibold text-[#F87171] hover:bg-[#F87171]/15 flex items-center gap-2.5 transition-colors duration-180 cursor-pointer"
                     >
                       <Flag className="w-4 h-4 text-[#F87171] shrink-0" />
-                      <span>Report incorrect information</span>
+                      <span>{t('explore:card.reportIncorrect', 'Report incorrect information')}</span>
                     </button>
                   </div>
                 )}

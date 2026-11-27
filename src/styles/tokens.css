@@ -1,0 +1,312 @@
+/* ==========================================================================
+   AniDub India — Advanced Multi-Theme Engine Semantic Design Tokens
+   All 12 Original Themes + High Contrast + Reduced Motion + Light Logo Guard
+   ========================================================================== */
+
+:root,
+:root[data-theme="eclipse"] {
+  color-scheme: dark;
+
+  /* Core Semantic Palette — Eclipse Dark (Default) */
+  --bg-canvas: #0B0A10;
+  --bg-surface: #12141E;
+  --bg-elevated: #191C29;
+  --bg-hover: #222637;
+
+  --accent-primary: #B49AF8;
+  --accent-soft: rgba(180, 154, 248, 0.14);
+  --accent-hover: #CBB6FF;
+  --accent-on-primary: #0B0A10;
+
+  --text-primary: #F4F3FA;
+  --text-secondary: #A1A5B5;
+  --text-muted: #8B90A3;
+
+  --border-subtle: #292B39;
+  --border-strong: #3B3F54;
+
+  --radius-card: 12px;
+  --radius-control: 12px;
+  --shadow-elevated: 0 16px 36px rgba(0, 0, 0, 0.45);
+  --backdrop-scrim: rgba(11, 10, 16, 0.80);
+
+  /* Semantic Status Constants (Preserved Across All Themes) */
+  --status-success: #34D399;
+  --status-warning: #FBBF24;
+  --status-rating: #F9C876;
+  --status-danger: #F87171;
+}
+
+/* 2. Arctic White (Clean Light Mode) */
+:root[data-theme="arctic-white"] {
+  color-scheme: light;
+  --bg-canvas: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F1F5F9;
+  --bg-hover: #E2E8F0;
+  --accent-primary: #6D28D9;
+  --accent-soft: rgba(109, 40, 217, 0.10);
+  --accent-hover: #5B21B6;
+  --accent-on-primary: #FFFFFF;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+  --border-subtle: #E2E8F0;
+  --border-strong: #CBD5E1;
+  --shadow-elevated: 0 12px 30px rgba(15, 23, 42, 0.08);
+  --backdrop-scrim: rgba(15, 23, 42, 0.50);
+}
+
+/* 3. AMOLED Black (True Black OLED) */
+:root[data-theme="amoled-black"] {
+  color-scheme: dark;
+  --bg-canvas: #000000;
+  --bg-surface: #0A0A0D;
+  --bg-elevated: #141419;
+  --bg-hover: #1D1D24;
+  --accent-primary: #F4F4F5;
+  --accent-soft: rgba(244, 244, 245, 0.14);
+  --accent-hover: #FFFFFF;
+  --accent-on-primary: #000000;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-muted: #8B8B96;
+  --border-subtle: #24242C;
+  --border-strong: #383844;
+  --shadow-elevated: 0 16px 36px rgba(0, 0, 0, 0.72);
+  --backdrop-scrim: rgba(0, 0, 0, 0.86);
+}
+
+/* 4. Shadow Monarch (Midnight & Electric Blue) */
+:root[data-theme="shadow-monarch"] {
+  color-scheme: dark;
+  --bg-canvas: #060913;
+  --bg-surface: #0D1426;
+  --bg-elevated: #15203B;
+  --bg-hover: #1C2A4D;
+  --accent-primary: #4F8CFF;
+  --accent-soft: rgba(79, 140, 255, 0.15);
+  --accent-hover: #70A3FF;
+  --accent-on-primary: #060913;
+  --text-primary: #F0F5FF;
+  --text-secondary: #93A6C8;
+  --text-muted: #7E93B8;
+  --border-subtle: #1E2E52;
+  --border-strong: #2D4373;
+  --shadow-elevated: 0 16px 36px rgba(2, 6, 18, 0.55);
+  --backdrop-scrim: rgba(6, 9, 19, 0.82);
+}
+
+/* 5. Crimson Flame (Obsidian & Ember Red) */
+:root[data-theme="crimson-flame"] {
+  color-scheme: dark;
+  --bg-canvas: #11070A;
+  --bg-surface: #1C0D12;
+  --bg-elevated: #28131A;
+  --bg-hover: #341922;
+  --accent-primary: #FB5666;
+  --accent-soft: rgba(251, 86, 102, 0.15);
+  --accent-hover: #FC7481;
+  --accent-on-primary: #11070A;
+  --text-primary: #FFF1F3;
+  --text-secondary: #C7A3AA;
+  --text-muted: #B08A92;
+  --border-subtle: #3D1D27;
+  --border-strong: #572937;
+  --shadow-elevated: 0 16px 36px rgba(10, 2, 5, 0.55);
+  --backdrop-scrim: rgba(17, 7, 10, 0.82);
+}
+
+/* 6. Infinity Void (Deep Indigo & Arcane Violet) */
+:root[data-theme="infinity-void"] {
+  color-scheme: dark;
+  --bg-canvas: #0A0614;
+  --bg-surface: #140D26;
+  --bg-elevated: #1E1438;
+  --bg-hover: #281B4A;
+  --accent-primary: #C084FC;
+  --accent-soft: rgba(192, 132, 252, 0.15);
+  --accent-hover: #D1A3FD;
+  --accent-on-primary: #0A0614;
+  --text-primary: #F7F2FF;
+  --text-secondary: #AE9CC9;
+  --text-muted: #9986B8;
+  --border-subtle: #2E2052;
+  --border-strong: #432F73;
+  --shadow-elevated: 0 16px 36px rgba(5, 2, 14, 0.55);
+  --backdrop-scrim: rgba(10, 6, 20, 0.82);
+}
+
+/* 7. Ocean King (Abyssal Navy & Aqua) */
+:root[data-theme="ocean-king"] {
+  color-scheme: dark;
+  --bg-canvas: #051018;
+  --bg-surface: #0A1B28;
+  --bg-elevated: #10283B;
+  --bg-hover: #16354D;
+  --accent-primary: #38BDF8;
+  --accent-soft: rgba(56, 189, 248, 0.15);
+  --accent-hover: #60CCFA;
+  --accent-on-primary: #051018;
+  --text-primary: #EFF9FF;
+  --text-secondary: #8FB3CA;
+  --text-muted: #7AA0B8;
+  --border-subtle: #1A3B54;
+  --border-strong: #275375;
+  --shadow-elevated: 0 16px 36px rgba(2, 10, 18, 0.55);
+  --backdrop-scrim: rgba(5, 16, 24, 0.82);
+}
+
+/* 8. Black Grimoire (Charcoal & Antique Gold) */
+:root[data-theme="black-grimoire"] {
+  color-scheme: dark;
+  --bg-canvas: #0C0D0E;
+  --bg-surface: #151719;
+  --bg-elevated: #1F2226;
+  --bg-hover: #292D32;
+  --accent-primary: #EAB308;
+  --accent-soft: rgba(234, 179, 8, 0.15);
+  --accent-hover: #F5C428;
+  --accent-on-primary: #0C0D0E;
+  --text-primary: #F7F6F2;
+  --text-secondary: #A6A6A0;
+  --text-muted: #90908A;
+  --border-subtle: #2E3238;
+  --border-strong: #434852;
+  --shadow-elevated: 0 16px 36px rgba(0, 0, 0, 0.55);
+  --backdrop-scrim: rgba(12, 13, 14, 0.82);
+}
+
+/* 9. Shinobi Ember (Warm Espresso & Amber Orange) */
+:root[data-theme="shinobi-ember"] {
+  color-scheme: dark;
+  --bg-canvas: #120C08;
+  --bg-surface: #1E140D;
+  --bg-elevated: #2B1D13;
+  --bg-hover: #382619;
+  --accent-primary: #FB923C;
+  --accent-soft: rgba(251, 146, 60, 0.15);
+  --accent-hover: #FCA862;
+  --accent-on-primary: #120C08;
+  --text-primary: #FFF6EE;
+  --text-secondary: #C7AD99;
+  --text-muted: #B29680;
+  --border-subtle: #422C1D;
+  --border-strong: #5C3E29;
+  --shadow-elevated: 0 16px 36px rgba(10, 5, 2, 0.55);
+  --backdrop-scrim: rgba(18, 12, 8, 0.82);
+}
+
+/* 10. Sakura Bloom (Soft Blossom Light Mode) */
+:root[data-theme="sakura-bloom"] {
+  color-scheme: light;
+  --bg-canvas: #FFF5F7;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #FDE8EE;
+  --bg-hover: #FAD6E1;
+  --accent-primary: #DB2777;
+  --accent-soft: rgba(219, 39, 119, 0.11);
+  --accent-hover: #BE185D;
+  --accent-on-primary: #FFFFFF;
+  --text-primary: #2A121C;
+  --text-secondary: #6E4455;
+  --text-muted: #855568;
+  --border-subtle: #F5CEDB;
+  --border-strong: #EBB0C4;
+  --shadow-elevated: 0 12px 30px rgba(42, 18, 28, 0.08);
+  --backdrop-scrim: rgba(42, 18, 28, 0.45);
+}
+
+/* 11. Emerald Spirit (Deep Forest & Jade) */
+:root[data-theme="emerald-spirit"] {
+  color-scheme: dark;
+  --bg-canvas: #05110C;
+  --bg-surface: #0B1D15;
+  --bg-elevated: #122B20;
+  --bg-hover: #193B2C;
+  --accent-primary: #34D399;
+  --accent-soft: rgba(52, 211, 153, 0.15);
+  --accent-hover: #58DFAD;
+  --accent-on-primary: #05110C;
+  --text-primary: #ECFDF5;
+  --text-secondary: #8FBAA6;
+  --text-muted: #7AA692;
+  --border-subtle: #1B3F2F;
+  --border-strong: #285C45;
+  --shadow-elevated: 0 16px 36px rgba(2, 10, 6, 0.55);
+  --backdrop-scrim: rgba(5, 17, 12, 0.82);
+}
+
+/* 12. Cyber Tokyo (Deep Slate & Electric Cyan) */
+:root[data-theme="cyber-tokyo"] {
+  color-scheme: dark;
+  --bg-canvas: #070B18;
+  --bg-surface: #0F162B;
+  --bg-elevated: #172240;
+  --bg-hover: #1F2E54;
+  --accent-primary: #22D3EE;
+  --accent-soft: rgba(34, 211, 238, 0.15);
+  --accent-hover: #4CE0F5;
+  --accent-on-primary: #070B18;
+  --text-primary: #ECFEFF;
+  --text-secondary: #8EA4C8;
+  --text-muted: #7991B8;
+  --border-subtle: #24345E;
+  --border-strong: #344B85;
+  --shadow-elevated: 0 16px 36px rgba(2, 5, 16, 0.55);
+  --backdrop-scrim: rgba(7, 11, 24, 0.82);
+}
+
+/* ==========================================================================
+   Accessibility: High Contrast Mode Boost
+   ========================================================================== */
+:root[data-high-contrast="true"] {
+  --text-primary: #FFFFFF;
+  --text-secondary: #D4D8E8;
+  --text-muted: #C2C7D9;
+  --border-subtle: #5C627A;
+  --border-strong: #878FA8;
+}
+
+:root[data-theme-mode="light"][data-high-contrast="true"],
+:root[data-theme="arctic-white"][data-high-contrast="true"],
+:root[data-theme="sakura-bloom"][data-high-contrast="true"] {
+  --text-primary: #020617;
+  --text-secondary: #1E293B;
+  --text-muted: #334155;
+  --border-subtle: #94A3B8;
+  --border-strong: #475569;
+}
+
+/* ==========================================================================
+   Accessibility: Reduce Animations Override
+   ========================================================================== */
+:root[data-reduced-motion="true"] *,
+:root[data-reduced-motion="true"] *::before,
+:root[data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ==========================================================================
+   Light-Mode Logo Contrast Guard
+   Because /logo.png contains white text ("A", "ANI", "INDIA"), wrap it in a
+   sleek dark rounded pill surface whenever a light theme is active.
+   ========================================================================== */
+.anidub-logo-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  transition: background-color 180ms ease, padding 180ms ease;
+}
+
+:root[data-theme-mode="light"] .anidub-logo-wrap,
+:root[data-theme="arctic-white"] .anidub-logo-wrap,
+:root[data-theme="sakura-bloom"] .anidub-logo-wrap {
+  background: #12141E;
+  padding: 4px 10px;
+  border-radius: 10px;
+}

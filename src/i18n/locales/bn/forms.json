@@ -1,0 +1,30 @@
+{
+  "submitDub": {
+    "title": "ডাব তথ্য জমা দিন",
+    "subtitle": "যাচাইকৃত আঞ্চলিক ডাব বিবরণ দিয়ে AniDub India-কে নির্ভুল রাখুন",
+    "animeTitleLabel": "অ্যানিমে নাম",
+    "languagesLabel": "ডাব ভাষা",
+    "platformLabel": "অফিসিয়াল OTT প্ল্যাটফর্ম",
+    "notesLabel": "যাচাইকরণ নোট / সোর্স লিংক",
+    "submitCta": "পর্যালোচনার জন্য জমা দিন",
+    "submitting": "জমা হচ্ছে..."
+  },
+  "report": {
+    "title": "ভুল তথ্য রিপোর্ট করুন",
+    "subtitle": "পুরোনো OTT লিংক, বাদ পড়া ভাষা বা ভুল পর্ব সংখ্যা জানান",
+    "reasonLabel": "কী সংশোধন করতে হবে?",
+    "detailsPlaceholder": "সংশোধন বা যাচাইকৃত সূত্র লিখুন...",
+    "submitCta": "রিপোর্ট পাঠান"
+  },
+  "feedback": {
+    "title": "মতামত পাঠান",
+    "subtitle": "ধারণা শেয়ার করুন, বাগ রিপোর্ট করুন বা নতুন ভাষার অনুরোধ করুন",
+    "messagePlaceholder": "AniDub India-কে আরও উন্নত করতে আপনার মতামত জানান...",
+    "submitCta": "মতামত জমা দিন"
+  },
+  "legal": {
+    "privacyTitle": "গোপনীয়তা নীতি",
+    "termsTitle": "সেবার শর্তাবলী",
+    "dmcaTitle": "DMCA ও স্বত্বাধিকারী নীতি"
+  }
+}

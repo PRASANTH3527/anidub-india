@@ -69,49 +69,49 @@ export const DualRating: React.FC<DualRatingProps> = ({
 
   return (
     <div
-      className="flex flex-col gap-3 bg-[#12141E] p-3.5 sm:p-4 rounded-[12px] border border-[#292B39]"
+      className="flex flex-col gap-3 bg-[var(--bg-surface)] p-3.5 sm:p-4 rounded-[12px] border border-[var(--border-subtle)]"
       data-testid="dual-rating-card"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* Catalog Score */}
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-center shrink-0">
-            <ShieldCheck className="w-4 h-4 text-[#B49AF8]" />
+          <div className="w-9 h-9 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-4 h-4 text-[var(--accent-primary)]" />
           </div>
           <div>
-            <div className="text-[11px] text-[#A1A5B5] uppercase font-semibold tracking-wider">Catalog Score</div>
+            <div className="text-[11px] text-[var(--text-secondary)] uppercase font-semibold tracking-wider">Catalog Score</div>
             {hasCatalogScore ? (
-              <div className="text-[15px] font-bold text-[#F4F3FA] flex items-center gap-1">
+              <div className="text-[15px] font-bold text-[var(--text-primary)] flex items-center gap-1">
                 <Star className="w-3.5 h-3.5 text-[#F9C876] fill-current" />
                 <span>{officialRating.toFixed(1)}</span>
-                <span className="text-[12px] text-[#A1A5B5] font-normal">/ 10</span>
+                <span className="text-[12px] text-[var(--text-secondary)] font-normal">/ 10</span>
               </div>
             ) : (
-              <div className="text-[13px] font-medium text-[#A1A5B5]">Not verified</div>
+              <div className="text-[13px] font-medium text-[var(--text-secondary)]">Not verified</div>
             )}
           </div>
         </div>
 
-        <div className="hidden sm:block h-8 w-px bg-[#292B39]" />
+        <div className="hidden sm:block h-8 w-px bg-[var(--border-subtle)]" />
 
         {/* Community Score */}
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-[10px] bg-[#191C29] border border-[#292B39] flex items-center justify-center shrink-0">
-            <Users className="w-4 h-4 text-[#CBB6FF]" />
+          <div className="w-9 h-9 rounded-[10px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+            <Users className="w-4 h-4 text-[var(--accent-hover)]" />
           </div>
           <div>
-            <div className="text-[11px] text-[#A1A5B5] uppercase font-semibold tracking-wider flex items-center gap-1">
+            <div className="text-[11px] text-[var(--text-secondary)] uppercase font-semibold tracking-wider flex items-center gap-1">
               <span>Community Score</span>
-              {totalVotes > 0 && <span className="text-[#A1A5B5]">({totalVotes})</span>}
+              {totalVotes > 0 && <span className="text-[var(--text-secondary)]">({totalVotes})</span>}
             </div>
             {hasCommunityScore ? (
-              <div className="text-[15px] font-bold text-[#F4F3FA] flex items-center gap-1">
-                <Star className="w-3.5 h-3.5 text-[#B49AF8] fill-current" />
+              <div className="text-[15px] font-bold text-[var(--text-primary)] flex items-center gap-1">
+                <Star className="w-3.5 h-3.5 text-[var(--accent-primary)] fill-current" />
                 <span>{averageUserRating.toFixed(1)}</span>
-                <span className="text-[12px] text-[#A1A5B5] font-normal">/ 10</span>
+                <span className="text-[12px] text-[var(--text-secondary)] font-normal">/ 10</span>
               </div>
             ) : (
-              <div className="text-[13px] font-medium text-[#A1A5B5]" data-testid="community-not-rated">
+              <div className="text-[13px] font-medium text-[var(--text-secondary)]" data-testid="community-not-rated">
                 Not rated yet
               </div>
             )}
@@ -125,23 +125,23 @@ export const DualRating: React.FC<DualRatingProps> = ({
           aria-expanded={isExpanded}
           className={`min-h-[44px] px-3.5 rounded-[10px] text-[12px] font-semibold border transition-all duration-180 motion-reduce:transition-none flex items-center gap-1.5 ${
             userRating
-              ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/40 hover:bg-[#B49AF8]/25'
-              : 'bg-[#191C29] text-[#F4F3FA] border-[#292B39] hover:border-[#B49AF8]/40'
+              ? 'bg-[var(--accent-primary)]/15 text-[var(--accent-hover)] border-[var(--accent-primary)]/40 hover:bg-[var(--accent-primary)]/25'
+              : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/40'
           }`}
         >
-          <Star className={`w-3.5 h-3.5 ${userRating ? 'text-[#F9C876] fill-current' : 'text-[#B49AF8]'}`} />
+          <Star className={`w-3.5 h-3.5 ${userRating ? 'text-[#F9C876] fill-current' : 'text-[var(--accent-primary)]'}`} />
           <span>{userRating ? `Your Score: ${userRating}/10` : 'Rate Anime'}</span>
         </button>
       </div>
 
       {/* Expandable Touch-Friendly 1-10 Rating Control (44px targets + accessible slider) */}
       {isExpanded && (
-        <div className="pt-3 border-t border-[#292B39] flex flex-col gap-3">
+        <div className="pt-3 border-t border-[var(--border-subtle)] flex flex-col gap-3">
           <div className="flex items-center justify-between text-[12px]">
-            <span className="text-[#A1A5B5] font-medium">
+            <span className="text-[var(--text-secondary)] font-medium">
               {userRating ? `Your saved score: ${userRating}/10` : 'Tap a score (1–10) or slide to rate'}
             </span>
-            <span className="font-bold text-[#CBB6FF]">{activePreviewScore} / 10</span>
+            <span className="font-bold text-[var(--accent-hover)]">{activePreviewScore} / 10</span>
           </div>
 
           <input
@@ -152,7 +152,7 @@ export const DualRating: React.FC<DualRatingProps> = ({
             aria-label="Rate this anime from 1 to 10"
             value={userRating ?? 8}
             onChange={(e) => handleRate(Number(e.target.value))}
-            className="w-full h-2 bg-[#191C29] rounded-lg appearance-none cursor-pointer accent-[#B49AF8]"
+            className="w-full h-2 bg-[var(--bg-elevated)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-primary)]"
           />
 
           <div
@@ -174,10 +174,10 @@ export const DualRating: React.FC<DualRatingProps> = ({
                   onClick={() => handleRate(score)}
                   className={`min-h-[44px] rounded-[10px] text-[13px] font-bold border transition-all duration-180 motion-reduce:transition-none flex items-center justify-center ${
                     isSelected
-                      ? 'bg-[#B49AF8] text-[#0B0A10] border-[#B49AF8] shadow-sm'
+                      ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] border-[var(--accent-primary)] shadow-sm'
                       : isHighlighted
-                        ? 'bg-[#B49AF8]/15 text-[#CBB6FF] border-[#B49AF8]/40'
-                        : 'bg-[#191C29] text-[#A1A5B5] border-[#292B39] hover:text-[#F4F3FA] hover:border-[#B49AF8]/30'
+                        ? 'bg-[var(--accent-primary)]/15 text-[var(--accent-hover)] border-[var(--accent-primary)]/40'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:border-[var(--accent-primary)]/30'
                   }`}
                 >
                   {score}

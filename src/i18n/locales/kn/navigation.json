@@ -1,0 +1,27 @@
+{
+  "explore": "ಅನ್ವೇಷಿಸಿ",
+  "schedule": "ವೇಳಾಪಟ್ಟಿ",
+  "chat": "ಚಾಟ್",
+  "library": "ಲೈಬ್ರರಿ",
+  "profile": "ಪ್ರೊಫೈಲ್",
+  "tools": "ಸಾಧನಗಳು",
+  "searchAnime": "ಅನಿಮೆ ಹುಡುಕಿ",
+  "openToolsMenu": "ಸಾಧನಗಳ ಮೆನು ತೆರೆಯಿರಿ",
+  "appearanceAndThemes": "ರೂಪ ಮತ್ತು ಥೀಮ್‌ಗಳು",
+  "toolsSheetTitle": "ಸಾಧನಗಳು ಮತ್ತು ಹೆಚ್ಚುವರಿ",
+  "toolsSheetSubtitle": "ತ್ವರಿತ ಹುಡುಕಾಟ ಸಾಧನಗಳು ಮತ್ತು ಸಮುದಾಯ ಸೌಲಭ್ಯಗಳು",
+  "websiteLanguage": "ಭಾಷೆ",
+  "websiteLanguageSubtitle": "ವೆಬ್‌ಸೈಟ್ ಪ್ರದರ್ಶನ ಭಾಷೆಯನ್ನು ಬದಲಾಯಿಸಿ",
+  "adminDashboard": "ಅಡ್ಮಿನ್ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
+  "adminDashboardSubtitle": "ಸಲ್ಲಿಕೆಗಳು ಮತ್ತು ಕ್ಯಾಟಲಾಗ್ ವಿವರಗಳನ್ನು ನಿರ್ವಹಿಸಿ",
+  "secondary": {
+    "forYou": "ನಿಮಗಾಗಿ",
+    "forYouSubtitle": "ನಿಮ್ಮ ಅಭಿರುಚಿಗೆ ತಕ್ಕ ಅನಿಮೆ ಶಿಫಾರಸುಗಳು",
+    "compare": "ಹೋಲಿಸಿ",
+    "compareSubtitle": "ಎರಡು ಅನಿಮೆಗಳನ್ನು ಅಕ್ಕಪಕ್ಕದಲ್ಲಿ ಹೋಲಿಸಿ",
+    "tierList": "ಟಿಯರ್ ಲಿಸ್ಟ್",
+    "tierListSubtitle": "ನೆಚ್ಚಿನ ಡಬ್ಡ್ ಅನಿಮೆಗಳನ್ನು ಶ್ರೇಣೀಕರಿಸಿ",
+    "submitAnime": "ಅನಿಮೆ ಸೇರಿಸಿ",
+    "submitAnimeSubtitle": "ತಪ್ಪಿದ ಡಬ್ಡ್ ಶೀರ್ಷಿಕೆಯನ್ನು ಸೂಚಿಸಿ"
+  }
+}

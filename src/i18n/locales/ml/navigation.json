@@ -1,0 +1,27 @@
+{
+  "explore": "കണ്ടെത്തൂ",
+  "schedule": "ഷെഡ്യൂൾ",
+  "chat": "ചാറ്റ്",
+  "library": "ലൈബ്രറി",
+  "profile": "പ്രൊഫൈൽ",
+  "tools": "ടൂളുകൾ",
+  "searchAnime": "അനിമെ തിരയുക",
+  "openToolsMenu": "ടൂളുകൾ മെനു തുറക്കുക",
+  "appearanceAndThemes": "രൂപവും തീമുകളും",
+  "toolsSheetTitle": "ടൂളുകളും അധികവും",
+  "toolsSheetSubtitle": "വേഗത്തിലുള്ള തിരയൽ ടൂളുകളും കമ്മ്യൂണിറ്റി സൗകര്യങ്ങളും",
+  "websiteLanguage": "ഭാഷ",
+  "websiteLanguageSubtitle": "വെബ്സൈറ്റിന്റെ ഭാഷ മാറ്റുക",
+  "adminDashboard": "അഡ്മിൻ ഡാഷ്‌ബോർഡ്",
+  "adminDashboardSubtitle": "സമർപ്പണങ്ങളും കാറ്റലോഗ് വിവരങ്ങളും നിയന്ത്രിക്കുക",
+  "secondary": {
+    "forYou": "നിങ്ങൾക്കായി",
+    "forYouSubtitle": "നിങ്ങളുടെ അഭിരുചിക്കനുസരിച്ച അനിമെ നിർദ്ദേശങ്ങൾ",
+    "compare": "താരതമ്യം",
+    "compareSubtitle": "രണ്ട് അനിമെകൾ അടുത്തടുത്ത് താരതമ്യം ചെയ്യുക",
+    "tierList": "ടിയർ ലിസ്റ്റ്",
+    "tierListSubtitle": "ഇഷ്ടപ്പെട്ട ഡബ്ഡ് അനിമെകൾ റാങ്ക് ചെയ്യുക",
+    "submitAnime": "അനിമെ ചേർക്കുക",
+    "submitAnimeSubtitle": "വിട്ടുപോയ ഡബ്ഡ് ടൈറ്റിൽ നിർദ്ദേശിക്കുക"
+  }
+}

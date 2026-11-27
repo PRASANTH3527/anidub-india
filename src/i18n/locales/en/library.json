@@ -1,0 +1,23 @@
+{
+  "title": "My Library",
+  "subtitle": "Track episodes, organize collections, and export your dub watchlist",
+  "searchPlaceholder": "Filter your saved anime...",
+  "exportCsv": "Export Watchlist (CSV)",
+  "createCollection": "New Collection",
+  "tabs": {
+    "all": "All",
+    "watching": "Watching",
+    "completed": "Completed",
+    "planToWatch": "Plan to Watch",
+    "onHold": "On Hold",
+    "dropped": "Dropped",
+    "rewatching": "Rewatching"
+  },
+  "plusOneEpisode": "+1 Ep",
+  "removeTitle": "Remove from Library?",
+  "removeConfirm": "Remove \"{{title}}\" from your watchlist? Your episode progress for this title will be cleared.",
+  "removeAction": "Remove",
+  "emptyTitle": "Your library is empty",
+  "emptySubtitle": "Bookmark anime from Explore to track seasons and regional dubs here.",
+  "browseExplore": "Browse Explore"
+}

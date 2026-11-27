@@ -1,0 +1,46 @@
+{
+  "whereToWatch": "कहाँ देखें",
+  "whereToWatchIndia": "कहाँ देखें (भारत)",
+  "addToLibrary": "लाइब्रेरी में जोड़ें",
+  "inLibrary": "लाइब्रेरी में है",
+  "follow": "फ़ॉलो करें",
+  "following": "फ़ॉलो किया",
+  "share": "शेयर",
+  "reportWrongInfo": "गलत जानकारी रिपोर्ट करें",
+  "episodes": "एपिसोड",
+  "seasons": "सीज़न",
+  "dubLanguages": "डब भाषाएं",
+  "audioLanguages": "ऑडियो भाषाएं",
+  "studio": "स्टूडियो",
+  "releaseYear": "रिलीज़ वर्ष",
+  "status": "स्थिति",
+  "rating": "रेटिंग",
+  "tabs": {
+    "overview": "सारांश",
+    "seasonsAndDubs": "सीज़न और डब",
+    "watchProgress": "देखने की प्रगति",
+    "reviews": "समीक्षाएं ({{count}})"
+  },
+  "synopsis": "कहानी का सार",
+  "noSynopsis": "अभी कोई सत्यापित कहानी सार उपलब्ध नहीं है।",
+  "franchiseOrder": "सीरीज़ देखने का क्रम",
+  "streamingNote": "भारत के लिए सत्यापित आधिकारिक स्ट्रीमिंग प्लेटफ़ॉर्म।",
+  "noVerifiedPlatforms": "भारत के लिए अभी कोई सत्यापित आधिकारिक OTT लिंक सूचीबद्ध नहीं है।",
+  "watchNow": "{{platform}} पर देखें",
+  "reviews": {
+    "writeReview": "समीक्षा लिखें",
+    "placeholder": "क्षेत्रीय डब गुणवत्ता, वॉइस एक्टिंग या अनुवाद पर अपने विचार साझा करें...",
+    "submit": "समीक्षा पोस्ट करें",
+    "posting": "पोस्ट हो रहा है…",
+    "failedRetry": "विफल — फिर प्रयास करें",
+    "signInToReview": "सत्यापित समीक्षा पोस्ट करने के लिए साइन इन करें।",
+    "emptyTitle": "अभी कोई समीक्षा नहीं",
+    "emptySubtitle": "इस भारतीय डब पर अपनी राय देने वाले पहले व्यक्ति बनें।"
+  },
+  "progress": {
+    "title": "एपिसोड प्रगति",
+    "watchedOf": "{{watched}} / {{total}} एपिसोड देखे गए",
+    "increment": "+1 एपिसोड",
+    "statusLabel": "वॉचलिस्ट स्थिति"
+  }
+}

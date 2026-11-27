@@ -1560,23 +1560,23 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
   if (!isClerkAdminAuthorized) {
     const isCheckingServerAdmin = Boolean(isSignedIn && clerkUser && serverAdminVerified === null);
     return (
-      <div className="w-full min-h-screen bg-[#0B0A10] text-[#F4F3FA] flex flex-col items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-2xl bg-[#12141E] border border-[#292B39] p-8 shadow-2xl text-center space-y-5">
+      <div className="w-full min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-8 shadow-2xl text-center space-y-5">
           <div className="w-12 h-12 rounded-2xl bg-[#F87171]/15 border border-[#F87171]/30 flex items-center justify-center mx-auto">
             {isCheckingServerAdmin ? (
-              <Loader2 className="w-6 h-6 text-[#B49AF8] animate-spin" />
+              <Loader2 className="w-6 h-6 text-[var(--accent-primary)] animate-spin" />
             ) : (
               <ShieldAlert className="w-6 h-6 text-[#F87171]" />
             )}
           </div>
           <div className="space-y-1.5">
-            <h2 className="text-lg font-black text-[#F4F3FA]">
+            <h2 className="text-lg font-black text-[var(--text-primary)]">
               {isCheckingServerAdmin ? 'Verifying Admin Session...' : 'Protected Admin Route'}
             </h2>
-            <p className="text-xs text-[#A1A5B5]">
+            <p className="text-xs text-[var(--text-secondary)]">
               {isCheckingServerAdmin
                 ? 'Checking Clerk administrator permissions with the backend.'
-                : <>Only the authorized Clerk Administrator can access <code className="text-[#B49AF8]">/admin</code>.</>}
+                : <>Only the authorized Clerk Administrator can access <code className="text-[var(--accent-primary)]">/admin</code>.</>}
             </p>
           </div>
           {!isSignedIn && (
@@ -1590,7 +1590,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
               if (onNavigateHome) onNavigateHome();
               else window.location.href = '/';
             }}
-            className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#191C29] hover:bg-[#292B39] border border-[#292B39] text-xs font-bold text-[#F4F3FA] transition-colors duration-150 cursor-pointer"
+            className="w-full min-h-[44px] py-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--border-subtle)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] transition-colors duration-150 cursor-pointer"
           >
             Return to Home
           </button>
@@ -1610,7 +1610,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
   ];
 
   return (
-    <div className="w-full min-h-screen bg-[#0B0A10] text-[#F4F3FA] flex flex-col md:flex-row font-sans relative selection:bg-[#B49AF8] selection:text-[#0B0A10] overflow-x-clip">
+    <div className="w-full min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans relative selection:bg-[var(--accent-primary)] selection:text-[var(--accent-on-primary)] overflow-x-clip">
       <input
         ref={fileInputRef}
         type="file"
@@ -1621,17 +1621,17 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
 
       {/* Desktop Sidebar */}
       <aside
-        className={`hidden md:flex flex-col shrink-0 border-r border-[#292B39] bg-[#12141E] transition-all duration-200 relative z-30 sticky top-0 h-screen overflow-y-auto ${
+        className={`hidden md:flex flex-col shrink-0 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-all duration-200 relative z-30 sticky top-0 h-screen overflow-y-auto ${
           isSidebarCollapsed ? 'w-20' : 'w-64'
         }`}
       >
-        <div className="p-4 border-b border-[#292B39] flex items-center justify-between">
+        <div className="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             {isSidebarCollapsed ? <AniDubLogo variant="icon" size="sm" /> : <AniDubLogo variant="horizontal" size="sm" />}
             {!isSidebarCollapsed && (
               <div className="min-w-0">
-                <div className="text-[10px] font-black tracking-[0.2em] uppercase text-[#A1A5B5] truncate">ADMIN CONSOLE</div>
-                <div className="text-[9px] text-[#B49AF8] font-mono tracking-tight flex items-center gap-1 mt-0.5">
+                <div className="text-[10px] font-black tracking-[0.2em] uppercase text-[var(--text-secondary)] truncate">ADMIN CONSOLE</div>
+                <div className="text-[9px] text-[var(--accent-primary)] font-mono tracking-tight flex items-center gap-1 mt-0.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
                   <span>v4.2 ECLIPSE</span>
                 </div>
@@ -1640,7 +1640,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
           </div>
           <button
             onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-            className="w-9 h-9 rounded-lg bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer"
+            className="w-9 h-9 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors duration-150 cursor-pointer"
             title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {isSidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
@@ -1650,17 +1650,17 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         <div className="p-3">
           <button
             onClick={() => setIsCommandPaletteOpen(true)}
-            className={`w-full rounded-xl bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer flex items-center gap-2 group ${
+            className={`w-full rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-150 cursor-pointer flex items-center gap-2 group ${
               isSidebarCollapsed ? 'p-2.5 justify-center' : 'px-3 py-2 justify-between'
             }`}
             title="Open Command Palette (Ctrl+K)"
           >
             <div className="flex items-center gap-2">
-              <Command className="w-4 h-4 text-[#B49AF8]" />
-              {!isSidebarCollapsed && <span className="text-xs font-medium text-[#F4F3FA]">Command Palette</span>}
+              <Command className="w-4 h-4 text-[var(--accent-primary)]" />
+              {!isSidebarCollapsed && <span className="text-xs font-medium text-[var(--text-primary)]">Command Palette</span>}
             </div>
             {!isSidebarCollapsed && (
-              <kbd className="px-1.5 py-0.5 rounded bg-[#12141E] text-[10px] font-mono text-[#A1A5B5] border border-[#292B39]">
+              <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] text-[10px] font-mono text-[var(--text-secondary)] border border-[var(--border-subtle)]">
                 ⌘K
               </kbd>
             )}
@@ -1679,71 +1679,71 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                   isSidebarCollapsed ? 'p-3 justify-center' : 'px-3.5 py-2.5 justify-between'
                 } ${
                   isActive
-                    ? 'bg-[#B49AF8] text-[#0B0A10] font-bold'
-                    : 'text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#191C29]'
+                    ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] font-bold'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
                 }`}
                 title={item.label}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <IconComp className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#0B0A10]' : 'text-[#A1A5B5] group-hover:text-[#B49AF8]'}`} />
+                  <IconComp className={`w-4 h-4 shrink-0 ${isActive ? 'text-[var(--accent-on-primary)]' : 'text-[var(--text-secondary)] group-hover:text-[var(--accent-primary)]'}`} />
                   {!isSidebarCollapsed && <span className="text-xs truncate tracking-tight">{item.label}</span>}
                 </div>
                 {!isSidebarCollapsed && item.count !== undefined && item.count > 0 && (
                   <span
                     className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono font-bold ${
-                      isActive ? 'bg-[#0B0A10]/20 text-[#0B0A10]' : 'bg-[#191C29] text-[#A1A5B5] border border-[#292B39]'
+                      isActive ? 'bg-[var(--bg-canvas)]/20 text-[var(--accent-on-primary)]' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
                     }`}
                   >
                     {item.count}
                   </span>
                 )}
                 {isSidebarCollapsed && item.count !== undefined && item.count > 0 && (
-                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#B49AF8]" />
+                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[var(--accent-primary)]" />
                 )}
               </button>
             );
           })}
         </nav>
 
-        <div className="p-3 border-t border-[#292B39]">
+        <div className="p-3 border-t border-[var(--border-subtle)]">
           <button
             onClick={() => setIsTerminalOpen((prev) => !prev)}
-            className={`w-full rounded-xl bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] hover:border-[#B49AF8]/50 p-2.5 transition-colors duration-150 cursor-pointer flex items-center gap-2.5 text-left group ${
+            className={`w-full rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 p-2.5 transition-colors duration-150 cursor-pointer flex items-center gap-2.5 text-left group ${
               isSidebarCollapsed ? 'justify-center' : 'justify-between'
             }`}
             title="Open Live System Terminal"
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-6 h-6 rounded-lg bg-[#B49AF8]/15 border border-[#B49AF8]/30 flex items-center justify-center shrink-0">
-                <Terminal className="w-3.5 h-3.5 text-[#B49AF8]" />
+              <div className="w-6 h-6 rounded-lg bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 flex items-center justify-center shrink-0">
+                <Terminal className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
               </div>
               {!isSidebarCollapsed && (
                 <div className="min-w-0">
-                  <div className="text-[11px] font-mono font-bold text-[#F4F3FA] flex items-center gap-1.5">
+                  <div className="text-[11px] font-mono font-bold text-[var(--text-primary)] flex items-center gap-1.5">
                     <span>SYS TERMINAL</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-[#34D399]" />
                   </div>
-                  <div className="text-[9px] text-[#A1A5B5] font-mono truncate">LIVE LOG MATRIX</div>
+                  <div className="text-[9px] text-[var(--text-secondary)] font-mono truncate">LIVE LOG MATRIX</div>
                 </div>
               )}
             </div>
             {!isSidebarCollapsed && (
-              <ChevronRight className="w-3.5 h-3.5 text-[#A1A5B5] group-hover:text-[#F4F3FA]" />
+              <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" />
             )}
           </button>
         </div>
 
-        <div className="p-3 border-t border-[#292B39] bg-[#0B0A10]">
+        <div className="p-3 border-t border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
           <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : 'justify-between'}`}>
             <button
               onClick={() => {
                 if (onNavigateHome) onNavigateHome();
                 else window.location.href = '/';
               }}
-              className="p-2 rounded-xl bg-[#191C29] hover:bg-[#12141E] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer flex items-center gap-2"
+              className="p-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-150 cursor-pointer flex items-center gap-2"
               title="Return to Public Directory"
             >
-              <Globe className="w-4 h-4 text-[#B49AF8]" />
+              <Globe className="w-4 h-4 text-[var(--accent-primary)]" />
               {!isSidebarCollapsed && <span className="text-xs">Public App</span>}
             </button>
             <button
@@ -1751,7 +1751,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                 if (onLogout) onLogout();
                 else window.location.href = '/';
               }}
-              className="p-2 rounded-xl bg-[#F87171]/10 hover:bg-[#F87171]/20 border border-[#F87171]/30 text-[#F87171] hover:text-[#F4F3FA] transition-colors duration-150 cursor-pointer flex items-center gap-2"
+              className="p-2 rounded-xl bg-[#F87171]/10 hover:bg-[#F87171]/20 border border-[#F87171]/30 text-[#F87171] hover:text-[var(--text-primary)] transition-colors duration-150 cursor-pointer flex items-center gap-2"
               title="Sign Out"
             >
               <LogOut className="w-4 h-4" />
@@ -1763,21 +1763,21 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
 
       {/* Main Content Workspace */}
       <div className="flex-1 flex flex-col min-w-0 pb-24 md:pb-10 relative">
-        <header className="sticky top-0 z-30 bg-[#12141E]/95 backdrop-blur-md border-b border-[#292B39] px-4 sm:px-6 py-3.5">
+        <header className="sticky top-0 z-30 bg-[var(--bg-surface)]/95 backdrop-blur-md border-b border-[var(--border-subtle)] px-4 sm:px-6 py-3.5">
           <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="relative shrink-0 md:hidden">
-                <div className="w-9 h-9 rounded-xl bg-[#191C29] border border-[#292B39] flex items-center justify-center text-[#B49AF8]">
+                <div className="w-9 h-9 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)]">
                   <Zap className="w-4 h-4" />
                 </div>
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-base sm:text-lg font-black tracking-tight text-[#F4F3FA] flex items-center gap-2">
+                  <h1 className="text-base sm:text-lg font-black tracking-tight text-[var(--text-primary)] flex items-center gap-2">
                     <span>Admin Command Console</span>
                   </h1>
                   <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-                    <span className="px-2 py-0.5 rounded-md bg-[#B49AF8]/15 border border-[#B49AF8]/30 text-[#B49AF8] text-[10px] font-mono tracking-wider uppercase font-semibold">
+                    <span className="px-2 py-0.5 rounded-md bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-[10px] font-mono tracking-wider uppercase font-semibold">
                       Superadmin
                     </span>
                     <span className="px-2 py-0.5 rounded-md bg-[#34D399]/10 border border-[#34D399]/30 text-[#34D399] text-[10px] font-mono flex items-center gap-1.5 font-semibold">
@@ -1787,12 +1787,12 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-[11px] text-[#A1A5B5] truncate hidden lg:block">
+                  <p className="text-[11px] text-[var(--text-secondary)] truncate hidden lg:block">
                     Regional Indian dubs moderation, Cloudflare D1 persistence &amp; IMDb telemetry
                   </p>
                   {cloudSyncing && (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#B49AF8]">
-                      <Loader2 className="w-3 h-3 animate-spin text-[#B49AF8]" />
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--accent-primary)]">
+                      <Loader2 className="w-3 h-3 animate-spin text-[var(--accent-primary)]" />
                       <span>{cloudStatusText || 'Syncing with Edge...'}</span>
                     </span>
                   )}
@@ -1803,12 +1803,12 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => setIsCommandPaletteOpen(true)}
-                className="h-10 px-3 rounded-xl bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] hover:border-[#B49AF8]/50 text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center gap-2 text-xs font-medium transition-colors duration-150 cursor-pointer"
+                className="h-10 px-3 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-2 text-xs font-medium transition-colors duration-150 cursor-pointer"
                 title="Open Global Command Palette (Ctrl+K)"
               >
-                <Command className="w-3.5 h-3.5 text-[#B49AF8]" />
+                <Command className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
                 <span className="hidden sm:inline">Search</span>
-                <kbd className="hidden sm:inline px-1 py-0.2 rounded bg-[#12141E] text-[9px] font-mono text-[#A1A5B5] border border-[#292B39]">
+                <kbd className="hidden sm:inline px-1 py-0.2 rounded bg-[var(--bg-surface)] text-[9px] font-mono text-[var(--text-secondary)] border border-[var(--border-subtle)]">
                   ⌘K
                 </kbd>
               </button>
@@ -1817,22 +1817,22 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                 onClick={() => setIsTerminalOpen((prev) => !prev)}
                 className={`h-10 px-3 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 transition-colors duration-150 cursor-pointer ${
                   isTerminalOpen
-                    ? 'bg-[#B49AF8] border-[#B49AF8] text-[#0B0A10]'
-                    : 'bg-[#191C29] hover:bg-[#0B0A10] border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA]'
+                    ? 'bg-[var(--accent-primary)] border-[var(--accent-primary)] text-[var(--accent-on-primary)]'
+                    : 'bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
                 title="Toggle System Terminal"
               >
                 <Terminal className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">CLI</span>
-                <span className={`w-1.5 h-1.5 rounded-full ${isTerminalOpen ? 'bg-[#0B0A10]' : 'bg-[#34D399]'}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${isTerminalOpen ? 'bg-[var(--bg-canvas)]' : 'bg-[#34D399]'}`} />
               </button>
 
               <button
                 onClick={fetchAnime}
-                className="h-10 w-10 rounded-xl bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] text-[#A1A5B5] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer"
+                className="h-10 w-10 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors duration-150 cursor-pointer"
                 title="Refresh database records"
               >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#B49AF8]' : ''}`} />
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[var(--accent-primary)]' : ''}`} />
               </button>
 
               <button
@@ -1840,9 +1840,9 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                   if (onNavigateHome) onNavigateHome();
                   else window.location.href = '/';
                 }}
-                className="h-10 px-3 rounded-xl bg-[#191C29] hover:bg-[#0B0A10] border border-[#292B39] text-[#F4F3FA] text-xs font-semibold hidden md:inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
+                className="h-10 px-3 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-semibold hidden md:inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
               >
-                <Globe className="w-3.5 h-3.5 text-[#B49AF8]" />
+                <Globe className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
                 <span>Public App</span>
               </button>
 
@@ -1851,7 +1851,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                   if (onLogout) onLogout();
                   else window.location.href = '/';
                 }}
-                className="h-10 w-10 rounded-xl bg-[#F87171]/10 hover:bg-[#F87171]/20 border border-[#F87171]/30 text-[#F87171] hover:text-[#F4F3FA] flex items-center justify-center transition-colors duration-150 cursor-pointer md:hidden"
+                className="h-10 w-10 rounded-xl bg-[#F87171]/10 hover:bg-[#F87171]/20 border border-[#F87171]/30 text-[#F87171] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors duration-150 cursor-pointer md:hidden"
                 title="Logout from admin session"
               >
                 <LogOut className="w-4 h-4" />
@@ -1859,7 +1859,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
             </div>
           </div>
 
-          <div className="max-w-6xl mx-auto mt-3 pt-2 border-t border-[#292B39] md:hidden">
+          <div className="max-w-6xl mx-auto mt-3 pt-2 border-t border-[var(--border-subtle)] md:hidden">
             <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
               {navItemsConfig.map((tab) => {
                 const isActive = activeAdminTab === tab.id;
@@ -1870,8 +1870,8 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                     onClick={() => setActiveAdminTab(tab.id)}
                     className={`relative min-h-[40px] px-3.5 rounded-xl text-xs font-medium transition-colors duration-150 shrink-0 flex items-center gap-2 cursor-pointer ${
                       isActive
-                        ? 'bg-[#B49AF8] text-[#0B0A10] font-bold'
-                        : 'text-[#A1A5B5] hover:text-[#F4F3FA] hover:bg-[#191C29]'
+                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)] font-bold'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
                     }`}
                   >
                     {IconComp && <IconComp className="w-3.5 h-3.5" />}
@@ -1879,7 +1879,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
                     {tab.count !== undefined && tab.count > 0 && (
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
-                          isActive ? 'bg-[#0B0A10]/20 text-[#0B0A10]' : 'bg-[#191C29] text-[#A1A5B5] border border-[#292B39]'
+                          isActive ? 'bg-[var(--bg-canvas)]/20 text-[var(--accent-on-primary)]' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
                         }`}
                       >
                         {tab.count}
@@ -1894,41 +1894,41 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
 
         <div className="max-w-6xl mx-auto w-full px-4 pt-4 relative z-10">
           {showImportToast && (
-            <div className="rounded-xl p-4 bg-[#12141E] border border-[#34D399]/40 flex items-center justify-between text-[#34D399] text-xs font-semibold mb-4">
+            <div className="rounded-xl p-4 bg-[var(--bg-surface)] border border-[#34D399]/40 flex items-center justify-between text-[#34D399] text-xs font-semibold mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-[#34D399]/15 border border-[#34D399]/35 flex items-center justify-center shrink-0">
                   <CheckCircle2 className="w-4 h-4 text-[#34D399]" />
                 </div>
                 <span>Import complete: Successfully synchronized {importedCount} anime entries to moderation queue.</span>
               </div>
-              <button onClick={() => setShowImportToast(false)} className="text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors p-1">
+              <button onClick={() => setShowImportToast(false)} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
           )}
 
           {successMsg && (
-            <div className="rounded-xl p-4 bg-[#12141E] border border-[#B49AF8]/40 flex items-center justify-between text-[#F4F3FA] text-xs font-semibold mb-4">
+            <div className="rounded-xl p-4 bg-[var(--bg-surface)] border border-[var(--accent-primary)]/40 flex items-center justify-between text-[var(--text-primary)] text-xs font-semibold mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-[#B49AF8]/15 border border-[#B49AF8]/35 flex items-center justify-center shrink-0">
-                  <Sparkles className="w-4 h-4 text-[#B49AF8]" />
+                <div className="w-8 h-8 rounded-xl bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/35 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-4 h-4 text-[var(--accent-primary)]" />
                 </div>
                 <span>{successMsg}</span>
               </div>
-              <button onClick={() => setSuccessMsg('')} className="text-[#A1A5B5] hover:text-[#F4F3FA] transition-colors p-1">
+              <button onClick={() => setSuccessMsg('')} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
           )}
 
           {apiError && (
-            <div className="rounded-xl p-4 bg-[#12141E] border border-[#F87171]/40 text-[#F87171] text-xs font-semibold mb-4 flex flex-col gap-2">
+            <div className="rounded-xl p-4 bg-[var(--bg-surface)] border border-[#F87171]/40 text-[#F87171] text-xs font-semibold mb-4 flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-[#F87171]" />
                 <span>Failed to reach anime catalog API. Operating in offline/cached session.</span>
               </div>
               {terminalLogs.length > 0 && terminalLogs[0].level === 'ERR' && (
-                <div className="mt-1 p-2 rounded-lg bg-[#0B0A10] border border-[#292B39] font-mono text-[10px] text-[#F87171] break-all">
+                <div className="mt-1 p-2 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] font-mono text-[10px] text-[#F87171] break-all">
                   {terminalLogs[0].msg}
                 </div>
               )}
@@ -2078,11 +2078,11 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
       />
 
       {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-3 left-3 right-3 z-40 bg-[#12141E]/95 backdrop-blur-md border border-[#292B39] rounded-2xl p-1.5 shadow-2xl flex items-center justify-around">
+      <div className="md:hidden fixed bottom-3 left-3 right-3 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border border-[var(--border-subtle)] rounded-2xl p-1.5 shadow-2xl flex items-center justify-around">
         <button
           onClick={() => setActiveAdminTab('overview')}
           className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
-            activeAdminTab === 'overview' ? 'text-[#B49AF8] bg-[#B49AF8]/15' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
+            activeAdminTab === 'overview' ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/15' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
           <Sliders className="w-4 h-4" />
@@ -2092,7 +2092,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         <button
           onClick={() => setActiveAdminTab('pending')}
           className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 relative transition-colors duration-150 cursor-pointer ${
-            activeAdminTab === 'pending' ? 'text-[#F9C876] bg-[#F9C876]/15' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
+            activeAdminTab === 'pending' ? 'text-[#F9C876] bg-[#F9C876]/15' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
           <Inbox className="w-4 h-4" />
@@ -2103,7 +2103,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         <button
           onClick={() => setActiveAdminTab('catalog')}
           className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
-            activeAdminTab === 'catalog' ? 'text-[#B49AF8] bg-[#B49AF8]/15' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
+            activeAdminTab === 'catalog' ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/15' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
           <Database className="w-4 h-4" />
@@ -2113,7 +2113,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         <button
           onClick={() => setActiveAdminTab('analytics')}
           className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
-            activeAdminTab === 'analytics' ? 'text-[#B49AF8] bg-[#B49AF8]/15' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
+            activeAdminTab === 'analytics' ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/15' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
           <Activity className="w-4 h-4" />
@@ -2122,7 +2122,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
 
         <button
           onClick={() => setIsCommandPaletteOpen(true)}
-          className="min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 text-[#B49AF8] hover:text-[#CBB6FF] cursor-pointer"
+          className="min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 text-[var(--accent-primary)] hover:text-[var(--accent-hover)] cursor-pointer"
         >
           <Command className="w-4 h-4" />
           <span className="text-[9px] font-mono">⌘K</span>
@@ -2131,7 +2131,7 @@ Dr. Stone,https://i.ibb.co/sample/dr-stone.jpg,2019,Tamil|Telugu|Malayalam,Sci-F
         <button
           onClick={() => setIsTerminalOpen((prev) => !prev)}
           className={`min-w-[44px] min-h-[44px] p-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors duration-150 cursor-pointer ${
-            isTerminalOpen ? 'text-[#B49AF8] bg-[#B49AF8]/15' : 'text-[#A1A5B5] hover:text-[#F4F3FA]'
+            isTerminalOpen ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/15' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
           <Terminal className="w-4 h-4" />
