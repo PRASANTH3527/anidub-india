@@ -274,7 +274,53 @@ test('Franchise Builder APIs enforce strict auth, validate anime existence, reje
     'Pending anime #204 must be filtered out and order must follow watch_order ASC'
   );
 
-  // 9. DELETE /api/admin/franchises/:key/entries/:id deletes row and re-sequences remaining 1..N atomically
+  // 9. GET /api/admin/franchises/catalog-search works case-insensitively across approved & pending and enforces Clerk admin auth
+  const nonAdminSearchRes = await onRequest({
+    request: new Request('https://anidub.in/api/admin/franchises/catalog-search?q=dem', {
+      headers: { Authorization: `Bearer ${userToken}` },
+    }),
+    env,
+  });
+  assert.equal(nonAdminSearchRes.status, 403);
+
+  const searchRes = await onRequest({
+    request: new Request('https://anidub.in/api/admin/franchises/catalog-search?q=DeMoN', {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    }),
+    env,
+  });
+  assert.equal(searchRes.status, 200);
+  const searchJson: any = await searchRes.json();
+  assert.equal(searchJson.results.length, 4, 'Must match both approved and pending Demon Slayer titles case-insensitively');
+  assert.equal(searchJson.results[0].poster.startsWith('https://'), true);
+  assert.ok(searchJson.results[0].type);
+
+  const emptySearchRes = await onRequest({
+    request: new Request('https://anidub.in/api/admin/franchises/catalog-search?q=nonexistenttitlexyz', {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    }),
+    env,
+  });
+  assert.equal(emptySearchRes.status, 200);
+  const emptySearchJson: any = await emptySearchRes.json();
+  assert.deepEqual(emptySearchJson.results, []);
+
+  // 10. PATCH /api/admin/franchises/:key/entries/:id updates relation_label and note inline
+  const patchTargetId = reorderJson.entries[0].id; // anime 202
+  const patchEntryRes = await onRequest({
+    request: new Request(`https://anidub.in/api/admin/franchises/demon-slayer/entries/${patchTargetId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ relation_label: 'OVA / Special', note: 'Watch before Entertainment District' }),
+    }),
+    env,
+  });
+  assert.equal(patchEntryRes.status, 200);
+  const patchEntryJson: any = await patchEntryRes.json();
+  assert.equal(patchEntryJson.entry.relation_label, 'OVA / Special');
+  assert.equal(patchEntryJson.entry.note, 'Watch before Entertainment District');
+
+  // 11. DELETE /api/admin/franchises/:key/entries/:id deletes row and re-sequences remaining 1..N atomically
   const batchesBeforeDel = getBatchCallCount();
   const deleteId = reorderJson.entries[1].id; // anime 201 (watch_order 2)
   const delRes = await onRequest({
@@ -295,6 +341,21 @@ test('Franchise Builder APIs enforce strict auth, validate anime existence, reje
       { anime_id: '204', watch_order: 3 },
     ]
   );
+
+  // 12. PATCH /api/admin/franchises/:key renames franchise cleanly and preserves entries
+  const renameRes = await onRequest({
+    request: new Request('https://anidub.in/api/admin/franchises/demon-slayer', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ newName: 'Kimetsu no Yaiba' }),
+    }),
+    env,
+  });
+  assert.equal(renameRes.status, 200);
+  const renameJson: any = await renameRes.json();
+  assert.equal(renameJson.franchiseKey, 'kimetsu-no-yaiba');
+  assert.equal(renameJson.displayTitle, 'Kimetsu No Yaiba');
+  assert.equal(renameJson.entries.length, 3);
 });
 
 test('Public AnimeUniverseSection renders nothing when fewer than 2 entries exist, and renders compact Watch Order when 2+ entries exist', () => {

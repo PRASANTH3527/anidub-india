@@ -77,6 +77,33 @@ export function formatFranchiseDisplayTitle(franchiseKey: string): string {
     .join(' ');
 }
 
+export function inferDefaultFranchiseRelation(
+  animeType: unknown,
+  existingEntryCount: number
+): string {
+  const lowerType = String(animeType || '').trim().toLowerCase();
+  if (lowerType.includes('movie') || lowerType.includes('film')) {
+    return 'Movie';
+  }
+  if (lowerType.includes('ova') || lowerType.includes('special') || lowerType.includes('ona')) {
+    return 'OVA / Special';
+  }
+  return existingEntryCount <= 0 ? 'Main Series' : 'Sequel';
+}
+
+export function deriveFranchiseKeyFromAnime(anime: {
+  slug?: string | null;
+  title?: string | null;
+  id?: string | number;
+}): string {
+  const fromSlug = normalizeFranchiseKey(anime.slug || '');
+  if (fromSlug.length >= 2) return fromSlug;
+  const fromTitle = normalizeFranchiseKey(anime.title || '');
+  if (fromTitle.length >= 2) return fromTitle;
+  const safeId = normalizeFranchiseKey(String(anime.id ?? ''));
+  return safeId ? `series-${safeId}` : `series-${Date.now()}`;
+}
+
 export function validateFranchiseEntryInput(
   input: {
     franchise_key?: unknown;

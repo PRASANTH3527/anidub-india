@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  deriveFranchiseKeyFromAnime,
   formatFranchiseDisplayTitle,
+  inferDefaultFranchiseRelation,
   normalizeFranchiseKey,
   validateFranchiseEntryInput,
   reorderFranchiseEntries,
@@ -28,6 +30,12 @@ test('normalizeFranchiseKey slugifies franchise identifiers cleanly', () => {
   assert.equal(normalizeFranchiseKey('naruto_shippuden'), 'naruto_shippuden');
   assert.equal(formatFranchiseDisplayTitle('demon-slayer'), 'Demon Slayer');
   assert.equal(formatFranchiseDisplayTitle('jjk'), 'JJK');
+  assert.equal(inferDefaultFranchiseRelation('Movie', 0), 'Movie');
+  assert.equal(inferDefaultFranchiseRelation('TV Series', 0), 'Main Series');
+  assert.equal(inferDefaultFranchiseRelation('TV Series', 1), 'Sequel');
+  assert.equal(inferDefaultFranchiseRelation('OVA', 2), 'OVA / Special');
+  assert.equal(deriveFranchiseKeyFromAnime({ slug: 'naruto', title: 'Naruto', id: 1 }), 'naruto');
+  assert.equal(deriveFranchiseKeyFromAnime({ title: 'Demon Slayer', id: 2 }), 'demon-slayer');
 });
 
 test('validateFranchiseEntryInput enforces required fields and blocks duplicate (franchise_key, anime_id)', () => {
@@ -260,8 +268,11 @@ test('handleAdminPhase3Routes enforces 401 Clerk Admin auth on all /api/admin/* 
   // 2. All Phase 3 /api/admin/* endpoints return 401 when unauthenticated
   const protectedEndpoints: Array<{ method: string; path: string }> = [
     { method: 'GET', path: '/api/admin/franchises' },
+    { method: 'GET', path: '/api/admin/franchises/catalog-search?q=nar' },
     { method: 'GET', path: '/api/admin/franchises/demon-slayer' },
+    { method: 'PATCH', path: '/api/admin/franchises/demon-slayer' },
     { method: 'POST', path: '/api/admin/franchises/demon-slayer/entries' },
+    { method: 'PATCH', path: '/api/admin/franchises/demon-slayer/entries/1' },
     { method: 'PUT', path: '/api/admin/franchises/demon-slayer/reorder' },
     { method: 'DELETE', path: '/api/admin/franchises/demon-slayer/entries/1' },
     { method: 'PUT', path: '/api/admin/franchises/demon-slayer' },

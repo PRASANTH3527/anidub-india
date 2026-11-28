@@ -3159,6 +3159,103 @@ class CloudflareApiService {
     };
   }
 
+  public async searchAdminFranchiseCatalog(
+    query: string,
+    limit: number = 25
+  ): Promise<{
+    success: boolean;
+    query: string;
+    results: Array<{
+      id: string;
+      title: string;
+      slug?: string;
+      poster?: string;
+      cover_image?: string;
+      type?: string;
+      year?: number | null;
+      status?: string;
+      approval_status?: string;
+    }>;
+  }> {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return { success: true, query: '', results: [] };
+    }
+    const qs = new URLSearchParams({ q: trimmed, limit: String(limit) }).toString();
+    const res = await this.smartFetch(`/api/admin/franchises/catalog-search?${qs}`, {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to search catalog (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      query: String(json?.query || trimmed),
+      results: Array.isArray(json?.results) ? json.results : [],
+    };
+  }
+
+  public async updateAdminFranchiseEntry(
+    franchiseKey: string,
+    entryId: string | number,
+    payload: {
+      relation_label?: string;
+      note?: string | null;
+    }
+  ): Promise<{
+    success: boolean;
+    entry?: import('../utils/adminPhase3Intelligence').AdminFranchiseEntry;
+    entries?: import('../utils/adminPhase3Intelligence').AdminFranchiseEntry[];
+  }> {
+    const safeKey = encodeURIComponent(franchiseKey.trim());
+    const safeId = encodeURIComponent(String(entryId).trim());
+    const res = await this.smartFetch(`/api/admin/franchises/${safeKey}/entries/${safeId}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to update watch order entry (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      entry: json?.entry,
+      entries: Array.isArray(json?.entries) ? json.entries : undefined,
+    };
+  }
+
+  public async renameAdminFranchiseKey(
+    franchiseKey: string,
+    newName: string
+  ): Promise<{
+    success: boolean;
+    oldFranchiseKey: string;
+    franchiseKey: string;
+    displayTitle: string;
+    entries?: import('../utils/adminPhase3Intelligence').AdminFranchiseEntry[];
+  }> {
+    const safeKey = encodeURIComponent(franchiseKey.trim());
+    const res = await this.smartFetch(`/api/admin/franchises/${safeKey}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ newName }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to rename watch order (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      oldFranchiseKey: String(json?.oldFranchiseKey || franchiseKey),
+      franchiseKey: String(json?.franchiseKey || franchiseKey),
+      displayTitle: String(json?.displayTitle || newName),
+      entries: Array.isArray(json?.entries) ? json.entries : undefined,
+    };
+  }
+
   public async saveAdminFranchiseEntry(
     franchiseKey: string,
     payload: {

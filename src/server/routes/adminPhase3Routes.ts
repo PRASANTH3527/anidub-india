@@ -390,6 +390,108 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
     }
   }
 
+  // GET /api/admin/franchises/catalog-search?q=...&limit=25 (Clerk-admin-protected full D1 catalog search)
+  if (path === '/api/admin/franchises/catalog-search' && method === 'GET') {
+    const auth = await requireStrictAdmin(ctx);
+    if (!auth.ok) return auth.response;
+
+    const query = String(url.searchParams.get('q') || url.searchParams.get('search') || '').trim();
+    const requestedLimit = Number(url.searchParams.get('limit') || 25);
+    const limit = Math.min(50, Math.max(1, Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 25));
+
+    if (!env.DB || !query) {
+      return jsonResponse(
+        { success: true, query, results: [] },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    }
+
+    const likeContains = `%${query}%`;
+    const likePrefix = `${query}%`;
+
+    try {
+      let rows: Record<string, any>[] = [];
+      try {
+        const res = await env.DB.prepare(
+          `SELECT id, title, slug, cover_image, type, year, status, approval_status
+           FROM anime
+           WHERE LOWER(COALESCE(title, '')) LIKE LOWER(?)
+              OR LOWER(COALESCE(japanese_title, '')) LIKE LOWER(?)
+              OR LOWER(COALESCE(slug, '')) LIKE LOWER(?)
+              OR CAST(id AS TEXT) = ?
+           ORDER BY
+             CASE WHEN LOWER(COALESCE(title, '')) LIKE LOWER(?) THEN 0 ELSE 1 END ASC,
+             title ASC
+           LIMIT ?`
+        )
+          .bind(likeContains, likeContains, likeContains, query, likePrefix, limit)
+          .all<Record<string, any>>();
+        rows = res.results || [];
+      } catch (err) {
+        if (!isMissingColumnError(err)) throw err;
+        try {
+          const res = await env.DB.prepare(
+            `SELECT id, title, slug, cover_image, type, year, status, approval_status
+             FROM anime
+             WHERE LOWER(COALESCE(title, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(slug, '')) LIKE LOWER(?)
+                OR CAST(id AS TEXT) = ?
+             ORDER BY
+               CASE WHEN LOWER(COALESCE(title, '')) LIKE LOWER(?) THEN 0 ELSE 1 END ASC,
+               title ASC
+             LIMIT ?`
+          )
+            .bind(likeContains, likeContains, query, likePrefix, limit)
+            .all<Record<string, any>>();
+          rows = res.results || [];
+        } catch (err2) {
+          if (!isMissingColumnError(err2)) throw err2;
+          const res = await env.DB.prepare(
+            `SELECT id, title, slug, cover_image, year, status
+             FROM anime
+             WHERE LOWER(COALESCE(title, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(slug, '')) LIKE LOWER(?)
+                OR CAST(id AS TEXT) = ?
+             ORDER BY
+               CASE WHEN LOWER(COALESCE(title, '')) LIKE LOWER(?) THEN 0 ELSE 1 END ASC,
+               title ASC
+             LIMIT ?`
+          )
+            .bind(likeContains, likeContains, query, likePrefix, limit)
+            .all<Record<string, any>>();
+          rows = res.results || [];
+        }
+      }
+
+      const results = rows.map((r) => {
+        const posterUrl = r.cover_image ? String(r.cover_image) : undefined;
+        const yearNum = Number(r.year);
+        return {
+          id: String(r.id),
+          title: String(r.title || `Anime #${r.id}`),
+          slug: r.slug ? String(r.slug) : undefined,
+          poster: posterUrl,
+          cover_image: posterUrl,
+          type: r.type ? String(r.type) : 'TV Series',
+          year: Number.isFinite(yearNum) && yearNum > 1900 ? yearNum : null,
+          status: r.status ? String(r.status) : undefined,
+          approval_status: r.approval_status ? String(r.approval_status) : undefined,
+        };
+      });
+
+      return jsonResponse(
+        { success: true, query, results },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
+    }
+  }
+
   // GET /api/admin/franchises/:key
   const franchiseGetByKeyMatch = path.match(/^\/api\/admin\/franchises\/([0-9a-zA-Z_-]+)\/?$/);
   if (franchiseGetByKeyMatch && method === 'GET') {
@@ -678,6 +780,209 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
           success: true,
           franchiseKey,
           updatedCount: orderedKeys.length,
+          entries,
+        },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
+    }
+  }
+
+  // PATCH /api/admin/franchises/:key/entries/:id (inline update of relation_label and note)
+  const franchisePatchEntryMatch = path.match(
+    /^\/api\/admin\/franchises\/([0-9a-zA-Z_-]+)\/entries\/([0-9a-zA-Z_-]+)\/?$/
+  );
+  if (franchisePatchEntryMatch && method === 'PATCH') {
+    const auth = await requireStrictAdmin(ctx);
+    if (!auth.ok) return auth.response;
+
+    if (!env.DB) {
+      return jsonResponse({ success: false, error: 'Database binding unavailable.' }, 503, request);
+    }
+
+    const franchiseKey = normalizeFranchiseKey(decodeURIComponent(franchisePatchEntryMatch[1]));
+    const targetId = decodeURIComponent(franchisePatchEntryMatch[2]).trim();
+    if (!franchiseKey || !targetId) {
+      return jsonResponse({ success: false, error: 'Valid franchise key and entry id are required.' }, 400, request);
+    }
+
+    let body: Record<string, any>;
+    try {
+      body = (await request.json()) as Record<string, any>;
+    } catch {
+      return jsonResponse({ success: false, error: 'Invalid JSON request body.' }, 400, request);
+    }
+
+    try {
+      const existingFr = await env.DB.prepare(
+        'SELECT id, franchise_key, anime_id, relation_label, watch_order, note FROM anime_franchise_links WHERE franchise_key = ? AND (CAST(id AS TEXT) = ? OR anime_id = ?) LIMIT 1'
+      )
+        .bind(franchiseKey, targetId, targetId)
+        .first<Record<string, any>>();
+
+      if (!existingFr) {
+        return jsonResponse(
+          { success: false, error: `Watch order entry #${targetId} not found in "${franchiseKey}".` },
+          404,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
+      }
+
+      const rawRelation =
+        body.relation_label !== undefined
+          ? String(body.relation_label || '').trim().slice(0, 60)
+          : body.relationLabel !== undefined
+            ? String(body.relationLabel || '').trim().slice(0, 60)
+            : String(existingFr.relation_label || 'Main Series');
+
+      const nextRelation = rawRelation || 'Main Series';
+
+      let nextNote: string | null = existingFr.note ? String(existingFr.note) : null;
+      if (body.note !== undefined) {
+        const trimmedNote = body.note === null ? '' : String(body.note).trim().slice(0, 300);
+        nextNote = trimmedNote || null;
+      }
+
+      await env.DB.prepare(
+        `UPDATE anime_franchise_links
+         SET relation_label = ?, note = ?, updated_at = datetime('now')
+         WHERE franchise_key = ? AND id = ?`
+      )
+        .bind(nextRelation, nextNote, franchiseKey, existingFr.id)
+        .run();
+
+      const entries = await fetchOrderedFranchiseEntries(env.DB, franchiseKey);
+      const updatedEntry =
+        entries.find((e) => Number(e.id) === Number(existingFr.id)) || {
+          id: Number(existingFr.id),
+          franchise_key: franchiseKey,
+          anime_id: String(existingFr.anime_id),
+          relation_label: nextRelation,
+          watch_order: Number(existingFr.watch_order) || 1,
+          note: nextNote,
+        };
+
+      await recordAdminActivityLog(env.DB, {
+        actor_id: auth.session.userId,
+        actor_email: auth.session.email,
+        action: 'UPDATE_FRANCHISE_LINK',
+        entity_type: 'anime_franchise_links',
+        entity_id: `${franchiseKey}:${existingFr.anime_id}`,
+        summary: `Updated entry #${existingFr.anime_id} in "${franchiseKey}" (${nextRelation}).`,
+        diff_json: { relation_label: nextRelation, note: nextNote },
+      });
+
+      return jsonResponse(
+        {
+          success: true,
+          franchiseKey,
+          entry: updatedEntry,
+          entries,
+        },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
+    }
+  }
+
+  // PATCH /api/admin/franchises/:key (rename a watch order's franchise_key cleanly)
+  const franchiseRenameMatch = path.match(/^\/api\/admin\/franchises\/([0-9a-zA-Z_-]+)\/?$/);
+  if (franchiseRenameMatch && method === 'PATCH') {
+    const auth = await requireStrictAdmin(ctx);
+    if (!auth.ok) return auth.response;
+
+    if (!env.DB) {
+      return jsonResponse({ success: false, error: 'Database binding unavailable.' }, 503, request);
+    }
+
+    const oldKey = normalizeFranchiseKey(decodeURIComponent(franchiseRenameMatch[1]));
+    if (!oldKey) {
+      return jsonResponse({ success: false, error: 'Valid franchise key is required.' }, 400, request);
+    }
+
+    let body: Record<string, any>;
+    try {
+      body = (await request.json()) as Record<string, any>;
+    } catch {
+      return jsonResponse({ success: false, error: 'Invalid JSON request body.' }, 400, request);
+    }
+
+    const rawNew = body.newKey ?? body.newName ?? body.name ?? body.franchise_key ?? '';
+    const nextKey = normalizeFranchiseKey(rawNew);
+    if (!nextKey || nextKey.length < 2) {
+      return jsonResponse(
+        { success: false, error: 'New watch order name must be at least 2 characters.' },
+        400,
+        request
+      );
+    }
+
+    try {
+      if (nextKey === oldKey) {
+        const entries = await fetchOrderedFranchiseEntries(env.DB, oldKey);
+        return jsonResponse(
+          {
+            success: true,
+            oldFranchiseKey: oldKey,
+            franchiseKey: nextKey,
+            displayTitle: formatFranchiseDisplayTitle(nextKey),
+            entries,
+          },
+          200,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
+      }
+
+      const collision = await env.DB.prepare(
+        'SELECT id FROM anime_franchise_links WHERE franchise_key = ? LIMIT 1'
+      )
+        .bind(nextKey)
+        .first<{ id: number }>();
+
+      if (collision) {
+        return jsonResponse(
+          {
+            success: false,
+            error: `A watch order named "${formatFranchiseDisplayTitle(nextKey)}" already exists.`,
+          },
+          409,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
+      }
+
+      await env.DB.prepare(
+        "UPDATE anime_franchise_links SET franchise_key = ?, updated_at = datetime('now') WHERE franchise_key = ?"
+      )
+        .bind(nextKey, oldKey)
+        .run();
+
+      const entries = await fetchOrderedFranchiseEntries(env.DB, nextKey);
+
+      await recordAdminActivityLog(env.DB, {
+        actor_id: auth.session.userId,
+        actor_email: auth.session.email,
+        action: 'RENAME_FRANCHISE_KEY',
+        entity_type: 'anime_franchise_links',
+        entity_id: nextKey,
+        summary: `Renamed watch order "${oldKey}" to "${nextKey}".`,
+        diff_json: { oldFranchiseKey: oldKey, franchiseKey: nextKey },
+      });
+
+      return jsonResponse(
+        {
+          success: true,
+          oldFranchiseKey: oldKey,
+          franchiseKey: nextKey,
+          displayTitle: formatFranchiseDisplayTitle(nextKey),
           entries,
         },
         200,
