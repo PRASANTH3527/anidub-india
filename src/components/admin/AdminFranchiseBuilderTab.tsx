@@ -1,26 +1,22 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-  Layers,
   Plus,
   Search,
   ArrowUp,
   ArrowDown,
   Trash2,
-  Save,
-  Eye,
-  RefreshCw,
   Loader2,
   AlertTriangle,
-  CheckCircle2,
   Film,
-  Edit3,
+  X,
+  Check,
 } from 'lucide-react';
 import { cloudflareApi } from '../../services/cloudflareApi';
 import {
-  FRANCHISE_RELATION_LABELS,
+  FRANCHISE_BUILDER_RELATION_OPTIONS,
+  formatFranchiseDisplayTitle,
   normalizeFranchiseKey,
   reorderFranchiseEntries,
-  validateFranchiseEntryInput,
   type AdminFranchiseEntry,
 } from '../../utils/adminPhase3Intelligence';
 
@@ -31,712 +27,830 @@ export interface AdminFranchiseBuilderTabProps {
   onSuccess?: (msg: string) => void;
 }
 
+interface FranchiseSummaryItem {
+  franchise_key: string;
+  display_title: string;
+  entry_count: number;
+  updated_at: string;
+}
+
+interface CatalogSearchCandidate {
+  id: string;
+  title: string;
+  poster?: string;
+  year?: number | null;
+  type?: string;
+  status?: string;
+}
+
+function mapCatalogCandidate(raw: any): CatalogSearchCandidate | null {
+  if (!raw || raw.id === undefined || raw.id === null) return null;
+  const id = String(raw.id).trim();
+  const title = String(raw.title || '').trim();
+  if (!id || !title) return null;
+  const yearNum = Number(raw.releaseYear ?? raw.year);
+  return {
+    id,
+    title,
+    poster: raw.poster || raw.cover_image || raw.image || undefined,
+    year: Number.isFinite(yearNum) && yearNum > 1900 ? yearNum : null,
+    type: raw.type ? String(raw.type) : undefined,
+    status: raw.status ? String(raw.status) : undefined,
+  };
+}
+
 export const AdminFranchiseBuilderTab: React.FC<AdminFranchiseBuilderTabProps> = ({
   catalog = [],
   initialFranchiseKey = null,
-  onEditAnimeInEditor,
   onSuccess,
 }) => {
-  const [franchises, setFranchises] = useState<
-    Array<{ franchise_key: string; entry_count: number; updated_at: string }>
-  >([]);
+  const [franchises, setFranchises] = useState<FranchiseSummaryItem[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>(
     initialFranchiseKey ? normalizeFranchiseKey(initialFranchiseKey) : ''
   );
-  const [newKeyInput, setNewKeyInput] = useState<string>('');
   const [entries, setEntries] = useState<AdminFranchiseEntry[]>([]);
-  const [tableReady, setTableReady] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
-  const [saving, setSaving] = useState<boolean>(false);
-  const [isDirtyOrder, setIsDirtyOrder] = useState<boolean>(false);
+  const [loadingEntries, setLoadingEntries] = useState<boolean>(false);
+  const [adding, setAdding] = useState<boolean>(false);
+  const [reordering, setReordering] = useState<boolean>(false);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Add Entry Form State
-  const [catalogSearch, setCatalogSearch] = useState<string>('');
-  const [selectedAnimeId, setSelectedAnimeId] = useState<string>('');
-  const [relationLabel, setRelationLabel] = useState<string>('Original Series');
-  const [entryNote, setEntryNote] = useState<string>('');
+  // Inline "+ New" Series Creator state
+  const [showNewSeriesInput, setShowNewSeriesInput] = useState<boolean>(false);
+  const [newSeriesName, setNewSeriesName] = useState<string>('');
+  const newSeriesInputRef = useRef<HTMLInputElement | null>(null);
 
-  const animeById = useMemo(() => {
-    const map = new Map<string, any>();
-    for (const a of catalog) {
-      if (a && a.id !== undefined) {
-        map.set(String(a.id), a);
-      }
+  // Live debounced D1 Catalog Search state
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchResults, setSearchResults] = useState<CatalogSearchCandidate[]>([]);
+  const [searchingCatalog, setSearchingCatalog] = useState<boolean>(false);
+  const [searchOpen, setSearchOpen] = useState<boolean>(false);
+  const [selectedAnime, setSelectedAnime] = useState<CatalogSearchCandidate | null>(null);
+  const [relationLabel, setRelationLabel] = useState<string>(FRANCHISE_BUILDER_RELATION_OPTIONS[0]);
+  const [entryNote, setEntryNote] = useState<string>('');
+  const searchSeqRef = useRef<number>(0);
+
+  const existingAnimeIdSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const entry of entries) {
+      set.add(String(entry.anime_id).trim());
     }
-    return map;
+    return set;
+  }, [entries]);
+
+  const activeSeriesTitle = useMemo(() => {
+    if (!selectedKey) return '';
+    const match = franchises.find((f) => f.franchise_key === selectedKey);
+    return match?.display_title || formatFranchiseDisplayTitle(selectedKey);
+  }, [franchises, selectedKey]);
+
+  const localFallbackCandidates = useMemo(() => {
+    const list: CatalogSearchCandidate[] = [];
+    for (const item of catalog) {
+      const mapped = mapCatalogCandidate(item);
+      if (mapped) list.push(mapped);
+    }
+    return list;
   }, [catalog]);
 
-  const loadFranchiseWorkspace = useCallback(
-    async (targetKey?: string) => {
-      setLoading(true);
-      setErrorMsg(null);
-      try {
-        const res = await cloudflareApi.fetchAdminFranchises(targetKey);
-        setTableReady(res.tableReady);
-        setFranchises(res.franchises || []);
-        const resolvedKey =
-          targetKey ||
-          res.selectedFranchiseKey ||
-          (res.franchises && res.franchises.length > 0 ? res.franchises[0].franchise_key : '');
-        if (resolvedKey) {
-          setSelectedKey(resolvedKey);
-        }
-        setEntries(res.entries || []);
-        setIsDirtyOrder(false);
-      } catch (err: any) {
-        setErrorMsg(err?.message || 'Failed to load Franchise Watch-Order workspace.');
-      } finally {
-        setLoading(false);
+  // Initial load of franchise list & entries
+  const loadInitialFranchises = useCallback(async (preferredKey?: string) => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const normalizedPref = preferredKey ? normalizeFranchiseKey(preferredKey) : undefined;
+      const res = await cloudflareApi.fetchAdminFranchises(normalizedPref);
+      const list: FranchiseSummaryItem[] = (res.franchises || []).map((f) => ({
+        franchise_key: f.franchise_key,
+        display_title: f.display_title || formatFranchiseDisplayTitle(f.franchise_key),
+        entry_count: Number(f.entry_count) || 0,
+        updated_at: f.updated_at || '',
+      }));
+
+      const nextKey = normalizedPref || res.selectedFranchiseKey || (list[0]?.franchise_key ?? '');
+      if (nextKey && !list.some((f) => f.franchise_key === nextKey)) {
+        list.unshift({
+          franchise_key: nextKey,
+          display_title: formatFranchiseDisplayTitle(nextKey),
+          entry_count: (res.entries || []).length,
+          updated_at: '',
+        });
       }
+
+      setFranchises(list);
+      setSelectedKey(nextKey);
+      setEntries(Array.isArray(res.entries) ? res.entries : []);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to load series watch orders.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadInitialFranchises(initialFranchiseKey || undefined);
+  }, [initialFranchiseKey, loadInitialFranchises]);
+
+  // Load entries when switching series
+  const handleSelectSeries = useCallback(async (nextKey: string) => {
+    const normalized = normalizeFranchiseKey(nextKey);
+    setSelectedKey(normalized);
+    setErrorMsg(null);
+    if (!normalized) {
+      setEntries([]);
+      return;
+    }
+
+    setLoadingEntries(true);
+    try {
+      const res = await cloudflareApi.fetchAdminFranchiseByKey(normalized);
+      const loaded = Array.isArray(res.entries) ? res.entries : [];
+      setEntries(loaded);
+      setFranchises((prev) =>
+        prev.map((f) =>
+          f.franchise_key === normalized ? { ...f, entry_count: loaded.length } : f
+        )
+      );
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to load watch order entries.');
+    } finally {
+      setLoadingEntries(false);
+    }
+  }, []);
+
+  // Create / open new series inline
+  const handleCreateSeries = useCallback(
+    async (e?: React.FormEvent) => {
+      if (e) e.preventDefault();
+      const rawName = newSeriesName.trim();
+      const slug = normalizeFranchiseKey(rawName);
+      if (!slug || slug.length < 2) {
+        setErrorMsg('Enter a series name with at least 2 characters.');
+        return;
+      }
+
+      const displayTitle = rawName.length >= 2 ? rawName : formatFranchiseDisplayTitle(slug);
+      setFranchises((prev) => {
+        if (prev.some((f) => f.franchise_key === slug)) return prev;
+        return [
+          {
+            franchise_key: slug,
+            display_title: displayTitle,
+            entry_count: 0,
+            updated_at: '',
+          },
+          ...prev,
+        ];
+      });
+
+      setShowNewSeriesInput(false);
+      setNewSeriesName('');
+      await handleSelectSeries(slug);
     },
-    []
+    [newSeriesName, handleSelectSeries]
   );
 
   useEffect(() => {
-    void loadFranchiseWorkspace(
-      initialFranchiseKey ? normalizeFranchiseKey(initialFranchiseKey) : undefined
-    );
-  }, [initialFranchiseKey, loadFranchiseWorkspace]);
+    if (showNewSeriesInput) {
+      setTimeout(() => newSeriesInputRef.current?.focus(), 30);
+    }
+  }, [showNewSeriesInput]);
 
-  const handleCreateOrSelectFranchise = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanKey = normalizeFranchiseKey(newKeyInput);
-    if (!cleanKey || cleanKey.length < 2) {
-      setErrorMsg('Enter a valid franchise_key (e.g., "naruto", "demon-slayer", "jujutsu-kaisen").');
+  // Debounced server-side D1 catalog search (no 30-item client cap)
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults([]);
+      setSearchingCatalog(false);
       return;
     }
-    setSelectedKey(cleanKey);
-    setNewKeyInput('');
-    const exists = franchises.some((f) => f.franchise_key === cleanKey);
-    if (exists) {
-      void loadFranchiseWorkspace(cleanKey);
-    } else {
-      setEntries([]);
-      setIsDirtyOrder(false);
+
+    const seq = ++searchSeqRef.current;
+    setSearchingCatalog(true);
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await cloudflareApi.fetchCatalog({
+          search: query,
+          page: 1,
+          limit: 25,
+          includePending: true,
+        });
+        if (seq !== searchSeqRef.current) return;
+
+        if (res.ok && Array.isArray(res.data)) {
+          const mapped = res.data
+            .map(mapCatalogCandidate)
+            .filter((item): item is CatalogSearchCandidate => item !== null);
+          setSearchResults(mapped);
+        } else {
+          const lower = query.toLowerCase();
+          setSearchResults(
+            localFallbackCandidates
+              .filter((c) => c.title.toLowerCase().includes(lower) || c.id === query)
+              .slice(0, 25)
+          );
+        }
+      } catch {
+        if (seq !== searchSeqRef.current) return;
+        const lower = query.toLowerCase();
+        setSearchResults(
+          localFallbackCandidates
+            .filter((c) => c.title.toLowerCase().includes(lower) || c.id === query)
+            .slice(0, 25)
+        );
+      } finally {
+        if (seq === searchSeqRef.current) {
+          setSearchingCatalog(false);
+        }
+      }
+    }, 220);
+
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, localFallbackCandidates]);
+
+  const isSelectedDuplicate = Boolean(selectedAnime && existingAnimeIdSet.has(selectedAnime.id));
+
+  // Add selected anime to active watch order
+  const handleAddEntry = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedKey) {
+        setErrorMsg('Select or create a series first.');
+        return;
+      }
+      if (!selectedAnime) {
+        setErrorMsg('Search and select an anime from the catalog.');
+        return;
+      }
+      if (isSelectedDuplicate) {
+        setErrorMsg(`"${selectedAnime.title}" is already in this watch order.`);
+        return;
+      }
+
+      setAdding(true);
       setErrorMsg(null);
-    }
-  };
+      try {
+        const res = await cloudflareApi.addAdminFranchiseEntry(selectedKey, {
+          anime_id: selectedAnime.id,
+          relation_label: relationLabel,
+          note: entryNote.trim() || null,
+        });
 
-  const filteredCatalogCandidates = useMemo(() => {
-    const q = catalogSearch.trim().toLowerCase();
-    const existingIds = new Set(entries.map((e) => String(e.anime_id)));
-    return catalog
-      .filter((a) => {
-        if (!a || a.id === undefined) return false;
-        if (!q) return true;
-        const title = String(a.title || '').toLowerCase();
-        const slug = String(a.slug || '').toLowerCase();
-        return title.includes(q) || slug.includes(q) || String(a.id) === q;
-      })
-      .slice(0, 30)
-      .map((a) => ({
-        ...a,
-        alreadyInFranchise: existingIds.has(String(a.id)),
-      }));
-  }, [catalog, catalogSearch, entries]);
+        const updatedEntries = Array.isArray(res.entries)
+          ? res.entries
+          : res.entry
+            ? [...entries, res.entry]
+            : entries;
 
-  const handleAddEntryToTimeline = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
+        setEntries(updatedEntries);
+        setFranchises((prev) => {
+          const exists = prev.some((f) => f.franchise_key === selectedKey);
+          if (!exists) {
+            return [
+              {
+                franchise_key: selectedKey,
+                display_title: formatFranchiseDisplayTitle(selectedKey),
+                entry_count: updatedEntries.length,
+                updated_at: new Date().toISOString(),
+              },
+              ...prev,
+            ];
+          }
+          return prev.map((f) =>
+            f.franchise_key === selectedKey
+              ? { ...f, entry_count: updatedEntries.length }
+              : f
+          );
+        });
 
-    const activeKey = normalizeFranchiseKey(selectedKey || newKeyInput);
-    if (!activeKey) {
-      setErrorMsg('Create or select a franchise_key first (e.g., "demon-slayer").');
-      return;
-    }
-
-    const validation = validateFranchiseEntryInput(
-      {
-        franchise_key: activeKey,
-        anime_id: selectedAnimeId,
-        relation_label: relationLabel,
-        watch_order: entries.length + 1,
-        note: entryNote,
-      },
+        const addedTitle = selectedAnime.title;
+        setSelectedAnime(null);
+        setSearchQuery('');
+        setSearchResults([]);
+        setSearchOpen(false);
+        setEntryNote('');
+        onSuccess?.(`Added "${addedTitle}" to ${activeSeriesTitle || selectedKey}`);
+      } catch (err: any) {
+        setErrorMsg(err?.message || 'Failed to add anime to watch order.');
+      } finally {
+        setAdding(false);
+      }
+    },
+    [
+      selectedKey,
+      selectedAnime,
+      isSelectedDuplicate,
+      relationLabel,
+      entryNote,
       entries,
-      false
-    );
+      activeSeriesTitle,
+      onSuccess,
+    ]
+  );
 
-    if (!validation.ok) {
-      setErrorMsg(validation.error);
-      return;
-    }
+  // Instant 1-tap up/down reorder with optimistic UI + atomic D1 batch persistence
+  const handleMoveEntry = useCallback(
+    async (index: number, direction: 'up' | 'down') => {
+      if (!selectedKey || reordering) return;
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= entries.length) return;
 
-    setSaving(true);
-    try {
-      await cloudflareApi.saveAdminFranchiseEntry(activeKey, {
-        anime_id: validation.data.anime_id,
-        relation_label: validation.data.relation_label,
-        watch_order: validation.data.watch_order,
-        note: validation.data.note,
-      });
-      setSelectedAnimeId('');
-      setEntryNote('');
-      await loadFranchiseWorkspace(activeKey);
-      onSuccess?.(`Added entry to "${activeKey}" watch order!`);
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to add entry to franchise.');
-    } finally {
-      setSaving(false);
-    }
-  };
+      const previousEntries = entries;
+      const nextEntries = reorderFranchiseEntries(entries, index, direction);
+      setEntries(nextEntries);
+      setReordering(true);
+      setErrorMsg(null);
 
-  const handleMoveEntry = (index: number, direction: 'up' | 'down') => {
-    setEntries((prev) => reorderFranchiseEntries(prev, index, direction));
-    setIsDirtyOrder(true);
-  };
+      try {
+        const entryIds = nextEntries
+          .map((e) => e.id)
+          .filter((id): id is number => typeof id === 'number' && Number.isFinite(id) && id > 0);
+        const animeIds = nextEntries.map((e) => String(e.anime_id));
 
-  const handleUpdateInlineEntry = (
-    index: number,
-    patch: Partial<Pick<AdminFranchiseEntry, 'relation_label' | 'note'>>
-  ) => {
-    setEntries((prev) =>
-      prev.map((item, idx) => (idx === index ? { ...item, ...patch } : item))
-    );
-    setIsDirtyOrder(true);
-  };
+        const res = await cloudflareApi.reorderAdminFranchiseEntries(selectedKey, {
+          ...(entryIds.length === nextEntries.length ? { entryIds } : {}),
+          animeIds,
+        });
 
-  const handleSaveWatchOrder = async () => {
-    if (!selectedKey) return;
-    setSaving(true);
-    setErrorMsg(null);
-    try {
-      await cloudflareApi.saveAdminFranchiseOrder(
-        selectedKey,
-        entries.map((e, idx) => ({
-          anime_id: e.anime_id,
-          relation_label: e.relation_label,
-          watch_order: idx + 1,
-          note: e.note,
-        }))
-      );
-      setIsDirtyOrder(false);
-      await loadFranchiseWorkspace(selectedKey);
-      onSuccess?.(`Saved Smart Watch Order for "${selectedKey}"!`);
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to save franchise watch order.');
-    } finally {
-      setSaving(false);
-    }
-  };
+        if (Array.isArray(res.entries) && res.entries.length > 0) {
+          setEntries(res.entries);
+        }
+      } catch (err: any) {
+        setEntries(previousEntries);
+        setErrorMsg(err?.message || 'Failed to save new watch order.');
+      } finally {
+        setReordering(false);
+      }
+    },
+    [selectedKey, entries, reordering]
+  );
 
-  const handleDeleteEntry = async (animeId: string) => {
-    if (!selectedKey) return;
-    setSaving(true);
-    setErrorMsg(null);
-    try {
-      await cloudflareApi.deleteAdminFranchiseEntry(selectedKey, animeId);
-      await loadFranchiseWorkspace(selectedKey);
-      onSuccess?.(`Removed anime #${animeId} from franchise "${selectedKey}".`);
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to delete franchise link.');
-    } finally {
-      setSaving(false);
-    }
-  };
+  // 1-tap remove + automatic re-sequence 1..N
+  const handleDeleteEntry = useCallback(
+    async (entry: AdminFranchiseEntry) => {
+      if (!selectedKey) return;
+      const targetId = entry.id ?? entry.anime_id;
+      const rowKey = `${entry.id ?? ''}:${entry.anime_id}`;
+      setDeletingKey(rowKey);
+      setErrorMsg(null);
 
-  // Enrich entries with local catalog details if needed
-  const enrichedEntries = useMemo(() => {
-    return entries.map((entry, idx) => {
-      const cat = animeById.get(String(entry.anime_id));
-      const rawLangs =
-        entry.languages && entry.languages.length > 0
-          ? entry.languages
-          : Array.isArray(cat?.languages)
-            ? cat.languages
-            : typeof cat?.languages === 'string' && cat.languages.trim()
-              ? cat.languages.split(',').map((s: string) => s.trim()).filter(Boolean)
-              : [];
-      return {
-        ...entry,
-        watch_order: idx + 1,
-        title: entry.title || cat?.title || `Anime #${entry.anime_id}`,
-        cover_image:
-          entry.cover_image || cat?.cover_image || cat?.posterUrl || cat?.image || '/logo.png',
-        year: entry.year || cat?.year || cat?.releaseYear || null,
-        episodes_count:
-          entry.episodes_count || cat?.episodes_count || cat?.episodes || null,
-        languages: rawLangs,
-      };
-    });
-  }, [entries, animeById]);
+      try {
+        const res = await cloudflareApi.deleteAdminFranchiseEntryById(selectedKey, targetId);
+        const remaining = Array.isArray(res.entries)
+          ? res.entries
+          : entries
+              .filter((e) => e.anime_id !== entry.anime_id)
+              .map((e, idx) => ({ ...e, watch_order: idx + 1 }));
+
+        setEntries(remaining);
+        setFranchises((prev) =>
+          prev.map((f) =>
+            f.franchise_key === selectedKey
+              ? { ...f, entry_count: remaining.length }
+              : f
+          )
+        );
+        onSuccess?.(`Removed "${entry.title || `#${entry.anime_id}`}" from watch order`);
+      } catch (err: any) {
+        setErrorMsg(err?.message || 'Failed to remove entry.');
+      } finally {
+        setDeletingKey(null);
+      }
+    },
+    [selectedKey, entries, onSuccess]
+  );
+
+  const previewSlug = normalizeFranchiseKey(newSeriesName);
 
   return (
-    <div
-      data-testid="admin-franchise-builder-tab"
-      className="space-y-6 text-[var(--text-primary)] pb-12"
-    >
-      {/* Top Header */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-sm">
-        <div>
-          <h2 className="text-lg sm:text-xl font-extrabold text-[var(--text-primary)] flex items-center gap-2.5">
-            <Layers className="w-5 h-5 text-[var(--accent-primary)]" />
-            <span>Anime Universe &amp; Smart Watch Order Builder</span>
-          </h2>
-          <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-            Curate verified franchise timelines (`anime_franchise_links`) with touch-friendly Move Up / Move Down ordering and live Anime Details 2.0 timeline preview.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
+    <div className="space-y-3.5 pb-24 max-w-full" data-testid="admin-franchise-builder">
+      {/* Inline dismissible error banner */}
+      {errorMsg && (
+        <div
+          role="alert"
+          className="rounded-xl bg-rose-500/15 border border-rose-500/35 px-3.5 py-2.5 flex items-center justify-between gap-2 text-xs text-rose-200"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span className="truncate">{errorMsg}</span>
+          </div>
           <button
             type="button"
-            onClick={() => void loadFranchiseWorkspace(selectedKey || undefined)}
-            disabled={loading}
-            className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] inline-flex items-center gap-2 cursor-pointer"
+            onClick={() => setErrorMsg(null)}
+            className="p-1 rounded-lg text-rose-300 hover:bg-rose-500/20 shrink-0 cursor-pointer"
+            aria-label="Dismiss error"
           >
-            <RefreshCw className={`w-4 h-4 text-[var(--accent-primary)] ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
+            <X className="w-3.5 h-3.5" />
           </button>
-
-          {isDirtyOrder && (
-            <button
-              type="button"
-              data-testid="save-franchise-order-btn"
-              onClick={handleSaveWatchOrder}
-              disabled={saving}
-              className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold inline-flex items-center gap-2 cursor-pointer shadow-sm"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              <span>Save Watch Order</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {!tableReady && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-500 flex items-start gap-3">
-          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold">Additive Migration Notice:</span> `anime_franchise_links` will automatically initialize on your first save or when `migrations/003_anime_details_v2.sql` is applied.
-          </div>
         </div>
       )}
 
-      {errorMsg && (
-        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-xs font-bold text-red-500 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span>{errorMsg}</span>
-        </div>
-      )}
-
-      {/* Franchise Key Selector & Creator Bar */}
-      <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
-          <div className="lg:col-span-5">
-            <label className="block text-xs font-bold text-[var(--text-primary)] mb-1.5">
-              Select Existing Franchise Key ({franchises.length})
-            </label>
-            <select
-              value={selectedKey}
-              onChange={(e) => {
-                const nextKey = e.target.value;
-                setSelectedKey(nextKey);
-                if (nextKey) {
-                  void loadFranchiseWorkspace(nextKey);
-                } else {
-                  setEntries([]);
-                }
-              }}
-              className="w-full min-h-[44px] px-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-primary)]"
-            >
-              <option value="">
-                {franchises.length === 0 ? 'No franchises created yet...' : 'Choose a franchise_key...'}
-              </option>
-              {franchises.map((f) => (
+      {/* 1. SERIES SWITCHER BAR (Single Compact Card) */}
+      <section className="rounded-2xl bg-[#161428]/95 border border-purple-500/20 p-3.5 shadow-lg shadow-black/25">
+        <div className="flex items-center gap-2">
+          <select
+            aria-label="Select series"
+            data-testid="franchise-series-select"
+            value={selectedKey}
+            disabled={loading}
+            onChange={(e) => handleSelectSeries(e.target.value)}
+            className="flex-1 min-w-0 h-10 px-3 rounded-xl bg-[#100E1D] border border-purple-500/25 text-sm font-medium text-white focus:outline-none focus:border-purple-400"
+          >
+            {loading ? (
+              <option value="">Loading series...</option>
+            ) : franchises.length === 0 ? (
+              <option value="">No series yet — tap + New</option>
+            ) : (
+              franchises.map((f) => (
                 <option key={f.franchise_key} value={f.franchise_key}>
-                  {f.franchise_key} ({f.entry_count} {f.entry_count === 1 ? 'entry' : 'entries'})
+                  {f.display_title} ({f.entry_count})
+                </option>
+              ))
+            )}
+          </select>
+
+          <button
+            type="button"
+            data-testid="franchise-new-series-btn"
+            onClick={() => {
+              setShowNewSeriesInput((prev) => !prev);
+              setErrorMsg(null);
+            }}
+            className="shrink-0 h-10 px-3.5 rounded-xl bg-purple-600/25 hover:bg-purple-600/40 border border-purple-500/40 text-purple-100 text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>New</span>
+          </button>
+        </div>
+
+        {/* Inline Series Creator */}
+        {showNewSeriesInput && (
+          <form
+            onSubmit={handleCreateSeries}
+            className="mt-2.5 pt-2.5 border-t border-white/10 space-y-2"
+          >
+            <div className="flex items-center gap-2">
+              <input
+                ref={newSeriesInputRef}
+                type="text"
+                data-testid="franchise-new-series-input"
+                value={newSeriesName}
+                onChange={(e) => setNewSeriesName(e.target.value)}
+                placeholder="Series Name (e.g. Demon Slayer)"
+                maxLength={80}
+                className="flex-1 min-w-0 h-10 px-3 rounded-xl bg-[#100E1D] border border-purple-500/35 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+              />
+              <button
+                type="submit"
+                disabled={previewSlug.length < 2}
+                className="shrink-0 h-10 px-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-45 text-white text-xs font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Open</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewSeriesInput(false);
+                  setNewSeriesName('');
+                }}
+                aria-label="Cancel new series"
+                className="shrink-0 w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 inline-flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {previewSlug && (
+              <div className="text-[11px] text-slate-400 px-1">
+                Key: <span className="font-mono text-purple-300">{previewSlug}</span>
+              </div>
+            )}
+          </form>
+        )}
+      </section>
+
+      {/* 2. QUICK ADD ANIME CARD (Live Server-Side D1 Search) */}
+      <section className="rounded-2xl bg-[#161428]/95 border border-purple-500/20 p-3.5 shadow-lg shadow-black/25">
+        <form onSubmit={handleAddEntry} className="space-y-2.5">
+          {/* Live D1 Catalog Search */}
+          <div className="relative">
+            {selectedAnime ? (
+              <div
+                data-testid="franchise-selected-anime"
+                className="flex items-center gap-2.5 p-2 rounded-xl bg-[#100E1D] border border-purple-500/40"
+              >
+                <div className="w-8 h-11 rounded-md overflow-hidden bg-slate-900 shrink-0 flex items-center justify-center">
+                  {selectedAnime.poster ? (
+                    <img
+                      src={selectedAnime.poster}
+                      alt={selectedAnime.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Film className="w-4 h-4 text-slate-500" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-white truncate">
+                    {selectedAnime.title}
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                    {selectedAnime.year && <span className="tabular-nums">{selectedAnime.year}</span>}
+                    {selectedAnime.type && <span>{selectedAnime.type}</span>}
+                    {isSelectedDuplicate && (
+                      <span className="text-amber-300 font-semibold">Already in this series</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedAnime(null);
+                    setSearchQuery('');
+                    setSearchResults([]);
+                  }}
+                  aria-label="Clear selected anime"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 shrink-0 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    data-testid="franchise-catalog-search"
+                    value={searchQuery}
+                    onFocus={() => setSearchOpen(true)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setSearchOpen(true);
+                    }}
+                    placeholder="Search any anime in catalog..."
+                    className="w-full h-10 pl-9 pr-9 rounded-xl bg-[#100E1D] border border-purple-500/25 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+                  />
+                  {searchingCatalog ? (
+                    <Loader2 className="w-4 h-4 text-purple-400 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
+                  ) : searchQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setSearchResults([]);
+                      }}
+                      aria-label="Clear search"
+                      className="p-1 text-slate-400 hover:text-white absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+
+                {/* Live Search Dropdown Results */}
+                {searchOpen && searchQuery.trim().length > 0 && (
+                  <div
+                    data-testid="franchise-search-results"
+                    className="mt-1.5 max-h-56 overflow-y-auto rounded-xl bg-[#0D0B18] border border-purple-500/30 divide-y divide-white/5 shadow-xl"
+                  >
+                    {searchingCatalog && searchResults.length === 0 ? (
+                      <div className="px-3 py-3 text-xs text-slate-400 flex items-center gap-2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                        <span>Searching catalog...</span>
+                      </div>
+                    ) : searchResults.length === 0 ? (
+                      <div className="px-3 py-3 text-xs text-slate-400">
+                        No matching anime found for "{searchQuery.trim()}".
+                      </div>
+                    ) : (
+                      searchResults.map((item) => {
+                        const alreadyAdded = existingAnimeIdSet.has(item.id);
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            disabled={alreadyAdded}
+                            onClick={() => {
+                              setSelectedAnime(item);
+                              setSearchOpen(false);
+                              setErrorMsg(null);
+                            }}
+                            className={`w-full text-left px-2.5 py-2 flex items-center gap-2.5 transition-colors ${
+                              alreadyAdded
+                                ? 'opacity-50 cursor-not-allowed'
+                                : 'hover:bg-purple-500/15 cursor-pointer'
+                            }`}
+                          >
+                            <div className="w-7 h-10 rounded overflow-hidden bg-slate-900 shrink-0 flex items-center justify-center">
+                              {item.poster ? (
+                                <img
+                                  src={item.poster}
+                                  alt={item.title}
+                                  loading="lazy"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <Film className="w-3.5 h-3.5 text-slate-500" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-semibold text-white truncate">
+                                {item.title}
+                              </div>
+                              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                                {item.year && <span className="tabular-nums">{item.year}</span>}
+                                {item.type && <span>{item.type}</span>}
+                              </div>
+                            </div>
+                            {alreadyAdded && (
+                              <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+                                Added
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Compact 2-field row: Relation + optional short Note */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <select
+              aria-label="Relation"
+              data-testid="franchise-relation-select"
+              value={relationLabel}
+              onChange={(e) => setRelationLabel(e.target.value)}
+              className="h-10 px-3 rounded-xl bg-[#100E1D] border border-purple-500/25 text-sm text-white focus:outline-none focus:border-purple-400"
+            >
+              {FRANCHISE_BUILDER_RELATION_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
                 </option>
               ))}
             </select>
+
+            <input
+              type="text"
+              aria-label="Optional note"
+              data-testid="franchise-note-input"
+              value={entryNote}
+              onChange={(e) => setEntryNote(e.target.value)}
+              placeholder="Note (e.g. Watch after S1)"
+              maxLength={140}
+              className="h-10 px-3 rounded-xl bg-[#100E1D] border border-purple-500/25 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+            />
           </div>
 
-          <form
-            onSubmit={handleCreateOrSelectFranchise}
-            className="lg:col-span-7 flex flex-col sm:flex-row gap-2.5"
+          {/* Full-width Add button */}
+          <button
+            type="submit"
+            data-testid="franchise-add-submit"
+            disabled={adding || !selectedKey || !selectedAnime || isSelectedDuplicate}
+            className="w-full h-11 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-45 disabled:cursor-not-allowed text-white text-sm font-bold inline-flex items-center justify-center gap-2 shadow-md shadow-purple-900/30 transition-all cursor-pointer"
           >
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-[var(--text-primary)] mb-1.5">
-                Or Create / Jump to Franchise Key
-              </label>
-              <input
-                type="text"
-                value={newKeyInput}
-                onChange={(e) => setNewKeyInput(e.target.value)}
-                placeholder="e.g., naruto, demon-slayer, attack-on-titan"
-                className="w-full min-h-[44px] px-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-mono text-[var(--text-primary)]"
-              />
-            </div>
-            <button
-              type="submit"
-              className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)]/15 hover:bg-[var(--accent-primary)]/25 border border-[var(--accent-primary)]/30 text-xs font-extrabold text-[var(--accent-primary)] sm:self-end cursor-pointer"
-            >
-              Open Franchise Key
-            </button>
-          </form>
+            {adding ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Adding...</span>
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4" />
+                <span>Add to Watch Order</span>
+              </>
+            )}
+          </button>
+        </form>
+      </section>
+
+      {/* 3. WATCH ORDER LIST (#1, #2, #3...) */}
+      <section className="rounded-2xl bg-[#161428]/95 border border-purple-500/20 p-3.5 shadow-lg shadow-black/25">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="min-w-0 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-white truncate">
+              {activeSeriesTitle || 'Watch Order'}
+            </h3>
+            <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-purple-500/20 border border-purple-500/30 text-purple-200 tabular-nums">
+              {entries.length}
+            </span>
+          </div>
+
+          {reordering && (
+            <span className="shrink-0 inline-flex items-center gap-1.5 text-[11px] font-medium text-cyan-300">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>Saving order...</span>
+            </span>
+          )}
         </div>
 
-        {/* Quick Franchise Pills */}
-        {franchises.length > 0 && (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {franchises.map((f) => (
-              <button
-                key={f.franchise_key}
-                type="button"
-                onClick={() => {
-                  setSelectedKey(f.franchise_key);
-                  void loadFranchiseWorkspace(f.franchise_key);
-                }}
-                className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                  selectedKey === f.franchise_key
-                    ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
-                    : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                <span className="font-mono">{f.franchise_key}</span>
-                <span className="ml-1.5 px-1.5 py-0.5 rounded bg-black/15 text-[10px]">
-                  {f.entry_count}
-                </span>
-              </button>
-            ))}
+        {loading || loadingEntries ? (
+          <div className="py-8 flex items-center justify-center gap-2 text-xs text-slate-400">
+            <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+            <span>Loading watch order...</span>
+          </div>
+        ) : !selectedKey ? (
+          <div className="py-6 text-center text-xs text-slate-400">
+            Tap <span className="text-purple-300 font-semibold">+ New</span> above to start a watch order.
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="py-6 text-center text-xs text-slate-400">
+            No anime in this series yet. Search and add titles above.
+          </div>
+        ) : (
+          <div className="space-y-2" data-testid="franchise-watch-order-list">
+            {entries.map((entry, idx) => {
+              const rowKey = `${entry.id ?? ''}:${entry.anime_id}`;
+              const isDeleting = deletingKey === rowKey;
+              const posterUrl = entry.poster || entry.cover_image;
+              return (
+                <div
+                  key={rowKey}
+                  data-testid={`franchise-order-row-${idx + 1}`}
+                  className="rounded-xl bg-[#100E1D] border border-white/10 p-2.5 flex items-center gap-2.5"
+                >
+                  {/* Order Badge */}
+                  <span className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/35 text-purple-200 text-xs font-extrabold flex items-center justify-center shrink-0 tabular-nums">
+                    #{entry.watch_order || idx + 1}
+                  </span>
+
+                  {/* Poster Thumbnail */}
+                  <div className="w-9 h-12 rounded-lg overflow-hidden bg-slate-900 shrink-0 flex items-center justify-center">
+                    {posterUrl ? (
+                      <img
+                        src={posterUrl}
+                        alt={entry.title || `Anime #${entry.anime_id}`}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Film className="w-4 h-4 text-slate-500" />
+                    )}
+                  </div>
+
+                  {/* Title, Relation & Optional Note */}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-white truncate">
+                      {entry.title || `Anime #${entry.anime_id}`}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="inline-block text-[11px] font-medium px-2 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-500/30 text-cyan-200 leading-tight">
+                        {entry.relation_label}
+                      </span>
+                      {entry.note && (
+                        <span className="text-[11px] text-slate-400 truncate max-w-full">
+                          {entry.note}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 1-tap Reorder & Remove buttons */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      aria-label={`Move ${entry.title || entry.anime_id} up`}
+                      disabled={idx === 0 || reordering || isDeleting}
+                      onClick={() => handleMoveEntry(idx, 'up')}
+                      className="w-8 h-8 rounded-lg bg-white/5 hover:bg-purple-500/25 disabled:opacity-30 border border-white/10 text-slate-200 inline-flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move ${entry.title || entry.anime_id} down`}
+                      disabled={idx === entries.length - 1 || reordering || isDeleting}
+                      onClick={() => handleMoveEntry(idx, 'down')}
+                      className="w-8 h-8 rounded-lg bg-white/5 hover:bg-purple-500/25 disabled:opacity-30 border border-white/10 text-slate-200 inline-flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${entry.title || entry.anime_id}`}
+                      disabled={reordering || isDeleting}
+                      onClick={() => handleDeleteEntry(entry)}
+                      className="w-8 h-8 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 disabled:opacity-40 border border-rose-500/30 text-rose-300 inline-flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
-      </div>
-
-      {/* Main 2-Column Workspace: Watch Order Editor (Left 7 cols) + Live Anime Details 2.0 Preview (Right 5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left 7 Columns: Add Entry + Reorderable Watch Order List */}
-        <div className="lg:col-span-7 space-y-5">
-          {/* Add Anime Entry to Franchise Card */}
-          <form
-            onSubmit={handleAddEntryToTimeline}
-            className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4"
-          >
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-                  Add Catalog Anime to{' '}
-                  <span className="font-mono text-[var(--accent-primary)]">
-                    {selectedKey || '(Select Franchise Key)'}
-                  </span>
-                </h3>
-                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                  Duplicate `(franchise_key, anime_id)` entries are automatically blocked.
-                </p>
-              </div>
-              <span className="px-2.5 py-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[11px] font-bold text-[var(--text-secondary)]">
-                Next Order: #{entries.length + 1}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-[var(--text-primary)] mb-1.5">
-                  1. Search &amp; Select Catalog Anime
-                </label>
-                <div className="space-y-2">
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-[var(--text-secondary)] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="search"
-                      value={catalogSearch}
-                      onChange={(e) => setCatalogSearch(e.target.value)}
-                      placeholder="Filter catalog by anime title, slug, or ID..."
-                      className="w-full min-h-[44px] pl-10 pr-4 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm text-[var(--text-primary)]"
-                    />
-                  </div>
-                  <select
-                    value={selectedAnimeId}
-                    onChange={(e) => setSelectedAnimeId(e.target.value)}
-                    className="w-full min-h-[44px] px-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm text-[var(--text-primary)]"
-                  >
-                    <option value="">
-                      Select anime from catalog ({filteredCatalogCandidates.length} shown)...
-                    </option>
-                    {filteredCatalogCandidates.map((a) => (
-                      <option
-                        key={a.id}
-                        value={String(a.id)}
-                        disabled={a.alreadyInFranchise}
-                      >
-                        #{a.id} — {a.title} ({a.year || a.releaseYear || 'N/A'})
-                        {a.alreadyInFranchise ? ' [Already in Franchise]' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-primary)] mb-1.5">
-                  2. Relation Label
-                </label>
-                <select
-                  value={relationLabel}
-                  onChange={(e) => setRelationLabel(e.target.value)}
-                  className="w-full min-h-[44px] px-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-primary)]"
-                >
-                  {FRANCHISE_RELATION_LABELS.map((rel) => (
-                    <option key={rel} value={rel}>
-                      {rel}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-primary)] mb-1.5">
-                  3. Optional Watch-Order Note
-                </label>
-                <input
-                  type="text"
-                  value={entryNote}
-                  onChange={(e) => setEntryNote(e.target.value)}
-                  placeholder="e.g., Watch after Season 1 Episode 24"
-                  className="w-full min-h-[44px] px-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm text-[var(--text-primary)]"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-1">
-              <button
-                type="submit"
-                disabled={saving || !selectedKey || !selectedAnimeId}
-                className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                <span>Add to Watch Order</span>
-              </button>
-            </div>
-          </form>
-
-          {/* Reorderable Watch Order Sequence List */}
-          <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-[var(--text-primary)]">
-                  Smart Watch Order Sequence ({enrichedEntries.length})
-                </h3>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Use Move Up / Move Down buttons to reorder `watch_order` integers cleanly on mobile and desktop.
-                </p>
-              </div>
-
-              {isDirtyOrder && (
-                <button
-                  type="button"
-                  onClick={handleSaveWatchOrder}
-                  disabled={saving}
-                  className="min-h-[44px] px-3.5 py-2 rounded-xl bg-emerald-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Commit Reorder</span>
-                </button>
-              )}
-            </div>
-
-            {enrichedEntries.length === 0 ? (
-              <div className="p-8 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-center space-y-2">
-                <Film className="w-8 h-8 text-[var(--text-secondary)] mx-auto opacity-60" />
-                <div className="text-sm font-bold text-[var(--text-primary)]">
-                  No Watch-Order Entries Yet
-                </div>
-                <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
-                  {selectedKey
-                    ? `Add catalog anime entries above to build the verified watch order for "${selectedKey}".`
-                    : 'Select or create a franchise_key above to start building an Anime Universe watch order.'}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {enrichedEntries.map((item, idx) => (
-                  <div
-                    key={`${item.franchise_key}-${item.anime_id}`}
-                    data-testid={`franchise-entry-row-${item.anime_id}`}
-                    className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-                      <div className="w-9 h-9 rounded-xl bg-[var(--accent-soft)] border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] font-black text-xs flex items-center justify-center shrink-0">
-                        #{item.watch_order}
-                      </div>
-                      <img
-                        src={item.cover_image || '/logo.png'}
-                        alt={item.title}
-                        className="w-11 h-16 rounded-lg object-cover shrink-0 border border-[var(--border-subtle)]"
-                      />
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-extrabold text-[var(--text-primary)] truncate">
-                            {item.title}
-                          </span>
-                          <span className="text-[11px] font-mono text-[var(--text-secondary)]">
-                            ID #{item.anime_id}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <select
-                            value={item.relation_label}
-                            onChange={(e) =>
-                              handleUpdateInlineEntry(idx, { relation_label: e.target.value })
-                            }
-                            aria-label="Relation Label"
-                            className="min-h-[38px] px-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)]"
-                          >
-                            {FRANCHISE_RELATION_LABELS.map((rel) => (
-                              <option key={rel} value={rel}>
-                                {rel}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            type="text"
-                            value={item.note || ''}
-                            onChange={(e) =>
-                              handleUpdateInlineEntry(idx, { note: e.target.value || null })
-                            }
-                            placeholder="Optional watch note..."
-                            className="min-h-[38px] px-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)]"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Touch-Friendly 44x44px Reorder & Action Controls */}
-                    <div className="flex items-center justify-end gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        data-testid={`franchise-move-up-${idx}`}
-                        disabled={idx === 0 || saving}
-                        onClick={() => handleMoveEntry(idx, 'up')}
-                        aria-label={`Move ${item.title} up`}
-                        title="Move Up"
-                        className="min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[var(--text-primary)] flex items-center justify-center disabled:opacity-35 cursor-pointer"
-                      >
-                        <ArrowUp className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        data-testid={`franchise-move-down-${idx}`}
-                        disabled={idx === enrichedEntries.length - 1 || saving}
-                        onClick={() => handleMoveEntry(idx, 'down')}
-                        aria-label={`Move ${item.title} down`}
-                        title="Move Down"
-                        className="min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[var(--text-primary)] flex items-center justify-center disabled:opacity-35 cursor-pointer"
-                      >
-                        <ArrowDown className="w-4 h-4" />
-                      </button>
-                      {onEditAnimeInEditor && animeById.get(String(item.anime_id)) && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onEditAnimeInEditor(animeById.get(String(item.anime_id)))
-                          }
-                          title="Open in Modular Anime Editor"
-                          className="min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[var(--accent-primary)] flex items-center justify-center cursor-pointer"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => handleDeleteEntry(String(item.anime_id))}
-                        aria-label={`Remove ${item.title} from franchise`}
-                        title="Remove from Franchise"
-                        className="min-w-[44px] min-h-[44px] rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 flex items-center justify-center cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right 5 Columns: Live Preview of Anime Details 2.0 Timeline */}
-        <div className="lg:col-span-5">
-          <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4 sticky top-20">
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
-              <div className="flex items-center gap-2">
-                <Eye className="w-4 h-4 text-[var(--accent-primary)]" />
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">
-                  Anime Details 2.0 Timeline Preview
-                </h3>
-              </div>
-              {selectedKey && (
-                <span className="px-2 py-0.5 rounded-md bg-[var(--accent-soft)] text-[var(--accent-primary)] text-[10px] font-mono font-bold">
-                  {selectedKey}
-                </span>
-              )}
-            </div>
-
-            {enrichedEntries.length === 0 ? (
-              <div className="p-6 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-center text-xs text-[var(--text-secondary)]">
-                When a franchise has 0 verified entries, Anime Details 2.0 cleanly hides the Anime Universe section instead of showing empty placeholder cards.
-              </div>
-            ) : (
-              <div className="relative pl-4 border-l-2 border-[var(--accent-primary)]/40 space-y-3">
-                {enrichedEntries.map((entry) => (
-                  <div
-                    key={`preview-${entry.anime_id}`}
-                    className="relative p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] flex items-center gap-3"
-                  >
-                    <span className="absolute -left-[23px] w-3 h-3 rounded-full bg-[var(--accent-primary)] ring-4 ring-[var(--bg-surface)]" />
-                    <img
-                      src={entry.cover_image || '/logo.png'}
-                      alt={entry.title}
-                      className="w-10 h-14 rounded-lg object-cover shrink-0 border border-[var(--border-subtle)]"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)]">
-                          #{entry.watch_order}
-                        </span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
-                          {entry.relation_label}
-                        </span>
-                        {entry.year && (
-                          <span className="text-[10px] text-[var(--text-secondary)] font-semibold">
-                            • {entry.year}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs font-extrabold text-[var(--text-primary)] truncate mt-1">
-                        {entry.title}
-                      </div>
-                      {entry.note && (
-                        <div className="text-[11px] text-[var(--text-secondary)] italic truncate mt-0.5">
-                          “{entry.note}”
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {entry.languages && entry.languages.length > 0 ? (
-                          entry.languages.slice(0, 4).map((lang: string) => (
-                            <span
-                              key={lang}
-                              className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-500"
-                            >
-                              {lang}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-[10px] text-[var(--text-secondary)]">
-                            Dub Unverified
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, ArrowRight, Compass } from 'lucide-react';
+import { Layers, ArrowRight, ChevronRight, Compass } from 'lucide-react';
 import { OptimizedImage } from '../OptimizedImage';
 import type { FranchiseLinkItem } from '../../utils/animeDetailsV2';
 import type { FranchiseEntry } from '../AnimeDetailPage';
@@ -28,10 +28,10 @@ interface UnifiedUniverseCard {
 }
 
 /**
- * Anime Universe & Smart Watch Order rail.
- * Prefers verified D1 anime_franchise_links joined with published catalog records,
- * gracefully falls back to verified catalog-matched franchise entries, and hides
- * completely when no verified franchise relationship exists.
+ * Public Anime Details "Watch Order" Timeline Card.
+ * Prefers verified D1 anime_franchise_links joined with approved/published catalog records,
+ * gracefully falls back to verified catalog-matched franchise entries, and renders NOTHING
+ * when fewer than 2 entries exist.
  */
 export const AnimeUniverseSection: React.FC<AnimeUniverseSectionProps> = ({
   d1Entries,
@@ -39,16 +39,16 @@ export const AnimeUniverseSection: React.FC<AnimeUniverseSectionProps> = ({
   currentAnimeId,
   allAnime,
   onSelectAnime,
-  titleLabel = 'Anime Universe & Watch Order',
+  titleLabel = 'Watch Order',
   'data-testid': testId = 'franchise-watch-order',
 }) => {
   const unifiedEntries: UnifiedUniverseCard[] = React.useMemo(() => {
-    if (Array.isArray(d1Entries) && d1Entries.length > 0) {
+    if (Array.isArray(d1Entries) && d1Entries.length >= 2) {
       return d1Entries.map((entry, idx) => ({
         id: String(entry.anime_id),
         title: entry.title,
         watchOrder: entry.watch_order || idx + 1,
-        relationLabel: entry.relation_label || 'Main Story',
+        relationLabel: entry.relation_label || 'Main Series',
         releaseYear: entry.release_year,
         poster: entry.poster,
         note: entry.note,
@@ -58,7 +58,7 @@ export const AnimeUniverseSection: React.FC<AnimeUniverseSectionProps> = ({
       }));
     }
 
-    if (Array.isArray(fallbackEntries) && fallbackEntries.length > 1) {
+    if (Array.isArray(fallbackEntries) && fallbackEntries.length >= 2) {
       return fallbackEntries.map((entry, idx) => ({
         id: String(entry.id),
         title: entry.title,
@@ -74,7 +74,8 @@ export const AnimeUniverseSection: React.FC<AnimeUniverseSectionProps> = ({
     return [];
   }, [d1Entries, fallbackEntries, currentAnimeId]);
 
-  if (unifiedEntries.length === 0) return null;
+  // Hide completely when 0 or 1 entries exist
+  if (unifiedEntries.length < 2) return null;
 
   const currentIdx = unifiedEntries.findIndex((e) => e.isCurrent);
   const nextEntry =
@@ -85,7 +86,7 @@ export const AnimeUniverseSection: React.FC<AnimeUniverseSectionProps> = ({
   const resolveClickableTarget = (entry: UnifiedUniverseCard) => {
     const fromCatalog = allAnime.find((a) => String(a.id) === String(entry.id));
     if (fromCatalog) return fromCatalog;
-    if (d1Entries.length > 0) {
+    if (d1Entries.length >= 2) {
       return {
         id: entry.id,
         slug: entry.slug,
@@ -101,25 +102,20 @@ export const AnimeUniverseSection: React.FC<AnimeUniverseSectionProps> = ({
   return (
     <section
       data-testid={testId}
-      className="rounded-[var(--radius-card)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5"
+      className="rounded-[var(--radius-card)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 sm:p-5 overflow-hidden"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5">
+      <div className="flex items-center justify-between gap-2 mb-3.5">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-8 h-8 rounded-[9px] bg-[var(--accent-soft)] border border-[var(--accent-primary)]/30 flex items-center justify-center shrink-0">
             <Layers className="w-4 h-4 text-[var(--accent-primary)]" />
           </div>
-          <div className="min-w-0">
-            <h2 className="text-[16px] font-bold text-[var(--text-primary)] truncate">
-              {titleLabel}
-            </h2>
-            <p className="text-[12px] text-[var(--text-secondary)]">
-              Verified chronological watch sequence
-            </p>
-          </div>
+          <h2 className="text-[16px] font-bold text-[var(--text-primary)] truncate">
+            {titleLabel}
+          </h2>
         </div>
 
         <span className="text-[12px] font-semibold text-[var(--text-secondary)] tabular-nums shrink-0">
-          {unifiedEntries.length} {unifiedEntries.length === 1 ? 'entry' : 'entries'}
+          {unifiedEntries.length} entries
         </span>
       </div>
 
@@ -127,12 +123,12 @@ export const AnimeUniverseSection: React.FC<AnimeUniverseSectionProps> = ({
       {nextEntry && onSelectAnime && (
         <div
           data-testid="smart-watch-next-banner"
-          className="mb-3.5 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2"
+          className="mb-3 rounded-[12px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] px-3 py-2 flex items-center justify-between gap-2"
         >
           <div className="flex items-center gap-2 min-w-0">
             <Compass className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
             <span className="text-[12px] font-semibold text-[var(--text-secondary)] shrink-0">
-              Watch Next:
+              Next:
             </span>
             <span className="text-[13px] font-bold text-[var(--text-primary)] truncate">
               #{nextEntry.watchOrder} {nextEntry.title}
@@ -144,102 +140,108 @@ export const AnimeUniverseSection: React.FC<AnimeUniverseSectionProps> = ({
               const target = resolveClickableTarget(nextEntry);
               if (target) onSelectAnime(target);
             }}
-            className="min-h-[44px] px-3 rounded-[9px] bg-[var(--accent-soft)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-on-primary)] border border-[var(--accent-primary)]/30 text-[12px] font-bold inline-flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+            className="min-h-[36px] px-3 rounded-[9px] bg-[var(--accent-soft)] hover:bg-[var(--accent-primary)] text-[var(--accent-primary)] hover:text-[var(--accent-on-primary)] border border-[var(--accent-primary)]/30 text-[12px] font-bold inline-flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
           >
-            <span>Open Next</span>
+            <span>Open</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+      {/* Compact Vertical Watch Order Timeline (0px horizontal overflow on mobile & all 12 themes) */}
+      <ol className="space-y-2">
         {unifiedEntries.map((entry, idx) => {
           const targetAnime = resolveClickableTarget(entry);
-          const isStartHere = idx === 0 && !entry.isCurrent;
-          const isWatchNext = nextEntry && entry.id === nextEntry.id;
           const isClickable = !entry.isCurrent && Boolean(targetAnime) && Boolean(onSelectAnime);
 
-          const statusTag = entry.isCurrent
-            ? 'Current'
-            : isWatchNext
-              ? 'Watch Next'
-              : isStartHere
-                ? 'Start Here'
-                : entry.relationLabel;
-
           return (
-            <button
-              key={`${entry.id}-${entry.watchOrder}`}
-              type="button"
-              data-testid={`universe-entry-${entry.watchOrder}`}
-              disabled={!isClickable}
-              onClick={() => {
-                if (isClickable && targetAnime && onSelectAnime) {
-                  onSelectAnime(targetAnime);
-                }
-              }}
-              className={`w-[152px] sm:w-[166px] shrink-0 text-left rounded-[12px] border p-2.5 flex flex-col transition-colors ${
-                entry.isCurrent
-                  ? 'bg-[var(--accent-soft)] border-[var(--accent-primary)]/50 cursor-default'
-                  : isClickable
-                    ? 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 cursor-pointer'
-                    : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] opacity-90 cursor-default'
-              }`}
-            >
-              <div className="relative aspect-[2/3] w-full rounded-[8px] overflow-hidden bg-[var(--bg-surface)] mb-2">
-                {entry.poster ? (
-                  <OptimizedImage
-                    src={entry.poster}
-                    alt={entry.title}
-                    width={166}
-                    height={249}
-                    loading="lazy"
-                    className="w-full h-full object-cover"
-                    aspectRatio="portrait"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)] text-[13px] font-bold tabular-nums">
-                    #{entry.watchOrder}
-                  </div>
-                )}
-
-                <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-[6px] bg-black/80 text-white text-[10px] font-extrabold tabular-nums">
-                  #{entry.watchOrder}
-                </span>
-
+            <li key={`${entry.id}-${entry.watchOrder}`}>
+              <button
+                type="button"
+                data-testid={`universe-entry-${entry.watchOrder}`}
+                disabled={!isClickable}
+                onClick={() => {
+                  if (isClickable && targetAnime && onSelectAnime) {
+                    onSelectAnime(targetAnime);
+                  }
+                }}
+                className={`w-full text-left rounded-[12px] border p-2.5 flex items-center gap-2.5 transition-colors ${
+                  entry.isCurrent
+                    ? 'bg-[var(--accent-soft)] border-[var(--accent-primary)]/60 cursor-default'
+                    : isClickable
+                      ? 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 cursor-pointer'
+                      : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] opacity-90 cursor-default'
+                }`}
+              >
+                {/* Order Number */}
                 <span
-                  className={`absolute bottom-1.5 left-1.5 right-1.5 px-1.5 py-0.5 rounded-[6px] text-[10px] font-bold uppercase tracking-wide truncate text-center ${
+                  className={`w-8 h-8 rounded-[8px] text-[12px] font-extrabold flex items-center justify-center shrink-0 tabular-nums ${
                     entry.isCurrent
                       ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary)]'
-                      : isWatchNext
-                        ? 'bg-[#34D399] text-[#052E16]'
-                        : 'bg-black/75 text-white'
+                      : 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)]'
                   }`}
                 >
-                  {statusTag}
+                  #{entry.watchOrder || idx + 1}
                 </span>
-              </div>
 
-              <div className="text-[13px] font-bold text-[var(--text-primary)] line-clamp-2 leading-snug">
-                {entry.title}
-              </div>
+                {/* Poster Thumbnail */}
+                <div className="w-10 h-14 rounded-[8px] overflow-hidden bg-[var(--bg-surface)] border border-[var(--border-subtle)] shrink-0 flex items-center justify-center">
+                  {entry.poster ? (
+                    <OptimizedImage
+                      src={entry.poster}
+                      alt={entry.title}
+                      width={40}
+                      height={56}
+                      loading="lazy"
+                      className="w-full h-full object-cover"
+                      aspectRatio="portrait"
+                    />
+                  ) : (
+                    <span className="text-[11px] font-bold text-[var(--text-muted)] tabular-nums">
+                      #{entry.watchOrder}
+                    </span>
+                  )}
+                </div>
 
-              <div className="mt-1 flex items-center justify-between gap-1 text-[11px] text-[var(--text-secondary)]">
-                <span className="truncate">{entry.relationLabel}</span>
-                {entry.releaseYear ? (
-                  <span className="tabular-nums shrink-0">{entry.releaseYear}</span>
-                ) : null}
-              </div>
+                {/* Title, Relation Badge & Optional Note */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[13px] sm:text-[14px] font-bold text-[var(--text-primary)] truncate">
+                      {entry.title}
+                    </span>
+                    {entry.isCurrent && (
+                      <span className="shrink-0 px-1.5 py-0.5 rounded-[6px] bg-[var(--accent-primary)] text-[var(--accent-on-primary)] text-[10px] font-bold uppercase tracking-wide">
+                        Current
+                      </span>
+                    )}
+                  </div>
 
-              {entry.note && (
-                <p className="mt-1.5 text-[11px] text-[var(--text-muted)] line-clamp-2 leading-snug">
-                  {entry.note}
-                </p>
-              )}
-            </button>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-secondary)]">
+                    <span className="px-1.5 py-0.5 rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] font-semibold text-[var(--text-secondary)]">
+                      {entry.relationLabel}
+                    </span>
+                    {entry.releaseYear ? (
+                      <span className="tabular-nums text-[var(--text-muted)]">
+                        {entry.releaseYear}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {entry.note && (
+                    <p className="mt-1 text-[11px] text-[var(--text-muted)] line-clamp-2 leading-snug">
+                      {entry.note}
+                    </p>
+                  )}
+                </div>
+
+                {isClickable && (
+                  <ChevronRight className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                )}
+              </button>
+            </li>
           );
         })}
-      </div>
+      </ol>
     </section>
   );
 };

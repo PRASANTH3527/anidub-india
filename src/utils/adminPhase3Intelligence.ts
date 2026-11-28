@@ -7,14 +7,25 @@ import { languageCodeToName, languageNameToCode } from './adminOpsPro';
 import { sanitizeOptionalHttpsImageUrl } from './animeDetailsV2';
 
 export const FRANCHISE_RELATION_LABELS = [
+  'Main Series',
   'Original Series',
   'Sequel',
   'Prequel',
   'Movie',
+  'OVA / Special',
   'OVA',
   'Special',
   'Spin-off',
   'Next Generation',
+] as const;
+
+export const FRANCHISE_BUILDER_RELATION_OPTIONS = [
+  'Main Series',
+  'Sequel',
+  'Prequel',
+  'Movie',
+  'OVA / Special',
+  'Spin-off',
 ] as const;
 
 export type FranchiseRelationLabel = (typeof FRANCHISE_RELATION_LABELS)[number];
@@ -30,9 +41,12 @@ export interface AdminFranchiseEntry {
   // Joined catalog preview fields
   title?: string;
   slug?: string;
+  poster?: string;
   cover_image?: string;
+  type?: string;
   year?: number | null;
   status?: string;
+  approval_status?: string;
   episodes_count?: number | null;
   languages?: string[];
 }
@@ -45,6 +59,22 @@ export function normalizeFranchiseKey(raw: unknown): string {
     .replace(/-+/g, '-')
     .replace(/(^-|-$)/g, '')
     .slice(0, 80);
+}
+
+const FRANCHISE_UPPERCASE_WORDS = new Set(['jjk', 'aot', 'fmab', 'ova', 'ona', 'sao', 'dbz', 'mha', 'opm']);
+
+export function formatFranchiseDisplayTitle(franchiseKey: string): string {
+  const clean = String(franchiseKey || '').trim();
+  if (!clean) return '';
+  return clean
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((word) => {
+      const lower = word.toLowerCase();
+      if (FRANCHISE_UPPERCASE_WORDS.has(lower)) return lower.toUpperCase();
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(' ');
 }
 
 export function validateFranchiseEntryInput(

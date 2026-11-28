@@ -32,6 +32,7 @@ import {
   CONTENT_BACKUP_SCHEMA_VERSION,
   CORE_CONTENT_BACKUP_TABLES,
   computeOttPerformanceCtr,
+  formatFranchiseDisplayTitle,
   normalizeCastLanguage,
   normalizeFranchiseKey,
   validateAdminCastPayload,
@@ -50,6 +51,7 @@ import {
   getErrorMessage,
   isMissingColumnError,
   type D1DatabaseLike,
+  type D1PreparedStatementLike,
   type RouteContext,
 } from './shared';
 
@@ -115,6 +117,102 @@ function escapeCsvCell(val: unknown): string {
   if (val === null || val === undefined) return '""';
   const str = String(val).replace(/"/g, '""');
   return `"${str}"`;
+}
+
+async function executeAtomicBatch(
+  db: D1DatabaseLike,
+  statements: D1PreparedStatementLike[]
+): Promise<void> {
+  if (statements.length === 0) return;
+  if (typeof db.batch === 'function') {
+    await db.batch(statements);
+    return;
+  }
+  for (const stmt of statements) {
+    await stmt.run();
+  }
+}
+
+function mapFranchiseEntryRow(r: Record<string, any>, idx: number): AdminFranchiseEntry {
+  const posterUrl = r.cover_image ? String(r.cover_image) : undefined;
+  return {
+    id: Number(r.id),
+    franchise_key: String(r.franchise_key),
+    anime_id: String(r.anime_id),
+    relation_label: String(r.relation_label || 'Main Series'),
+    watch_order: Number(r.watch_order) || idx + 1,
+    note: r.note ? String(r.note) : null,
+    updated_at: r.updated_at ? String(r.updated_at) : undefined,
+    title: r.title ? String(r.title) : `Anime #${r.anime_id}`,
+    slug: r.slug ? String(r.slug) : undefined,
+    poster: posterUrl,
+    cover_image: posterUrl,
+    type: r.type ? String(r.type) : undefined,
+    year: Number(r.year) > 1900 ? Number(r.year) : null,
+    status: r.status ? String(r.status) : undefined,
+    approval_status: r.approval_status ? String(r.approval_status) : undefined,
+    episodes_count: Number(r.episodes_count) > 0 ? Number(r.episodes_count) : null,
+    languages: parseLanguageArray(r.languages),
+  };
+}
+
+async function fetchOrderedFranchiseEntries(
+  db: D1DatabaseLike,
+  franchiseKey: string
+): Promise<AdminFranchiseEntry[]> {
+  try {
+    const rowsRes = await db
+      .prepare(
+        `SELECT l.id, l.franchise_key, l.anime_id, l.relation_label, l.watch_order, l.note, l.updated_at,
+                a.title, a.slug, a.cover_image, a.type, a.year, a.status, a.approval_status, a.episodes_count, a.languages
+         FROM anime_franchise_links l
+         LEFT JOIN anime a ON CAST(a.id AS TEXT) = l.anime_id
+         WHERE l.franchise_key = ?
+         ORDER BY l.watch_order ASC, l.id ASC`
+      )
+      .bind(franchiseKey)
+      .all<Record<string, any>>();
+    return (rowsRes.results || []).map(mapFranchiseEntryRow);
+  } catch (err) {
+    if (!isMissingColumnError(err)) throw err;
+    const fallbackRes = await db
+      .prepare(
+        `SELECT l.id, l.franchise_key, l.anime_id, l.relation_label, l.watch_order, l.note, l.updated_at,
+                a.title, a.slug, a.cover_image, a.year, a.status, a.episodes_count, a.languages
+         FROM anime_franchise_links l
+         LEFT JOIN anime a ON CAST(a.id AS TEXT) = l.anime_id
+         WHERE l.franchise_key = ?
+         ORDER BY l.watch_order ASC, l.id ASC`
+      )
+      .bind(franchiseKey)
+      .all<Record<string, any>>();
+    return (fallbackRes.results || []).map(mapFranchiseEntryRow);
+  }
+}
+
+async function resequenceFranchiseWatchOrder(
+  db: D1DatabaseLike,
+  franchiseKey: string
+): Promise<void> {
+  const remRes = await db
+    .prepare(
+      'SELECT id FROM anime_franchise_links WHERE franchise_key = ? ORDER BY watch_order ASC, id ASC'
+    )
+    .bind(franchiseKey)
+    .all<{ id: number }>()
+    .catch(() => ({ results: [] }));
+
+  const remaining = remRes.results || [];
+  if (remaining.length === 0) return;
+
+  const updateStatements = remaining.map((row, i) =>
+    db
+      .prepare(
+        "UPDATE anime_franchise_links SET watch_order = ?, updated_at = datetime('now') WHERE franchise_key = ? AND id = ?"
+      )
+      .bind(i + 1, franchiseKey, row.id)
+  );
+  await executeAtomicBatch(db, updateStatements);
 }
 
 export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Response | null> {
@@ -203,8 +301,12 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
   // ===========================================================================
   // 2. ANIME UNIVERSE & SMART WATCH ORDER VISUAL BUILDER:
   //    - GET    /api/admin/franchises(?franchiseKey=...)
-  //    - PUT    /api/admin/franchises/:franchiseKey
-  //    - DELETE /api/admin/franchises/:franchiseKey/:animeId
+  //    - GET    /api/admin/franchises/:franchiseKey
+  //    - POST   /api/admin/franchises/:franchiseKey/entries
+  //    - PUT    /api/admin/franchises/:franchiseKey/reorder
+  //    - DELETE /api/admin/franchises/:franchiseKey/entries/:id
+  //    - PUT    /api/admin/franchises/:franchiseKey (legacy compatible)
+  //    - DELETE /api/admin/franchises/:franchiseKey/:animeId (legacy compatible)
   // ===========================================================================
   if (path === '/api/admin/franchises' && method === 'GET') {
     const auth = await requireStrictAdmin(ctx);
@@ -228,7 +330,12 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
 
     try {
       let tableReady = true;
-      let franchiseSummaries: Array<{ franchise_key: string; entry_count: number; updated_at: string }> = [];
+      let franchiseSummaries: Array<{
+        franchise_key: string;
+        display_title: string;
+        entry_count: number;
+        updated_at: string;
+      }> = [];
       let entries: AdminFranchiseEntry[] = [];
 
       try {
@@ -239,44 +346,22 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
            ORDER BY franchise_key ASC`
         ).all<Record<string, any>>();
 
-        franchiseSummaries = (groupRes.results || []).map((r) => ({
-          franchise_key: String(r.franchise_key || ''),
-          entry_count: Number(r.entry_count) || 0,
-          updated_at: String(r.updated_at || ''),
-        }));
+        franchiseSummaries = (groupRes.results || []).map((r) => {
+          const key = String(r.franchise_key || '');
+          return {
+            franchise_key: key,
+            display_title: formatFranchiseDisplayTitle(key),
+            entry_count: Number(r.entry_count) || 0,
+            updated_at: String(r.updated_at || ''),
+          };
+        });
 
         const targetKey =
           filterKey ||
           (franchiseSummaries.length > 0 ? franchiseSummaries[0].franchise_key : '');
 
         if (targetKey) {
-          const rowsRes = await env.DB.prepare(
-            `SELECT l.id, l.franchise_key, l.anime_id, l.relation_label, l.watch_order, l.note, l.updated_at,
-                    a.title, a.slug, a.cover_image, a.year, a.status, a.episodes_count, a.languages
-             FROM anime_franchise_links l
-             LEFT JOIN anime a ON CAST(a.id AS TEXT) = l.anime_id
-             WHERE l.franchise_key = ?
-             ORDER BY l.watch_order ASC, l.id ASC`
-          )
-            .bind(targetKey)
-            .all<Record<string, any>>();
-
-          entries = (rowsRes.results || []).map((r, idx) => ({
-            id: Number(r.id),
-            franchise_key: String(r.franchise_key),
-            anime_id: String(r.anime_id),
-            relation_label: String(r.relation_label || 'Original Series'),
-            watch_order: Number(r.watch_order) || idx + 1,
-            note: r.note ? String(r.note) : null,
-            updated_at: r.updated_at ? String(r.updated_at) : undefined,
-            title: r.title ? String(r.title) : `Anime #${r.anime_id}`,
-            slug: r.slug ? String(r.slug) : undefined,
-            cover_image: r.cover_image ? String(r.cover_image) : undefined,
-            year: Number(r.year) > 1900 ? Number(r.year) : null,
-            status: r.status ? String(r.status) : undefined,
-            episodes_count: Number(r.episodes_count) > 0 ? Number(r.episodes_count) : null,
-            languages: parseLanguageArray(r.languages),
-          }));
+          entries = await fetchOrderedFranchiseEntries(env.DB, targetKey);
         }
       } catch (err) {
         if (isMissingPhase3TableError(err)) {
@@ -305,6 +390,381 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
     }
   }
 
+  // GET /api/admin/franchises/:key
+  const franchiseGetByKeyMatch = path.match(/^\/api\/admin\/franchises\/([0-9a-zA-Z_-]+)\/?$/);
+  if (franchiseGetByKeyMatch && method === 'GET') {
+    const auth = await requireStrictAdmin(ctx);
+    if (!auth.ok) return auth.response;
+
+    const franchiseKey = normalizeFranchiseKey(decodeURIComponent(franchiseGetByKeyMatch[1]));
+    if (!franchiseKey) {
+      return jsonResponse({ success: false, error: 'Valid franchise key is required.' }, 400, request);
+    }
+
+    if (!env.DB) {
+      return jsonResponse(
+        {
+          success: true,
+          tableReady: false,
+          franchiseKey,
+          displayTitle: formatFranchiseDisplayTitle(franchiseKey),
+          entries: [],
+        },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    }
+
+    try {
+      let tableReady = true;
+      let entries: AdminFranchiseEntry[] = [];
+      try {
+        entries = await fetchOrderedFranchiseEntries(env.DB, franchiseKey);
+      } catch (err) {
+        if (isMissingPhase3TableError(err)) {
+          tableReady = false;
+        } else {
+          throw err;
+        }
+      }
+
+      return jsonResponse(
+        {
+          success: true,
+          tableReady,
+          franchiseKey,
+          displayTitle: formatFranchiseDisplayTitle(franchiseKey),
+          entries,
+        },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
+    }
+  }
+
+  // POST /api/admin/franchises/:key/entries
+  const franchiseAddEntryMatch = path.match(
+    /^\/api\/admin\/franchises\/([0-9a-zA-Z_-]+)\/entries\/?$/
+  );
+  if (franchiseAddEntryMatch && method === 'POST') {
+    const auth = await requireStrictAdmin(ctx);
+    if (!auth.ok) return auth.response;
+
+    if (!env.DB) {
+      return jsonResponse({ success: false, error: 'Database binding unavailable.' }, 503, request);
+    }
+
+    const franchiseKey = normalizeFranchiseKey(decodeURIComponent(franchiseAddEntryMatch[1]));
+    if (!franchiseKey || franchiseKey.length < 2) {
+      return jsonResponse({ success: false, error: 'Valid franchise key is required.' }, 400, request);
+    }
+
+    let body: Record<string, any>;
+    try {
+      body = (await request.json()) as Record<string, any>;
+    } catch {
+      return jsonResponse({ success: false, error: 'Invalid JSON request body.' }, 400, request);
+    }
+
+    const animeId = String(body.anime_id ?? body.animeId ?? '').trim();
+    if (!animeId) {
+      return jsonResponse({ success: false, error: 'anime_id is required.' }, 400, request);
+    }
+
+    try {
+      await ensureFranchiseLinksTable(env.DB);
+
+      // 1. Validate that anime_id exists in the anime catalog table
+      const animeRow = await env.DB.prepare(
+        'SELECT id, title FROM anime WHERE CAST(id AS TEXT) = ? LIMIT 1'
+      )
+        .bind(animeId)
+        .first<{ id: number | string; title?: string }>();
+
+      if (!animeRow) {
+        return jsonResponse(
+          { success: false, error: `Anime #${animeId} was not found in the catalog.` },
+          404,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
+      }
+
+      // 2. Reject duplicate (franchise_key, anime_id) cleanly with HTTP 409
+      const existingRow = await env.DB.prepare(
+        'SELECT id FROM anime_franchise_links WHERE franchise_key = ? AND anime_id = ? LIMIT 1'
+      )
+        .bind(franchiseKey, animeId)
+        .first<{ id: number }>();
+
+      if (existingRow) {
+        return jsonResponse(
+          {
+            success: false,
+            error: `"${animeRow.title || `Anime #${animeId}`}" is already in "${formatFranchiseDisplayTitle(franchiseKey)}".`,
+          },
+          409,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
+      }
+
+      // 3. Compute next watch_order = COALESCE(MAX(watch_order), 0) + 1
+      const maxRow = await env.DB.prepare(
+        'SELECT COALESCE(MAX(watch_order), 0) + 1 AS next_order FROM anime_franchise_links WHERE franchise_key = ?'
+      )
+        .bind(franchiseKey)
+        .first<{ next_order?: number }>();
+
+      const nextWatchOrder = Math.max(1, Number(maxRow?.next_order) || 1);
+
+      const check = validateFranchiseEntryInput(
+        {
+          franchise_key: franchiseKey,
+          anime_id: animeId,
+          relation_label: body.relation_label ?? body.relationLabel ?? 'Main Series',
+          watch_order: nextWatchOrder,
+          note: body.note,
+        },
+        [],
+        true
+      );
+      if (!check.ok) {
+        return jsonResponse({ success: false, error: check.error }, 400, request);
+      }
+
+      const d = check.data;
+      const insertResult = await env.DB.prepare(
+        `INSERT INTO anime_franchise_links (franchise_key, anime_id, relation_label, watch_order, note, updated_at)
+         VALUES (?, ?, ?, ?, ?, datetime('now'))`
+      )
+        .bind(d.franchise_key, d.anime_id, d.relation_label, d.watch_order, d.note)
+        .run();
+
+      const entries = await fetchOrderedFranchiseEntries(env.DB, franchiseKey);
+      const createdEntry =
+        entries.find((e) => e.anime_id === d.anime_id) || {
+          ...d,
+          id: insertResult?.meta?.last_row_id,
+          title: animeRow.title || `Anime #${d.anime_id}`,
+        };
+
+      await recordAdminActivityLog(env.DB, {
+        actor_id: auth.session.userId,
+        actor_email: auth.session.email,
+        action: 'ADD_FRANCHISE_LINK',
+        entity_type: 'anime_franchise_links',
+        entity_id: `${d.franchise_key}:${d.anime_id}`,
+        summary: `Added "${createdEntry.title || `#${d.anime_id}`}" (${d.relation_label}, #${d.watch_order}) to franchise "${d.franchise_key}".`,
+        diff_json: d,
+      });
+
+      return jsonResponse(
+        {
+          success: true,
+          franchiseKey,
+          entry: createdEntry,
+          entries,
+        },
+        201,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    } catch (err) {
+      const msg = getErrorMessage(err);
+      if (/unique constraint/i.test(msg)) {
+        return jsonResponse(
+          { success: false, error: `Anime #${animeId} is already in this series.` },
+          409,
+          request,
+          { 'Cache-Control': 'no-store' }
+        );
+      }
+      return jsonResponse({ success: false, error: msg }, 500, request);
+    }
+  }
+
+  // PUT /api/admin/franchises/:key/reorder (atomic db.batch() updates without ever deleting rows)
+  const franchiseReorderMatch = path.match(
+    /^\/api\/admin\/franchises\/([0-9a-zA-Z_-]+)\/reorder\/?$/
+  );
+  if (franchiseReorderMatch && method === 'PUT') {
+    const auth = await requireStrictAdmin(ctx);
+    if (!auth.ok) return auth.response;
+
+    if (!env.DB) {
+      return jsonResponse({ success: false, error: 'Database binding unavailable.' }, 503, request);
+    }
+
+    const franchiseKey = normalizeFranchiseKey(decodeURIComponent(franchiseReorderMatch[1]));
+    if (!franchiseKey) {
+      return jsonResponse({ success: false, error: 'Valid franchise key is required.' }, 400, request);
+    }
+
+    let body: Record<string, any>;
+    try {
+      body = (await request.json()) as Record<string, any>;
+    } catch {
+      return jsonResponse({ success: false, error: 'Invalid JSON request body.' }, 400, request);
+    }
+
+    const rawEntryIds: Array<number | string> = Array.isArray(body.entryIds)
+      ? body.entryIds
+      : Array.isArray(body.entries)
+        ? body.entries
+            .map((e: any) => e?.id)
+            .filter((v: unknown): v is number | string => v !== undefined && v !== null && String(v).trim() !== '')
+        : [];
+
+    const rawAnimeIds: string[] = Array.isArray(body.animeIds)
+      ? body.animeIds.map((v: unknown) => String(v ?? '').trim()).filter(Boolean)
+      : Array.isArray(body.entries)
+        ? body.entries.map((e: any) => String(e?.anime_id ?? '').trim()).filter(Boolean)
+        : [];
+
+    const useEntryIds = rawEntryIds.length > 0;
+    const orderedKeys = useEntryIds
+      ? rawEntryIds.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
+      : rawAnimeIds;
+
+    if (orderedKeys.length === 0) {
+      return jsonResponse(
+        { success: false, error: 'Ordered entryIds or animeIds array is required.' },
+        400,
+        request
+      );
+    }
+
+    const dedupCheck = new Set(orderedKeys.map((k) => String(k)));
+    if (dedupCheck.size !== orderedKeys.length) {
+      return jsonResponse(
+        { success: false, error: 'Duplicate identifiers in reorder payload are not allowed.' },
+        400,
+        request
+      );
+    }
+
+    try {
+      const updateStatements = orderedKeys.map((keyVal, idx) =>
+        useEntryIds
+          ? env.DB!.prepare(
+              "UPDATE anime_franchise_links SET watch_order = ?, updated_at = datetime('now') WHERE franchise_key = ? AND id = ?"
+            ).bind(idx + 1, franchiseKey, keyVal)
+          : env.DB!.prepare(
+              "UPDATE anime_franchise_links SET watch_order = ?, updated_at = datetime('now') WHERE franchise_key = ? AND anime_id = ?"
+            ).bind(idx + 1, franchiseKey, String(keyVal))
+      );
+
+      await executeAtomicBatch(env.DB, updateStatements);
+
+      const entries = await fetchOrderedFranchiseEntries(env.DB, franchiseKey);
+
+      await recordAdminActivityLog(env.DB, {
+        actor_id: auth.session.userId,
+        actor_email: auth.session.email,
+        action: 'REORDER_FRANCHISE_WATCH_ORDER',
+        entity_type: 'anime_franchise_links',
+        entity_id: franchiseKey,
+        summary: `Reordered Watch Order for franchise "${franchiseKey}" (${orderedKeys.length} entries).`,
+        diff_json: { franchiseKey, orderedKeys },
+      });
+
+      return jsonResponse(
+        {
+          success: true,
+          franchiseKey,
+          updatedCount: orderedKeys.length,
+          entries,
+        },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
+    }
+  }
+
+  // DELETE /api/admin/franchises/:key/entries/:id
+  const franchiseDeleteEntryByIdMatch = path.match(
+    /^\/api\/admin\/franchises\/([0-9a-zA-Z_-]+)\/entries\/([0-9a-zA-Z_-]+)\/?$/
+  );
+  if (franchiseDeleteEntryByIdMatch && method === 'DELETE') {
+    const auth = await requireStrictAdmin(ctx);
+    if (!auth.ok) return auth.response;
+
+    if (!env.DB) {
+      return jsonResponse({ success: false, error: 'Database binding unavailable.' }, 503, request);
+    }
+
+    const franchiseKey = normalizeFranchiseKey(decodeURIComponent(franchiseDeleteEntryByIdMatch[1]));
+    const targetId = decodeURIComponent(franchiseDeleteEntryByIdMatch[2]).trim();
+
+    try {
+      const existingFr = await env.DB.prepare(
+        'SELECT * FROM anime_franchise_links WHERE franchise_key = ? AND (CAST(id AS TEXT) = ? OR anime_id = ?) LIMIT 1'
+      )
+        .bind(franchiseKey, targetId, targetId)
+        .first<Record<string, unknown>>()
+        .catch(() => null);
+
+      let recycleBinId: number | null = null;
+      if (existingFr) {
+        recycleBinId = await archiveEntityToRecycleBin(env.DB, {
+          entity_type: 'anime_franchise_links',
+          entity_id: String(existingFr.id ?? `${franchiseKey}:${targetId}`),
+          title: `Franchise link ${franchiseKey} → Anime #${String(existingFr.anime_id ?? targetId)}`,
+          payload: existingFr,
+          deleted_by: auth.session.email || auth.session.userId || 'admin',
+        });
+
+        await env.DB.prepare(
+          'DELETE FROM anime_franchise_links WHERE franchise_key = ? AND id = ?'
+        )
+          .bind(franchiseKey, existingFr.id)
+          .run();
+      } else {
+        await env.DB.prepare(
+          'DELETE FROM anime_franchise_links WHERE franchise_key = ? AND (CAST(id AS TEXT) = ? OR anime_id = ?)'
+        )
+          .bind(franchiseKey, targetId, targetId)
+          .run();
+      }
+
+      await resequenceFranchiseWatchOrder(env.DB, franchiseKey);
+      const entries = await fetchOrderedFranchiseEntries(env.DB, franchiseKey);
+
+      await recordAdminActivityLog(env.DB, {
+        actor_id: auth.session.userId,
+        actor_email: auth.session.email,
+        action: 'DELETE_FRANCHISE_LINK',
+        entity_type: 'anime_franchise_links',
+        entity_id: `${franchiseKey}:${targetId}`,
+        summary: `Removed entry ${targetId} from franchise "${franchiseKey}" and re-sequenced watch order.`,
+      });
+
+      return jsonResponse(
+        {
+          success: true,
+          franchiseKey,
+          deletedId: targetId,
+          recycleBinId,
+          entries,
+        },
+        200,
+        request,
+        { 'Cache-Control': 'no-store' }
+      );
+    } catch (err) {
+      return jsonResponse({ success: false, error: getErrorMessage(err) }, 500, request);
+    }
+  }
+
+  // Legacy-compatible PUT/POST /api/admin/franchises/:key
   const franchisePutMatch = path.match(/^\/api\/admin\/franchises\/([0-9a-zA-Z_-]+)\/?$/);
   if (franchisePutMatch && (method === 'PUT' || method === 'POST')) {
     const auth = await requireStrictAdmin(ctx);
@@ -329,7 +789,7 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
     try {
       await ensureFranchiseLinksTable(env.DB);
 
-      // Mode A: Full ordered list save (`entries: [...]`)
+      // Mode A: Full ordered list save (`entries: [...]`) via atomic upserts
       if (Array.isArray(body.entries)) {
         const seenAnimeIds = new Set<string>();
         const validatedList: Array<{
@@ -370,25 +830,46 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
           validatedList.push(check.data);
         }
 
-        // Replace watch order cleanly for this franchise_key
-        await env.DB.prepare('DELETE FROM anime_franchise_links WHERE franchise_key = ?')
+        const existingRes = await env.DB.prepare(
+          'SELECT anime_id FROM anime_franchise_links WHERE franchise_key = ?'
+        )
           .bind(franchiseKey)
-          .run();
+          .all<{ anime_id: string }>()
+          .catch(() => ({ results: [] }));
+
+        const statements: D1PreparedStatementLike[] = [];
+        for (const row of existingRes.results || []) {
+          const existingAnimeId = String(row.anime_id);
+          if (!seenAnimeIds.has(existingAnimeId)) {
+            statements.push(
+              env.DB.prepare(
+                'DELETE FROM anime_franchise_links WHERE franchise_key = ? AND anime_id = ?'
+              ).bind(franchiseKey, existingAnimeId)
+            );
+          }
+        }
 
         for (const entry of validatedList) {
-          await env.DB.prepare(
-            `INSERT INTO anime_franchise_links (franchise_key, anime_id, relation_label, watch_order, note, updated_at)
-             VALUES (?, ?, ?, ?, ?, datetime('now'))`
-          )
-            .bind(
+          statements.push(
+            env.DB.prepare(
+              `INSERT INTO anime_franchise_links (franchise_key, anime_id, relation_label, watch_order, note, updated_at)
+               VALUES (?, ?, ?, ?, ?, datetime('now'))
+               ON CONFLICT(franchise_key, anime_id) DO UPDATE SET
+                 relation_label = excluded.relation_label,
+                 watch_order = excluded.watch_order,
+                 note = excluded.note,
+                 updated_at = datetime('now')`
+            ).bind(
               entry.franchise_key,
               entry.anime_id,
               entry.relation_label,
               entry.watch_order,
               entry.note
             )
-            .run();
+          );
         }
+
+        await executeAtomicBatch(env.DB, statements);
 
         await recordAdminActivityLog(env.DB, {
           actor_id: auth.session.userId,
@@ -476,6 +957,7 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
     }
   }
 
+  // Legacy-compatible DELETE /api/admin/franchises/:key/:animeId
   const franchiseDelMatch = path.match(
     /^\/api\/admin\/franchises\/([0-9a-zA-Z_-]+)\/([0-9a-zA-Z_-]+)\/?$/
   );
@@ -515,22 +997,7 @@ export async function handleAdminPhase3Routes(ctx: RouteContext): Promise<Respon
         .bind(franchiseKey, animeId)
         .run();
 
-      // Re-normalize remaining watch_order integers 1..N
-      const remRes = await env.DB.prepare(
-        'SELECT id FROM anime_franchise_links WHERE franchise_key = ? ORDER BY watch_order ASC, id ASC'
-      )
-        .bind(franchiseKey)
-        .all<{ id: number }>()
-        .catch(() => ({ results: [] }));
-
-      const remaining = remRes.results || [];
-      for (let i = 0; i < remaining.length; i++) {
-        await env.DB.prepare(
-          "UPDATE anime_franchise_links SET watch_order = ?, updated_at = datetime('now') WHERE id = ?"
-        )
-          .bind(i + 1, remaining[i].id)
-          .run();
-      }
+      await resequenceFranchiseWatchOrder(env.DB, franchiseKey);
 
       await recordAdminActivityLog(env.DB, {
         actor_id: auth.session.userId,

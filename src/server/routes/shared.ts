@@ -20,6 +20,7 @@ export interface D1PreparedStatementLike {
 
 export interface D1DatabaseLike {
   prepare: (sql: string) => D1PreparedStatementLike;
+  batch?: (statements: D1PreparedStatementLike[]) => Promise<unknown[]>;
 }
 
 export interface D1PreparedStatementInputLike {
@@ -31,6 +32,7 @@ export interface D1PreparedStatementInputLike {
 
 export interface D1DatabaseInputLike {
   prepare: (sql: string) => D1PreparedStatementInputLike;
+  batch?: (statements: D1PreparedStatementInputLike[]) => Promise<unknown[]>;
 }
 
 export interface DurableObjectNamespaceLike {

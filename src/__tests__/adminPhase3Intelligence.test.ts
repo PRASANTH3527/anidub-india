@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  formatFranchiseDisplayTitle,
   normalizeFranchiseKey,
   validateFranchiseEntryInput,
   reorderFranchiseEntries,
@@ -25,6 +26,8 @@ test('Production Clerk Admin security remains strictly enforced (TEMP_BYPASS_ADM
 test('normalizeFranchiseKey slugifies franchise identifiers cleanly', () => {
   assert.equal(normalizeFranchiseKey('  Demon Slayer: Kimetsu no Yaiba! '), 'demon-slayer-kimetsu-no-yaiba');
   assert.equal(normalizeFranchiseKey('naruto_shippuden'), 'naruto_shippuden');
+  assert.equal(formatFranchiseDisplayTitle('demon-slayer'), 'Demon Slayer');
+  assert.equal(formatFranchiseDisplayTitle('jjk'), 'JJK');
 });
 
 test('validateFranchiseEntryInput enforces required fields and blocks duplicate (franchise_key, anime_id)', () => {
@@ -257,6 +260,10 @@ test('handleAdminPhase3Routes enforces 401 Clerk Admin auth on all /api/admin/* 
   // 2. All Phase 3 /api/admin/* endpoints return 401 when unauthenticated
   const protectedEndpoints: Array<{ method: string; path: string }> = [
     { method: 'GET', path: '/api/admin/franchises' },
+    { method: 'GET', path: '/api/admin/franchises/demon-slayer' },
+    { method: 'POST', path: '/api/admin/franchises/demon-slayer/entries' },
+    { method: 'PUT', path: '/api/admin/franchises/demon-slayer/reorder' },
+    { method: 'DELETE', path: '/api/admin/franchises/demon-slayer/entries/1' },
     { method: 'PUT', path: '/api/admin/franchises/demon-slayer' },
     { method: 'DELETE', path: '/api/admin/franchises/demon-slayer/101' },
     { method: 'GET', path: '/api/admin/cast?anime_id=1' },

@@ -436,10 +436,16 @@ export async function handleAnimeDetailsV2Routes(ctx: RouteContext): Promise<Res
 
       const rawEntries: FranchiseLinkItem[] = [];
       for (const r of rowsRes.results || []) {
-        // Strictly omit unpublished or rejected anime rows from public watch-order responses
+        // Strictly omit unpublished, pending, or rejected anime rows from public watch-order responses
+        const normalizedStatus = r.status ? String(r.status).trim().toLowerCase() : '';
+        const normalizedApproval = r.approval_status
+          ? String(r.approval_status).trim().toLowerCase()
+          : '';
         const isUnpublished =
           (r.is_published !== undefined && r.is_published !== null && Number(r.is_published) === 0) ||
-          (r.approval_status && String(r.approval_status).toLowerCase() !== 'approved');
+          (normalizedApproval !== '' && normalizedApproval !== 'approved' && normalizedApproval !== 'published') ||
+          normalizedStatus === 'pending' ||
+          normalizedStatus === 'rejected';
         if (isUnpublished || !r.title) continue;
 
         rawEntries.push({

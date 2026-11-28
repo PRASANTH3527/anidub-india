@@ -714,7 +714,7 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
           .all<{ anime_id: string; availability_status: string; verified_at: string | null }>()
           .catch(() => ({ results: [] })),
         env.DB.prepare(
-          'SELECT id, franchise_key, franchise_title, anime_id, relation_type, watch_order FROM anime_franchise_links'
+          'SELECT id, franchise_key, anime_id, relation_label, watch_order FROM anime_franchise_links'
         )
           .all<Record<string, any>>()
           .catch(() => ({ results: [] })),
@@ -743,9 +743,9 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
         franchiseRows: (frRes.results || []).map((f) => ({
           id: Number(f.id) || undefined,
           franchise_key: String(f.franchise_key || ''),
-          franchise_title: f.franchise_title ? String(f.franchise_title) : null,
+          franchise_title: null,
           anime_id: Number(f.anime_id),
-          relation_type: f.relation_type ? String(f.relation_type) : null,
+          relation_type: f.relation_label ? String(f.relation_label) : null,
           watch_order: Number(f.watch_order) || 1,
         })),
         castRows: (castRes.results || []).map((c) => ({

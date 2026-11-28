@@ -3025,7 +3025,12 @@ class CloudflareApiService {
   public async fetchAdminFranchises(franchiseKey?: string): Promise<{
     success: boolean;
     tableReady: boolean;
-    franchises: Array<{ franchise_key: string; entry_count: number; updated_at: string }>;
+    franchises: Array<{
+      franchise_key: string;
+      display_title?: string;
+      entry_count: number;
+      updated_at: string;
+    }>;
     selectedFranchiseKey: string | null;
     entries: import('../utils/adminPhase3Intelligence').AdminFranchiseEntry[];
   }> {
@@ -3044,6 +3049,113 @@ class CloudflareApiService {
       franchises: Array.isArray(json?.franchises) ? json.franchises : [],
       selectedFranchiseKey: json?.selectedFranchiseKey || null,
       entries: Array.isArray(json?.entries) ? json.entries : [],
+    };
+  }
+
+  public async fetchAdminFranchiseByKey(franchiseKey: string): Promise<{
+    success: boolean;
+    tableReady: boolean;
+    franchiseKey: string;
+    displayTitle: string;
+    entries: import('../utils/adminPhase3Intelligence').AdminFranchiseEntry[];
+  }> {
+    const safeKey = encodeURIComponent(franchiseKey.trim());
+    const res = await this.smartFetch(`/api/admin/franchises/${safeKey}`, {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to load watch order (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      tableReady: json?.tableReady !== false,
+      franchiseKey: String(json?.franchiseKey || franchiseKey),
+      displayTitle: String(json?.displayTitle || franchiseKey),
+      entries: Array.isArray(json?.entries) ? json.entries : [],
+    };
+  }
+
+  public async addAdminFranchiseEntry(
+    franchiseKey: string,
+    payload: {
+      anime_id: string | number;
+      relation_label: string;
+      note?: string | null;
+    }
+  ): Promise<{
+    success: boolean;
+    entry?: import('../utils/adminPhase3Intelligence').AdminFranchiseEntry;
+    entries?: import('../utils/adminPhase3Intelligence').AdminFranchiseEntry[];
+  }> {
+    const safeKey = encodeURIComponent(franchiseKey.trim());
+    const res = await this.smartFetch(`/api/admin/franchises/${safeKey}/entries`, {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to add anime to watch order (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      entry: json?.entry,
+      entries: Array.isArray(json?.entries) ? json.entries : undefined,
+    };
+  }
+
+  public async reorderAdminFranchiseEntries(
+    franchiseKey: string,
+    payload: {
+      entryIds?: Array<number | string>;
+      animeIds?: Array<number | string>;
+    }
+  ): Promise<{
+    success: boolean;
+    updatedCount: number;
+    entries?: import('../utils/adminPhase3Intelligence').AdminFranchiseEntry[];
+  }> {
+    const safeKey = encodeURIComponent(franchiseKey.trim());
+    const res = await this.smartFetch(`/api/admin/franchises/${safeKey}/reorder`, {
+      method: 'PUT',
+      headers: this.getHeaders(true),
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to reorder watch order (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      updatedCount: Number(json?.updatedCount) || 0,
+      entries: Array.isArray(json?.entries) ? json.entries : undefined,
+    };
+  }
+
+  public async deleteAdminFranchiseEntryById(
+    franchiseKey: string,
+    entryId: string | number
+  ): Promise<{
+    success: boolean;
+    recycleBinId?: number | null;
+    entries?: import('../utils/adminPhase3Intelligence').AdminFranchiseEntry[];
+  }> {
+    const safeKey = encodeURIComponent(franchiseKey.trim());
+    const safeId = encodeURIComponent(String(entryId).trim());
+    const res = await this.smartFetch(`/api/admin/franchises/${safeKey}/entries/${safeId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(true),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json?.error || `Failed to remove entry from watch order (HTTP ${res.status})`);
+    }
+    return {
+      success: Boolean(json?.success),
+      recycleBinId: json?.recycleBinId ?? null,
+      entries: Array.isArray(json?.entries) ? json.entries : undefined,
     };
   }
 
