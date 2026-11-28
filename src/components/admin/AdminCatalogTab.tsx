@@ -23,6 +23,9 @@ import {
   ShieldCheck,
   X,
   Pencil,
+  Database,
+  Upload,
+  HelpCircle,
 } from 'lucide-react';
 import { OFFICIAL_INDIAN_LANGUAGES } from './types';
 
@@ -80,6 +83,9 @@ export interface AdminCatalogTabProps {
   onToggleVisibility: (anime: any) => void;
   onEditAnime: (anime: any) => void;
   onDeleteCatalogAnime: (id: number, title: string) => void;
+  onTriggerCsvUpload?: () => void;
+  onExportCsv?: () => void;
+  onOpenCsvHelp?: () => void;
   mode?: 'catalog' | 'dubs';
 }
 
@@ -117,12 +123,14 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
   onToggleVisibility,
   onEditAnime,
   onDeleteCatalogAnime,
+  onTriggerCsvUpload,
+  onExportCsv,
+  onOpenCsvHelp,
   mode = 'catalog',
 }) => {
   const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(totalItems, currentPage * pageSize);
 
-  // Saved Filter Presets (localStorage)
   const [presets, setPresets] = useState<SavedCatalogFilterPreset[]>(() => {
     try {
       const raw = localStorage.getItem(CATALOG_PRESETS_STORAGE_KEY);
@@ -137,7 +145,6 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
   const [renamingPresetId, setRenamingPresetId] = useState<string | null>(null);
   const [renamePresetInput, setRenamePresetInput] = useState('');
 
-  // Desktop Column Visibility Toggle
   const [visibleColumns, setVisibleColumns] = useState<VisibleCatalogColumns>(() => {
     try {
       const raw = localStorage.getItem(CATALOG_COLUMNS_STORAGE_KEY);
@@ -156,7 +163,6 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
   const [isColumnsMenuOpen, setIsColumnsMenuOpen] = useState(false);
   const columnsMenuRef = useRef<HTMLDivElement>(null);
 
-  // Bulk Action Confirmation Modal
   const [bulkConfirm, setBulkConfirm] = useState<{
     title: string;
     message: string;
@@ -164,7 +170,6 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
     onConfirm: () => void;
   } | null>(null);
 
-  // Restore scroll position when returning from Modular Anime Editor
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -286,128 +291,86 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const dubQuickFilters = [
-    'All',
-    'Unverified',
-    'Hindi',
-    'Tamil',
-    'Telugu',
-    'Malayalam',
-    'Kannada',
-    'Bengali',
-  ];
-
   return (
     <div
       data-testid={mode === 'dubs' ? 'admin-dubs-tab' : 'admin-catalog-tab'}
       className="space-y-4 w-full max-w-full overflow-x-clip text-[var(--text-primary)]"
     >
-      {/* 1. HEADER & SERVER-SIDE SEARCH / FILTER BAR */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4 shadow-sm">
+      {/* 1. CLASSIC CATALOG MATRIX CONTROL HEADER CARD */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4 shadow-md">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg sm:text-xl font-extrabold text-[var(--text-primary)] flex items-center gap-2">
-              {mode === 'dubs' ? (
-                <>
-                  <Globe className="w-5 h-5 text-[var(--accent-primary)]" />
-                  <span>Regional Dub Intelligence &amp; Tag Verification</span>
-                </>
-              ) : (
-                <>
-                  <Film className="w-5 h-5 text-[var(--accent-primary)]" />
-                  <span>Anime Catalog (Server-Side D1 Pagination)</span>
-                </>
-              )}
-            </h2>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
-              {totalItems.toLocaleString()} matching D1 records • Page {currentPage} of {totalPages}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-extrabold text-[var(--text-primary)]">
+                  Catalog Matrix Control
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[11px] font-mono font-extrabold text-[var(--text-secondary)]">
+                  {totalItems.toLocaleString()} ACTIVE ENTRIES
+                </span>
+              </div>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Server-side Cloudflare D1 catalog • Page {currentPage} of {totalPages}
+              </p>
+            </div>
           </div>
 
+          {/* 3 Compact Inline CSV Buttons + Refresh + Columns */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Desktop Column Visibility Dropdown */}
-            <div ref={columnsMenuRef} className="hidden md:block relative">
+            {onTriggerCsvUpload && (
               <button
                 type="button"
-                data-testid="catalog-columns-toggle"
-                onClick={() => setIsColumnsMenuOpen((prev) => !prev)}
-                className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                onClick={onTriggerCsvUpload}
+                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
               >
-                <Columns className="w-4 h-4 text-[var(--accent-primary)]" />
-                <span>Columns</span>
+                <Upload className="w-3.5 h-3.5" />
+                <span>Import CSV</span>
               </button>
-              {isColumnsMenuOpen && (
-                <div
-                  data-testid="catalog-columns-menu"
-                  className="absolute right-0 mt-2 w-52 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-xl p-2 z-30 space-y-1"
-                >
-                  <div className="px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">
-                    Visible Table Columns
-                  </div>
-                  {(
-                    [
-                      { key: 'status', label: 'Broadcast Status' },
-                      { key: 'dubs', label: 'Verified Dub Languages' },
-                      { key: 'visibility', label: 'Visibility Status' },
-                      { key: 'rating', label: 'Rating & Metadata' },
-                    ] as const
-                  ).map((col) => (
-                    <label
-                      key={col.key}
-                      className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-[var(--bg-elevated)] cursor-pointer text-xs font-semibold text-[var(--text-primary)]"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={visibleColumns[col.key]}
-                        onChange={() => handleToggleColumn(col.key)}
-                        className="w-4 h-4 accent-[var(--accent-primary)]"
-                      />
-                      <span>{col.label}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-
+            )}
+            {onExportCsv && (
+              <button
+                type="button"
+                onClick={onExportCsv}
+                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Download className="w-3.5 h-3.5 text-purple-400" />
+                <span>Export CSV</span>
+              </button>
+            )}
+            {onOpenCsvHelp && (
+              <button
+                type="button"
+                onClick={onOpenCsvHelp}
+                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-400 text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>CSV Guide</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={onRefresh}
               disabled={isLoading}
-              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-[var(--accent-primary)]' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-purple-400' : ''}`} />
               <span>Refresh</span>
-            </button>
-            <button
-              type="button"
-              onClick={onOpenAddModal}
-              className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Anime</span>
             </button>
           </div>
         </div>
 
-        {/* Dub Quick Filter Chips when in Dubs view */}
-        {mode === 'dubs' && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            {dubQuickFilters.map((lang) => (
-              <button
-                key={lang}
-                type="button"
-                onClick={() => setFilterLanguage(lang)}
-                className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                  filterLanguage === lang
-                    ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
-                    : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                {lang === 'All' ? 'All Languages' : lang === 'Unverified' ? 'Unverified Dubs' : `${lang} Dub`}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Full-Width Vibrant Purple + ADD NEW ANIME Button */}
+        <button
+          type="button"
+          onClick={onOpenAddModal}
+          className="w-full min-h-[46px] px-5 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-purple-600/25 transition-all cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>ADD NEW ANIME</span>
+        </button>
 
         {/* Search + Status + Language + Sort Controls */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5">
@@ -416,10 +379,10 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
             <input
               type="text"
               data-testid="admin-catalog-search"
-              placeholder="Search title, slug, or ID across D1..."
+              placeholder="Filter catalog by anime title, ID, language, genre, studio..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full min-h-[44px] pl-10 pr-4 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)]/60 focus:outline-none focus:border-[var(--accent-primary)] transition-all"
+              className="w-full min-h-[44px] pl-10 pr-4 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)]/60 focus:outline-none focus:border-purple-500 transition-all"
             />
           </div>
 
@@ -429,7 +392,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               aria-label="Filter by Status"
-              className="w-full min-h-[44px] pl-8 pr-6 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer"
+              className="w-full min-h-[44px] pl-8 pr-6 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:border-purple-500 cursor-pointer"
             >
               <option value="All">All Status</option>
               <option value="Airing">Airing</option>
@@ -445,7 +408,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
               value={filterLanguage}
               onChange={(e) => setFilterLanguage(e.target.value)}
               aria-label="Filter by Language"
-              className="w-full min-h-[44px] pl-8 pr-6 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer"
+              className="w-full min-h-[44px] pl-8 pr-6 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:border-purple-500 cursor-pointer"
             >
               <option value="All">All Languages</option>
               <option value="Unverified">Unverified (No Dubs)</option>
@@ -463,7 +426,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
               aria-label="Sort Catalog"
-              className="w-full min-h-[44px] pl-8 pr-6 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] cursor-pointer"
+              className="w-full min-h-[44px] pl-8 pr-6 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs sm:text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:border-purple-500 cursor-pointer"
             >
               <option value="popularity">Sort: Popularity</option>
               <option value="id_desc">Sort: Newest ID</option>
@@ -477,112 +440,157 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
         {/* Saved Filter Presets Row */}
         <div
           data-testid="catalog-saved-presets-bar"
-          className="pt-2 border-t border-[var(--border-subtle)] flex flex-wrap items-center gap-2"
+          className="pt-2 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2"
         >
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] mr-1">
-            <Bookmark className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-            Presets:
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] mr-1">
+              <Bookmark className="w-3.5 h-3.5 text-purple-400" />
+              Presets:
+            </span>
 
-          {presets.map((preset) => (
-            <div
-              key={preset.id}
-              className="inline-flex items-center gap-1 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] px-2 py-1"
-            >
-              {renamingPresetId === preset.id ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleCommitRenamePreset(preset.id);
-                  }}
-                  className="inline-flex items-center gap-1"
-                >
-                  <input
-                    type="text"
-                    value={renamePresetInput}
-                    onChange={(e) => setRenamePresetInput(e.target.value)}
-                    autoFocus
-                    className="w-28 px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--accent-primary)] text-xs text-[var(--text-primary)] focus:outline-none"
-                  />
-                  <button
-                    type="submit"
-                    aria-label="Save preset name"
-                    className="p-1 text-emerald-500 cursor-pointer"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                </form>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleApplyPreset(preset)}
-                    className="min-h-[32px] px-1.5 text-xs font-bold text-[var(--text-primary)] hover:text-[var(--accent-primary)] cursor-pointer"
-                  >
-                    {preset.name}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRenamingPresetId(preset.id);
-                      setRenamePresetInput(preset.name);
-                    }}
-                    aria-label={`Rename preset ${preset.name}`}
-                    className="p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeletePreset(preset.id)}
-                    aria-label={`Delete preset ${preset.name}`}
-                    className="p-1 text-[var(--text-secondary)] hover:text-red-500 cursor-pointer"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-
-          {isSavingPreset ? (
-            <form onSubmit={handleSaveNewPreset} className="inline-flex items-center gap-1.5">
-              <input
-                type="text"
-                value={presetNameInput}
-                onChange={(e) => setPresetNameInput(e.target.value)}
-                placeholder="e.g., Unverified Tamil Airing"
-                autoFocus
-                className="min-h-[36px] px-2.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--accent-primary)] text-xs text-[var(--text-primary)] focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="min-h-[36px] px-3 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-bold cursor-pointer"
+            {presets.map((preset) => (
+              <div
+                key={preset.id}
+                className="inline-flex items-center gap-1 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] px-2 py-1"
               >
-                Save
-              </button>
+                {renamingPresetId === preset.id ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleCommitRenamePreset(preset.id);
+                    }}
+                    className="inline-flex items-center gap-1"
+                  >
+                    <input
+                      type="text"
+                      value={renamePresetInput}
+                      onChange={(e) => setRenamePresetInput(e.target.value)}
+                      autoFocus
+                      className="w-28 px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-purple-500 text-xs text-[var(--text-primary)] focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      aria-label="Save preset name"
+                      className="p-1 text-emerald-500 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyPreset(preset)}
+                      className="min-h-[32px] px-1.5 text-xs font-bold text-[var(--text-primary)] hover:text-purple-400 cursor-pointer"
+                    >
+                      {preset.name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRenamingPresetId(preset.id);
+                        setRenamePresetInput(preset.name);
+                      }}
+                      aria-label={`Rename preset ${preset.name}`}
+                      className="p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePreset(preset.id)}
+                      aria-label={`Delete preset ${preset.name}`}
+                      className="p-1 text-[var(--text-secondary)] hover:text-red-500 cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+
+            {isSavingPreset ? (
+              <form onSubmit={handleSaveNewPreset} className="inline-flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={presetNameInput}
+                  onChange={(e) => setPresetNameInput(e.target.value)}
+                  placeholder="e.g., Unverified Tamil Airing"
+                  autoFocus
+                  className="min-h-[36px] px-2.5 rounded-lg bg-[var(--bg-elevated)] border border-purple-500 text-xs text-[var(--text-primary)] focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  className="min-h-[36px] px-3 rounded-lg bg-purple-600 text-white text-xs font-bold cursor-pointer"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSavingPreset(false);
+                    setPresetNameInput('');
+                  }}
+                  className="min-h-[36px] px-2 rounded-lg bg-[var(--bg-elevated)] text-xs text-[var(--text-secondary)] cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
               <button
                 type="button"
-                onClick={() => {
-                  setIsSavingPreset(false);
-                  setPresetNameInput('');
-                }}
-                className="min-h-[36px] px-2 rounded-lg bg-[var(--bg-elevated)] text-xs text-[var(--text-secondary)] cursor-pointer"
+                data-testid="save-catalog-preset-btn"
+                onClick={() => setIsSavingPreset(true)}
+                className="min-h-[34px] px-2.5 py-1 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-dashed border-[var(--border-subtle)] text-xs font-bold text-purple-400 inline-flex items-center gap-1.5 cursor-pointer"
               >
-                Cancel
+                <BookmarkPlus className="w-3.5 h-3.5" />
+                <span>Save Current Filter</span>
               </button>
-            </form>
-          ) : (
+            )}
+          </div>
+
+          <div ref={columnsMenuRef} className="hidden md:block relative">
             <button
               type="button"
-              data-testid="save-catalog-preset-btn"
-              onClick={() => setIsSavingPreset(true)}
-              className="min-h-[36px] px-2.5 py-1 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-dashed border-[var(--border-subtle)] text-xs font-bold text-[var(--accent-primary)] inline-flex items-center gap-1.5 cursor-pointer"
+              data-testid="catalog-columns-toggle"
+              onClick={() => setIsColumnsMenuOpen((prev) => !prev)}
+              className="min-h-[34px] px-3 py-1 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
             >
-              <BookmarkPlus className="w-3.5 h-3.5" />
-              <span>Save Current Filter</span>
+              <Columns className="w-3.5 h-3.5 text-purple-400" />
+              <span>Columns</span>
             </button>
-          )}
+            {isColumnsMenuOpen && (
+              <div
+                data-testid="catalog-columns-menu"
+                className="absolute right-0 mt-2 w-52 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-xl p-2 z-30 space-y-1"
+              >
+                <div className="px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">
+                  Visible Fields
+                </div>
+                {(
+                  [
+                    { key: 'status', label: 'Broadcast Status' },
+                    { key: 'dubs', label: 'Dub Languages' },
+                    { key: 'visibility', label: 'Visibility Toggle' },
+                    { key: 'rating', label: 'Rating & OTT Pill' },
+                  ] as const
+                ).map((col) => (
+                  <label
+                    key={col.key}
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-[var(--bg-elevated)] cursor-pointer text-xs font-semibold text-[var(--text-primary)]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={visibleColumns[col.key]}
+                      onChange={() => handleToggleColumn(col.key)}
+                      className="w-4 h-4 accent-purple-600"
+                    />
+                    <span>{col.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -590,12 +598,19 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
       {selectedCatalogIds.length > 0 && (
         <div
           data-testid="catalog-sticky-bulk-bar"
-          className="sticky top-[70px] z-20 p-3.5 rounded-2xl bg-[var(--bg-surface)]/95 backdrop-blur-md border border-[var(--accent-primary)]/40 flex flex-wrap items-center justify-between gap-3 shadow-lg"
+          className="sticky top-[70px] z-20 p-3.5 rounded-2xl bg-[var(--bg-surface)]/95 backdrop-blur-md border border-purple-500/40 flex flex-wrap items-center justify-between gap-3 shadow-lg"
         >
           <div className="flex items-center gap-2.5">
-            <span className="px-2.5 py-1 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold">
+            <span className="px-2.5 py-1 rounded-lg bg-purple-600 text-white text-xs font-extrabold">
               {selectedCatalogIds.length} Selected
             </span>
+            <button
+              type="button"
+              onClick={onSelectAllCatalog}
+              className="min-h-[36px] px-2.5 py-1 text-xs font-bold text-purple-400 hover:underline cursor-pointer"
+            >
+              {selectedCatalogIds.length === items.length ? 'Unselect Page' : 'Select All Page'}
+            </button>
             <button
               type="button"
               onClick={() => setSelectedCatalogIds([])}
@@ -620,7 +635,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
                 })
               }
               disabled={isBulkProcessing}
-              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold cursor-pointer"
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold cursor-pointer"
             >
               Publish
             </button>
@@ -647,9 +662,9 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
                 type="button"
                 onClick={() =>
                   setBulkConfirm({
-                    title: 'Mark Selected Titles Verified',
-                    message: `Stamp today's verification date on ${selectedCatalogIds.length} selected anime?`,
-                    confirmLabel: 'Mark Verified',
+                    title: 'Mark Selected Titles',
+                    message: `Stamp today's date on ${selectedCatalogIds.length} selected anime?`,
+                    confirmLabel: 'Confirm',
                     onConfirm: () => {
                       setBulkConfirm(null);
                       onBulkMarkVerified();
@@ -657,10 +672,10 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
                   })
                 }
                 disabled={isBulkProcessing}
-                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-teal-600 dark:text-teal-400 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-teal-400 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
               >
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Mark Verified</span>
+                <span>Stamp Date</span>
               </button>
             )}
             <button
@@ -677,7 +692,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
                 })
               }
               disabled={isBulkProcessing}
-              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold cursor-pointer"
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 text-xs font-bold cursor-pointer"
             >
               Set Airing
             </button>
@@ -695,7 +710,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
                 })
               }
               disabled={isBulkProcessing}
-              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-600 dark:text-sky-400 text-xs font-bold cursor-pointer"
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-400 text-xs font-bold cursor-pointer"
             >
               Set Completed
             </button>
@@ -727,7 +742,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
                   })
                 }
                 disabled={isBulkProcessing}
-                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 text-[var(--accent-primary)] text-xs font-bold cursor-pointer"
+                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 text-xs font-bold cursor-pointer"
               >
                 Add Dub Tag
               </button>
@@ -739,7 +754,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
               disabled={isBulkProcessing}
               className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+              <Download className="w-3.5 h-3.5 text-purple-400" />
               <span>Export CSV</span>
             </button>
 
@@ -747,7 +762,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
               type="button"
               onClick={onBulkDeleteSelected}
               disabled={isBulkProcessing}
-              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold flex items-center gap-1 cursor-pointer"
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-1 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" /> Delete
             </button>
@@ -757,7 +772,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
 
       {/* 3. ERROR OR LOADING STATES */}
       {errorMsg && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs sm:text-sm font-semibold flex items-center justify-between gap-3">
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs sm:text-sm font-semibold flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
@@ -774,7 +789,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
 
       {isLoading && items.length === 0 ? (
         <div className="p-12 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-center space-y-3">
-          <Loader2 className="w-7 h-7 text-[var(--accent-primary)] animate-spin mx-auto" />
+          <Loader2 className="w-7 h-7 text-purple-400 animate-spin mx-auto" />
           <p className="text-sm font-bold text-[var(--text-primary)]">
             Loading D1 Catalog Page {currentPage}...
           </p>
@@ -790,49 +805,37 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
           </p>
         </div>
       ) : (
-        <>
-          {/* 4A. MOBILE COMPACT CARDS (< 768px, 0px horizontal overflow, 44x44px touch targets) */}
-          <div className="md:hidden space-y-3">
-            {items.map((anime) => {
-              const isSelected = selectedCatalogIds.includes(Number(anime.id));
-              const isPublished =
-                anime.is_published !== 0 &&
-                anime.is_published !== false &&
-                anime.status !== 'pending';
-              const langsList = Array.isArray(anime.languages)
-                ? anime.languages.filter(Boolean)
-                : typeof anime.languages === 'string' && anime.languages.trim()
-                  ? anime.languages.split(',').map((s: string) => s.trim()).filter(Boolean)
-                  : [];
+        /* 4. CLASSIC ANIME CATALOG CARDS (Responsive 1-column on mobile, 2-column grid on desktop) */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+          {items.map((anime) => {
+            const isSelected = selectedCatalogIds.includes(Number(anime.id));
+            const isPublished =
+              anime.is_published !== 0 &&
+              anime.is_published !== false &&
+              anime.status !== 'pending';
+            const langsList = Array.isArray(anime.languages)
+              ? anime.languages.filter(Boolean)
+              : typeof anime.languages === 'string' && anime.languages.trim()
+                ? anime.languages.split(',').map((s: string) => s.trim()).filter(Boolean)
+                : [];
+            const platformBadge =
+              (typeof anime.platform === 'string' && anime.platform.trim()) ||
+              (Array.isArray(anime.streaming_partners) && anime.streaming_partners[0]?.name) ||
+              'Crunchyroll';
 
-              return (
-                <div
-                  key={anime.id}
-                  data-testid={`mobile-catalog-card-${anime.id}`}
-                  className={`p-3.5 rounded-2xl border transition-all ${
-                    isSelected
-                      ? 'bg-[var(--accent-primary)]/10 border-[var(--accent-primary)]/40'
-                      : 'bg-[var(--bg-surface)] border-[var(--border-subtle)]'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <button
-                      type="button"
-                      onClick={() => onToggleSelectCatalog(Number(anime.id))}
-                      aria-label={`Select ${anime.title}`}
-                      className="min-w-[44px] min-h-[44px] -m-1.5 flex items-center justify-center shrink-0"
-                    >
-                      <span
-                        className={`w-5 h-5 rounded-md border flex items-center justify-center ${
-                          isSelected
-                            ? 'bg-[var(--accent-primary)] border-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)]'
-                            : 'border-[var(--border-subtle)] bg-[var(--bg-elevated)]'
-                        }`}
-                      >
-                        {isSelected && <Check className="w-3.5 h-3.5" />}
-                      </span>
-                    </button>
-
+            return (
+              <div
+                key={anime.id}
+                data-testid={`mobile-catalog-card-${anime.id}`}
+                className={`p-4 rounded-2xl border transition-all shadow-sm flex flex-col justify-between gap-3 ${
+                  isSelected
+                    ? 'bg-purple-500/10 border-purple-500/40'
+                    : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] hover:border-purple-500/30'
+                }`}
+              >
+                <div className="flex items-start gap-3.5">
+                  {/* Poster Thumbnail with TV Series / Movie Overlay Pill */}
+                  <div className="relative shrink-0">
                     <img
                       src={
                         anime.posterUrl ||
@@ -843,301 +846,140 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
                       }
                       alt={anime.title}
                       loading="lazy"
-                      className="w-12 h-16 rounded-lg object-cover border border-[var(--border-subtle)] shrink-0"
+                      className="w-20 h-28 rounded-xl object-cover border border-[var(--border-subtle)]"
                     />
+                    <span className="absolute bottom-1.5 left-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/80 backdrop-blur-xs text-[9px] font-extrabold text-white text-center truncate">
+                      {anime.type || 'TV Series'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onToggleSelectCatalog(Number(anime.id))}
+                      aria-label={`Select ${anime.title}`}
+                      className={`absolute -top-1.5 -left-1.5 w-6 h-6 rounded-lg border flex items-center justify-center cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'bg-purple-600 border-purple-500 text-white'
+                          : 'bg-black/75 border-white/25 text-transparent hover:border-purple-400'
+                      }`}
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
 
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <h4 className="text-sm font-extrabold text-[var(--text-primary)] line-clamp-1">
-                          {anime.title}
-                        </h4>
-                        <span className="text-xs font-mono text-[var(--text-secondary)] shrink-0">
-                          #{anime.id}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  {/* Right Details */}
+                  <div className="min-w-0 flex-1 space-y-2">
+                    {/* Top Row Badges: • Live D1, #ID, ★ Rating, OTT Platform */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-extrabold text-emerald-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        Live D1
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[10px] font-mono font-bold text-[var(--text-secondary)]">
+                        #{anime.id}
+                      </span>
+                      {visibleColumns.rating && (
+                        <>
+                          <span className="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-[10px] font-extrabold text-amber-400">
+                            ★ {anime.rating || '8.5'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-500/30 text-[10px] font-extrabold text-cyan-400 truncate max-w-[140px]">
+                            {platformBadge}
+                          </span>
+                        </>
+                      )}
+                      {visibleColumns.status && (
                         <span
-                          className={`px-2 py-0.5 rounded-md font-bold text-[11px] border ${
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold border ${
                             anime.status === 'Airing'
-                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                               : anime.status === 'Upcoming'
-                                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
                                 : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
                           }`}
                         >
                           {anime.status || 'Airing'}
                         </span>
-                        <span className="text-[var(--text-secondary)]">
-                          ★ {anime.rating || '8.5'}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap gap-1 pt-0.5">
-                        {langsList.length > 0 ? (
-                          langsList.map((lang: string, i: number) => (
-                            <span
-                              key={i}
-                              className="px-2 py-0.5 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--text-primary)]"
-                            >
-                              {lang}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-[11px] font-bold text-rose-600 dark:text-rose-400">
-                            Unverified Dubs
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-[var(--border-subtle)]">
-                    <button
-                      type="button"
-                      onClick={() => onToggleVisibility(anime)}
-                      className={`min-h-[44px] px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 ${
-                        isPublished
-                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
-                      }`}
-                    >
-                      {isPublished ? (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Published
-                        </>
-                      ) : (
-                        <>
-                          <EyeOff className="w-3.5 h-3.5" /> Hidden
-                        </>
                       )}
-                    </button>
+                    </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEditWithScrollSave(anime)}
-                        className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5"
-                      >
-                        <Edit3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDeleteCatalogAnime(Number(anime.id), anime.title)}
-                        aria-label={`Delete ${anime.title}`}
-                        className="min-w-[44px] min-h-[44px] rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 flex items-center justify-center"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    {/* Title & Studio */}
+                    <div>
+                      <h4 className="text-sm sm:text-base font-extrabold text-[var(--text-primary)] line-clamp-1">
+                        {anime.title}
+                      </h4>
+                      <p className="text-xs text-[var(--text-secondary)] truncate mt-0.5">
+                        Studio:{' '}
+                        <span className="font-bold text-[var(--text-primary)]">
+                          {anime.studio || 'Unknown Studio'}
+                        </span>
+                      </p>
+                    </div>
+
+                    {/* Dub Languages + Action Buttons Row */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      {visibleColumns.dubs ? (
+                        <div className="flex flex-wrap gap-1 min-w-0">
+                          {langsList.length > 0 ? (
+                            langsList.slice(0, 4).map((lang: string, i: number) => (
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[10px] font-bold text-[var(--text-primary)]"
+                              >
+                                {lang}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-[10px] font-bold text-rose-400">
+                              Unverified Dubs
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div />
+                      )}
+
+                      <div className="flex items-center gap-2 shrink-0 ml-auto">
+                        {visibleColumns.visibility && (
+                          <button
+                            type="button"
+                            onClick={() => onToggleVisibility(anime)}
+                            title={isPublished ? 'Published (click to hide)' : 'Hidden (click to publish)'}
+                            className={`min-h-[38px] px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
+                              isPublished
+                                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                                : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
+                            }`}
+                          >
+                            {isPublished ? (
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            ) : (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleEditWithScrollSave(anime)}
+                          className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-extrabold text-[var(--text-primary)] flex items-center gap-1.5 cursor-pointer transition-colors"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-purple-400" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteCatalogAnime(Number(anime.id), anime.title)}
+                          aria-label={`Delete ${anime.title}`}
+                          className="min-w-[38px] min-h-[38px] rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 flex items-center justify-center cursor-pointer transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-
-          {/* 4B. DESKTOP / TABLET STRUCTURED TABLE (>= 768px) */}
-          <div className="hidden md:block rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
-                    <th className="py-3.5 pl-4 pr-2 w-10">
-                      <button
-                        type="button"
-                        onClick={onSelectAllCatalog}
-                        aria-label="Select all on current page"
-                        className="w-5 h-5 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex items-center justify-center"
-                      >
-                        {selectedCatalogIds.length === items.length && items.length > 0 && (
-                          <Check className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                        )}
-                      </button>
-                    </th>
-                    <th className="py-3.5 px-3 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-                      Anime Title &amp; Metadata
-                    </th>
-                    {visibleColumns.status && (
-                      <th className="py-3.5 px-3 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-                        Status
-                      </th>
-                    )}
-                    {visibleColumns.dubs && (
-                      <th className="py-3.5 px-3 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-                        Verified Dub Languages
-                      </th>
-                    )}
-                    {visibleColumns.visibility && (
-                      <th className="py-3.5 px-3 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-                        Visibility
-                      </th>
-                    )}
-                    <th className="py-3.5 pl-3 pr-5 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider text-right">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border-subtle)]">
-                  {items.map((anime) => {
-                    const isSelected = selectedCatalogIds.includes(Number(anime.id));
-                    const isPublished =
-                      anime.is_published !== 0 &&
-                      anime.is_published !== false &&
-                      anime.status !== 'pending';
-                    const langsList = Array.isArray(anime.languages)
-                      ? anime.languages.filter(Boolean)
-                      : typeof anime.languages === 'string' && anime.languages.trim()
-                        ? anime.languages.split(',').map((s: string) => s.trim()).filter(Boolean)
-                        : [];
-
-                    return (
-                      <tr
-                        key={anime.id}
-                        className={`transition-colors ${
-                          isSelected
-                            ? 'bg-[var(--accent-primary)]/10'
-                            : 'hover:bg-[var(--bg-elevated)]/60'
-                        }`}
-                      >
-                        <td className="py-3 pl-4 pr-2">
-                          <button
-                            type="button"
-                            onClick={() => onToggleSelectCatalog(Number(anime.id))}
-                            aria-label={`Select ${anime.title}`}
-                            className={`w-5 h-5 rounded-md border flex items-center justify-center ${
-                              isSelected
-                                ? 'bg-[var(--accent-primary)] border-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)]'
-                                : 'border-[var(--border-subtle)] bg-[var(--bg-elevated)]'
-                            }`}
-                          >
-                            {isSelected && <Check className="w-3.5 h-3.5" />}
-                          </button>
-                        </td>
-
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={
-                                anime.posterUrl ||
-                                anime.image ||
-                                anime.cover_image ||
-                                anime.poster ||
-                                'https://picsum.photos/seed/anime/100/150'
-                              }
-                              alt={anime.title}
-                              loading="lazy"
-                              className="w-10 h-14 rounded-lg object-cover border border-[var(--border-subtle)] shrink-0"
-                            />
-                            <div className="min-w-0 max-w-xs xl:max-w-md">
-                              <h4 className="font-bold text-[var(--text-primary)] text-sm truncate">
-                                {anime.title}
-                              </h4>
-                              <div className="flex items-center gap-2 mt-0.5 text-xs text-[var(--text-secondary)]">
-                                <span className="font-mono">#{anime.id}</span>
-                                <span>•</span>
-                                <span>{anime.type || 'TV Series'}</span>
-                                {visibleColumns.rating && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="text-amber-500 font-bold">
-                                      ★ {anime.rating || '8.5'}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        {visibleColumns.status && (
-                          <td className="py-3 px-3">
-                            <span
-                              className={`px-2.5 py-1 rounded-md text-xs font-bold border ${
-                                anime.status === 'Airing'
-                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                                  : anime.status === 'Upcoming'
-                                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                                    : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
-                              }`}
-                            >
-                              {anime.status || 'Airing'}
-                            </span>
-                          </td>
-                        )}
-
-                        {visibleColumns.dubs && (
-                          <td className="py-3 px-3">
-                            <div className="flex flex-wrap gap-1 max-w-xs">
-                              {langsList.length > 0 ? (
-                                langsList.map((lang: string, i: number) => (
-                                  <span
-                                    key={i}
-                                    className="px-2 py-0.5 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)]"
-                                  >
-                                    {lang}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="px-2.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-xs font-bold text-rose-600 dark:text-rose-400">
-                                  Unverified
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        )}
-
-                        {visibleColumns.visibility && (
-                          <td className="py-3 px-3">
-                            <button
-                              type="button"
-                              onClick={() => onToggleVisibility(anime)}
-                              className={`min-h-[36px] px-3 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                                isPublished
-                                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                                  : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
-                              }`}
-                            >
-                              {isPublished ? (
-                                <>
-                                  <CheckCircle2 className="w-3.5 h-3.5" /> Published
-                                </>
-                              ) : (
-                                <>
-                                  <EyeOff className="w-3.5 h-3.5" /> Hidden
-                                </>
-                              )}
-                            </button>
-                          </td>
-                        )}
-
-                        <td className="py-3 pl-3 pr-5 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleEditWithScrollSave(anime)}
-                              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5 transition-all cursor-pointer"
-                            >
-                              <Edit3 className="w-3.5 h-3.5 text-[var(--accent-primary)]" /> Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onDeleteCatalogAnime(Number(anime.id), anime.title)}
-                              aria-label={`Delete ${anime.title}`}
-                              className="min-w-[38px] min-h-[38px] p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-600 dark:text-red-400 flex items-center justify-center transition-all cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {/* 5. SERVER-SIDE PAGINATION FOOTER */}
@@ -1156,7 +998,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
             type="button"
             disabled={currentPage <= 1 || isLoading}
             onClick={() => onPageChange(currentPage - 1)}
-            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1 disabled:opacity-40 transition-all"
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1 disabled:opacity-40 transition-all cursor-pointer"
           >
             <ChevronLeft className="w-4 h-4" /> Prev
           </button>
@@ -1169,7 +1011,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
             type="button"
             disabled={currentPage >= totalPages || isLoading}
             onClick={() => onPageChange(currentPage + 1)}
-            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1 disabled:opacity-40 transition-all"
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1 disabled:opacity-40 transition-all cursor-pointer"
           >
             Next <ChevronRight className="w-4 h-4" />
           </button>
@@ -1197,7 +1039,7 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
               <button
                 type="button"
                 onClick={bulkConfirm.onConfirm}
-                className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold cursor-pointer"
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-purple-600 text-white text-xs font-extrabold cursor-pointer"
               >
                 {bulkConfirm.confirmLabel}
               </button>

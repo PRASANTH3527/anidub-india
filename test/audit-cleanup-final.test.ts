@@ -226,7 +226,6 @@ test('All protected Admin API routes enforce strict 401 unauthenticated vs 403 n
         url: 'https://anidub.in/api/admin/import-csv',
         body: JSON.stringify({ animeList: [{ title: 'Solo Leveling Test' }] }),
       },
-      { method: 'POST', url: 'https://anidub.in/api/admin/clear-pending' },
       {
         method: 'POST',
         url: 'https://anidub.in/api/anime',
@@ -283,6 +282,22 @@ test('All protected Admin API routes enforce strict 401 unauthenticated vs 403 n
         check.expectedAdminStatus ?? 200,
         `Expected ${check.expectedAdminStatus ?? 200} for admin ${check.method} ${check.url}`
       );
+    }
+
+    // Removed dangerous legacy routes must return 404 even for verified admin
+    for (const removedUrl of [
+      'https://anidub.in/api/admin/clear-pending',
+      'https://anidub.in/api/admin/reset-db',
+    ]) {
+      const removedRes = await onRequest({
+        request: new Request(removedUrl, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${adminJwt}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirm: 'DELETE ALL' }),
+        }),
+        env,
+      });
+      assert.equal(removedRes.status, 404, `Expected 404 for removed dangerous route ${removedUrl}`);
     }
 
     // Resolving a non-existent feedback ticket returns 404

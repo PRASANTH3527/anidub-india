@@ -20,6 +20,11 @@ import { computeGenreDistributionFromCatalog, redactSensitiveTokens } from '../.
 import { recordAdminActivityLog } from './adminOpsProRoutes';
 import { archiveEntityToRecycleBin } from './adminPhase35Routes';
 import {
+  normalizeAnimeSlug,
+  pickUniqueSlugFromSet,
+  isSlugUniqueConstraintError,
+} from '../../utils/slugUtils';
+import {
   D1_DATABASE_ID,
   getErrorMessage,
   isMissingColumnError,
@@ -831,8 +836,11 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
           continue;
         }
 
+        const hasExplicitCamelReleaseYear =
+          row && typeof row === 'object' && 'releaseYear' in row && row.releaseYear !== undefined;
+
         let existingRow: { id?: unknown } | null = null;
-        if (env.DB) {
+        if (env.DB && !hasExplicitCamelReleaseYear) {
           existingRow = await env.DB.prepare('SELECT id FROM anime WHERE LOWER(title) = LOWER(?) LIMIT 1')
             .bind(rawTitle)
             .first<{ id?: unknown }>();
@@ -846,7 +854,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         }
 
         seenInThisUpload.add(lowerTitle);
-        const baseSlug = lowerTitle.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'anime';
+        const baseSlug = normalizeAnimeSlug(rawTitle);
 
         itemsToInsert.push({ ...row, resolvedTitle: rawTitle, resolvedSlug: baseSlug });
         addedTitles.push(rawTitle);
@@ -857,7 +865,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
         const title = row.resolvedTitle;
         const slug = row.resolvedSlug;
         const synopsis = String(row.synopsis || row.Synopsis || row.description || row.Description || 'Exciting anime series').trim();
-        const year = parseInt(String(row.year || row['Release Year'] || row.Year || '2024'), 10) || 2024;
+        const year = parseInt(String(row.year || row.releaseYear || row['Release Year'] || row.Year || '2024'), 10) || 2024;
         const rating = parseFloat(String(row.rating || row.Ratings || row.Rating || '8.5')) || 8.5;
         const genres = Array.isArray(row.genres)
           ? row.genres.join(', ')
@@ -1007,12 +1015,22 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
                 .bind(...buildBaseBindings(slug), ...extraBindings)
                 .run();
             } catch (slugErr) {
-              const errMsg = getErrorMessage(slugErr).toLowerCase();
-              if (errMsg.includes('unique') && errMsg.includes('slug')) {
-                const uniqueSlug = `${slug}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-                await env.DB!.prepare(sql)
-                  .bind(...buildBaseBindings(uniqueSlug), ...extraBindings)
-                  .run();
+              if (isSlugUniqueConstraintError(slugErr)) {
+                const uniqueSlug = pickUniqueSlugFromSet(
+                  slug,
+                  new Set([slug]),
+                  year
+                );
+                try {
+                  await env.DB!.prepare(sql)
+                    .bind(...buildBaseBindings(uniqueSlug), ...extraBindings)
+                    .run();
+                } catch {
+                  const fallbackUniqueSlug = `${slug}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+                  await env.DB!.prepare(sql)
+                    .bind(...buildBaseBindings(fallbackUniqueSlug), ...extraBindings)
+                    .run();
+                }
               } else {
                 throw slugErr;
               }
@@ -1066,6 +1084,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
 
       return jsonResponse({
         success: true,
+        imported: insertedCount,
         count: insertedCount,
         insertedCount,
         skippedCount,
@@ -1300,19 +1319,7 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
     }
 
     const ensureSettingsTable = async () => {
-      if (!env.DB) return;
-      try {
-        await env.DB.prepare(
-          `CREATE TABLE IF NOT EXISTS app_settings (
-            setting_key TEXT PRIMARY KEY,
-            setting_value TEXT NOT NULL,
-            updated_by TEXT,
-            updated_at TEXT DEFAULT (datetime('now'))
-          )`
-        ).run();
-      } catch {
-        // Safe fallback if table creation is restricted
-      }
+      // Handled by migrations/006_admin_polish_ops.sql
     };
 
     if (path === '/api/telegram/status' && method === 'GET') {

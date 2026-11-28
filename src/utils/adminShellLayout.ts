@@ -123,7 +123,7 @@ export function partitionOverviewAttentionChecks(
   };
 }
 
-export type AdminMobileNavGroup = 'overview' | 'catalog' | 'dubs' | 'tools' | 'more';
+export type AdminMobileNavGroup = 'overview' | 'catalog' | 'pending' | 'tools' | 'more';
 
 export const ADMIN_TOOLS_TABS: readonly AdminActiveTab[] = [
   'imdb_checker',
@@ -140,10 +140,7 @@ export const ADMIN_STUDIO_TABS: readonly AdminActiveTab[] = [
 ] as const;
 
 export const ADMIN_MORE_TABS: readonly AdminActiveTab[] = [
-  'moderation',
   'analytics',
-  'activity_log',
-  'recycle_bin',
   'backup',
   'settings',
 ] as const;
@@ -152,26 +149,30 @@ export const ADMIN_QUICK_PILL_TABS: ReadonlyArray<{
   id: AdminActiveTab;
   label: string;
 }> = [
-  { id: 'overview', label: 'Home' },
-  { id: 'catalog', label: 'Catalog' },
-  { id: 'dubs', label: 'Dubs' },
+  { id: 'overview', label: 'Overview' },
+  { id: 'moderation', label: 'Pending Reviews' },
+  { id: 'catalog', label: 'Anime Catalog' },
+  { id: 'imdb_checker', label: 'IMDb & Diagnostics' },
+  { id: 'analytics', label: 'Edge Analytics' },
+  { id: 'settings', label: 'Cloud Infrastructure' },
   { id: 'backup', label: 'Bulk CSV & Backup' },
-  { id: 'imdb_checker', label: 'IMDb Checker' },
   { id: 'data_health', label: 'Data Health' },
   { id: 'translations', label: 'Translations' },
   { id: 'franchises', label: 'Franchise' },
   { id: 'cast', label: 'Cast' },
-  { id: 'moderation', label: 'Moderation' },
-  { id: 'analytics', label: 'Analytics 2.0' },
-  { id: 'activity_log', label: 'Activity Log' },
-  { id: 'recycle_bin', label: 'Recycle Bin' },
-  { id: 'settings', label: 'Telegram & Settings' },
 ];
 
 export function resolveMobileAdminActiveGroup(effectiveTab: AdminActiveTab): AdminMobileNavGroup {
   if (effectiveTab === 'overview') return 'overview';
   if (effectiveTab === 'catalog' || effectiveTab === 'editor') return 'catalog';
-  if (effectiveTab === 'dubs') return 'dubs';
+  if (
+    effectiveTab === 'moderation' ||
+    effectiveTab === 'pending' ||
+    effectiveTab === 'feedback'
+  ) {
+    return 'pending';
+  }
   if (ADMIN_TOOLS_TABS.includes(effectiveTab)) return 'tools';
   return 'more';
 }
+

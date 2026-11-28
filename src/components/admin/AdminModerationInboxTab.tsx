@@ -29,6 +29,7 @@ export interface AdminModerationInboxTabProps {
   feedbackList: AdminFeedbackItem[];
   updatingFeedbackId: number | string | null;
   feedbackError: string | null;
+  initialSubTab?: ModerationQueueTab;
   onApproveAnime: (id: number | string, status?: string) => void;
   onRejectAnime: (
     id: number | string,
@@ -41,7 +42,54 @@ export interface AdminModerationInboxTabProps {
   onSuccess?: (message: string, recycleBinId?: number | null) => void;
 }
 
-type ModerationQueueTab = 'all' | 'pending' | 'dub_reviews' | 'general_reviews' | 'feedback';
+export type ModerationQueueTab = 'all' | 'pending' | 'dub_reviews' | 'general_reviews' | 'feedback';
+
+export function getVisibleModerationSections(counts: {
+  pendingCount: number;
+  dubReviewsCount: number;
+  generalReviewsCount: number;
+  openFeedbackCount: number;
+}): {
+  showDubReviews: boolean;
+  showGeneralReviews: boolean;
+  visibleTabs: Array<{ id: ModerationQueueTab; label: string; count: number }>;
+} {
+  const showDubReviews = counts.dubReviewsCount > 0;
+  const showGeneralReviews = counts.generalReviewsCount > 0;
+  const totalCount =
+    counts.pendingCount +
+    counts.openFeedbackCount +
+    (showDubReviews ? counts.dubReviewsCount : 0) +
+    (showGeneralReviews ? counts.generalReviewsCount : 0);
+
+  const visibleTabs: Array<{ id: ModerationQueueTab; label: string; count: number }> = [
+    { id: 'all', label: 'All Queues', count: totalCount },
+    { id: 'pending', label: 'Pending Submissions', count: counts.pendingCount },
+    { id: 'feedback', label: 'User Feedback', count: counts.openFeedbackCount },
+  ];
+
+  if (showDubReviews) {
+    visibleTabs.push({
+      id: 'dub_reviews',
+      label: '5-Slider Dub Reviews',
+      count: counts.dubReviewsCount,
+    });
+  }
+
+  if (showGeneralReviews) {
+    visibleTabs.push({
+      id: 'general_reviews',
+      label: 'General Reviews',
+      count: counts.generalReviewsCount,
+    });
+  }
+
+  return {
+    showDubReviews,
+    showGeneralReviews,
+    visibleTabs,
+  };
+}
 
 export const AdminModerationInboxTab: React.FC<AdminModerationInboxTabProps> = ({
   pendingItems,
@@ -49,6 +97,7 @@ export const AdminModerationInboxTab: React.FC<AdminModerationInboxTabProps> = (
   feedbackList,
   updatingFeedbackId,
   feedbackError,
+  initialSubTab = 'all',
   onApproveAnime,
   onRejectAnime,
   onEditPendingAnime,
@@ -56,7 +105,13 @@ export const AdminModerationInboxTab: React.FC<AdminModerationInboxTabProps> = (
   onUpdateFeedbackStatus,
   onSuccess,
 }) => {
-  const [queueTab, setQueueTab] = useState<ModerationQueueTab>('all');
+  const [queueTab, setQueueTab] = useState<ModerationQueueTab>(initialSubTab);
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setQueueTab(initialSubTab);
+    }
+  }, [initialSubTab]);
   const [loadingInbox, setLoadingInbox] = useState<boolean>(true);
   const [dubReviews, setDubReviews] = useState<any[]>([]);
   const [generalReviews, setGeneralReviews] = useState<any[]>([]);

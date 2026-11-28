@@ -346,7 +346,7 @@ test('GET /api/anime/:id hides unpublished rows from public/non-admins and allow
   assert.equal(adminJson.title, 'Secret Pending Dub');
 });
 
-test('POST /api/admin/reset-db requires strict { confirm: "DELETE ALL" } and AdminDashboard enforces prompt()', async () => {
+test('POST /api/admin/reset-db is permanently removed (404) and AdminDashboard exposes no full-DB wipe', async () => {
   const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
     modulusLength: 2048,
     publicKeyEncoding: { type: 'spki', format: 'pem' },
@@ -376,36 +376,8 @@ test('POST /api/admin/reset-db requires strict { confirm: "DELETE ALL" } and Adm
     privateKey
   );
 
-  // 1. Missing body -> 400 and no DELETE executed
-  const missingBodyRes = await onRequest({
-    request: new Request('https://anidub.in/api/admin/reset-db', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${adminJwt}` },
-    }),
-    env,
-  });
-  assert.equal(missingBodyRes.status, 400);
-  assert.equal(deletedTables.length, 0);
-
-  // 2. Wrong confirmation string -> 400 and no DELETE executed
-  for (const wrongPayload of [{}, { confirm: '' }, { confirm: 'delete all' }, { confirm: 'YES' }]) {
-    const wrongRes = await onRequest({
-      request: new Request('https://anidub.in/api/admin/reset-db', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${adminJwt}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(wrongPayload),
-      }),
-      env,
-    });
-    assert.equal(wrongRes.status, 400);
-    assert.equal(deletedTables.length, 0);
-  }
-
-  // 3. Exact { confirm: "DELETE ALL" } -> 200 and deletes executed
-  const confirmRes = await onRequest({
+  // Even for a verified admin sending { confirm: "DELETE ALL" }, the route must be permanently removed (404)
+  const resetRes = await onRequest({
     request: new Request('https://anidub.in/api/admin/reset-db', {
       method: 'POST',
       headers: {
@@ -416,13 +388,13 @@ test('POST /api/admin/reset-db requires strict { confirm: "DELETE ALL" } and Adm
     }),
     env,
   });
-  assert.equal(confirmRes.status, 200);
-  assert.ok(deletedTables.some((s) => s.includes('DELETE FROM anime')));
+  assert.equal(resetRes.status, 404);
+  assert.equal(deletedTables.length, 0);
 
-  // 4. Frontend AdminDashboard.tsx requires window.prompt() matching "DELETE ALL"
+  // Frontend AdminDashboard.tsx must not invoke reset-db or window.prompt()
   const dashboardCode = fs.readFileSync(path.join(process.cwd(), 'src/components/AdminDashboard.tsx'), 'utf-8');
-  assert.ok(dashboardCode.includes('window.prompt('));
-  assert.ok(dashboardCode.includes("typedConfirmation !== 'DELETE ALL'"));
+  assert.equal(dashboardCode.includes('/api/admin/reset-db'), false);
+  assert.equal(dashboardCode.includes('resetDatabase'), false);
 });
 
 test('Security headers (_headers), .gitignore, SEO assets, and non-sensitive reviews SQL projection', () => {

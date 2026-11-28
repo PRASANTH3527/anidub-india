@@ -105,38 +105,8 @@ export async function recordAdminActivityLog(
       )
       .run();
   } catch (err) {
-    if (isMissingOpsProTableError(err)) {
-      try {
-        await db
-          .prepare(
-            `CREATE TABLE IF NOT EXISTS admin_activity_logs (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              actor_id TEXT NOT NULL,
-              actor_email TEXT,
-              action TEXT NOT NULL,
-              entity_type TEXT NOT NULL,
-              entity_id TEXT NOT NULL,
-              summary TEXT,
-              diff_json TEXT,
-              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )`
-          )
-          .run();
-        await db
-          .prepare(insertSql)
-          .bind(
-            String(entry.actor_id || 'admin'),
-            entry.actor_email ? String(entry.actor_email) : null,
-            actionVal,
-            String(entry.entity_type).trim(),
-            String(entry.entity_id).trim(),
-            String(entry.summary || '').trim(),
-            diffStr
-          )
-          .run();
-      } catch {
-        // Safe non-blocking fallback if D1 is read-only or mock
-      }
+    if (!isMissingOpsProTableError(err)) {
+      // Safe non-blocking fallback if D1 is read-only or mock
     }
   }
 }
@@ -583,29 +553,6 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
     const actorEmail = auth.session.email || auth.session.userId || 'admin';
 
     try {
-      // Ensure additive table exists so bulk edits succeed even before manual CLI migration
-      await env.DB.prepare(
-        `CREATE TABLE IF NOT EXISTS anime_dub_matrix (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          anime_id TEXT NOT NULL,
-          season_number INTEGER NOT NULL DEFAULT 1,
-          language_code TEXT NOT NULL,
-          platform_name TEXT,
-          region TEXT NOT NULL DEFAULT 'IN',
-          dubbed_episodes INTEGER,
-          total_episodes INTEGER,
-          availability_status TEXT NOT NULL DEFAULT 'unverified' CHECK (availability_status IN ('complete', 'partial', 'announced', 'unavailable', 'unverified')),
-          source_url TEXT,
-          evidence_note TEXT,
-          verified_at TEXT,
-          verified_by TEXT,
-          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(anime_id, season_number, language_code, platform_name)
-        )`
-      )
-        .run()
-        .catch(() => {});
-
       const affectedAnimeIds = new Set<string>();
 
       for (const entry of validatedEntries) {
@@ -1095,18 +1042,7 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
             .bind(locked ? 1 : 0, animeId, locale)
             .run();
         } catch (colErr) {
-          if (isMissingColumnError(colErr)) {
-            await env.DB.prepare(
-              'ALTER TABLE anime_translations ADD COLUMN is_locked INTEGER DEFAULT 0'
-            )
-              .run()
-              .catch(() => {});
-            await env.DB.prepare(
-              "UPDATE anime_translations SET is_locked = ?, updated_at = datetime('now') WHERE anime_id = ? AND locale = ?"
-            )
-              .bind(locked ? 1 : 0, animeId, locale)
-              .run();
-          } else if (!isMissingTranslationsTableError(colErr)) {
+          if (!isMissingColumnError(colErr) && !isMissingTranslationsTableError(colErr)) {
             throw colErr;
           }
         }
@@ -1285,7 +1221,9 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
     if (method === 'DELETE') {
       let recycleBinId: number | null = null;
       if (env.DB) {
-        const existingRev = await env.DB.prepare('SELECT * FROM reviews WHERE id = ?')
+        const existingRev = await env.DB.prepare(
+          'SELECT id, anime_id, user_id, user_name, user_avatar, rating, language, comment, created_at FROM reviews WHERE id = ?'
+        )
           .bind(revId)
           .first<Record<string, unknown>>()
           .catch(() => null);
@@ -1334,14 +1272,8 @@ export async function handleAdminOpsProRoutes(ctx: RouteContext): Promise<Respon
               .bind(status, revId)
               .run();
           } catch (colErr) {
-            if (isMissingColumnError(colErr)) {
-              await env.DB.prepare("ALTER TABLE reviews ADD COLUMN status TEXT DEFAULT 'published'")
-                .run()
-                .catch(() => {});
-              await env.DB.prepare('UPDATE reviews SET status = ? WHERE id = ?')
-                .bind(status, revId)
-                .run()
-                .catch(() => {});
+            if (!isMissingColumnError(colErr)) {
+              throw colErr;
             }
           }
         }

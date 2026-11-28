@@ -133,27 +133,25 @@ describe('Restored Legacy Admin Features — Pure Logic & Security', () => {
     assert.ok(safe.includes('apikey=[REDACTED]'));
   });
 
-  it('keeps all restored legacy and Phase 1–3.5 tools reachable in Quick-Tab bar and Tools/More groups', () => {
+  it('keeps all active legacy and Phase 1–3.5 tools reachable in Quick-Tab bar and Pending/Tools/More groups', () => {
     const quickIds = new Set(ADMIN_QUICK_PILL_TABS.map((t) => t.id));
     for (const required of [
       'overview',
       'catalog',
-      'dubs',
+      'moderation',
       'backup',
       'imdb_checker',
       'data_health',
       'translations',
       'franchises',
       'cast',
-      'moderation',
       'analytics',
-      'activity_log',
-      'recycle_bin',
       'settings',
     ] as const) {
       assert.ok(quickIds.has(required), `Missing ${required} in ADMIN_QUICK_PILL_TABS`);
     }
 
+    assert.equal(resolveMobileAdminActiveGroup('moderation'), 'pending');
     assert.equal(resolveMobileAdminActiveGroup('imdb_checker'), 'tools');
     assert.equal(resolveMobileAdminActiveGroup('data_health'), 'tools');
     assert.equal(resolveMobileAdminActiveGroup('translations'), 'tools');

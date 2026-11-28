@@ -1,22 +1,17 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react';
 import {
   CheckCircle2,
   XCircle,
   Plus,
   Search,
-  Globe,
   ShieldAlert,
   Clock,
   Film,
   Download,
   Upload,
-  HelpCircle,
-  Loader2,
-  Database,
   LogOut,
   Terminal,
   BarChart3,
-  MessageSquare,
   Settings,
   ArrowLeft,
   ShieldCheck,
@@ -24,29 +19,21 @@ import {
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
-  MoreHorizontal,
-  X,
-  FileSpreadsheet,
-  RefreshCw,
-  Activity,
   Layers,
   Mic2,
-  Trash2,
-  RotateCcw,
   Palette,
-  Sparkles,
   ExternalLink,
   Star,
-  Wrench,
+  Zap,
+  RefreshCw,
+  Command,
+  MessageSquare,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../context/ThemeContext';
-import {
-  ADMIN_QUICK_PILL_TABS,
-  resolveMobileAdminActiveGroup,
-} from '../utils/adminShellLayout';
+import { ADMIN_QUICK_PILL_TABS } from '../utils/adminShellLayout';
 import { DubInfoModal } from './DubInfoModal';
-import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { ConfirmDialog, AdminSkeleton } from './ui/EclipseState';
 import { cloudflareApi, type AdminLinkCheckResponse } from '../services/cloudflareApi';
 import { getCloudflareUrl } from '../config/cloudflare';
 import { useUser, useAuth, getClerkSessionToken } from '../lib/clerk';
@@ -67,26 +54,27 @@ import {
 import { AdminTranslationsTab } from './admin/AdminTranslationsTab';
 import { AdminOverviewTab } from './admin/AdminOverviewTab';
 import { AdminCatalogTab } from './admin/AdminCatalogTab';
-import { AdminPendingTab } from './admin/AdminPendingTab';
 import { AdminDataHealthTab } from './admin/AdminDataHealthTab';
-import { AdminFeedbackTab } from './admin/AdminFeedbackTab';
 import { AdminSettingsTab } from './admin/AdminSettingsTab';
 import { AdminTerminalHud } from './admin/AdminTerminalHud';
 import { AdminCommandPalette } from './admin/AdminCommandPalette';
 import { AdminCsvHelpModal } from './admin/AdminCsvHelpModal';
-import { AdminAnimeEditorView } from './admin/AdminAnimeEditorView';
-import { AdminDubMatrixTab } from './admin/AdminDubMatrixTab';
 import { AdminModerationInboxTab } from './admin/AdminModerationInboxTab';
-import { AdminActivityLogTab } from './admin/AdminActivityLogTab';
 import { AdminFranchiseBuilderTab } from './admin/AdminFranchiseBuilderTab';
 import { AdminCastManagerTab } from './admin/AdminCastManagerTab';
 import { AdminBackupCenterTab } from './admin/AdminBackupCenterTab';
-import { AdminRecycleBinTab } from './admin/AdminRecycleBinTab';
 import { AdminImdbCheckerTab } from './admin/AdminImdbCheckerTab';
+import { AdminMobileNav } from './admin/AdminMobileNav';
+import { parseCsvTextToAnimeRows } from '../utils/adminLegacyRestore';
 import {
-  computeGenreDistributionFromCatalog,
-  parseCsvTextToAnimeRows,
-} from '../utils/adminLegacyRestore';
+  buildCatalogExportCsv,
+  buildCatalogExportSql,
+  computeAdminOverviewStats,
+} from '../utils/adminExportHelpers';
+
+const AnalyticsDashboard = lazy(() =>
+  import('./AnalyticsDashboard').then((m) => ({ default: m.AnalyticsDashboard }))
+);
 
 export interface AdminDashboardProps {
   onAnimeCreated?: (updatedAnime?: any, deletedId?: string | number) => void;
@@ -111,17 +99,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     Boolean(isSignedIn && clerkUser && (isAuthorizedClerkAdmin(clerkUser) || serverVerifiedAdmin === true)) &&
     serverVerifiedAdmin !== false;
 
-  // Navigation & Responsive Shell State (hydrates from URL query params so editor back-navigation restores exact catalog state)
+  // Navigation & Responsive Shell State (hydrates from URL query params)
   const [activeTab, setActiveTab] = useState<AdminActiveTab>(() => {
     if (typeof window !== 'undefined') {
       const p = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
       if (p === '/admin/analytics') return 'analytics';
-      if (p === '/admin/catalog/new' || /^\/admin\/catalog\/[^/]+\/edit\/?$/.test(p)) {
-        return 'editor';
-      }
       const tabParam = params.get('tab') as AdminActiveTab | null;
-      if (tabParam) return tabParam;
+      if (
+        tabParam &&
+        tabParam !== 'dubs' &&
+        tabParam !== 'activity_log' &&
+        tabParam !== 'recycle_bin' &&
+        tabParam !== 'editor'
+      ) {
+        return tabParam;
+      }
     }
     return 'overview';
   });
@@ -171,7 +164,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isBulkProcessing, setIsBulkProcessing] = useState<boolean>(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [editingAnime, setEditingAnime] = useState<any | null>(null);
-  const [editorTargetTab, setEditorTargetTab] = useState<AnimeEditorTabId>('identity');
   const [translationTargetAnimeId, setTranslationTargetAnimeId] = useState<string | number | null>(null);
   const [franchiseTargetKey, setFranchiseTargetKey] = useState<string | undefined>(undefined);
   const [castTargetAnimeId, setCastTargetAnimeId] = useState<string | number | null>(null);
@@ -230,11 +222,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   });
   const [isUrlSaved, setIsUrlSaved] = useState<boolean>(false);
 
-  // Toast Notification Banner State (with optional Soft-Delete Undo Recycle Bin ID)
+  // Toast Notification Banner & Confirmation Dialog State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
-  const [toastUndoRecycleId, setToastUndoRecycleId] = useState<number | null>(null);
-  const [isUndoingToast, setIsUndoingToast] = useState<boolean>(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -244,23 +234,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onConfirm: () => void;
   } | null>(null);
 
-  const showToast = useCallback(
-    (msg: string, type: 'success' | 'error' = 'success', recycleBinId?: number | null) => {
-      setToastMessage(msg);
-      setToastType(type);
-      setToastUndoRecycleId(recycleBinId ?? null);
-      window.setTimeout(() => {
-        setToastMessage((prev) => {
-          if (prev === msg) {
-            setToastUndoRecycleId(null);
-            return null;
-          }
-          return prev;
-        });
-      }, recycleBinId ? 8000 : 4500);
-    },
-    []
-  );
+  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    window.setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 4500);
+  }, []);
 
   const addLog = useCallback((msg: string, type: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR' = 'INFO') => {
     const time = new Date().toLocaleTimeString();
@@ -404,8 +384,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         activeTab === 'translations' ||
         activeTab === 'backup' ||
         activeTab === 'franchises' ||
-        activeTab === 'cast' ||
-        activeTab === 'dubs')
+        activeTab === 'cast')
     ) {
       void fetchFullIndexForTools();
     }
@@ -470,7 +449,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, []);
 
-  // 4. Fetch D1 Diagnostics & Status Summary
+  // 4. Fetch D1 Diagnostics & Status Summary (/api/cloudflare/status)
   const fetchD1StatusSummary = useCallback(async () => {
     setIsTestingApi(true);
     try {
@@ -478,7 +457,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (cf) {
         setCfStatus(cf);
         addLog(
-          `D1 connected (${cf.services?.d1?.recordsCount ?? 0} total rows, ${cf.services?.d1?.latencyMs ?? 12}ms).`,
+          `D1 connected via /api/cloudflare/status (${cf.services?.d1?.recordsCount ?? 0} total rows, ${cf.services?.d1?.latencyMs ?? 12}ms).`,
           'SUCCESS'
         );
       }
@@ -618,96 +597,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   ]);
 
   // 8. Real D1 Overview Stats (Never attributing empty-language anime to Hindi/Tamil/Telugu!)
-  const overviewStats: AdminOverviewStats = useMemo(() => {
-    const d1 = cfStatus?.services?.d1;
-    const fallbackPool = fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems;
-
-    // Accurate language tally from loaded pool if D1 summary hasn't arrived yet
-    const computedLangCounts: Record<string, number> = {
-      Hindi: 0,
-      Tamil: 0,
-      Telugu: 0,
-      Malayalam: 0,
-      Kannada: 0,
-      Bengali: 0,
-      Marathi: 0,
-      Gujarati: 0,
-      Unverified: 0,
-    };
-
-    for (const anime of fallbackPool) {
-      const rawLangs = Array.isArray(anime.languages)
-        ? anime.languages.filter(Boolean)
-        : typeof anime.languages === 'string' && anime.languages.trim()
-          ? anime.languages
-              .split(',')
-              .map((s: string) => s.trim())
-              .filter(Boolean)
-          : [];
-      if (rawLangs.length === 0) {
-        computedLangCounts.Unverified += 1;
-      } else {
-        const joined = rawLangs.join(' ').toLowerCase();
-        if (joined.includes('hindi')) computedLangCounts.Hindi += 1;
-        if (joined.includes('tamil')) computedLangCounts.Tamil += 1;
-        if (joined.includes('telugu')) computedLangCounts.Telugu += 1;
-        if (joined.includes('malayalam')) computedLangCounts.Malayalam += 1;
-        if (joined.includes('kannada')) computedLangCounts.Kannada += 1;
-        if (joined.includes('bengali')) computedLangCounts.Bengali += 1;
-        if (joined.includes('marathi')) computedLangCounts.Marathi += 1;
-        if (joined.includes('gujarati')) computedLangCounts.Gujarati += 1;
-      }
-    }
-
-    const openFeedbackCount = feedbackList.filter(
-      (f) => String(f.status || 'open').toLowerCase() !== 'resolved'
-    ).length;
-
-    const publishedAnimeCount =
-      typeof d1?.activeAnimeCount === 'number'
-        ? d1.activeAnimeCount
-        : Math.max(catalogTotalItems, fallbackPool.length);
-
-    const totalAnimeCount =
-      typeof d1?.recordsCount === 'number' && d1.recordsCount > 0
-        ? d1.recordsCount
-        : Math.max(catalogTotalItems, fallbackPool.length);
-
-    const unverifiedDubsCount =
-      typeof d1?.unverifiedDubsCount === 'number'
-        ? d1.unverifiedDubsCount
-        : computedLangCounts.Unverified;
-
-    const missingTranslationsCount =
-      typeof d1?.missingTranslationsCount === 'number'
-        ? d1.missingTranslationsCount
-        : publishedAnimeCount;
-
-    const serverGenreCounts =
-      d1?.genreCounts && typeof d1.genreCounts === 'object' && Object.keys(d1.genreCounts).length > 0
-        ? d1.genreCounts
-        : computeGenreDistributionFromCatalog(fallbackPool, 20).genreCounts;
-
-    return {
-      publishedAnimeCount,
-      totalAnimeCount,
-      pendingModerationCount: pendingItems.length,
-      openFeedbackCount:
-        typeof d1?.openFeedbackCount === 'number' && feedbackList.length === 0
-          ? d1.openFeedbackCount
-          : openFeedbackCount,
-      totalFeedbackCount: feedbackList.length || Number(d1?.feedbackCount || 0),
-      unverifiedDubsCount,
-      missingTranslationsCount,
-      reviewsCount: Number(d1?.reviewsCount || 0),
-      reportsCount: Number(d1?.reportsCount || 0),
-      watchlistCount: Number(d1?.watchlistCount || 0),
-      d1Connected: Boolean(d1?.connected),
-      d1LatencyMs: Number(d1?.latencyMs || 12),
-      languageCounts: d1?.languageCounts || computedLangCounts,
-      genreCounts: serverGenreCounts,
-    };
-  }, [cfStatus, fullAdminIndex, catalogItems, catalogTotalItems, pendingItems, feedbackList]);
+  const overviewStats: AdminOverviewStats = useMemo(
+    () =>
+      computeAdminOverviewStats({
+        cfStatus,
+        fullAdminIndex,
+        catalogItems,
+        catalogTotalItems,
+        pendingItems,
+        feedbackList,
+      }),
+    [cfStatus, fullAdminIndex, catalogItems, catalogTotalItems, pendingItems, feedbackList]
+  );
 
   // 9. Data Health Report
   const dataHealthPool = useMemo(
@@ -810,94 +711,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         throw new Error(res?.error || 'Server rejected deletion');
       }
       setPendingItems((prev) => prev.filter((item) => String(item.id) !== String(id)));
-      showToast(
-        'Rejected submission and archived snapshot to Recycle Bin.',
-        'success',
-        res?.recycleBinId ?? null
-      );
+      showToast('Rejected pending submission.', 'success');
       void fetchD1StatusSummary();
     } catch (err: any) {
       showToast(`Failed to reject submission: ${err?.message || 'Unknown error'}`, 'error');
     }
-  };
-
-  const handleTogglePendingLanguage = async (id: number | string, lang: string) => {
-    const targetItem = pendingItems.find((i) => String(i.id) === String(id));
-    if (!targetItem) return;
-    const currentLangs: string[] = Array.isArray(targetItem.languages)
-      ? targetItem.languages
-      : typeof targetItem.languages === 'string' && targetItem.languages.trim()
-        ? targetItem.languages.split(',').map((s: string) => s.trim())
-        : [];
-    const updatedLangs = currentLangs.includes(lang)
-      ? currentLangs.filter((l: string) => l !== lang)
-      : [...currentLangs, lang];
-
-    setPendingItems((prev) =>
-      prev.map((item) =>
-        String(item.id) === String(id) ? { ...item, languages: updatedLangs } : item
-      )
-    );
-
-    try {
-      await cloudflareApi.updateAnime(id, {
-        ...targetItem,
-        languages: updatedLangs.join(', '),
-      });
-    } catch (err) {
-      console.error('Failed to sync pending language update:', err);
-    }
-  };
-
-  const handleApproveAllPending = () => {
-    if (pendingItems.length === 0) return;
-    setConfirmDialog({
-      isOpen: true,
-      title: 'Approve All Pending Submissions',
-      message: `Approve and publish all ${pendingItems.length} pending anime to the live Cloudflare D1 catalog?`,
-      confirmLabel: 'Approve All',
-      onConfirm: async () => {
-        setConfirmDialog(null);
-        let approvedCount = 0;
-        for (const item of pendingItems) {
-          try {
-            const targetStatus = item.type === 'Movie' ? 'Completed' : 'Airing';
-            const res: any = await cloudflareApi.approveAnime(item.id, targetStatus);
-            if (res && res.success !== false) approvedCount++;
-          } catch {}
-        }
-        await fetchPendingItems();
-        await fetchPaginatedAdminCatalog(1);
-        await fetchD1StatusSummary();
-        onAnimeCreated?.();
-        showToast(`Approved and published ${approvedCount} titles to the catalog!`, 'success');
-      },
-    });
-  };
-
-  const handleClearAllPending = () => {
-    if (pendingItems.length === 0) return;
-    setConfirmDialog({
-      isOpen: true,
-      title: 'Clear Pending Moderation Queue',
-      message: `Reject and permanently delete all ${pendingItems.length} pending submissions? Published catalog titles will NOT be affected.`,
-      confirmLabel: 'Clear Queue',
-      isDanger: true,
-      onConfirm: async () => {
-        setConfirmDialog(null);
-        try {
-          const res: any = await cloudflareApi.clearPendingQueue();
-          if (!res || !res.success) {
-            throw new Error(res?.error || res?.message || 'Failed to clear pending queue');
-          }
-          setPendingItems([]);
-          showToast('Pending moderation queue cleared.', 'success');
-          void fetchD1StatusSummary();
-        } catch (err: any) {
-          showToast(`Failed to clear pending queue: ${err?.message || 'Unknown error'}`, 'error');
-        }
-      },
-    });
   };
 
   // 12. Catalog Row & Bulk Actions
@@ -926,48 +744,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleDeleteCatalogAnime = (id: number, title: string) => {
     setConfirmDialog({
       isOpen: true,
-      title: 'Move Catalog Title to Recycle Bin',
-      message: `Soft-delete "${title}" (#${id}) from the live catalog? A full snapshot will be saved in Recycle Bin so you can restore it anytime.`,
-      confirmLabel: 'Move to Recycle Bin',
+      title: 'Delete Catalog Title',
+      message: `Are you sure you want to remove "${title}" (#${id}) from the live catalog?`,
+      confirmLabel: 'Delete Title',
       isDanger: true,
       onConfirm: async () => {
         setConfirmDialog(null);
         try {
-          const res: any = await cloudflareApi.deleteAnime(id);
+          await cloudflareApi.deleteAnime(id);
           setCatalogItems((prev) => prev.filter((a) => Number(a.id) !== Number(id)));
           setCatalogTotalItems((prev) => Math.max(0, prev - 1));
           onAnimeCreated?.(undefined, id);
-          showToast(
-            `Moved "${title}" to Recycle Bin.`,
-            'success',
-            res?.recycleBinId ?? null
-          );
+          showToast(`Deleted "${title}" from catalog.`, 'success');
           void fetchD1StatusSummary();
         } catch (err: any) {
           showToast(`Failed to delete "${title}": ${err?.message || 'Error'}`, 'error');
         }
       },
     });
-  };
-
-  const handleUndoRecycleToast = async () => {
-    if (!toastUndoRecycleId || isUndoingToast) return;
-    setIsUndoingToast(true);
-    try {
-      const res = await cloudflareApi.restoreAdminRecycleBinItem(toastUndoRecycleId);
-      setToastUndoRecycleId(null);
-      showToast(res.message || 'Restored item from Recycle Bin!', 'success');
-      await Promise.all([
-        fetchPaginatedAdminCatalog(catalogPage),
-        fetchPendingItems(),
-        fetchD1StatusSummary(),
-      ]);
-      onAnimeCreated?.();
-    } catch (err: any) {
-      showToast(err?.message || 'Undo restore failed.', 'error');
-    } finally {
-      setIsUndoingToast(false);
-    }
   };
 
   const handleToggleSelectCatalog = (id: number) => {
@@ -1090,24 +884,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (selectedCatalogIds.length === 0) return;
     setConfirmDialog({
       isOpen: true,
-      title: 'Move Selected Titles to Recycle Bin',
-      message: `Soft-delete ${selectedCatalogIds.length} selected anime from the live catalog? Full snapshots will be stored in Recycle Bin.`,
+      title: 'Delete Selected Titles',
+      message: `Are you sure you want to remove ${selectedCatalogIds.length} selected anime from the live catalog?`,
       confirmLabel: `Delete ${selectedCatalogIds.length} Titles`,
       isDanger: true,
       onConfirm: async () => {
         setConfirmDialog(null);
         setIsBulkProcessing(true);
         try {
-          let lastRecycleId: number | null = null;
           for (const id of selectedCatalogIds) {
-            const res: any = await cloudflareApi.deleteAnime(id);
-            if (res?.recycleBinId) lastRecycleId = res.recycleBinId;
+            await cloudflareApi.deleteAnime(id);
           }
-          showToast(
-            `Moved ${selectedCatalogIds.length} titles to Recycle Bin.`,
-            'success',
-            selectedCatalogIds.length === 1 ? lastRecycleId : null
-          );
+          showToast(`Deleted ${selectedCatalogIds.length} selected titles.`, 'success');
           setSelectedCatalogIds([]);
           await fetchPaginatedAdminCatalog(1);
           void fetchD1StatusSummary();
@@ -1121,7 +909,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
 
-  // 13. Add / Edit Submit Handler
+  // 13. Add / Edit Submit Handler (Avoids double-posting when DubInfoModal already persisted to D1)
   const handleAddOrEditAnime = async (newAnimeData: any) => {
     try {
       const isEditing = Boolean(editingAnime && editingAnime.id);
@@ -1131,14 +919,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             pendingItems.some((p) => String(p.id) === String(editingAnime.id)))
       );
 
-      const savedRes: any = isEditing
-        ? await cloudflareApi.updateAnime(editingAnime.id, {
-            ...newAnimeData,
-            status: isPendingItem ? 'pending' : newAnimeData.status || editingAnime.status,
-            is_published: isPendingItem ? 0 : 1,
-          })
-        : await cloudflareApi.createAnime(newAnimeData);
-      const savedAnime = savedRes?.data || savedRes || newAnimeData;
+      let savedAnime = newAnimeData;
+      if (!newAnimeData?._savedToServer) {
+        const savedRes: any = isEditing
+          ? await cloudflareApi.updateAnime(editingAnime.id, {
+              ...newAnimeData,
+              status: isPendingItem ? 'pending' : newAnimeData.status || editingAnime.status,
+              is_published: isPendingItem ? 0 : 1,
+            })
+          : await cloudflareApi.createAnime(newAnimeData);
+        savedAnime = savedRes?.data || savedRes || newAnimeData;
+      }
 
       if (isEditing && isPendingItem) {
         setPendingItems((prev) =>
@@ -1262,41 +1053,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // 15. CSV Import / Export & SQL Dump Handlers
   const handleDownloadSampleCSV = () => {
-    const sampleHeaders = [
-      'Title',
-      'Poster URL',
-      'Synopsis',
-      'Rating',
-      'Release Year',
-      'Status',
-      'Type',
-      'Studio',
-      'Genres',
-      'Languages',
-      'Platforms',
-      'Episodes',
-      'Season',
-    ];
-    const sampleRows = [
-      [
-        '"Solo Leveling"',
-        '"https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx151807-m1gX3iwfIsLu.png"',
-        '"In a world where hunters must battle deadly monsters to protect humanity, Sung Jinwoo finds a mysterious program."',
-        '"8.8"',
-        '"2024"',
-        '"Airing"',
-        '"TV Series"',
-        '"A-1 Pictures"',
-        '"Action | Adventure | Fantasy"',
-        '"Tamil | Hindi | Telugu"',
-        '"Crunchyroll"',
-        '"12 | 13"',
-        '"Winter 2024"',
-      ],
-    ];
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [sampleHeaders.join(','), ...sampleRows.map((e) => e.join(','))].join('\n');
+    const sampleHeaders =
+      'Title,Poster URL,Synopsis,Rating,Release Year,Status,Type,Studio,Genres,Languages,Platforms,Episodes,Season';
+    const sampleRow =
+      'Solo Leveling,https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx151807-m1gX3iwfIsLu.png,"In a world where hunters must battle deadly monsters to protect humanity, Sung Jinwoo finds a mysterious program.",8.8,2024,Airing,TV Series,A-1 Pictures,Action | Adventure | Fantasy,Tamil | Hindi | Telugu,Prime Video|Netflix,12 | 13,Winter 2024';
+    const csvContent = 'data:text/csv;charset=utf-8,' + [sampleHeaders, sampleRow].join('\n');
     const link = document.createElement('a');
     link.setAttribute('href', encodeURI(csvContent));
     link.setAttribute('download', 'anidub_sample_template.csv');
@@ -1312,53 +1073,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       showToast('No catalog items loaded to export.', 'error');
       return;
     }
-
-    const headers = [
-      'ID',
-      'Title',
-      'Slug',
-      'Poster URL',
-      'Rating',
-      'Release Year',
-      'Status',
-      'Type',
-      'Studio',
-      'Genres',
-      'Languages',
-      'Platforms',
-      'Episodes Count',
-    ];
-
-    const escapeCsv = (val: any) => {
-      if (val === null || val === undefined) return '""';
-      const str = String(val).replace(/"/g, '""');
-      return `"${str}"`;
-    };
-
-    const rows = exportList.map((a) => {
-      const genresStr = Array.isArray(a.genres) ? a.genres.join(' | ') : a.genres || '';
-      const langsStr = Array.isArray(a.languages) ? a.languages.join(' | ') : a.languages || '';
-      const platformsStr = Array.isArray(a.platforms)
-        ? a.platforms.join(' | ')
-        : a.platform || '';
-      return [
-        escapeCsv(a.id),
-        escapeCsv(a.title),
-        escapeCsv(a.slug || ''),
-        escapeCsv(a.posterUrl || a.image || a.cover_image || ''),
-        escapeCsv(a.rating || '8.5'),
-        escapeCsv(a.releaseYear || a.year || '2024'),
-        escapeCsv(a.status || 'Airing'),
-        escapeCsv(a.type || 'TV Series'),
-        escapeCsv(a.studio || ''),
-        escapeCsv(genresStr),
-        escapeCsv(langsStr),
-        escapeCsv(platformsStr),
-        escapeCsv(a.episodes_count || 12),
-      ].join(',');
-    });
-
-    const csvString = [headers.join(','), ...rows].join('\n');
+    const csvString = buildCatalogExportCsv(exportList);
     const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1380,52 +1095,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       showToast('No catalog items loaded to export.', 'error');
       return;
     }
-
-    const escSql = (val: any) => {
-      if (val === null || val === undefined || val === '') return 'NULL';
-      if (typeof val === 'number') return String(val);
-      return `'${String(val).replace(/'/g, "''")}'`;
-    };
-
-    const lines: string[] = [
-      `-- AniDub India Cloudflare D1 SQL Backup`,
-      `-- Generated at: ${new Date().toISOString()}`,
-      `-- Total Titles: ${exportList.length}`,
-      ``,
-    ];
-
-    for (const a of exportList) {
-      const title = escSql(a.title);
-      const slug = escSql(
-        a.slug ||
-          String(a.title || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-      );
-      const synopsis = escSql(a.synopsis || '');
-      const cover = escSql(a.posterUrl || a.image || a.cover_image || '');
-      const rating = Number(a.rating) || 8.5;
-      const year = Number(a.releaseYear || a.year) || 2024;
-      const status = escSql(a.status || 'Airing');
-      const type = escSql(a.type || 'TV Series');
-      const studio = escSql(a.studio || 'MAPPA');
-      const genres = escSql(
-        Array.isArray(a.genres) ? a.genres.join(', ') : a.genres || ''
-      );
-      const langs = escSql(
-        Array.isArray(a.languages) ? a.languages.join(', ') : a.languages || ''
-      );
-      const platform = escSql(
-        Array.isArray(a.platforms) ? a.platforms[0] : a.platform || ''
-      );
-      const epCount = Number(a.episodes_count) || 12;
-
-      lines.push(
-        `INSERT OR REPLACE INTO anime (title, slug, synopsis, cover_image, rating, year, status, type, studio, genres, languages, platform, episodes_count, is_published, submissionStatus) VALUES (${title}, ${slug}, ${synopsis}, ${cover}, ${rating}, ${year}, ${status}, ${type}, ${studio}, ${genres}, ${langs}, ${platform}, ${epCount}, 1, 'approved');`
-      );
-    }
-
-    const blob = new Blob([lines.join('\n')], { type: 'application/sql;charset=utf-8;' });
+    const sqlText = buildCatalogExportSql(exportList);
+    const blob = new Blob([sqlText], { type: 'application/sql;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -1610,7 +1281,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleFilterCatalogByLanguage = (language: string) => {
     setFilterLanguage(language);
     setCatalogPage(1);
-    setActiveTab(language === 'Unverified' ? 'dubs' : 'catalog');
+    setActiveTab('catalog');
   };
 
   const handleFilterCatalogByGenre = (genre: string) => {
@@ -1647,13 +1318,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           badge: overviewStats.publishedAnimeCount,
         },
         {
-          id: 'dubs',
-          label: 'Dubs Matrix',
-          icon: Globe,
-          badge:
-            overviewStats.unverifiedDubsCount > 0
-              ? overviewStats.unverifiedDubsCount
-              : undefined,
+          id: 'moderation',
+          label: 'Pending & Feedback',
+          icon: Clock,
+          badge: totalModerationBadge > 0 ? totalModerationBadge : undefined,
         },
         {
           id: 'translations',
@@ -1676,12 +1344,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       groupLabel: 'Operations & Tools',
       items: [
         {
-          id: 'moderation',
-          label: 'Moderation Inbox',
-          icon: Clock,
-          badge: totalModerationBadge > 0 ? totalModerationBadge : undefined,
-        },
-        {
           id: 'data_health',
           label: 'Data Health QA',
           icon: ShieldCheck,
@@ -1700,8 +1362,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       groupLabel: 'System',
       items: [
         { id: 'backup', label: 'Bulk CSV & Backup', icon: Upload },
-        { id: 'recycle_bin', label: 'Recycle Bin', icon: Trash2 },
-        { id: 'activity_log', label: 'Activity Log', icon: Activity },
         { id: 'settings', label: 'Telegram & Settings', icon: Settings },
       ],
     },
@@ -1845,80 +1505,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* 2. MAIN WORKSPACE COLUMN */}
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* ONE Clean, Compact 52px Admin Top Bar */}
+        {/* Classic Admin Command Console Top Bar */}
         <header
           data-testid="admin-top-bar"
-          className="sticky top-0 z-30 h-[52px] px-2.5 sm:px-5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/95 backdrop-blur-md flex items-center justify-between gap-2"
+          className="sticky top-0 z-30 min-h-[60px] px-3 sm:px-5 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/95 backdrop-blur-md flex items-center justify-between gap-2"
         >
-          {/* Left: AniDub Admin Badge + Live D1 Green Dot (+ Desktop Active Section) */}
-          <div className="flex items-center gap-2 min-w-0">
+          {/* Left: Glowing dark rounded square badge with cyan lightning bolt icon + bold "Admin Command Console" */}
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
               onClick={() => handleSelectNavTab('overview')}
-              className="lg:hidden flex items-center gap-1.5 min-h-[44px] pr-1 min-w-0 cursor-pointer"
-              aria-label="AniDub Admin Home"
+              className="flex items-center gap-2.5 min-h-[44px] pr-1 min-w-0 cursor-pointer group"
+              aria-label="Admin Command Console Home"
             >
-              <img
-                src="/logo.png"
-                alt="AniDub India"
-                className="w-6 h-6 rounded-md object-contain shrink-0"
-              />
-              <span className="text-sm font-extrabold text-[var(--text-primary)] whitespace-nowrap truncate">
-                AniDub Admin
-              </span>
-              <span
-                className={`w-2 h-2 rounded-full shrink-0 ${
-                  overviewStats.d1Connected ? 'bg-emerald-500' : 'bg-amber-500'
-                }`}
-                title={overviewStats.d1Connected ? 'D1 Live Connected' : 'D1 Local Runtime'}
-              />
+              <div className="w-10 h-10 rounded-xl bg-[#0e1526] border border-cyan-500/35 shadow-md shadow-cyan-500/15 flex items-center justify-center shrink-0">
+                <Zap className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div className="flex flex-col items-start min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm sm:text-base font-black text-[var(--text-primary)] tracking-tight whitespace-nowrap truncate">
+                    Admin Command Console
+                  </span>
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      overviewStats.d1Connected ? 'bg-emerald-500' : 'bg-amber-500'
+                    }`}
+                    title={overviewStats.d1Connected ? 'D1 Live Connected' : 'D1 Local Runtime'}
+                  />
+                </div>
+                <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                  AniDub India • Cloudflare D1 Edge Control
+                </span>
+              </div>
             </button>
-
-            <div className="hidden lg:flex items-center gap-2 min-w-0">
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--text-secondary)] whitespace-nowrap shrink-0">
-                <span
-                  className={`w-2 h-2 rounded-full shrink-0 ${
-                    overviewStats.d1Connected ? 'bg-emerald-500' : 'bg-amber-500'
-                  }`}
-                />
-                AniDub Admin
-              </span>
-              <span className="text-[var(--text-secondary)]/50 text-xs" aria-hidden="true">
-                /
-              </span>
-              <h1 className="text-sm font-extrabold text-[var(--text-primary)] truncate">
-                {effectiveTab === 'overview' && 'Command Center'}
-                {effectiveTab === 'catalog' && 'Anime Catalog'}
-                {effectiveTab === 'editor' && (editingAnime ? 'Modular Anime Editor' : 'New Catalog Entry')}
-                {effectiveTab === 'dubs' && 'Dubs Matrix'}
-                {effectiveTab === 'translations' && 'Translation Studio'}
-                {effectiveTab === 'franchises' && 'Franchise Builder'}
-                {effectiveTab === 'cast' && 'Cast & Voice Actors'}
-                {effectiveTab === 'moderation' && 'Moderation Inbox'}
-                {effectiveTab === 'data_health' && 'Data Health QA'}
-                {effectiveTab === 'imdb_checker' && 'IMDb Ratings Checker'}
-                {effectiveTab === 'analytics' && 'Analytics 2.0'}
-                {effectiveTab === 'backup' && 'Bulk CSV & Backup Center'}
-                {effectiveTab === 'recycle_bin' && 'Recycle Bin'}
-                {effectiveTab === 'activity_log' && 'Activity Log'}
-                {effectiveTab === 'settings' && 'Telegram & Settings'}
-              </h1>
-            </div>
           </div>
 
-          {/* Right: Search/Ctrl+K, Terminal HUD (>_), Theme Toggle, Quick + Add, Exit to Site */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          {/* Right: 4 Compact Rounded Icon Buttons (⌘ Command Palette, >_ Live Terminal, ↻ Refresh, [→ Exit) + Theme & Quick Add */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               data-testid="admin-quick-search-trigger"
               onClick={() => setIsCommandPaletteOpen(true)}
-              className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] sm:px-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-              aria-label="Quick Search (Ctrl+K)"
-              title="Quick Search (Ctrl+K)"
+              className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] px-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              aria-label="Command Palette (Ctrl+K)"
+              title="Command Palette (Ctrl+K)"
             >
-              <Search className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
+              <Command className="w-4 h-4 text-purple-400 shrink-0" />
               <span className="hidden md:inline whitespace-nowrap">Search</span>
-              <kbd className="hidden md:inline-block px-1 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[10px] font-mono leading-none">
+              <kbd className="hidden md:inline-block px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[10px] font-mono leading-none">
                 ⌘K
               </kbd>
             </button>
@@ -1926,19 +1560,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button
               type="button"
               data-testid="admin-topbar-terminal-btn"
-              onClick={() => setIsDiagnosticsOpen(true)}
-              className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] sm:px-2 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] inline-flex items-center justify-center gap-1 cursor-pointer transition-colors"
-              aria-label="Open Terminal HUD & Diagnostics"
-              title="Terminal HUD & Edge Diagnostics"
+              onClick={() => setIsDiagnosticsOpen((prev) => !prev)}
+              className="relative min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] px-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-cyan-400 inline-flex items-center justify-center gap-1 cursor-pointer transition-colors"
+              aria-label="Open Live System Terminal"
+              title="Live System Terminal (>_)"
             >
               <Terminal className="w-4 h-4 shrink-0" />
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/80" />
+            </button>
+
+            <button
+              type="button"
+              data-testid="admin-topbar-refresh-btn"
+              onClick={() => {
+                void fetchPaginatedAdminCatalog(catalogPage);
+                void fetchFullIndexForTools();
+                void fetchD1StatusSummary();
+                showToast('Synced live Cloudflare D1 records.', 'success');
+              }}
+              className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] px-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center cursor-pointer transition-colors"
+              aria-label="Refresh Live D1 Records"
+              title="Refresh Live D1 Records"
+            >
+              <RefreshCw
+                className={`w-4 h-4 shrink-0 ${isCatalogLoading ? 'animate-spin text-purple-400' : ''}`}
+              />
             </button>
 
             <button
               type="button"
               data-testid="admin-theme-toggle"
               onClick={() => openAppearance('presets')}
-              className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center cursor-pointer transition-colors"
+              className="hidden sm:inline-flex min-w-[40px] min-h-[40px] rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] items-center justify-center cursor-pointer transition-colors"
               aria-label={`Switch Theme (${displayName})`}
               title={`Theme: ${displayName}`}
             >
@@ -1949,7 +1602,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               type="button"
               data-testid="admin-header-add-anime-btn"
               onClick={() => handleOpenModularEditor(null, 'identity')}
-              className="min-h-[44px] sm:min-h-[36px] px-2.5 sm:px-3 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-bold inline-flex items-center justify-center gap-1 whitespace-nowrap shrink-0 cursor-pointer hover:opacity-95 transition-opacity"
+              className="hidden sm:inline-flex min-h-[40px] px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-extrabold items-center justify-center gap-1 whitespace-nowrap shrink-0 cursor-pointer transition-colors shadow-sm shadow-purple-600/25"
               aria-label="Add Anime"
             >
               <Plus className="w-4 h-4 shrink-0" />
@@ -1961,63 +1614,116 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="button"
                 data-testid="admin-exit-to-site-btn"
                 onClick={onNavigateHome}
-                className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] sm:px-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+                className="min-w-[44px] min-h-[44px] sm:min-h-[40px] px-3 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 text-xs font-extrabold text-rose-400 inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer transition-colors"
                 aria-label="Exit to Site"
                 title="Exit to Site"
               >
-                <ExternalLink className="w-4 h-4 shrink-0" />
-                <span className="hidden lg:inline">Exit</span>
+                <LogOut className="w-4 h-4 shrink-0" />
+                <span>Exit</span>
               </button>
             )}
           </div>
         </header>
 
-        {/* Sleek Horizontal Scrollable Quick-Tab Pill Bar (1-Tap Access to Every Major Section) */}
+        {/* Horizontal Scrollable Command Console Tab Bar (Classic Purple Pill Active State) */}
         <div
           data-testid="admin-quick-tab-bar"
           role="tablist"
-          aria-label="Admin Quick Sections"
-          className="w-full max-w-full overflow-x-auto no-scrollbar border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/75 px-2.5 sm:px-5 py-1.5 flex items-center gap-1.5"
+          aria-label="Admin Command Console Tabs"
+          className="w-full max-w-full overflow-x-auto no-scrollbar border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/85 px-2.5 sm:px-5 py-2 flex items-center gap-2"
         >
           {ADMIN_QUICK_PILL_TABS.map((tabItem) => {
             const isActive =
               effectiveTab === tabItem.id ||
               (tabItem.id === 'catalog' && effectiveTab === 'editor');
+            const displayLabel =
+              tabItem.id === 'moderation'
+                ? 'Pending Reviews'
+                : tabItem.id === 'catalog'
+                  ? 'Anime Catalog'
+                  : tabItem.id === 'imdb_checker'
+                    ? 'IMDb & Diagnostics'
+                    : tabItem.id === 'analytics'
+                      ? 'Edge Analytics'
+                      : tabItem.id === 'settings'
+                        ? 'Cloud Infrastructure'
+                        : tabItem.label;
             const badgeCount =
               tabItem.id === 'moderation'
-                ? totalModerationBadge
-                : tabItem.id === 'data_health'
-                  ? dataHealthReport.summary.all
-                  : tabItem.id === 'dubs'
-                    ? overviewStats.unverifiedDubsCount
+                ? pendingItems.length
+                : tabItem.id === 'catalog'
+                  ? overviewStats.totalAnimeCount
+                  : tabItem.id === 'data_health'
+                    ? dataHealthReport.summary.all
                     : 0;
             return (
-              <button
-                key={tabItem.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                data-testid={`admin-quick-tab-${tabItem.id}`}
-                onClick={() => handleSelectNavTab(tabItem.id)}
-                className={`min-h-[36px] px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
-                  isActive
-                    ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)]'
-                    : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)]'
-                }`}
-              >
-                <span>{tabItem.label}</span>
-                {badgeCount > 0 && (
-                  <span
-                    className={`font-mono tabular-nums text-[10px] font-extrabold ${
-                      isActive
-                        ? 'text-[var(--accent-on-primary,#fff)]/90'
-                        : 'text-amber-500'
+              <React.Fragment key={tabItem.id}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive && (tabItem.id !== 'moderation' || moderationSubTab === 'pending')}
+                  data-testid={`admin-quick-tab-${tabItem.id}`}
+                  onClick={() => {
+                    if (tabItem.id === 'moderation') {
+                      setModerationSubTab('pending');
+                    }
+                    handleSelectNavTab(tabItem.id);
+                  }}
+                  className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap shrink-0 inline-flex items-center gap-2 transition-all cursor-pointer ${
+                    isActive && (tabItem.id !== 'moderation' || moderationSubTab === 'pending')
+                      ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25 border border-purple-400/40'
+                      : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)]'
+                  }`}
+                >
+                  <span>{displayLabel}</span>
+                  {badgeCount > 0 && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md font-mono tabular-nums text-[10px] font-black ${
+                        isActive && (tabItem.id !== 'moderation' || moderationSubTab === 'pending')
+                          ? 'bg-white/20 text-white'
+                          : tabItem.id === 'moderation'
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'bg-purple-500/15 text-purple-300'
+                      }`}
+                    >
+                      {badgeCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Classic "User Feedback" tab button right alongside Pending Reviews */}
+                {tabItem.id === 'moderation' && (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={effectiveTab === 'moderation' && moderationSubTab === 'feedback'}
+                    data-testid="admin-quick-tab-user-feedback"
+                    onClick={() => {
+                      setModerationSubTab('feedback');
+                      handleSelectNavTab('moderation');
+                    }}
+                    className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap shrink-0 inline-flex items-center gap-2 transition-all cursor-pointer ${
+                      effectiveTab === 'moderation' && moderationSubTab === 'feedback'
+                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25 border border-purple-400/40'
+                        : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)]'
                     }`}
                   >
-                    {badgeCount}
-                  </span>
+                    <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                    <span>User Feedback</span>
+                    {feedbackList.length > 0 && (
+                      <span
+                        className={`px-1.5 py-0.5 rounded-md font-mono tabular-nums text-[10px] font-black ${
+                          effectiveTab === 'moderation' && moderationSubTab === 'feedback'
+                            ? 'bg-white/20 text-white'
+                            : 'bg-purple-500/15 text-purple-300'
+                        }`}
+                      >
+                        {feedbackList.length}
+                      </span>
+                    )}
+                  </button>
                 )}
-              </button>
+              </React.Fragment>
             );
           })}
         </div>
@@ -2036,47 +1742,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onFilterCatalogByGenre={handleFilterCatalogByGenre}
               onApprovePending={handleApprove}
               onRejectPending={handleReject}
+              onTriggerCsvUpload={() => csvInputRef.current?.click()}
+              onDownloadSampleCsv={handleDownloadSampleCSV}
+              onOpenCsvHelp={() => setIsCsvHelpOpen(true)}
             />
           )}
 
-          {/* SECTION 2: MODULAR ANIME EDITOR (/admin/catalog/new & /admin/catalog/:id/edit) */}
-          {effectiveTab === 'editor' && (
-            <AdminAnimeEditorView
-              initialAnime={editingAnime}
-              initialTab={editorTargetTab}
-              onCancel={() => {
-                setEditingAnime(null);
-                handleSelectNavTab('catalog');
-              }}
-              onSaved={(savedAnime, isNew) => {
-                onAnimeCreated?.(savedAnime);
-                setEditingAnime(null);
-                handleSelectNavTab('catalog');
-                void fetchPaginatedAdminCatalog(catalogPage);
-                void fetchD1StatusSummary();
-                showToast(
-                  isNew
-                    ? `Created "${savedAnime.title}" in Cloudflare D1!`
-                    : `Updated "${savedAnime.title}" in Cloudflare D1!`,
-                  'success'
-                );
-              }}
-              onOpenTranslationsForAnime={(animeId) => {
-                setTranslationTargetAnimeId(animeId);
-                handleSelectNavTab('translations');
-              }}
-              onOpenFranchiseBuilder={(fKey) => {
-                setFranchiseTargetKey(fKey);
-                handleSelectNavTab('franchises');
-              }}
-              onOpenCastManager={(animeId) => {
-                setCastTargetAnimeId(animeId);
-                handleSelectNavTab('cast');
-              }}
-            />
-          )}
-
-          {/* SECTION 3: ANIME CATALOG */}
+          {/* SECTION 2: ANIME CATALOG */}
           {effectiveTab === 'catalog' && (
             <AdminCatalogTab
               mode="catalog"
@@ -2098,6 +1770,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onPageChange={(nextPage) => setCatalogPage(nextPage)}
               onRefresh={() => void fetchPaginatedAdminCatalog(catalogPage)}
               onOpenAddModal={() => handleOpenModularEditor(null, 'identity')}
+              onTriggerCsvUpload={() => csvInputRef.current?.click()}
+              onExportCsv={handleExportCSV}
+              onOpenCsvHelp={() => setIsCsvHelpOpen(true)}
               selectedCatalogIds={selectedCatalogIds}
               setSelectedCatalogIds={setSelectedCatalogIds}
               bulkLanguage={bulkLanguage}
@@ -2116,20 +1791,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* SECTION 4: BULK DUB INTELLIGENCE & EPISODE MATRIX EDITOR */}
-          {effectiveTab === 'dubs' && (
-            <AdminDubMatrixTab
-              catalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
-              onEditAnimeInEditor={(anime) => handleOpenModularEditor(anime, 'dubs')}
-              onSuccess={(msg) => {
-                showToast(msg, 'success');
-                void fetchPaginatedAdminCatalog(catalogPage);
-                void fetchD1StatusSummary();
-              }}
-            />
-          )}
-
-          {/* SECTION 5: WORKERS AI TRANSLATION STUDIO */}
+          {/* SECTION 3: WORKERS AI TRANSLATION STUDIO */}
           {effectiveTab === 'translations' && (
             <AdminTranslationsTab
               catalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
@@ -2138,7 +1800,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* SECTION 5B: ANIME UNIVERSE & SMART WATCH ORDER VISUAL BUILDER */}
+          {/* SECTION 4: ANIME UNIVERSE & SMART WATCH ORDER VISUAL BUILDER */}
           {effectiveTab === 'franchises' && (
             <AdminFranchiseBuilderTab
               catalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
@@ -2148,7 +1810,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* SECTION 5C: CHARACTERS & VERIFIED INDIAN VOICE ACTOR MANAGER */}
+          {/* SECTION 5: CHARACTERS & VERIFIED INDIAN VOICE ACTOR MANAGER */}
           {effectiveTab === 'cast' && (
             <AdminCastManagerTab
               catalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
@@ -2157,7 +1819,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* SECTION 6: UNIFIED MODERATION INBOX */}
+          {/* SECTION 6: COMPACT PENDING & FEEDBACK */}
           {effectiveTab === 'moderation' && (
             <AdminModerationInboxTab
               pendingItems={pendingItems}
@@ -2165,6 +1827,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               feedbackList={feedbackList}
               updatingFeedbackId={updatingFeedbackId}
               feedbackError={feedbackError}
+              initialSubTab={moderationSubTab}
               onApproveAnime={handleApprove}
               onRejectAnime={handleReject}
               onEditPendingAnime={(anime) => handleOpenModularEditor(anime, 'identity')}
@@ -2179,7 +1842,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 }
               }}
               onUpdateFeedbackStatus={handleUpdateFeedbackStatus}
-              onSuccess={(msg, recycleBinId) => showToast(msg, 'success', recycleBinId ?? null)}
+              onSuccess={(msg) => showToast(msg, 'success')}
             />
           )}
 
@@ -2204,7 +1867,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* SECTION 7B: RESTORED LEGACY IMDb & EXTERNAL RATINGS CHECKER */}
+          {/* SECTION 7B: IMDb & EXTERNAL RATINGS CHECKER */}
           {effectiveTab === 'imdb_checker' && (
             <AdminImdbCheckerTab
               catalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
@@ -2215,28 +1878,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 void fetchFullIndexForTools();
                 void fetchD1StatusSummary();
               }}
+              terminalLogs={terminalLogs}
+              onExpandTerminal={() => setIsDiagnosticsOpen(true)}
+              d1LatencyMs={overviewStats.d1LatencyMs}
             />
           )}
 
-          {/* SECTION 8: ACTIONABLE ADMIN ANALYTICS 2.0 */}
+          {/* SECTION 8: ACTIONABLE ADMIN ANALYTICS 2.0 (Lazy Loaded) */}
           {effectiveTab === 'analytics' && (
-            <AnalyticsDashboard
-              onNavigateHome={onNavigateHome}
-              onSelectAnimeSlug={(slug) => {
-                setSearchQuery(slug);
-                setActiveTab('catalog');
-              }}
-              onAddMissingAnimeTitle={(missingTitle) => {
-                handleOpenModularEditor({ title: missingTitle }, 'identity');
-              }}
-              onJumpToDataHealth={(filterKey) => {
-                if (filterKey) {
-                  setHealthFilter(filterKey as DataHealthFilter);
-                }
-                handleSelectNavTab('data_health');
-              }}
-              onJumpToDubsMatrix={() => handleSelectNavTab('dubs')}
-            />
+            <Suspense fallback={<AdminSkeleton />}>
+              <AnalyticsDashboard
+                onNavigateHome={onNavigateHome}
+                onSelectAnimeSlug={(slug) => {
+                  setSearchQuery(slug);
+                  setActiveTab('catalog');
+                }}
+                onAddMissingAnimeTitle={(missingTitle) => {
+                  handleOpenModularEditor({ title: missingTitle }, 'identity');
+                }}
+                onJumpToDataHealth={(filterKey) => {
+                  if (filterKey) {
+                    setHealthFilter(filterKey as DataHealthFilter);
+                  }
+                  handleSelectNavTab('data_health');
+                }}
+                onJumpToDubsMatrix={() => handleFilterCatalogByLanguage('Unverified')}
+              />
+            </Suspense>
           )}
 
           {/* SECTION 9: FULL BACKUP & BULK CSV UPLOAD CENTER */}
@@ -2261,23 +1929,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* SECTION 9B: RECYCLE BIN & SAFE RECOVERY */}
-          {effectiveTab === 'recycle_bin' && (
-            <AdminRecycleBinTab
-              onShowToast={(msg, type) => showToast(msg, type || 'success')}
-              onRestoredItem={() => {
-                void fetchPaginatedAdminCatalog(catalogPage);
-                void fetchPendingItems();
-                void fetchD1StatusSummary();
-                onAnimeCreated?.();
-              }}
-            />
-          )}
-
-          {/* SECTION 10: ADMIN ACTIVITY LOG */}
-          {effectiveTab === 'activity_log' && <AdminActivityLogTab />}
-
-          {/* SECTION 11: SETTINGS */}
+          {/* SECTION 10: SETTINGS / CLOUD INFRASTRUCTURE */}
           {effectiveTab === 'settings' && (
             <AdminSettingsTab
               tgStatus={tgStatus}
@@ -2296,301 +1948,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onResetWorkerUrl={handleResetWorkerUrl}
               onRefreshLocalCache={handleRefreshLocalCache}
               onOpenDiagnosticsDrawer={() => setIsDiagnosticsOpen(true)}
+              onExportCsv={handleExportCSV}
             />
           )}
         </div>
       </div>
 
-      {/* 3. DEDICATED ADMIN MOBILE 5-TAB BOTTOM NAVIGATION BAR (< 1024px) */}
-      {(() => {
-        const activeMobileGroup = resolveMobileAdminActiveGroup(effectiveTab);
-        return (
-          <nav
-            data-testid="admin-mobile-bottom-nav"
-            aria-label="Admin Mobile Navigation"
-            className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-[60px] bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-subtle)] grid grid-cols-5 items-center px-1"
-          >
-            {(
-              [
-                { id: 'overview', label: 'Home', icon: LayoutDashboard },
-                { id: 'catalog', label: 'Catalog', icon: Film },
-                { id: 'dubs', label: 'Dubs', icon: Globe },
-              ] as const
-            ).map((tab) => {
-              const Icon = tab.icon;
-              const isActive =
-                activeMobileGroup === tab.id && !isMobileStudioOpen && !isMobileMoreOpen;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  data-testid={`admin-mobile-tab-${tab.id}`}
-                  onClick={() => handleSelectNavTab(tab.id)}
-                  className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl relative transition-colors cursor-pointer ${
-                    isActive
-                      ? 'text-[var(--accent-primary)] font-extrabold'
-                      : 'text-[var(--text-secondary)] font-semibold'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="text-[11px] truncate max-w-[68px]">{tab.label}</span>
-                </button>
-              );
-            })}
-
-            {/* Tools Tab -> Opens Bulk CSV Upload, IMDb Ratings Checker, Data Health, Translations, Franchise, Cast */}
-            <button
-              type="button"
-              data-testid="admin-mobile-tab-tools"
-              onClick={() => {
-                setIsMobileMoreOpen(false);
-                setIsMobileStudioOpen((prev) => !prev);
-              }}
-              className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl relative transition-colors cursor-pointer ${
-                isMobileStudioOpen || (activeMobileGroup === 'tools' && !isMobileMoreOpen)
-                  ? 'text-[var(--accent-primary)] font-extrabold'
-                  : 'text-[var(--text-secondary)] font-semibold'
-              }`}
-            >
-              <Wrench className="w-5 h-5" />
-              <span className="text-[11px]">Tools</span>
-            </button>
-
-            {/* More Tab -> Opens Moderation, Analytics 2.0, Activity Log, Recycle Bin, Backup Center, Telegram & Settings, Terminal HUD */}
-            <button
-              type="button"
-              data-testid="admin-mobile-tab-more"
-              onClick={() => {
-                setIsMobileStudioOpen(false);
-                setIsMobileMoreOpen((prev) => !prev);
-              }}
-              className={`min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl relative transition-colors cursor-pointer ${
-                isMobileMoreOpen || (activeMobileGroup === 'more' && !isMobileStudioOpen)
-                  ? 'text-[var(--accent-primary)] font-extrabold'
-                  : 'text-[var(--text-secondary)] font-semibold'
-              }`}
-            >
-              <MoreHorizontal className="w-5 h-5" />
-              <span className="text-[11px]">More</span>
-              {totalModerationBadge > 0 && (
-                <span className="absolute top-1.5 right-3 min-w-[16px] px-1 rounded-full bg-amber-500 text-black text-[9px] font-black font-mono leading-tight text-center">
-                  {totalModerationBadge}
-                </span>
-              )}
-            </button>
-          </nav>
-        );
-      })()}
-
-      {/* MOBILE "TOOLS" BOTTOM SHEET (Bulk CSV Upload, IMDb Ratings Checker, Data Health, Translations, Franchise, Cast) */}
-      {isMobileStudioOpen && (
-        <div
-          data-testid="admin-mobile-tools-drawer"
-          className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs"
-          onClick={() => setIsMobileStudioOpen(false)}
-        >
-          <div
-            className="w-full bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] rounded-t-2xl p-4 pb-6 space-y-3 shadow-2xl max-h-[82vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
-              <span className="text-sm font-extrabold text-[var(--text-primary)]">
-                Content Studio &amp; Tools
-              </span>
-              <button
-                type="button"
-                aria-label="Close Tools Menu"
-                onClick={() => setIsMobileStudioOpen(false)}
-                className="min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2">
-              <button
-                type="button"
-                data-testid="admin-tools-tile-bulk-csv"
-                onClick={handleOpenBulkCsvUpload}
-                className="min-h-[54px] px-3.5 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-primary)] text-left flex items-center gap-3 cursor-pointer"
-              >
-                <Upload className="w-5 h-5 text-[var(--accent-primary)] shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-xs font-extrabold truncate">Bulk CSV Upload</div>
-                  <div className="text-[11px] text-[var(--text-secondary)] truncate">
-                    File Picker · Paste CSV · Dry-Run &amp; Sample Template
-                  </div>
-                </div>
-              </button>
-
-              {(
-                [
-                  {
-                    id: 'imdb_checker',
-                    label: 'IMDb Ratings Checker',
-                    sub: 'Live IMDb / MAL rating audit & batch sync',
-                    icon: Star,
-                  },
-                  {
-                    id: 'data_health',
-                    label: 'Data Health QA',
-                    sub: 'Artwork, OTT links, duplicates & platform cleanup',
-                    icon: ShieldCheck,
-                  },
-                  {
-                    id: 'translations',
-                    label: 'Translation Studio',
-                    sub: '6 Indian scripts · AI Cost Guard · Rollback',
-                    icon: Languages,
-                  },
-                  {
-                    id: 'franchises',
-                    label: 'Franchise Builder',
-                    sub: 'Anime Universe & Smart Watch Order',
-                    icon: Layers,
-                  },
-                  {
-                    id: 'cast',
-                    label: 'Cast & Voice Actors',
-                    sub: 'Verified Indian & Japanese voice credits',
-                    icon: Mic2,
-                  },
-                ] as const
-              ).map((item) => {
-                const Icon = item.icon;
-                const isActive = effectiveTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    data-testid={`admin-tools-tile-${item.id}`}
-                    onClick={() => handleSelectNavTab(item.id)}
-                    className={`min-h-[54px] px-3.5 py-2.5 rounded-xl border text-left flex items-center gap-3 cursor-pointer ${
-                      isActive
-                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
-                        : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border-[var(--border-subtle)]'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-xs font-extrabold truncate">{item.label}</div>
-                      <div
-                        className={`text-[11px] truncate ${
-                          isActive
-                            ? 'text-[var(--accent-on-primary,#fff)]/80'
-                            : 'text-[var(--text-secondary)]'
-                        }`}
-                      >
-                        {item.sub}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MOBILE "MORE" BOTTOM SHEET (1-Tap Tiles for Moderation, Analytics, Logs, Recycle Bin, Backup, Telegram & Terminal HUD) */}
-      {isMobileMoreOpen && (
-        <div
-          data-testid="admin-mobile-more-drawer"
-          className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs"
-          onClick={() => setIsMobileMoreOpen(false)}
-        >
-          <div
-            className="w-full bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] rounded-t-2xl p-4 pb-6 space-y-3 shadow-2xl max-h-[82vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
-              <span className="text-sm font-extrabold text-[var(--text-primary)]">
-                Admin Operations &amp; System
-              </span>
-              <button
-                type="button"
-                aria-label="Close More Menu"
-                onClick={() => setIsMobileMoreOpen(false)}
-                className="min-w-[44px] min-h-[44px] rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {(
-                [
-                  { id: 'moderation', label: 'Moderation', icon: Clock, badge: totalModerationBadge },
-                  { id: 'analytics', label: 'Analytics 2.0', icon: BarChart3, badge: 0 },
-                  { id: 'activity_log', label: 'Activity Log', icon: Activity, badge: 0 },
-                  { id: 'recycle_bin', label: 'Recycle Bin', icon: Trash2, badge: 0 },
-                  { id: 'backup', label: 'Backup Center', icon: Download, badge: 0 },
-                  { id: 'settings', label: 'Telegram & Settings', icon: Settings, badge: 0 },
-                ] as const
-              ).map((item) => {
-                const Icon = item.icon;
-                const isActive = effectiveTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    data-testid={`admin-more-tile-${item.id}`}
-                    onClick={() => {
-                      if (item.id === 'backup') setBackupFocusSection('backup');
-                      handleSelectNavTab(item.id);
-                    }}
-                    className={`min-h-[48px] px-3 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 cursor-pointer ${
-                      isActive
-                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] border-[var(--accent-primary)]'
-                        : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border-[var(--border-subtle)]'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      <Icon className="w-4 h-4 shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </span>
-                    {item.badge > 0 && (
-                      <span
-                        className={`font-mono tabular-nums text-[10px] font-extrabold shrink-0 ${
-                          isActive
-                            ? 'text-[var(--accent-on-primary,#fff)]'
-                            : 'text-amber-500'
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-
-              <button
-                type="button"
-                data-testid="admin-more-tile-diagnostics"
-                onClick={() => {
-                  setIsMobileMoreOpen(false);
-                  setIsDiagnosticsOpen(true);
-                }}
-                className="min-h-[48px] px-3 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-primary)] text-xs font-bold flex items-center gap-2 cursor-pointer col-span-2"
-              >
-                <Terminal className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
-                <span className="truncate">Terminal HUD &amp; Edge Diagnostics</span>
-              </button>
-            </div>
-
-            {onLogout && (
-              <button
-                type="button"
-                onClick={onLogout}
-                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <LogOut className="w-4 h-4" />
-                Lock Admin Workspace
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* 3. DEDICATED ADMIN MOBILE 5-TAB BOTTOM NAVIGATION BAR & SHEETS */}
+      <AdminMobileNav
+        effectiveTab={effectiveTab}
+        totalModerationBadge={totalModerationBadge}
+        isMobileStudioOpen={isMobileStudioOpen}
+        setIsMobileStudioOpen={setIsMobileStudioOpen}
+        isMobileMoreOpen={isMobileMoreOpen}
+        setIsMobileMoreOpen={setIsMobileMoreOpen}
+        onSelectNavTab={handleSelectNavTab}
+        onOpenBulkCsvUpload={handleOpenBulkCsvUpload}
+        onOpenBackupCenter={() => {
+          setBackupFocusSection('backup');
+          handleSelectNavTab('backup');
+        }}
+        onOpenDiagnostics={() => {
+          setIsMobileMoreOpen(false);
+          setIsDiagnosticsOpen(true);
+        }}
+        onLogout={onLogout}
+      />
 
       {/* 4. OPTIONAL COLLAPSIBLE DIAGNOSTICS / TERMINAL HUD DRAWER */}
       <AdminTerminalHud
@@ -2616,6 +1999,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         isNormalizingPlatforms={isNormalizingPlatforms}
       />
 
+      {/* 4B. FLOATING BOTTOM-RIGHT ">_ SYS_TERM" PILL BUTTON */}
+      {!isDiagnosticsOpen && (
+        <button
+          type="button"
+          data-testid="admin-floating-sys-term"
+          onClick={() => setIsDiagnosticsOpen(true)}
+          className="fixed bottom-20 lg:bottom-6 right-4 z-[105] min-h-[40px] px-3.5 py-2 rounded-full bg-[#090d16]/95 hover:bg-[#0e1526] border border-cyan-500/40 text-cyan-300 text-xs font-mono font-extrabold shadow-xl shadow-cyan-500/15 flex items-center gap-2 cursor-pointer transition-all"
+          title="Open Live System Terminal (>_ SYS_TERM)"
+        >
+          <span className="text-cyan-400 font-black">&gt;_</span>
+          <span>SYS_TERM</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        </button>
+      )}
+
       {/* 5. GLOBAL COMMAND PALETTE (⌘K) */}
       <AdminCommandPalette
         isOpen={isCommandPaletteOpen}
@@ -2631,6 +2029,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onSetActiveTab={handleSelectNavTab}
         onFilterUnverifiedDubs={() => handleFilterCatalogByLanguage('Unverified')}
         onExportCSV={handleExportCSV}
+        onOpenCsvHelp={() => setIsCsvHelpOpen(true)}
+        onDownloadSampleCsv={handleDownloadSampleCSV}
+        onSyncLiveRecords={() => {
+          void fetchPaginatedAdminCatalog(catalogPage);
+          void fetchFullIndexForTools();
+          void fetchD1StatusSummary();
+        }}
         onRunDiagnostics={() => setIsDiagnosticsOpen(true)}
         filteredCatalog={fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems}
         onEditAnime={(anime) => handleOpenModularEditor(anime, 'identity')}
@@ -2644,8 +2049,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onTriggerCsvUpload={() => csvInputRef.current?.click()}
       />
 
-      {/* 7. FALLBACK QUICK DUB MODAL (Only if explicitly triggered) */}
+      {/* 7. CLASSIC SINGLE-SCROLL ADD / EDIT ANIME MODAL */}
       <DubInfoModal
+        key={editingAnime?.id ? `edit-${editingAnime.id}` : isAddModalOpen ? 'add-new' : 'closed'}
+        mode={editingAnime?.id ? 'edit' : 'submit'}
         isOpen={isAddModalOpen}
         onClose={() => {
           setIsAddModalOpen(false);
@@ -2655,41 +2062,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         initialData={editingAnime}
       />
 
-      {/* 8. NON-DESTRUCTIVE CONFIRMATION MODAL */}
-      {confirmDialog?.isOpen && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-6 shadow-2xl space-y-4 text-[var(--text-primary)]">
-            <h3 className="text-lg font-extrabold text-[var(--text-primary)]">
-              {confirmDialog.title}
-            </h3>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed">
-              {confirmDialog.message}
-            </p>
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setConfirmDialog(null)}
-                className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDialog.onConfirm}
-                className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold ${
-                  confirmDialog.isDanger
-                    ? 'bg-red-500 text-white hover:bg-red-600'
-                    : 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)]'
-                }`}
-              >
-                {confirmDialog.confirmLabel || 'Confirm'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 8. SAFE CONFIRMATION MODAL (Prevents accidental deletes) */}
+      <ConfirmDialog
+        isOpen={Boolean(confirmDialog?.isOpen)}
+        title={confirmDialog?.title || 'Confirm Action'}
+        description={confirmDialog?.message || ''}
+        confirmLabel={confirmDialog?.confirmLabel || 'Confirm'}
+        cancelLabel="Cancel"
+        destructive={Boolean(confirmDialog?.isDanger)}
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={() => confirmDialog?.onConfirm()}
+      />
 
-      {/* 9. TOAST NOTIFICATION BANNER (WITH OPTIONAL SOFT-DELETE UNDO) */}
+      {/* 9. TOAST NOTIFICATION BANNER */}
       {toastMessage && (
         <div
           data-testid="admin-toast-banner"
@@ -2707,18 +2092,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)]">
             {toastMessage}
           </span>
-          {toastUndoRecycleId && (
-            <button
-              type="button"
-              data-testid="admin-toast-undo-btn"
-              disabled={isUndoingToast}
-              onClick={handleUndoRecycleToast}
-              className="min-h-[34px] px-2.5 py-1 rounded-lg bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs font-extrabold inline-flex items-center gap-1 shrink-0 cursor-pointer disabled:opacity-50"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>{isUndoingToast ? 'Restoring...' : 'Undo'}</span>
-            </button>
-          )}
         </div>
       )}
     </div>

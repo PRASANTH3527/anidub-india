@@ -62,11 +62,13 @@ test('partitionOverviewAttentionChecks collapses zero-count checks into a 1-line
   assert.equal(allActive.healthySummaryText, null);
 });
 
-test('resolveMobileAdminActiveGroup maps Tools and More sheets accurately and covers all restored & Phase 1-3.5 tabs', () => {
+test('resolveMobileAdminActiveGroup maps Pending, Tools, and More accurately and excludes removed tabs', () => {
   assert.equal(resolveMobileAdminActiveGroup('overview'), 'overview');
   assert.equal(resolveMobileAdminActiveGroup('catalog'), 'catalog');
   assert.equal(resolveMobileAdminActiveGroup('editor'), 'catalog');
-  assert.equal(resolveMobileAdminActiveGroup('dubs'), 'dubs');
+  assert.equal(resolveMobileAdminActiveGroup('moderation'), 'pending');
+  assert.equal(resolveMobileAdminActiveGroup('pending'), 'pending');
+  assert.equal(resolveMobileAdminActiveGroup('feedback'), 'pending');
 
   for (const toolsTab of ADMIN_TOOLS_TABS) {
     assert.equal(resolveMobileAdminActiveGroup(toolsTab), 'tools');
@@ -81,27 +83,34 @@ test('resolveMobileAdminActiveGroup maps Tools and More sheets accurately and co
   }
   assert.deepEqual(
     [...ADMIN_MORE_TABS],
-    ['moderation', 'analytics', 'activity_log', 'recycle_bin', 'backup', 'settings']
+    ['analytics', 'backup', 'settings']
   );
 
-  // Every major tab is reachable via the 1-tap horizontal quick-tab bar
+  // Every active tab is reachable via the 1-tap horizontal quick-tab bar
   const pillIds = new Set(ADMIN_QUICK_PILL_TABS.map((t) => t.id));
   for (const required of [
     'overview',
     'catalog',
-    'dubs',
+    'moderation',
     'backup',
     'imdb_checker',
     'data_health',
     'translations',
     'franchises',
     'cast',
-    'moderation',
     'analytics',
-    'activity_log',
-    'recycle_bin',
     'settings',
   ] as const) {
     assert.ok(pillIds.has(required), `Missing quick-tab pill for ${required}`);
+  }
+
+  // Removed clutter tabs must NOT appear in quick-tab bar or More drawer
+  for (const removed of ['dubs', 'activity_log', 'recycle_bin'] as const) {
+    assert.equal(pillIds.has(removed as any), false, `Removed tab ${removed} should not be in quick-tab bar`);
+    assert.equal(
+      (ADMIN_MORE_TABS as readonly string[]).includes(removed),
+      false,
+      `Removed tab ${removed} should not be in More drawer`
+    );
   }
 });

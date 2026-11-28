@@ -26,6 +26,11 @@ import { fetchPublishedTranslationsMap } from './translationRoutes';
 import { recordAdminActivityLog } from './adminOpsProRoutes';
 import { archiveEntityToRecycleBin, recordAnimeRevision } from './adminPhase35Routes';
 import { checkOptimisticConcurrencyConflict, computeAnimeRevisionDiff } from '../../utils/adminPhase35Polish';
+import {
+  normalizeAnimeSlug,
+  pickUniqueSlugFromSet,
+  isSlugUniqueConstraintError,
+} from '../../utils/slugUtils';
 import { getErrorMessage, isMissingColumnError, sendTelegramAlert, type RouteContext } from './shared';
 
 const BASE_PUBLISHED_CLAUSE =
@@ -614,22 +619,42 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                 : '')
         ) || null;
 
+      const parsedReleaseYear =
+        parseInt(String(body.year ?? body.releaseYear ?? body.release_year ?? ''), 10) || 2026;
+      const baseSlugInput = String(body.slug || body.title);
+      let resolvedSlug = normalizeAnimeSlug(baseSlugInput);
+
       if (env.DB) {
-        const slug = String(body.title).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const existingSlugs = new Set<string>();
+        try {
+          const slugRows = await env.DB.prepare(
+            'SELECT slug FROM anime WHERE LOWER(slug) LIKE LOWER(?)'
+          )
+            .bind(`${resolvedSlug}%`)
+            .all<{ slug?: string }>();
+          for (const r of slugRows?.results || []) {
+            if (r?.slug) existingSlugs.add(String(r.slug).toLowerCase());
+          }
+        } catch {
+          // Safe fallback if mock DB does not return slug list
+        }
+        resolvedSlug = pickUniqueSlugFromSet(baseSlugInput, existingSlugs, parsedReleaseYear);
+
         const finalIsPublished =
           body.is_published === false ||
           body.is_published === 0 ||
           finalSubmissionStatus.toLowerCase() === 'pending'
             ? 0
             : 1;
-        try {
-          const insertRes = await env.DB.prepare(`
+
+        const runPrimaryInsert = async (slugToUse: string) =>
+          env.DB!.prepare(`
             INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, platforms_data, watch_url, studio, mixedEntries, mixed_entries, episodes_per_season, broadcast_day, broadcast_time, season_episode_count, official_source_url, approval_status, is_published, airing_status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `)
             .bind(
               body.title,
-              slug,
+              slugToUse,
               body.synopsis || '',
               safeCoverUrl,
               safeBannerUrl,
@@ -638,7 +663,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               finalStatus,
               finalSubmissionStatus,
               parsedSeason,
-              parseInt(String(body.year), 10) || 2026,
+              parsedReleaseYear,
               body.genres || 'Action',
               0,
               resolvedLanguages,
@@ -659,18 +684,15 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               finalStatus
             )
             .run();
-          createdId = insertRes.meta?.last_row_id || null;
-        } catch (primaryInsertErr) {
-          if (!isMissingColumnError(primaryInsertErr)) {
-            throw primaryInsertErr;
-          }
-          const insertRes = await env.DB.prepare(`
+
+        const runFallbackInsert = async (slugToUse: string) =>
+          env.DB!.prepare(`
             INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, rating, episodes_count, status, submissionStatus, season, year, genres, popularity, languages, platform, type, platforms_data, watch_url, studio, mixedEntries, mixed_entries, episodes_per_season, approval_status, is_published)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `)
             .bind(
               body.title,
-              slug,
+              slugToUse,
               body.synopsis || '',
               safeCoverUrl,
               safeBannerUrl,
@@ -679,7 +701,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               finalStatus,
               finalSubmissionStatus,
               parsedSeason,
-              parseInt(String(body.year), 10) || 2026,
+              parsedReleaseYear,
               body.genres || 'Action',
               0,
               resolvedLanguages,
@@ -695,7 +717,33 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
               finalIsPublished
             )
             .run();
+
+        try {
+          const insertRes = await runPrimaryInsert(resolvedSlug);
           createdId = insertRes.meta?.last_row_id || null;
+        } catch (primaryInsertErr) {
+          if (isSlugUniqueConstraintError(primaryInsertErr)) {
+            existingSlugs.add(resolvedSlug);
+            resolvedSlug = pickUniqueSlugFromSet(baseSlugInput, existingSlugs, parsedReleaseYear);
+            const retryRes = await runPrimaryInsert(resolvedSlug);
+            createdId = retryRes.meta?.last_row_id || null;
+          } else if (isMissingColumnError(primaryInsertErr)) {
+            try {
+              const insertRes = await runFallbackInsert(resolvedSlug);
+              createdId = insertRes.meta?.last_row_id || null;
+            } catch (fallbackErr) {
+              if (isSlugUniqueConstraintError(fallbackErr)) {
+                existingSlugs.add(resolvedSlug);
+                resolvedSlug = pickUniqueSlugFromSet(baseSlugInput, existingSlugs, parsedReleaseYear);
+                const retryRes = await runFallbackInsert(resolvedSlug);
+                createdId = retryRes.meta?.last_row_id || null;
+              } else {
+                throw fallbackErr;
+              }
+            }
+          } else {
+            throw primaryInsertErr;
+          }
         }
       }
 
@@ -717,6 +765,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
         summary: `Created anime "${String(body.title).trim()}" (${finalStatus})`,
         payload_json: {
           title: body.title,
+          slug: resolvedSlug,
           status: finalStatus,
           languages: resolvedLanguages,
           platform: normalizedPlatform,
@@ -728,6 +777,7 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
           success: true,
           animeId: createdId,
           id: createdId,
+          slug: resolvedSlug,
           status: finalStatus,
           airing_status: finalStatus,
           platform: normalizedPlatform,
@@ -1081,6 +1131,32 @@ export async function handleAnimeRoutes(ctx: RouteContext): Promise<Response | n
                   expectedUpdatedAt: conflictCheck.expectedUpdatedAt,
                   currentUpdatedAt: conflictCheck.currentDbUpdatedAt,
                   currentRecord: existingRecordBeforeUpdate,
+                },
+                409,
+                request
+              );
+            }
+          }
+
+          if (body.slug !== undefined && body.slug !== null && String(body.slug).trim() !== '') {
+            const requestedSlug = normalizeAnimeSlug(String(body.slug));
+            const conflictRow = await env.DB.prepare(
+              'SELECT id, slug FROM anime WHERE LOWER(slug) = LOWER(?) LIMIT 1'
+            )
+              .bind(requestedSlug)
+              .first<{ id?: unknown; slug?: unknown }>()
+              .catch(() => null);
+            const targetId = existingRecordBeforeUpdate?.id ?? id;
+            const targetSlug = existingRecordBeforeUpdate?.slug ?? id;
+            if (
+              conflictRow &&
+              String(conflictRow.id) !== String(targetId) &&
+              String(conflictRow.slug || '').toLowerCase() !== String(targetSlug || '').toLowerCase()
+            ) {
+              return jsonResponse(
+                {
+                  success: false,
+                  error: `An anime with slug "${requestedSlug}" already exists.`,
                 },
                 409,
                 request

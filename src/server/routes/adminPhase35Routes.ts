@@ -27,81 +27,6 @@ function safeJsonParse<T>(raw: unknown, fallback: T): T {
   }
 }
 
-export async function ensurePhase35Tables(db: D1DatabaseLike | null | undefined): Promise<void> {
-  if (!db) return;
-  try {
-    await db
-      .prepare(
-        `CREATE TABLE IF NOT EXISTS admin_recycle_bin (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          entity_type TEXT NOT NULL,
-          entity_id TEXT NOT NULL,
-          title TEXT,
-          payload_json TEXT NOT NULL,
-          deleted_by TEXT,
-          deleted_at TEXT DEFAULT (datetime('now')),
-          restored_at TEXT
-        )`
-      )
-      .run();
-    await db
-      .prepare(
-        `CREATE INDEX IF NOT EXISTS idx_recycle_bin_active ON admin_recycle_bin(entity_type, restored_at, deleted_at DESC)`
-      )
-      .run();
-
-    await db
-      .prepare(
-        `CREATE TABLE IF NOT EXISTS translation_versions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          anime_id INTEGER NOT NULL,
-          language_code TEXT NOT NULL,
-          synopsis_text TEXT NOT NULL,
-          source_type TEXT DEFAULT 'manual',
-          saved_by TEXT,
-          created_at TEXT DEFAULT (datetime('now'))
-        )`
-      )
-      .run();
-    await db
-      .prepare(
-        `CREATE INDEX IF NOT EXISTS idx_translation_versions_lookup ON translation_versions(anime_id, language_code, created_at DESC)`
-      )
-      .run();
-
-    await db
-      .prepare(
-        `CREATE TABLE IF NOT EXISTS anime_revisions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          anime_id INTEGER NOT NULL,
-          revision_summary TEXT,
-          snapshot_json TEXT NOT NULL,
-          edited_by TEXT,
-          created_at TEXT DEFAULT (datetime('now'))
-        )`
-      )
-      .run();
-    await db
-      .prepare(
-        `CREATE INDEX IF NOT EXISTS idx_anime_revisions_lookup ON anime_revisions(anime_id, created_at DESC)`
-      )
-      .run();
-
-    await db
-      .prepare(
-        `CREATE TABLE IF NOT EXISTS ai_usage_daily (
-          usage_date TEXT PRIMARY KEY,
-          translation_calls INTEGER DEFAULT 0,
-          daily_cap INTEGER DEFAULT 100,
-          updated_at TEXT DEFAULT (datetime('now'))
-        )`
-      )
-      .run();
-  } catch (e) {
-    console.warn('[Phase3.5] ensurePhase35Tables fallback warning:', e);
-  }
-}
-
 export async function archiveEntityToRecycleBin(
   db: D1DatabaseLike | null | undefined,
   input: {
@@ -114,7 +39,6 @@ export async function archiveEntityToRecycleBin(
 ): Promise<number | null> {
   if (!db) return null;
   try {
-    await ensurePhase35Tables(db);
     const entry = buildRecycleBinArchiveEntry(input);
     const res = await db
       .prepare(
@@ -149,14 +73,13 @@ export async function recordTranslationVersion(
 ): Promise<void> {
   if (!db || !input.synopsis_text || !String(input.synopsis_text).trim()) return;
   try {
-    await ensurePhase35Tables(db);
     await db
       .prepare(
         `INSERT INTO translation_versions (anime_id, language_code, synopsis_text, source_type, saved_by, created_at)
          VALUES (?, ?, ?, ?, ?, datetime('now'))`
       )
       .bind(
-        Number(input.anime_id),
+        String(input.anime_id),
         String(input.language_code).trim().toLowerCase(),
         String(input.synopsis_text),
         input.source_type || 'manual',
@@ -179,23 +102,38 @@ export async function recordAnimeRevision(
 ): Promise<void> {
   if (!db || !input.anime_id) return;
   try {
-    await ensurePhase35Tables(db);
     const snapshotJson =
       typeof input.snapshot === 'string'
         ? input.snapshot
         : JSON.stringify(input.snapshot ?? {});
-    await db
-      .prepare(
-        `INSERT INTO anime_revisions (anime_id, revision_summary, snapshot_json, edited_by, created_at)
-         VALUES (?, ?, ?, ?, datetime('now'))`
-      )
-      .bind(
-        Number(input.anime_id),
-        input.revision_summary || 'Saved anime snapshot',
-        snapshotJson,
-        input.edited_by || 'admin'
-      )
-      .run();
+    const summaryText = input.revision_summary || 'Saved anime snapshot';
+    try {
+      await db
+        .prepare(
+          `INSERT INTO anime_revisions (anime_id, summary, snapshot_json, edited_by, created_at)
+           VALUES (?, ?, ?, ?, datetime('now'))`
+        )
+        .bind(
+          String(input.anime_id),
+          summaryText,
+          snapshotJson,
+          input.edited_by || 'admin'
+        )
+        .run();
+    } catch {
+      await db
+        .prepare(
+          `INSERT INTO anime_revisions (anime_id, revision_summary, snapshot_json, edited_by, created_at)
+           VALUES (?, ?, ?, ?, datetime('now'))`
+        )
+        .bind(
+          Number(input.anime_id),
+          summaryText,
+          snapshotJson,
+          input.edited_by || 'admin'
+        )
+        .run();
+    }
   } catch (e) {
     console.warn('[Phase3.5] recordAnimeRevision fallback warning:', e);
   }
@@ -219,35 +157,38 @@ export async function getTodayAiUsage(db: D1DatabaseLike | null | undefined): Pr
     };
   }
   try {
-    await ensurePhase35Tables(db);
     let row = await db
-      .prepare(`SELECT usage_date, translation_calls, daily_cap FROM ai_usage_daily WHERE usage_date = ?`)
+      .prepare(`SELECT * FROM ai_usage_daily WHERE usage_date = ?`)
       .bind(today)
       .first<Record<string, unknown>>();
 
-    let defaultCap = 100;
     if (!row) {
-      const latestRow = await db
-        .prepare(`SELECT daily_cap FROM ai_usage_daily ORDER BY usage_date DESC LIMIT 1`)
-        .first<Record<string, unknown>>();
-      if (latestRow && Number(latestRow.daily_cap) > 0) {
-        defaultCap = Number(latestRow.daily_cap);
+      try {
+        await db
+          .prepare(
+            `INSERT OR IGNORE INTO ai_usage_daily (usage_date, request_count, updated_at)
+             VALUES (?, 0, datetime('now'))`
+          )
+          .bind(today)
+          .run();
+      } catch {
+        await db
+          .prepare(
+            `INSERT OR IGNORE INTO ai_usage_daily (usage_date, translation_calls, daily_cap, updated_at)
+             VALUES (?, 0, 100, datetime('now'))`
+          )
+          .bind(today)
+          .run()
+          .catch(() => {});
       }
-      await db
-        .prepare(
-          `INSERT OR IGNORE INTO ai_usage_daily (usage_date, translation_calls, daily_cap, updated_at)
-           VALUES (?, 0, ?, datetime('now'))`
-        )
-        .bind(today, defaultCap)
-        .run();
       row = await db
-        .prepare(`SELECT usage_date, translation_calls, daily_cap FROM ai_usage_daily WHERE usage_date = ?`)
+        .prepare(`SELECT * FROM ai_usage_daily WHERE usage_date = ?`)
         .bind(today)
         .first<Record<string, unknown>>();
     }
 
-    const usedToday = Number(row?.translation_calls ?? 0);
-    const dailyCap = Number(row?.daily_cap ?? defaultCap);
+    const usedToday = Number(row?.request_count ?? row?.translation_calls ?? 0);
+    const dailyCap = Number(row?.daily_cap ?? 100);
     const quota = checkDailyAiUsageQuota(usedToday, dailyCap);
     return {
       usageDate: today,
@@ -270,19 +211,32 @@ export async function incrementTodayAiUsage(db: D1DatabaseLike | null | undefine
   const today = new Date().toISOString().slice(0, 10);
   try {
     await getTodayAiUsage(db);
-    await db
-      .prepare(
-        `UPDATE ai_usage_daily
-         SET translation_calls = COALESCE(translation_calls, 0) + 1,
-             updated_at = datetime('now')
-         WHERE usage_date = ?`
-      )
-      .bind(today)
-      .run();
+    try {
+      await db
+        .prepare(
+          `UPDATE ai_usage_daily
+           SET request_count = COALESCE(request_count, 0) + 1,
+               updated_at = datetime('now')
+           WHERE usage_date = ?`
+        )
+        .bind(today)
+        .run();
+    } catch {
+      await db
+        .prepare(
+          `UPDATE ai_usage_daily
+           SET translation_calls = COALESCE(translation_calls, 0) + 1,
+               updated_at = datetime('now')
+           WHERE usage_date = ?`
+        )
+        .bind(today)
+        .run();
+    }
   } catch (e) {
     console.warn('[Phase3.5] incrementTodayAiUsage fallback warning:', e);
   }
 }
+
 
 export async function handleAdminPhase35Routes(ctx: RouteContext): Promise<Response | null> {
   const { request, env, path, method, url, jsonResponse } = ctx;
@@ -329,7 +283,6 @@ export async function handleAdminPhase35Routes(ctx: RouteContext): Promise<Respo
   }
 
   const adminActor = session.email || session.userId || 'admin';
-  await ensurePhase35Tables(env.DB);
 
   // =========================================================================
   // 1. RECYCLE BIN: List, 1-Click Restore, Permanent Purge
@@ -621,12 +574,16 @@ export async function handleAdminPhase35Routes(ctx: RouteContext): Promise<Respo
     if (env.DB) {
       try {
         const res = await env.DB.prepare(
-          `SELECT usage_date, translation_calls, daily_cap, updated_at
+          `SELECT *
            FROM ai_usage_daily
            ORDER BY usage_date DESC
            LIMIT 14`
         ).all<Record<string, unknown>>();
-        history = res.results || [];
+        history = (res.results || []).map((r) => ({
+          ...r,
+          translation_calls: Number(r.request_count ?? r.translation_calls ?? 0),
+          daily_cap: Number(r.daily_cap ?? 100),
+        }));
       } catch {
         // ignore
       }
@@ -648,7 +605,8 @@ export async function handleAdminPhase35Routes(ctx: RouteContext): Promise<Respo
         `UPDATE ai_usage_daily SET daily_cap = ?, updated_at = datetime('now') WHERE usage_date = ?`
       )
         .bind(newCap, today)
-        .run();
+        .run()
+        .catch(() => {});
 
       await recordAdminActivityLog(env.DB, {
         actor_email: adminActor,
@@ -659,7 +617,7 @@ export async function handleAdminPhase35Routes(ctx: RouteContext): Promise<Respo
       });
 
       const usage = await getTodayAiUsage(env.DB);
-      return jsonResponse({ success: true, usage }, 200, request);
+      return jsonResponse({ success: true, usage: { ...usage, dailyCap: newCap } }, 200, request);
     } catch (e) {
       return jsonResponse({ error: getErrorMessage(e) || 'Failed to update AI daily cap' }, 500, request);
     }
@@ -775,17 +733,18 @@ export async function handleAdminPhase35Routes(ctx: RouteContext): Promise<Respo
     }
     try {
       const res = await env.DB.prepare(
-        `SELECT id, anime_id, revision_summary, snapshot_json, edited_by, created_at
+        `SELECT *
          FROM anime_revisions
          WHERE anime_id = ?
          ORDER BY id DESC
          LIMIT 35`
       )
-        .bind(animeId)
+        .bind(String(animeId))
         .all<Record<string, unknown>>();
 
       const revisions = (res.results || []).map((r) => ({
         ...r,
+        revision_summary: r.summary || r.revision_summary || 'Saved anime snapshot',
         snapshot: safeJsonParse(r.snapshot_json, {}),
       }));
 

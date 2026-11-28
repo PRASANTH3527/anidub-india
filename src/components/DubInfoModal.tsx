@@ -75,6 +75,9 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   onSubmit,
 }) => {
   const { isSignedIn, user: clerkUser } = useUser();
+  const isAdminSessionVerified = Boolean(
+    isSignedIn && clerkUser && isAuthorizedClerkAdmin(clerkUser)
+  );
   const { t } = useTranslation(['forms', 'common']);
 
   const initDataAny = initialData as any;
@@ -766,14 +769,16 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         {/* HEADER */}
         <div className="p-4 sm:p-5 border-b border-[var(--border-subtle)] flex items-center justify-between bg-[var(--bg-elevated)] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/30 flex items-center justify-center text-[var(--accent-primary)] shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-lg shadow-purple-500/25 flex items-center justify-center shrink-0">
               <Film className="w-5 h-5" />
             </div>
             <div>
               <h3 className="font-heading font-black text-base sm:text-lg text-[var(--text-primary)] leading-tight">
-                {mode === 'edit' ? 'Edit Anime Info' : t('forms:submitDub.title', 'Submit Dub Info')}
+                {mode === 'edit' || isAdminSessionVerified
+                  ? 'Edit Anime Info'
+                  : t('forms:submitDub.title', 'Submit Dub Info')}
               </h3>
-              {mode !== 'edit' && (
+              {mode !== 'edit' && !isAdminSessionVerified && (
                 <p className="text-[11px] text-[#F9C876] font-semibold flex items-center gap-1 mt-0.5">
                   <ShieldAlert className="w-3.5 h-3.5" />
                   <span>Strict Moderation: Requires Admin Approval</span>
@@ -792,8 +797,8 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
           </button>
         </div>
 
-        {/* 3-Step Guided Flow Progress Header */}
-        {!isSuccess && (
+        {/* 3-Step Guided Flow Progress Header (Public Community Submit Only) */}
+        {!isSuccess && mode !== 'edit' && !isAdminSessionVerified && (
           <div
             data-testid="dub-submit-guided-steps"
             className="px-4 py-2.5 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] grid grid-cols-3 gap-1.5 shrink-0"
@@ -1405,16 +1410,18 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
                   </div>
                 </div>
 
-                {/* Strict Moderation Gate Card */}
-                <div className="rounded-xl p-4 bg-[var(--bg-elevated)] border border-[#F9C876]/35 space-y-1.5">
-                  <div className="flex items-center gap-2 text-[#F9C876] text-xs font-bold">
-                    <ShieldAlert className="w-4 h-4 shrink-0" />
-                    <span>Strict Moderation Gate</span>
+                {/* Strict Moderation Gate Card (Public Community Submit Only) */}
+                {mode !== 'edit' && !isAdminSessionVerified && (
+                  <div className="rounded-xl p-4 bg-[var(--bg-elevated)] border border-[#F9C876]/35 space-y-1.5">
+                    <div className="flex items-center gap-2 text-[#F9C876] text-xs font-bold">
+                      <ShieldAlert className="w-4 h-4 shrink-0" />
+                      <span>Strict Moderation Gate</span>
+                    </div>
+                    <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                      This submission will be saved with <span className="text-[#F9C876] font-bold">approval status: "pending"</span>. It will <span className="text-[#F87171] font-bold">NEVER</span> appear on the public website until approved by the admin.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
-                    This submission will be saved with <span className="text-[#F9C876] font-bold">approval status: "pending"</span>. It will <span className="text-[#F87171] font-bold">NEVER</span> appear on the public website until approved by the admin.
-                  </p>
-                </div>
+                )}
 
               </form>
             )}
@@ -1428,17 +1435,17 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
               type="submit"
               form="dub-info-form"
               disabled={isSubmitting || !title.trim()}
-              className="w-full min-h-[48px] px-5 py-3 rounded-xl bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-[var(--accent-on-primary)] font-black text-sm flex items-center justify-center gap-2.5 cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full min-h-[48px] px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-purple-600 hover:from-amber-400 hover:via-orange-400 hover:to-purple-500 text-white shadow-lg shadow-purple-600/25 font-black text-sm flex items-center justify-center gap-2.5 cursor-pointer transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
-                <div className="flex items-center gap-2 text-[var(--accent-on-primary)]">
+                <div className="flex items-center gap-2 text-white">
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>{mode === 'edit' ? 'Saving changes...' : t('forms:submitDub.submitting', 'Submitting...')}</span>
+                  <span>{mode === 'edit' || isAdminSessionVerified ? 'Saving changes...' : t('forms:submitDub.submitting', 'Submitting...')}</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2.5">
                   <Send className="w-4 h-4" />
-                  <span>{mode === 'edit' ? 'Save Anime Changes' : t('forms:submitDub.submitCta', 'Submit Dub for Admin Approval')}</span>
+                  <span>{mode === 'edit' || isAdminSessionVerified ? 'Save Anime Changes' : t('forms:submitDub.submitCta', 'Submit Dub for Admin Approval')}</span>
                 </div>
               )}
             </button>

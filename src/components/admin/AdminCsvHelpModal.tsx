@@ -64,7 +64,7 @@ export const AdminCsvHelpModal: React.FC<AdminCsvHelpModalProps> = ({
                 { col: 'Studio', desc: 'e.g. MAPPA, Ufotable' },
                 { col: 'Genres', desc: 'Pipe or comma separated' },
                 { col: 'Languages', desc: 'Tamil | Hindi | Telugu (or empty)' },
-                { col: 'Platforms', desc: 'Crunchyroll | Netflix' },
+                { col: 'Platforms', desc: 'Prime Video|Netflix or Crunchyroll | Netflix' },
                 { col: 'Episodes', desc: '12 or 12 | 24 per season' },
               ].map((item, i) => (
                 <div
@@ -88,7 +88,9 @@ export const AdminCsvHelpModal: React.FC<AdminCsvHelpModalProps> = ({
                 |
               </code>{' '}
               to separate multiple languages, genres, or platforms inside a single cell (e.g.{' '}
-              <code className="text-[var(--text-primary)] font-mono">Tamil | Hindi | Telugu</code>).
+              <code className="text-[var(--text-primary)] font-mono">Tamil | Hindi | Telugu</code> or{' '}
+              <code className="text-[var(--text-primary)] font-mono">Prime Video|Netflix</code>, with optional per-platform link syntax{' '}
+              <code className="text-[var(--text-primary)] font-mono">Prime Video|Netflix::https://...</code>).
             </p>
           </div>
         </div>

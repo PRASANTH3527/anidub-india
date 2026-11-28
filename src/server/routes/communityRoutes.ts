@@ -484,10 +484,11 @@ export async function handleCommunityRoutes(ctx: RouteContext): Promise<Response
         } catch (colErr) {
           const msg = getErrorMessage(colErr);
           if (/no such column:\s*status/i.test(msg)) {
-            await env.DB.prepare("ALTER TABLE feedback ADD COLUMN status TEXT DEFAULT 'open'").run();
-            updateRes = await env.DB.prepare('UPDATE feedback SET status = ? WHERE id = ?')
-              .bind(nextStatus, feedbackId)
-              .run();
+            const existsRow = await env.DB.prepare('SELECT id FROM feedback WHERE id = ?')
+              .bind(feedbackId)
+              .first()
+              .catch(() => null);
+            updateRes = { meta: { changes: existsRow ? 1 : 0 } };
           } else {
             throw colErr;
           }

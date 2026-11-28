@@ -82,6 +82,9 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     '0011_p0_p2_upgrades.sql',
     '002_anime_translations.sql',
     '003_anime_details_v2.sql',
+    '004_admin_ops_pro.sql',
+    '005_admin_intelligence_scale.sql',
+    '006_admin_polish_ops.sql',
   ]);
 
   const db = new DatabaseSync(':memory:');
@@ -97,10 +100,15 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
   const tableNames = tablesRes.map((row) => String(row.name));
 
   for (const requiredTable of [
+    'admin_activity_logs',
+    'admin_recycle_bin',
+    'ai_usage_daily',
     'anime',
     'anime_cast_entries',
+    'anime_dub_matrix',
     'anime_follows',
     'anime_franchise_links',
+    'anime_revisions',
     'anime_translations',
     'analytics_events',
     'analytics_pageviews',
@@ -108,6 +116,7 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     'chat_messages',
     'cloudflare_logs',
     'community_submission_logs',
+    'content_demand_events',
     'dub_radar',
     'dub_request_votes',
     'dub_requests',
@@ -118,6 +127,7 @@ test('All versioned SQL migrations in migrations/ execute cleanly in SQLite and 
     'in_app_alerts',
     'reports',
     'reviews',
+    'translation_versions',
     'user_ratings',
     'user_votes',
     'users',

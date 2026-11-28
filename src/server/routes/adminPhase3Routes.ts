@@ -99,60 +99,16 @@ function isMissingPhase3TableError(err: unknown): boolean {
   );
 }
 
-async function ensureFranchiseLinksTable(db: D1DatabaseLike): Promise<void> {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS anime_franchise_links (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        franchise_key TEXT NOT NULL,
-        anime_id TEXT NOT NULL,
-        relation_label TEXT NOT NULL,
-        watch_order INTEGER NOT NULL DEFAULT 1,
-        note TEXT,
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        UNIQUE(franchise_key, anime_id)
-      )`
-    )
-    .run()
-    .catch(() => {});
+async function ensureFranchiseLinksTable(_db: D1DatabaseLike): Promise<void> {
+  // Handled by migrations/003_anime_details_v2.sql
 }
 
-async function ensureCastEntriesTable(db: D1DatabaseLike): Promise<void> {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS anime_cast_entries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        anime_id TEXT NOT NULL,
-        character_name TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'Main',
-        voice_actor_name TEXT NOT NULL,
-        dub_language TEXT NOT NULL,
-        character_image TEXT,
-        actor_image TEXT,
-        verified INTEGER NOT NULL DEFAULT 0,
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )`
-    )
-    .run()
-    .catch(() => {});
+async function ensureCastEntriesTable(_db: D1DatabaseLike): Promise<void> {
+  // Handled by migrations/003_anime_details_v2.sql
 }
 
-async function ensureContentDemandEventsTable(db: D1DatabaseLike): Promise<void> {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS content_demand_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_type TEXT NOT NULL,
-        anime_id TEXT,
-        query_text TEXT,
-        language_code TEXT,
-        platform_name TEXT,
-        result_count INTEGER,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`
-    )
-    .run()
-    .catch(() => {});
+async function ensureContentDemandEventsTable(_db: D1DatabaseLike): Promise<void> {
+  // Handled by migrations/005_admin_intelligence_scale.sql
 }
 
 function escapeCsvCell(val: unknown): string {

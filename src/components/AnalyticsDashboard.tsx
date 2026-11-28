@@ -229,22 +229,22 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold uppercase tracking-wider">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                {t('common.live', 'CONTENT DEMAND INTELLIGENCE 2.0')}
+                {t('common.live', '• REAL-TIME CLOUDFLARE EDGE TELEMETRY')}
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] text-[11px] font-semibold">
-                Cloudflare D1 • Zero Fake Metrics
+                Cookieless • Privacy-First
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--text-primary)] tracking-tight flex items-center gap-2.5">
               <BarChart3 className="w-6 h-6 text-[var(--accent-primary)] shrink-0" />
-              <span>Actionable Admin Analytics &amp; Demand Intelligence</span>
+              <span>Real-Time Edge Visitor Analytics</span>
             </h2>
             <p className="text-xs sm:text-sm text-[var(--text-secondary)] max-w-2xl">
-              Real D1 zero-result search demand, regional Indian dub language popularity, verified OTT click-through conversion rates (CTR), and catalog completeness gaps.
+              Live D1 visitor sessions, pageviews, regional city/state telemetry, zero-result search demand, regional Indian dub language popularity, and verified OTT click-through conversion rates (CTR).
             </p>
           </div>
 
-          {/* Timeframe Selector (Today, 7D, 30D, 90D) + Manual Refresh Button */}
+          {/* Timeframe Selector (Today, 7D, 30D, 90D) + Auto-Refresh + Manual Refresh Button */}
           <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
             <div
               data-testid="analytics-timeframe-selector"
@@ -265,7 +265,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   onClick={() => setTimeRange(tab.id)}
                   className={`min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     timeRange === tab.id
-                      ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] shadow-sm'
+                      ? 'bg-purple-600 text-white shadow-sm'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
@@ -282,14 +282,14 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
                   : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-secondary)]'
               }`}
-              title="Toggle optional 60s background refresh (Off by default)"
+              title="Toggle auto-refresh"
             >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  autoRefresh ? 'bg-emerald-500 animate-ping' : 'bg-[var(--text-secondary)]'
+                  autoRefresh ? 'bg-emerald-500 animate-ping' : 'bg-emerald-500'
                 }`}
               />
-              {autoRefresh ? 'Auto (60s)' : 'Manual Mode'}
+              {autoRefresh ? 'Auto-Refresh (15s)' : 'Auto-Refresh (Off)'}
             </button>
 
             <button
@@ -301,7 +301,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               title="Refresh Telemetry"
             >
               <RefreshCw
-                className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[var(--accent-primary)]' : ''}`}
+                className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-purple-400' : ''}`}
               />
               <span>Refresh</span>
             </button>
@@ -734,7 +734,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-emerald-500/30 flex flex-col justify-between">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  Live Right Now
+                  Live Visitors
                 </span>
                 <Activity className="w-4 h-4 text-emerald-500 animate-pulse" />
               </div>
@@ -746,7 +746,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   active
                 </span>
               </div>
-              <p className="text-[11px] text-[var(--text-secondary)] mt-2">Active within last 3m</p>
+              <p className="text-[11px] text-[var(--text-secondary)] mt-2">Active in last 60s</p>
             </div>
 
             <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col justify-between">
