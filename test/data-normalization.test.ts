@@ -5,7 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { onRequest } from '../functions/api/[[route]].ts';
-import { buildStreamingPartnersPayload } from '../src/utils/dataNormalization.ts';
+import {
+  buildStreamingPartnersPayload,
+  resolveAnimeStreamingPartners,
+} from '../src/utils/dataNormalization.ts';
 
 function createSignedClerkJwt(sub: string, extraClaims: Record<string, unknown> = {}) {
   const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
@@ -713,5 +716,277 @@ test('DubInfoModal conditionally renders per-platform languages only when 2+ pla
     modalSrc.includes('Languages on {activePlatformLabel}'),
     'Per-platform label must dynamically reflect the selected platform name'
   );
+});
+
+test('resolveAnimeStreamingPartners pre-fills OTT links across all D1 schemas (streaming_partners="[]", platforms_data, watch_url, official_source_url, streamingLinks, platform_links)', () => {
+  // 1. Multi-platform Attack on Titan row where D1 streaming_partners is "[]" while platforms_data holds the 3 partner URLs
+  const aotPartners = resolveAnimeStreamingPartners(
+    {
+      title: 'Attack on Titan',
+      platform: 'Anime Times|Crunchyroll|JioHotstar',
+      languages: 'Hindi, Tamil, Telugu',
+      streaming_partners: '[]',
+      platforms_data: JSON.stringify([
+        {
+          name: 'Anime Times',
+          url: 'https://www.primevideo.com/detail/aot-anime-times',
+          languages: ['Hindi'],
+        },
+        {
+          name: 'Crunchyroll',
+          url: 'https://www.crunchyroll.com/series/GR751KNZY/attack-on-titan',
+          languages: ['Hindi', 'Tamil', 'Telugu'],
+        },
+        {
+          name: 'JioHotstar',
+          url: 'https://www.hotstar.com/in/shows/attack-on-titan/1260000001',
+          languages: ['Hindi'],
+        },
+      ]),
+    },
+    { defaultWhenEmpty: true, includePlatformNamesFallback: true }
+  );
+
+  assert.equal(aotPartners.length, 3);
+  assert.equal(aotPartners[0].name, 'Anime Times');
+  assert.equal(aotPartners[0].url, 'https://www.primevideo.com/detail/aot-anime-times');
+  assert.deepEqual(aotPartners[0].languages, ['Hindi']);
+  assert.equal(aotPartners[1].name, 'Crunchyroll');
+  assert.equal(
+    aotPartners[1].url,
+    'https://www.crunchyroll.com/series/GR751KNZY/attack-on-titan'
+  );
+  assert.deepEqual(aotPartners[1].languages, ['Hindi', 'Tamil', 'Telugu']);
+  assert.equal(aotPartners[2].name, 'JioHotstar');
+  assert.equal(
+    aotPartners[2].url,
+    'https://www.hotstar.com/in/shows/attack-on-titan/1260000001'
+  );
+
+  // 2. Single-platform Haikyu!! row where platforms_data has url: "" while official_source_url / watch_url holds the link
+  const haikyuPartners = resolveAnimeStreamingPartners(
+    {
+      title: 'Haikyu!!',
+      platform: 'Crunchyroll',
+      languages: 'Hindi, Tamil, Telugu',
+      streaming_partners: '[]',
+      platforms_data: JSON.stringify([{ name: 'Crunchyroll', url: '', languages: [] }]),
+      watch_url: '',
+      official_source_url: 'https://www.crunchyroll.com/series/GY8VM8MWY/haikyu',
+    },
+    { defaultWhenEmpty: true, includePlatformNamesFallback: true }
+  );
+  assert.equal(haikyuPartners.length, 1);
+  assert.equal(haikyuPartners[0].name, 'Crunchyroll');
+  assert.equal(haikyuPartners[0].url, 'https://www.crunchyroll.com/series/GY8VM8MWY/haikyu');
+  assert.deepEqual(haikyuPartners[0].languages, ['Hindi', 'Tamil', 'Telugu']);
+
+  // 3. Welcome to Demon School! Iruma-kun row where links are stored in streamingLinks / watchLink / { platform, link }
+  const irumaPartners = resolveAnimeStreamingPartners(
+    {
+      title: 'Welcome to Demon School! Iruma-kun',
+      platform: 'Crunchyroll',
+      languages: 'Hindi, Tamil',
+      streaming_partners: [],
+      platform_links: JSON.stringify([
+        {
+          platform: 'Crunchyroll',
+          link: 'https://www.crunchyroll.com/series/G6NVG970Y/welcome-to-demon-school-iruma-kun',
+        },
+      ]),
+    },
+    { defaultWhenEmpty: true, includePlatformNamesFallback: true }
+  );
+  assert.equal(irumaPartners.length, 1);
+  assert.equal(irumaPartners[0].name, 'Crunchyroll');
+  assert.equal(
+    irumaPartners[0].url,
+    'https://www.crunchyroll.com/series/G6NVG970Y/welcome-to-demon-school-iruma-kun'
+  );
+  assert.deepEqual(irumaPartners[0].languages, ['Hindi', 'Tamil']);
+});
+
+test('GET /api/anime, GET /api/anime/:id, and PUT /api/anime/:id preserve D1 OTT links when streaming_partners defaults to "[]"', async () => {
+  const { token, publicPem } = createSignedClerkJwt('admin_ott_links_fix', {
+    email: 'admin@anidub.in',
+    email_verified: true,
+  });
+
+  const sqlite = new DatabaseSync(':memory:');
+  sqlite.exec(`
+    CREATE TABLE anime (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      synopsis TEXT DEFAULT '',
+      cover_image TEXT DEFAULT '/logo.png',
+      banner_image TEXT DEFAULT '/logo.png',
+      rating REAL DEFAULT 8.5,
+      episodes_count INTEGER DEFAULT 25,
+      status TEXT DEFAULT 'Completed',
+      airing_status TEXT DEFAULT 'Completed',
+      submissionStatus TEXT DEFAULT 'approved',
+      approval_status TEXT DEFAULT 'approved',
+      is_published INTEGER DEFAULT 1,
+      season TEXT DEFAULT 'Spring',
+      year INTEGER DEFAULT 2014,
+      genres TEXT DEFAULT 'Sports',
+      popularity INTEGER DEFAULT 100,
+      languages TEXT DEFAULT 'Hindi, Tamil, Telugu',
+      platform TEXT DEFAULT 'Crunchyroll',
+      type TEXT DEFAULT 'TV Series',
+      studio TEXT DEFAULT 'Production I.G',
+      episodes_per_season TEXT DEFAULT '25',
+      mixedEntries TEXT DEFAULT '',
+      mixed_entries TEXT DEFAULT '',
+      watch_url TEXT DEFAULT '',
+      platforms_data TEXT DEFAULT '[]',
+      streaming_partners TEXT DEFAULT '[]',
+      broadcast_day TEXT DEFAULT NULL,
+      broadcast_time TEXT DEFAULT NULL,
+      season_episode_count TEXT DEFAULT '1 Season • 25 Episodes',
+      official_source_url TEXT DEFAULT '',
+      last_verified_at TEXT DEFAULT '2026-03-01',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE episodes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      anime_id INTEGER NOT NULL,
+      episode_number INTEGER NOT NULL,
+      title TEXT NOT NULL
+    );
+    CREATE TABLE reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      anime_id INTEGER NOT NULL,
+      user_id TEXT,
+      user_name TEXT,
+      user_avatar TEXT,
+      rating INTEGER,
+      language TEXT,
+      comment TEXT,
+      is_spoiler INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Insert Haikyu!! with streaming_partners = '[]' (D1 column default) and link in platforms_data + official_source_url
+  sqlite
+    .prepare(
+      `INSERT INTO anime (id, title, slug, platform, languages, streaming_partners, platforms_data, watch_url, official_source_url)
+       VALUES (1, 'Haikyu!!', 'haikyu', 'Crunchyroll', 'Hindi, Tamil, Telugu', '[]', ?, 'https://www.crunchyroll.com/series/GY8VM8MWY/haikyu', 'https://www.crunchyroll.com/series/GY8VM8MWY/haikyu')`
+    )
+    .run(
+      JSON.stringify([
+        {
+          name: 'Crunchyroll',
+          platform: 'Crunchyroll',
+          url: 'https://www.crunchyroll.com/series/GY8VM8MWY/haikyu',
+          languages: ['Hindi', 'Tamil', 'Telugu'],
+        },
+      ])
+    );
+
+  const d1Adapter = {
+    prepare(sql: string) {
+      let bound: unknown[] = [];
+      return {
+        bind(...args: unknown[]) {
+          bound = args;
+          return this;
+        },
+        async first() {
+          const stmt = sqlite.prepare(sql);
+          return (stmt.get(...(bound as Array<string | number | null>)) as Record<string, unknown>) || null;
+        },
+        async all() {
+          const stmt = sqlite.prepare(sql);
+          return {
+            results: (stmt.all(...(bound as Array<string | number | null>)) as Array<Record<string, unknown>>) || [],
+          };
+        },
+        async run() {
+          const stmt = sqlite.prepare(sql);
+          const info = stmt.run(...(bound as Array<string | number | null>));
+          return {
+            meta: {
+              changes: Number(info.changes ?? 0),
+              last_row_id: Number(info.lastInsertRowid ?? 0),
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const env = {
+    ADMIN_EMAIL: 'admin@anidub.in',
+    CLERK_JWT_KEY: publicPem,
+    DB: d1Adapter,
+  };
+
+  // 1. GET /api/anime returns non-empty streaming_partners and platforms_data with URL intact
+  const catalogRes = await onRequest({
+    request: new Request('https://anidub.in/api/anime?includePending=true', {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    env,
+  });
+  assert.equal(catalogRes.status, 200);
+  const catalogJson = (await catalogRes.json()) as { data: Array<Record<string, any>> };
+  assert.equal(catalogJson.data.length, 1);
+  assert.equal(
+    catalogJson.data[0].streaming_partners[0].url,
+    'https://www.crunchyroll.com/series/GY8VM8MWY/haikyu'
+  );
+
+  // 2. GET /api/anime/1 returns the full streaming_partners and platforms_data URLs
+  const detailRes = await onRequest({
+    request: new Request('https://anidub.in/api/anime/1', {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    env,
+  });
+  assert.equal(detailRes.status, 200);
+  const detailJson = (await detailRes.json()) as Record<string, any>;
+  assert.equal(
+    detailJson.streaming_partners[0].url,
+    'https://www.crunchyroll.com/series/GY8VM8MWY/haikyu'
+  );
+  assert.equal(
+    detailJson.platforms_data[0].url,
+    'https://www.crunchyroll.com/series/GY8VM8MWY/haikyu'
+  );
+
+  // 3. Non-destructive PUT /api/anime/1: updating rating with empty partner URL preserves existing D1 link
+  const putRes = await onRequest({
+    request: new Request('https://anidub.in/api/anime/1', {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Haikyu!!',
+        rating: 8.9,
+        streaming_partners: [{ name: 'Crunchyroll', url: '', languages: ['Hindi', 'Tamil', 'Telugu'] }],
+        watch_url: '',
+        official_source_url: '',
+      }),
+    }),
+    env,
+  });
+  assert.equal(putRes.status, 200);
+  const putJson = (await putRes.json()) as Record<string, any>;
+  assert.equal(
+    putJson.platforms_data[0].url,
+    'https://www.crunchyroll.com/series/GY8VM8MWY/haikyu'
+  );
+  assert.equal(putJson.watch_url, 'https://www.crunchyroll.com/series/GY8VM8MWY/haikyu');
+  assert.equal(
+    putJson.official_source_url,
+    'https://www.crunchyroll.com/series/GY8VM8MWY/haikyu'
+  );
+
+  sqlite.close();
 });
 

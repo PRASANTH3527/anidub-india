@@ -7,6 +7,7 @@ import {
   normalizePlatformString,
   normalizeSeasonEpisodeCount,
   normalizeStreamingPartners,
+  resolveAnimeStreamingPartners,
   parseCsvMixedEntriesAndEpisodesPerSeason,
   parseCsvPlatformsField,
   parseOptionalEpisodesCount,
@@ -728,16 +729,16 @@ export async function handleAdminRoutes(ctx: RouteContext): Promise<Response | n
           "SELECT * FROM anime WHERE LOWER(COALESCE(status, '')) = 'pending' OR LOWER(COALESCE(submissionStatus, '')) = 'pending' OR LOWER(COALESCE(approval_status, '')) = 'pending' OR is_published = 0 OR is_published = false ORDER BY id DESC"
         ).all();
         const hydrated = ((res.results || []) as Array<Record<string, unknown>>).map((row) => {
-          const fromPlatformsData = normalizeStreamingPartners(row.platforms_data);
-          const parsedPartners =
-            fromPlatformsData.length > 0
-              ? fromPlatformsData
-              : normalizeStreamingPartners(row.streaming_partners);
+          const parsedPartners = resolveAnimeStreamingPartners(row, {
+            defaultWhenEmpty: false,
+            includePlatformNamesFallback: false,
+          });
           if (parsedPartners.length > 0) {
             return {
               ...row,
               platforms_data: parsedPartners,
               streaming_partners: parsedPartners,
+              watch_providers: parsedPartners,
             };
           }
           return row;

@@ -1251,10 +1251,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleOpenModularEditor = useCallback((anime: any | null, _targetTab: AnimeEditorTabId = 'identity') => {
-    setEditingAnime(anime);
-    setIsAddModalOpen(true);
-  }, []);
+  const handleOpenModularEditor = useCallback(
+    (anime: any | null, _targetTab: AnimeEditorTabId = 'identity') => {
+      if (anime && anime.id !== undefined && anime.id !== null) {
+        const richerMatch =
+          catalogItems.find((item) => String(item.id) === String(anime.id)) ||
+          pendingItems.find((item) => String(item.id) === String(anime.id));
+        setEditingAnime(richerMatch ? { ...anime, ...richerMatch } : anime);
+      } else {
+        setEditingAnime(anime);
+      }
+      setIsAddModalOpen(true);
+    },
+    [catalogItems, pendingItems]
+  );
 
   // STRICT CLERK ADMIN ROUTE GUARD (Production Enforced)
   if (!isClerkAdminAuthorized) {
@@ -2034,13 +2044,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         isNormalizingPlatforms={isNormalizingPlatforms}
       />
 
-      {/* 4B. FLOATING BOTTOM-RIGHT ">_ SYS_TERM" PILL BUTTON */}
-      {!isDiagnosticsOpen && (
+      {/* 4B. FLOATING BOTTOM-RIGHT ">_ SYS_TERM" PILL BUTTON (Hidden when any modal is open) */}
+      {!isDiagnosticsOpen && !isAddModalOpen && !isCsvHelpOpen && !isCommandPaletteOpen && !confirmDialog?.isOpen && (
         <button
           type="button"
           data-testid="admin-floating-sys-term"
           onClick={() => setIsDiagnosticsOpen(true)}
-          className="fixed bottom-20 lg:bottom-6 right-4 z-[105] min-h-[40px] px-3.5 py-2 rounded-full bg-[#090d16]/95 hover:bg-[#0e1526] border border-cyan-500/40 text-cyan-300 text-xs font-mono font-extrabold shadow-xl shadow-cyan-500/15 flex items-center gap-2 cursor-pointer transition-all"
+          className="fixed bottom-20 lg:bottom-6 right-4 z-20 min-h-[40px] px-3.5 py-2 rounded-full bg-[#090d16]/95 hover:bg-[#0e1526] border border-cyan-500/40 text-cyan-300 text-xs font-mono font-extrabold shadow-xl shadow-cyan-500/15 flex items-center gap-2 cursor-pointer transition-all"
           title="Open Live System Terminal (>_ SYS_TERM)"
         >
           <span className="text-cyan-400 font-black">&gt;_</span>

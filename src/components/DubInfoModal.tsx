@@ -27,7 +27,7 @@ import {
   matchCanonicalPlatformName,
   normalizePlatformString,
   normalizePartnerLanguages,
-  parseCsvPlatformsField,
+  resolveAnimeStreamingPartners,
   buildStreamingPartnersPayload,
   normalizeBroadcastDay,
   normalizeBroadcastTime,
@@ -194,57 +194,19 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
   const [currentSeason, setCurrentSeason] = useState<string>(initialData?.release_season || initDataAny?.season || '');
   const [currentlyAiringEpisode, setCurrentlyAiringEpisode] = useState<number | ''>(initialData?.episodes_count || '');
 
-  // Helper to safely parse and reconstruct streaming partners from initialData
+  // Helper to safely parse and reconstruct streaming partners from initialData across all D1 OTT link columns
   const parseStreamingPartners = (data: any): { name: string; url: string; languages: string[] }[] => {
     if (!data) return [{ name: 'Crunchyroll', url: '', languages: [] }];
-    const raw =
-      data.streaming_partners ||
-      data.streamingPartners ||
-      data.platforms_data ||
-      data.platformsData ||
-      data.watch_providers;
-    let list: any[] = [];
-    if (typeof raw === 'string' && raw.trim()) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) list = parsed;
-      } catch (e) {
-        console.warn('Failed to parse streaming partners JSON:', e);
-      }
-    } else if (Array.isArray(raw)) {
-      list = raw;
-    }
-
-    const fallbackLangs = normalizePartnerLanguages(data.languages);
-    const initialLangs = fallbackLangs;
-
-    if (list.length > 0) {
-      return list.map((item: any) => ({
-        name: matchCanonicalPlatformName(item.name || item.platform) || 'Crunchyroll',
-        url: String(item.url || item.watch_url || item.link || '').trim(),
-        languages:
-          item.languages !== undefined
-            ? normalizePartnerLanguages(item.languages)
-            : initialLangs,
-      }));
-    }
-
-    const rawPlatformStr = String(data.platforms || data.platform || '').trim();
-    const defaultUrl = String(data.watch_url || data.watchUrl || '').trim();
-    const { partners: parsedFromPlatform } = parseCsvPlatformsField(
-      rawPlatformStr,
-      initialLangs,
-      defaultUrl
-    );
-    if (parsedFromPlatform.length > 0) {
-      return parsedFromPlatform.map((partner) => ({
-        name: partner.name,
-        url: partner.url,
-        languages: partner.languages.length > 0 ? partner.languages : initialLangs,
-      }));
-    }
-
-    return [{ name: 'Crunchyroll', url: defaultUrl, languages: initialLangs }];
+    const resolved = resolveAnimeStreamingPartners(data, {
+      fallbackLanguages: data.languages,
+      defaultWhenEmpty: true,
+      includePlatformNamesFallback: true,
+    });
+    return resolved.map((partner) => ({
+      name: matchCanonicalPlatformName(partner.name || partner.platform) || 'Crunchyroll',
+      url: String(partner.url || '').trim(),
+      languages: Array.isArray(partner.languages) ? partner.languages : [],
+    }));
   };
 
   // Multi-Platform Links
@@ -357,6 +319,75 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       setFormData({ type: 'TV Series', status: 'Airing' });
     }
   }, [initialData]);
+
+  // Hydrate full anime record from Cloudflare D1 when opening Edit Anime Info so no OTT links or fields are missing
+  useEffect(() => {
+    if (!isOpen || mode !== 'edit') return;
+    const lookupId = initialData?.id ?? initialData?.slug;
+    if (lookupId === undefined || lookupId === null || String(lookupId).trim() === '') return;
+
+    let cancelled = false;
+    cloudflareApi
+      .getAnimeById(lookupId)
+      .then((res) => {
+        if (cancelled || !res) return;
+        const fullRecord =
+          (res as any).data && typeof (res as any).data === 'object' ? (res as any).data : res;
+        if (!fullRecord || typeof fullRecord !== 'object') return;
+
+        const hydratedPartners = parseStreamingPartners(fullRecord);
+        if (hydratedPartners.some((p) => Boolean(p.url)) || hydratedPartners.length > 1) {
+          setStreamingPartners((prev) => {
+            const prevHasAnyUrl = prev.some((p) => Boolean(p.url?.trim()));
+            if (!prevHasAnyUrl) {
+              return hydratedPartners;
+            }
+            const next = prev.map((item) => {
+              const canonical = matchCanonicalPlatformName(item.name).toLowerCase();
+              const match = hydratedPartners.find(
+                (hp) => matchCanonicalPlatformName(hp.name).toLowerCase() === canonical
+              );
+              if (!match) return item;
+              return {
+                ...item,
+                url: item.url?.trim() ? item.url : match.url,
+                languages:
+                  item.languages && item.languages.length > 0 ? item.languages : match.languages,
+              };
+            });
+            for (const hp of hydratedPartners) {
+              const canonical = matchCanonicalPlatformName(hp.name).toLowerCase();
+              const exists = next.some(
+                (item) => matchCanonicalPlatformName(item.name).toLowerCase() === canonical
+              );
+              if (!exists && hp.url) {
+                next.push(hp);
+              }
+            }
+            return next;
+          });
+        }
+
+        setFormData((prev: any) => ({
+          ...fullRecord,
+          ...prev,
+          watch_url: prev?.watch_url || fullRecord.watch_url || '',
+          official_source_url: prev?.official_source_url || fullRecord.official_source_url || '',
+          platforms_data: fullRecord.platforms_data || prev?.platforms_data,
+          streaming_partners: fullRecord.streaming_partners || prev?.streaming_partners,
+        }));
+
+        setSynopsis((prev: string) => (prev && prev.trim() ? prev : String(fullRecord.synopsis || '')));
+        setStudio((prev: string) => (prev && prev.trim() ? prev : String(fullRecord.studio || '')));
+      })
+      .catch(() => {
+        // Safe fallback when offline or in unit test mocks
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, mode, initialData?.id, initialData?.slug]);
 
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -573,7 +604,15 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
     }
 
     const derivedOfficialSourceUrl = deriveOfficialSourceUrlFromPartners(serializedPartners);
-    const sourceUrlCheck = validateOfficialSourceUrl(derivedOfficialSourceUrl, 'Streaming Partner URL');
+    const fallbackExistingSourceUrl = String(
+      formData?.official_source_url ||
+        formData?.watch_url ||
+        initialData?.official_source_url ||
+        initialData?.watch_url ||
+        ''
+    ).trim();
+    const effectiveOfficialSourceUrl = derivedOfficialSourceUrl || fallbackExistingSourceUrl;
+    const sourceUrlCheck = validateOfficialSourceUrl(effectiveOfficialSourceUrl, 'Streaming Partner URL');
     if (!sourceUrlCheck.ok) {
       const urlErr = sourceUrlCheck.error || 'Primary streaming link must be a valid HTTP or HTTPS URL.';
       setFormError(urlErr);
@@ -581,6 +620,17 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
       setIsSubmitting(false);
       return;
     }
+
+    const resolvedPrimaryWatchUrl = (
+      serializedPartners.find((p) => p.url?.trim())?.url ||
+      serializedPartners[0]?.url ||
+      sourceUrlCheck.url ||
+      ''
+    ).trim();
+    const finalSerializedPartners =
+      serializedPartners.length === 1 && !serializedPartners[0].url && resolvedPrimaryWatchUrl
+        ? [{ ...serializedPartners[0], url: resolvedPrimaryWatchUrl }]
+        : serializedPartners;
 
     const normalizedSeasonEpCount = deriveSeasonEpisodeCountSummary(mixedEntries);
 
@@ -637,11 +687,11 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         airing_status: statusState,
         submissionStatus: resolvedSubmissionStatus,
         languages: derivedGlobalDubs.join(', '),
-        platform: normalizePlatformString(serializedPartners.map((p) => p.name).filter(Boolean)),
-        watch_url: (serializedPartners.find(p => p.url?.trim())?.url || serializedPartners[0]?.url || '').trim(),
-        streaming_partners: serializedPartners,
-        platforms_data: serializedPartners,
-        watch_providers: serializedPartners,
+        platform: normalizePlatformString(finalSerializedPartners.map((p) => p.name).filter(Boolean)),
+        watch_url: resolvedPrimaryWatchUrl,
+        streaming_partners: finalSerializedPartners,
+        platforms_data: finalSerializedPartners,
+        watch_providers: finalSerializedPartners,
         mixed_entries: formattedMixedEntries,
         mixedEntries: formattedMixedEntries,
         episodes_per_season: episodesPerSeasonStr,
@@ -659,7 +709,7 @@ export const DubInfoModal: React.FC<DubInfoModalProps> = ({
         releaseDay: resolvedBroadcastDay || '',
         airTime: resolvedBroadcastTime || '',
         season_episode_count: normalizedSeasonEpCount,
-        official_source_url: sourceUrlCheck.url || '',
+        official_source_url: sourceUrlCheck.url || resolvedPrimaryWatchUrl || '',
       };
 
       let savedResult: any = null;

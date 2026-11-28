@@ -428,23 +428,75 @@ export function normalizeStreamingPartners(rawPartners: unknown): NormalizedStre
   if (Array.isArray(rawPartners)) {
     list = rawPartners;
   } else if (typeof rawPartners === 'string' && rawPartners.trim()) {
+    const trimmed = rawPartners.trim();
     try {
-      const parsed = JSON.parse(rawPartners) as unknown;
+      const parsed = JSON.parse(trimmed) as unknown;
       if (Array.isArray(parsed)) {
         list = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        list = Object.entries(parsed as Record<string, unknown>).map(([k, v]) => {
+          if (v && typeof v === 'object' && !Array.isArray(v)) {
+            return { name: k, ...(v as Record<string, unknown>) };
+          }
+          return { name: k, url: typeof v === 'string' ? v : '' };
+        });
       }
     } catch {
-      return [];
+      if (trimmed.includes('::')) {
+        const segments = trimmed.split('|');
+        for (const seg of segments) {
+          const cleanSeg = seg.trim();
+          if (!cleanSeg) continue;
+          const idx = cleanSeg.indexOf('::');
+          if (idx !== -1) {
+            list.push({
+              name: cleanSeg.slice(0, idx).trim(),
+              url: cleanSeg.slice(idx + 2).trim(),
+            });
+          } else {
+            list.push({ name: cleanSeg, url: '' });
+          }
+        }
+      } else {
+        return [];
+      }
     }
+  } else if (rawPartners && typeof rawPartners === 'object') {
+    list = Object.entries(rawPartners as Record<string, unknown>).map(([k, v]) => {
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        return { name: k, ...(v as Record<string, unknown>) };
+      }
+      return { name: k, url: typeof v === 'string' ? v : '' };
+    });
   }
 
   const normalized: NormalizedStreamingPartner[] = [];
   for (const item of list) {
     if (!item || typeof item !== 'object') continue;
     const rec = item as Record<string, unknown>;
-    const rawName = String(rec.name ?? rec.platform ?? '').replace(/<[^>]*>/g, '').trim();
-    const rawUrl = String(rec.url ?? rec.watch_url ?? rec.link ?? '').trim();
-    const languages = normalizePartnerLanguages(rec.languages);
+    const rawName = String(
+      rec.name ?? rec.platform ?? rec.provider ?? rec.platform_name ?? ''
+    )
+      .replace(/<[^>]*>/g, '')
+      .trim();
+    const rawUrl = String(
+      rec.url ??
+        rec.watch_url ??
+        rec.watchUrl ??
+        rec.link ??
+        rec.watchLink ??
+        rec.stream_url ??
+        rec.streamUrl ??
+        rec.official_source_url ??
+        rec.officialSourceUrl ??
+        rec.source_url ??
+        rec.sourceUrl ??
+        rec.href ??
+        ''
+    ).trim();
+    const languages = normalizePartnerLanguages(
+      rec.languages ?? rec.dubs ?? rec.audio_languages ?? rec.dubLanguages
+    );
     if (!rawName && !rawUrl && languages.length === 0) continue;
     const resolvedName = rawName || 'Crunchyroll';
     normalized.push({
@@ -455,6 +507,264 @@ export function normalizeStreamingPartners(rawPartners: unknown): NormalizedStre
     });
   }
   return normalized;
+}
+
+const PLATFORM_DOMAIN_PATTERNS: Array<{ pattern: RegExp; platforms: string[] }> = [
+  { pattern: /crunchyroll\.com/i, platforms: ['crunchyroll'] },
+  { pattern: /netflix\.com/i, platforms: ['netflix'] },
+  {
+    pattern: /hotstar\.com|jiocinema\.com|jiohotstar\.com/i,
+    platforms: ['jiohotstar', 'jiocinema', 'disney+ hotstar', 'hotstar'],
+  },
+  {
+    pattern: /primevideo\.com|amazon\.(com|in)/i,
+    platforms: ['prime video', 'anime times', 'amazon prime'],
+  },
+  {
+    pattern: /youtube\.com|youtu\.be/i,
+    platforms: [
+      'youtube',
+      'youtube (muse india)',
+      'youtube (ani-one)',
+      'youtube (ani-one india)',
+      'muse india',
+      'ani-one india',
+      'ani-one',
+    ],
+  },
+  { pattern: /sonyliv\.com/i, platforms: ['sony liv', 'sonyliv'] },
+  { pattern: /zee5\.com/i, platforms: ['zee5'] },
+  { pattern: /bilibili\.(tv|com)/i, platforms: ['bilibili'] },
+];
+
+export function doesUrlMatchStreamingPlatform(url: string, platformName: string): boolean {
+  const cleanUrl = String(url || '').trim();
+  const cleanPlat = String(platformName || '').trim().toLowerCase();
+  const canonicalPlat = matchCanonicalPlatformName(platformName).toLowerCase();
+  if (!cleanUrl || !cleanPlat) return false;
+
+  for (const entry of PLATFORM_DOMAIN_PATTERNS) {
+    if (entry.pattern.test(cleanUrl)) {
+      return entry.platforms.some(
+        (p) =>
+          cleanPlat === p ||
+          canonicalPlat === p ||
+          cleanPlat.includes(p) ||
+          canonicalPlat.includes(p)
+      );
+    }
+  }
+  return false;
+}
+
+export interface ResolveStreamingPartnersOptions {
+  fallbackLanguages?: unknown;
+  defaultWhenEmpty?: boolean;
+  includePlatformNamesFallback?: boolean;
+}
+
+/**
+ * Resolves all streaming partner entries and URLs from an anime record by inspecting
+ * every D1 and frontend OTT link field (`platforms_data`, `streaming_partners`,
+ * `watch_providers`, `platform_links`, `streaming_links`, `streamingLinks`, `platforms`,
+ * `platform`, `watch_url`, `watchUrl`, `watchLink`, `streamUrl`, `official_source_url`, `source_url`).
+ *
+ * Never short-circuits when `streaming_partners` is `'[]'` or `[]` while `platforms_data`
+ * or `watch_url` / `official_source_url` holds the real links.
+ */
+export function resolveAnimeStreamingPartners(
+  record: unknown,
+  options: ResolveStreamingPartnersOptions = {}
+): NormalizedStreamingPartner[] {
+  const defaultWhenEmpty = options.defaultWhenEmpty === true;
+  const includePlatformNamesFallback = options.includePlatformNamesFallback !== false;
+
+  if (!record || typeof record !== 'object') {
+    const fallbackLangs = normalizePartnerLanguages(options.fallbackLanguages);
+    return defaultWhenEmpty
+      ? [{ name: 'Crunchyroll', platform: 'Crunchyroll', url: '', languages: fallbackLangs }]
+      : [];
+  }
+
+  const rec = record as Record<string, unknown>;
+  const fallbackLangs = normalizePartnerLanguages(
+    options.fallbackLanguages ?? rec.languages ?? rec.dubLanguages
+  );
+
+  // 1. Collect all structured partner lists across all candidate fields (never short-circuiting on '[]')
+  const candidateSources: unknown[] = [
+    rec.platforms_data,
+    rec.platformsData,
+    rec.streaming_partners,
+    rec.streamingPartners,
+    rec.watch_providers,
+    rec.watchProviders,
+    rec.platform_links,
+    rec.platformLinks,
+    rec.streaming_links,
+    rec.streamingLinks,
+  ];
+
+  if (
+    (Array.isArray(rec.platforms) && rec.platforms.some((p) => p && typeof p === 'object')) ||
+    (typeof rec.platforms === 'string' &&
+      (rec.platforms.trim().startsWith('[') ||
+        rec.platforms.trim().startsWith('{') ||
+        rec.platforms.includes('::')))
+  ) {
+    candidateSources.push(rec.platforms);
+  }
+  if (
+    typeof rec.platform === 'string' &&
+    (rec.platform.trim().startsWith('[') ||
+      rec.platform.trim().startsWith('{') ||
+      rec.platform.includes('::'))
+  ) {
+    candidateSources.push(rec.platform);
+  }
+
+  const parsedSourceLists: NormalizedStreamingPartner[][] = [];
+  for (const src of candidateSources) {
+    if (src === null || src === undefined || src === '' || src === '[]' || src === '{}') continue;
+    const parsed = normalizeStreamingPartners(src);
+    if (parsed.length > 0) {
+      parsedSourceLists.push(parsed);
+    }
+  }
+
+  // Prefer the first source that has at least one non-empty URL, or else the first non-empty source
+  const primaryIdx = parsedSourceLists.findIndex((list) => list.some((p) => Boolean(p.url)));
+  const orderedLists =
+    primaryIdx > 0
+      ? [
+          parsedSourceLists[primaryIdx],
+          ...parsedSourceLists.slice(0, primaryIdx),
+          ...parsedSourceLists.slice(primaryIdx + 1),
+        ]
+      : parsedSourceLists;
+
+  const partners: NormalizedStreamingPartner[] = [];
+  const findPartnerMatch = (name: string): NormalizedStreamingPartner | undefined => {
+    const lower = name.trim().toLowerCase();
+    const canonical = matchCanonicalPlatformName(name).toLowerCase();
+    return partners.find((p) => {
+      const pLower = p.name.trim().toLowerCase();
+      const pCanonical = matchCanonicalPlatformName(p.name).toLowerCase();
+      return pLower === lower || pCanonical === canonical;
+    });
+  };
+
+  for (let listIdx = 0; listIdx < orderedLists.length; listIdx++) {
+    const list = orderedLists[listIdx];
+    for (const item of list) {
+      const existing = findPartnerMatch(item.name || item.platform);
+      if (!existing) {
+        if (listIdx === 0 || Boolean(item.url)) {
+          partners.push({
+            name: item.name,
+            platform: item.platform || item.name,
+            url: item.url,
+            languages: [...item.languages],
+          });
+        }
+      } else {
+        if (!existing.url && item.url) {
+          existing.url = item.url;
+        }
+        if (existing.languages.length === 0 && item.languages.length > 0) {
+          existing.languages = [...item.languages];
+        }
+      }
+    }
+  }
+
+  // 2. Collect single-URL fallback columns on the anime row
+  const singleUrlFields = [
+    rec.watch_url,
+    rec.watchUrl,
+    rec.watchLink,
+    rec.stream_url,
+    rec.streamUrl,
+    rec.official_source_url,
+    rec.officialSourceUrl,
+    rec.source_url,
+    rec.sourceUrl,
+  ];
+  const fallbackUrls: string[] = [];
+  for (const rawUrl of singleUrlFields) {
+    if (typeof rawUrl === 'string') {
+      const clean = rawUrl.trim();
+      if (clean && !fallbackUrls.includes(clean)) {
+        fallbackUrls.push(clean);
+      }
+    }
+  }
+
+  // 3. Ensure all platforms from platform / platforms string are included when includePlatformNamesFallback is true (or when partners is empty and a fallback URL exists)
+  if (includePlatformNamesFallback || (partners.length === 0 && fallbackUrls.length > 0)) {
+    const platList = parsePlatformList(rec.platform, rec.platforms, undefined, {
+      defaultFallback: partners.length === 0 && defaultWhenEmpty ? ['Crunchyroll'] : [],
+    });
+    for (const platName of platList) {
+      const canonical = matchCanonicalPlatformName(platName) || platName;
+      if (!findPartnerMatch(canonical)) {
+        partners.push({
+          name: canonical,
+          platform: canonical,
+          url: '',
+          languages: [],
+        });
+      }
+    }
+  }
+
+  // 4. Backfill any missing partner URL from single-URL columns (only when that URL isn't already assigned to a partner)
+  for (const candidateUrl of fallbackUrls) {
+    const alreadyAssigned = partners.some(
+      (p) => p.url.trim().toLowerCase() === candidateUrl.toLowerCase()
+    );
+    if (alreadyAssigned) continue;
+
+    // First try domain-based matching onto an empty partner row
+    const domainMatched = partners.find(
+      (p) => !p.url && doesUrlMatchStreamingPlatform(candidateUrl, p.name)
+    );
+    if (domainMatched) {
+      domainMatched.url = candidateUrl;
+      continue;
+    }
+
+    // Otherwise, if no partner has any URL yet (or there is only 1 partner and its URL is empty), assign to the first partner
+    if (partners.length > 0 && partners.every((p) => !p.url)) {
+      partners[0].url = candidateUrl;
+    }
+  }
+
+  // 5. Backfill languages when missing
+  if (fallbackLangs.length > 0) {
+    if (partners.length === 1 && partners[0].languages.length === 0) {
+      partners[0].languages = [...fallbackLangs];
+    } else if (
+      partners.length > 1 &&
+      defaultWhenEmpty &&
+      partners.every((p) => p.languages.length === 0)
+    ) {
+      partners[0].languages = [...fallbackLangs];
+    }
+  }
+
+  if (partners.length === 0 && defaultWhenEmpty) {
+    return [
+      {
+        name: 'Crunchyroll',
+        platform: 'Crunchyroll',
+        url: fallbackUrls[0] || '',
+        languages: fallbackLangs,
+      },
+    ];
+  }
+
+  return partners;
 }
 
 /**
