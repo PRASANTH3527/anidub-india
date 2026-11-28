@@ -410,3 +410,193 @@ test('AdminDashboard and AdminCsvHelpModal templates default to Prime Video|Netf
     'AdminCsvHelpModal should document optional ::URL mixed syntax'
   );
 });
+
+test('End-to-end CSV Import -> Duplicate Check -> Pending Reviews -> Approve to Live workflow', async () => {
+  const { parseCsvTextToAnimeRows } = await import('../src/utils/adminLegacyRestore.ts');
+  const { token, publicPem } = createSignedClerkJwt('admin_csv_e2e_workflow', {
+    email: 'admin@anidub.in',
+    email_verified: true,
+  });
+
+  const sqlite = new DatabaseSync(':memory:');
+  sqlite.exec(`
+    CREATE TABLE anime (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      synopsis TEXT,
+      cover_image TEXT NOT NULL,
+      banner_image TEXT NOT NULL,
+      rating REAL DEFAULT 0.0,
+      episodes_count INTEGER DEFAULT 12,
+      status TEXT DEFAULT 'Airing',
+      airing_status TEXT DEFAULT 'Airing',
+      season TEXT,
+      year INTEGER DEFAULT 2026,
+      genres TEXT NOT NULL,
+      popularity INTEGER DEFAULT 0,
+      languages TEXT DEFAULT '',
+      platform TEXT DEFAULT 'Crunchyroll',
+      type TEXT DEFAULT 'TV Series',
+      studio TEXT DEFAULT 'Unknown Studio',
+      submissionStatus TEXT DEFAULT 'approved',
+      approval_status TEXT DEFAULT 'approved',
+      is_published INTEGER DEFAULT 1,
+      episodes_per_season TEXT DEFAULT '',
+      watch_url TEXT DEFAULT '',
+      platforms_data TEXT DEFAULT '[]',
+      streaming_partners TEXT DEFAULT '[]',
+      broadcast_day TEXT,
+      broadcast_time TEXT,
+      season_episode_count TEXT DEFAULT '',
+      official_source_url TEXT DEFAULT ''
+    );
+  `);
+
+  // Seed 1 existing published anime in D1 to test case-insensitive duplicate checking
+  sqlite
+    .prepare(
+      `INSERT INTO anime (title, slug, synopsis, cover_image, banner_image, genres, languages, approval_status, submissionStatus, is_published)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', 'approved', 1)`
+    )
+    .run('Solo Leveling', 'solo-leveling', 'Existing live anime', '/logo.png', '/logo.png', 'Action', 'Hindi, Tamil');
+
+  const d1Wrapper = {
+    prepare(sql: string) {
+      let bindings: unknown[] = [];
+      return {
+        bind(...args: unknown[]) {
+          bindings = args;
+          return this;
+        },
+        async first() {
+          const stmt = sqlite.prepare(sql);
+          return (
+            (stmt.get(...(bindings as Array<string | number | null>)) as
+              | Record<string, unknown>
+              | undefined) ?? null
+          );
+        },
+        async all() {
+          const stmt = sqlite.prepare(sql);
+          return { results: stmt.all(...(bindings as Array<string | number | null>)) };
+        },
+        async run() {
+          const stmt = sqlite.prepare(sql);
+          const info = stmt.run(...(bindings as Array<string | number | null>));
+          return { meta: { last_row_id: Number(info.lastInsertRowid), changes: info.changes } };
+        },
+      };
+    },
+  };
+
+  const env = {
+    ADMIN_EMAIL: 'admin@anidub.in',
+    CLERK_JWT_KEY: publicPem,
+    DB: d1Wrapper,
+  };
+
+  // Parse CSV with:
+  // 1) Duplicate of existing D1 row ("  SOLO LEVELING ")
+  // 2) Brand-new valid row with Hindi | Tamil
+  // 3) Brand-new valid row with empty languages (must NOT auto-populate Hindi/Tamil/Telugu)
+  // 4) Intra-CSV duplicate of row 2
+  // 5) Invalid row missing Title
+  const rawCsv = `\uFEFFTitle,Poster URL,Synopsis,Rating,Release Year,Status,Type,Studio,Genres,Languages,Platforms,Episodes,Season
+"  SOLO LEVELING ",https://example.com/sl.jpg,"Already in D1",8.9,2024,Airing,TV Series,A-1 Pictures,Action | Fantasy,Hindi | Tamil,Crunchyroll,12,Winter 2024
+"Dan Da Dan",https://example.com/ddd.jpg,"Ghosts and aliens collide, fast!",8.7,2024,Completed,TV Series,Science SARU,Action | Supernatural,Hindi | Tamil | Telugu,Netflix|Crunchyroll,12,Fall 2024
+"Blue Box",https://example.com/bb.jpg,"Sports romance",8.4,2024,Airing,TV Series,Telecom Animation Film,Romance | Sports,,Netflix,25,Fall 2024
+"dan da dan",https://example.com/ddd2.jpg,"Duplicate inside same CSV",8.7,2024,Completed,TV Series,Science SARU,Action,Hindi,Netflix,12,Fall 2024
+,https://example.com/notitle.jpg,"Missing title row",7.0,2024,Airing,TV Series,Studio,Action,Hindi,Netflix,12,Fall 2024`;
+
+  const parsed = parseCsvTextToAnimeRows(rawCsv);
+  assert.equal(parsed.totalRows, 5);
+  assert.equal(parsed.rows.length, 4);
+  assert.equal(parsed.invalidRows, 1);
+
+  const importRes = await onRequest({
+    request: new Request('https://anidub.in/api/admin/import-csv', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        animeList: parsed.rows,
+        totalRows: parsed.totalRows,
+        invalidRows: parsed.invalidRows,
+        errors: parsed.errors,
+      }),
+    }),
+    env,
+  });
+
+  assert.equal(importRes.status, 200);
+  const importBody = (await importRes.json()) as Record<string, unknown>;
+  assert.equal(importBody.success, true);
+  assert.equal(importBody.totalRows, 5);
+  assert.equal(importBody.addedToPending, 2);
+  assert.equal(importBody.skippedDuplicates, 2);
+  assert.deepEqual(importBody.duplicateTitles, ['SOLO LEVELING', 'dan da dan']);
+  assert.equal(importBody.invalidRows, 1);
+
+  // Verify Pending Queue contains the 2 newly imported rows with is_published = 0 and approval_status = 'pending'
+  const pendingRes = await onRequest({
+    request: new Request('https://anidub.in/api/admin/pending', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    env,
+  });
+  assert.equal(pendingRes.status, 200);
+  const pendingBody = (await pendingRes.json()) as {
+    success: boolean;
+    count: number;
+    data: Array<Record<string, unknown>>;
+  };
+  assert.equal(pendingBody.success, true);
+  assert.equal(pendingBody.count, 2);
+
+  const blueBoxPending = pendingBody.data.find((r) => r.title === 'Blue Box');
+  assert.ok(blueBoxPending);
+  assert.equal(
+    blueBoxPending.languages,
+    '',
+    'Empty languages in CSV must remain empty and never auto-populate default Indian dub languages'
+  );
+  assert.equal(blueBoxPending.is_published, 0);
+  assert.equal(blueBoxPending.approval_status, 'pending');
+
+  const danDaDanPending = pendingBody.data.find((r) => r.title === 'Dan Da Dan');
+  assert.ok(danDaDanPending);
+
+  // Approve Dan Da Dan to Live Catalog
+  const approveRes = await onRequest({
+    request: new Request(`https://anidub.in/api/admin/approve/${String(danDaDanPending.id)}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: 'Completed',
+      }),
+    }),
+    env,
+  });
+  assert.equal(approveRes.status, 200);
+  const approveBody = (await approveRes.json()) as Record<string, unknown>;
+  assert.equal(approveBody.success, true);
+
+  // Verify Dan Da Dan is now approved and published (is_published = 1) in D1
+  const dbRow = sqlite
+    .prepare('SELECT title, approval_status, submissionStatus, is_published, status FROM anime WHERE id = ?')
+    .get(Number(danDaDanPending.id)) as Record<string, unknown>;
+  assert.equal(dbRow.approval_status, 'approved');
+  assert.equal(dbRow.submissionStatus, 'approved');
+  assert.equal(dbRow.is_published, 1);
+  assert.equal(dbRow.status, 'Completed');
+
+  sqlite.close();
+});
+

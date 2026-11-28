@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
   HelpCircle,
   MessageSquare,
+  Upload,
 } from 'lucide-react';
 import type { AdminActiveTab } from './types';
 
@@ -33,6 +34,7 @@ export interface AdminCommandPaletteProps {
   onSetActiveTab: (tab: AdminActiveTab) => void;
   onFilterUnverifiedDubs?: () => void;
   onExportCSV: () => void;
+  onTriggerCsvUpload?: () => void;
   onRunDiagnostics: () => void;
   onSyncLiveRecords?: () => void;
   onOpenCsvHelp?: () => void;
@@ -52,6 +54,7 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
   onOpenAddModal,
   onSetActiveTab,
   onExportCSV,
+  onTriggerCsvUpload,
   onRunDiagnostics,
   onSyncLiveRecords,
   onOpenCsvHelp,
@@ -72,6 +75,16 @@ export const AdminCommandPalette: React.FC<AdminCommandPaletteProps> = ({
       action: () => {
         onOpenAddModal(cmdQuery.trim() || undefined);
         onClose();
+      },
+    },
+    {
+      label: 'Import Anime CSV to Pending Reviews',
+      badge: 'IMPORT',
+      icon: Upload,
+      color: 'text-emerald-400',
+      action: () => {
+        onClose();
+        if (onTriggerCsvUpload) onTriggerCsvUpload();
       },
     },
     {

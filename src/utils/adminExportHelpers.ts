@@ -211,3 +211,26 @@ export function computeAdminOverviewStats(input: {
     genreCounts: genreDist.genreCounts,
   };
 }
+
+export function downloadTextBlob(content: string, filename: string, mimeType = 'text/csv;charset=utf-8;') {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+export function buildFailedCsvRowsString(failed: Array<Record<string, string>>): string {
+  if (!failed || failed.length === 0) return '';
+  const headers = Array.from(new Set(failed.flatMap((r) => Object.keys(r))));
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  return [
+    headers.join(','),
+    ...failed.map((r) => headers.map((h) => esc(r[h])).join(',')),
+  ].join('\n');
+}
+

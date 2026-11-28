@@ -26,8 +26,12 @@ import {
   Database,
   Upload,
   HelpCircle,
+  Clock,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { OFFICIAL_INDIAN_LANGUAGES } from './types';
+import type { CsvImportSummaryResult } from '../../utils/adminLegacyRestore';
 
 interface SavedCatalogFilterPreset {
   id: string;
@@ -86,6 +90,12 @@ export interface AdminCatalogTabProps {
   onTriggerCsvUpload?: () => void;
   onExportCsv?: () => void;
   onOpenCsvHelp?: () => void;
+  isUploadingCsv?: boolean;
+  csvUploadError?: string | null;
+  csvImportResult?: CsvImportSummaryResult | null;
+  onDismissCsvFeedback?: () => void;
+  onOpenPendingReviews?: () => void;
+  onDownloadFailedCsvRows?: () => void;
   mode?: 'catalog' | 'dubs';
 }
 
@@ -126,10 +136,17 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
   onTriggerCsvUpload,
   onExportCsv,
   onOpenCsvHelp,
+  isUploadingCsv = false,
+  csvUploadError = null,
+  csvImportResult = null,
+  onDismissCsvFeedback,
+  onOpenPendingReviews,
+  onDownloadFailedCsvRows,
   mode = 'catalog',
 }) => {
   const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(totalItems, currentPage * pageSize);
+  const [showDuplicateTitlesList, setShowDuplicateTitlesList] = useState(false);
 
   const [presets, setPresets] = useState<SavedCatalogFilterPreset[]>(() => {
     try {
@@ -297,46 +314,55 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
       className="space-y-4 w-full max-w-full overflow-x-clip text-[var(--text-primary)]"
     >
       {/* 1. CLASSIC CATALOG MATRIX CONTROL HEADER CARD */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-4 shadow-md">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-extrabold text-[var(--text-primary)]">
+      <div className="p-4 sm:p-6 rounded-3xl bg-[#0b101d] border border-white/10 space-y-4 shadow-xl">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-3">
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/15 border border-purple-500/35 shadow-lg shadow-purple-500/15 flex items-center justify-center text-purple-400 shrink-0">
+                <Database className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
                   Catalog Matrix Control
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[11px] font-mono font-extrabold text-[var(--text-secondary)]">
-                  {totalItems.toLocaleString()} ACTIVE ENTRIES
-                </span>
+                <p className="text-xs sm:text-sm text-slate-400">
+                  Direct global data persistence on Cloudflare Worker &amp; D1
+                </p>
               </div>
-              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                Server-side Cloudflare D1 catalog • Page {currentPage} of {totalPages}
-              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-xs font-mono font-extrabold text-slate-300 uppercase tracking-wider">
+                {totalItems.toLocaleString()} ACTIVE ENTRIES
+              </span>
             </div>
           </div>
 
-          {/* 3 Compact Inline CSV Buttons + Refresh + Columns */}
+          {/* 3 Compact Inline CSV Buttons: Import CSV, Export CSV, purple-tinted CSV Guide */}
           <div className="flex flex-wrap items-center gap-2">
             {onTriggerCsvUpload && (
               <button
                 type="button"
+                data-testid="catalog-import-csv-btn"
                 onClick={onTriggerCsvUpload}
-                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                disabled={isUploadingCsv}
+                className="min-h-[40px] px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-60"
               >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Import CSV</span>
+                {isUploadingCsv ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                ) : (
+                  <Upload className="w-3.5 h-3.5 text-slate-300" />
+                )}
+                <span>{isUploadingCsv ? 'Importing CSV...' : 'Import CSV'}</span>
               </button>
             )}
             {onExportCsv && (
               <button
                 type="button"
                 onClick={onExportCsv}
-                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="min-h-[40px] px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
               >
-                <Download className="w-3.5 h-3.5 text-purple-400" />
+                <Download className="w-3.5 h-3.5 text-slate-300" />
                 <span>Export CSV</span>
               </button>
             )}
@@ -344,23 +370,179 @@ export const AdminCatalogTab: React.FC<AdminCatalogTabProps> = ({
               <button
                 type="button"
                 onClick={onOpenCsvHelp}
-                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-400 text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="min-h-[40px] px-3.5 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 text-purple-300 text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <HelpCircle className="w-3.5 h-3.5" />
                 <span>CSV Guide</span>
               </button>
             )}
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={isLoading}
-              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-purple-400' : ''}`} />
-              <span>Refresh</span>
-            </button>
           </div>
         </div>
+
+        {/* LIVE CSV UPLOAD LOADING STATE */}
+        {isUploadingCsv && (
+          <div
+            data-testid="csv-upload-loading-banner"
+            className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/35 flex items-center gap-3 text-xs sm:text-sm font-bold text-purple-300"
+          >
+            <Loader2 className="w-4 h-4 animate-spin text-purple-400 shrink-0" />
+            <span>Checking duplicates &amp; importing CSV...</span>
+          </div>
+        )}
+
+        {/* VISIBLE CSV PARSE / AUTH / NETWORK ERROR ALERT BANNER */}
+        {csvUploadError && !isUploadingCsv && (
+          <div
+            data-testid="csv-upload-error-banner"
+            className="p-3.5 rounded-xl bg-red-500/15 border border-red-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm text-red-300"
+          >
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <div className="font-extrabold text-red-200">CSV Import Error</div>
+                <div className="text-xs text-red-300/90 break-words">{csvUploadError}</div>
+              </div>
+            </div>
+            {onDismissCsvFeedback && (
+              <button
+                type="button"
+                onClick={onDismissCsvFeedback}
+                className="min-h-[36px] px-3 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-xs font-bold text-red-200 self-end sm:self-center cursor-pointer"
+              >
+                Dismiss
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* POST-UPLOAD CSV IMPORT SUMMARY BANNER */}
+        {csvImportResult && !isUploadingCsv && (
+          <div
+            data-testid="csv-upload-summary-banner"
+            className="p-4 rounded-xl bg-[#0e1628] border border-emerald-500/35 space-y-3 shadow-lg"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="text-xs sm:text-sm font-extrabold text-white">
+                    CSV Import Complete ({csvImportResult.fileName})
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-white/10 text-[10px] font-mono font-bold text-slate-300">
+                    {csvImportResult.totalRows} Total Rows
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span
+                    data-testid="csv-summary-added-count"
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-extrabold"
+                  >
+                    {csvImportResult.addedToPending} added to Pending Reviews
+                  </span>
+                  <span
+                    data-testid="csv-summary-duplicates-count"
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/35 text-amber-300 text-xs font-extrabold"
+                  >
+                    {csvImportResult.skippedDuplicates} duplicates skipped
+                  </span>
+                  <span
+                    data-testid="csv-summary-invalid-count"
+                    className={`px-2.5 py-1 rounded-lg border text-xs font-extrabold ${
+                      csvImportResult.invalidRows > 0
+                        ? 'bg-rose-500/15 border-rose-500/35 text-rose-300'
+                        : 'bg-white/5 border-white/10 text-slate-400'
+                    }`}
+                  >
+                    {csvImportResult.invalidRows} invalid rows
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {csvImportResult.invalidRows > 0 && onDownloadFailedCsvRows && (
+                  <button
+                    type="button"
+                    data-testid="csv-summary-download-failed-btn"
+                    onClick={onDownloadFailedCsvRows}
+                    className="min-h-[38px] px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 text-rose-300 text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download Failed Rows ({csvImportResult.invalidRows})</span>
+                  </button>
+                )}
+
+                {onOpenPendingReviews && (
+                  <button
+                    type="button"
+                    data-testid="csv-summary-open-pending-btn"
+                    onClick={onOpenPendingReviews}
+                    className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md shadow-purple-600/25 cursor-pointer"
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Open Pending Reviews ({csvImportResult.addedToPending})</span>
+                  </button>
+                )}
+
+                {onDismissCsvFeedback && (
+                  <button
+                    type="button"
+                    onClick={onDismissCsvFeedback}
+                    className="min-h-[38px] px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-400 hover:text-white text-xs font-bold cursor-pointer"
+                    aria-label="Dismiss CSV summary"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {csvImportResult.duplicateTitles.length > 0 && (
+              <div className="pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  data-testid="csv-summary-toggle-duplicates-btn"
+                  onClick={() => setShowDuplicateTitlesList((prev) => !prev)}
+                  className="text-xs font-bold text-amber-300 hover:text-amber-200 inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  {showDuplicateTitlesList ? (
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {showDuplicateTitlesList ? 'Hide' : 'Show'} skipped duplicate titles ({csvImportResult.duplicateTitles.length})
+                  </span>
+                </button>
+                {showDuplicateTitlesList && (
+                  <div
+                    data-testid="csv-summary-duplicate-titles-list"
+                    className="mt-2 p-2.5 rounded-lg bg-black/30 border border-amber-500/20 flex flex-wrap gap-1.5 max-h-36 overflow-y-auto"
+                  >
+                    {csvImportResult.duplicateTitles.map((dupTitle, idx) => (
+                      <span
+                        key={`${dupTitle}-${idx}`}
+                        className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-[11px] font-semibold text-amber-200"
+                      >
+                        {dupTitle}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {csvImportResult.errors.length > 0 && (
+              <div className="pt-2 border-t border-white/10 text-xs text-rose-300 space-y-1">
+                <div className="font-bold">Row Validation Notices:</div>
+                <ul className="list-disc list-inside space-y-0.5 text-[11px] text-rose-300/90 max-h-28 overflow-y-auto">
+                  {csvImportResult.errors.slice(0, 10).map((errLine, idx) => (
+                    <li key={idx}>{errLine}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Full-Width Vibrant Purple + ADD NEW ANIME Button */}
         <button

@@ -1065,14 +1065,40 @@ class CloudflareApiService {
   /**
    * UPLOAD / IMPORT CSV: Sends CSV text or array to backend import route
    */
-  public async uploadCSV(payload: { csvText?: string; animeList?: Record<string, unknown>[] } | string): Promise<{ success: boolean; count?: number; skipped?: number; insertedCount?: number; skippedCount?: number; skippedTitles?: string[]; addedTitles?: string[]; message?: string }> {
+  public async uploadCSV(
+    payload:
+      | {
+          csvText?: string;
+          animeList?: Record<string, unknown>[];
+          totalRows?: number;
+          invalidRows?: number;
+          errors?: string[];
+        }
+      | string
+  ): Promise<{
+    success: boolean;
+    totalRows?: number;
+    addedToPending?: number;
+    skippedDuplicates?: number;
+    duplicateTitles?: string[];
+    invalidRows?: number;
+    errors?: string[];
+    count?: number;
+    skipped?: number;
+    insertedCount?: number;
+    skippedCount?: number;
+    skippedTitles?: string[];
+    addedTitles?: string[];
+    message?: string;
+    error?: string;
+  }> {
     const endpoint = '/api/admin/import-csv';
     const bodyData = typeof payload === 'string' ? { csvText: payload } : payload;
 
     const res = await this.smartFetch(endpoint, {
       method: 'POST',
       headers: this.getHeaders(true),
-      body: JSON.stringify(bodyData)
+      body: JSON.stringify(bodyData),
     });
 
     if (!res.ok) {

@@ -1,33 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react';
 import {
-  CheckCircle2,
-  XCircle,
-  Plus,
-  Search,
-  ShieldAlert,
-  Clock,
-  Film,
-  Download,
-  Upload,
-  LogOut,
-  Terminal,
-  BarChart3,
-  Settings,
-  ArrowLeft,
-  ShieldCheck,
-  Languages,
-  LayoutDashboard,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Layers,
-  Mic2,
-  Palette,
-  ExternalLink,
-  Star,
-  Zap,
-  RefreshCw,
-  Command,
-  MessageSquare,
+  CheckCircle2, XCircle, Plus, Search, ShieldAlert, Clock, Film, Download, Upload, LogOut,
+  Terminal, BarChart3, Settings, ArrowLeft, ShieldCheck, Languages, LayoutDashboard,
+  PanelLeftClose, PanelLeftOpen, Layers, Mic2, Palette, ExternalLink, Star, Zap, RefreshCw,
+  Command, MessageSquare,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../context/ThemeContext';
@@ -39,18 +15,10 @@ import { getCloudflareUrl } from '../config/cloudflare';
 import { useUser, useAuth, getClerkSessionToken } from '../lib/clerk';
 import { isAuthorizedClerkAdmin } from '../utils/auth';
 import {
-  auditAnimeDataHealth,
-  type DataHealthFilter,
-  type AdminActiveTab,
-  type AdminFeedbackItem,
-  type AdminOverviewStats,
-  type FeedbackStatus,
+  auditAnimeDataHealth, type DataHealthFilter, type AdminActiveTab,
+  type AdminFeedbackItem, type AdminOverviewStats, type FeedbackStatus,
 } from './admin/types';
-import {
-  validateCsvDryRunRows,
-  type AnimeEditorTabId,
-  type CsvDryRunSummary,
-} from '../utils/adminOpsPro';
+import { validateCsvDryRunRows, type AnimeEditorTabId, type CsvDryRunSummary } from '../utils/adminOpsPro';
 import { AdminTranslationsTab } from './admin/AdminTranslationsTab';
 import { AdminOverviewTab } from './admin/AdminOverviewTab';
 import { AdminCatalogTab } from './admin/AdminCatalogTab';
@@ -65,11 +33,10 @@ import { AdminCastManagerTab } from './admin/AdminCastManagerTab';
 import { AdminBackupCenterTab } from './admin/AdminBackupCenterTab';
 import { AdminImdbCheckerTab } from './admin/AdminImdbCheckerTab';
 import { AdminMobileNav } from './admin/AdminMobileNav';
-import { parseCsvTextToAnimeRows } from '../utils/adminLegacyRestore';
+import { parseCsvTextToAnimeRows, type CsvImportSummaryResult } from '../utils/adminLegacyRestore';
 import {
-  buildCatalogExportCsv,
-  buildCatalogExportSql,
-  computeAdminOverviewStats,
+  buildCatalogExportCsv, buildCatalogExportSql, computeAdminOverviewStats,
+  downloadTextBlob, buildFailedCsvRowsString,
 } from '../utils/adminExportHelpers';
 
 const AnalyticsDashboard = lazy(() =>
@@ -118,7 +85,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     return 'overview';
   });
-  const [moderationSubTab, setModerationSubTab] = useState<'all' | 'pending' | 'feedback'>('all');
+  const [moderationSubTab, setModerationSubTab] = useState<'all' | 'pending' | 'feedback'>('pending');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileStudioOpen, setIsMobileStudioOpen] = useState<boolean>(false);
   const [isMobileMoreOpen, setIsMobileMoreOpen] = useState<boolean>(false);
@@ -183,12 +150,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // CSV Import / Export & Dry-Run State
   const [isUploadingCsv, setIsUploadingCsv] = useState<boolean>(false);
+  const [csvUploadError, setCsvUploadError] = useState<string | null>(null);
+  const [csvImportResult, setCsvImportResult] = useState<CsvImportSummaryResult | null>(null);
   const [isCsvHelpOpen, setIsCsvHelpOpen] = useState<boolean>(false);
   const [csvDryRunReport, setCsvDryRunReport] = useState<CsvDryRunSummary | null>(null);
   const [stagedCsvRows, setStagedCsvRows] = useState<any[]>([]);
   const [backupFocusSection, setBackupFocusSection] = useState<'csv' | 'backup'>('backup');
   const [isNormalizingPlatforms, setIsNormalizingPlatforms] = useState<boolean>(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
+
+  const triggerCsvFilePicker = useCallback(() => {
+    if (csvInputRef.current) {
+      csvInputRef.current.value = '';
+      csvInputRef.current.click();
+    }
+  }, []);
 
   // Diagnostics & D1 Status State
   const [cfStatus, setCfStatus] = useState<any>(null);
@@ -671,16 +647,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // 11. Pending Moderation Actions
-  const handleApprove = async (id: number | string) => {
+  const handleApprove = async (id: number | string, explicitStatus?: string) => {
     const itemToApprove = pendingItems.find((item) => String(item.id) === String(id));
     if (!itemToApprove) return;
     try {
       const targetStatus =
-        itemToApprove.airing_status && itemToApprove.airing_status !== 'pending'
-          ? itemToApprove.airing_status
-          : itemToApprove.type === 'Movie'
-            ? 'Completed'
-            : 'Airing';
+        explicitStatus && explicitStatus.toLowerCase() !== 'pending'
+          ? explicitStatus
+          : itemToApprove.airing_status && String(itemToApprove.airing_status).toLowerCase() !== 'pending'
+            ? itemToApprove.airing_status
+            : itemToApprove.status && String(itemToApprove.status).toLowerCase() !== 'pending'
+              ? itemToApprove.status
+              : itemToApprove.type === 'Movie'
+                ? 'Completed'
+                : 'Airing';
 
       const res: any = await cloudflareApi.approveAnime(id, targetStatus);
       if (!res || res.success === false) {
@@ -688,16 +668,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       setPendingItems((prev) => prev.filter((item) => String(item.id) !== String(id)));
-      showToast(`Approved "${itemToApprove.title}" and published to D1 catalog!`, 'success');
+      showToast(`Approved "${itemToApprove.title}" and published to live D1 catalog!`, 'success');
+      void fetchPendingItems();
       void fetchPaginatedAdminCatalog(catalogPage);
+      void fetchFullIndexForTools();
       void fetchD1StatusSummary();
       onAnimeCreated?.({
         ...itemToApprove,
         status: targetStatus,
+        approval_status: 'approved',
+        submissionStatus: 'approved',
         is_published: 1,
       });
     } catch (err: any) {
       showToast(`Failed to approve: ${err?.message || 'Unknown error'}`, 'error');
+    }
+  };
+
+  const handleBulkApprove = async (ids: Array<number | string>) => {
+    if (!ids || ids.length === 0) return;
+    let approvedCount = 0;
+    for (const id of ids) {
+      const item = pendingItems.find((p) => String(p.id) === String(id));
+      const targetStatus =
+        item?.airing_status && String(item.airing_status).toLowerCase() !== 'pending'
+          ? item.airing_status
+          : item?.status && String(item.status).toLowerCase() !== 'pending'
+            ? item.status
+            : item?.type === 'Movie'
+              ? 'Completed'
+              : 'Airing';
+      try {
+        const res: any = await cloudflareApi.approveAnime(id, targetStatus);
+        if (res && res.success !== false) {
+          approvedCount++;
+        }
+      } catch {}
+    }
+    await fetchPendingItems();
+    await fetchPaginatedAdminCatalog(catalogPage);
+    void fetchFullIndexForTools();
+    void fetchD1StatusSummary();
+    onAnimeCreated?.();
+    if (approvedCount > 0) {
+      showToast(`Approved ${approvedCount} anime title(s) to live D1 catalog!`, 'success');
+    } else {
+      showToast('Failed to approve selected pending items.', 'error');
     }
   };
 
@@ -1053,58 +1069,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // 15. CSV Import / Export & SQL Dump Handlers
   const handleDownloadSampleCSV = () => {
-    const sampleHeaders =
-      'Title,Poster URL,Synopsis,Rating,Release Year,Status,Type,Studio,Genres,Languages,Platforms,Episodes,Season';
-    const sampleRow =
-      'Solo Leveling,https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx151807-m1gX3iwfIsLu.png,"In a world where hunters must battle deadly monsters to protect humanity, Sung Jinwoo finds a mysterious program.",8.8,2024,Airing,TV Series,A-1 Pictures,Action | Adventure | Fantasy,Tamil | Hindi | Telugu,Prime Video|Netflix,12 | 13,Winter 2024';
-    const csvContent = 'data:text/csv;charset=utf-8,' + [sampleHeaders, sampleRow].join('\n');
-    const link = document.createElement('a');
-    link.setAttribute('href', encodeURI(csvContent));
-    link.setAttribute('download', 'anidub_sample_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const sampleHeaders = 'Title,Poster URL,Synopsis,Rating,Release Year,Status,Type,Studio,Genres,Languages,Platforms,Episodes,Season';
+    const sampleRow = 'Solo Leveling,https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx151807-m1gX3iwfIsLu.png,"In a world where hunters must battle deadly monsters to protect humanity, Sung Jinwoo finds a mysterious program.",8.8,2024,Airing,TV Series,A-1 Pictures,Action | Adventure | Fantasy,Tamil | Hindi | Telugu,Prime Video|Netflix,12 | 13,Winter 2024';
+    downloadTextBlob([sampleHeaders, sampleRow].join('\n'), 'anidub_sample_template.csv');
     showToast('Downloaded sample CSV template!', 'success');
   };
 
   const handleExportCSV = () => {
     const exportList = fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems;
-    if (exportList.length === 0) {
-      showToast('No catalog items loaded to export.', 'error');
-      return;
-    }
-    const csvString = buildCatalogExportCsv(exportList);
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute(
-      'download',
-      `anidub_catalog_export_${new Date().toISOString().slice(0, 10)}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    if (exportList.length === 0) return showToast('No catalog items loaded to export.', 'error');
+    downloadTextBlob(buildCatalogExportCsv(exportList), `anidub_catalog_export_${new Date().toISOString().slice(0, 10)}.csv`);
     showToast(`Exported ${exportList.length} anime titles to CSV!`, 'success');
   };
 
   const handleExportSQL = () => {
     const exportList = fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems;
-    if (exportList.length === 0) {
-      showToast('No catalog items loaded to export.', 'error');
-      return;
-    }
-    const sqlText = buildCatalogExportSql(exportList);
-    const blob = new Blob([sqlText], { type: 'application/sql;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `anidub_d1_backup_${new Date().toISOString().slice(0, 10)}.sql`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    if (exportList.length === 0) return showToast('No catalog items loaded to export.', 'error');
+    downloadTextBlob(buildCatalogExportSql(exportList), `anidub_d1_backup_${new Date().toISOString().slice(0, 10)}.sql`, 'application/sql;charset=utf-8;');
     showToast(`Exported ${exportList.length} titles as D1 SQL Dump!`, 'success');
   };
 
@@ -1116,33 +1097,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         showToast(parsed.error || 'Could not find valid anime rows in CSV.', 'error');
         return;
       }
-
       const parsedItems = parsed.rows;
       setStagedCsvRows(parsedItems);
-
       try {
         const dryRes = await cloudflareApi.dryRunImportCsv(parsedItems);
         if (dryRes && dryRes.report) {
           setCsvDryRunReport(dryRes.report);
           setBackupFocusSection('csv');
           setActiveTab('backup');
-          showToast(
-            `Dry-Run Complete: ${dryRes.report.validCount} valid, ${dryRes.report.duplicateCount} duplicates, ${dryRes.report.invalidCount} errors. Review before committing.`,
-            'success'
-          );
+          showToast(`Dry-Run Complete: ${dryRes.report.validCount} valid, ${dryRes.report.duplicateCount} duplicates, ${dryRes.report.invalidCount} errors. Review before committing.`, 'success');
           return;
         }
       } catch {
-        // Fallback to local dry-run validator if server endpoint is unreachable
         const existingSource = fullAdminIndex.length > 0 ? fullAdminIndex : catalogItems;
         const localDryReport = validateCsvDryRunRows(parsedItems, existingSource);
         setCsvDryRunReport(localDryReport);
         setBackupFocusSection('csv');
         setActiveTab('backup');
-        showToast(
-          `Dry-Run Complete: ${localDryReport.validCount} valid, ${localDryReport.duplicateCount} duplicates, ${localDryReport.invalidCount} errors.`,
-          'success'
-        );
+        showToast(`Dry-Run Complete: ${localDryReport.validCount} valid, ${localDryReport.duplicateCount} duplicates, ${localDryReport.invalidCount} errors.`, 'success');
         return;
       }
     } catch (err: any) {
@@ -1152,13 +1124,82 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleDownloadFailedCsvRows = () => {
+    const failed = csvImportResult?.failedRows || [];
+    if (failed.length === 0) return;
+    downloadTextBlob(buildFailedCsvRowsString(failed), `anidub_failed_csv_rows_${failed.length}.csv`);
+  };
+
   const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const inputEl = e.target;
+    const file = inputEl.files?.[0];
     if (!file) return;
+    const fileName = String(file.name || '').trim();
+    if (!/\.csv$/i.test(fileName)) {
+      const extErr = `Invalid file "${fileName || 'unknown'}". Please select a valid .csv file.`;
+      setCsvUploadError(extErr);
+      setCsvImportResult(null);
+      showToast(extErr, 'error');
+      inputEl.value = '';
+      if (csvInputRef.current) csvInputRef.current.value = '';
+      return;
+    }
+
+    setIsUploadingCsv(true);
+    setCsvUploadError(null);
+    setCsvImportResult(null);
+    addLog(`Checking duplicates & importing CSV ("${fileName}")...`, 'INFO');
+
     try {
       const text = await file.text();
-      await runCsvTextDryRun(text);
+      const parsed = parseCsvTextToAnimeRows(text);
+      if (parsed.rows.length === 0) {
+        const parseErr = parsed.error || 'Could not find valid anime rows with a Title column in CSV.';
+        setCsvUploadError(parseErr);
+        addLog(`CSV parse error: ${parseErr}`, 'ERROR');
+        showToast(parseErr, 'error');
+        return;
+      }
+
+      const res = await cloudflareApi.uploadCSV({
+        animeList: parsed.rows,
+        totalRows: parsed.totalRows,
+        invalidRows: parsed.invalidRows,
+        errors: parsed.errors,
+      });
+
+      if (!res || res.success === false) {
+        throw new Error(res?.error || res?.message || 'Server rejected CSV upload');
+      }
+
+      const addedToPending = Number(res.addedToPending ?? res.insertedCount ?? res.count ?? 0);
+      const duplicateTitles = Array.isArray(res.duplicateTitles)
+        ? res.duplicateTitles
+        : Array.isArray(res.skippedTitles) ? res.skippedTitles : [];
+      const skippedDuplicates = Number(res.skippedDuplicates ?? duplicateTitles.length ?? 0);
+      const invalidRows = Number(res.invalidRows ?? parsed.invalidRows ?? 0);
+      const totalRows = Number(res.totalRows ?? parsed.totalRows ?? parsed.rows.length);
+
+      const summary: CsvImportSummaryResult = {
+        fileName, totalRows, addedToPending, skippedDuplicates, duplicateTitles, invalidRows,
+        errors: Array.isArray(res.errors) && res.errors.length > 0 ? res.errors : parsed.errors,
+        failedRows: parsed.failedRows,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+
+      setCsvImportResult(summary);
+      await fetchPendingItems();
+      void fetchD1StatusSummary();
+      addLog(`CSV Import complete: ${addedToPending} added to Pending Reviews, ${skippedDuplicates} duplicates skipped, ${invalidRows} invalid rows.`, 'SUCCESS');
+      showToast(`CSV Import Complete: ${addedToPending} added to Pending Reviews, ${skippedDuplicates} duplicates skipped${invalidRows > 0 ? `, ${invalidRows} invalid rows` : ''}.`, 'success');
+    } catch (err: any) {
+      const errMsg = err?.message || 'Network or authentication error while importing CSV.';
+      setCsvUploadError(errMsg);
+      addLog(`CSV import failed: ${errMsg}`, 'ERROR');
+      showToast(`CSV Import Failed: ${errMsg}`, 'error');
     } finally {
+      setIsUploadingCsv(false);
+      inputEl.value = '';
       if (csvInputRef.current) csvInputRef.current.value = '';
     }
   };
@@ -1167,10 +1208,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsNormalizingPlatforms(true);
     try {
       const res = await cloudflareApi.normalizeAdminPlatforms();
-      addLog(
-        `OTT Platform Normalizer scanned ${res.totalScanned} rows, standardized ${res.updatedCount} rows.`,
-        'SUCCESS'
-      );
+      addLog(`OTT Platform Normalizer scanned ${res.totalScanned} rows, standardized ${res.updatedCount} rows.`, 'SUCCESS');
       showToast(
         res.updatedCount > 0
           ? `Normalized OTT platform tags on ${res.updatedCount} anime title(s) (scanned ${res.totalScanned}).`
@@ -1213,21 +1251,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleOpenModularEditor = useCallback(
-    (anime: any | null, targetTab: AnimeEditorTabId = 'identity') => {
-      setEditingAnime(anime);
-      setIsAddModalOpen(true);
-    },
-    []
-  );
+  const handleOpenModularEditor = useCallback((anime: any | null, _targetTab: AnimeEditorTabId = 'identity') => {
+    setEditingAnime(anime);
+    setIsAddModalOpen(true);
+  }, []);
 
   // STRICT CLERK ADMIN ROUTE GUARD (Production Enforced)
   if (!isClerkAdminAuthorized) {
     return (
-      <div
-        data-testid="admin-auth-gate"
-        className="min-h-[75vh] flex items-center justify-center p-4 bg-[var(--bg-canvas)] text-[var(--text-primary)]"
-      >
+      <div data-testid="admin-auth-gate" className="min-h-[75vh] flex items-center justify-center p-4 bg-[var(--bg-canvas)] text-[var(--text-primary)]">
         <div className="max-w-md w-full p-6 sm:p-8 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-center space-y-4 shadow-xl">
           <div className="w-12 h-12 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center mx-auto">
             <ShieldAlert className="w-6 h-6 text-red-500" />
@@ -1239,11 +1271,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             Strict Clerk Admin authentication and verified administrator credentials are required to access the AniDub India Admin Workspace.
           </p>
           {onNavigateHome && (
-            <button
-              type="button"
-              onClick={onNavigateHome}
-              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs sm:text-sm font-bold inline-flex items-center gap-2"
-            >
+            <button type="button" onClick={onNavigateHome} className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] text-xs sm:text-sm font-bold inline-flex items-center gap-2">
               <ArrowLeft className="w-4 h-4" />
               Return to Public Catalog
             </button>
@@ -1253,12 +1281,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   }
 
-  // Normalized active tab for unified Moderation & Feedback
-  const effectiveTab: AdminActiveTab =
-    activeTab === 'pending' || activeTab === 'feedback' ? 'moderation' : activeTab;
+  const effectiveTab: AdminActiveTab = activeTab === 'pending' || activeTab === 'feedback' ? 'moderation' : activeTab;
 
   const handleSelectNavTab = (tab: AdminActiveTab) => {
-    if (tab === 'pending') {
+    if (tab === 'pending' || tab === 'moderation') {
       setActiveTab('moderation');
       setModerationSubTab('pending');
     } else if (tab === 'feedback') {
@@ -1267,11 +1293,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } else {
       setActiveTab(tab);
     }
-    if (
-      typeof window !== 'undefined' &&
-      tab !== 'editor' &&
-      window.location.pathname.startsWith('/admin/catalog/')
-    ) {
+    if (typeof window !== 'undefined' && tab !== 'editor' && window.location.pathname.startsWith('/admin/catalog/')) {
       window.history.pushState(null, '', '/admin');
     }
     setIsMobileStudioOpen(false);
@@ -1295,66 +1317,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     handleSelectNavTab('backup');
   };
 
-  const totalModerationBadge =
-    overviewStats.pendingModerationCount + overviewStats.openFeedbackCount;
+  const totalModerationBadge = overviewStats.pendingModerationCount + overviewStats.openFeedbackCount;
 
   const sidebarGroups: Array<{
     groupLabel: string;
-    items: Array<{
-      id: AdminActiveTab;
-      label: string;
-      icon: React.FC<{ className?: string }>;
-      badge?: number;
-    }>;
+    items: Array<{ id: AdminActiveTab; label: string; icon: React.FC<{ className?: string }>; badge?: number }>;
   }> = [
     {
       groupLabel: 'Workspace',
       items: [
         { id: 'overview', label: 'Command Center', icon: LayoutDashboard },
-        {
-          id: 'catalog',
-          label: 'Anime Catalog',
-          icon: Film,
-          badge: overviewStats.publishedAnimeCount,
-        },
-        {
-          id: 'moderation',
-          label: 'Pending & Feedback',
-          icon: Clock,
-          badge: totalModerationBadge > 0 ? totalModerationBadge : undefined,
-        },
-        {
-          id: 'translations',
-          label: 'Translation Studio',
-          icon: Languages,
-        },
-        {
-          id: 'franchises',
-          label: 'Franchise Builder',
-          icon: Layers,
-        },
-        {
-          id: 'cast',
-          label: 'Cast & Voice Actors',
-          icon: Mic2,
-        },
+        { id: 'catalog', label: 'Anime Catalog', icon: Film, badge: overviewStats.publishedAnimeCount },
+        { id: 'moderation', label: 'Pending & Feedback', icon: Clock, badge: totalModerationBadge > 0 ? totalModerationBadge : undefined },
+        { id: 'translations', label: 'Translation Studio', icon: Languages },
+        { id: 'franchises', label: 'Franchise Builder', icon: Layers },
+        { id: 'cast', label: 'Cast & Voice Actors', icon: Mic2 },
       ],
     },
     {
       groupLabel: 'Operations & Tools',
       items: [
-        {
-          id: 'data_health',
-          label: 'Data Health QA',
-          icon: ShieldCheck,
-          badge:
-            dataHealthReport.summary.all > 0 ? dataHealthReport.summary.all : undefined,
-        },
-        {
-          id: 'imdb_checker',
-          label: 'IMDb Ratings Checker',
-          icon: Star,
-        },
+        { id: 'data_health', label: 'Data Health QA', icon: ShieldCheck, badge: dataHealthReport.summary.all > 0 ? dataHealthReport.summary.all : undefined },
+        { id: 'imdb_checker', label: 'IMDb Ratings Checker', icon: Star },
         { id: 'analytics', label: 'Analytics 2.0', icon: BarChart3 },
       ],
     },
@@ -1368,43 +1352,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   ];
 
   return (
-    <div
-      data-testid="admin-workspace-shell"
-      className="min-h-screen w-full max-w-full overflow-x-clip bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col lg:flex-row pb-20 lg:pb-0"
-    >
-      {/* Hidden CSV File Input */}
-      <input
-        type="file"
-        accept=".csv"
-        ref={csvInputRef}
-        onChange={handleCsvUpload}
-        className="hidden"
-      />
+    <div data-testid="admin-workspace-shell" className="min-h-screen w-full max-w-full overflow-x-clip bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col lg:flex-row pb-20 lg:pb-0">
+      <input type="file" accept=".csv,text/csv,text/plain,application/vnd.ms-excel" ref={csvInputRef} onChange={handleCsvUpload} data-testid="admin-csv-file-input" className="hidden" />
 
       {/* 1. DESKTOP COLLAPSIBLE 240PX SIDEBAR */}
       <aside
         data-testid="admin-desktop-sidebar"
-        className={`hidden lg:flex flex-col shrink-0 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-all duration-200 ${
-          isSidebarCollapsed ? 'w-[72px]' : 'w-[240px]'
-        }`}
+        className={`hidden lg:flex flex-col shrink-0 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-all duration-200 ${isSidebarCollapsed ? 'w-[72px]' : 'w-[240px]'}`}
       >
         <div className="h-[52px] px-3.5 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
           {!isSidebarCollapsed && (
             <div className="flex items-center gap-2 min-w-0">
-              <img
-                src="/logo.png"
-                alt="AniDub India"
-                className="w-6 h-6 rounded-md object-contain shrink-0"
-              />
-              <span className="text-sm font-extrabold text-[var(--text-primary)] truncate">
-                AniDub Admin
-              </span>
-              <span
-                className={`w-2 h-2 rounded-full shrink-0 ${
-                  overviewStats.d1Connected ? 'bg-emerald-500' : 'bg-amber-500'
-                }`}
-                title={overviewStats.d1Connected ? 'Cloudflare D1 Connected' : 'D1 Local Runtime'}
-              />
+              <img src="/logo.png" alt="AniDub India" className="w-6 h-6 rounded-md object-contain shrink-0" />
+              <span className="text-sm font-extrabold text-[var(--text-primary)] truncate">AniDub Admin</span>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${overviewStats.d1Connected ? 'bg-emerald-500' : 'bg-amber-500'}`} title={overviewStats.d1Connected ? 'Cloudflare D1 Connected' : 'D1 Local Runtime'} />
             </div>
           )}
           <button
@@ -1413,11 +1374,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             aria-label={isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
             className="min-w-[40px] min-h-[40px] rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center mx-auto"
           >
-            {isSidebarCollapsed ? (
-              <PanelLeftOpen className="w-4 h-4" />
-            ) : (
-              <PanelLeftClose className="w-4 h-4" />
-            )}
+            {isSidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
           </button>
         </div>
 
@@ -1440,9 +1397,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onClick={() => handleSelectNavTab(item.id)}
                     title={item.label}
                     className={`w-full min-h-[42px] px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between gap-2.5 transition-all ${
-                      isActive
-                        ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] shadow-xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+                      isActive ? 'bg-[var(--accent-primary)] text-[var(--accent-on-primary,#fff)] shadow-xs' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -1450,13 +1405,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {!isSidebarCollapsed && <span className="truncate">{item.label}</span>}
                     </div>
                     {!isSidebarCollapsed && item.badge !== undefined && item.badge > 0 && (
-                      <span
-                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${
-                          isActive
-                            ? 'bg-black/20 text-[var(--accent-on-primary,#fff)]'
-                            : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)]'
-                        }`}
-                      >
+                      <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${isActive ? 'bg-black/20 text-[var(--accent-on-primary,#fff)]' : 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)]'}`}>
                         {item.badge}
                       </span>
                     )}
@@ -1468,34 +1417,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </nav>
 
         <div className="p-3 border-t border-[var(--border-subtle)] space-y-1.5">
-          <button
-            type="button"
-            data-testid="admin-diagnostics-trigger"
-            onClick={() => setIsDiagnosticsOpen(true)}
-            title="Open Diagnostics Drawer"
-            className="w-full min-h-[38px] px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-2.5 cursor-pointer"
-          >
+          <button type="button" data-testid="admin-diagnostics-trigger" onClick={() => setIsDiagnosticsOpen(true)} title="Open Diagnostics Drawer" className="w-full min-h-[38px] px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-2.5 cursor-pointer">
             <Terminal className="w-4 h-4 text-[var(--accent-primary)] shrink-0" />
             {!isSidebarCollapsed && <span>Diagnostics</span>}
           </button>
           {onNavigateHome && (
-            <button
-              type="button"
-              onClick={onNavigateHome}
-              title="Exit to Site"
-              className="w-full min-h-[38px] px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-2.5 cursor-pointer"
-            >
+            <button type="button" onClick={onNavigateHome} title="Exit to Site" className="w-full min-h-[38px] px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-2.5 cursor-pointer">
               <ExternalLink className="w-4 h-4 shrink-0" />
               {!isSidebarCollapsed && <span>Exit to Site</span>}
             </button>
           )}
           {onLogout && (
-            <button
-              type="button"
-              onClick={onLogout}
-              title="Lock Admin"
-              className="w-full min-h-[38px] px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-2.5 cursor-pointer"
-            >
+            <button type="button" onClick={onLogout} title="Lock Admin" className="w-full min-h-[38px] px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-2.5 cursor-pointer">
               <LogOut className="w-4 h-4 shrink-0" />
               {!isSidebarCollapsed && <span>Lock Admin</span>}
             </button>
@@ -1510,21 +1443,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           data-testid="admin-top-bar"
           className="sticky top-0 z-30 min-h-[60px] px-3 sm:px-5 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/95 backdrop-blur-md flex items-center justify-between gap-2"
         >
-          {/* Left: Glowing dark rounded square badge with cyan lightning bolt icon + bold "Admin Command Console" */}
+          {/* Left: Glowing dark rounded square badge with cyan lightning bolt icon + two-line "Admin Command / Console" */}
           <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
               onClick={() => handleSelectNavTab('overview')}
-              className="flex items-center gap-2.5 min-h-[44px] pr-1 min-w-0 cursor-pointer group"
+              className="flex items-center gap-3 min-h-[44px] pr-1 cursor-pointer group text-left"
               aria-label="Admin Command Console Home"
             >
-              <div className="w-10 h-10 rounded-xl bg-[#0e1526] border border-cyan-500/35 shadow-md shadow-cyan-500/15 flex items-center justify-center shrink-0">
+              <div className="w-11 h-11 rounded-2xl bg-[#0e1526] border border-cyan-500/35 shadow-md shadow-cyan-500/15 flex items-center justify-center shrink-0">
                 <Zap className="w-5 h-5 text-cyan-400" />
               </div>
-              <div className="flex flex-col items-start min-w-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm sm:text-base font-black text-[var(--text-primary)] tracking-tight whitespace-nowrap truncate">
-                    Admin Command Console
+              <div className="flex flex-col items-start leading-tight">
+                <span className="text-sm sm:text-base font-black text-[var(--text-primary)] tracking-tight whitespace-nowrap">
+                  Admin Command
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm sm:text-base font-black text-[var(--text-primary)] tracking-tight whitespace-nowrap">
+                    Console
                   </span>
                   <span
                     className={`w-2 h-2 rounded-full shrink-0 ${
@@ -1533,24 +1469,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     title={overviewStats.d1Connected ? 'D1 Live Connected' : 'D1 Local Runtime'}
                   />
                 </div>
-                <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                  AniDub India • Cloudflare D1 Edge Control
-                </span>
               </div>
             </button>
           </div>
 
-          {/* Right: 4 Compact Rounded Icon Buttons (⌘ Command Palette, >_ Live Terminal, ↻ Refresh, [→ Exit) + Theme & Quick Add */}
+          {/* Right: 4 Compact Rounded Icon Buttons (⌘ Command Palette, >_ Live Terminal, ↻ Refresh, [→ Icon-Only Exit) */}
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               data-testid="admin-quick-search-trigger"
               onClick={() => setIsCommandPaletteOpen(true)}
-              className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] px-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              className="w-10 h-10 sm:w-auto sm:min-h-[40px] sm:px-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
               aria-label="Command Palette (Ctrl+K)"
               title="Command Palette (Ctrl+K)"
             >
-              <Command className="w-4 h-4 text-purple-400 shrink-0" />
+              <Command className="w-4 h-4 text-slate-300 shrink-0" />
               <span className="hidden md:inline whitespace-nowrap">Search</span>
               <kbd className="hidden md:inline-block px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[10px] font-mono leading-none">
                 ⌘K
@@ -1561,7 +1494,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               type="button"
               data-testid="admin-topbar-terminal-btn"
               onClick={() => setIsDiagnosticsOpen((prev) => !prev)}
-              className="relative min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] px-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-cyan-400 inline-flex items-center justify-center gap-1 cursor-pointer transition-colors"
+              className="relative w-10 h-10 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-cyan-400 inline-flex items-center justify-center gap-1 cursor-pointer transition-colors"
               aria-label="Open Live System Terminal"
               title="Live System Terminal (>_)"
             >
@@ -1578,7 +1511,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 void fetchD1StatusSummary();
                 showToast('Synced live Cloudflare D1 records.', 'success');
               }}
-              className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] px-2.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center cursor-pointer transition-colors"
+              className="w-10 h-10 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center justify-center cursor-pointer transition-colors"
               aria-label="Refresh Live D1 Records"
               title="Refresh Live D1 Records"
             >
@@ -1614,28 +1547,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="button"
                 data-testid="admin-exit-to-site-btn"
                 onClick={onNavigateHome}
-                className="min-w-[44px] min-h-[44px] sm:min-h-[40px] px-3 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 text-xs font-extrabold text-rose-400 inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+                className="w-10 h-10 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 text-rose-400 inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors"
                 aria-label="Exit to Site"
                 title="Exit to Site"
               >
                 <LogOut className="w-4 h-4 shrink-0" />
-                <span>Exit</span>
               </button>
             )}
           </div>
         </header>
 
-        {/* Horizontal Scrollable Command Console Tab Bar (Classic Purple Pill Active State) */}
+        {/* Horizontal Scrollable Command Console Tab Bar (Classic Flat Inactive & Soft Purple/Lavender Active Pill) */}
         <div
           data-testid="admin-quick-tab-bar"
           role="tablist"
           aria-label="Admin Command Console Tabs"
-          className="w-full max-w-full overflow-x-auto no-scrollbar border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/85 px-2.5 sm:px-5 py-2 flex items-center gap-2"
+          className="w-full max-w-full overflow-x-auto no-scrollbar border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/85 px-2.5 sm:px-5 py-2 flex items-center gap-1.5"
         >
           {ADMIN_QUICK_PILL_TABS.map((tabItem) => {
-            const isActive =
-              effectiveTab === tabItem.id ||
-              (tabItem.id === 'catalog' && effectiveTab === 'editor');
+            const isTabActive =
+              (effectiveTab === tabItem.id ||
+                (tabItem.id === 'catalog' && effectiveTab === 'editor')) &&
+              (tabItem.id !== 'moderation' || moderationSubTab !== 'feedback');
             const displayLabel =
               tabItem.id === 'moderation'
                 ? 'Pending Reviews'
@@ -1648,6 +1581,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       : tabItem.id === 'settings'
                         ? 'Cloud Infrastructure'
                         : tabItem.label;
+            const TabIcon =
+              tabItem.id === 'overview'
+                ? LayoutDashboard
+                : tabItem.id === 'moderation'
+                  ? Clock
+                  : tabItem.id === 'catalog'
+                    ? Film
+                    : tabItem.id === 'imdb_checker'
+                      ? Star
+                      : tabItem.id === 'analytics'
+                        ? BarChart3
+                        : tabItem.id === 'settings'
+                          ? Settings
+                          : tabItem.id === 'backup'
+                            ? Upload
+                            : tabItem.id === 'data_health'
+                              ? ShieldCheck
+                              : tabItem.id === 'translations'
+                                ? Languages
+                                : tabItem.id === 'franchises'
+                                  ? Layers
+                                  : Mic2;
             const badgeCount =
               tabItem.id === 'moderation'
                 ? pendingItems.length
@@ -1661,7 +1616,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={isActive && (tabItem.id !== 'moderation' || moderationSubTab === 'pending')}
+                  aria-selected={isTabActive}
                   data-testid={`admin-quick-tab-${tabItem.id}`}
                   onClick={() => {
                     if (tabItem.id === 'moderation') {
@@ -1669,21 +1624,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }
                     handleSelectNavTab(tabItem.id);
                   }}
-                  className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap shrink-0 inline-flex items-center gap-2 transition-all cursor-pointer ${
-                    isActive && (tabItem.id !== 'moderation' || moderationSubTab === 'pending')
-                      ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25 border border-purple-400/40'
-                      : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)]'
+                  className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap shrink-0 inline-flex items-center gap-2 transition-all cursor-pointer ${
+                    isTabActive
+                      ? 'bg-[#c084fc] text-[#090d16] shadow-md shadow-purple-500/20'
+                      : 'bg-transparent text-slate-400 hover:text-slate-200'
                   }`}
                 >
+                  <TabIcon className="w-3.5 h-3.5 shrink-0" />
                   <span>{displayLabel}</span>
                   {badgeCount > 0 && (
                     <span
                       className={`px-1.5 py-0.5 rounded-md font-mono tabular-nums text-[10px] font-black ${
-                        isActive && (tabItem.id !== 'moderation' || moderationSubTab === 'pending')
-                          ? 'bg-white/20 text-white'
+                        isTabActive
+                          ? 'bg-[#090d16]/15 text-[#090d16]'
                           : tabItem.id === 'moderation'
                             ? 'bg-amber-500/20 text-amber-400'
-                            : 'bg-purple-500/15 text-purple-300'
+                            : 'bg-white/10 text-slate-300'
                       }`}
                     >
                       {badgeCount}
@@ -1691,8 +1647,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   )}
                 </button>
 
-                {/* Classic "User Feedback" tab button right alongside Pending Reviews */}
-                {tabItem.id === 'moderation' && (
+                {/* Place "User Feedback" 4th, immediately AFTER "Anime Catalog" (3rd) */}
+                {tabItem.id === 'catalog' && (
                   <button
                     type="button"
                     role="tab"
@@ -1700,12 +1656,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     data-testid="admin-quick-tab-user-feedback"
                     onClick={() => {
                       setModerationSubTab('feedback');
-                      handleSelectNavTab('moderation');
+                      handleSelectNavTab('feedback');
                     }}
-                    className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap shrink-0 inline-flex items-center gap-2 transition-all cursor-pointer ${
+                    className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap shrink-0 inline-flex items-center gap-2 transition-all cursor-pointer ${
                       effectiveTab === 'moderation' && moderationSubTab === 'feedback'
-                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25 border border-purple-400/40'
-                        : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)]'
+                        ? 'bg-[#c084fc] text-[#090d16] shadow-md shadow-purple-500/20'
+                        : 'bg-transparent text-slate-400 hover:text-slate-200'
                     }`}
                   >
                     <MessageSquare className="w-3.5 h-3.5 shrink-0" />
@@ -1714,8 +1670,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span
                         className={`px-1.5 py-0.5 rounded-md font-mono tabular-nums text-[10px] font-black ${
                           effectiveTab === 'moderation' && moderationSubTab === 'feedback'
-                            ? 'bg-white/20 text-white'
-                            : 'bg-purple-500/15 text-purple-300'
+                            ? 'bg-[#090d16]/15 text-[#090d16]'
+                            : 'bg-white/10 text-slate-300'
                         }`}
                       >
                         {feedbackList.length}
@@ -1729,7 +1685,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         {/* Active Workspace Section Content */}
-        <div className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-5 py-3 sm:py-4">
+        <div className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-5 py-3 sm:py-4 space-y-4">
+          {/* GLOBAL CSV UPLOAD STATUS / SUMMARY BANNER (When triggered outside Catalog tab) */}
+          {effectiveTab !== 'catalog' && isUploadingCsv && (
+            <div
+              data-testid="global-csv-upload-loading-banner"
+              className="p-3.5 rounded-xl bg-purple-500/15 border border-purple-500/40 flex items-center gap-3 text-xs sm:text-sm font-bold text-purple-300"
+            >
+              <RefreshCw className="w-4 h-4 animate-spin text-purple-400 shrink-0" />
+              <span>Checking duplicates &amp; importing CSV...</span>
+            </div>
+          )}
+
+          {effectiveTab !== 'catalog' && csvUploadError && !isUploadingCsv && (
+            <div
+              data-testid="global-csv-upload-error-banner"
+              className="p-3.5 rounded-xl bg-red-500/15 border border-red-500/40 flex items-center justify-between gap-3 text-xs sm:text-sm text-red-300"
+            >
+              <span>
+                <strong className="text-red-200">CSV Import Error:</strong> {csvUploadError}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCsvUploadError(null)}
+                className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-xs font-bold text-red-200 cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {effectiveTab !== 'catalog' && csvImportResult && !isUploadingCsv && (
+            <div
+              data-testid="global-csv-upload-summary-banner"
+              className="p-4 rounded-xl bg-[#0e1628] border border-emerald-500/35 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg"
+            >
+              <div className="space-y-1">
+                <div className="text-xs sm:text-sm font-extrabold text-white">
+                  CSV Import Complete ({csvImportResult.fileName})
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-extrabold">
+                    {csvImportResult.addedToPending} added to Pending Reviews
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/35 text-amber-300 text-xs font-extrabold">
+                    {csvImportResult.skippedDuplicates} duplicates skipped
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-slate-300 text-xs font-extrabold">
+                    {csvImportResult.invalidRows} invalid rows
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleSelectNavTab('pending')}
+                  className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-extrabold cursor-pointer"
+                >
+                  Open Pending Reviews ({csvImportResult.addedToPending})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCsvImportResult(null)}
+                  className="min-h-[38px] px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-300 cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* SECTION 1: COMMAND CENTER (OVERVIEW) */}
           {effectiveTab === 'overview' && (
             <AdminOverviewTab
@@ -1742,7 +1767,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onFilterCatalogByGenre={handleFilterCatalogByGenre}
               onApprovePending={handleApprove}
               onRejectPending={handleReject}
-              onTriggerCsvUpload={() => csvInputRef.current?.click()}
+              onTriggerCsvUpload={triggerCsvFilePicker}
               onDownloadSampleCsv={handleDownloadSampleCSV}
               onOpenCsvHelp={() => setIsCsvHelpOpen(true)}
             />
@@ -1770,9 +1795,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onPageChange={(nextPage) => setCatalogPage(nextPage)}
               onRefresh={() => void fetchPaginatedAdminCatalog(catalogPage)}
               onOpenAddModal={() => handleOpenModularEditor(null, 'identity')}
-              onTriggerCsvUpload={() => csvInputRef.current?.click()}
+              onTriggerCsvUpload={triggerCsvFilePicker}
               onExportCsv={handleExportCSV}
               onOpenCsvHelp={() => setIsCsvHelpOpen(true)}
+              isUploadingCsv={isUploadingCsv}
+              csvUploadError={csvUploadError}
+              csvImportResult={csvImportResult}
+              onDismissCsvFeedback={() => {
+                setCsvUploadError(null);
+                setCsvImportResult(null);
+              }}
+              onOpenPendingReviews={() => handleSelectNavTab('pending')}
+              onDownloadFailedCsvRows={handleDownloadFailedCsvRows}
               selectedCatalogIds={selectedCatalogIds}
               setSelectedCatalogIds={setSelectedCatalogIds}
               bulkLanguage={bulkLanguage}
@@ -1829,6 +1863,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               feedbackError={feedbackError}
               initialSubTab={moderationSubTab}
               onApproveAnime={handleApprove}
+              onBulkApproveAnime={handleBulkApprove}
               onRejectAnime={handleReject}
               onEditPendingAnime={(anime) => handleOpenModularEditor(anime, 'identity')}
               onInspectExistingAnime={(animeId) => {
@@ -1912,7 +1947,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <AdminBackupCenterTab
               onFallbackExportCsv={handleExportCSV}
               onExportSql={handleExportSQL}
-              onTriggerCsvUpload={() => csvInputRef.current?.click()}
+              onTriggerCsvUpload={triggerCsvFilePicker}
               onDryRunPastedCsv={(csvText) => void runCsvTextDryRun(csvText)}
               initialFocusSection={backupFocusSection}
               isUploadingCsv={isUploadingCsv}
@@ -2029,6 +2064,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onSetActiveTab={handleSelectNavTab}
         onFilterUnverifiedDubs={() => handleFilterCatalogByLanguage('Unverified')}
         onExportCSV={handleExportCSV}
+        onTriggerCsvUpload={triggerCsvFilePicker}
         onOpenCsvHelp={() => setIsCsvHelpOpen(true)}
         onDownloadSampleCsv={handleDownloadSampleCSV}
         onSyncLiveRecords={() => {
@@ -2046,7 +2082,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         isOpen={isCsvHelpOpen}
         onClose={() => setIsCsvHelpOpen(false)}
         onDownloadSampleCSV={handleDownloadSampleCSV}
-        onTriggerCsvUpload={() => csvInputRef.current?.click()}
+        onTriggerCsvUpload={triggerCsvFilePicker}
       />
 
       {/* 7. CLASSIC SINGLE-SCROLL ADD / EDIT ANIME MODAL */}

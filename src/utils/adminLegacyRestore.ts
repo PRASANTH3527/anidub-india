@@ -94,6 +94,18 @@ export function parseRawCsvMatrix(raw: string): string[][] {
   return result;
 }
 
+export interface CsvImportSummaryResult {
+  fileName: string;
+  totalRows: number;
+  addedToPending: number;
+  skippedDuplicates: number;
+  duplicateTitles: string[];
+  invalidRows: number;
+  errors: string[];
+  failedRows?: Array<Record<string, string>>;
+  timestamp: string;
+}
+
 /**
  * Parses CSV text (from file picker or direct paste textarea) into normalized anime row payloads.
  * IMPORTANT: Never invents fake dub languages or platforms if blank — leaves them empty so
@@ -101,22 +113,39 @@ export function parseRawCsvMatrix(raw: string): string[][] {
  */
 export function parseCsvTextToAnimeRows(rawText: string): {
   rows: ParsedCsvAnimeRow[];
+  totalRows: number;
+  invalidRows: number;
+  errors: string[];
+  failedRows: Array<Record<string, string>>;
   error?: string;
 } {
   const matrix = parseRawCsvMatrix(rawText);
   if (matrix.length < 2) {
     return {
       rows: [],
+      totalRows: 0,
+      invalidRows: 0,
+      errors: ['CSV input is empty or missing data rows (header + at least 1 data row required).'],
+      failedRows: [],
       error: 'CSV input is empty or missing data rows (header + at least 1 data row required).',
     };
   }
 
   const rawHeaders = matrix[0].map((h) => h.replace(/^"|"$/g, '').trim());
+  const hasExplicitTitleHeader = rawHeaders.some((h) =>
+    ['title', 'name', 'animetitle', 'animename', 'series', 'titleenglish'].includes(
+      h.toLowerCase().replace(/[^a-z0-9]/g, '')
+    )
+  );
   const parsedItems: ParsedCsvAnimeRow[] = [];
+  const errors: string[] = [];
+  const failedRows: Array<Record<string, string>> = [];
+  let totalDataRows = 0;
 
   for (let i = 1; i < matrix.length; i++) {
     const values = matrix[i];
-    if (!values || values.length === 0) continue;
+    if (!values || values.length === 0 || values.every((cell) => !cell || !cell.trim())) continue;
+
     const rowObj: Record<string, string> = {};
     rawHeaders.forEach((h, idx) => {
       if (h) {
@@ -134,8 +163,20 @@ export function parseCsvTextToAnimeRows(rawText: string): {
       return '';
     };
 
-    const title = getField(['title', 'name', 'animetitle', 'animename']) || values[0] || '';
-    if (!title || title.toLowerCase() === 'title') continue;
+    const explicitTitle = getField(['title', 'name', 'animetitle', 'animename', 'series', 'titleenglish']);
+    const fallbackFirstCol = !hasExplicitTitleHeader ? (values[0] || '').replace(/^"|"$/g, '').trim() : '';
+    const title = (explicitTitle || fallbackFirstCol).trim();
+
+    // Skip repeated header row if present
+    if (title.toLowerCase() === 'title' && i === 1) continue;
+
+    totalDataRows++;
+
+    if (!title) {
+      errors.push(`Row ${i + 1}: Missing required Title value`);
+      failedRows.push(rowObj);
+      continue;
+    }
 
     parsedItems.push({
       ...rowObj,
@@ -146,22 +187,38 @@ export function parseCsvTextToAnimeRows(rawText: string): {
       releaseYear: getField(['releaseyear', 'year', 'aired']),
       status: getField(['status', 'airingstatus']) || 'Completed',
       type: getField(['type', 'format', 'mediatype']) || 'TV Series',
-      studio: getField(['studio', 'studios', 'producer']),
+      studio: getField(['studio', 'studios', 'producer', 'animationstudio', 'studioname']),
       genres: getField(['genres', 'genre', 'tags', 'categories']),
       languages: getField(['languages', 'language', 'dublanguages', 'dub', 'audio']),
-      platforms: getField(['platforms', 'platform', 'streaming', 'ott', 'watchon']),
-      episodes: getField(['episodes', 'episodecount', 'totalepisodes', 'eps']),
+      platforms: getField(['platforms', 'platform', 'streaming', 'ott', 'watchon', 'streamingpartners']),
+      episodes: getField(['episodes', 'episodecount', 'totalepisodes', 'eps', 'episodesperseason']),
+      season: getField(['season', 'seasons', 'cour']),
+      watchUrl: getField(['watchurl', 'url', 'link', 'streamurl', 'officialsourceurl', 'officialsourcelink']),
     });
   }
 
   if (parsedItems.length === 0) {
+    const errMsg =
+      errors.length > 0
+        ? `Could not import CSV: ${errors[0]}`
+        : 'Could not find valid anime rows with a Title column in the provided CSV.';
     return {
       rows: [],
-      error: 'Could not find valid anime rows with a Title column in the provided CSV.',
+      totalRows: totalDataRows,
+      invalidRows: failedRows.length,
+      errors: errors.length > 0 ? errors : [errMsg],
+      failedRows,
+      error: errMsg,
     };
   }
 
-  return { rows: parsedItems };
+  return {
+    rows: parsedItems,
+    totalRows: totalDataRows,
+    invalidRows: failedRows.length,
+    errors,
+    failedRows,
+  };
 }
 
 /**
